@@ -1,0 +1,12 @@
+{
+  "case": "an edit outside allowed_files is denied with SCOPE_CHANGE_REQUIRED",
+  "expect": "deny",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Edit",
+    "cwd": "__ROOT__",
+    "tool_input": {
+      "file_path": "__ROOT__/src/Order/OrderProcessor.php"
+    }
+  }
+}

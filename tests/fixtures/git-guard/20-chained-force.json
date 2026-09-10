@@ -1,0 +1,12 @@
+{
+  "case": "a force push chained after another command is denied",
+  "expect": "deny",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "cwd": "__ROOT__",
+    "tool_input": {
+      "command": "git push --force origin main && echo done"
+    }
+  }
+}

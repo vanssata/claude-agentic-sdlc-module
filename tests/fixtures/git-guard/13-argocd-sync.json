@@ -1,0 +1,12 @@
+{
+  "case": "argocd app sync is denied",
+  "expect": "deny",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "cwd": "__ROOT__",
+    "tool_input": {
+      "command": "argocd app sync shop-production"
+    }
+  }
+}

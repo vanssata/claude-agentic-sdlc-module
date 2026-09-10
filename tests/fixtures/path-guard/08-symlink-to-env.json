@@ -1,0 +1,1 @@
+{"case":"reading a symlink that resolves to .env is denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Read","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/config/link.txt"}}}

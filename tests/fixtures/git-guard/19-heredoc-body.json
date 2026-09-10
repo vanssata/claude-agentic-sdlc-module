@@ -1,0 +1,12 @@
+{
+  "case": "a heredoc commit message describing a force push is allowed",
+  "expect": "allow",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "cwd": "__ROOT__",
+    "tool_input": {
+      "command": "git commit -m \"$(cat <<'EOF'\nfix: stop force-pushing in the deploy script\n\nThe old script ran git push --force origin main on every deploy.\nEOF\n)\""
+    }
+  }
+}

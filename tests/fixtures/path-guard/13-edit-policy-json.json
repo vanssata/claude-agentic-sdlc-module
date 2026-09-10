@@ -1,0 +1,1 @@
+{"case":"editing .ai/policies/path-guard.json is denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Edit","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/.ai/policies/path-guard.json"}}}

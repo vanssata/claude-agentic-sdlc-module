@@ -1,0 +1,12 @@
+{
+  "case": "staging a source file is allowed",
+  "expect": "allow",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "cwd": "__ROOT__",
+    "tool_input": {
+      "command": "git add src/Payment/Gateway.php"
+    }
+  }
+}

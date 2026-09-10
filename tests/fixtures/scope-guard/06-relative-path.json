@@ -1,0 +1,12 @@
+{
+  "case": "a relative path outside scope is denied too",
+  "expect": "deny",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Edit",
+    "cwd": "__ROOT__",
+    "tool_input": {
+      "file_path": "src/Shipping/Calc.php"
+    }
+  }
+}

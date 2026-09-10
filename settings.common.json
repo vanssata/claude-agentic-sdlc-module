@@ -1,0 +1,75 @@
+{
+  "bashOutputMaxChars": 75000,
+  "taskOutputMaxChars": 80000,
+  "env": {
+    "MAX_MCP_OUTPUT_TOKENS": "40000",
+    "CLAUDE_READ_MAX_LINES": "4000",
+    "CLAUDE_READ_MAX_BYTES": "250000"
+  },
+  "autoCompactEnabled": true,
+  "precomputeCompactionEnabled": false,
+  "showClearContextOnPlanAccept": true,
+  "autoContinueAtUsageLimit": true,
+  "workflowSizeGuideline": "small",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/cap-large-read.py\"",
+            "timeout": 5,
+            "statusMessage": "Checking read size"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/ai-git-guard.sh\"",
+            "timeout": 15,
+            "statusMessage": "Checking git and deploy safety"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/ai-path-guard.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking sensitive paths"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/ai-scope-guard.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking task scope"
+          }
+        ]
+      }
+    ],
+    "Setup": [
+      {
+        "matcher": "init",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/project-scaffold.sh\"",
+            "timeout": 10,
+            "statusMessage": "Scaffolding project folders"
+          }
+        ]
+      }
+    ]
+  }
+}

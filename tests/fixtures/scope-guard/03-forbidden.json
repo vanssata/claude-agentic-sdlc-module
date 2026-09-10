@@ -1,0 +1,13 @@
+{
+  "case": "an edit of a forbidden file is denied",
+  "expect": "deny",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "cwd": "__ROOT__",
+    "tool_input": {
+      "file_path": "__ROOT__/src/Payment/LegacyGateway.php",
+      "content": "x"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "case": "the colon refspec branch delete is denied",
+  "expect": "deny",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "cwd": "__ROOT__",
+    "tool_input": {
+      "command": "git push origin :feature/old"
+    }
+  }
+}

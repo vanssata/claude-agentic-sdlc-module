@@ -1,0 +1,1 @@
+{"case":"writing an ordinary source file is allowed","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/src/New.php","content":"x"}}}

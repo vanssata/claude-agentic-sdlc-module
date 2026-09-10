@@ -1,0 +1,1 @@
+{"case":"creating a symlink to .env is denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"ln -s .env public/x.txt"}}}

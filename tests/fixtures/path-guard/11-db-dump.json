@@ -1,0 +1,1 @@
+{"case":"reading a production sql dump is denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Read","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/var/dump-2026-09-01.sql"}}}

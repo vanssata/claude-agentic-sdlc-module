@@ -1,0 +1,13 @@
+{
+  "model": "opus",
+  "availableModels": ["opus", "sonnet", "haiku"],
+  "fallbackModel": "sonnet",
+  "effortLevel": "medium",
+  "modelSettings": {
+    "claude-opus-5": { "effortLevel": "medium" },
+    "claude-sonnet-5": { "effortLevel": "medium" },
+    "claude-haiku-4-5-20251001": { "effortLevel": "low" }
+  },
+  "autoCompactWindow": 180000,
+  "env": { "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet" }
+}

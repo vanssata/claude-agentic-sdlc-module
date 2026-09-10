@@ -1,0 +1,1 @@
+{"case":"a heredoc that merely mentions .env is allowed","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"echo \"remember to update .env on the server\" >> notes.md"}}}

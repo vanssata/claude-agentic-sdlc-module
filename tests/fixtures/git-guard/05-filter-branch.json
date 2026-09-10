@@ -1,0 +1,12 @@
+{
+  "case": "git filter-branch is denied",
+  "expect": "deny",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "cwd": "__ROOT__",
+    "tool_input": {
+      "command": "git filter-branch --tree-filter 'rm -f secret' HEAD"
+    }
+  }
+}

@@ -1,0 +1,1 @@
+{"case":"editing .ai/state/current.json is denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/.ai/state/current.json","content":"{}"}}}

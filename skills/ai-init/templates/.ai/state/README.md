@@ -1,0 +1,27 @@
+# Task state
+
+`current.json` is the machine-readable record of the task in flight. It is
+written only by `skills/ai-task/state.py` (atomically), read by `/ai-status`, and
+enforced by `ai-scope-guard`, which derives the files the current step may touch
+from it.
+
+It is **not committed**: it describes a session, not the repository. The
+`.gitignore` entry added by `/ai-init` keeps it out of git.
+
+When a task closes, `state.py archive` moves it to
+`.ai/reports/<task-id>/state.json`, which **is** committed — that is the audit
+trail: which stages ran, in what order, who approved what, and when.
+
+It holds facts, never transcripts:
+
+```
+task_id, goal, workflow, risk_tier, current_stage, affected_modules,
+context_summary_ref, approved_plan { ref, current_step_id, steps[] },
+completed_steps, test_status, review_status, security_status, open_risks,
+next_action, human_approval { required, granted, granted_by, granted_at },
+created_at, updated_at, history[]
+```
+
+If this file is corrupt, `state.py` refuses to read it rather than replacing it.
+Inspect it by hand: the scope guard's boundaries come from here, and a silently
+regenerated state file means an unbounded implementer.
