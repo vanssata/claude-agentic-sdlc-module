@@ -8,9 +8,9 @@ INSTALL="$PLUGIN_ROOT/install.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
 echo "== dry run renders for every plan"
-for combo in "max yes:xhigh:fable:Fable 5.1" "max no:high:opus:Opus 5" "pro no:high:opus:Opus 5"; do
+for combo in "max yes:xhigh:fable:Fable 5.1:Opus 5 [1m]" "max no:high:opus:Opus 5:Opus 5 [1m]" "pro no:high:opus:Opus 5:Sonnet 5"; do
     args="${combo%%:*}"; rest="${combo#*:}"; effort="${rest%%:*}"; rest="${rest#*:}"
-    xmodel="${rest%%:*}"; model="${rest#*:}"
+    xmodel="${rest%%:*}"; rest="${rest#*:}"; model="${rest%%:*}"; session="${rest#*:}"
     set -- $args
     out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan "$1" --fable "$2" --dry-run 2>&1)
     rc=$?
@@ -19,7 +19,7 @@ for combo in "max yes:xhigh:fable:Fable 5.1" "max no:high:opus:Opus 5" "pro no:h
     printf '%s' "$out" | grep -q "effort: $effort" && pass "--plan $1 --fable $2 sets EXPERT effort to $effort" || fail "expected effort: $effort" "$out"
     printf '%s' "$out" | grep -qx "model: $xmodel" && pass "--plan $1 --fable $2 pins ai-expert to $xmodel" || fail "expected model: $xmodel" "$out"
     printf '%s' "$out" | grep -qF "## $model (EXPERT)" && pass "--plan $1 --fable $2 names $model as EXPERT" || fail "expected '## $model (EXPERT)' in the output" "$out"
-    printf '%s' "$out" | grep -qF 'Session model is Sonnet 5' && pass "--plan $1 --fable $2 runs the session on Sonnet" || fail "expected a Sonnet session" "$out"
+    printf '%s' "$out" | grep -qF "Session model is $session" && pass "--plan $1 --fable $2 runs the session on $session" || fail "expected a $session session" "$out"
     printf '%s' "$out" | grep -q 'nothing written' && pass "--plan $1 --fable $2 writes nothing" || fail "dry run should write nothing"
 done
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable no --dry-run 2>&1)
@@ -54,7 +54,7 @@ done
 [ -x "$DIR/hooks/ai-git-guard.sh" ] && pass "hooks are executable" || fail "hooks should be executable"
 [ -x "$DIR/skills/ai-init/scaffold-ai.sh" ] && pass "scaffold-ai.sh is executable" || fail "scaffold should be executable"
 grep -q 'effort: xhigh' "$DIR/agents/ai-expert.md" && pass "ai-expert renders at xhigh on max+fable" || fail "expert effort wrong"
-grep -qx 'model: fable' "$DIR/agents/ai-expert.md" && pass "ai-expert pins fable on max+fable (the Sonnet session must not be inherited)" || fail "ai-expert should pin model: fable"
+grep -qx 'model: fable' "$DIR/agents/ai-expert.md" && pass "ai-expert pins fable on max+fable (the subagent default must not be inherited)" || fail "ai-expert should pin model: fable"
 grep -qx 'model: opus' "$DIR/agents/architect.md" && pass "architect pins opus" || fail "architect should pin model: opus"
 
 echo "== settings.json"
@@ -62,8 +62,9 @@ n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/settings.json")
 [ "$n" = 5 ] && pass "five PreToolUse hooks registered (four guards + fable-gate on a Fable install)" || fail "expected 5 PreToolUse commands, got $n"
 jq -e '.hooks.Setup[0].hooks[0].command | test("project-scaffold")' "$DIR/settings.json" >/dev/null \
     && pass "the Setup:init scaffold hook is registered" || fail "Setup hook missing"
-[ "$(jq -r .model "$DIR/settings.json")" = "sonnet" ] && pass "the session model is sonnet" || fail "model not set to sonnet"
-[ "$(jq -r .effortLevel "$DIR/settings.json")" = "high" ] && pass "the default effort is set" || fail "effort not set"
+[ "$(jq -r .model "$DIR/settings.json")" = "opus[1m]" ] && pass "the session model is opus[1m] on Max" || fail "model not set to opus[1m]"
+[ "$(jq -r .effortLevel "$DIR/settings.json")" = "medium" ] && pass "the default effort is medium" || fail "effort not set to medium"
+[ "$(jq -r '.modelSettings["claude-opus-5"].effortLevel' "$DIR/settings.json")" = "medium" ] && pass "Opus runs at medium" || fail "opus effort not medium"
 [ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "300000" ] && pass "the compaction window is set" || fail "compaction not set"
 [ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL' "$DIR/settings.json")" = "sonnet" ] && pass "the subagent default is sonnet" || fail "subagent default not set"
 grep -q 'claude-agentic:start' "$DIR/CLAUDE.md" && pass "the CLAUDE.md block is written" || fail "block missing"

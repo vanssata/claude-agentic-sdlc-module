@@ -6,7 +6,8 @@
 # --dry-run prints everything that would be written, and writes nothing.
 #
 # Installs into ~/.claude/: model, effort and context settings for the detected
-# plan (the session runs Sonnet on every plan); the ai-* pipeline agents plus
+# plan (the session runs Opus 5 [1m] at medium on Max and Sonnet on Pro; agents
+# default to Sonnet); the ai-* pipeline agents plus
 # architect, Explore and log-reader; five hooks, plus fable-gate on a Fable
 # install; nine skills; and one managed block in ~/.claude/CLAUDE.md.
 #
@@ -89,7 +90,7 @@ SESSION_HUMAN=$(pretty "$SESSION_MODEL")
 FALLBACK_HUMAN=$(jq -r '.fallbackModel | if type=="array" then .[] else . end' "$TMP/settings.snippet.json" \
                  | while read -r m; do pretty "$m"; done | paste -sd'|' | sed 's/|/, then /g')
 
-# The session runs Sonnet, so nothing expensive may be inherited: ai-expert pins
+# Agents default to Sonnet (CLAUDE_CODE_SUBAGENT_MODEL), so nothing expensive may be inherited: ai-expert pins
 # the EXPERT model (rendered here) and architect pins opus. fallbackModel applies
 # to pinned subagents too, so a Fable outage still falls back to Opus.
 if [ "$PLAN" = pro ]; then
@@ -110,7 +111,7 @@ else
     EXPERT_EFFORT="high"
     PLAN_SPECIFIC="- Fable is disabled in this install (\`--fable no\`): Opus 5 serves both STRONG and EXPERT. Do not request \`model: fable\` anywhere. \`xhigh\`/\`max\` stay off."
   fi
-  EFFORT_RULE="Lower to \`medium\` for routine edits when the session is long; raise above \`high\` only per the plan rule above, and say that you are raising it."
+  EFFORT_RULE="Raise to \`high\` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; above \`high\` only per the plan rule above."
 fi
 EXPERT_HUMAN=$(pretty "$EXPERT_MODEL")
 

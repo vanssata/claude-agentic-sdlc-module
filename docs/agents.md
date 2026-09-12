@@ -27,7 +27,7 @@ Three more come from the routing half, and are not part of the pipeline:
 | `Explore` | sonnet | low | fast read-only search: which files matter, and why |
 | `log-reader` | sonnet | low | logs, test output, CI, kubectl and helm output, condensed to the errors that matter |
 
-The main session runs Sonnet too. Built-in `Plan` and `general-purpose` have no
+The main session runs Opus 5 [1m] at `medium` on Max and Sonnet on Pro. Built-in `Plan` and `general-purpose` have no
 pinned model and resolve to `CLAUDE_CODE_SUBAGENT_MODEL` (sonnet); that is why
 every definition here pins `model:` — an omitted one silently drops to BALANCED.
 

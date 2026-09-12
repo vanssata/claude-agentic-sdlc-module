@@ -1,20 +1,22 @@
 <!-- claude-agentic:start -->
 # Model allocation by task and scope (host-wide)
 
-Applies everywhere a model can be chosen: the Agent tool's `model`/`effort`, `.claude/agents/*.md` frontmatter, Workflow `agent()` calls, scheduled jobs. **Sonnet is the default; STRONG and EXPERT are paid for only on a named trigger.** Facts are collected cheaply; the expensive tiers are for adversarial review, high-risk decisions and what a cheaper tier could not settle — never for fact collection.
+Applies everywhere a model can be chosen: the Agent tool's `model`/`effort`, `.claude/agents/*.md` frontmatter, Workflow `agent()` calls, scheduled jobs. **The session runs {{SESSION_MODEL}} at `{{DEFAULT_EFFORT}}`; agents default to Sonnet, and STRONG and EXPERT agents are paid for only on a named trigger.** Facts are collected cheaply; the expensive tiers are for adversarial review, high-risk decisions and what a cheaper tier could not settle — never for fact collection.
 
 | Tier | Model | Effort | Role |
 |---|---|---|---|
 | FAST | `haiku` | `low` | verbatim extraction, file and symbol inventories, listings, counting, running a command and reporting its output (`ai-indexer`) |
-| BALANCED — default | `sonnet` | `low`–`medium` for agents | the main session and implementation; discovery, context compression, planning up to T2, tests, release assembly, mechanical edits (`Explore`, `Plan`, `general-purpose`, `log-reader`, `ai-discovery`, `ai-context`, `ai-risk`, `ai-planner`, `ai-tester`, `ai-release`, `ai-implementer`) |
+| BALANCED — default for agents | `sonnet` | `low`–`medium` | discovery, context compression, planning up to T2, tests, release assembly, mechanical edits (`Explore`, `Plan`, `general-purpose`, `log-reader`, `ai-discovery`, `ai-context`, `ai-risk`, `ai-planner`, `ai-tester`, `ai-release`, `ai-implementer`) |
 | STRONG | `opus` | `high` | the Opus triggers below (`ai-reviewer`, `ai-security`, `architect`; `ai-risk`/`ai-planner` with `model: opus`) |
 | EXPERT | `{{EXPERT_MODEL}}` | `{{EXPERT_EFFORT}}` | the EXPERT triggers below (`ai-expert`; `architect` with `model: {{EXPERT_MODEL}}`) |
+
+The main session itself runs {{SESSION_MODEL}} at `{{DEFAULT_EFFORT}}` and does the implementation; the tiers above are for agents.
 
 ## Opus (STRONG) — only on one of these triggers
 
 1. **Review** of a finished change before a commit is proposed: `ai-reviewer`. Add `ai-security` for authentication, authorization, secrets, payments, personal data, webhooks, and any T4/T5 change.
 2. **Risk and plan**: `ai-risk` on Sonnet answered T3+ or `confidence: uncertain` — re-run it with `model: opus`; `ai-planner` with `model: opus` at T3/T4.
-3. **Root cause** after a Sonnet diagnosis already failed once (the fix did not hold, or competing hypotheses remain), or a bug in concurrency, retries/idempotency, caching or data integrity.
+3. **Root cause** after a first diagnosis in the session already failed once (the fix did not hold, or competing hypotheses remain), or a bug in concurrency, retries/idempotency, caching or data integrity.
 4. **Reversible design** with two or more viable options that are costly to change later — module structure, service boundaries, a library choice: `architect`.
 
 ## {{EXPERT_MODEL_HUMAN}} (EXPERT) — only on one of these triggers
@@ -32,13 +34,13 @@ Applies everywhere a model can be chosen: the Agent tool's `model`/`effort`, `.c
 - Never retry a failed *thinking* task on a cheaper model; downgrading is for mechanical work. An overload is not a failure: `fallbackModel` moves any agent to {{FALLBACK_MODEL}} on its own.
 - Every subagent pays its own start-up (system prompt and tools written to cache). Spawn one to keep hundreds of lines of reading out of the main context, not for what one `grep` answers.
 - Forks (`subagent_type: 'fork'`) always inherit the session model — never pass `model` there.
-- Every `.claude/agents/*.md` and every Workflow `agent()` call declares `model:` and `effort:` explicitly. An omitted `model:` resolves to `CLAUDE_CODE_SUBAGENT_MODEL`, then the session — Sonnet either way, never the tier the role needs.
+- Every `.claude/agents/*.md` and every Workflow `agent()` call declares `model:` and `effort:` explicitly. An omitted `model:` resolves to `CLAUDE_CODE_SUBAGENT_MODEL` (Sonnet), never the tier the role needs.
 - Readers, scouts and runners never go above `effort: low`. Final synthesis and anything the user reads stays in the main session.
 
 # Model routing ({{PLAN}} plan)
 
 - Session model is {{SESSION_MODEL}}; the harness falls back to {{FALLBACK_MODEL}}. Implement code yourself in the main conversation; `ai-implementer` is for mechanical pattern-copying steps or when the user asks.
-- Do not switch a running session to Opus or Fable for one hard question: each model has its own cache, so `/model` re-reads the whole conversation uncached at the new price. Send the question to `architect` or `ai-expert` with a brief. Switch the main model only in a fresh session dedicated to design, and back to Sonnet afterwards.
+- Do not switch a running session to a stronger model for one hard question: each model has its own cache, so `/model` re-reads the whole conversation uncached at the new price. Send the question to `architect` or `ai-expert` with a brief. Switch the main model only in a fresh session dedicated to design, and back to {{SESSION_MODEL}} afterwards.
 {{PLAN_SPECIFIC_ROUTING}}
 - `{{DEFAULT_EFFORT}}` is the default effort. {{EFFORT_RULE}}
 - Delegate logs, test output, CI/CD and kubectl/helm output to `log-reader`. Never read raw logs in the main context.

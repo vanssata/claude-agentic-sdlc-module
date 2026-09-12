@@ -3,7 +3,7 @@ name: ai-expert
 description: Last-resort reasoning for a question the STRONG tier could not settle — conflicting architectural constraints, a T5 migration or infrastructure decision, several viable irreversible designs, or a very high cost of being wrong. Read-only; returns a decision with its residual risk. Do not call it because it exists.
 tools: Read, Grep, Glob
 disallowedTools: Edit, Write, NotebookEdit
-# model: pinned at install time ({{EXPERT_MODEL_HUMAN}}) — the session runs Sonnet, so inheriting would silently drop EXPERT to BALANCED
+# model: pinned at install time ({{EXPERT_MODEL_HUMAN}}) — an omitted model resolves to CLAUDE_CODE_SUBAGENT_MODEL (Sonnet), which would silently drop EXPERT to BALANCED
 model: {{EXPERT_MODEL}}
 effort: {{EXPERT_EFFORT}}
 memory: user

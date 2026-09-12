@@ -10,9 +10,11 @@ cheaper tier could not settle — never for fact collection.
 |---|---|---|
 | **LOCAL** | *not available inside Claude Code* | see the note below |
 | **FAST** | `haiku`, effort `low` | file and symbol inventories, listings, counting, running a command and reporting its output |
-| **BALANCED** — default | `sonnet`, effort `low`–`medium` | the main session and implementation, discovery with judgment, context compression, planning up to T2, tests, release assembly |
+| **BALANCED** — default for agents | `sonnet`, effort `low`–`medium` | discovery with judgment, context compression, planning up to T2, tests, release assembly |
 | **STRONG** | `opus`, effort `high` | the Opus triggers below |
 | **EXPERT** | `ai-expert`, pinned at install time — Fable 5.1 on Max with Fable, Opus 5 otherwise | the EXPERT triggers below |
+
+The main session runs the model the installed profile sets (Opus 5 [1m] at `medium` on Max, Sonnet on Pro) and does the implementation itself.
 
 **On LOCAL.** The original design of this system assumed a local model for
 indexing and repetitive inspection. Claude Code has no local-model backend, so

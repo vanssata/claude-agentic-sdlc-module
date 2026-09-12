@@ -25,7 +25,7 @@ three things: who plans it, who reviews it, and whether a human signs it off.
 | T3, T4 | STRONG |
 | T5 | EXPERT — `ai-expert`, pinned to Fable 5.1 on Max with Fable, Opus 5 otherwise |
 
-The main session and every agent without a trigger run on Sonnet (BALANCED).
+Every agent without a trigger runs on Sonnet (BALANCED). The main session runs the model the installed profile sets (Opus 5 [1m] at `medium` on Max, Sonnet on Pro).
 
 Escalation is per task and one step at a time. The triggers are listed in
 `risk-tiers.json`; the short version is that a cheap agent which returns thin,

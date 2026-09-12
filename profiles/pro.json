@@ -6,8 +6,8 @@
   "modelSettings": {
     "claude-opus-5": { "effortLevel": "medium" },
     "claude-sonnet-5": { "effortLevel": "medium" },
-    "claude-haiku-4-5-20251001": { "effortLevel": "low" }
+    "claude-haiku-4-5-20251001": { "effortLevel": "high" }
   },
-  "autoCompactWindow": 180000,
+  "autoCompactWindow": 300000,
   "env": { "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet" }
 }

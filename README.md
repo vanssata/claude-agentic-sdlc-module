@@ -35,7 +35,7 @@ project than to make a small, well-defined change safely.**
 ./install.sh --plan max            # Max 5x and 20x share this profile
 ./install.sh --plan max --fable no # Opus at the EXPERT tier instead of Fable
 ./install.sh --plan pro            # Opus is the top tier on Pro
-# The session runs Sonnet on every plan; Opus and Fable are reached through agents.
+# The session runs Opus 5 [1m] at medium on Max and Sonnet on Pro; agents default to Sonnet.
 ./install.sh --dry-run             # print what would be written, write nothing
 ```
 
@@ -66,7 +66,7 @@ Re-running the installer updates in place: it backs up what it replaces to
 | `taskOutputMaxChars` | 80 000 | — |
 | `MAX_MCP_OUTPUT_TOKENS` | 40 000 | 25 000 |
 | `cap-large-read.py` | refuses an unbounded `Read` over 4 000 lines or 250 KB | no limit |
-| `autoCompactWindow` | 300 000 on Max, 180 000 on Pro | the model window |
+| `autoCompactWindow` | 300 000 on both plans | the model window |
 
 The Read guard is a guardrail, not a cage: an explicit `limit` always goes
 through, so reading something large stays possible but has to be deliberate.
@@ -118,20 +118,26 @@ The machine-readable source of truth is `.ai/policies/risk-tiers.json`, which
 | Tier | Runs on | Does |
 |---|---|---|
 | FAST | `haiku`, low | inventories, listings, counting (`ai-indexer`) |
-| BALANCED — default | `sonnet` | the main session and implementation; discovery, context, planning up to T2, tests, release (`Explore`, `log-reader`, most `ai-*`) |
-| STRONG | `opus`, high | adversarial and security review, T3/T4 risk and planning, root cause after Sonnet failed, reversible design (`ai-reviewer`, `ai-security`, `architect`) |
+| BALANCED — default for agents | `sonnet` | discovery, context, planning up to T2, tests, release (`Explore`, `log-reader`, most `ai-*`) |
+| STRONG | `opus`, high | adversarial and security review, T3/T4 risk and planning, root cause after a first diagnosis failed, reversible design (`ai-reviewer`, `ai-security`, `architect`) |
 | EXPERT | `ai-expert` | T5, irreversible design, what STRONG could not settle |
 
-Sonnet is the default everywhere, and Opus or Fable run only when a named trigger
-fires; the triggers are listed in the managed `CLAUDE.md` block. On a Max plan
+The main session runs Opus 5 [1m] at `medium` effort on Max and Sonnet on Pro;
+it does the implementation itself. Agents default to Sonnet, and Opus or Fable
+agents run only when a named trigger fires; the triggers are listed in the
+managed `CLAUDE.md` block. On a Max plan
 with Fable enabled, `ai-expert` is pinned to Fable 5.1 at `xhigh` effort; with
 `--fable no`, and on Pro, it is Opus 5. The expensive agents pin `model:`
-because a Sonnet session would otherwise be inherited, and `fallbackModel`
+because an omitted one resolves to the Sonnet subagent default, and `fallbackModel`
 applies to pinned subagents, so a Fable overload still lands on Opus.
 
 Why: in measured usage, over 80% of the cost was the main session re-reading its
-context (cache read and write), not output. A Sonnet session costs a fifth of a
-Fable one per token of context; `/usage-report` shows the split on your machine.
+context (cache read and write), not output, so the session model is the lever
+that matters. Opus 5 costs half of Fable per token and, in Anthropic's coding
+runs, matches it within a point; at `medium` it gives up about two points for
+half the spend of `high`. Sonnet is a fifth of Fable but loses on the hard tail
+(root cause, design, ambiguous multi-file changes), where a retry costs more than
+the saving. `/usage-report` shows the split on your machine.
 
 There is no LOCAL tier: Claude Code has no local-model backend. The work it would
 have done is done by deterministic tools and by `ai-indexer` on the cheapest
@@ -189,9 +195,9 @@ one; nothing references it any more.
 bash tests/run-all.sh
 ```
 
-Ten suites, 343 assertions: the three guards against JSON fixtures, the state
+Ten suites, 344 assertions: the three guards against JSON fixtures, the state
 machine, scaffold idempotency, installer rendering for all three plan
-combinations (Sonnet session, pinned EXPERT model), the migration off
+combinations (session model per plan, pinned EXPERT model), the migration off
 `claude-routing`, an end-to-end run that installs into a scratch directory,
 scaffolds a throwaway repository and drives a T4 task through the guards, the
 usage report's per-response deduplication, and `fable-gate` through every event

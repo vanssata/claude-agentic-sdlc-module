@@ -1,13 +1,13 @@
 {
-  "model": "sonnet",
+  "model": "opus[1m]",
   "availableModels": ["sonnet", "fable[1m]", "fable", "opus[1m]", "opus", "haiku"],
   "fallbackModel": ["opus[1m]", "sonnet"],
-  "effortLevel": "high",
+  "effortLevel": "medium",
   "modelSettings": {
     "claude-fable-5-1": { "effortLevel": "high" },
-    "claude-opus-5": { "effortLevel": "high" },
+    "claude-opus-5": { "effortLevel": "medium" },
     "claude-sonnet-5": { "effortLevel": "high" },
-    "claude-haiku-4-5-20251001": { "effortLevel": "low" }
+    "claude-haiku-4-5-20251001": { "effortLevel": "high" }
   },
   "autoCompactWindow": 300000,
   "env": { "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet" }
