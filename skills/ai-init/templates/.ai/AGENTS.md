@@ -17,7 +17,7 @@ Full rules: `policies/safety.md`. Read it before your first edit.
 | Directory | What it holds |
 |---|---|
 | `project/` | what this system *is* — architecture, modules, integrations, business rules, legacy, risks, glossary |
-| `policies/` | what agents may and may not do — safety, production, coding, testing, security, database, git, release, context, model routing, risk tiers |
+| `policies/` | what agents may and may not do — safety, production, coding, testing, security, database, git, release, context, model routing, risk tiers, review economy |
 | `agents/` | the role each agent plays and what it must return |
 | `workflows/` | the pipeline for a feature, a bugfix, a refactoring, a hotfix, an investigation |
 | `templates/` | the shape of every artifact a task produces |

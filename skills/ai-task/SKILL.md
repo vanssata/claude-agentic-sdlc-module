@@ -127,8 +127,24 @@ is recorded and reported, not fixed inside this task. Never let a test be edited
 to make it pass.
 
 ### ADVERSARIAL REVIEW (T2 and above)
-`ai-reviewer` on the diff. Save findings to
-`.ai/reports/<task-id>/review-report.md`.
+
+**Probe first — it is your work, not the reviewer's.** Before delegating, run the
+change's own shape matrix in the scratchpad: the handful of inputs its threat
+model says are interesting, against the real code or the language semantics it
+depends on. One `node -e` / `php -r` / `python3 -c`. Append every outcome to
+`.ai/reports/<task-id>/review-ledger.md`. A blocker you find here costs a minute;
+the same blocker found by a reviewer costs a full pass and a remediation round.
+
+Then `ai-reviewer` on the diff, **pointed at the ledger**. At T3 and above prefer
+two or three narrow reviewers in a single message — semantics and types, resources
+and failure modes, the record — over one reviewer asked to cover everything: same
+coverage, a third of the wall clock, and each goes deeper. Merge the findings
+yourself. Save them to `.ai/reports/<task-id>/review-report.md`.
+
+Re-review after a remediation is **scoped**: do the named findings close, and what
+did the remediation introduce. Nothing else — the ledger carries the rest.
+
+Full rules, including the second-attempt invariant: `.ai/policies/review-economy.md`.
 
 ```bash
 $STATE set review_status <passed|blockers_open>
