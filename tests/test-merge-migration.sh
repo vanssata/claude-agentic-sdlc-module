@@ -62,8 +62,9 @@ echo "== every agent this plugin ships declares its tier"
 for f in "$PLUGIN_ROOT"/agents/*.md; do
     name=$(basename "$f")
     grep -qE '^effort:' "$f" || fail "$name declares no effort:"
+    grep -qE '^model:' "$f" || fail "$name declares no model: (it would resolve to the Sonnet default)"
 done
-pass "every agent declares effort:"
-grep -qE '^model:' "$PLUGIN_ROOT/agents/architect.md" && fail "architect must not pin a model" || pass "architect inherits the session model"
+pass "every agent declares model: and effort:"
+grep -qE '^model:' "$PLUGIN_ROOT/agents/ai-expert.md.tmpl" && pass "ai-expert pins its model" || fail "ai-expert.md.tmpl must pin model:"
 
 summary "merge migration"

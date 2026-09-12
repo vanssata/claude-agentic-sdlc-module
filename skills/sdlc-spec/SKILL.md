@@ -33,8 +33,9 @@ policies contradict each other or the intent, do **not** pick silently — put i
 1. **Prerequisites** — the intent file exists and `docs/sdlc/specs/TEMPLATE.md` exists
    (else `/project-init`). Read the intent fully; it is small by design. Carry its open questions.
 2. **Collect policies** as above.
-3. **Design** — delegate to the `architect` subagent (it omits `model:` and inherits the session
-   model, per the routing rules). Give it: the intent text, the policy list, and the request to
+3. **Design** — delegate to the `architect` subagent (it runs on Opus; pass the EXPERT model only
+   when an EXPERT trigger in the routing rules fires, e.g. an irreversible data-model or API
+   decision). Give it: the intent text, the policy list, and the request to
    return Requirements (numbered, testable), Design (components, data flow, ≥2 alternatives
    rejected), Interfaces (exact shapes), Risks. Do not let it write code.
 4. **Write** — copy `docs/sdlc/specs/TEMPLATE.md` to `docs/sdlc/specs/<slug>.md`, replace

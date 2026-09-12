@@ -2,12 +2,13 @@
 # claude-agentic installer.
 #   ./install.sh [--plan pro|max] [--fable auto|yes|no] [--dry-run]
 # --plan   defaults to auto-detect from ~/.claude.json (organizationType); prompts if unknown.
-# --fable  auto = yes on max, no on pro. Sets the session model and the EXPERT tier's effort.
+# --fable  auto = yes on max, no on pro. Picks the EXPERT tier: Fable 5.1 at xhigh, or Opus 5.
 # --dry-run prints everything that would be written, and writes nothing.
 #
 # Installs into ~/.claude/: model, effort and context settings for the detected
-# plan; the ai-* pipeline agents plus architect, Explore and log-reader; five
-# hooks; eight skills; and one managed block in ~/.claude/CLAUDE.md.
+# plan (the session runs Sonnet on every plan); the ai-* pipeline agents plus
+# architect, Explore and log-reader; five hooks, plus fable-gate on a Fable
+# install; nine skills; and one managed block in ~/.claude/CLAUDE.md.
 #
 # This plugin supersedes claude-routing. On the first run it migrates that
 # plugin's managed block into this one's, so the two never coexist.
@@ -63,9 +64,7 @@ fi
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 PROFILE="$SRC/profiles/$PLAN.json"
 if [ "$PLAN" = max ] && [ "$FABLE" = no ]; then
-  jq '.model = "opus[1m]"
-      | .fallbackModel = "sonnet"
-      | .availableModels = (.availableModels | map(select(startswith("fable") | not)))
+  jq '.availableModels = (.availableModels | map(select(startswith("fable") | not)))
       | del(.modelSettings["claude-fable-5-1"])' "$PROFILE" > "$TMP/profile.json"
 else
   cp "$PROFILE" "$TMP/profile.json"
@@ -81,7 +80,8 @@ READ_BYTES=$(jq -r '.env.CLAUDE_READ_MAX_BYTES' "$TMP/settings.snippet.json")
 
 pretty() {  # model id -> human name
   case "$1" in
-    fable*) echo "Fable 5.1 [1m]";; "opus[1m]") echo "Opus 5 [1m]";; opus*) echo "Opus 5";;
+    "fable[1m]") echo "Fable 5.1 [1m]";; fable*) echo "Fable 5.1";;
+    "opus[1m]") echo "Opus 5 [1m]";; opus*) echo "Opus 5";;
     sonnet*) echo "Sonnet 5";; haiku*) echo "Haiku 4.5";; *) echo "$1";;
   esac
 }
@@ -89,33 +89,48 @@ SESSION_HUMAN=$(pretty "$SESSION_MODEL")
 FALLBACK_HUMAN=$(jq -r '.fallbackModel | if type=="array" then .[] else . end' "$TMP/settings.snippet.json" \
                  | while read -r m; do pretty "$m"; done | paste -sd'|' | sed 's/|/, then /g')
 
-# The EXPERT tier is the session model: ai-expert and architect omit `model:` on
-# purpose, so a Fable outage falls back exactly as the session does.
+# The session runs Sonnet, so nothing expensive may be inherited: ai-expert pins
+# the EXPERT model (rendered here) and architect pins opus. fallbackModel applies
+# to pinned subagents too, so a Fable outage still falls back to Opus.
 if [ "$PLAN" = pro ]; then
   PLAN_LABEL="Pro"
+  EXPERT_MODEL="opus"
   EXPERT_EFFORT="high"
-  PLAN_SPECIFIC="- Fable is off this plan; never request it (\`model: fable\`, \`fable[1m]\`) anywhere. Opus 5 is the top tier here; Sonnet 5 is the fallback and the subagent default. \`xhigh\`/\`max\` are not supported — treat them as unavailable."
+  PLAN_SPECIFIC="- Fable is off this plan; never request it (\`model: fable\`, \`fable[1m]\`) anywhere. Opus 5 is the top tier and serves both STRONG and EXPERT; \`ai-expert\` differs from STRONG in its brief, not its model. \`xhigh\`/\`max\` are not supported — treat them as unavailable."
   EFFORT_RULE="Raise to \`high\` only for architecture, root-cause analysis and adversarial verification, and say that you are raising it."
-  EXPERT_SESSION_NOTE="# model: intentionally omitted — inherits the session model (Opus 5 on the pro plan)"
 else
   PLAN_LABEL="Max"
   if [ "$FABLE" = yes ]; then
+    EXPERT_MODEL="fable"
     EXPERT_EFFORT="xhigh"
-    PLAN_SPECIFIC="- \`xhigh\` is allowed only for \`architect\`, \`ai-expert\` and verify/judge stages while the session runs Fable; \`max\` stays off. Readers never go above \`low\`."
-    EXPERT_SESSION_NOTE="# model: intentionally omitted — inherits the session model (Fable 5.1 [1m] on this install), so the Fable to Opus fallback applies here too"
+    PLAN_SPECIFIC="- \`xhigh\` is allowed only for \`ai-expert\` and verify/judge stages on Fable; \`max\` stays off. Readers never go above \`low\`.
+- \`fable-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/fable-gate.py status\` shows the gate; \`clear\` re-enables Fable early."
   else
+    EXPERT_MODEL="opus"
     EXPERT_EFFORT="high"
-    PLAN_SPECIFIC="- Fable is disabled in this install (\`--fable no\`); the session runs Opus 5 [1m]. Do not request \`model: fable\` anywhere. \`xhigh\`/\`max\` stay off."
-    EXPERT_SESSION_NOTE="# model: intentionally omitted — inherits the session model (Opus 5 [1m] on this install, Fable disabled)"
+    PLAN_SPECIFIC="- Fable is disabled in this install (\`--fable no\`): Opus 5 serves both STRONG and EXPERT. Do not request \`model: fable\` anywhere. \`xhigh\`/\`max\` stay off."
   fi
   EFFORT_RULE="Lower to \`medium\` for routine edits when the session is long; raise above \`high\` only per the plan rule above, and say that you are raising it."
+fi
+EXPERT_HUMAN=$(pretty "$EXPERT_MODEL")
+
+# The Fable gate exists only where Fable does: its hooks are merged into the
+# snippet on a Fable install, and stripped from settings.json on any other.
+if [ "$EXPERT_MODEL" = fable ]; then
+  GATE=on
+  jq -s '.[0] as $base | reduce (.[1].hooks | to_entries[]) as $e
+           ($base; .hooks[$e.key] = ((.hooks[$e.key] // []) + $e.value))' \
+     "$TMP/settings.snippet.json" "$SRC/settings.fable.json" > "$TMP/snippet.gate.json"
+  mv "$TMP/snippet.gate.json" "$TMP/settings.snippet.json"
+else
+  GATE=off
 fi
 
 render() {  # render <src> <dst>
   PLAN_LABEL="$PLAN_LABEL" SESSION_HUMAN="$SESSION_HUMAN" FALLBACK_HUMAN="$FALLBACK_HUMAN" \
   EFFORT="$EFFORT" COMPACT="$COMPACT" READ_LINES="$READ_LINES" \
   PLAN_SPECIFIC="$PLAN_SPECIFIC" EFFORT_RULE="$EFFORT_RULE" \
-  EXPERT_EFFORT="$EXPERT_EFFORT" EXPERT_SESSION_NOTE="$EXPERT_SESSION_NOTE" \
+  EXPERT_EFFORT="$EXPERT_EFFORT" EXPERT_MODEL="$EXPERT_MODEL" EXPERT_HUMAN="$EXPERT_HUMAN" \
   python3 - "$1" "$2" <<'PY'
 import os, sys
 src, dst = sys.argv[1], sys.argv[2]
@@ -130,7 +145,8 @@ for key, value in {
     "{{PLAN_SPECIFIC_ROUTING}}": os.environ["PLAN_SPECIFIC"],
     "{{EFFORT_RULE}}": os.environ["EFFORT_RULE"],
     "{{EXPERT_EFFORT}}": os.environ["EXPERT_EFFORT"],
-    "{{EXPERT_SESSION_NOTE}}": os.environ["EXPERT_SESSION_NOTE"],
+    "{{EXPERT_MODEL}}": os.environ["EXPERT_MODEL"],
+    "{{EXPERT_MODEL_HUMAN}}": os.environ["EXPERT_HUMAN"],
 }.items():
     text = text.replace(key, value)
 assert "{{" not in text, "unrendered placeholder in %s" % src
@@ -141,8 +157,59 @@ PY
 render "$SRC/agents/ai-expert.md.tmpl" "$TMP/ai-expert.md"
 render "$SRC/CLAUDE.snippet.md" "$TMP/CLAUDE.block.md"
 
+# Only the statusline receives the account's rate_limits, so the gate's weekly
+# check rides on it: on a Fable install the statusline command is wrapped as
+#   "$HOME/.claude/hooks/fable-gate.py" statusline --then '<your command>'
+# (or set to the bare check when there was none), and unwrapped to exactly the
+# original command on any other install.
+statusline_gate() {  # statusline_gate <settings.json> <on|off> <apply|dry>
+  python3 - "$@" <<'PY'
+import json, os, shlex, sys
+path, gate, mode = sys.argv[1:4]
+PREFIX = '"$HOME/.claude/hooks/fable-gate.py" statusline'
+try:
+    settings = json.load(open(path)) if os.path.exists(path) else {}
+except ValueError:
+    print("statusline: settings.json is not valid JSON; left alone"); sys.exit(0)
+line = settings.get("statusLine")
+cmd = line.get("command", "") if isinstance(line, dict) else ""
+ours = isinstance(cmd, str) and cmd.startswith(PREFIX)
+action = None
+if gate == "on":
+    if ours:
+        print("statusline: already checks the Fable weekly limit"); sys.exit(0)
+    if line is None:
+        settings["statusLine"] = {"type": "command", "command": PREFIX}
+        action = "added a silent statusline that checks the Fable weekly limit"
+    elif isinstance(line, dict) and line.get("type") == "command" and cmd.strip():
+        line["command"] = f"{PREFIX} --then {shlex.quote(cmd)}"
+        action = "wrapped your statusline command with the Fable weekly-limit check (its output is unchanged)"
+    else:
+        print("statusline: not a command statusline; the weekly-limit check is not wired"); sys.exit(0)
+else:
+    if not ours:
+        sys.exit(0)
+    rest = cmd[len(PREFIX):].strip()
+    if rest.startswith("--then"):
+        parts = shlex.split(rest)
+        line["command"] = parts[1] if len(parts) > 1 else ""
+        action = "restored your original statusline command (no Fable on this install)"
+    else:
+        del settings["statusLine"]
+        action = "removed the Fable weekly-limit statusline (no Fable on this install)"
+if mode == "dry":
+    print("statusline: would have " + action); sys.exit(0)
+tmp = path + ".tmp"
+with open(tmp, "w") as fh:
+    json.dump(settings, fh, indent=2); fh.write("\n")
+os.replace(tmp, path)
+print("statusline: " + action)
+PY
+}
+
 if [ "$DRY" = 1 ]; then
-  echo "== plan=$PLAN fable=$FABLE (dry run, nothing written)"
+  echo "== plan=$PLAN fable=$FABLE fable-gate=$GATE (dry run, nothing written)"
+  statusline_gate "$CLAUDE_DIR/settings.json" "$GATE" dry | sed 's/^/== /'
   echo "== settings snippet (merged into $CLAUDE_DIR/settings.json):"
   jq . "$TMP/settings.snippet.json"
   echo "== agents/ai-expert.md (rendered head):"
@@ -264,6 +331,22 @@ jq -s '
 ' "$SETTINGS" "$TMP/settings.snippet.json" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 echo "merged: settings.json (backup in settings.json.bak)"
 
+# No Fable on this install: drop the gate's entries a previous Fable install left,
+# and an event list only when the gate was all it held. Other hooks stay.
+if [ "$GATE" = off ]; then
+  before=$(jq -c '.hooks // {}' "$SETTINGS")
+  jq 'if (.hooks | type) == "object" then
+        .hooks |= with_entries(
+          . as $e
+          | ($e.value | map(select(((.hooks // []) | map(.command // "") | any(test("fable-gate"))) | not))) as $kept
+          | if ($kept | length) == ($e.value | length) then $e
+            elif ($kept | length) == 0 then empty
+            else $e | .value = $kept end)
+      else . end' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+  [ "$before" != "$(jq -c '.hooks // {}' "$SETTINGS")" ] && echo "removed: fable-gate hooks (no Fable on this install)"
+fi
+statusline_gate "$SETTINGS" "$GATE" apply
+
 # ---------------------------------------------------------------- 5. CLAUDE.md block
 GLOBAL_MD="$CLAUDE_DIR/CLAUDE.md"
 touch "$GLOBAL_MD"
@@ -302,17 +385,24 @@ print("CLAUDE.md: %s%s (backup in CLAUDE.md.bak)"
 PY
 
 # ---------------------------------------------------------------- 6. audits
-missing=""
+missing="" unpinned=""
 for f in "$CLAUDE_DIR"/agents/*.md; do
   case "$f" in *.bak|*.superseded) continue;; esac
   [ -e "$f" ] || continue
   grep -qE '^effort:' "$f" || missing="$missing $(basename "$f")"
+  grep -qE '^model:' "$f" || unpinned="$unpinned $(basename "$f")"
 done
 if [ -n "$missing" ]; then
   echo
   echo "WARNING: these agents declare no 'effort:' and inherit the session effort:"
   for m in $missing; do echo "  - $m"; done
   echo "Add 'effort: low' for readers and runners, 'effort: medium' for mechanical work."
+fi
+if [ -n "$unpinned" ]; then
+  echo
+  echo "WARNING: these agents declare no 'model:' and resolve to CLAUDE_CODE_SUBAGENT_MODEL (sonnet):"
+  for m in $unpinned; do echo "  - $m"; done
+  echo "Pin 'model: haiku|sonnet|opus|fable' to the tier the role needs."
 fi
 
 if python3 - "$GLOBAL_MD" <<'PY'
@@ -334,17 +424,20 @@ Done.
   plan            $PLAN  (fable=$FABLE)
   session model   $SESSION_MODEL ($SESSION_HUMAN), effort $EFFORT
   fallback        $FALLBACK
-  EXPERT tier     the session model at effort $EXPERT_EFFORT (architect, ai-expert)
+  STRONG tier     opus at effort high (ai-reviewer, ai-security, architect)
+  EXPERT tier     $EXPERT_MODEL ($EXPERT_HUMAN) at effort $EXPERT_EFFORT (ai-expert)
   compaction      $COMPACT tokens
   read guard      an unbounded Read is refused above $READ_LINES lines / $READ_BYTES bytes
   agents          $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd' ')
   hooks           cap-large-read, project-scaffold (Setup:init), ai-git-guard (global),
                   ai-path-guard + ai-scope-guard (active where .ai/ exists)
+  fable gate      $GATE $( [ "$GATE" = on ] && echo "(Fable agents go to Opus while Fable is rate-limited, unreachable,
+                  or the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% used — checked through the statusline)" || echo "(no Fable on this install)" )
   skills          $(ls "$SRC/skills" | paste -sd' ')
 
 Restart Claude Code, then:
   /config        model and effort match the profile
-  /hooks         lists the five hooks
-  /skills        lists ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*
+  /hooks         lists the five hooks$( [ "$GATE" = on ] && echo ", plus fable-gate on PreToolUse, PostToolUse and StopFailure" )
+  /skills        lists ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*, usage-report
   /ai-init       in a project, to survey it and build .ai/
 SUM

@@ -4,7 +4,7 @@ description: Use proactively to read logs, test output, stack traces, CI/CD pipe
 tools: Read, Grep, Glob, Bash
 disallowedTools: Write, Edit
 model: sonnet
-effort: medium
+effort: low
 color: cyan
 ---
 You read logs and command output so the main agent does not have to.

@@ -1,6 +1,8 @@
 # The hooks
 
-Five in total. Two come from the routing half and are not guards:
+Five in total, plus `fable-gate` on a Fable install (see
+[fable-gate](#fable-gate--fable-installs-only)). Two come from the routing half
+and are not guards:
 
 - **`cap-large-read.py`** (`PreToolUse:Read`) refuses an unbounded `Read` of a
   file over 4 000 lines or 250 KB. It does not cap what can be read — it insists
@@ -127,11 +129,74 @@ This is the hook that makes the plan real. Without it, "the step may touch these
 files" is a sentence in a document; with it, the sentence is enforced by the
 harness, and widening scope requires amending the plan.
 
+## fable-gate — Fable installs only
+
+`ai-expert` is pinned to `model: fable`, and `architect` may be called with it.
+`fallbackModel` moves such an agent to Opus when Fable is **overloaded** — but a
+rate limit, a used-up usage limit, or a model the account cannot reach
+(`model_not_found`) never triggers that switch: the agent just fails, and so does
+the next one. `fable-gate.py` closes the gap at run time.
+
+| Event | Does |
+|---|---|
+| `StopFailure` (`rate_limit\|model_not_found`) | when the failure is Fable's, records Fable as unavailable — 1 h for a rate limit, 6 h for model-not-found |
+| `PostToolUse:Agent` | a Fable agent that `resolvedModel`/`modelsUsed` show fell back: recorded for 15 min, so the next ones skip the failed attempt |
+| `PreToolUse:Agent` | while a record is live, returns `updatedInput` with `model: opus` for any agent that would run on Fable — an explicit `model`, the definition's frontmatter (project before user), or `CLAUDE_CODE_SUBAGENT_MODEL` — and tells Claude (`additionalContext`) and you (`permissionDecisionReason`) why |
+
+A failure is Fable's when its message names Fable, the failing agent's definition
+pins Fable, the transcript was last served by Fable, or a Fable agent launched in
+the last five minutes. Authentication, billing and account errors are ignored:
+they are account-wide, and Opus would fail the same way.
+
+The record lives in `~/.claude/state/fable-gate.json` and expires on its own, so
+Fable is tried again after the reset. The gate never blocks an agent and fails
+open on any error. When an agent was already running on Fable and failed, the
+managed `CLAUDE.md` block has the main session re-run that brief once on Opus.
+
+```bash
+~/.claude/hooks/fable-gate.py status          # active until …, or inactive
+~/.claude/hooks/fable-gate.py clear           # try Fable again now
+~/.claude/hooks/fable-gate.py set 3600 reason # route to Opus for an hour
+```
+
+**The weekly limit — on by default.** Claude Code gives the statusline, not
+hooks, the account's `rate_limits`, so the installer wires the check through the
+statusline. On a Fable install your `statusLine` command becomes
+
+```
+"$HOME/.claude/hooks/fable-gate.py" statusline --then '<your original command>'
+```
+
+The gate reads the input, then runs your command on the same input and passes
+its output and exit code through — what you see does not change. With no
+statusline configured, the installer adds the bare check, which prints nothing.
+At `CLAUDE_FABLE_GATE_WEEKLY_PCT` (90) percent of `rate_limits.seven_day` used,
+Fable agents go to Opus until `resets_at`. The limit is account-wide, not
+Fable's own, so this is a spend guard rather than an availability check.
+
+Re-installing never wraps twice; `--fable no` or a Pro install puts your
+original command back byte for byte, or removes the statusline it added. If
+`/statusline` later rewrites the command, re-run the installer to wire the
+check again. To keep the statusline but skip every check, set
+`CLAUDE_FABLE_GATE=off`.
+
+Tuning: `CLAUDE_FABLE_GATE=off` disables it; `CLAUDE_FABLE_GATE_TTL`,
+`_NOT_FOUND_TTL`, `_OVERLOAD_TTL`, `_LAUNCH_WINDOW`, `_WEEKLY_PCT`, `_FALLBACK` and
+`_STATE` override the defaults.
+
+An install with `--fable no`, or on Pro, does not register the gate, and removes
+the entries a previous Fable install left — your own hooks on the same events
+stay, and the statusline is unwrapped.
+
 ## Testing them
 
 ```bash
 bash tests/run-all.sh
 ```
+
+`tests/test-fable-gate.sh` drives the gate through every event with synthetic
+payloads, and installs each plan and `--fable` option into scratch directories,
+including switching Fable off and on again.
 
 Each guard has a fixture suite: a JSON payload plus the expected decision, run
 through the real script. Adding a rule means adding a fixture — including one that

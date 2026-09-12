@@ -9,8 +9,9 @@ cd "/Store/Claude Plugins/claude-agentic"
 
 It detects your plan from `~/.claude.json`, writes the model, effort and context
 settings for it, renders the EXPERT tier accordingly, copies the agents, hooks
-and skills into `~/.claude/`, registers five hooks in `settings.json` and writes
-one managed block into `~/.claude/CLAUDE.md`.
+and skills into `~/.claude/`, registers five hooks in `settings.json` (plus
+`fable-gate` when Fable is enabled) and writes one managed block into
+`~/.claude/CLAUDE.md`.
 
 If you had `claude-routing` installed, this run migrates its block away; see the
 migration section of the README.
@@ -19,8 +20,8 @@ Restart Claude Code, then check:
 
 ```
 /config     → the model and effort match your plan
-/skills     → ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*
-/hooks      → five hooks
+/skills     → ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*, usage-report
+/hooks      → five hooks, plus fable-gate on a Fable install
 ```
 
 Try it without committing to anything first:

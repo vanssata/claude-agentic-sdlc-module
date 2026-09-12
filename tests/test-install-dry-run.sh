@@ -8,17 +8,22 @@ INSTALL="$PLUGIN_ROOT/install.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
 echo "== dry run renders for every plan"
-for combo in "max yes:xhigh:Fable 5.1 [1m]" "max no:high:Opus 5 [1m]" "pro no:high:Opus 5"; do
-    args="${combo%%:*}"; rest="${combo#*:}"; effort="${rest%%:*}"; model="${rest#*:}"
+for combo in "max yes:xhigh:fable:Fable 5.1" "max no:high:opus:Opus 5" "pro no:high:opus:Opus 5"; do
+    args="${combo%%:*}"; rest="${combo#*:}"; effort="${rest%%:*}"; rest="${rest#*:}"
+    xmodel="${rest%%:*}"; model="${rest#*:}"
     set -- $args
     out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan "$1" --fable "$2" --dry-run 2>&1)
     rc=$?
     [ $rc -eq 0 ] && pass "--plan $1 --fable $2 exits 0" || fail "--plan $1 --fable $2 should exit 0" "$out"
     printf '%s' "$out" | grep -q '{{' && fail "--plan $1 --fable $2 left an unrendered placeholder" || pass "--plan $1 --fable $2 renders every placeholder"
     printf '%s' "$out" | grep -q "effort: $effort" && pass "--plan $1 --fable $2 sets EXPERT effort to $effort" || fail "expected effort: $effort" "$out"
-    printf '%s' "$out" | grep -qF "$model" && pass "--plan $1 --fable $2 names $model" || fail "expected $model in the output" "$out"
+    printf '%s' "$out" | grep -qx "model: $xmodel" && pass "--plan $1 --fable $2 pins ai-expert to $xmodel" || fail "expected model: $xmodel" "$out"
+    printf '%s' "$out" | grep -qF "## $model (EXPERT)" && pass "--plan $1 --fable $2 names $model as EXPERT" || fail "expected '## $model (EXPERT)' in the output" "$out"
+    printf '%s' "$out" | grep -qF 'Session model is Sonnet 5' && pass "--plan $1 --fable $2 runs the session on Sonnet" || fail "expected a Sonnet session" "$out"
     printf '%s' "$out" | grep -q 'nothing written' && pass "--plan $1 --fable $2 writes nothing" || fail "dry run should write nothing"
 done
+out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable no --dry-run 2>&1)
+printf '%s' "$out" | grep -q '"fable' && fail "--fable no must drop fable from the settings" "$out" || pass "--fable no drops fable from the settings"
 
 echo "== dry run writes nothing at all"
 PROBE="$TMP/probe"; mkdir -p "$PROBE"
@@ -42,22 +47,24 @@ for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Ex
          skills/ai-init/SKILL.md skills/ai-init/scaffold-ai.sh skills/ai-task/state.py \
          skills/ai-audit/SKILL.md skills/ai-status/SKILL.md skills/project-init/SKILL.md \
          skills/sdlc-intent/SKILL.md skills/sdlc-spec/SKILL.md skills/sdlc-plan/SKILL.md \
-         skills/ai-init/templates/.ai/AGENTS.md skills/project-init/templates/intent.md; do
+         skills/ai-init/templates/.ai/AGENTS.md skills/project-init/templates/intent.md \
+         skills/usage-report/SKILL.md skills/usage-report/usage-report.py; do
     [ -e "$DIR/$f" ] && pass "$f installed" || fail "$f missing"
 done
 [ -x "$DIR/hooks/ai-git-guard.sh" ] && pass "hooks are executable" || fail "hooks should be executable"
 [ -x "$DIR/skills/ai-init/scaffold-ai.sh" ] && pass "scaffold-ai.sh is executable" || fail "scaffold should be executable"
 grep -q 'effort: xhigh' "$DIR/agents/ai-expert.md" && pass "ai-expert renders at xhigh on max+fable" || fail "expert effort wrong"
-grep -q '^model:' "$DIR/agents/ai-expert.md" && fail "ai-expert must NOT pin a model" || pass "ai-expert omits model: so it inherits the session"
+grep -qx 'model: fable' "$DIR/agents/ai-expert.md" && pass "ai-expert pins fable on max+fable (the Sonnet session must not be inherited)" || fail "ai-expert should pin model: fable"
+grep -qx 'model: opus' "$DIR/agents/architect.md" && pass "architect pins opus" || fail "architect should pin model: opus"
 
 echo "== settings.json"
 n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/settings.json")
-[ "$n" = 4 ] && pass "four PreToolUse hooks registered" || fail "expected 4 PreToolUse commands, got $n"
+[ "$n" = 5 ] && pass "five PreToolUse hooks registered (four guards + fable-gate on a Fable install)" || fail "expected 5 PreToolUse commands, got $n"
 jq -e '.hooks.Setup[0].hooks[0].command | test("project-scaffold")' "$DIR/settings.json" >/dev/null \
     && pass "the Setup:init scaffold hook is registered" || fail "Setup hook missing"
-[ "$(jq -r .model "$DIR/settings.json")" = "fable[1m]" ] && pass "the session model is set from the profile" || fail "model not set"
+[ "$(jq -r .model "$DIR/settings.json")" = "sonnet" ] && pass "the session model is sonnet" || fail "model not set to sonnet"
 [ "$(jq -r .effortLevel "$DIR/settings.json")" = "high" ] && pass "the default effort is set" || fail "effort not set"
-[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "600000" ] && pass "the compaction window is set" || fail "compaction not set"
+[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "300000" ] && pass "the compaction window is set" || fail "compaction not set"
 [ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL' "$DIR/settings.json")" = "sonnet" ] && pass "the subagent default is sonnet" || fail "subagent default not set"
 grep -q 'claude-agentic:start' "$DIR/CLAUDE.md" && pass "the CLAUDE.md block is written" || fail "block missing"
 
@@ -75,7 +82,7 @@ CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 echo "== re-install is idempotent"
 CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/settings.json")
-[ "$n" = 4 ] && pass "hook entries are not duplicated on re-install" || fail "hooks duplicated: $n"
+[ "$n" = 5 ] && pass "hook entries are not duplicated on re-install" || fail "hooks duplicated: $n"
 [ "$(jq '[.hooks.Setup[].hooks[].command] | length' "$DIR/settings.json")" = 1 ] \
     && pass "the Setup hook is not duplicated either" || fail "Setup hook duplicated"
 b=$(grep -c 'claude-agentic:start' "$DIR/CLAUDE.md")
@@ -93,8 +100,8 @@ jq -n '{permissions:{allow:["Bash(ls:*)"]}, hooks:{PreToolUse:[{matcher:"Edit|Wr
 CLAUDE_DIR="$DIR2" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 jq -e '[.hooks.PreToolUse[].hooks[].command] | index("\"$HOME/.claude/hooks/vendor-write-guard.sh\"")' "$DIR2/settings.json" >/dev/null \
   && pass "a third-party hook survives the merge" || fail "the user's own hook was clobbered"
-[ "$(jq '[.hooks.PreToolUse[].hooks[].command]|length' "$DIR2/settings.json")" = 5 ] \
-  && pass "our four PreToolUse hooks are appended alongside it" || fail "expected 5 hook commands total"
+[ "$(jq '[.hooks.PreToolUse[].hooks[].command]|length' "$DIR2/settings.json")" = 6 ] \
+  && pass "our five PreToolUse hooks are appended alongside it" || fail "expected 6 hook commands total"
 jq -e '.permissions.allow | index("Bash(ls:*)")' "$DIR2/settings.json" >/dev/null \
   && pass "unrelated settings keys are preserved" || fail "unrelated settings were lost"
 

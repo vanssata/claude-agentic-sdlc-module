@@ -1,7 +1,7 @@
 {
-  "model": "opus",
-  "availableModels": ["opus", "sonnet", "haiku"],
-  "fallbackModel": "sonnet",
+  "model": "sonnet",
+  "availableModels": ["sonnet", "opus", "haiku"],
+  "fallbackModel": "opus",
   "effortLevel": "medium",
   "modelSettings": {
     "claude-opus-5": { "effortLevel": "medium" },

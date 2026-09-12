@@ -39,11 +39,16 @@ Read-only. This skill never changes state; it reports it.
 
    ```bash
    jq -r '{model, fallbackModel, effortLevel}' ~/.claude/settings.json
+   grep -E '^(model|effort):' ~/.claude/agents/ai-expert.md
+   python3 ~/.claude/hooks/fable-gate.py status 2>/dev/null
    ```
 
    Report what the tiers resolve to on this machine: FAST is haiku, BALANCED is
-   sonnet, STRONG is opus, and **EXPERT is whatever `model` says** — name it, so
-   the reader knows what an escalation would actually cost.
+   sonnet (and the session, per `model`), STRONG is opus, and **EXPERT is the
+   `model:` pinned in `ai-expert.md`** — name it, so the reader knows what an
+   escalation would actually cost. If `model` is not sonnet, say so: the session
+   is running above the default tier. When EXPERT is fable and the gate reports
+   `active`, EXPERT is running on Opus right now — say until when, and why.
 
 5. **Risk-tier mirror staleness.** `.ai/policies/risk-tiers.md` carries the
    sha256 of the JSON it was generated from:

@@ -1,4 +1,4 @@
-<!-- generated from risk-tiers.json sha256:01c32f8ff038787e49070b8b0eb160eb4b4704a020b050678292051fc73a4fc6 -->
+<!-- generated from risk-tiers.json sha256:17fa7392d1466e286d5aa83a19e364835c1977750ae1f186aec59e2046d688ea -->
 <!-- If /ai-status reports this hash as stale, risk-tiers.json changed and this
      mirror did not. The JSON file is the source of truth; update this by hand. -->
 
@@ -23,7 +23,9 @@ three things: who plans it, who reviews it, and whether a human signs it off.
 | T0, T1 | FAST — the cheapest model that can follow an instruction |
 | T2 | BALANCED |
 | T3, T4 | STRONG |
-| T5 | EXPERT, the session model itself |
+| T5 | EXPERT — `ai-expert`, pinned to Fable 5.1 on Max with Fable, Opus 5 otherwise |
+
+The main session and every agent without a trigger run on Sonnet (BALANCED).
 
 Escalation is per task and one step at a time. The triggers are listed in
 `risk-tiers.json`; the short version is that a cheap agent which returns thin,

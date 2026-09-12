@@ -17,7 +17,9 @@ It gives a machine and a repository four things:
    human approval — with the gates each risk tier requires.
 4. **Five hooks** that enforce the parts that matter, so an agent cannot read a
    whole 20 000-line file into context, quietly widen its scope, read a
-   production secret, force-push, or deploy.
+   production secret, force-push, or deploy — plus, on a Fable install,
+   `fable-gate`, which sends Fable agents to Opus while Fable is rate-limited or
+   unreachable.
 
 The design goal is asymmetry: **it should be harder for an agent to damage the
 project than to make a small, well-defined change safely.**
@@ -33,6 +35,7 @@ project than to make a small, well-defined change safely.**
 ./install.sh --plan max            # Max 5x and 20x share this profile
 ./install.sh --plan max --fable no # Opus at the EXPERT tier instead of Fable
 ./install.sh --plan pro            # Opus is the top tier on Pro
+# The session runs Sonnet on every plan; Opus and Fable are reached through agents.
 ./install.sh --dry-run             # print what would be written, write nothing
 ```
 
@@ -50,10 +53,10 @@ Re-running the installer updates in place: it backs up what it replaces to
 | `profiles/{pro,max}.json` + `settings.common.json` | deep-merged into `~/.claude/settings.json` | model, fallback, effort, compaction, output limits and the hook registrations |
 | `CLAUDE.snippet.md` | a managed block in `~/.claude/CLAUDE.md` | the rules, between `<!-- claude-agentic:start/end -->`, with the plan's numbers filled in |
 | `agents/ai-*.md` | `~/.claude/agents/` | the ten pipeline agents |
-| `agents/ai-expert.md.tmpl` | `~/.claude/agents/ai-expert.md` | the escalation agent, effort rendered per plan |
+| `agents/ai-expert.md.tmpl` | `~/.claude/agents/ai-expert.md` | the escalation agent, model and effort rendered per plan |
 | `agents/{architect,Explore,log-reader}.md` | `~/.claude/agents/` | design, fast search, log reading |
 | `hooks/*` | `~/.claude/hooks/` | five hooks, the shared library and the guards' default config |
-| `skills/*/` | `~/.claude/skills/` | `/ai-init`, `/ai-audit`, `/ai-task`, `/ai-status`, `/project-init`, `/sdlc-intent`, `/sdlc-spec`, `/sdlc-plan` |
+| `skills/*/` | `~/.claude/skills/` | `/ai-init`, `/ai-audit`, `/ai-task`, `/ai-status`, `/project-init`, `/sdlc-intent`, `/sdlc-spec`, `/sdlc-plan`, `/usage-report` |
 
 ### Limits it sets
 
@@ -63,7 +66,7 @@ Re-running the installer updates in place: it backs up what it replaces to
 | `taskOutputMaxChars` | 80 000 | — |
 | `MAX_MCP_OUTPUT_TOKENS` | 40 000 | 25 000 |
 | `cap-large-read.py` | refuses an unbounded `Read` over 4 000 lines or 250 KB | no limit |
-| `autoCompactWindow` | 600 000 on Max, 180 000 on Pro | the model window |
+| `autoCompactWindow` | 300 000 on Max, 180 000 on Pro | the model window |
 
 The Read guard is a guardrail, not a cage: an explicit `limit` always goes
 through, so reading something large stays possible but has to be deliberate.
@@ -115,13 +118,20 @@ The machine-readable source of truth is `.ai/policies/risk-tiers.json`, which
 | Tier | Runs on | Does |
 |---|---|---|
 | FAST | `haiku`, low | inventories, listings, counting (`ai-indexer`) |
-| BALANCED | `sonnet`, medium | discovery, context, planning, tests, release (`Explore`, `log-reader`, most `ai-*`) |
-| STRONG | `opus`, high | risk at T3+, high-tier planning, adversarial review, security |
-| EXPERT | the session model | design (`architect`) and what STRONG could not settle (`ai-expert`) |
+| BALANCED — default | `sonnet` | the main session and implementation; discovery, context, planning up to T2, tests, release (`Explore`, `log-reader`, most `ai-*`) |
+| STRONG | `opus`, high | adversarial and security review, T3/T4 risk and planning, root cause after Sonnet failed, reversible design (`ai-reviewer`, `ai-security`, `architect`) |
+| EXPERT | `ai-expert` | T5, irreversible design, what STRONG could not settle |
 
-On a Max plan with Fable enabled, EXPERT is Fable 5.1 [1m] at `xhigh` effort; with
-`--fable no` it is Opus 5 [1m]; on Pro it is Opus 5. `ai-expert.md` omits `model:`
-on purpose, so the session's own fallback chain applies to it too.
+Sonnet is the default everywhere, and Opus or Fable run only when a named trigger
+fires; the triggers are listed in the managed `CLAUDE.md` block. On a Max plan
+with Fable enabled, `ai-expert` is pinned to Fable 5.1 at `xhigh` effort; with
+`--fable no`, and on Pro, it is Opus 5. The expensive agents pin `model:`
+because a Sonnet session would otherwise be inherited, and `fallbackModel`
+applies to pinned subagents, so a Fable overload still lands on Opus.
+
+Why: in measured usage, over 80% of the cost was the main session re-reading its
+context (cache read and write), not output. A Sonnet session costs a fifth of a
+Fable one per token of context; `/usage-report` shows the split on your machine.
 
 There is no LOCAL tier: Claude Code has no local-model backend. The work it would
 have done is done by deterministic tools and by `ai-indexer` on the cheapest
@@ -133,6 +143,7 @@ model, and nothing in the design depends on a local model existing.
 |---|---|---|
 | `cap-large-read.py` | every session | refuses an unbounded `Read` of a large file; an explicit `limit` passes |
 | `project-scaffold.sh` | `Setup:init` | creates the `docs/sdlc/` and `.claude/` layout on `/init` |
+| `fable-gate.py` | Fable installs only | records a Fable rate limit or model-not-found (`StopFailure`), or a weekly limit 90% used (read by wrapping your statusline command), and rewrites `model: fable` to `opus` on `PreToolUse:Agent` until the reset; see `docs/hooks.md` |
 | `ai-git-guard` | **every repository** | refuses force push, remote branch delete, history rewrite, push or merge to a protected branch, `gh pr merge`, `--no-verify`, staging a secret, production deploy commands |
 | `ai-path-guard` | only where `.ai/` exists | refuses reading or writing `.env`, `secrets/`, keys, dumps, production logs; and edits to the guards' own config or the task state |
 | `ai-scope-guard` | only during an implementation step | refuses editing a file the approved step does not name, with the `SCOPE_CHANGE_REQUIRED` signal |
@@ -178,11 +189,13 @@ one; nothing references it any more.
 bash tests/run-all.sh
 ```
 
-Eight suites, 224 assertions: the three guards against JSON fixtures, the state
+Ten suites, 343 assertions: the three guards against JSON fixtures, the state
 machine, scaffold idempotency, installer rendering for all three plan
-combinations, the migration off `claude-routing`, and an end-to-end run that
-installs into a scratch directory, scaffolds a throwaway repository and drives a
-T4 task through the guards.
+combinations (Sonnet session, pinned EXPERT model), the migration off
+`claude-routing`, an end-to-end run that installs into a scratch directory,
+scaffolds a throwaway repository and drives a T4 task through the guards, the
+usage report's per-response deduplication, and `fable-gate` through every event
+and every `--plan`/`--fable` install option, including switching Fable off and on.
 
 ## Documentation
 

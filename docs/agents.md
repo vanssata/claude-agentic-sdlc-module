@@ -17,15 +17,19 @@ read at the start of a run.
 | `ai-reviewer` | opus | high | no | plan review, adversarial review |
 | `ai-security` | opus | high | no | T4, T5, auth or personal data |
 | `ai-release` | sonnet | medium | the report | release report |
-| `ai-expert` | the session model | per plan | no | escalation only |
+| `ai-expert` | fable on Max with Fable, opus otherwise (pinned at install) | xhigh / high | no | escalation only |
 
 Three more come from the routing half, and are not part of the pipeline:
 
 | Agent | Model | Effort | Role |
 |---|---|---|---|
-| `architect` | the session model | high | design questions outside a task, or in a repository without `.ai/`. Returns a design and an ordered plan; never writes code |
+| `architect` | opus (the EXPERT model on an EXPERT trigger) | high | design questions outside a task, or in a repository without `.ai/`. Returns a design and an ordered plan; never writes code |
 | `Explore` | sonnet | low | fast read-only search: which files matter, and why |
-| `log-reader` | sonnet | medium | logs, test output, CI, kubectl and helm output, condensed to the errors that matter |
+| `log-reader` | sonnet | low | logs, test output, CI, kubectl and helm output, condensed to the errors that matter |
+
+The main session runs Sonnet too. Built-in `Plan` and `general-purpose` have no
+pinned model and resolve to `CLAUDE_CODE_SUBAGENT_MODEL` (sonnet); that is why
+every definition here pins `model:` — an omitted one silently drops to BALANCED.
 
 `reviewer` used to sit here too. `ai-reviewer` replaces it: adversarial rather
 than descriptive, aware of the task's risk tier, and reading the project's own
@@ -62,13 +66,16 @@ Two mechanisms, deliberately different:
 - **Within the STRONG range**, pass `model: opus` to the same agent definition.
   `ai-risk` and `ai-planner` are written to work at either level; the caller
   decides based on the tier or on a `confidence: uncertain` answer.
-- **To EXPERT**, call `ai-expert`, which is a separate definition because EXPERT
-  resolves to *the session model*, and that is plan-dependent. Baking the
-  resolution into its frontmatter at install time means every skill can just say
-  "call `ai-expert`" and be correct on any plan.
+- **To EXPERT**, call `ai-expert`, which is a separate definition because the
+  EXPERT model is plan-dependent: Fable 5.1 on Max with Fable, Opus 5 otherwise.
+  The installer pins it in the frontmatter, so every skill can just say "call
+  `ai-expert`" and be correct on any plan. `fallbackModel` applies to pinned
+  subagents as well, so a Fable overload still lands on Opus.
 
-Escalate one task at a time, on a trigger from `risk-tiers.json`. Never re-run
-the whole fleet expensive, and never start at EXPERT because it exists.
+The triggers for each tier are in the managed `CLAUDE.md` block and in
+`.ai/policies/model-routing.md`. Escalate one task at a time, on a named trigger.
+Never re-run the whole fleet expensive, and never start at EXPERT because it
+exists.
 
 ## The honest answers
 

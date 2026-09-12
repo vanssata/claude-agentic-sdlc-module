@@ -90,9 +90,9 @@
       "note": "No local model runs inside Claude Code. The work this tier would do — indexing, listing, counting, summarising git history — is done by deterministic tools (rg, git, jq, the framework CLI) and by ai-indexer on the cheapest model."
     },
     "FAST":     { "agent": "ai-indexer",  "model": "haiku",  "effort": "low" },
-    "BALANCED": { "agent": "ai-context, ai-planner, ai-tester, ai-release", "model": "sonnet", "effort": "medium" },
-    "STRONG":   { "agent": "ai-planner, ai-risk, ai-reviewer, ai-security (with model: opus)", "model": "opus", "effort": "high" },
-    "EXPERT":   { "agent": "ai-expert", "model": "inherits the session model", "effort": "set at install time" }
+    "BALANCED": { "agent": "the main session, ai-discovery, ai-context, ai-risk, ai-planner, ai-tester, ai-release, ai-implementer", "model": "sonnet", "effort": "medium", "note": "the default tier" },
+    "STRONG":   { "agent": "ai-reviewer, ai-security, architect; ai-planner and ai-risk with model: opus", "model": "opus", "effort": "high" },
+    "EXPERT":   { "agent": "ai-expert", "model": "pinned in ai-expert.md at install time: fable on Max with Fable, opus otherwise", "effort": "set at install time" }
   },
   "escalation_triggers": [
     "the STRONG tier could not resolve an ambiguity and said so",
