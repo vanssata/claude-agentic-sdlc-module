@@ -64,7 +64,7 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 PROFILE="$SRC/profiles/$PLAN.json"
 if [ "$PLAN" = max ] && [ "$FABLE" = no ]; then
   jq '.model = "opus[1m]"
-      | .fallbackModel = "sonnet"
+      | .fallbackModel = ["sonnet"]
       | .availableModels = (.availableModels | map(select(startswith("fable") | not)))
       | del(.modelSettings["claude-fable-5-1"])' "$PROFILE" > "$TMP/profile.json"
 else
