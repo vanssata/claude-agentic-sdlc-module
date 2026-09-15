@@ -1,27 +1,63 @@
 # The hooks
 
-Five in total, plus `fable-gate` on a Fable install (see
-[fable-gate](#fable-gate--fable-installs-only)). Two come from the routing half
-and are not guards:
+| Hook | Claude Code | Codex |
+|---|---|---|
+| `ai-git-guard` | yes | yes |
+| `ai-path-guard` | yes | yes |
+| `ai-scope-guard` | yes | yes |
+| `cap-large-read.py` | yes | **no** — no hookable read tool |
+| `project-scaffold.sh` | yes (`Setup:init`) | **no** — no equivalent event |
+| `fable-gate.py` | on a Fable install | — |
+| `codex-model-gate.py` | — | yes |
+
+Two of the Claude-side ones come from the routing half and are not guards:
 
 - **`cap-large-read.py`** (`PreToolUse:Read`) refuses an unbounded `Read` of a
   file over 4 000 lines or 250 KB. It does not cap what can be read — it insists
   that reading something large is deliberate, because the main session re-reads
   its whole context every turn, so one 500 KB read is paid for again on every
   later turn. An explicit `limit` always passes. Thresholds come from
-  `CLAUDE_READ_MAX_LINES` and `CLAUDE_READ_MAX_BYTES`.
-- **`project-scaffold.sh`** (`Setup:init`) creates the `docs/sdlc/` and
-  `.claude/` layout when `/init` runs. It never overwrites.
+  `AI_READ_MAX_LINES`/`AI_READ_MAX_BYTES`, or the older
+  `CLAUDE_READ_MAX_LINES`/`CLAUDE_READ_MAX_BYTES`.
+  **Codex has no counterpart**, because its read tool is not on the hook path.
+  The rule is written into `~/.codex/AGENTS.md` instead, where it is policy rather
+  than enforcement — which is worth knowing when you rely on it.
+- **`project-scaffold.sh`** (`Setup:init`) creates the `docs/sdlc/` and runtime
+  layout when `/init` runs. It never overwrites. Under Codex, run it by hand:
+  `~/.codex/hooks/project-scaffold.sh "$PWD"`.
 
-The other three are the guards. They share `hooks/lib/ai-hook-common.sh` and one
-contract: read the payload from stdin, exit 0 silently to allow, or print
+The three guards share `hooks/lib/ai-hook-common.sh` and one contract: read the
+payload from stdin, exit 0 silently to allow, or print
 
 ```json
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"…"}}
 ```
 
-and exit 0 to refuse. They **fail open**: a guard that cannot parse its input
-allows the call.
+and exit 0 to refuse. The deny shape is identical in both runtimes. They **fail
+open**: a guard that cannot parse its input allows the call.
+
+## Two runtimes, one set of rules
+
+The guards' rules are written once. `ai-hook-common.sh` normalises what arrives
+first, so no rule has to know which runtime it is in:
+
+| Codex sends | The guards see |
+|---|---|
+| `apply_patch` | `Edit`, plus every path in the patch body |
+| `shell`, `exec_command`, `local_shell` | `Bash` |
+
+`apply_patch` is the one that changes behaviour rather than naming. A single call
+can add, update, delete and move many files, so the paths are extracted from its
+`*** Add File:`, `*** Update File:`, `*** Delete File:` and `*** Move to:`
+headers and each is checked separately. **One out-of-scope or protected file
+rejects the whole patch** — split it rather than widening the step. The patch text
+also arrives in `tool_input.command`, which is where a shell command lives for
+`Bash`; the guards only treat that field as a command when the tool really is a
+shell, so a patch body is never parsed as a command line.
+
+**Codex will not run these hooks until you trust them.** A non-managed hook has
+to be reviewed and approved through `/hooks` first. Until you do, everything
+below describes rules that are installed but not being applied.
 
 ## What these guards are, and are not
 
@@ -65,11 +101,13 @@ is resolved to its destination, `main`, and refused.
 any rule matches, so `git commit -m "stop force-pushing in the deploy script"` is
 a commit, not a force push.
 
-Configuration: `~/.claude/hooks/ai-git-guard.json`. The installer seeds it once
-from the shipped defaults and **never overwrites it**, so your edits survive a
-re-install. `protected_branches` and `deploy_patterns` are the ones you will want
-to adjust; `allow_force_push_repos` and `allow_protected_push_repos` take
-repository names as an escape hatch.
+Configuration: `~/.claude/hooks/ai-git-guard.json` and
+`~/.codex/hooks/ai-git-guard.json`. The installer seeds each one once from the
+shipped defaults and **never overwrites it**, so your edits survive a re-install.
+Each runtime has its own copy, so edit both if you want the same local rule in
+both. `protected_branches` and `deploy_patterns` are the ones you will want to
+adjust; `allow_force_push_repos` and `allow_protected_push_repos` take repository
+names as an escape hatch.
 
 **Not enforced here:** "do not weaken a test or a static-analysis level to make a
 check pass" is not a property of a git command. It is checked by `ai-reviewer`
@@ -77,7 +115,9 @@ and reported by `ai-release`, and it is stated in `.ai/policies/git.md`.
 
 ## ai-path-guard — where `.ai/` exists
 
-Registered on `Read`, `Edit`, `Write`, `NotebookEdit` and `Bash`. Its first act is
+Registered on `Read`, `Edit`, `Write`, `NotebookEdit` and `Bash` — and on
+`apply_patch` under Codex, where the `Read` half does not apply because reads are
+not hookable there. Its first act is
 to look for a `.ai/` directory above the working directory; without one it exits
 immediately, which is why it can be registered globally and still be invisible in
 repositories that never opted in.
@@ -90,7 +130,8 @@ customer exports, production logs. Allowed back in: `.env.example` and friends,
 migrations, fixtures, test SQL.
 
 **Control files** — `.ai/state/*.json`, `.ai/policies/*.json`, and the guards' own
-scripts and configuration under `~/.claude/hooks/ai-*`. Reading them is fine;
+scripts and configuration under `~/.claude/hooks/ai-*` and `~/.codex/hooks/ai-*`
+(including `codex-model-gate.py`). Reading them is fine;
 writing them is not. State is written by `state.py`; policy is edited by a human,
 outside an agent run, where the change is reviewable.
 
@@ -112,7 +153,7 @@ around it.
 
 ## ai-scope-guard — during an implementation step
 
-Registered on `Edit`, `Write` and `NotebookEdit`. It does nothing unless
+Registered on `Edit`, `Write`, `NotebookEdit` and `apply_patch`. It does nothing unless
 `.ai/state/current.json` exists, its `current_stage` is `implementation`, and a
 step is current.
 
@@ -188,17 +229,64 @@ An install with `--fable no`, or on Pro, does not register the gate, and removes
 the entries a previous Fable install left — your own hooks on the same events
 stay, and the statusline is unwrapped.
 
+## codex-model-gate — Codex only
+
+The same problem as `fable-gate`, one tier up the Codex ladder. `ai-expert` is
+pinned to `gpt-6-astra`; when Astra is rate-limited or the account cannot reach
+it, the agent fails, and so does the next one. The gate records that and sends
+EXPERT launches to Sol at `high` until it expires.
+
+| Event | Does |
+|---|---|
+| `SubagentStop` | when the failure text names a rate limit, an unavailable model or an overload **and** the failure is attributable to an EXPERT agent, records Astra as unavailable — 1 h for a rate limit or overload, 6 h for model-not-found |
+| `PostToolUse:Agent` | marks a completed expert launch, so an immediately following failure can be attributed |
+| `PreToolUse:Agent` | while a record is live, returns `permissionDecision: "allow"` with `updatedInput` carrying `model: gpt-5.6-sol` and `model_reasoning_effort: high`, and says in `additionalContext` that the answer is Sol's, not Astra's |
+
+**Why `SubagentStop`.** Codex has no `StopFailure` event, so there is no signal
+that says "this agent failed for this reason". The gate therefore only marks the
+record when the evidence actually points at an EXPERT agent: the expert agent's
+name in the text, an explicit expert `model` in the payload, an agent file pinned
+to the expert model, or an expert launch within the last five minutes. The
+matching is deliberately narrow — rate limit, quota, 429, model-not-found,
+no-access, overloaded, 503, capacity. A bare "error" or "failed" does not count,
+because a gate that trips on any failure would keep the whole EXPERT tier
+downgraded for an hour over an unrelated bug.
+
+To resolve which model a launch would use, it checks the explicit `model` first,
+then the agent's own file (project `.codex/agents/` before `~/.codex/agents/`),
+then `default_subagent_model` in `config.toml` — the same precedence Codex itself
+applies.
+
+The record lives in `$CODEX_HOME/state/codex-model-gate.json` and expires on its
+own. The gate never blocks an agent and fails open on any error.
+
+```bash
+~/.codex/hooks/codex-model-gate.py status          # active until …, or inactive
+~/.codex/hooks/codex-model-gate.py clear           # try Astra again now
+~/.codex/hooks/codex-model-gate.py set 3600 reason # route to Sol for an hour
+```
+
+Tuning: `CODEX_MODEL_GATE=off` disables it. `CODEX_MODEL_GATE_MODE=context`
+makes it annotate instead of rewriting, for when you would rather see the failure
+than have the model quietly changed under you.
+
+There is no weekly-limit equivalent: Codex does not expose the account's usage
+window to a hook the way Claude Code's statusline does.
+
 ## Testing them
 
 ```bash
 bash tests/run-all.sh
 ```
 
-`tests/test-fable-gate.sh` drives the gate through every event with synthetic
-payloads, and installs each plan and `--fable` option into scratch directories,
-including switching Fable off and on again.
+`tests/test-fable-gate.sh` and `tests/test-codex-model-gate.sh` drive each gate
+through every event with synthetic payloads — including malformed input, an
+unwritable state directory, expiry and explicit-model precedence — and install
+each plan and `--fable` option into scratch directories, including switching
+Fable off and on again.
 
 Each guard has a fixture suite: a JSON payload plus the expected decision, run
-through the real script. Adding a rule means adding a fixture — including one that
-proves the rule does **not** fire where it should not, which is the half that
-gets forgotten.
+through the real script. `tests/fixtures/codex-hooks/` holds the Codex ones,
+including `apply_patch` payloads that touch several files at once. Adding a rule
+means adding a fixture — including one that proves the rule does **not** fire
+where it should not, which is the half that gets forgotten.

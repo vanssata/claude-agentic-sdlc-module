@@ -4,6 +4,14 @@ This directory is the contract between the people who own this codebase and any
 AI agent that works in it. Read this file first; it tells you where everything
 else is and what you are allowed to do.
 
+It is provider-neutral. The same `.ai/` tree serves Claude Code and Codex: same
+pipeline, same stages, same risk tiers, same scope rule, same artifacts. What
+differs is only the runtime layer around it — the repo-root instruction file
+(`CLAUDE.md`, `AGENTS.md`, or both, all pointing here) and which model each tier
+resolves to, in `policies/model-routing.md`. There is exactly one `.ai/` tree
+however many runtimes the project uses, and one `state/current.json`: a task
+started in one runtime resumes in the other.
+
 ## The rule that outranks the others
 
 **Production behaviour is the source of truth.** This is an existing system with
@@ -68,6 +76,11 @@ Each implementation step names the files it may touch. Anything else is refused
 by a hook, and the answer is `SCOPE_CHANGE_REQUIRED`: stop, say what you need and
 why, let the plan be amended. Silent scope growth is the failure mode this whole
 system is built to prevent.
+
+The same guard runs in both runtimes. Where a runtime edits several files in one
+call — Codex's `apply_patch` — every path in that call is checked separately, so
+one out-of-scope file rejects the whole patch. Split the patch; do not widen the
+step.
 
 ## Keeping this directory true
 

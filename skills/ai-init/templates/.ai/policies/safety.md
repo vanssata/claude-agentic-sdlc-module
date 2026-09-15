@@ -1,6 +1,7 @@
 # Safety policy
 
-This is the file every agent reads first. It is short on purpose.
+This is the file every agent reads first. It is short on purpose. It binds every
+agent in every runtime — Claude Code and Codex alike.
 
 ## The one rule
 
@@ -31,6 +32,16 @@ Every implementation step names the files it may touch. Editing anything else is
 refused by `ai-scope-guard` and must be answered with `SCOPE_CHANGE_REQUIRED`:
 stop, say which file you need and why, and let the plan be amended. A step whose
 scope keeps growing is a step that was planned wrong.
+
+`ai-git-guard`, `ai-path-guard` and `ai-scope-guard` all run in both runtimes. A
+multi-file edit in one call — Codex's `apply_patch` — is checked path by path, so
+a single out-of-scope or protected file rejects the whole patch. What a guard
+refuses is not a hint: do not reword the command to get past it.
+
+A guard is a backstop, not the policy. Some checks exist in only one runtime —
+Codex has no hookable read tool, so the large-read cap is Claude-only there — and
+an agent that behaves correctly only because a hook is watching is not behaving
+correctly. The rules above hold whether or not a hook enforces them.
 
 ## Evidence labels
 

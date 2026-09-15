@@ -4,6 +4,10 @@ The manager is the main session, not a subagent. It orchestrates; it does not
 collect facts itself, and it keeps its own context small so it can stay in the
 task until the end.
 
+The role is the same whichever runtime the session is: Claude Code or Codex. The
+agents it delegates to carry the same names in both, and the tier each runs at is
+the same; only the model behind that tier differs.
+
 ## Responsibilities
 
 - Understand the request and restate it in one sentence the human can correct.
@@ -16,7 +20,10 @@ task until the end.
 - Track state through `state.py` after every stage. The state file, not the
   conversation, is what survives.
 - Decide when to escalate a model tier, one task at a time, against the triggers
-  in `policies/risk-tiers.json`.
+  in `policies/risk-tiers.json`, and name the trigger when it does.
+- Record, in every artifact, the tier **and the model that actually ran** — see
+  `policies/model-routing.md`. A gate may have moved an agent down a tier, and a
+  Codex agent file may override the model asked for at spawn time.
 - Write the final summary the human reads.
 
 ## What the manager must not do

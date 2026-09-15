@@ -19,8 +19,12 @@ Output: `docs/sdlc/specs/<slug>.md` with the same slug.
 
 Before designing, collect the policies the spec must conform to, in this order:
 
-1. `CLAUDE.md` at the repo root and the global `~/.claude/CLAUDE.md` (bounded reads);
-2. `.claude/skills/*/SKILL.md` and `.claude/agents/*.md` in the repo — read only the frontmatter
+1. the repo-root instruction file — `CLAUDE.md` and/or `AGENTS.md`, whichever exist — and the
+   global one of the runtime you are in (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`), bounded reads.
+   When a repo carries both, they describe the same project: read both and note any disagreement
+   as a flagged concern;
+2. `.claude/skills/*/SKILL.md` and `.claude/agents/*.md`, `.codex/skills/*/SKILL.md` and
+   `.codex/agents/*.toml` in the repo — read only the frontmatter
    `description:` lines (`grep -n '^description:'`) and open a skill only if it applies;
 3. `docs/sdlc/adr/*.md` — accepted decisions are binding, note their numbers;
 4. plugin skills whose description matches the stack (e.g. Sylius/Symfony UX skills).
@@ -33,8 +37,9 @@ policies contradict each other or the intent, do **not** pick silently — put i
 1. **Prerequisites** — the intent file exists and `docs/sdlc/specs/TEMPLATE.md` exists
    (else `/project-init`). Read the intent fully; it is small by design. Carry its open questions.
 2. **Collect policies** as above.
-3. **Design** — delegate to the `architect` subagent (it runs on Opus; pass the EXPERT model only
-   when an EXPERT trigger in the routing rules fires, e.g. an irreversible data-model or API
+3. **Design** — delegate to the `architect` subagent (it runs at the STRONG tier — Opus under
+   Claude Code, Sol under Codex; escalate to the EXPERT agent only when an EXPERT trigger in the
+   routing rules fires, e.g. an irreversible data-model or API
    decision). Give it: the intent text, the policy list, and the request to
    return Requirements (numbered, testable), Design (components, data flow, ≥2 alternatives
    rejected), Interfaces (exact shapes), Risks. Do not let it write code.

@@ -1,0 +1,13 @@
+{
+  "case": "codex apply_patch: writing .env is refused",
+  "guard": "path",
+  "expect": "deny",
+  "payload": {
+    "session_id": "thr_1",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "apply_patch",
+    "tool_use_id": "call_11",
+    "cwd": "__ROOT__",
+    "tool_input": { "command": "*** Begin Patch\n*** Update File: .env\n@@\n-SECRET=1\n+SECRET=2\n*** End Patch" }
+  }
+}

@@ -63,4 +63,8 @@ NOREPO="$TMP/plain"; mkdir -p "$NOREPO"
 out=$(jq -nc --arg r "$NOREPO" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:"echo hello"}}' | "$GUARD")
 [ -z "$out" ] && pass "a non-git command outside a repo is allowed" || fail "should allow" "$out"
 
+echo "== ai-git-guard (codex payloads)"
+run_codex_fixtures "$GUARD" git "$ROOT"
+assert_fails_open "$GUARD" "a malformed Codex payload fails open" "{ not json"
+
 summary "ai-git-guard"

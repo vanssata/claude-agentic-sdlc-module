@@ -11,9 +11,13 @@ says what to do instead.
 - **Out of scope** — the current step does not name that file. Amend the step in
   the plan and re-register it, or finish the step first. That is the entire point
   of the guard.
-- **A git operation** — adjust `~/.claude/hooks/ai-git-guard.json`
-  (`protected_branches`, `deploy_patterns`, or the per-repository allow lists).
-  It is your file; the installer never overwrites it.
+- **A git operation** — adjust `ai-git-guard.json` in your runtime's hooks
+  directory (`protected_branches`, `deploy_patterns`, or the per-repository allow
+  lists). It is your file; the installer never overwrites it. Each runtime has its
+  own copy, so edit both if you use both.
+- **A whole `apply_patch` rejected over one file** — that is the rule, not a bug.
+  A patch is checked path by path, and one out-of-scope or protected file rejects
+  all of it. Split the patch; do not widen the step to make the patch fit.
 
 ## How do I widen scope in the middle of a step?
 
@@ -21,9 +25,12 @@ Have the agent report `SCOPE_CHANGE_REQUIRED` with the file it needs and why,
 then amend that one step in the plan and re-register it:
 
 ```bash
-python3 ~/.claude/skills/ai-task/state.py plan --ref <plan> --steps steps.json
-python3 ~/.claude/skills/ai-task/state.py step <step_id>
+python3 "$AI_HOME/skills/ai-task/state.py" plan --ref <plan> --steps steps.json
+python3 "$AI_HOME/skills/ai-task/state.py" step <step_id>
 ```
+
+where `$AI_HOME` is `~/.claude` or `~/.codex` — the two copies are the same
+script and both write the project's `.ai/state/current.json`.
 
 One step is amended, not the whole task replanned.
 
@@ -37,8 +44,7 @@ git guard is global by design, but takes per-repository escape hatches:
   "allow_protected_push_repos": ["my-notes"] }
 ```
 
-in `~/.claude/hooks/ai-git-guard.json`, matched against the repository's directory
-name.
+in `ai-git-guard.json`, matched against the repository's directory name.
 
 ## Why does the pipeline never commit or deploy?
 
@@ -56,7 +62,8 @@ no path or scope guard — `/ai-task` would be a name for improvisation.
 
 ## What happened to claude-routing?
 
-It is part of this plugin now. Installing this one migrates its managed
+It is part of this plugin now, and the routing it did for Claude Code is one half
+of what this does for two runtimes. Installing this one migrates its managed
 `CLAUDE.md` block into a single block carrying both sets of rules, and retires
 the `reviewer` agent that `ai-reviewer` replaces. Your model, effort and limits
 do not change — they come from the same `profiles/`. The old directory can be
@@ -76,10 +83,66 @@ are the options" — and in repositories that have no `.ai/`. Inside a task,
 
 ## Why is there no local model?
 
-Claude Code has no local-model backend. The work a LOCAL tier would have done —
+Neither runtime has a local-model backend. The work a LOCAL tier would have done —
 indexing, listing, summarising git history — is done by deterministic tools and by
 `ai-indexer` on the cheapest hosted model. Nothing depends on a local model
 existing, so one can be added later without redesigning anything.
+
+## Can I use this from Codex as well as Claude Code?
+
+Yes, and from both over the same repository. `./install.sh` detects what you have
+and installs for each; `--target auto|claude|codex|both` overrides it. The `.ai/`
+tree, the pipeline, the tiers and the task state are shared — a task started in
+one runtime resumes in the other. What differs is the install root, the
+instruction file (`CLAUDE.md` / `AGENTS.md`) and which model each tier resolves
+to. See the table at the top of the README.
+
+## The installer changed my Codex model from Astra to Sol
+
+Deliberately. The session model is the largest single cost in a long session —
+most of it is re-reading context, not generating output — so the routing puts the
+session on Sol at `high` and keeps Astra as the EXPERT escalation, one named
+trigger away. If you want it back, set `model` in `~/.codex/config.toml`; the
+installer will set it again on the next run, so change `profiles/codex.json`
+instead if you want the decision to stick.
+
+## Will installing overwrite my `config.toml`?
+
+No. Six keys are managed: `model`, `model_reasoning_effort`, and four under
+`[agents]`. The merge edits those lines in place, then parses the file before and
+after and **refuses to write** unless the only keys that differ are those six.
+Comments, `[projects.*]`, `[mcp_servers.*]`, `[marketplaces.*]` and everything
+else survive; a malformed file aborts the merge untouched. The previous version
+is kept as `config.toml.bak`.
+
+## Why do the Codex guards not seem to do anything?
+
+Almost certainly because they have not been trusted yet. Codex does not run a
+non-managed hook until you review and approve it in `/hooks`. Until then they are
+installed and inert.
+
+## Why does Codex have `ai-risk-strong` and `ai-planner-strong`?
+
+Because Codex resolves a value in an agent's own file *ahead* of the value passed
+when the agent is spawned. "Run `ai-risk` on a stronger model" is silently ignored
+there, so the STRONG re-run is a separate agent that pins Sol. Under Claude Code
+the same escalation is `model: opus` on the ordinary agent. Same tier, same
+trigger.
+
+## Why is there no large-read cap under Codex?
+
+Its read tool is not on the hook path, so there is nothing to hook. The rule is
+written into `~/.codex/AGENTS.md`, which makes it policy rather than enforcement.
+Worth knowing before you rely on it: under Codex, context hygiene is something the
+agent follows, not something the harness imposes.
+
+## The Codex costs in `/usage-report` look wrong
+
+The token columns are measured; the dollar column for Codex is an estimate. The
+report says so under the total, because `skills/usage-report/prices.json` has
+`rates_verified: false` for that provider — the numbers there are scaled to the
+tier each model serves, not published rates. Check them against the current price
+list, update the file, and flip the flag; the parser does not need touching.
 
 ## Why does the main session implement instead of a subagent?
 

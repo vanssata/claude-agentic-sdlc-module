@@ -1,0 +1,17 @@
+{
+  "case": "codex Agent: an ai-expert spawn, which resolves to the EXPERT model",
+  "guard": "gate",
+  "expect": "allow",
+  "payload": {
+    "session_id": "thr_1",
+    "turn_id": "turn_1",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Agent",
+    "tool_use_id": "call_30",
+    "cwd": "__ROOT__",
+    "tool_input": {
+      "agent_type": "ai-expert",
+      "prompt": "Decide between the two migration strategies in the brief."
+    }
+  }
+}

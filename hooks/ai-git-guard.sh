@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # claude-agentic: git and deployment safety guard (PreToolUse on Bash).
+# Runs in both runtimes: Claude Code's Bash tool and Codex's shell tool arrive as
+# the same normalised `Bash` call, and Codex's apply_patch is not a shell command
+# at all, so it is allowed through here and handled by the other two guards.
 #
 # GLOBAL: this one is not gated on .ai/. The operations it refuses — rewriting
 # shared history, pushing straight to a protected branch, staging a secret,
@@ -30,9 +33,8 @@ cmd_rules=$(strip_prose "$cmd")
 # Cheap exit for the overwhelming majority of commands.
 printf '%s' "$cmd_rules" | grep -qE '(^|[|;&[:space:]])(git|gh|argocd|helm|kubectl|terraform|dep|deployer|cap|flyctl|fly|vercel|netlify)([[:space:]]|$)' || allow
 
-CONFIG="$HOME/.claude/hooks/ai-git-guard.json"
-[ -f "$CONFIG" ] || CONFIG="$HOOK_DIR/ai-git-guard-defaults.json"
 DEFAULTS="$HOOK_DIR/ai-git-guard-defaults.json"
+CONFIG=$(runtime_hook_config ai-git-guard.json) || CONFIG="$DEFAULTS"
 
 read_list() {  # read_list <jq-path> — project config first, shipped defaults as fallback
     local out

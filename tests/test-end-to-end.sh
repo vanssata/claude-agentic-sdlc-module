@@ -92,6 +92,58 @@ out=$(jq -nc --arg r "$REPO" '{hook_event_name:"PreToolUse",tool_name:"Edit",cwd
 printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -q SCOPE_CHANGE_REQUIRED \
     && pass "the refusal carries the SCOPE_CHANGE_REQUIRED signal" || fail "signal missing" "$out"
 
+echo "== the same task, from Codex"
+# A second runtime installed over the same project must land on the same state
+# file and enforce the same step — the pipeline is shared, only the adapter differs.
+CDIR="$TMP/codex"; mkdir -p "$CDIR"
+CODEX_DIR="$CDIR" bash "$PLUGIN_ROOT/install.sh" >/dev/null 2>&1
+[ -f "$CDIR/hooks/ai-scope-guard.sh" ] && pass "installed into a scratch CODEX_DIR" || fail "codex install failed"
+[ -f "$CDIR/agents/ai-reviewer.toml" ] && pass "the Codex agent roster is rendered" || fail "codex agents missing"
+[ -e "$CDIR/hooks/cap-large-read.py" ] && fail "cap-large-read has no Codex counterpart" || pass "no Claude-only hook is installed into Codex"
+
+CODEX_SCOPE="$CDIR/hooks/ai-scope-guard.sh"
+CODEX_PATH="$CDIR/hooks/ai-path-guard.sh"
+CODEX_GIT="$CDIR/hooks/ai-git-guard.sh"
+
+# The state the Claude half of this test wrote is the state Codex reads.
+[ "$(python3 "$CDIR/skills/ai-task/state.py" --root "$REPO" get | jq -r '.approved_plan.current_step_id')" = 1 ] \
+    && pass "Codex reads the step the Claude session armed" || fail "state is not shared between runtimes"
+[ "$(python3 "$CDIR/skills/ai-task/state.py" --root "$REPO" get --field risk_tier)" = T4 ] \
+    && pass "and the same risk tier" || fail "tier should be shared"
+
+mkpatch() {  # mkpatch <path> [second-path] -> one apply_patch payload, one or two files
+    printf '*** Begin Patch\n*** Update File: %s\n@@\n-old\n+new\n' "$1"
+    [ -n "${2:-}" ] && printf '*** Update File: %s\n@@\n-old\n+new\n' "$2"
+    printf '*** End Patch\n'
+}
+ap() {  # ap <guard> <patch-text>
+    local out
+    out=$(jq -nc --arg r "$REPO" --arg c "$2" \
+        '{hook_event_name:"PreToolUse",tool_name:"apply_patch",cwd:$r,tool_input:{command:$c}}' | "$1")
+    if [ -z "$out" ]; then echo allow; else
+        printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "malformed"'
+    fi
+}
+
+[ "$(ap "$CODEX_SCOPE" "$(mkpatch "$REPO/src/Payment/Gateway.php")")" = allow ] \
+    && pass "an in-scope apply_patch is permitted" || fail "in-scope patch should be allowed"
+[ "$(ap "$CODEX_SCOPE" "$(mkpatch "$REPO/src/Order/OrderProcessor.php")")" = deny ] \
+    && pass "an out-of-scope apply_patch is refused" || fail "out-of-scope patch should be refused"
+[ "$(ap "$CODEX_SCOPE" "$(mkpatch "$REPO/src/Payment/Gateway.php" "$REPO/src/Order/OrderProcessor.php")")" = deny ] \
+    && pass "one out-of-scope file rejects the whole patch" || fail "mixed patch should be refused"
+[ "$(ap "$CODEX_SCOPE" "$(mkpatch "$REPO/src/Payment/LegacyGateway.php")")" = deny ] \
+    && pass "a forbidden file is refused through apply_patch too" || fail "forbidden file should be refused"
+
+out=$(jq -nc --arg r "$REPO" --arg c "$(mkpatch "$REPO/src/Order/OrderProcessor.php")" \
+    '{hook_event_name:"PreToolUse",tool_name:"apply_patch",cwd:$r,tool_input:{command:$c}}' | "$CODEX_SCOPE")
+printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -q SCOPE_CHANGE_REQUIRED \
+    && pass "and the Codex refusal carries the same signal" || fail "signal missing" "$out"
+
+[ "$(ap "$CODEX_PATH" "$(mkpatch "$REPO/.env")")" = deny ] \
+    && pass "the path guard refuses a patch that touches .env" || fail ".env patch should be refused"
+[ "$(decide "$CODEX_GIT" Bash '{"command":"git push --force origin main"}')" = deny ] \
+    && pass "the git guard refuses a force push from Codex as well" || fail "force push should be refused"
+
 echo "== finishing the task"
 S step-done 1 >/dev/null
 S stage test >/dev/null;             S set test_status passing >/dev/null

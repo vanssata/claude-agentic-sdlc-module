@@ -15,7 +15,8 @@ Read first, when they exist: `.ai/policies/coding.md`,
 `.ai/policies/production.md`, `.ai/policies/review-economy.md`,
 `.ai/agents/reviewer.md`, and the task's plan and context under
 `.ai/reports/<task-id>/`. In a repository without `.ai/`, review against the
-project's own `CLAUDE.md` conventions instead and say so.
+project's own instruction file instead — `CLAUDE.md`, `AGENTS.md`, or both — and
+say so.
 
 ## Budget
 

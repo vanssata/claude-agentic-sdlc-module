@@ -1,35 +1,46 @@
 # Model routing policy
 
-Sonnet is the default. Facts are collected cheaply; Opus and Fable are paid for
-only on a named trigger — adversarial review, high-risk decisions and what a
-cheaper tier could not settle — never for fact collection.
+**The tiers are the contract; the models are the implementation.** This project
+can be worked on from Claude Code, from Codex, or from both, and the pipeline is
+identical either way. What changes is which model each tier resolves to. Routine
+workload runs on the cheap tier; the expensive tiers are paid for only on a named
+trigger — adversarial review, high-risk decisions and what a cheaper tier could
+not settle — never for fact collection.
 
 ## Tiers
 
-| Tier | Runs on | Used for |
-|---|---|---|
-| **LOCAL** | *not available inside Claude Code* | see the note below |
-| **FAST** | `haiku`, effort `low` | file and symbol inventories, listings, counting, running a command and reporting its output |
-| **BALANCED** — default for agents | `sonnet`, effort `low`–`medium` | discovery with judgment, context compression, planning up to T2, tests, release assembly |
-| **STRONG** | `opus`, effort `high` | the Opus triggers below |
-| **EXPERT** | `ai-expert`, pinned at install time — Fable 5.1 on Max with Fable, Opus 5 otherwise | the EXPERT triggers below |
+| Tier | Claude Code | Codex | Used for |
+|---|---|---|---|
+| **LOCAL** | *not available* | *not available* | see the note below |
+| **FAST** | `haiku`, effort `low` | `gpt-5.6-terra`, effort `low` | file and symbol inventories, listings, counting, running a command and reporting its output |
+| **BALANCED** — default for agents | `sonnet`, effort `low`–`medium` | `gpt-5.6-terra`, effort `medium` | discovery with judgment, context compression, planning up to T2, tests, release assembly |
+| **STRONG** | `opus`, effort `high` | `gpt-5.6-sol`, effort `high` | the STRONG triggers below |
+| **EXPERT** | `ai-expert`, pinned at install time — Fable 5.1 where available, Opus 5 otherwise | `ai-expert`, pinned to `gpt-6-astra` at `xhigh` | the EXPERT triggers below |
 
-The main session runs the model the installed profile sets (Opus 5 [1m] at `medium` on Max, Sonnet on Pro) and does the implementation itself.
+The main session runs the model the installed profile sets — Opus 5 [1m] at
+`medium` under Claude Code, Sol at `high` under Codex — and does the
+implementation itself.
+
+**Codex agent precedence.** A value written into a Codex agent file wins over the
+model asked for when the agent is spawned. So "re-run `ai-risk` on a stronger
+model" cannot work there; the STRONG re-runs use the dedicated `ai-risk-strong`
+and `ai-planner-strong` agents, which pin Sol in their own files. Same tier, same
+trigger, different mechanism.
 
 **On LOCAL.** The original design of this system assumed a local model for
-indexing and repetitive inspection. Claude Code has no local-model backend, so
+indexing and repetitive inspection. Neither runtime has a local-model backend, so
 that work is done by deterministic tools (`rg`, `git`, `jq`, the framework CLI)
 plus `ai-indexer` on the cheapest hosted model. Nothing in this infrastructure
 depends on a local model; if one becomes available it slots in at the FAST tier.
 
-## Opus (STRONG) triggers
+## STRONG triggers
 
 1. Review of a finished change before a commit is proposed (`ai-reviewer`), and
    `ai-security` for authentication, authorization, secrets, payments, personal
    data, webhooks and any T4/T5 change.
-2. `ai-risk` on Sonnet answered T3+ or `confidence: uncertain` — re-run on Opus;
-   `ai-planner` on Opus at T3/T4.
-3. Root cause after a Sonnet diagnosis already failed once, or a bug in
+2. `ai-risk` on the BALANCED tier answered T3+ or `confidence: uncertain` — re-run
+   it at STRONG; `ai-planner` at STRONG for T3/T4.
+3. Root cause after a BALANCED diagnosis already failed once, or a bug in
    concurrency, retries/idempotency, caching or data integrity.
 4. A reversible but costly design choice with two or more viable options
    (`architect`).
@@ -37,7 +48,7 @@ depends on a local model; if one becomes available it slots in at the FAST tier.
 ## EXPERT triggers
 
 1. The task is T5: migration, infrastructure, production architecture.
-2. STRONG could not settle it: `confidence: uncertain`, or two Opus results
+2. STRONG could not settle it: `confidence: uncertain`, or two STRONG results
    contradict each other.
 3. An irreversible design with several viable options — core data model, public
    API or event contract, service split.
@@ -59,14 +70,23 @@ fallback chain moves the agent to another model on its own.
 ## Fan-out
 
 Cost scales with the number of agents, and every agent pays its own start-up. A
-sweep of three or more parallel agents runs on `haiku` or `sonnet`, always. One
-Opus or EXPERT agent per question, and one EXPERT agent per task.
+sweep of three or more parallel agents runs at FAST or BALANCED, always. One
+STRONG or EXPERT agent per question, and one EXPERT agent per task.
 
 ## Briefing the expensive tiers
 
-Collect first, cheaply. An Opus or EXPERT agent receives a compact brief — the
+Collect first, cheaply. A STRONG or EXPERT agent receives a compact brief — the
 context summary, `file:line` facts, the question and the options — and asks for a
 specific file when it needs one. It is never sent to explore the repository.
+
+## Reporting what actually ran
+
+Every artifact that names a tier names the model too — "STRONG (opus)", "STRONG
+(gpt-5.6-sol)" — because a tier alone does not tell a reviewer what the review
+cost or how much weight to give it. Report the model that **ran**, not the one
+that was requested: a gate may have sent an EXPERT agent down one tier during a
+rate limit, and a Codex agent file may have overridden the spawn-time model. Both
+runtimes expose the current state through `/ai-status`.
 
 ## What never gets delegated
 

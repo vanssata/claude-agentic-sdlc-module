@@ -10,11 +10,23 @@ You are the **manager**. You orchestrate the pipeline, keep your own context
 small, and stop at human approval. Read `.ai/agents/manager.md` and
 `.ai/policies/safety.md` before the first stage.
 
+The pipeline, its stages and its gates are identical under Claude Code and under
+Codex; only the install root and the model ladder differ. Resolve the root once:
+
+```bash
+for AI_HOME in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CODEX_HOME:-$HOME/.codex}"; do
+  [ -d "$AI_HOME/skills/ai-task" ] && break
+done
+```
+
 `STATE` below means:
 
 ```bash
-python3 "$HOME/.claude/skills/ai-task/state.py"
+python3 "$AI_HOME/skills/ai-task/state.py"
 ```
+
+The state file is the project's `.ai/state/current.json` either way, so a task
+started in one runtime resumes in the other.
 
 ## 0. Resume or start
 
@@ -68,8 +80,11 @@ contracts, other environments, blast radius, what must stay unaffected. Save to
 `.ai/reports/<task-id>/impact-report.md`.
 
 ### RISK CLASSIFICATION
-`ai-risk`. If it returns `confidence: uncertain` or tier T3 or above, run it
-again with `model: opus` and use that answer. Then:
+`ai-risk`. If it returns `confidence: uncertain` or tier T3 or above, re-run it
+at the STRONG tier and use that answer. Under Claude Code that is `ai-risk` with
+`model: opus`; under Codex it is the `ai-risk-strong` agent, which pins Sol —
+Codex resolves an agent's own file ahead of a spawn-time model, so asking for a
+stronger model on `ai-risk` there would be ignored. Then:
 
 ```bash
 $STATE risk T<n> --note "<the trigger that decided it>"
@@ -80,7 +95,8 @@ makes mandatory. Everything after this point follows that answer, not your
 impression of how big the task feels.
 
 ### PLAN
-`ai-planner` — with `model: opus` for T3 and T4, and `ai-expert` instead for T5.
+`ai-planner` — at the STRONG tier for T3 and T4 (`model: opus` under Claude Code,
+the `ai-planner-strong` agent under Codex), and `ai-expert` instead for T5.
 Save to `.ai/reports/<task-id>/implementation-plan.md`, then convert the steps to
 JSON and register them:
 

@@ -11,29 +11,47 @@ not a greenfield setup: the repository already contains legacy code,
 undocumented rules, historical workarounds and behaviour that customers depend
 on right now.
 
+The skill is the same under Claude Code and under Codex. Only the install root
+differs, so resolve it once instead of hard-coding `~/.claude`:
+
+```bash
+for AI_HOME in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CODEX_HOME:-$HOME/.codex}"; do
+  [ -d "$AI_HOME/skills/ai-init" ] && break
+done
+```
+
+Either copy of the scripts does the same thing — they operate on the project's
+`.ai/` tree, not on the install — so which one resolves first does not matter.
+
 ## The rule for this entire skill
 
 **Do not modify application code.** Not a rename, not a formatting fix, not a
-"while I'm here". The only files this skill creates or edits are `.ai/**`,
-`CLAUDE.md`, `.gitignore`, and (through the routing scaffold, if installed)
-`docs/sdlc/**`. If you find problems — and you will — you document them. You do
-not fix them.
+"while I'm here". The only files this skill creates or edits are `.ai/**`, the
+instruction file of each runtime in scope (`CLAUDE.md`, `AGENTS.md`, or both),
+`.gitignore`, and (through the routing scaffold, if installed) `docs/sdlc/**`.
+If you find problems — and you will — you document them. You do not fix them.
 
 ## Steps
 
 ### 1. Scaffold
 
-Run the SDLC scaffold first, so `docs/sdlc/` and `.claude/` exist:
+Run the SDLC scaffold first, so `docs/sdlc/` and the runtime directory exist:
 
 ```bash
-"$HOME/.claude/hooks/project-scaffold.sh" "$PWD"
+"$AI_HOME/hooks/project-scaffold.sh" "$PWD"
 ```
 
 Then the agentic scaffold:
 
 ```bash
-"$HOME/.claude/skills/ai-init/scaffold-ai.sh" "$PWD"
+"$AI_HOME/skills/ai-init/scaffold-ai.sh" "$PWD"
 ```
+
+Both take `--runtime auto|claude|codex|both`, and `auto` follows what the project
+already declares (`CLAUDE.md`/`.claude/` → Claude, `AGENTS.md`/`.codex/` →
+Codex), falling back to the runtime this copy was installed for. Pass `--runtime
+both` when the repository is worked on from both, so one `.ai/` tree ends up with
+two instruction files pointing at it.
 
 Both are idempotent and never overwrite. Note which files they report creating —
 if `.ai/project/overview.md` was **not** created, this project was already
@@ -163,4 +181,5 @@ Do not claim anything was validated that was not actually run.
   CLI, the test runner.
 - Do not install anything, add a dependency, or "modernise" a tool. Document what
   exists and how the workflows will use it.
-- Suggest `git add .ai CLAUDE.md .gitignore` at the end; do not commit.
+- Suggest `git add .ai .gitignore` plus whichever instruction files the scaffold
+  reported (`CLAUDE.md`, `AGENTS.md`) at the end; do not commit.

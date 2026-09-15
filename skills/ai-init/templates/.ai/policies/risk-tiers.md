@@ -18,14 +18,27 @@ three things: who plans it, who reviews it, and whether a human signs it off.
 
 ## Which model works on it
 
-| Tier | Plans and reviews on |
-|---|---|
-| T0, T1 | FAST — the cheapest model that can follow an instruction |
-| T2 | BALANCED |
-| T3, T4 | STRONG |
-| T5 | EXPERT — `ai-expert`, pinned to Fable 5.1 on Max with Fable, Opus 5 otherwise |
+The tier is the contract; which model it resolves to depends on the runtime the
+session is in. The pipeline, the gates and the obligations below are identical
+either way.
 
-Every agent without a trigger runs on Sonnet (BALANCED). The main session runs the model the installed profile sets (Opus 5 [1m] at `medium` on Max, Sonnet on Pro).
+| Tier | Plans and reviews on | Claude Code | Codex |
+|---|---|---|---|
+| T0, T1 | FAST — the cheapest model that can follow an instruction | `haiku` | `gpt-5.6-terra` |
+| T2 | BALANCED | `sonnet` | `gpt-5.6-terra` |
+| T3, T4 | STRONG | `opus` | `gpt-5.6-sol` |
+| T5 | EXPERT — `ai-expert` | pinned at install: Fable 5.1 where available, Opus 5 otherwise | `gpt-6-astra` |
+
+Every agent without a trigger runs at BALANCED. The main session runs the model
+the installed profile sets — Opus 5 [1m] at `medium` under Claude Code (Sonnet on
+Pro), Sol at `high` under Codex.
+
+Under Codex an agent's own file outranks the model asked for when it is spawned,
+so the T3/T4 re-runs of `ai-risk` and `ai-planner` use the dedicated
+`ai-risk-strong` and `ai-planner-strong` agents. Same tier, same trigger.
+
+Report the model that actually ran, not the one that was requested: a rate-limit
+gate may have moved an EXPERT agent down a tier.
 
 Escalation is per task and one step at a time. The triggers are listed in
 `risk-tiers.json`; the short version is that a cheap agent which returns thin,
