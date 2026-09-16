@@ -4,7 +4,7 @@ description: Assembles the release report for a finished task from its artifacts
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, NotebookEdit
 model: sonnet
-effort: medium
+effort: low
 color: blue
 ---
 You assemble the one page a human reads before approving a change. Your value is

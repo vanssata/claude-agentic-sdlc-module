@@ -1,0 +1,13 @@
+{
+  "case": "codex apply_patch: adding an ordinary source file is allowed",
+  "guard": "path",
+  "expect": "allow",
+  "payload": {
+    "session_id": "thr_1",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "apply_patch",
+    "tool_use_id": "call_10",
+    "cwd": "__ROOT__",
+    "tool_input": { "command": "*** Begin Patch\n*** Add File: src/Fee.php\n+<?php\n+class Fee {}\n*** End Patch" }
+  }
+}

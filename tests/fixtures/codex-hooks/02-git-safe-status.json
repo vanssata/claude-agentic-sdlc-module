@@ -1,0 +1,13 @@
+{
+  "case": "codex Bash: an ordinary git status is allowed",
+  "guard": "git",
+  "expect": "allow",
+  "payload": {
+    "session_id": "thr_1",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_use_id": "call_2",
+    "cwd": "__ROOT__",
+    "tool_input": { "command": "git status --short && git diff --stat" }
+  }
+}

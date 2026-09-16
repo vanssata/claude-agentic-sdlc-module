@@ -82,6 +82,53 @@ out=$(S init --goal "third task" --workflow bugfix 2>&1 || true)
 printf '%s' "$out" | grep -q "still at stage" && pass "starting a second task over a live one is refused" || fail "should refuse to clobber a live task" "$out"
 S init --goal "third task" --workflow bugfix --force >/dev/null && pass "--force starts a fresh task anyway" || fail "--force should work"
 
+echo "== triage records the four inline stages in one call"
+S triage T1 --note "isolated label change" --context "template + translation key" >/dev/null && pass "triage accepts a tier" || fail "triage failed"
+[ "$(S get --field risk_tier)" = T1 ] && pass "triage sets the tier" || fail "triage should set the tier"
+[ "$(S get --field current_stage)" = risk_classification ] && pass "triage lands on risk_classification" || fail "triage stage wrong"
+n=$(S get --field history | jq '[.[] | select(.event=="stage" and (.detail|test("inline")))] | length')
+[ "$n" = 4 ] && pass "all four stages are in the audit trail" || fail "expected 4 inline stage records, got $n"
+S get --field context_summary_ref | grep -q '^inline: template' && pass "the inline context is kept in the state" || fail "context not stored"
+out=$(S triage T9 2>&1 || true)
+printf '%s' "$out" | grep -q "risk tier must be one of" && pass "triage rejects an unknown tier" || fail "triage should reject T9" "$out"
+
+echo "== quick: the direct path below T3 in one call"
+S init --goal "quick base" --workflow feature --force >/dev/null; S done >/dev/null; S archive >/dev/null
+out=$(S quick --goal "rename a label" --workflow feature --tier T1 --files "templates/admin/*.twig,translations/messages.en.yaml" --note "isolated label" 2>&1)
+printf '%s' "$out" | grep -q "step 1 armed" && pass "quick records the task and arms step 1" || fail "quick should arm step 1" "$out"
+[ "$(S get --field risk_tier)" = T1 ] && pass "quick sets the tier" || fail "quick should set the tier"
+[ "$(S get --field current_stage)" = implementation ] && pass "quick lands on implementation" || fail "quick stage wrong"
+[ "$(S get --field approved_plan.current_step_id)" = 1 ] && pass "quick arms the scope guard on step 1" || fail "current step should be 1"
+S get --field approved_plan.steps | jq -e '.[0].allowed_files | index("translations/messages.en.yaml")' >/dev/null \
+  && pass "quick keeps the named files as the step scope" || fail "allowed files missing"
+n=$(S get --field history | jq '[.[] | select(.event=="stage" and (.detail|test("inline")))] | length')
+[ "$n" = 4 ] && pass "quick still writes the four triage stages to the audit trail" || fail "expected 4 inline stage records, got $n"
+out=$(S quick --goal "x" --workflow feature --tier T3 --files a --force 2>&1 || true)
+printf '%s' "$out" | grep -q "quick is for T0, T1 and T2" && pass "quick refuses T3 and above" || fail "quick should refuse T3" "$out"
+out=$(S quick --goal "x" --workflow feature --tier T1 --files "" --force 2>&1 || true)
+printf '%s' "$out" | grep -q "at least one file" && pass "quick refuses an empty scope" || fail "quick should refuse empty --files" "$out"
+
+echo "== remediate: one step for the whole batch of fixes"
+out=$(S remediate --files tests/FooTest.php 2>&1 || true)
+printf '%s' "$out" | grep -q "still in progress" && pass "remediate refuses while a step is open" || fail "should refuse with an open step" "$out"
+S step-done 1 >/dev/null
+out=$(S remediate --files "tests/FooTest.php,tests/BarTest.php" --note "3 regressions from the verification run" 2>&1)
+printf '%s' "$out" | grep -q "step R1 armed" && pass "remediate arms step R1" || fail "remediate should arm R1" "$out"
+[ "$(S get --field approved_plan.current_step_id)" = R1 ] && pass "R1 is the current step" || fail "current step should be R1"
+S get --field approved_plan.steps | jq -e '[.[] | select(.step_id=="R1")][0].allowed_files | (index("templates/admin/*.twig") != null) and (index("tests/BarTest.php") != null)' >/dev/null \
+  && pass "R1 scope is the union of the finished steps and the named files" || fail "R1 scope wrong"
+[ "$(S get --field current_stage)" = implementation ] && pass "remediate returns to implementation" || fail "stage should be implementation"
+S step-done R1 >/dev/null
+S remediate --note "review findings" >/dev/null
+[ "$(S get --field approved_plan.current_step_id)" = R2 ] && pass "a second batch is R2" || fail "second remediation should be R2"
+S step-done R2 >/dev/null
+
+echo "== close: done + archive in one call"
+ARCHIVED=$(S close | tail -1)
+[ -f "$ARCHIVED" ] && pass "close archives the task" || fail "close should archive" "$ARCHIVED"
+[ ! -f "$ROOT/.ai/state/current.json" ] && pass "close clears current.json" || fail "close should clear current.json"
+jq -e '.current_stage == "done"' "$ARCHIVED" >/dev/null && pass "the archived task is closed" || fail "archived task should be done"
+
 echo "== a corrupt state file is loud, not silently replaced"
 printf 'not json at all' > "$ROOT/.ai/state/current.json"
 out=$(S get 2>&1 || true)

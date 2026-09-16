@@ -1,0 +1,17 @@
+{
+  "case": "codex Agent: an ai-discovery spawn, which resolves to the BALANCED model",
+  "guard": "gate",
+  "expect": "allow",
+  "payload": {
+    "session_id": "thr_1",
+    "turn_id": "turn_1",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Agent",
+    "tool_use_id": "call_31",
+    "cwd": "__ROOT__",
+    "tool_input": {
+      "agent_type": "ai-discovery",
+      "prompt": "Trace the checkout flow."
+    }
+  }
+}

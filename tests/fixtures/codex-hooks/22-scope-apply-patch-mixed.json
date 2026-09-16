@@ -1,0 +1,13 @@
+{
+  "case": "codex apply_patch: one in-scope file does not carry an out-of-scope one through with it",
+  "guard": "scope",
+  "expect": "deny",
+  "payload": {
+    "session_id": "thr_1",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "apply_patch",
+    "tool_use_id": "call_22",
+    "cwd": "__ROOT__",
+    "tool_input": { "command": "*** Begin Patch\n*** Update File: src/Payment/Fee.php\n@@\n-a\n+b\n*** Add File: config/services.yaml\n+new: true\n*** End Patch" }
+  }
+}

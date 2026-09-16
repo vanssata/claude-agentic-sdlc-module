@@ -33,6 +33,30 @@ run_fixture() {
     fi
 }
 
+# run_codex_fixtures <guard-script> <guard-key> <root> — the Codex payloads for
+# one guard. They live in one directory because they share a schema, and each
+# suite picks its own out of it, reusing the project tree that suite built.
+run_codex_fixtures() {
+    local guard="$1" key="$2" root="$3" f
+    for f in "$PLUGIN_ROOT"/tests/fixtures/codex-hooks/*.json; do
+        [ -e "$f" ] || continue
+        [ "$(jq -r '.guard // ""' "$f")" = "$key" ] || continue
+        run_fixture "$guard" "$f" "$root"
+    done
+}
+
+# assert_fails_open <guard-script> <description> — malformed input must exit 0
+# and print nothing, so a broken payload never makes the tool unusable.
+assert_fails_open() {
+    local guard="$1" name="$2" input="${3-}" out rc
+    out=$(printf '%s' "$input" | "$guard" 2>&1); rc=$?
+    if [ $rc -eq 0 ] && [ -z "$out" ]; then
+        pass "$name"
+    else
+        fail "$name" "exit $rc, output: $(printf '%s' "$out" | head -c 200)"
+    fi
+}
+
 summary() {
     printf '\n%s: %d passed, %d failed\n' "$1" "$PASS" "$FAIL"
     [ "$FAIL" -eq 0 ]

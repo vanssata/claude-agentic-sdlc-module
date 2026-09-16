@@ -4,6 +4,14 @@
 # hooks/cap-large-read.py: read the hook payload from stdin, and
 # either exit 0 silently (allow) or print a deny JSON object and exit 0.
 #
+# Both runtimes are supported. Claude Code and Codex send the same PreToolUse
+# envelope (`tool_name`, `tool_input`, `cwd`, `hook_event_name`) and accept the
+# same deny object, but they name their tools differently: Codex performs every
+# file edit through one `apply_patch` call whose `tool_input.command` is the
+# patch text, where Claude sends Edit/Write/MultiEdit with a `file_path`.
+# read_payload normalises the tool name and target_paths reads both shapes, so
+# each guard keeps one set of rules rather than one per provider.
+#
 # Fail-open policy: a guard that cannot parse its input must allow. These hooks
 # are defence-in-depth against ordinary agent mistakes, not a security boundary;
 # a broken guard must never make the tool unusable.
@@ -12,18 +20,39 @@ set -uo pipefail
 
 AI_PAYLOAD=""
 AI_TOOL=""
+AI_TOOL_RAW=""
 AI_CWD=""
 AI_EVENT=""
 
 # read_payload — slurp stdin once and extract the fields every guard needs.
+# AI_TOOL_RAW is what the runtime sent; AI_TOOL is that name mapped onto the
+# Claude vocabulary the guards' case statements are written in.
 read_payload() {
     AI_PAYLOAD=$(cat)
     [ -n "$AI_PAYLOAD" ] || exit 0
     command -v jq >/dev/null 2>&1 || exit 0
-    AI_TOOL=$(printf '%s' "$AI_PAYLOAD" | jq -r '.tool_name // empty' 2>/dev/null) || exit 0
+    AI_TOOL_RAW=$(printf '%s' "$AI_PAYLOAD" | jq -r '.tool_name // empty' 2>/dev/null) || exit 0
     AI_CWD=$(printf '%s' "$AI_PAYLOAD" | jq -r '.cwd // empty' 2>/dev/null)
     AI_EVENT=$(printf '%s' "$AI_PAYLOAD" | jq -r '.hook_event_name // empty' 2>/dev/null)
     [ -n "$AI_CWD" ] || AI_CWD="$PWD"
+    case "$AI_TOOL_RAW" in
+        apply_patch)                 AI_TOOL=Edit ;;   # Codex: one call, many files
+        shell|exec_command|local_shell) AI_TOOL=Bash ;;
+        *)                           AI_TOOL="$AI_TOOL_RAW" ;;
+    esac
+}
+
+# runtime_hook_config <basename> — the live (user-owned) config for a guard.
+# It sits next to the guard itself, because the installer puts a copy in each
+# runtime's own hooks directory. The runtime homes are searched afterwards so a
+# guard invoked straight from a checkout still finds an installed config.
+runtime_hook_config() {
+    local name="$1" d
+    for d in "$HOOK_DIR" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks" "${CODEX_HOME:-$HOME/.codex}/hooks"; do
+        [ -n "$d" ] || continue
+        if [ -f "$d/$name" ]; then printf '%s\n' "$d/$name"; return 0; fi
+    done
+    return 1
 }
 
 # payload_field <jq-path> — read one field from the payload, empty on failure.
@@ -31,9 +60,18 @@ payload_field() {
     printf '%s' "$AI_PAYLOAD" | jq -r "$1 // empty" 2>/dev/null
 }
 
-# bash_command — the command text of a Bash tool call.
+# bash_command — the command text of a Bash tool call. Empty for Codex's
+# apply_patch, whose `command` holds a patch rather than a shell command.
 bash_command() {
+    [ "$AI_TOOL" = Bash ] || return 0
     payload_field '.tool_input.command'
+}
+
+# patch_paths — the files a Codex apply_patch call touches, read from the patch
+# headers. "*** Move to:" is included, because the destination is written too.
+patch_paths() {
+    payload_field '.tool_input.command' | sed -nE \
+      's/^\*\*\* (Add|Update|Delete) File: (.*)$/\2/p; s/^\*\*\* Move to: (.*)$/\1/p'
 }
 
 # target_paths — every file path a write/read tool call refers to, one per line.
@@ -42,6 +80,8 @@ target_paths() {
         [ .tool_input.file_path?, .tool_input.notebook_path?, .tool_input.path?,
           (.tool_input.edits? // [] | .[]?.file_path?) ]
         | map(select(type == "string" and . != "")) | .[]' 2>/dev/null
+    [ "$AI_TOOL_RAW" = apply_patch ] && patch_paths
+    return 0
 }
 
 # ere_escape <string> — quote a literal so it can be embedded in an ERE.

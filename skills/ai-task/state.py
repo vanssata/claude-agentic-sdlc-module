@@ -14,7 +14,12 @@ Usage:
   state.py get    [--field current_stage] [--root DIR]
   state.py stage  <stage> [--note TEXT]
   state.py risk   <T0..T5> [--note TEXT]
+  state.py triage <T0..T5> [--note TEXT] [--context TEXT]   discovery+context+impact+risk in one call
+  state.py quick  --goal G --workflow W --tier <T0..T2> --files a,b [--note TEXT] [--context TEXT]
+                                         init+triage+one-step plan in one call: the direct path below T3
   state.py plan   --ref PATH --steps STEPS.json
+  state.py remediate --files a,b [--note TEXT]   one extra step R<n> for the batch of test/review fixes;
+                                         allowed = every finished step's files + the ones named
   state.py step   <step_id>
   state.py step-done <step_id>
   state.py set    <field> <value>        # test_status, review_status, security_status, next_action
@@ -22,6 +27,7 @@ Usage:
   state.py approve --by NAME
   state.py done
   state.py archive                       # move current.json into .ai/reports/<task_id>/state.json
+  state.py close                         # done + archive in one call
 """
 
 import argparse
@@ -189,6 +195,25 @@ def cmd_risk(args, root):
     print(args.tier)
 
 
+def cmd_triage(args, root):
+    """The four inline stages of a small task, recorded in one call so the audit
+    trail still shows each of them without four round trips."""
+    if args.tier not in TIERS:
+        die("risk tier must be one of: %s" % ", ".join(TIERS))
+    state = load(root)
+    previous = state["current_stage"]
+    for stage in ("discovery", "context", "impact_analysis", "risk_classification"):
+        record(state, "stage", "%s -> %s: inline" % (previous, stage))
+        previous = stage
+    state["current_stage"] = "risk_classification"
+    state["risk_tier"] = args.tier
+    if args.context:
+        state["context_summary_ref"] = "inline: " + args.context
+    record(state, "risk_classified", "%s%s" % (args.tier, ": " + args.note if args.note else ""))
+    save(root, state)
+    print("%s, triaged inline through risk_classification" % args.tier)
+
+
 def cmd_plan(args, root):
     state = load(root)
     try:
@@ -247,6 +272,85 @@ def cmd_step_done(args, root):
     save(root, state)
     remaining = [s["step_id"] for s in steps if s["status"] != "done"]
     print("step %s done; remaining: %s" % (args.step_id, ", ".join(remaining) or "none"))
+
+
+def _split_files(text):
+    return [f.strip() for f in (text or "").split(",") if f.strip()]
+
+
+def cmd_quick(args, root):
+    """The direct path for T0–T2: one call records the task, the four inline
+    triage stages and a single step whose allowed files are the ones named, so
+    the scope guard is armed without a plan file, a task.md or four round trips."""
+    if args.tier not in ("T0", "T1", "T2"):
+        die("quick is for T0, T1 and T2; from T3 the task needs init, triage and a reviewed plan")
+    files = _split_files(args.files)
+    if not files:
+        die("--files must name at least one file or glob the step may touch")
+    cmd_init(args, root)
+    state = load(root)
+    previous = state["current_stage"]
+    for stage in ("discovery", "context", "impact_analysis", "risk_classification"):
+        record(state, "stage", "%s -> %s: inline" % (previous, stage))
+        previous = stage
+    state["risk_tier"] = args.tier
+    if args.context:
+        state["context_summary_ref"] = "inline: " + args.context
+    record(state, "risk_classified", "%s%s" % (args.tier, ": " + args.note if args.note else ""))
+    step = {
+        "step_id": "1", "description": args.goal, "allowed_files": files,
+        "forbidden_files": [], "forbidden_reason": "not part of this task",
+        "required_tests": [], "status": "in_progress",
+    }
+    state["approved_plan"] = {"ref": "inline", "current_step_id": "1", "steps": [step]}
+    record(state, "plan_approved", "1 step, inline (quick)")
+    state["current_stage"] = "implementation"
+    record(state, "stage", "risk_classification -> plan -> implementation: quick")
+    record(state, "step_started", "1: %s" % args.goal)
+    state["next_action"] = "implement, then run the verification command once"
+    save(root, state)
+    print("%s %s: step 1 armed for %s" % (state["task_id"], args.tier, ", ".join(files)))
+
+
+def cmd_remediate(args, root):
+    """One extra step for the whole batch of fixes after the test run or the
+    review — never one step per failure. Its scope is the union of every step
+    already done plus the files named (usually the failing tests)."""
+    state = load(root)
+    steps = state.get("approved_plan", {}).get("steps", [])
+    if not steps:
+        die("no approved plan to remediate; register one with plan or quick first")
+    if any(s["status"] == "in_progress" for s in steps):
+        die("a step is still in progress; finish it with step-done before remediating")
+    allowed = []
+    for s in steps:
+        for f in s.get("allowed_files", []):
+            if f not in allowed:
+                allowed.append(f)
+    for f in _split_files(args.files):
+        if f not in allowed:
+            allowed.append(f)
+    n = 1 + sum(1 for s in steps if str(s["step_id"]).startswith("R"))
+    step_id = "R%d" % n
+    step = {
+        "step_id": step_id,
+        "description": args.note or "remediation batch %d" % n,
+        "allowed_files": allowed, "forbidden_files": [],
+        "forbidden_reason": "not part of this task", "required_tests": [],
+        "status": "in_progress",
+    }
+    steps.append(step)
+    state["approved_plan"]["current_step_id"] = step_id
+    state["current_stage"] = "implementation"
+    record(state, "remediation", "%s: %s" % (step_id, step["description"]))
+    record(state, "step_started", "%s: %s" % (step_id, step["description"]))
+    save(root, state)
+    print("step %s armed for %s" % (step_id, ", ".join(allowed)))
+
+
+def cmd_close(args, root):
+    cmd_done(args, root)
+    cmd_archive(args, root)
 
 
 def cmd_set(args, root):
@@ -336,8 +440,20 @@ def main():
     p = sub.add_parser("risk"); p.add_argument("tier"); p.add_argument("--note", default="")
     p.set_defaults(func=cmd_risk)
 
+    p = sub.add_parser("triage"); p.add_argument("tier"); p.add_argument("--note", default="")
+    p.add_argument("--context", default=""); p.set_defaults(func=cmd_triage)
+
+    p = sub.add_parser("quick"); p.add_argument("--goal", required=True)
+    p.add_argument("--workflow", required=True); p.add_argument("--tier", required=True)
+    p.add_argument("--files", required=True); p.add_argument("--note", default="")
+    p.add_argument("--context", default=""); p.add_argument("--task-id")
+    p.add_argument("--force", action="store_true"); p.set_defaults(func=cmd_quick)
+
     p = sub.add_parser("plan"); p.add_argument("--ref", required=True)
     p.add_argument("--steps", required=True); p.set_defaults(func=cmd_plan)
+
+    p = sub.add_parser("remediate"); p.add_argument("--files", default="")
+    p.add_argument("--note", default=""); p.set_defaults(func=cmd_remediate)
 
     p = sub.add_parser("step"); p.add_argument("step_id"); p.set_defaults(func=cmd_step)
     p = sub.add_parser("step-done"); p.add_argument("step_id"); p.set_defaults(func=cmd_step_done)
@@ -354,6 +470,7 @@ def main():
 
     p = sub.add_parser("done"); p.set_defaults(func=cmd_done)
     p = sub.add_parser("archive"); p.set_defaults(func=cmd_archive)
+    p = sub.add_parser("close"); p.set_defaults(func=cmd_close)
 
     args = parser.parse_args()
     root = find_root(args.root)

@@ -12,7 +12,8 @@ be deliberate and be conservative.
 
 Read first: `.ai/policies/risk-tiers.json` (the source of truth),
 `.ai/project/known-risks.md`, `.ai/agents/risk.md`. Without `.ai/`, use the tier
-definitions in the global `CLAUDE.md` block and say that the project has not
+definitions in the global instruction file's managed block — `CLAUDE.md` or
+`AGENTS.md`, whichever this runtime uses — and say that the project has not
 tuned them.
 
 ## Output

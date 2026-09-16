@@ -2,7 +2,7 @@
 name: Explore
 description: Fast read-only codebase search and file discovery.
 tools: Read, Grep, Glob
-model: sonnet
+model: haiku
 effort: low
 color: green
 ---

@@ -1,0 +1,15 @@
+{
+  "case": "codex SubagentStop: the expert agent answered, badly — not an availability failure",
+  "guard": "gate",
+  "expect": "no-mark",
+  "payload": {
+    "session_id": "thr_1",
+    "turn_id": "turn_1",
+    "hook_event_name": "SubagentStop",
+    "cwd": "__ROOT__",
+    "agent_id": "agt_2",
+    "agent_type": "ai-expert",
+    "stop_hook_active": false,
+    "last_assistant_message": "## RESOLUTION\ndecision: I could not settle this. The error handling is unclear and the migration failed to converge; confidence: uncertain."
+  }
+}

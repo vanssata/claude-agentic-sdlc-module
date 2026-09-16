@@ -1,0 +1,13 @@
+{
+  "case": "codex apply_patch: an explicitly forbidden file is refused with the plan's own reason",
+  "guard": "scope",
+  "expect": "deny",
+  "payload": {
+    "session_id": "thr_1",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "apply_patch",
+    "tool_use_id": "call_23",
+    "cwd": "__ROOT__",
+    "tool_input": { "command": "*** Begin Patch\n*** Update File: src/Payment/LegacyGateway.php\n@@\n-old\n+new\n*** End Patch" }
+  }
+}

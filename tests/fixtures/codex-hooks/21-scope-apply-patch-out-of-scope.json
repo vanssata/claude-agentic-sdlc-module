@@ -1,0 +1,13 @@
+{
+  "case": "codex apply_patch: a patch outside the approved step's files is refused",
+  "guard": "scope",
+  "expect": "deny",
+  "payload": {
+    "session_id": "thr_1",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "apply_patch",
+    "tool_use_id": "call_21",
+    "cwd": "__ROOT__",
+    "tool_input": { "command": "*** Begin Patch\n*** Update File: src/Order/OrderProcessor.php\n@@\n-old\n+new\n*** End Patch" }
+  }
+}

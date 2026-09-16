@@ -1,0 +1,33 @@
+{
+  "name": "claude-agentic",
+  "version": "2.0.0",
+  "description": "A complete agentic engineering pipeline for Codex and Claude Code: risk-tiered task workflow, scoped implementation steps, adversarial and security review, enforcement hooks, and model routing that keeps routine work on the cheap tier.",
+  "author": {
+    "name": "Ivan Kakurov"
+  },
+  "skills": "./skills/",
+  "keywords": [
+    "sdlc",
+    "agents",
+    "code-review",
+    "guardrails",
+    "model-routing",
+    "risk-tiers"
+  ],
+  "interface": {
+    "displayName": "Claude Agentic",
+    "shortDescription": "Risk-tiered agentic engineering pipeline with enforced scope and cost-aware model routing.",
+    "longDescription": "Installs one dual-runtime module: an .ai/ engineering pipeline shared by Codex and Claude Code, agents rendered for whichever runtime you use, and three hooks that enforce the rules mechanically rather than by asking politely. Every change runs discovery → context → impact → risk tier → plan → implementation → test → adversarial review → security review → release report → human approval, with the stages scaled to the tier and none of them skipped. Each implementation step names the files it may touch and anything else is refused, including inside a multi-file apply_patch. Routine workload stays on the cheap tier; the expensive tiers are spent only on a named trigger, and a bundled zero-cost usage report shows where the tokens actually went. No agent commits, merges or deploys on its own initiative — the pipeline ends at human approval.",
+    "developerName": "Ivan Kakurov",
+    "category": "developer-tools",
+    "capabilities": [
+      "Run a change through a risk-tiered pipeline with the gates its tier requires",
+      "Refuse edits outside the current approved step, file by file",
+      "Block force pushes, history rewrites, protected-branch pushes and secret staging",
+      "Survey an existing production codebase into a reusable .ai/ knowledge base",
+      "Audit a repository against the twelve plays of the AI-native SDLC",
+      "Report token usage and cost from local transcripts at zero model cost"
+    ],
+    "defaultPrompt": "Set up the agentic pipeline in this repository with /ai-init, then run my next change through /ai-task."
+  }
+}
