@@ -62,6 +62,7 @@ echo "== every agent this plugin ships declares its tier"
 for f in "$PLUGIN_ROOT"/agents/*.md; do
     name=$(basename "$f")
     grep -qE '^effort:' "$f" || fail "$name declares no effort:"
+    grep -qE '^model:' "$f" || fail "$name declares no model: (it would resolve to the Sonnet default)"
 done
 pass "every agent declares effort:"
 grep -q '{{ARCHITECT_MODEL_LINE}}' "$PLUGIN_ROOT/agents/architect.md.tmpl" && pass "architect's model line is rendered per plan" || fail "architect.md.tmpl should carry the ARCHITECT model placeholder"

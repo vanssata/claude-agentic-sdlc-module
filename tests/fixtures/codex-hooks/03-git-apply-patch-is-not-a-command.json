@@ -1,0 +1,13 @@
+{
+  "case": "codex apply_patch: the git guard ignores a patch, even one whose body quotes a forbidden command",
+  "guard": "git",
+  "expect": "allow",
+  "payload": {
+    "session_id": "thr_1",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "apply_patch",
+    "tool_use_id": "call_3",
+    "cwd": "__ROOT__",
+    "tool_input": { "command": "*** Begin Patch\n*** Update File: docs/release.md\n@@\n-old\n+Never force-push a shared branch.\n*** End Patch" }
+  }
+}

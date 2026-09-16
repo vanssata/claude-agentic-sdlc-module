@@ -37,6 +37,15 @@ for f in "$PLUGIN_ROOT"/tests/fixtures/scope-guard/*.json; do
     run_fixture "$GUARD" "$f" "$ROOT"
 done
 
+echo "== ai-scope-guard (codex apply_patch payloads)"
+run_codex_fixtures "$GUARD" scope "$ROOT"
+out=$(jq -r '.payload' "$PLUGIN_ROOT/tests/fixtures/codex-hooks/21-scope-apply-patch-out-of-scope.json" \
+      | sed "s|__ROOT__|$ROOT|g" | "$GUARD")
+printf '%s' "$out" | grep -q 'SCOPE_CHANGE_REQUIRED' \
+    && pass "an out-of-scope patch is refused with the SCOPE_CHANGE_REQUIRED signal" \
+    || fail "the Codex deny message must carry SCOPE_CHANGE_REQUIRED" "$out"
+assert_fails_open "$GUARD" "a malformed Codex payload fails open" "{ not json"
+
 echo "== ai-scope-guard (disarmed states)"
 payload=$(jq -nc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Edit",cwd:$r,tool_input:{file_path:($r+"/src/Order/OrderProcessor.php")}}')
 

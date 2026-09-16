@@ -1,0 +1,15 @@
+{
+  "case": "codex SubagentStop: a rate limit reported by a BALANCED agent says nothing about the expert model",
+  "guard": "gate",
+  "expect": "no-mark",
+  "payload": {
+    "session_id": "thr_1",
+    "turn_id": "turn_1",
+    "hook_event_name": "SubagentStop",
+    "cwd": "__ROOT__",
+    "agent_id": "agt_3",
+    "agent_type": "ai-discovery",
+    "stop_hook_active": false,
+    "last_assistant_message": "Request failed: 429 rate limit exceeded for model gpt-5.6-terra."
+  }
+}

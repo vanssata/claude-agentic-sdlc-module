@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# claude-agentic: task-scope guard (PreToolUse on Edit|Write|NotebookEdit).
+# claude-agentic: task-scope guard (PreToolUse on Edit|Write|NotebookEdit, and on
+# apply_patch in Codex — one patch is checked file by file, so a patch that
+# touches one file outside the step is refused whole).
 #
 # During the IMPLEMENTATION stage of an /ai-task run, the approved plan names the
 # files each step may touch. This guard makes that boundary mechanical: an edit

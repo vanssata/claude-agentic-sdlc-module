@@ -4,17 +4,31 @@ Five moving parts: host-wide routing settings, a knowledge base on disk, a
 pipeline that runs in a session, a state file that connects them, and hooks that
 make the boundaries real.
 
+Everything below is the same under Claude Code and under Codex except where it
+says otherwise. The runtime-specific part is deliberately thin — see
+[The two adapters](#the-two-adapters) at the end.
+
 ## The routing layer
 
-`install.sh` writes the settings a session runs on: the model for the detected
-plan, its fallback chain, the default effort, the compaction window, the output
-caps, and `CLAUDE_CODE_SUBAGENT_MODEL`. It also writes one managed block into
-`~/.claude/CLAUDE.md` carrying the tier table, the effort rules, the context
-hygiene rules and the pipeline rules.
+`install.sh` writes the settings a session runs on: the session model, its
+fallback behaviour, the default effort, the output caps and the subagent default.
+
+Under Claude Code that is a deep merge into `~/.claude/settings.json` from
+`profiles/{pro,max}.json` plus `settings.common.json`. Under Codex it is six
+managed keys in `~/.codex/config.toml` — `model`, `model_reasoning_effort`, and
+four under `[agents]` — taken from `profiles/codex.json`, which is also what the
+agent renderer reads, so a Codex routing decision has exactly one home.
+
+It also writes one managed block into the global instruction file —
+`~/.claude/CLAUDE.md` or `~/.codex/AGENTS.md` — carrying the tier table, the
+effort rules, the context hygiene rules and the pipeline rules. The two blocks
+say the same things with the models of their runtime substituted in.
 
 This half used to be a separate plugin. It is here because the two were giving
 contradictory instructions — which agent reviews, where a change starts, who
 designs — and a rule that exists twice in two places is a rule nobody follows.
+The same reasoning is why there is one module for both runtimes rather than two
+that drift.
 
 ## The knowledge base
 
@@ -33,11 +47,15 @@ edited by humans afterwards — the scaffold never overwrites an existing file.
   reports/<task-id>/   that task's artifacts (committed — the audit trail)
 ```
 
-The split matters: `agents/*.md` in `~/.claude/agents/` are **static** and
-identical in every project, so their prompts stay cache-friendly; `.ai/agents/*.md`
-and `.ai/policies/*.md` are the **project layer** they read at the start of a run.
-Nothing dynamic — a ticket, a diff, test output — is ever read from disk by an
-agent; it arrives in the prompt.
+There is exactly one `.ai/` tree however many runtimes the project uses. Only the
+instruction file that points at it differs — `CLAUDE.md`, `AGENTS.md`, or both —
+and `scaffold-ai.sh --runtime both` creates both over the same tree.
+
+The split matters: the installed agent definitions (`~/.claude/agents/*.md`,
+`~/.codex/agents/*.toml`) are **static** and identical in every project, so their
+prompts stay cache-friendly; `.ai/agents/*.md` and `.ai/policies/*.md` are the
+**project layer** they read at the start of a run. Nothing dynamic — a ticket, a
+diff, test output — is ever read from disk by an agent; it arrives in the prompt.
 
 ## The pipeline
 
@@ -47,17 +65,17 @@ REQUEST
   → CONTEXT              ai-context, one structured summary
   → IMPACT ANALYSIS      ai-discovery again, this time on blast radius
   → RISK CLASSIFICATION  ai-risk, one tier from risk-tiers.json
-  → PLAN                 ai-planner (opus at T3/T4, ai-expert at T5)
+  → PLAN                 ai-planner (STRONG at T3/T4, ai-expert at T5)
   → PLAN REVIEW          ai-reviewer, T3 and above
   → IMPLEMENTATION       the session itself, one step at a time
-  → TEST                 ai-tester
+  → TEST                 the session, once after the last step (ai-tester in team)
   → ADVERSARIAL REVIEW   ai-reviewer, T2 and above
   → SECURITY REVIEW      ai-security, T4 and T5
   → RELEASE REPORT       ai-release
   → HUMAN APPROVAL       the pipeline stops here, always
 ```
 
-The manager is the **main session**, not a subagent. Claude Code has no cheap
+The manager is the **main session**, not a subagent. Neither runtime has a cheap
 orchestrator process, and an orchestrator that cannot see the conversation is
 worse than none. What keeps the session's context small is that reading is
 delegated or bounded, and every artifact is written to a file and referred to by
@@ -129,15 +147,18 @@ It is git-ignored on purpose: it describes a session, not the repository.
 
 ## The hooks
 
-Five, registered once in `~/.claude/settings.json`:
+Registered once per runtime — in `~/.claude/settings.json`, in
+`~/.codex/hooks.json`:
 
-| Hook | Event | Scope | Armed by |
-|---|---|---|---|
-| `cap-large-read.py` | `PreToolUse:Read` | every session | always |
-| `project-scaffold.sh` | `Setup:init` | a new project | `/init` |
-| `ai-git-guard` | `PreToolUse:Bash` | every repository | always |
-| `ai-path-guard` | `PreToolUse` on reads and writes | this project | the presence of `.ai/` |
-| `ai-scope-guard` | `PreToolUse` on writes | this step | `current_stage == "implementation"` and a current step |
+| Hook | Event | Scope | Armed by | Runtimes |
+|---|---|---|---|---|
+| `ai-git-guard` | `PreToolUse:Bash` | every repository | always | both |
+| `ai-path-guard` | `PreToolUse` on reads and writes | this project | the presence of `.ai/` | both |
+| `ai-scope-guard` | `PreToolUse` on writes | this step | `current_stage == "implementation"` and a current step | both |
+| `cap-large-read.py` | `PreToolUse:Read` | every session | always | Claude |
+| `project-scaffold.sh` | `Setup:init` | a new project | `/init` | Claude |
+| `fable-gate.py` | `StopFailure`, `PreToolUse:Agent` | the EXPERT tier | a Fable install | Claude |
+| `codex-model-gate.py` | `PreToolUse`/`PostToolUse:Agent`, `SubagentStop` | the EXPERT tier | always | Codex |
 
 The path and scope guards check for their arming condition in their first few
 lines and exit silently otherwise, which is why they can be registered globally
@@ -147,6 +168,19 @@ All three share `hooks/lib/ai-hook-common.sh` and the same contract: read the
 payload from stdin, exit 0 silently to allow, or print a deny object and exit 0.
 They **fail open** — a guard that cannot parse its input allows the call, because
 these are defence-in-depth, and a broken guard must never make the tool unusable.
+
+Under Codex there is one extra thing they must do first. The runtime calls its
+tools by different names, and one of them edits several files at once, so
+`ai-hook-common.sh` normalises before any rule runs: `apply_patch` becomes
+`Edit`, `shell`/`exec_command`/`local_shell` become `Bash`, and the paths inside
+an `apply_patch` body are extracted from its `*** Add/Update/Delete File:` and
+`*** Move to:` headers so each one is checked on its own. The guards' rules are
+written once and see the same shapes in both runtimes.
+
+Two Codex facts shape the rest. Its hooks must be reviewed and trusted through
+`/hooks` before they run at all — until you do, nothing is enforced. And its read
+tool is not on the hook path, which is why `cap-large-read.py` has no Codex
+counterpart; the rule is written into `AGENTS.md` instead of being mechanical.
 
 ## Cost
 
@@ -165,3 +199,41 @@ Context length, not model choice, dominates the cost of a session, so:
 
 The expensive tier is reserved for design, adversarial review and the conclusions
 a human reads.
+
+## The two adapters
+
+Everything above is provider-neutral. What is not:
+
+| Concern | Claude Code | Codex |
+|---|---|---|
+| install root | `~/.claude/` | `~/.codex/` |
+| settings | deep merge into `settings.json` | six managed keys in `config.toml` |
+| instruction block | `~/.claude/CLAUDE.md` | `~/.codex/AGENTS.md` |
+| agent definition | Markdown + YAML frontmatter | one TOML file per agent |
+| hook registration | a `hooks` block in settings | `hooks.json`, trusted via `/hooks` |
+| model ladder | haiku → sonnet → opus → Fable/Opus | Terra → Terra → Sol → Astra |
+
+Two consequences are worth naming, because they are not cosmetic.
+
+**Agent precedence is inverted.** Codex resolves a value written in an agent's own
+file *ahead* of the value passed when it is spawned. Asking for a stronger model
+at spawn time therefore does nothing there. The renderer handles this by writing
+an explicit `model` and `model_reasoning_effort` into every agent — an omitted
+`model` would fall back to the Terra `[agents]` default — and by emitting
+`ai-risk-strong` and `ai-planner-strong`, which pin Sol, for the T3/T4 re-runs
+that Claude Code does with `model: opus`. `tests/test-codex-agent-render.sh`
+asserts each role's *effective* model, not the one that was requested.
+
+**There is no `StopFailure`.** Claude's `fable-gate` learns about a rate limit
+from a dedicated failure event. Codex has no such event, so `codex-model-gate`
+watches `SubagentStop` and marks the gate only when the evidence actually points
+at an EXPERT agent: its name in the text, an explicit expert `model`, an agent
+file pinned to the expert model, or an expert launch inside the last five minutes.
+Both gates then do the same thing — rewrite an EXPERT launch to the tier below,
+say so in the agent's context, and expire on their own.
+
+`config.toml` gets one more piece of care. There is no comment-preserving TOML
+writer in the standard library, so `scripts/merge-codex-config.py` edits the
+managed lines surgically, then parses the file before and after and refuses to
+write unless the only keys that differ are the ones it manages. That check, not
+the editing, is the safety contract.

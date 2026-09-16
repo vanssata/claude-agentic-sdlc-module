@@ -1,5 +1,5 @@
 {
-  "_comment": "Shipped defaults for ai-git-guard.sh. The installer copies this to ~/.claude/hooks/ai-git-guard.json once and never overwrites it, so local edits survive a re-install. This guard is global: it applies in every repository, whether or not the project uses .ai/.",
+  "_comment": "Shipped defaults for ai-git-guard.sh. The installer copies this to the hooks directory of each runtime it installs — ~/.claude/hooks/ai-git-guard.json, ~/.codex/hooks/ai-git-guard.json — once, and never overwrites it, so local edits survive a re-install. Each runtime therefore has its own copy; edit both if you want the same local rule in both. This guard is global: it applies in every repository, whether or not the project uses .ai/, and under Codex it sees the shell tool under its own name as well.",
   "protected_branches": ["main", "master", "production", "prod", "stable", "release/.*", "hotfix/.*"],
   "deploy_patterns": [
     "(^|[|;&[:space:]])argocd[[:space:]]+app[[:space:]]+(sync|rollback|delete)",

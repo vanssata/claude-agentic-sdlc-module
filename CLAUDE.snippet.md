@@ -24,6 +24,7 @@ Context length, not model choice, is the largest cost: the session re-reads ever
 - One subagent returning twenty lines beats five tool calls whose output stays in context all session.
 - Deterministic tools first: `rg`, `git`, `jq`, the framework CLI, the test runner.
 - `/clear` between tasks. Compaction near {{COMPACT_WINDOW}} tokens is a summary of the old task, not a clean start.
+- `/usage-report` shows where the tokens went, at zero model cost; `--provider both` puts Codex next to Claude Code.
 
 # Agentic pipeline (in any repository with `.ai/`)
 
@@ -35,5 +36,5 @@ Context length, not model choice, is the largest cost: the session re-reads ever
 - Verify before reporting done: run the verification command from `.ai/policies/testing.md` (or the project `CLAUDE.md`) and show its output. A bugfix starts with the failing test.
 - When a review flags the same mistake a second time, the correction goes into the project `CLAUDE.md`.
 - `ai-git-guard` runs in every repository: no force push, history rewrite, push or merge to a protected branch, `--no-verify`, staged secret or production deploy. `ai-path-guard` and `ai-scope-guard` arm only where `.ai/` exists. No agent commits, merges or deploys on its own; the pipeline ends at human approval.
-- A repository without `.ai/` gets `/ai-init` first; one that has it gets `/project-update` after the plugin is reinstalled (running `/ai-init` or `/project-init` again does the same). `/sdlc-intent` → `/sdlc-spec` → `/sdlc-plan` when a written intent and spec must exist before code; the plan then goes to `/ai-task`. Artefacts live in `docs/sdlc/`, decisions in `docs/sdlc/adr/`, task audit trails in `.ai/reports/<task-id>/`.
+- A repository without `.ai/` gets `/ai-init` first; one that has it gets `/project-update` after the plugin is reinstalled (running `/ai-init` or `/project-init` again does the same). A repository may carry both `CLAUDE.md` and `AGENTS.md`: one `.ai/` tree, one task state, two runtimes. `/sdlc-intent` → `/sdlc-spec` → `/sdlc-plan` when a written intent and spec must exist before code; the plan then goes to `/ai-task`. Artefacts live in `docs/sdlc/`, decisions in `docs/sdlc/adr/`, task audit trails in `.ai/reports/<task-id>/`.
 <!-- claude-agentic:end -->

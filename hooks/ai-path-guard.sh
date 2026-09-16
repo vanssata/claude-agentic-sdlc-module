@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # claude-agentic: sensitive-path guard (PreToolUse on Read|Edit|Write|NotebookEdit|Bash).
+# In Codex the same guard is registered on Bash|apply_patch: an apply_patch call
+# normalises to Edit and its target files are read out of the patch headers, so
+# one patch that touches five files is checked as five writes.
 #
 # Opt-in by construction: it exits immediately unless the project has a .ai/
 # directory, so installing the plugin changes nothing in repos that never ran

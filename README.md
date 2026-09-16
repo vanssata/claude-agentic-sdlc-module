@@ -1,23 +1,24 @@
 # claude-agentic
 
-Host-wide model, effort and context routing for Claude Code, plus agentic
-engineering infrastructure for **existing production codebases** — the kind with
-legacy code, undocumented business rules, historical workarounds and behaviour
-that customers depend on right now.
+Host-wide model, effort and context routing for **Claude Code and Codex**, plus
+agentic engineering infrastructure for **existing production codebases** — the
+kind with legacy code, undocumented business rules, historical workarounds and
+behaviour that customers depend on right now.
 
 It gives a machine and a repository four things:
 
 1. **Routing** — model, effort, fallback, compaction and output limits for the
-   detected plan, plus the tier rules that keep fact collection cheap and pay
-   only for thinking.
+   detected runtime and plan, plus the tier rules that keep fact collection cheap
+   and pay only for thinking.
 2. **`.ai/`** — a knowledge base and a policy set that says what agents may and
-   may not do in this repository.
+   may not do in this repository. One tree, shared by both runtimes.
 3. **A pipeline** — discovery, context, impact, risk classification, plan,
    implementation, test, adversarial review, security review, release report,
    human approval — with the gates each risk tier requires.
-4. **Five hooks** that enforce the parts that matter, so an agent cannot read a
-   whole 20 000-line file into context, quietly widen its scope, read a
-   production secret, force-push, or deploy.
+4. **Hooks** that enforce the parts that matter, so an agent cannot quietly widen
+   its scope, read a production secret, force-push, or deploy — plus a per-runtime
+   escalation gate that sends EXPERT agents one tier down while the top model is
+   rate-limited or unreachable.
 
 The design goal is asymmetry: **it should be harder for an agent to damage the
 project than to make a small, well-defined change safely.**
@@ -33,57 +34,125 @@ A fully delegated `team` profile is one JSON key away.
 > plugin's managed `CLAUDE.md` block into its own, so the two never coexist; see
 > [Migrating from claude-routing](#migrating-from-claude-routing).
 
+## One module, two runtimes
+
+`.ai/**`, the pipeline state machine, the risk tiers, the workflow contracts and
+the skill bodies are provider-neutral. The runtime-specific part is a thin
+adapter: where the files go, what an agent definition looks like, how hooks are
+registered, and which model each tier resolves to.
+
+| | Claude Code | Codex |
+|---|---|---|
+| install root | `~/.claude/` | `~/.codex/` |
+| instruction file | `CLAUDE.md` | `AGENTS.md` |
+| settings | `settings.json` (deep-merged) | `config.toml` (six managed keys) |
+| agents | `agents/*.md`, YAML frontmatter | `agents/*.toml`, rendered from the same prompts |
+| hooks | `settings.json` `hooks` block | `hooks.json` |
+| edits arrive as | `Edit` / `Write`, one file | `apply_patch`, possibly many files |
+| FAST | `haiku` | `gpt-5.6-terra` (Terra) |
+| BALANCED | `sonnet` | `gpt-5.6-terra` (Terra) |
+| STRONG | `opus` | `gpt-5.6-sol` (Sol) |
+| EXPERT | Fable 5.1, or Opus 5 with `--fable no` | `gpt-6-astra` (Astra) |
+| session | Opus 5 [1m] at `medium` (Sonnet on Pro) | Sol at `high` |
+
+A repository can carry both instruction files over one `.ai/` tree. The task
+state is `.ai/state/current.json` either way, so a task started in one runtime
+resumes in the other.
+
 ## Install
 
 ```bash
-./install.sh                       # auto-detects the plan from ~/.claude.json
+./install.sh                       # detects Claude Code, Codex, or both, and updates each
+./install.sh --target codex        # auto | claude | codex | both
+./install.sh --dry-run             # print what would be written, write nothing
+
+# Claude-side options (the plan is auto-detected from ~/.claude.json):
 ./install.sh --plan pro            # Pro and Team: opusplan session, opus pinned for EXPERT
 ./install.sh --plan max            # Max 5x and 20x: Opus 5 [1m] session, Fable only on architect
 ./install.sh --plan max --fable no # no Fable anywhere; architect inherits the Opus session
-./install.sh --dry-run             # print what would be written, write nothing
 ```
 
-Restart Claude Code afterwards. `/skills` should list `ai-init`, `ai-audit`,
-`ai-task` and `ai-status`; `/hooks` should list the three guards.
+`--target auto` installs for each runtime it finds — the CLI on `PATH`, or an
+existing install directory. If it finds neither it stops and tells you which
+`--target` to name; it never guesses one.
 
-Re-running the installer updates in place: it backs up what it replaces to
-`*.bak`, never duplicates a hook entry, and never overwrites your edits to
-`~/.claude/hooks/ai-git-guard.json`.
+Restart the runtime afterwards.
+
+- **Claude Code**: `/skills` should list `ai-init`, `ai-audit`, `ai-task` and
+  `ai-status`; `/hooks` should list the three guards.
+- **Codex**: `/hooks` shows the hooks — **and you must review and trust them
+  there before they run.** Codex does not execute a non-managed hook until it has
+  been trusted, so until you do, nothing is being enforced.
+
+Re-running the installer updates in place: it backs up what it replaces, never
+duplicates a hook entry, and never overwrites your edits to `ai-git-guard.json`.
 
 ### What it installs
 
-| Source | Target | Purpose |
+| Source | Claude target | Codex target |
 |---|---|---|
-| `profiles/{pro,max}.json` + `settings.common.json` | deep-merged into `~/.claude/settings.json` | model, fallback, effort, compaction, output limits and the hook registrations |
-| `CLAUDE.snippet.md` | a managed block in `~/.claude/CLAUDE.md` | the rules, between `<!-- claude-agentic:start/end -->`, with the plan's numbers filled in |
-| `agents/ai-*.md` | `~/.claude/agents/` | the ten pipeline agents |
-| `agents/{ai-expert,architect}.md.tmpl` | `~/.claude/agents/` | the EXPERT-tier agents, model line and effort rendered per plan |
-| `agents/{Explore,log-reader}.md` | `~/.claude/agents/` | fast search, log reading |
-| `hooks/*` | `~/.claude/hooks/` | five hooks, the shared library and the guards' default config |
-| `skills/*/` | `~/.claude/skills/` | `/ai-init`, `/ai-audit`, `/ai-task`, `/ai-status`, `/project-init`, `/project-update`, `/sdlc-intent`, `/sdlc-spec`, `/sdlc-plan` |
+| `profiles/{pro,max}.json` + `settings.common.json` | deep-merged into `settings.json` | — |
+| `profiles/codex.json` | — | six managed keys in `config.toml` |
+| `CLAUDE.snippet.md` / `AGENTS.snippet.md` | a managed block in `~/.claude/CLAUDE.md` | a managed block in `~/.codex/AGENTS.md` |
+| `agents/*.md` | `~/.claude/agents/` | rendered to `~/.codex/agents/*.toml` |
+| `agents/{ai-expert,architect}.md.tmpl` | the EXPERT-tier agents, model line and effort rendered per plan | `ai-expert.toml` pinned to Astra, `architect.toml` to Sol |
+| `hooks/*` | `~/.claude/hooks/` — five hooks, `fable-gate` on a Fable install, the shared library and the guards' default config | `~/.codex/hooks/` + `codex/hooks.json` |
+| `skills/*/` | `~/.claude/skills/` | `~/.codex/skills/` |
+
+The skills are `/ai-init`, `/ai-audit`, `/ai-task`, `/ai-status`, `/project-init`,
+`/project-update`, `/sdlc-intent`, `/sdlc-spec`, `/sdlc-plan` and
+`/usage-report`, identical in both runtimes.
+
+The Codex install is a strict subset in one place: `cap-large-read.py` is not
+installed there, because Codex's read tool is not on the hook path. The rule it
+enforces is still written into `AGENTS.md`; it is just not mechanical there.
+
+`profiles/codex.json` is the machine-readable routing contract — session model,
+`[agents]` defaults, the four tiers and every role's tier and sandbox mode. Both
+the agent renderer and the config merge read it, so there is one place to change
+a Codex routing decision.
+
+### Editing `config.toml` safely
+
+There is no comment-preserving TOML writer in the standard library, so
+`scripts/merge-codex-config.py` edits the six managed keys line by line, then
+parses the file before and after and refuses to write unless the *only* keys that
+differ are the six it manages. Your comments, `[projects.*]`, `[mcp_servers.*]`,
+`[marketplaces.*]` and every other setting survive; a malformed file aborts the
+merge and is left untouched. The previous version is kept as `config.toml.bak`.
+
+**One accepted change to your defaults:** the Codex session is set to Sol at
+`high`, not Astra. Astra stays available as the EXPERT escalation. This is the
+whole point of the routing — the session model is the largest single cost, and
+it should not be the most expensive model by default.
 
 ### Limits it sets
 
-| Limit | Value | Claude Code default |
+| Limit | Value | Default |
 |---|---|---|
-| `bashOutputMaxChars` | 75 000 | 30 000 |
-| `taskOutputMaxChars` | 80 000 | — |
-| `MAX_MCP_OUTPUT_TOKENS` | 40 000 | 25 000 |
-| `cap-large-read.py` | refuses an unbounded `Read` over 4 000 lines or 250 KB | no limit |
-| `autoCompactWindow` | 600 000 on Max, 180 000 on Pro | the model window |
-| `model` | `opusplan` on Pro: Opus in plan mode, Sonnet when executing; `opus[1m]` on Max | Sonnet 5 on Pro |
-| `effortLevel` | `medium` on both plans; agents raise it per task | — |
+| `bashOutputMaxChars` (Claude) | 75 000 | 30 000 |
+| `taskOutputMaxChars` (Claude) | 80 000 | — |
+| `MAX_MCP_OUTPUT_TOKENS` (Claude) | 40 000 | 25 000 |
+| `cap-large-read.py` (Claude) | refuses an unbounded `Read` over 4 000 lines or 250 KB | no limit |
+| `autoCompactWindow` (Claude) | 300 000 on both plans | the model window |
+| `model` (Claude) | `opusplan` on Pro: Opus in plan mode, Sonnet when executing; `opus[1m]` on Max | Sonnet 5 on Pro |
+| `effortLevel` (Claude) | `medium` on both plans; agents raise it per task | — |
+| `model` (Codex) | `gpt-5.6-sol` at `high`; subagents `gpt-5.6-terra` at `medium` | — |
+| `max_concurrent_threads_per_session` (Codex) | 6 | runtime default |
 
 The Read guard is a guardrail, not a cage: an explicit `limit` always goes
 through, so reading something large stays possible but has to be deliberate.
 
 ## Use
 
+The same commands in both runtimes:
+
 ```bash
 /ai-init                 # in a project: survey it, build .ai/ and docs/sdlc/
 /ai-task <what you want> # run one change through the pipeline
-/ai-status               # where does the current task stand
+/ai-status               # where does the current task stand, on which models
 /ai-audit                # score the repo against the twelve AI-SDLC plays
+/usage-report            # what it cost, from local transcripts, at zero model cost
 ```
 
 ### Updating a project after the plugin changes
@@ -129,7 +198,8 @@ For work that needs a written intent and specification before any code:
 ```
 
 `/project-init` scaffolds only the SDLC layout, for a repository that does not
-want the agentic pipeline.
+want the agentic pipeline. Both scaffolds take `--runtime auto|claude|codex|both`
+and default to what the project already declares.
 
 `/ai-init` reads the codebase and writes `.ai/`. It does not touch application
 code — not a rename, not a formatting fix. Problems it finds are documented in
@@ -143,7 +213,7 @@ to you. Either way it ends with the one verification command written into
 ## Risk tiers
 
 Every task is classified before it is planned. The tier decides who plans it, who
-reviews it, and whether a human signs it off.
+reviews it, and whether a human signs it off. It does not depend on the runtime.
 
 | Tier | Covers | Plan review | Adversarial review | Security review | Human approval |
 |---|---|---|---|---|---|
@@ -181,18 +251,23 @@ key. No stage is ever skipped; the profile only changes who does it.
 
 ## Model tiers
 
-| Tier | Runs on | Does |
-|---|---|---|
-| FAST | `haiku`, low | inventories, listings, counting (`ai-indexer`) |
-| BALANCED | `sonnet`, medium | discovery, context, planning, tests, release (`Explore`, `log-reader`, most `ai-*`) |
-| STRONG | `opus`, high | risk at T3+, high-tier planning, adversarial review, security |
-| EXPERT | the session model | design (`architect`) and what STRONG could not settle (`ai-expert`) |
+| Tier | Claude Code | Codex | Does |
+|---|---|---|---|
+| FAST | `haiku`, low | Terra, low | inventories, listings, counting (`ai-indexer`) |
+| BALANCED — default for agents | `sonnet` | Terra, medium | discovery, context, planning up to T2, tests, release (`Explore`, `log-reader`, most `ai-*`) |
+| STRONG | `opus`, high | Sol, high | adversarial and security review, T3/T4 risk and planning, root cause after a first diagnosis failed, reversible design (`ai-reviewer`, `ai-security`, `architect`) |
+| EXPERT | the session model (Opus 5 [1m]) on Max, `opus` pinned on Pro; Fable 5.1 [1m] on `architect` only | Astra, `xhigh` | T5, irreversible design, what STRONG could not settle |
+
+The main session does the implementation itself. Agents default to the BALANCED
+tier, and a STRONG or EXPERT agent runs only when a named trigger fires; the
+triggers are listed in `.ai/policies/model-routing.md`.
 
 On a Max plan the session runs Opus 5 [1m] at `medium` effort and escalates from
 there: `ai-expert` omits `model:` and inherits it, so the session's fallback
 chain applies to it too. Fable 5.1 [1m] is pinned on `architect` alone, at
-`xhigh`, for design questions outside a task; nothing else ever runs on it.
-`--fable no` leaves `architect` on the Opus session as well.
+`xhigh`, for design questions outside a task; nothing else ever runs on it, and
+`fable-gate` sends it to Opus while Fable is rate-limited or its weekly limit is
+nearly used. `--fable no` leaves `architect` on the Opus session as well.
 
 On Pro (and Team, which shares its models) the session model is `opusplan`:
 Opus 5 in plan mode, Sonnet 5 when executing. That is the playbook's "plan mode"
@@ -202,24 +277,51 @@ inherit Sonnet outside plan mode, the installer pins `model: opus` on
 `ai-expert` and `architect` for this plan. `log-reader`, `ai-tester` and
 `ai-release` run at `low` effort: they read and report, they do not think.
 
-There is no LOCAL tier: Claude Code has no local-model backend. The work it would
-have done is done by deterministic tools and by `ai-indexer` on the cheapest
+**One difference worth knowing.** Under Claude Code you escalate by spawning
+`ai-risk` or `ai-planner` with `model: opus`. Codex resolves an agent's own file
+*ahead* of the model asked for at spawn time, so that would silently be ignored —
+the Codex roster therefore carries dedicated `ai-risk-strong` and
+`ai-planner-strong` agents that pin Sol. Same tier, same trigger, different
+mechanism. Every rendered Codex agent writes an explicit `model` and
+`model_reasoning_effort` for the same reason: an omitted `model` falls back to the
+Terra `[agents]` default, which is not the tier a reviewer needs.
+
+Why route this way: in measured usage, over 80% of the cost was the main session
+re-reading its context (cache read and write), not output, so the session model is
+the lever that matters. `/usage-report` shows the split on your machine, across
+both runtimes.
+
+There is no LOCAL tier: neither runtime has a local-model backend. The work it
+would have done is done by deterministic tools and by `ai-indexer` on the cheapest
 model, and nothing in the design depends on a local model existing.
 
 ## The guards
 
-| Hook | Where | Does |
-|---|---|---|
-| `cap-large-read.py` | every session | refuses an unbounded `Read` of a large file; an explicit `limit` passes |
-| `project-scaffold.sh` | `Setup:init` | creates the `docs/sdlc/` and `.claude/` layout on `/init` |
-| `ai-git-guard` | **every repository** | refuses force push, remote branch delete, history rewrite, push or merge to a protected branch, `gh pr merge`, `--no-verify`, staging a secret, production deploy commands |
-| `ai-path-guard` | only where `.ai/` exists | refuses reading or writing `.env`, `secrets/`, keys, dumps, production logs; and edits to the guards' own config or the task state |
-| `ai-scope-guard` | only during an implementation step | refuses editing a file the approved step does not name, with the `SCOPE_CHANGE_REQUIRED` signal |
+| Hook | Runtimes | Where | Does |
+|---|---|---|---|
+| `ai-git-guard` | both | **every repository** | refuses force push, remote branch delete, history rewrite, push or merge to a protected branch, `gh pr merge`, `--no-verify`, staging a secret, production deploy commands |
+| `ai-path-guard` | both | only where `.ai/` exists | refuses reading or writing `.env`, `secrets/`, keys, dumps, production logs; and edits to the guards' own config or the task state |
+| `ai-scope-guard` | both | only during an implementation step | refuses editing a file the approved step does not name, with the `SCOPE_CHANGE_REQUIRED` signal |
+| `cap-large-read.py` | Claude only | every session | refuses an unbounded `Read` of a large file; an explicit `limit` passes |
+| `project-scaffold.sh` | Claude only | `Setup:init` | creates the `docs/sdlc/` and runtime layout on `/init` |
+| `fable-gate.py` | Claude, Max with Fable only | `StopFailure` / `PreToolUse:Agent` / the statusline | records a Fable rate limit, model-not-found or a nearly used weekly limit, and rewrites `model: fable` (the `architect` agent) to `opus` until the reset |
+| `codex-model-gate.py` | Codex only | `PreToolUse`/`PostToolUse:Agent`, `SubagentStop` | the same idea for Astra: records a rate limit or unavailability and rewrites an Astra launch to Sol at `high` until it expires |
+
+The three shared guards see Codex's `apply_patch` as well. One `apply_patch` can
+touch many files, so every `*** Add/Update/Delete File:` and `*** Move to:` path
+in the patch is checked separately — a single out-of-scope or protected file
+rejects the whole patch. Split the patch rather than widening the step.
+
+Codex has no `StopFailure` event, so `codex-model-gate` attributes a failure at
+`SubagentStop` instead, and only when the evidence points at an EXPERT agent:
+the agent's name in the text, an explicit expert `model`, an agent file pinned to
+the expert model, or an expert launch inside the last five minutes.
 
 They are regex-based and run on every matching tool call. That makes them
 defence-in-depth against ordinary agent mistakes — **not a security boundary**. A
-determined process can still read a file through an interpreter. The real
-backstops are human review and server-side branch protection.
+determined process can still read a file through an interpreter, and a tool that
+is not on the hook path is not gated at all. The real backstops are human review
+and server-side branch protection.
 
 ## Migrating from claude-routing
 
@@ -229,7 +331,7 @@ This plugin absorbed `claude-routing`. Run `./install.sh` once and it:
   your model, effort or limits changes;
 - **removes the `<!-- claude-routing:start/end -->` block** from
   `~/.claude/CLAUDE.md` and writes one `claude-agentic` block carrying both sets
-  of rules (56 lines, against the 99 the two blocks used);
+  of rules;
 - also removes an older unmarked `# Model allocation by task and scope` section,
   if one predates the plugins;
 - **retires `agents/reviewer.md`** to `reviewer.md.superseded`, because
@@ -257,20 +359,31 @@ one; nothing references it any more.
 bash tests/run-all.sh
 ```
 
-Nine suites, 287 assertions: the three guards against JSON fixtures, the state
-machine, scaffold idempotency, installer rendering for all three plan
-combinations, the migration off `claude-routing`, and an end-to-end run that
-installs into a scratch directory, scaffolds a throwaway repository and drives a
-T4 task through the guards.
+Sixteen suites, 663 assertions. The guards against JSON fixtures in both runtimes (including
+`apply_patch` payloads that touch several files at once); the state machine and
+its `triage` call; scaffold idempotency for one runtime, the other, and both
+over a single `.ai/` tree; installer rendering for every plan combination and
+every `--target`; the Codex agent renderer, asserting each role's *effective*
+model and effort; the `config.toml` merge against a fixture full of third-party
+settings, and its refusal on a malformed file; the migration off
+`claude-routing`; `/project-update` against a project scaffolded from the oldest
+shipped templates and edited by hand, for a Claude and for a Codex project; an
+end-to-end run that installs both runtimes into scratch directories, scaffolds a
+throwaway repository, drives a T4 task through the guards from Claude and then
+from Codex, and proves both see the same state; the usage report for both
+runtimes; and both escalation gates through every event.
+
+No suite reads or writes the developer's real `~/.claude` or `~/.codex`.
 
 ## Documentation
 
 | File | About |
 |---|---|
 | `docs/getting-started.md` | the first hour: install, `/ai-init`, a worked T1 and T4 task |
-| `docs/architecture.md` | how the pieces fit: `.ai/`, the pipeline, state, hooks |
+| `docs/architecture.md` | how the pieces fit: `.ai/`, the pipeline, state, hooks, the two adapters |
 | `docs/agents.md` | the roster, contracts and when each agent runs |
 | `docs/hooks.md` | every rule the guards enforce, their configuration and limits |
 | `docs/risk-tiers.md` | how classification works and how to tune it |
 | `docs/workflows.md` | the five workflows and how one is chosen |
 | `docs/faq.md` | why something was blocked, and how to change it |
+| `docs/sdlc/plans/dual-runtime-agentic-routing.md` | the approved plan this dual-runtime support was built from |

@@ -11,16 +11,25 @@
      line on its quality. Cite the path. Mark anything you could not check as
      unverified, with what would settle it. -->
 
+Runtimes configured in this repository: <!-- Claude Code / Codex / both / none -->
+
+Rows for a runtime the repository does not use are marked *n/a*, not *missing*.
+
 | Item | State | Note |
 |---|---|---|
-| `CLAUDE.md` (root) | | |
-| nested `CLAUDE.md` files | | |
+| root instruction file (`CLAUDE.md` / `AGENTS.md`) | | |
+| nested instruction files | | |
+| the two agree with each other (if both exist) | | |
 | `.claude/settings.json` | | |
 | `.claude/settings.local.json` | | |
 | `.claude/hooks/` | | |
 | `.claude/skills/` | | |
 | `.claude/agents/` | | |
 | `.claude/commands/` | | |
+| `.codex/config.toml` | | |
+| `.codex/hooks.json` (or inline `[hooks]`) | | |
+| `.codex/skills/` | | |
+| `.codex/agents/` | | |
 | CI workflows | | |
 | branch protection | | |
 | test entry point | | |
@@ -41,7 +50,7 @@
 | 1 | Capture as intent.md | | |
 | 2 | Requirements and design | | |
 | 3 | Plan mode default, plan.md committed | | |
-| 4 | CLAUDE.md | | |
+| 4 | The agent instruction file | | |
 | 5 | Skills as institutional knowledge | | |
 | 6 | Parallel sessions and subagents | | |
 | 7 | Feedback loop | | |

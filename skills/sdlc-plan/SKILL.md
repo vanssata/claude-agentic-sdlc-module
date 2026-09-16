@@ -31,4 +31,6 @@ Output: `docs/sdlc/plans/<slug>.md`.
    then build in the main session one step at a time, running `ai-reviewer` before each commit.
    In a repository with `.ai/`, hand the plan to `/ai-task` instead and let the pipeline
    run the review and approval gates for the task's risk tier.
-   If the plan is approved in plan mode, also save it to `.claude/plans/<slug>.md`.
+   If the plan is approved in plan mode, also save it to the runtime's plan directory —
+   `.claude/plans/<slug>.md` under Claude Code, `.codex/plans/<slug>.md` under Codex. The
+   canonical copy stays in `docs/sdlc/plans/`, which is shared by both.

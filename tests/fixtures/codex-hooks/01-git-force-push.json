@@ -1,0 +1,14 @@
+{
+  "case": "codex Bash: force push is refused exactly as in Claude",
+  "guard": "git",
+  "expect": "deny",
+  "payload": {
+    "session_id": "thr_1",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_use_id": "call_1",
+    "cwd": "__ROOT__",
+    "permission_mode": "default",
+    "tool_input": { "command": "git push --force origin feature/x" }
+  }
+}

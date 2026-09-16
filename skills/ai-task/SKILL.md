@@ -10,11 +10,23 @@ You are the **manager**. You orchestrate the pipeline, keep your own context
 small, and stop at human approval. Read `.ai/agents/manager.md` and
 `.ai/policies/safety.md` before the first stage.
 
+The pipeline, its stages and its gates are identical under Claude Code and under
+Codex; only the install root and the model ladder differ. Resolve the root once:
+
+```bash
+for AI_HOME in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CODEX_HOME:-$HOME/.codex}"; do
+  [ -d "$AI_HOME/skills/ai-task" ] && break
+done
+```
+
 `STATE` below means:
 
 ```bash
-python3 "$HOME/.claude/skills/ai-task/state.py"
+python3 "$AI_HOME/skills/ai-task/state.py"
 ```
+
+The state file is the project's `.ai/state/current.json` either way, so a task
+started in one runtime resumes in the other.
 
 ## 0. Resume or start
 
@@ -86,9 +98,10 @@ $STATE set context_summary_ref ".ai/reports/<task-id>/task.md"
 at a time. `ai-discovery` — one agent per area in parallel, after `ai-indexer`
 when the area is large — into `discovery.md`; `ai-context` for the summary; a
 second `ai-discovery` pass for `.ai/templates/impact-report.md`; `ai-risk` with
-`model: opus` for the tier, re-run when it says `confidence: uncertain`.
+`model: opus` for the tier (`ai-risk-strong` under Codex, whose agent files
+outrank a spawn-time model), re-run when it says `confidence: uncertain`.
 In `solo` you may still write context and impact yourself at T3 when the area
-is one you know; the risk call on `opus` is not optional there.
+is one you know; the risk call at STRONG is not optional there.
 
 ```bash
 $STATE risk T<n> --note "<the trigger that decided it>"
@@ -117,8 +130,8 @@ spans several modules. Register it:
 $STATE plan --ref ".ai/reports/<task-id>/task.md" --steps /tmp/steps.json
 ```
 
-**T3 and T4:** `ai-planner` with `model: opus`, in plan mode. **T5:**
-`ai-expert`. Save to `.ai/reports/<task-id>/implementation-plan.md` following
+**T3 and T4:** `ai-planner` with `model: opus` (`ai-planner-strong` under
+Codex), in plan mode. **T5:** `ai-expert`. Save to `.ai/reports/<task-id>/implementation-plan.md` following
 `.ai/templates/implementation-plan.md`, register the steps as above.
 
 `allowed_files` is enforced by a hook from T2 up, so it must be accurate. A
@@ -180,9 +193,18 @@ let a test be edited to make it pass.
 
 ### ADVERSARIAL REVIEW (T2 and above)
 
-`ai-reviewer` on the diff — a fresh context that did not write the code — with
-the model from `pipeline_profiles.<profile>.review_model[<tier>]`: `sonnet` at
-T2 in solo, `opus` above. Save findings to `.ai/reports/<task-id>/review-report.md`.
+One `ai-reviewer` on the diff — a fresh context that did not write the code —
+with the model from `pipeline_profiles.<profile>.review_model[<tier>]`: `sonnet`
+at T2 in solo, `opus` above. Save findings to
+`.ai/reports/<task-id>/review-report.md`.
+
+Before you delegate, probe the change yourself for a minute: the handful of
+inputs its own threat model makes interesting, run through the real code in the
+scratchpad, outcomes noted in `.ai/reports/<task-id>/review-ledger.md`. The
+reviewer starts where you stopped. A re-review after a remediation is scoped —
+do the named findings close, and what did the remediation introduce — never a
+second full pass. One reviewer per pass; fan out narrow reviewers only at T4/T5
+when the change is wide. Full rules: `.ai/policies/review-economy.md`.
 
 ```bash
 $STATE set review_status <passed|blockers_open>

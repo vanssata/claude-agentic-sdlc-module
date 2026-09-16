@@ -1,0 +1,13 @@
+{
+  "case": "codex apply_patch: deleting a file outside the step is refused too",
+  "guard": "scope",
+  "expect": "deny",
+  "payload": {
+    "session_id": "thr_1",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "apply_patch",
+    "tool_use_id": "call_24",
+    "cwd": "__ROOT__",
+    "tool_input": { "command": "*** Begin Patch\n*** Delete File: src/Order/OrderProcessor.php\n*** End Patch" }
+  }
+}

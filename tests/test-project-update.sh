@@ -107,6 +107,31 @@ python3 "$UPDATE" "$P2" --apply >/dev/null
 [ "$(sha256sum "$P2/.ai/policies/risk-tiers.json" | cut -d' ' -f1)" != "$(grep -o 'sha256:[0-9a-f]*' "$P2/.ai/policies/risk-tiers.md" | cut -d: -f2)" ] \
     && pass "a mirror that was already stale is not silently marked in sync" || fail "stale mirror was hidden"
 
+echo "== a Codex project gets its AGENTS.md block and .codex/ layer, and no stray CLAUDE.md"
+P4="$TMP/proj4"; mkdir -p "$P4"
+CLAUDE_ROUTING_TEMPLATES="$OLD/project-init/templates" bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$P4" --runtime codex >/dev/null
+CLAUDE_AGENTIC_TEMPLATES="$OLD/ai-init/templates" bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$P4" --runtime codex >/dev/null
+[ -e "$P4/AGENTS.md" ] && [ ! -e "$P4/CLAUDE.md" ] && pass "the fixture is a Codex-only project" || fail "fixture should be Codex-only"
+printf '\n# my codex notes\nkeep me\n' >> "$P4/AGENTS.md"
+rm "$P4/.codex/memory/README.md"
+out=$(python3 "$UPDATE" "$P4" --apply 2>&1)
+grep -q 'keep me' "$P4/AGENTS.md" && grep -q 'claude-agentic:start' "$P4/AGENTS.md" \
+    && pass "the AGENTS.md block is managed and the rest of the file kept" || fail "AGENTS.md update wrong" "$out"
+[ "$(grep -c 'claude-agentic:start' "$P4/AGENTS.md")" = 1 ] && pass "one AGENTS.md block remains" || fail "AGENTS.md block duplicated"
+[ ! -e "$P4/CLAUDE.md" ] && [ ! -d "$P4/.claude" ] && pass "no Claude layer is added to a Codex project" || fail "a stray Claude layer was created"
+[ -f "$P4/.codex/memory/README.md" ] && pass "a missing .codex/memory/README.md is recreated" || fail ".codex/memory/README.md not created"
+[ -f "$P4/.codex/config.toml" ] && pass ".codex/config.toml is left in place" || fail ".codex/config.toml missing"
+grep -q '.codex/memory/local/' "$P4/.gitignore" && pass "the Codex ignore entry is appended" || fail ".gitignore lacks the codex entry"
+python3 "$UPDATE" "$P4" --apply >/dev/null 2>&1
+python3 "$UPDATE" "$P4" | grep -q '^0 automatic, 0 conflict' && pass "a second run on the Codex project is a no-op" || fail "codex project not idempotent" "$(python3 "$UPDATE" "$P4")"
+
+echo "== a dual-runtime project keeps both instruction files in step"
+P5="$TMP/proj5"; mkdir -p "$P5"
+CLAUDE_AGENTIC_TEMPLATES="$OLD/ai-init/templates" bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$P5" --runtime both >/dev/null
+python3 "$UPDATE" "$P5" --apply >/dev/null 2>&1
+grep -q 'pipeline_profile' "$P5/CLAUDE.md" && grep -q 'claude-agentic:start' "$P5/AGENTS.md" \
+    && pass "both blocks are brought up to date over the one .ai/ tree" || fail "dual-runtime blocks not updated"
+
 echo "== an up-to-date project and a non-project"
 P3="$TMP/proj3"; mkdir -p "$P3"
 CLAUDE_ROUTING_TEMPLATES="$PLUGIN_ROOT/skills/project-init/templates" bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$P3" >/dev/null

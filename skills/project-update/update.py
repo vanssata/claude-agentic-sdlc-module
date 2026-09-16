@@ -9,10 +9,17 @@ Default is a dry run: print what would change, write nothing.
 
 What it manages, and how:
   .ai/** (policies, workflows, agents, templates)   three-way update
-  docs/sdlc/*/TEMPLATE.md, .claude/memory/README.md  three-way update
-  the managed block in CLAUDE.md                     three-way update of the block only
+  docs/sdlc/*/TEMPLATE.md                            three-way update
+  .claude/memory/README.md, .codex/memory/README.md  three-way update, per runtime the project uses
+  the managed block in CLAUDE.md and/or AGENTS.md    three-way update of the block only
   .gitignore                                         missing entries appended
-  .ai/project/**, CLAUDE.md, .claude/settings.json   created when missing, never updated
+  .ai/project/**, the instruction files themselves,
+  .claude/settings.json, .codex/config.toml          created when missing, never updated
+
+A project uses the runtime(s) it declares: CLAUDE.md or .claude/ means Claude
+Code, AGENTS.md or .codex/ means Codex, both means both. A project that declares
+neither gets the runtime this copy of the plugin was installed for, exactly as
+the scaffolds do.
 
 Three-way update: a file whose content is a version this plugin once shipped was
 never edited, so it is replaced. An edited file is merged against the shipped
@@ -40,9 +47,29 @@ PROJECT_INIT_MAP = [  # template -> target, kind
     ("spec.md", "docs/sdlc/specs/TEMPLATE.md", "update"),
     ("plan.md", "docs/sdlc/plans/TEMPLATE.md", "update"),
     ("adr.md", "docs/sdlc/adr/TEMPLATE.md", "update"),
-    ("memory-README.md", ".claude/memory/README.md", "update"),
-    ("project-settings.json", ".claude/settings.json", "create"),
 ]
+RUNTIME_MAP = {  # the per-runtime layer of the project-init scaffold
+    "claude": [("memory-README.md", ".claude/memory/README.md", "update"),
+               ("project-settings.json", ".claude/settings.json", "create")],
+    "codex":  [("memory-README.md", ".codex/memory/README.md", "update"),
+               ("project-config.toml", ".codex/config.toml", "create")],
+}
+INSTRUCTION_FILE = {  # runtime -> (file, block template, minimal template)
+    "claude": ("CLAUDE.md", "CLAUDE.block.md", "CLAUDE.minimal.md"),
+    "codex":  ("AGENTS.md", "AGENTS.block.md", "AGENTS.minimal.md"),
+}
+
+
+def project_runtimes(root):
+    """The runtimes a project declares, or the one this plugin copy serves."""
+    out = []
+    if os.path.exists(os.path.join(root, "CLAUDE.md")) or os.path.isdir(os.path.join(root, ".claude")):
+        out.append("claude")
+    if os.path.exists(os.path.join(root, "AGENTS.md")) or os.path.isdir(os.path.join(root, ".codex")):
+        out.append("codex")
+    if not out:
+        out.append("codex" if "/.codex/" in HERE + "/" else "claude")
+    return out
 
 
 def sha(data):
@@ -247,25 +274,26 @@ def fix_mirror(plan, target, content, ours):
     return HASH_RE.sub(old.group(0), content, count=1) if old else content
 
 
-def block_update(plan, history):
-    tpl = read(os.path.join(TEMPLATES["ai-init"], "CLAUDE.block.md"))
-    path = os.path.join(plan.root, "CLAUDE.md")
+def block_update(plan, history, runtime):
+    name, block_tpl, minimal_tpl = INSTRUCTION_FILE[runtime]
+    tpl = read(os.path.join(TEMPLATES["ai-init"], block_tpl))
+    path = os.path.join(plan.root, name)
     text = read(path) if os.path.exists(path) else None
     if text is None:
-        created = read(os.path.join(TEMPLATES["ai-init"], "CLAUDE.minimal.md")).replace(
+        created = read(os.path.join(TEMPLATES["ai-init"], minimal_tpl)).replace(
             b"{{PROJECT}}", os.path.basename(plan.root).encode())
-        plan.add("create", "CLAUDE.md", "with the managed block", content=created.rstrip(b"\n") + b"\n\n" + tpl)
+        plan.add("create", name, "with the managed block", content=created.rstrip(b"\n") + b"\n\n" + tpl)
         return
     s, e = text.find(START.encode()), text.find(END.encode())
     if s < 0 or e < 0:
-        plan.add("update", "CLAUDE.md", "managed block appended",
+        plan.add("update", name, "managed block appended",
                  content=text.rstrip(b"\n") + b"\n\n" + tpl)
         return
     e += len(END)
     ours = text[s:e] + b"\n"
     if ours == tpl:
         return
-    versions = [v for v in history.versions("ai-init/CLAUDE.block.md") if v != tpl]
+    versions = [v for v in history.versions("ai-init/" + block_tpl) if v != tpl]
     if ours in versions:
         new_block = tpl
         note = "managed block replaced (unchanged since it was installed)"
@@ -274,10 +302,10 @@ def block_update(plan, history):
         new_block = merge_text(ours, base, tpl) if base is not None else None
         note = "managed block merged, your edits kept"
     if new_block is None:
-        plan.add("conflict", "CLAUDE.md", "the managed block was edited here and changed in the plugin",
+        plan.add("conflict", name, "the managed block was edited here and changed in the plugin",
                  conflict_copy=tpl)
         return
-    plan.add("update", "CLAUDE.md", note, content=text[:s] + new_block.rstrip(b"\n") + text[e:])
+    plan.add("update", name, note, content=text[:s] + new_block.rstrip(b"\n") + text[e:])
 
 
 def gitignore_update(plan, snippet_path):
@@ -307,13 +335,18 @@ def build_plan(root):
     if not (has_ai or has_sdlc):
         return None
 
+    runtimes = project_runtimes(root)
     if has_sdlc:
         tpl = TEMPLATES["project-init"]
-        for src, target, kind in PROJECT_INIT_MAP:
+        entries = list(PROJECT_INIT_MAP)
+        for rt in runtimes:
+            entries += RUNTIME_MAP[rt]
+        for src, target, kind in entries:
             content = read(os.path.join(tpl, src))
             if kind == "create":
                 if not os.path.exists(os.path.join(root, target)):
-                    plan.add("create", target, content=content)
+                    plan.add("create", target, content=content.replace(
+                        b"{{PROJECT}}", os.path.basename(root).encode()))
             else:
                 three_way(plan, history, "project-init/" + src, target, content)
         gitignore_update(plan, os.path.join(tpl, "gitignore.snippet"))
@@ -332,7 +365,8 @@ def build_plan(root):
                     plan.add("create", rel, content=content)
                 continue
             three_way(plan, history, "ai-init/" + rel, rel, content)
-        block_update(plan, history)
+        for rt in runtimes:
+            block_update(plan, history, rt)
         gitignore_update(plan, os.path.join(tpl, "gitignore.snippet"))
 
         testing = plan.final.get(".ai/policies/testing.md")

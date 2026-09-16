@@ -11,6 +11,21 @@ on it rather than starting over**. Most repositories that reach this skill have
 some AI configuration already; the plan's job is to find the gaps worth closing,
 in an order that works.
 
+The audit is provider-neutral: it scores the same twelve plays whether the
+repository is set up for Claude Code, for Codex, or for both. Resolve the install
+root once, so the rubric is read from wherever this skill is installed:
+
+```bash
+for AI_HOME in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CODEX_HOME:-$HOME/.codex}"; do
+  [ -d "$AI_HOME/skills/ai-audit" ] && break
+done
+```
+
+Say in the report which runtime layouts you found. A repository configured for
+only one of them is not thereby scored lower — the plays are about the practice,
+not the vendor — but a repository configured for both whose two instruction files
+have drifted apart **is** a finding, under the play about a single source of truth.
+
 ## The rule for this entire skill
 
 The only file you write is `docs/ai-sdlc-adoption-plan.md`. Everything else in
@@ -36,10 +51,14 @@ Do not invent this. An adoption plan written against a guessed team is worthless
 Delegate the wide read to `ai-indexer` and, where judgment is needed, to
 `ai-discovery` or `Explore`. Cover:
 
-- `CLAUDE.md` at the root and every nested one — length, currency, contradictions;
-- `.claude/settings.json` and `.claude/settings.local.json` — permissions, hooks,
+- the instruction files at the root and every nested one — `CLAUDE.md` for Claude
+  Code, `AGENTS.md` for Codex, often both — length, currency, contradictions, and
+  whether the two agree with each other where both exist;
+- the runtime configuration, whichever is present: `.claude/settings.json` and
+  `.claude/settings.local.json`, `.codex/config.toml` — permissions, hooks,
   environment, models;
 - `.claude/hooks/`, `.claude/skills/`, `.claude/agents/`, `.claude/commands/`;
+- `.codex/hooks.json`, `.codex/skills/`, `.codex/agents/*.toml`;
 - CI workflows (`.github/workflows/`, `.gitlab-ci.yml`, `Jenkinsfile`);
 - branch protection — via `gh api repos/{owner}/{repo}/branches/{branch}/protection`
   when `gh` is authenticated, otherwise **unverified**, and say so;
@@ -51,7 +70,7 @@ For each: **exists / partial / missing**, plus one line on its quality.
 
 ### 3. Score the twelve plays
 
-Read `~/.claude/skills/ai-audit/templates/play-scoring-rubric.md` for what each
+Read `$AI_HOME/skills/ai-audit/templates/play-scoring-rubric.md` for what each
 play means and what evidence to look for. Score each 0–3 and cite the file and
 line that justifies the score.
 
@@ -65,8 +84,8 @@ that reports a fabricated 2 is worse than one that admits it could not see.
 
 Respect the dependency order:
 
-- no prerequisites: CLAUDE.md, skills, the feedback loop, hooks, plan mode;
-- subagents and evals need CLAUDE.md and the feedback loop;
+- no prerequisites: the instruction file, skills, the feedback loop, hooks, planning first;
+- subagents and evals need the instruction file and the feedback loop;
 - the PR review loop needs evals and subagents;
 - CI/CD integration needs the PR review loop and hooks;
 - closing the loop needs CI/CD integration and intent.
@@ -91,13 +110,17 @@ drifted, with the minimal fix for each:
 - secrets reachable by the agent — including through a Bash command;
 - test files editable during a fix task, which lets a failing test be "fixed" by
   deleting it;
-- a `CLAUDE.md` that is stale, self-contradictory, or longer than a page;
+- an instruction file that is stale, self-contradictory, or longer than a page —
+  and, where both `CLAUDE.md` and `AGENTS.md` exist, any rule one states and the
+  other contradicts or omits;
+- guardrails present in one runtime and absent in the other, so the same work is
+  safe from Claude Code and unguarded from Codex, or the reverse;
 - when there is no `.ai/`: note that the path and scope guards are inactive here,
   and only the global git guard applies.
 
 ### 6. Write it
 
-Copy `~/.claude/skills/ai-audit/templates/ai-sdlc-adoption-plan.md` to
+Copy `$AI_HOME/skills/ai-audit/templates/ai-sdlc-adoption-plan.md` to
 `docs/ai-sdlc-adoption-plan.md` and fill it in: Inventory, Gap scores, Phase 1,
 Phase 2, Phase 3, Guardrail fixes, Open questions for the team. Keep it under
 about four pages — a plan nobody finishes reading changes nothing.

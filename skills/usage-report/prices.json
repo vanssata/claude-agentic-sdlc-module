@@ -1,0 +1,37 @@
+{
+  "_comment": "Token prices in $/MTok, per provider. usage-report.py reads this file; editing it changes the report without touching the parser. A family key matches by substring against the model name, longest key first, so 'gpt-5.6-sol' wins over 'gpt-5.6'. cache_write_multiplier and cache_read_multiplier are applied to the input price. Set rates_verified to false for a provider whose numbers you have not checked against the vendor's current price list — the report then labels its cost column as an estimate instead of presenting a guess as a fact.",
+
+  "claude": {
+    "rates_verified": true,
+    "verified_on": "2026-07",
+    "default_family": "opus",
+    "cache_write_multiplier": 2.0,
+    "cache_read_multiplier": 0.1,
+    "families": {
+      "fable": [10.0, 50.0],
+      "opus": [5.0, 25.0],
+      "sonnet": [2.0, 10.0],
+      "haiku": [1.0, 5.0]
+    }
+  },
+
+  "codex": {
+    "rates_verified": false,
+    "verified_on": null,
+    "_rates_note": "Placeholders scaled to the tier each model serves, not published rates. Until someone checks them against the current OpenAI price list and flips rates_verified, treat the Codex cost column as relative weight between tiers and read the token columns as the real measurement.",
+    "default_family": "gpt-5.6-sol",
+    "cache_write_multiplier": 2.0,
+    "cache_read_multiplier": 0.1,
+    "families": {
+      "gpt-6-astra": [10.0, 50.0],
+      "gpt-5.6-sol": [5.0, 25.0],
+      "gpt-5.6-terra": [1.0, 5.0],
+      "gpt-5.6-luna": [2.0, 10.0],
+      "gpt-5.6": [2.0, 10.0],
+      "gpt-5.5": [2.0, 10.0],
+      "gpt-5.4-mini": [1.0, 5.0],
+      "gpt-5.4": [2.0, 10.0],
+      "codex-auto-review": [1.0, 5.0]
+    }
+  }
+}

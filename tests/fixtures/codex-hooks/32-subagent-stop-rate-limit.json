@@ -1,0 +1,15 @@
+{
+  "case": "codex SubagentStop: the expert agent hit a rate limit",
+  "guard": "gate",
+  "expect": "mark",
+  "payload": {
+    "session_id": "thr_1",
+    "turn_id": "turn_1",
+    "hook_event_name": "SubagentStop",
+    "cwd": "__ROOT__",
+    "agent_id": "agt_1",
+    "agent_type": "ai-expert",
+    "stop_hook_active": false,
+    "last_assistant_message": "Request failed: 429 rate limit exceeded for model gpt-6-astra. Try again later."
+  }
+}

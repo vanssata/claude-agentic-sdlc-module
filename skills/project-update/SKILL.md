@@ -6,10 +6,19 @@ argument-hint: [--apply]
 
 # /project-update $ARGUMENTS
 
+The skill is the same under Claude Code and under Codex; resolve the install
+root once:
+
+```bash
+for AI_HOME in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CODEX_HOME:-$HOME/.codex}"; do
+  [ -d "$AI_HOME/skills/project-update" ] && break
+done
+```
+
 `UPDATE` below means:
 
 ```bash
-python3 "$HOME/.claude/skills/project-update/update.py" "$PWD"
+python3 "$AI_HOME/skills/project-update/update.py" "$PWD"
 ```
 
 The script does the whole update deterministically. Your job is to show what it
@@ -18,7 +27,7 @@ will do, get a confirmation where one is owed, and merge what it cannot.
 ## 1. A task in flight
 
 ```bash
-python3 "$HOME/.claude/skills/ai-task/state.py" get --quiet
+python3 "$AI_HOME/skills/ai-task/state.py" get --quiet
 ```
 
 If a task is in flight, say so: updating the policies mid-task can change which
@@ -64,8 +73,8 @@ in the git-ignored copy the line names.
   project's value for the paths it lists. For each one, show the project value
   and the plugin value, and tell the human which one the plugin now expects and
   why it matters. They edit it.
-- **The CLAUDE.md managed block:** merge it like a markdown file, inside the
-  markers only.
+- **The managed block in `CLAUDE.md` or `AGENTS.md`:** merge it like a markdown
+  file, inside the markers only.
 
 ## 6. Hints
 
@@ -83,15 +92,16 @@ git diff --stat
 Say what changed, what was merged by hand, and what is left for the human. If
 `/ai-status` would now show a stale risk-tier mirror, say so: it means the JSON
 and its markdown mirror disagreed before this update, and the mirror needs a
-hand edit. Suggest `git add -A .ai docs/sdlc .claude CLAUDE.md .gitignore` and a
-commit; do not commit.
+hand edit. Suggest `git add -A .ai docs/sdlc .gitignore` plus the runtime
+directories and instruction files the project has (`.claude CLAUDE.md`,
+`.codex AGENTS.md`) and a commit; do not commit.
 
 ## Rules
 
 - The script writes; you do not reimplement it. Never copy template files over
   project files by hand.
 - `.ai/project/**`, the project `CLAUDE.md` outside the managed block and
-  `.claude/settings.json` belong to the project. The script only creates them
-  when missing, and so do you.
+  `.claude/settings.json` and `.codex/config.toml` belong to the project. The
+  script only creates them when missing, and so do you.
 - A conflict is resolved by merging, never by taking the plugin's version
   wholesale.

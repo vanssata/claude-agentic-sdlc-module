@@ -1,0 +1,68 @@
+{
+  "_comment": "Codex routing profile. The Claude profiles (pro.json, max.json) are Claude Code settings.json fragments; this one is not — Codex is configured through ~/.codex/config.toml, so this file is the machine-readable source of truth that scripts/merge-codex-config.py and scripts/render-codex-agents.py both read. Keep the tier names identical to CLAUDE.snippet.md and AGENTS.snippet.md: the two runtimes run the same pipeline on two equivalent model ladders.",
+
+  "session": {
+    "model": "gpt-5.6-sol",
+    "model_reasoning_effort": "high"
+  },
+
+  "agents": {
+    "enabled": true,
+    "max_concurrent_threads_per_session": 6,
+    "default_subagent_model": "gpt-5.6-terra",
+    "default_subagent_reasoning_effort": "medium"
+  },
+
+  "tiers": {
+    "FAST":     { "model": "gpt-5.6-terra", "effort": "low" },
+    "BALANCED": { "model": "gpt-5.6-terra", "effort": "medium" },
+    "STRONG":   { "model": "gpt-5.6-sol",   "effort": "high" },
+    "EXPERT":   { "model": "gpt-6-astra",   "effort": "xhigh" }
+  },
+
+  "labels": {
+    "gpt-5.6-terra": "Terra",
+    "gpt-5.6-sol": "Sol",
+    "gpt-6-astra": "Astra"
+  },
+
+  "_roles_comment": "One entry per rendered custom agent. `source` is the shared prompt body in agents/; when it is absent the agent is a rendered variant of another agent's body (see `variant_of`). `sandbox_mode` mirrors the Claude definition's tool surface: every agent that disallows Edit/Write is read-only.",
+  "roles": {
+    "ai-indexer":   { "source": "ai-indexer.md",   "tier": "FAST",     "sandbox_mode": "read-only" },
+    "Explore":      { "source": "Explore.md",      "tier": "FAST",     "sandbox_mode": "read-only" },
+    "ai-discovery": { "source": "ai-discovery.md", "tier": "FAST",     "sandbox_mode": "read-only" },
+    "log-reader":   { "source": "log-reader.md",   "tier": "FAST",     "sandbox_mode": "read-only" },
+
+    "ai-context":   { "source": "ai-context.md",   "tier": "BALANCED", "sandbox_mode": "read-only" },
+    "ai-risk":      { "source": "ai-risk.md",      "tier": "BALANCED", "sandbox_mode": "read-only" },
+    "ai-planner":   { "source": "ai-planner.md",   "tier": "BALANCED", "sandbox_mode": "read-only" },
+    "ai-tester":    { "source": "ai-tester.md",    "tier": "BALANCED", "sandbox_mode": "read-only" },
+    "ai-release":   { "source": "ai-release.md",   "tier": "BALANCED", "sandbox_mode": "workspace-write" },
+    "ai-implementer": { "source": "ai-implementer.md", "tier": "BALANCED", "sandbox_mode": "workspace-write" },
+
+    "ai-reviewer":  { "source": "ai-reviewer.md",  "tier": "STRONG",   "sandbox_mode": "read-only" },
+    "ai-security":  { "source": "ai-security.md",  "tier": "STRONG",   "sandbox_mode": "read-only" },
+    "architect":    { "source": "architect.md.tmpl", "tier": "STRONG", "sandbox_mode": "read-only" },
+
+    "ai-risk-strong": {
+      "variant_of": "ai-risk",
+      "tier": "STRONG",
+      "sandbox_mode": "read-only",
+      "description_prefix": "STRONG re-run of ai-risk. Use only when ai-risk on the BALANCED tier answered T3+ or confidence: uncertain.",
+      "escalation_note": "You are the STRONG re-run of `ai-risk`. A cheaper tier already classified this change and returned T3+ or `confidence: uncertain`. Read its answer first and say explicitly whether you confirm or raise its tier."
+    },
+    "ai-planner-strong": {
+      "variant_of": "ai-planner",
+      "tier": "STRONG",
+      "sandbox_mode": "read-only",
+      "description_prefix": "STRONG planner. Use for T3 and T4 plans; T5 goes to ai-expert instead.",
+      "escalation_note": "You are the STRONG planner, spawned because the risk tier is T3 or T4. Plan with the care that tier demands: name the files each step may touch, the compatibility risk, the rollback and what a human must approve."
+    },
+
+    "ai-expert": {
+      "source": "ai-expert.md.tmpl",
+      "tier": "EXPERT",
+      "sandbox_mode": "read-only"
+    }
+  }
+}

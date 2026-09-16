@@ -5,13 +5,32 @@ The main session re-reads its whole context on every turn, so one 500K-character
 Read is paid for again on every subsequent turn of the session. This hook does
 not cap what can be read — it only insists that reading something large is an
 explicit act: pass `limit`, and the read goes through untouched.
+
+Claude Code only. It matches a tool named `Read` that takes a `file_path` and an
+optional `limit`. Codex has no equivalent on the hook path: its file reads go
+through the shell, where there is no `limit` argument to ask for and no file
+path to size up before the command runs, so the installer does not register this
+hook for Codex. The limits are read from AI_READ_MAX_LINES / AI_READ_MAX_BYTES,
+with the original CLAUDE_READ_MAX_* names still honoured.
 """
 import json
 import os
 import sys
 
-MAX_LINES = int(os.environ.get("CLAUDE_READ_MAX_LINES", "4000"))
-MAX_BYTES = int(os.environ.get("CLAUDE_READ_MAX_BYTES", "250000"))
+
+def limit_from_env(neutral, legacy, default):
+    for name in (neutral, legacy):
+        value = os.environ.get(name)
+        if value:
+            try:
+                return int(value)
+            except ValueError:
+                pass
+    return default
+
+
+MAX_LINES = limit_from_env("AI_READ_MAX_LINES", "CLAUDE_READ_MAX_LINES", 4000)
+MAX_BYTES = limit_from_env("AI_READ_MAX_BYTES", "CLAUDE_READ_MAX_BYTES", 250000)
 
 # Read handles these as media, not text — line and byte counts say nothing useful.
 BINARY = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".pdf", ".ipynb"}

@@ -31,7 +31,9 @@ def main():
         if sha not in versions:
             versions.append(sha)
 
-    commits = git("rev-list", "--reverse", "HEAD", "--", *SETS.values()).split()
+    # Every ref, not only HEAD: a template shipped from a feature branch or an
+    # install made before a merge is still a version a project may carry.
+    commits = git("rev-list", "--reverse", "--all", "--", *SETS.values()).split()
     for commit in commits:
         for name, root in SETS.items():
             for path in git("ls-tree", "-r", "--name-only", commit, "--", root).splitlines():

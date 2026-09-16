@@ -1,0 +1,76 @@
+{
+  "description": "claude-agentic guards for Codex. The installer merges these entries into ~/.codex/hooks.json without duplicating a command. Codex requires you to review and trust a non-managed hook before it runs: open /hooks once after installing, or these are listed and skipped.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.codex/hooks/ai-git-guard.sh\"",
+            "timeout": 15,
+            "statusMessage": "Checking git and deploy safety"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.codex/hooks/ai-path-guard.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking sensitive paths"
+          }
+        ]
+      },
+      {
+        "matcher": "apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.codex/hooks/ai-scope-guard.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking task scope"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.codex/hooks/codex-model-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Checking expert-model availability"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.codex/hooks/codex-model-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Recording expert-model availability"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.codex/hooks/codex-model-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Recording expert-model availability"
+          }
+        ]
+      }
+    ]
+  }
+}

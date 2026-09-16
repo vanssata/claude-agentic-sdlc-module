@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
-# claude-agentic installer.
-#   ./install.sh [--plan pro|max] [--fable auto|yes|no] [--dry-run]
-# --plan   defaults to auto-detect from ~/.claude.json (organizationType); prompts if unknown.
-# --fable  auto = yes on max, no on pro. On max the session runs Opus 5 [1m] either way;
-#          yes pins Fable 5.1 [1m] on the architect agent alone.
-# --dry-run prints everything that would be written, and writes nothing.
+# claude-agentic installer (Claude Code and/or Codex).
+#   ./install.sh [--target auto|claude|codex|both] [--plan pro|max] [--fable auto|yes|no] [--dry-run]
+# --target defaults to auto: each runtime is installed only if it is present.
+# --plan   Claude only. Defaults to auto-detect from ~/.claude.json (organizationType); prompts if unknown.
+# --fable  Claude only. auto = yes on max, no on pro. On max the session runs Opus 5 [1m]
+#          either way; yes pins Fable 5.1 [1m] on the architect agent alone.
+# --dry-run prints everything that would be written, per runtime, and writes nothing.
 #
-# Installs into ~/.claude/: model, effort and context settings for the detected
-# plan; the ai-* pipeline agents plus architect, Explore and log-reader; five
-# hooks; eight skills; and one managed block in ~/.claude/CLAUDE.md.
+# Claude Code (~/.claude): model, effort and context settings for the detected
+# plan (agents default to Sonnet); the ai-* pipeline agents plus architect,
+# Explore and log-reader; five hooks, plus fable-gate on a Fable install; the
+# skills; and one managed block in ~/.claude/CLAUDE.md.
+#
+# Codex (~/.codex): the same pipeline on the Terra -> Sol -> Astra ladder. The
+# session runs gpt-5.6-sol at high effort, subagents default to gpt-5.6-terra,
+# the agents are rendered as custom-agent TOML files, the guards are registered
+# in ~/.codex/hooks.json, and one managed block is written to ~/.codex/AGENTS.md.
+# Codex lists a non-managed hook until you trust it: run /hooks once afterwards.
 #
 # pro (and Team Standard, which shares its models): session model `opusplan` —
 # Opus in plan mode, Sonnet when executing — and the EXPERT tier pinned to opus.
@@ -21,24 +29,94 @@
 # and never duplicates a hook entry or a managed block.
 set -euo pipefail
 
+# An explicitly supplied CLAUDE_DIR/CODEX_DIR is how the test suite points the
+# installer at a scratch tree. Remember which one was given before defaulting,
+# because under --target auto, supplying exactly one of them means "this runtime
+# only" — otherwise a test that scopes CLAUDE_DIR would still write to the
+# developer's real ~/.codex.
+CLAUDE_DIR_GIVEN=0; if [ -n "${CLAUDE_DIR:-}" ]; then CLAUDE_DIR_GIVEN=1; fi
+CODEX_DIR_GIVEN=0;  if [ -n "${CODEX_DIR:-}" ];  then CODEX_DIR_GIVEN=1;  fi
 CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
+CODEX_DIR="${CODEX_DIR:-$HOME/.codex}"
 SRC="$(cd "$(dirname "$0")" && pwd)"
-PLAN="" FABLE="auto" DRY=0
+PLAN="" FABLE="auto" DRY=0 TARGET=auto PLAN_GIVEN=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --plan)  PLAN="${2:?missing value for --plan}"; shift 2;;
-    --plan=*) PLAN="${1#*=}"; shift;;
-    --fable) FABLE="${2:?missing value for --fable}"; shift 2;;
-    --fable=*) FABLE="${1#*=}"; shift;;
+    --target) TARGET="${2:?missing value for --target}"; shift 2;;
+    --target=*) TARGET="${1#*=}"; shift;;
+    --plan)  PLAN="${2:?missing value for --plan}"; PLAN_GIVEN=1; shift 2;;
+    --plan=*) PLAN="${1#*=}"; PLAN_GIVEN=1; shift;;
+    --fable) FABLE="${2:?missing value for --fable}"; PLAN_GIVEN=1; shift 2;;
+    --fable=*) FABLE="${1#*=}"; PLAN_GIVEN=1; shift;;
     --dry-run) DRY=1; shift;;
-    -h|--help) sed -n '2,17p' "$0"; exit 0;;
+    -h|--help) sed -n '2,26p' "$0"; exit 0;;
     *) echo "unknown option: $1" >&2; exit 2;;
   esac
 done
+case "$TARGET" in auto|claude|codex|both) ;; *) echo "--target must be auto|claude|codex|both (got '$TARGET')" >&2; exit 2;; esac
 
 command -v jq >/dev/null 2>&1 || { echo "jq is required (apt install jq)" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 is required" >&2; exit 1; }
+
+# ---------------------------------------------------------------- runtime detection
+DO_CLAUDE=0 DO_CODEX=0
+case "$TARGET" in
+  claude) DO_CLAUDE=1;;
+  codex)  DO_CODEX=1;;
+  both)   DO_CLAUDE=1; DO_CODEX=1;;
+  auto)
+    if [ "$CLAUDE_DIR_GIVEN" = 1 ] && [ "$CODEX_DIR_GIVEN" = 0 ]; then
+      DO_CLAUDE=1
+    elif [ "$CODEX_DIR_GIVEN" = 1 ] && [ "$CLAUDE_DIR_GIVEN" = 0 ]; then
+      DO_CODEX=1
+    else
+      if command -v claude >/dev/null 2>&1 || [ -d "$CLAUDE_DIR" ] || [ "$PLAN_GIVEN" = 1 ]; then DO_CLAUDE=1; fi
+      if command -v codex  >/dev/null 2>&1 || [ -d "$CODEX_DIR"  ]; then DO_CODEX=1; fi
+    fi;;
+esac
+if [ "$DO_CLAUDE" = 0 ] && [ "$DO_CODEX" = 0 ]; then
+  cat >&2 <<'NONE'
+No supported runtime found.
+
+Looked for a `claude` or `codex` executable on PATH and for an existing
+~/.claude or ~/.codex directory, and found neither. Install Claude Code or
+Codex first, or name the runtime yourself:
+
+  ./install.sh --target claude      # Claude Code only
+  ./install.sh --target codex       # Codex only
+  ./install.sh --target both        # both, whether or not they are detected
+NONE
+  exit 1
+fi
+if [ "$TARGET" = auto ]; then
+  chosen=""
+  if [ "$DO_CLAUDE" = 1 ]; then chosen="$chosen claude"; fi
+  if [ "$DO_CODEX" = 1 ]; then chosen="$chosen codex"; fi
+  echo "detected runtime:$chosen"
+fi
+
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+
+# render <src> <dst> — substitute {{PLACEHOLDER}}s from the environment.
+# The variable set differs per runtime; both are exported by their render step.
+render() {
+  python3 - "$1" "$2" <<'PY'
+import os, re, sys
+src, dst = sys.argv[1], sys.argv[2]
+text = open(src).read()
+text = re.sub(r"\{\{([A-Z_]+)\}\}",
+              lambda m: os.environ.get("RENDER_" + m.group(1), m.group(0)), text)
+assert "{{" not in text, "unrendered placeholder in %s" % src
+open(dst, "w").write(text)
+PY
+}
+
+# ================================================================= Claude Code
+# The Claude branch is unchanged from the single-runtime installer. It lives in
+# functions so the Codex branch can be skipped or run independently; the bodies
+# are kept at their original indentation so this stays diff-comparable.
+claude_render() {
 
 # ---------------------------------------------------------------- plan detection
 if [ -z "$PLAN" ]; then
@@ -66,7 +144,6 @@ if [ "$PLAN" = pro ] && [ "$FABLE" = yes ]; then
 fi
 
 # ---------------------------------------------------------------- render settings
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 PROFILE="$SRC/profiles/$PLAN.json"
 if [ "$PLAN" = max ] && [ "$FABLE" = no ]; then
   jq '.availableModels = (.availableModels | map(select(startswith("fable") | not)))
@@ -83,19 +160,15 @@ COMPACT=$(jq -r .autoCompactWindow "$TMP/settings.snippet.json")
 READ_LINES=$(jq -r '.env.CLAUDE_READ_MAX_LINES' "$TMP/settings.snippet.json")
 READ_BYTES=$(jq -r '.env.CLAUDE_READ_MAX_BYTES' "$TMP/settings.snippet.json")
 
-pretty() {  # model id -> human name
-  case "$1" in
-    fable*) echo "Fable 5.1 [1m]";; opusplan) echo "Opus 5 in plan mode, Sonnet 5 when executing (opusplan)";;
-    "opus[1m]") echo "Opus 5 [1m]";; opus*) echo "Opus 5";;
-    sonnet*) echo "Sonnet 5";; haiku*) echo "Haiku 4.5";; *) echo "$1";;
-  esac
-}
 SESSION_HUMAN=$(pretty "$SESSION_MODEL")
 FALLBACK_HUMAN=$(jq -r '.fallbackModel | if type=="array" then .[] else . end' "$TMP/settings.snippet.json" \
                  | while read -r m; do pretty "$m"; done | paste -sd'|' | sed 's/|/, then /g')
 
-# The EXPERT tier is the session model: ai-expert and architect omit `model:` on
-# purpose, so a Fable outage falls back exactly as the session does.
+# Agents default to Sonnet (CLAUDE_CODE_SUBAGENT_MODEL). The EXPERT-tier agents
+# are rendered per plan: on pro both pin opus (an inherited model would be Sonnet
+# outside plan mode); on max ai-expert inherits the Opus 5 [1m] session and
+# architect alone is pinned to fable[1m] when Fable is enabled. fallbackModel
+# applies to pinned subagents too, so a Fable outage still falls back.
 if [ "$PLAN" = pro ]; then
   PLAN_LABEL="Pro"
   EXPERT_EFFORT="high"
@@ -116,7 +189,8 @@ else
     ARCHITECT_MODEL_LINE="model: fable[1m]"
     ARCHITECT_EFFORT="xhigh"
     EXPERT_ROW="omit \`model:\` — inherits the session (Opus 5 [1m]) / \`high\`; \`architect\` alone pins \`fable[1m]\` / \`xhigh\`"
-    PLAN_SPECIFIC="- Session model is Opus 5 [1m]; \`ai-expert\` escalates from it by inheriting it. Fable 5.1 [1m] is reserved for \`architect\` (pinned \`model: fable[1m]\`, \`xhigh\`) — never for the session, a reader, a reviewer or \`ai-expert\`. \`max\` stays off."
+    PLAN_SPECIFIC="- Session model is Opus 5 [1m]; \`ai-expert\` escalates from it by inheriting it. Fable 5.1 [1m] is reserved for \`architect\` (pinned \`model: fable[1m]\`, \`xhigh\`) — never for the session, a reader, a reviewer or \`ai-expert\`. \`max\` stays off.
+- \`fable-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/fable-gate.py status\` shows the gate; \`clear\` re-enables Fable early."
   else
     ARCHITECT_MODEL_LINE="# model: intentionally omitted — inherits the session model (Opus 5 [1m], Fable disabled in this install)"
     ARCHITECT_EFFORT="high"
@@ -126,43 +200,104 @@ else
   EFFORT_RULE="Raise to \`high\` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; readers stay at \`low\`."
 fi
 
-render() {  # render <src> <dst>
-  PLAN_LABEL="$PLAN_LABEL" SESSION_HUMAN="$SESSION_HUMAN" FALLBACK_HUMAN="$FALLBACK_HUMAN" \
-  EFFORT="$EFFORT" COMPACT="$COMPACT" READ_LINES="$READ_LINES" \
-  PLAN_SPECIFIC="$PLAN_SPECIFIC" EFFORT_RULE="$EFFORT_RULE" \
-  EXPERT_EFFORT="$EXPERT_EFFORT" EXPERT_MODEL_LINE="$EXPERT_MODEL_LINE" EXPERT_ROW="$EXPERT_ROW" \
-  ARCHITECT_MODEL_LINE="$ARCHITECT_MODEL_LINE" ARCHITECT_EFFORT="$ARCHITECT_EFFORT" \
-  python3 - "$1" "$2" <<'PY'
-import os, sys
-src, dst = sys.argv[1], sys.argv[2]
-text = open(src).read()
-for key, value in {
-    "{{PLAN}}": os.environ["PLAN_LABEL"],
-    "{{SESSION_MODEL}}": os.environ["SESSION_HUMAN"],
-    "{{FALLBACK_MODEL}}": os.environ["FALLBACK_HUMAN"],
-    "{{DEFAULT_EFFORT}}": os.environ["EFFORT"],
-    "{{COMPACT_WINDOW}}": "{:,}".format(int(os.environ["COMPACT"])).replace(",", " "),
-    "{{READ_LINES}}": os.environ["READ_LINES"],
-    "{{PLAN_SPECIFIC_ROUTING}}": os.environ["PLAN_SPECIFIC"],
-    "{{EFFORT_RULE}}": os.environ["EFFORT_RULE"],
-    "{{EXPERT_EFFORT}}": os.environ["EXPERT_EFFORT"],
-    "{{EXPERT_MODEL_LINE}}": os.environ["EXPERT_MODEL_LINE"],
-    "{{EXPERT_ROW}}": os.environ["EXPERT_ROW"],
-    "{{ARCHITECT_MODEL_LINE}}": os.environ["ARCHITECT_MODEL_LINE"],
-    "{{ARCHITECT_EFFORT}}": os.environ["ARCHITECT_EFFORT"],
-}.items():
-    text = text.replace(key, value)
-assert "{{" not in text, "unrendered placeholder in %s" % src
-open(dst, "w").write(text)
+# The Fable gate exists only where Fable does — on Max with --fable yes, where
+# architect is pinned to fable[1m]. Its hooks are merged into the snippet on
+# such an install, and stripped from settings.json on any other.
+if [ "$PLAN" = max ] && [ "$FABLE" = yes ]; then
+  GATE=on
+  jq -s '.[0] as $base | reduce (.[1].hooks | to_entries[]) as $e
+           ($base; .hooks[$e.key] = ((.hooks[$e.key] // []) + $e.value))' \
+     "$TMP/settings.snippet.json" "$SRC/settings.fable.json" > "$TMP/snippet.gate.json"
+  mv "$TMP/snippet.gate.json" "$TMP/settings.snippet.json"
+else
+  GATE=off
+fi
+
+RENDER_PLAN="$PLAN_LABEL" \
+RENDER_SESSION_MODEL="$SESSION_HUMAN" \
+RENDER_FALLBACK_MODEL="$FALLBACK_HUMAN" \
+RENDER_DEFAULT_EFFORT="$EFFORT" \
+RENDER_COMPACT_WINDOW="$(printf '%s' "$COMPACT" | python3 -c 'import sys;print("{:,}".format(int(sys.stdin.read())).replace(",", " "))')" \
+RENDER_READ_LINES="$READ_LINES" \
+RENDER_PLAN_SPECIFIC_ROUTING="$PLAN_SPECIFIC" \
+RENDER_EFFORT_RULE="$EFFORT_RULE" \
+RENDER_EXPERT_EFFORT="$EXPERT_EFFORT" \
+RENDER_EXPERT_MODEL_LINE="$EXPERT_MODEL_LINE" \
+RENDER_EXPERT_ROW="$EXPERT_ROW" \
+RENDER_ARCHITECT_MODEL_LINE="$ARCHITECT_MODEL_LINE" \
+RENDER_ARCHITECT_EFFORT="$ARCHITECT_EFFORT" \
+  render_claude_files
+}
+
+render_claude_files() {
+  render "$SRC/agents/ai-expert.md.tmpl" "$TMP/ai-expert.md"
+  render "$SRC/agents/architect.md.tmpl" "$TMP/architect.md"
+  render "$SRC/CLAUDE.snippet.md" "$TMP/CLAUDE.block.md"
+}
+
+pretty() {  # model id -> human name
+  case "$1" in
+    "fable[1m]") echo "Fable 5.1 [1m]";; fable*) echo "Fable 5.1";;
+    opusplan) echo "Opus 5 in plan mode, Sonnet 5 when executing (opusplan)";;
+    "opus[1m]") echo "Opus 5 [1m]";; opus*) echo "Opus 5";;
+    sonnet*) echo "Sonnet 5";; haiku*) echo "Haiku 4.5";; *) echo "$1";;
+  esac
+}
+
+# Only the statusline receives the account's rate_limits, so the gate's weekly
+# check rides on it: on a Fable install the statusline command is wrapped as
+#   "$HOME/.claude/hooks/fable-gate.py" statusline --then '<your command>'
+# (or set to the bare check when there was none), and unwrapped to exactly the
+# original command on any other install.
+statusline_gate() {  # statusline_gate <settings.json> <on|off> <apply|dry>
+  python3 - "$@" <<'PY'
+import json, os, shlex, sys
+path, gate, mode = sys.argv[1:4]
+PREFIX = '"$HOME/.claude/hooks/fable-gate.py" statusline'
+try:
+    settings = json.load(open(path)) if os.path.exists(path) else {}
+except ValueError:
+    print("statusline: settings.json is not valid JSON; left alone"); sys.exit(0)
+line = settings.get("statusLine")
+cmd = line.get("command", "") if isinstance(line, dict) else ""
+ours = isinstance(cmd, str) and cmd.startswith(PREFIX)
+action = None
+if gate == "on":
+    if ours:
+        print("statusline: already checks the Fable weekly limit"); sys.exit(0)
+    if line is None:
+        settings["statusLine"] = {"type": "command", "command": PREFIX}
+        action = "added a silent statusline that checks the Fable weekly limit"
+    elif isinstance(line, dict) and line.get("type") == "command" and cmd.strip():
+        line["command"] = f"{PREFIX} --then {shlex.quote(cmd)}"
+        action = "wrapped your statusline command with the Fable weekly-limit check (its output is unchanged)"
+    else:
+        print("statusline: not a command statusline; the weekly-limit check is not wired"); sys.exit(0)
+else:
+    if not ours:
+        sys.exit(0)
+    rest = cmd[len(PREFIX):].strip()
+    if rest.startswith("--then"):
+        parts = shlex.split(rest)
+        line["command"] = parts[1] if len(parts) > 1 else ""
+        action = "restored your original statusline command (no Fable on this install)"
+    else:
+        del settings["statusLine"]
+        action = "removed the Fable weekly-limit statusline (no Fable on this install)"
+if mode == "dry":
+    print("statusline: would have " + action); sys.exit(0)
+tmp = path + ".tmp"
+with open(tmp, "w") as fh:
+    json.dump(settings, fh, indent=2); fh.write("\n")
+os.replace(tmp, path)
+print("statusline: " + action)
 PY
 }
 
-render "$SRC/agents/ai-expert.md.tmpl" "$TMP/ai-expert.md"
-render "$SRC/agents/architect.md.tmpl" "$TMP/architect.md"
-render "$SRC/CLAUDE.snippet.md" "$TMP/CLAUDE.block.md"
-
-if [ "$DRY" = 1 ]; then
-  echo "== plan=$PLAN fable=$FABLE (dry run, nothing written)"
+claude_dry_run() {
+  echo "== claude: plan=$PLAN fable=$FABLE fable-gate=$GATE (dry run, nothing written)"
+  echo "== claude: target directory $CLAUDE_DIR"
+  statusline_gate "$CLAUDE_DIR/settings.json" "$GATE" dry | sed 's/^/== /'
   echo "== settings snippet (merged into $CLAUDE_DIR/settings.json):"
   jq . "$TMP/settings.snippet.json"
   echo "== agents/ai-expert.md (rendered head):"
@@ -177,20 +312,95 @@ if [ "$DRY" = 1 ]; then
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
   echo "   config:  ai-git-guard.json (only if absent)"
   echo "== would migrate: the claude-routing managed block, if present, into this one"
-  exit 0
-fi
+}
 
-mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/hooks/lib" "$CLAUDE_DIR/skills"
-
-install_file() {  # install_file <src> <dst> — back up on a real change, then copy
-  local src="$1" dst="$2"
+install_file() {  # install_file <src> <dst> [root] — back up on a real change, then copy
+  local src="$1" dst="$2" root="${3:-$CLAUDE_DIR}"
   if [ -e "$dst" ] && ! cmp -s "$src" "$dst"; then
     cp "$dst" "$dst.bak"
-    echo "backup: ${dst#"$CLAUDE_DIR"/} -> $(basename "$dst").bak"
+    echo "backup: ${dst#"$root"/} -> $(basename "$dst").bak"
   fi
   cp "$src" "$dst"
-  echo "installed: ${dst#"$CLAUDE_DIR"/}"
+  echo "installed: ${dst#"$root"/}"
 }
+
+# install_skills <destination-root> — a backup must not land inside skills/:
+# both runtimes load every directory there as a skill, so a "<name>.bak" copy
+# would show up as a second, stale command. Backups go to a sibling directory.
+install_skills() {
+  local root="$1" backups="$1/backups/skills" d name dst stale
+  for d in "$SRC"/skills/*/; do
+    name=$(basename "$d")
+    dst="$root/skills/$name"
+    if [ -d "$dst" ] && ! diff -rq "$d" "$dst" >/dev/null 2>&1; then
+      mkdir -p "$backups"
+      rm -rf "$backups/$name"; cp -r "$dst" "$backups/$name"
+      echo "backup: skills/$name -> backups/skills/$name"
+    fi
+    rm -rf "$dst"; cp -r "$d" "$dst"
+    # A developer who ran the scripts in place leaves __pycache__ behind; it
+    # would otherwise be copied into the install and then shipped onward.
+    find "$dst" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+    echo "installed: skills/$name"
+  done
+  # Clean up backups a previous version of this installer left inside skills/,
+  # where they were being loaded as duplicate skills.
+  for stale in "$root"/skills/*.bak; do
+    [ -d "$stale" ] || continue
+    mkdir -p "$backups"
+    rm -rf "$backups/$(basename "${stale%.bak}")-old"
+    mv "$stale" "$backups/$(basename "${stale%.bak}")-old"
+    echo "moved: skills/$(basename "$stale") -> backups/skills/ (it was loading as a duplicate skill)"
+  done
+  chmod +x "$root/skills/ai-init/scaffold-ai.sh" "$root/skills/ai-task/state.py" \
+           "$root/skills/project-update/update.py"
+}
+
+# managed_block <target.md> <block-file> <label> — replace the one managed block,
+# or append it; migrates the predecessor plugin's block and an unmarked legacy
+# section on the way. Writes <target>.bak first.
+managed_block() {
+  local target="$1" block="$2" label="$3"
+  touch "$target"
+  cp "$target" "$target.bak"
+  BLOCK="$block" LABEL="$label" python3 - "$target" <<'PY'
+import os, re, sys
+path = sys.argv[1]
+block = open(os.environ["BLOCK"]).read().strip("\n")
+label = os.environ["LABEL"]
+text = open(path).read()
+start, end = "<!-- claude-agentic:start -->", "<!-- claude-agentic:end -->"
+notes = []
+
+# Migrate the predecessor plugin's block: this one now carries its rules.
+routing = re.search(r"<!-- claude-routing:start -->.*?<!-- claude-routing:end -->\n?", text, flags=re.S)
+if routing:
+    text = text[: routing.start()] + text[routing.end():]
+    notes.append("migrated the claude-routing block")
+
+# Migrate a pre-plugin unmarked "# Model allocation by task and scope" section.
+legacy = re.search(r"(?m)^# Model allocation by task and scope.*?(?=^# |\Z)", text, flags=re.S)
+if legacy and start not in text[: legacy.start()]:
+    text = text[: legacy.start()] + text[legacy.end():]
+    notes.append("migrated an unmarked 'Model allocation' section")
+
+if start in text and end in text:
+    new = re.sub(re.escape(start) + r".*?" + re.escape(end), lambda m: block, text, flags=re.S)
+    action = "updated"
+else:
+    sep = "\n\n" if text.strip() else ""
+    new = text.rstrip("\n") + sep + block + "\n"
+    action = "appended"
+new = re.sub(r"\n{4,}", "\n\n\n", new)
+open(path, "w").write(new)
+print("%s: %s%s (backup in %s.bak)"
+      % (label, action, " + " + " + ".join(notes) if notes else "", label))
+PY
+}
+
+claude_apply() {
+
+mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/hooks/lib" "$CLAUDE_DIR/skills"
 
 # ---------------------------------------------------------------- 1. agents
 for f in "$SRC"/agents/*.md; do
@@ -217,6 +427,7 @@ fi
 for f in "$SRC"/hooks/*.sh "$SRC"/hooks/*.py "$SRC"/hooks/lib/*.sh; do
   [ -e "$f" ] || continue
   case "$f" in
+    */codex-*) continue;;   # Codex-only guards; Claude has no event that fires them
     */lib/*) dst="$CLAUDE_DIR/hooks/lib/$(basename "$f")";;
     *)       dst="$CLAUDE_DIR/hooks/$(basename "$f")";;
   esac
@@ -235,33 +446,7 @@ else
 fi
 
 # ---------------------------------------------------------------- 3. skills
-# A backup must not land inside skills/: Claude Code loads every directory there
-# as a skill, so a "<name>.bak" copy would show up in /skills as a second,
-# stale command. Backups go to a sibling directory instead.
-SKILL_BACKUPS="$CLAUDE_DIR/backups/skills"
-for d in "$SRC"/skills/*/; do
-  name=$(basename "$d")
-  dst="$CLAUDE_DIR/skills/$name"
-  if [ -d "$dst" ] && ! diff -rq "$d" "$dst" >/dev/null 2>&1; then
-    mkdir -p "$SKILL_BACKUPS"
-    rm -rf "$SKILL_BACKUPS/$name"; cp -r "$dst" "$SKILL_BACKUPS/$name"
-    echo "backup: skills/$name -> backups/skills/$name"
-  fi
-  rm -rf "$dst"; cp -r "$d" "$dst"
-  echo "installed: skills/$name"
-done
-
-# Clean up backups a previous version of this installer left inside skills/,
-# where they were being loaded as duplicate skills.
-for stale in "$CLAUDE_DIR"/skills/*.bak; do
-  [ -d "$stale" ] || continue
-  mkdir -p "$SKILL_BACKUPS"
-  rm -rf "$SKILL_BACKUPS/$(basename "${stale%.bak}")-old"
-  mv "$stale" "$SKILL_BACKUPS/$(basename "${stale%.bak}")-old"
-  echo "moved: skills/$(basename "$stale") -> backups/skills/ (it was loading as a duplicate skill)"
-done
-chmod +x "$CLAUDE_DIR/skills/ai-init/scaffold-ai.sh" "$CLAUDE_DIR/skills/ai-task/state.py" \
-         "$CLAUDE_DIR/skills/project-update/update.py"
+install_skills "$CLAUDE_DIR"
 
 # ---------------------------------------------------------------- 4. settings.json
 SETTINGS="$CLAUDE_DIR/settings.json"
@@ -288,55 +473,46 @@ jq -s '
 ' "$SETTINGS" "$TMP/settings.snippet.json" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 echo "merged: settings.json (backup in settings.json.bak)"
 
+# No Fable on this install: drop the gate's entries a previous Fable install left,
+# and an event list only when the gate was all it held. Other hooks stay.
+if [ "$GATE" = off ]; then
+  before=$(jq -c '.hooks // {}' "$SETTINGS")
+  jq 'if (.hooks | type) == "object" then
+        .hooks |= with_entries(
+          . as $e
+          | ($e.value | map(select(((.hooks // []) | map(.command // "") | any(test("fable-gate"))) | not))) as $kept
+          | if ($kept | length) == ($e.value | length) then $e
+            elif ($kept | length) == 0 then empty
+            else $e | .value = $kept end)
+      else . end' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+  [ "$before" != "$(jq -c '.hooks // {}' "$SETTINGS")" ] && echo "removed: fable-gate hooks (no Fable on this install)" || true
+fi
+statusline_gate "$SETTINGS" "$GATE" apply
+
 # ---------------------------------------------------------------- 5. CLAUDE.md block
 GLOBAL_MD="$CLAUDE_DIR/CLAUDE.md"
-touch "$GLOBAL_MD"
-cp "$GLOBAL_MD" "$GLOBAL_MD.bak"
-BLOCK="$TMP/CLAUDE.block.md" python3 - "$GLOBAL_MD" <<'PY'
-import os, re, sys
-path = sys.argv[1]
-block = open(os.environ["BLOCK"]).read().strip("\n")
-text = open(path).read()
-start, end = "<!-- claude-agentic:start -->", "<!-- claude-agentic:end -->"
-notes = []
-
-# Migrate the predecessor plugin's block: this one now carries its rules.
-routing = re.search(r"<!-- claude-routing:start -->.*?<!-- claude-routing:end -->\n?", text, flags=re.S)
-if routing:
-    text = text[: routing.start()] + text[routing.end():]
-    notes.append("migrated the claude-routing block")
-
-# Migrate a pre-plugin unmarked "# Model allocation by task and scope" section.
-legacy = re.search(r"(?m)^# Model allocation by task and scope.*?(?=^# |\Z)", text, flags=re.S)
-if legacy and start not in text[: legacy.start()]:
-    text = text[: legacy.start()] + text[legacy.end():]
-    notes.append("migrated an unmarked 'Model allocation' section")
-
-if start in text and end in text:
-    new = re.sub(re.escape(start) + r".*?" + re.escape(end), lambda m: block, text, flags=re.S)
-    action = "updated"
-else:
-    sep = "\n\n" if text.strip() else ""
-    new = text.rstrip("\n") + sep + block + "\n"
-    action = "appended"
-new = re.sub(r"\n{4,}", "\n\n\n", new)
-open(path, "w").write(new)
-print("CLAUDE.md: %s%s (backup in CLAUDE.md.bak)"
-      % (action, " + " + " + ".join(notes) if notes else ""))
-PY
+managed_block "$GLOBAL_MD" "$TMP/CLAUDE.block.md" "CLAUDE.md"
 
 # ---------------------------------------------------------------- 6. audits
-missing=""
+missing="" unpinned=""
 for f in "$CLAUDE_DIR"/agents/*.md; do
   case "$f" in *.bak|*.superseded) continue;; esac
   [ -e "$f" ] || continue
   grep -qE '^effort:' "$f" || missing="$missing $(basename "$f")"
+  case "$(basename "$f")" in ai-expert.md|architect.md) continue;; esac  # may inherit the session on purpose
+  grep -qE '^model:' "$f" || unpinned="$unpinned $(basename "$f")"
 done
 if [ -n "$missing" ]; then
   echo
   echo "WARNING: these agents declare no 'effort:' and inherit the session effort:"
   for m in $missing; do echo "  - $m"; done
   echo "Add 'effort: low' for readers and runners, 'effort: medium' for mechanical work."
+fi
+if [ -n "$unpinned" ]; then
+  echo
+  echo "WARNING: these agents declare no 'model:' and resolve to CLAUDE_CODE_SUBAGENT_MODEL (sonnet):"
+  for m in $unpinned; do echo "  - $m"; done
+  echo "Pin 'model: haiku|sonnet|opus|fable' to the tier the role needs."
 fi
 
 if python3 - "$GLOBAL_MD" <<'PY'
@@ -350,11 +526,13 @@ then
   echo "WARNING: $GLOBAL_MD still has routing rules outside the managed block."
   echo "They are superseded by the block above — remove them by hand."
 fi
+}
 
-# ---------------------------------------------------------------- 7. summary
+claude_summary() {
 cat <<SUM
 
-Done.
+Done (Claude Code).
+  target          $CLAUDE_DIR
   plan            $PLAN  (fable=$FABLE)
   session model   $SESSION_MODEL ($SESSION_HUMAN), effort $EFFORT
   fallback        $FALLBACK
@@ -365,12 +543,177 @@ Done.
   agents          $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd' ')
   hooks           cap-large-read, project-scaffold (Setup:init), ai-git-guard (global),
                   ai-path-guard + ai-scope-guard (active where .ai/ exists)
+  fable gate      $GATE $( [ "$GATE" = on ] && echo "(Fable agents go to Opus while Fable is rate-limited, unreachable,
+                  or the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% used — checked through the statusline)" || echo "(no Fable on this install)" )
   skills          $(ls "$SRC/skills" | paste -sd' ')
 
 Restart Claude Code, then:
   /config        model and effort match the profile
-  /hooks         lists the five hooks
-  /skills        lists ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*
+  /hooks         lists the five hooks$( [ "$GATE" = on ] && echo ", plus fable-gate on PreToolUse, PostToolUse and StopFailure" )
+  /skills        lists ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*, usage-report
   /ai-init       in a project, to survey it and build .ai/
   /project-update in a project that already has .ai/ or docs/sdlc/, to pull in these rules
 SUM
+}
+
+# ======================================================================= Codex
+CODEX_PROFILE="$SRC/profiles/codex.json"
+
+codex_render() {
+  CODEX_SESSION_MODEL=$(jq -r .session.model "$CODEX_PROFILE")
+  CODEX_SESSION_EFFORT=$(jq -r .session.model_reasoning_effort "$CODEX_PROFILE")
+  CODEX_SUBAGENT_MODEL=$(jq -r .agents.default_subagent_model "$CODEX_PROFILE")
+  CODEX_MAX_THREADS=$(jq -r .agents.max_concurrent_threads_per_session "$CODEX_PROFILE")
+  CODEX_FAST=$(jq -r .tiers.FAST.model "$CODEX_PROFILE")
+  CODEX_BALANCED=$(jq -r .tiers.BALANCED.model "$CODEX_PROFILE")
+  CODEX_STRONG=$(jq -r .tiers.STRONG.model "$CODEX_PROFILE")
+  CODEX_EXPERT=$(jq -r .tiers.EXPERT.model "$CODEX_PROFILE")
+  CODEX_EXPERT_EFFORT=$(jq -r .tiers.EXPERT.effort "$CODEX_PROFILE")
+  codex_label() { jq -r --arg m "$1" '.labels[$m] // $m' "$CODEX_PROFILE"; }
+
+  python3 "$SRC/scripts/render-codex-agents.py" --src "$SRC" --out "$TMP/codex-agents" >/dev/null
+
+  RENDER_SESSION_MODEL="$(codex_label "$CODEX_SESSION_MODEL")" \
+  RENDER_SESSION_MODEL_ID="$CODEX_SESSION_MODEL" \
+  RENDER_SESSION_EFFORT="$CODEX_SESSION_EFFORT" \
+  RENDER_FAST_MODEL="$(codex_label "$CODEX_FAST")" \
+  RENDER_FAST_MODEL_ID="$CODEX_FAST" \
+  RENDER_BALANCED_MODEL="$(codex_label "$CODEX_BALANCED")" \
+  RENDER_BALANCED_MODEL_ID="$CODEX_BALANCED" \
+  RENDER_STRONG_MODEL="$(codex_label "$CODEX_STRONG")" \
+  RENDER_STRONG_MODEL_ID="$CODEX_STRONG" \
+  RENDER_EXPERT_MODEL="$(codex_label "$CODEX_EXPERT")" \
+  RENDER_EXPERT_MODEL_ID="$CODEX_EXPERT" \
+  RENDER_EXPERT_EFFORT="$CODEX_EXPERT_EFFORT" \
+  RENDER_MAX_THREADS="$CODEX_MAX_THREADS" \
+  RENDER_READ_LINES="$(jq -r '.env.CLAUDE_READ_MAX_LINES' "$SRC/settings.common.json")" \
+    render "$SRC/AGENTS.snippet.md" "$TMP/AGENTS.block.md"
+}
+
+codex_dry_run() {
+  echo "== codex: session $CODEX_SESSION_MODEL at $CODEX_SESSION_EFFORT (dry run, nothing written)"
+  echo "== codex: target directory $CODEX_DIR"
+  python3 "$SRC/scripts/merge-codex-config.py" "$CODEX_DIR/config.toml" \
+          --profile "$CODEX_PROFILE" --dry-run | sed 's/^/== /'
+  echo "== AGENTS.md managed block:"
+  cat "$TMP/AGENTS.block.md"
+  echo "== would install:"
+  echo "   agents:  $(ls "$TMP/codex-agents" | sed 's/\.toml$//' | paste -sd,)"
+  echo "   hooks:   $(codex_hook_files | xargs -n1 basename | paste -sd,)"
+  echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
+  echo "   config:  ai-git-guard.json (only if absent)"
+  echo "== hooks.json entries (merged into $CODEX_DIR/hooks.json):"
+  jq . "$SRC/codex/hooks.json"
+  echo "== reminder: Codex lists a non-managed hook until you review it in /hooks"
+}
+
+# The guard scripts Codex can actually use. cap-large-read.py and fable-gate.py
+# are deliberately absent: Codex has no hookable Read tool, and Fable is a
+# Claude model.
+codex_hook_files() {
+  printf '%s\n' \
+    "$SRC/hooks/ai-git-guard.sh" \
+    "$SRC/hooks/ai-path-guard.sh" \
+    "$SRC/hooks/ai-scope-guard.sh" \
+    "$SRC/hooks/codex-model-gate.py"
+}
+
+codex_apply() {
+  mkdir -p "$CODEX_DIR/agents" "$CODEX_DIR/hooks/lib" "$CODEX_DIR/skills"
+
+  # -------------------------------------------------------------- 1. agents
+  for f in "$TMP"/codex-agents/*.toml; do
+    install_file "$f" "$CODEX_DIR/agents/$(basename "$f")" "$CODEX_DIR"
+  done
+
+  # -------------------------------------------------------------- 2. hooks
+  local f dst
+  while IFS= read -r f; do
+    dst="$CODEX_DIR/hooks/$(basename "$f")"
+    install_file "$f" "$dst" "$CODEX_DIR"
+    chmod +x "$dst"
+  done < <(codex_hook_files)
+  install_file "$SRC/hooks/lib/ai-hook-common.sh" "$CODEX_DIR/hooks/lib/ai-hook-common.sh" "$CODEX_DIR"
+  install_file "$SRC/hooks/ai-path-guard-defaults.json" "$CODEX_DIR/hooks/ai-path-guard-defaults.json" "$CODEX_DIR"
+  install_file "$SRC/hooks/ai-git-guard-defaults.json"  "$CODEX_DIR/hooks/ai-git-guard-defaults.json" "$CODEX_DIR"
+  if [ ! -e "$CODEX_DIR/hooks/ai-git-guard.json" ]; then
+    cp "$SRC/hooks/ai-git-guard-defaults.json" "$CODEX_DIR/hooks/ai-git-guard.json"
+    echo "installed: hooks/ai-git-guard.json (edit this one; it is never overwritten)"
+  else
+    echo "kept: hooks/ai-git-guard.json (your edits are preserved)"
+  fi
+
+  # -------------------------------------------------------------- 3. skills
+  install_skills "$CODEX_DIR"
+
+  # -------------------------------------------------------------- 4. hooks.json
+  local HOOKS="$CODEX_DIR/hooks.json"
+  [ -f "$HOOKS" ] || echo '{}' > "$HOOKS"
+  cp "$HOOKS" "$HOOKS.bak"
+  jq -s '
+    .[0] as $cur
+    | (.[1].hooks // {}) as $new
+    | reduce ($new | to_entries[]) as $event
+        ($cur;
+          .hooks[$event.key] = (
+            (.hooks[$event.key] // [])
+            + ( $event.value
+                | map( . as $entry
+                       | select( ($entry.hooks // []) | map(.command)
+                                 | any( . as $c | $cur.hooks[$event.key] // []
+                                        | map(.hooks // [] | map(.command)) | flatten
+                                        | index($c) ) | not ) ) )
+          )
+        )
+  ' "$HOOKS" "$SRC/codex/hooks.json" > "$HOOKS.tmp" && mv "$HOOKS.tmp" "$HOOKS"
+  echo "merged: hooks.json (backup in hooks.json.bak)"
+
+  # -------------------------------------------------------------- 5. config.toml
+  python3 "$SRC/scripts/merge-codex-config.py" "$CODEX_DIR/config.toml" --profile "$CODEX_PROFILE"
+
+  # -------------------------------------------------------------- 6. AGENTS.md
+  managed_block "$CODEX_DIR/AGENTS.md" "$TMP/AGENTS.block.md" "AGENTS.md"
+}
+
+codex_summary() {
+cat <<SUM
+
+Done (Codex).
+  target          $CODEX_DIR
+  session model   $CODEX_SESSION_MODEL at effort $CODEX_SESSION_EFFORT
+  subagent default $CODEX_SUBAGENT_MODEL at medium, at most $CODEX_MAX_THREADS threads at once
+  FAST tier       $CODEX_FAST at low (ai-indexer, Explore, ai-discovery, log-reader)
+  BALANCED tier   $CODEX_BALANCED at medium (ai-context, ai-risk, ai-planner, ai-tester, ai-release, ai-implementer)
+  STRONG tier     $CODEX_STRONG at high (ai-reviewer, ai-security, architect, ai-risk-strong, ai-planner-strong)
+  EXPERT tier     $CODEX_EXPERT at $CODEX_EXPERT_EFFORT (ai-expert)
+  expert gate     codex-model-gate sends EXPERT work to $CODEX_STRONG while $CODEX_EXPERT is
+                  rate-limited or unavailable; 'codex-model-gate.py status' shows it
+  agents          $(ls "$TMP/codex-agents" | sed 's/\.toml$//' | paste -sd' ')
+  hooks           ai-git-guard (global), ai-path-guard + ai-scope-guard (active where .ai/ exists),
+                  codex-model-gate. No cap-large-read: Codex has no hookable Read tool.
+  skills          $(ls "$SRC/skills" | paste -sd' ')
+
+Restart Codex, then:
+  /hooks         review and trust the four hooks — until you do, Codex skips them
+  /skills        lists ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*, usage-report
+  /ai-init       in a project, to survey it and build .ai/
+
+Your previous default model was replaced. config.toml.bak holds the old one.
+SUM
+}
+
+# ======================================================================= run
+if [ "$DO_CLAUDE" = 1 ]; then claude_render; fi
+if [ "$DO_CODEX" = 1 ]; then codex_render; fi
+
+if [ "$DRY" = 1 ]; then
+  if [ "$DO_CLAUDE" = 1 ]; then claude_dry_run; fi
+  if [ "$DO_CODEX" = 1 ]; then codex_dry_run; fi
+  exit 0
+fi
+
+if [ "$DO_CLAUDE" = 1 ]; then claude_apply; fi
+if [ "$DO_CODEX" = 1 ]; then codex_apply; fi
+if [ "$DO_CLAUDE" = 1 ]; then claude_summary; fi
+if [ "$DO_CODEX" = 1 ]; then codex_summary; fi
+exit 0

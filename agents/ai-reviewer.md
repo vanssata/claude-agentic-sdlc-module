@@ -12,9 +12,31 @@ A review that finds nothing on a change to shared or critical code is usually a
 review that read the diff instead of the system.
 
 Read first, when they exist: `.ai/policies/coding.md`,
-`.ai/policies/production.md`, `.ai/agents/reviewer.md`, and the task's plan and
-context under `.ai/reports/<task-id>/`. In a repository without `.ai/`, review
-against the project's own `CLAUDE.md` conventions instead and say so.
+`.ai/policies/production.md`, `.ai/policies/review-economy.md`,
+`.ai/agents/reviewer.md`, and the task's plan and context under
+`.ai/reports/<task-id>/`. In a repository without `.ai/`, review against the
+project's own instruction file instead — `CLAUDE.md`, `AGENTS.md`, or both — and
+say so.
+
+## Budget
+
+Read `.ai/reports/<task-id>/review-ledger.md` before planning your own work, and
+treat it as binding. A claim already marked CONFIRMED there is **out of budget**:
+do not re-derive it, and say in EXAMINED AND CLEAN that you inherited it. Re-open
+a row only when the code under it changed, and say which change re-opened it.
+Spend what you save on the parts nobody has probed yet.
+
+If the request names a dimension — semantics and types, resources and failure
+modes, the record — review **only** that dimension and say so in the verdict.
+Another agent has the rest, in parallel.
+
+If the request is a **re-review after remediation**, answer exactly two questions:
+does each named finding close against the real code, and what did the remediation
+introduce? A re-review that re-reads the whole change is a first review wearing
+the wrong name, and costs the same.
+
+Verify by execution where execution is possible. A claim you ran beats a claim you
+reasoned to, and it is what makes your row in the ledger worth inheriting.
 
 ## Look for
 

@@ -7,6 +7,15 @@ description: Show where the current agentic task stands — id, stage, next acti
 
 Read-only. This skill never changes state; it reports it.
 
+Resolve the install root once — the skill runs the same under Claude Code and
+under Codex, and the state it reads lives in the project, not in the install:
+
+```bash
+for AI_HOME in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CODEX_HOME:-$HOME/.codex}"; do
+  [ -d "$AI_HOME/skills/ai-task" ] && break
+done
+```
+
 ## Steps
 
 1. **Find the project.** Walk up from `$PWD` for a `.ai/` directory. If there is
@@ -15,7 +24,7 @@ Read-only. This skill never changes state; it reports it.
 2. **The task in flight:**
 
    ```bash
-   python3 "$HOME/.claude/skills/ai-task/state.py" get
+   python3 "$AI_HOME/skills/ai-task/state.py" get
    ```
 
    If there is none, say "no task in flight" and skip to step 4. Otherwise report,
@@ -35,23 +44,43 @@ Read-only. This skill never changes state; it reports it.
 3. **The audit trail.** The last few `history` entries, one line each, so the
    reader can see how the task got here.
 
-4. **Model routing.** Read `~/.claude/settings.json`:
+4. **Model routing.** Report the ladder of the runtime you are actually running
+   in. Read whichever configuration exists:
 
    ```bash
-   jq -r '{model, fallbackModel, effortLevel}' ~/.claude/settings.json
+   # Claude Code
+   jq -r '{model, fallbackModel, effortLevel}' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+   grep -E '^(model|effort):' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/ai-expert.md"
+   python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/fable-gate.py" status 2>/dev/null
+
+   # Codex
+   grep -E '^(model|model_reasoning_effort|default_subagent_)' "${CODEX_HOME:-$HOME/.codex}/config.toml"
+   grep -E '^(model|model_reasoning_effort) *=' "${CODEX_HOME:-$HOME/.codex}/agents/ai-expert.toml"
+   python3 "${CODEX_HOME:-$HOME/.codex}/hooks/codex-model-gate.py" status 2>/dev/null
    ```
 
-   Report what the tiers resolve to on this machine: FAST is haiku, BALANCED is
-   sonnet, STRONG is opus, and **EXPERT is whatever `model` says** — name it, so
-   the reader knows what an escalation would actually cost. When `model` is
-   `opusplan`, say so in one line: Opus in plan mode, Sonnet when executing,
-   and `ai-expert` and `architect` pin `opus` explicitly. On Max the session is
-   Opus 5 [1m], `ai-expert` inherits it, and `architect` alone may be pinned to
-   `fable[1m]` — check its frontmatter:
+   Report what the tiers resolve to on this machine, and **name the model, not
+   the tier** — so the reader knows what an escalation would actually cost:
+
+   | Tier | Claude Code | Codex |
+   |---|---|---|
+   | FAST | haiku | `gpt-5.6-terra` (Terra) |
+   | BALANCED | sonnet | `gpt-5.6-terra` (Terra) |
+   | STRONG | opus | `gpt-5.6-sol` (Sol) |
+   | EXPERT | `ai-expert`: the session model on Max, `opus` pinned on Pro | the `model` pinned in `ai-expert.toml` |
+
+   Under Claude Code, when `model` is `opusplan`, say so in one line: Opus in
+   plan mode, Sonnet when executing, and `ai-expert` and `architect` pin `opus`
+   explicitly. On Max the session is Opus 5 [1m], `ai-expert` inherits it, and
+   `architect` alone may be pinned to `fable[1m]` — check its frontmatter:
 
    ```bash
-   grep -E '^model:' ~/.claude/agents/architect.md || echo "architect inherits the session model"
+   grep -E '^model:' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/architect.md" || echo "architect inherits the session model"
    ```
+
+   When a runtime's gate reports `active`, its top model is running one tier down
+   right now — say until when, and why. A Codex install has no `fable-gate`, a
+   Claude install has no `codex-model-gate`; report only the one that exists.
 
    Also print the pipeline profile, because it decides how much of a task is
    delegated:
@@ -74,7 +103,7 @@ Read-only. This skill never changes state; it reports it.
 6. **Plugin version.** One line from:
 
    ```bash
-   python3 "$HOME/.claude/skills/project-update/update.py" "$PWD" --check
+   python3 "$AI_HOME/skills/project-update/update.py" "$PWD" --check
    ```
 
    When it exits 1, the project's rules are older than the installed plugin:
@@ -83,6 +112,11 @@ Read-only. This skill never changes state; it reports it.
 7. **Guards.** Say in one line each whether the three hooks are active here:
    `ai-git-guard` always is; `ai-path-guard` and `ai-scope-guard` are active
    because `.ai/` exists; the scope guard is armed only while a step is current.
+   The same three run in both runtimes. Under Codex they also see `apply_patch`,
+   which can touch several files in one call — every path in the patch is checked
+   separately, so one out-of-scope file rejects the whole patch. Codex has no
+   hookable read tool, so `cap-large-read` is Claude-only there; note that if the
+   session is running under Codex.
 
 ## Rules
 

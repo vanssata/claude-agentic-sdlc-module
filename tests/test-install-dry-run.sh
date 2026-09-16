@@ -11,7 +11,7 @@ echo "== dry run renders for every plan"
 for combo in "max yes:xhigh:fable[1m]" "max no:high:Opus 5 [1m]" "pro no:high:Opus 5"; do
     args="${combo%%:*}"; rest="${combo#*:}"; effort="${rest%%:*}"; model="${rest#*:}"
     set -- $args
-    out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan "$1" --fable "$2" --dry-run 2>&1)
+    out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan "$1" --fable "$2" --dry-run 2>&1)
     rc=$?
     [ $rc -eq 0 ] && pass "--plan $1 --fable $2 exits 0" || fail "--plan $1 --fable $2 should exit 0" "$out"
     printf '%s' "$out" | grep -q '{{' && fail "--plan $1 --fable $2 left an unrendered placeholder" || pass "--plan $1 --fable $2 renders every placeholder"
@@ -19,6 +19,8 @@ for combo in "max yes:xhigh:fable[1m]" "max no:high:Opus 5 [1m]" "pro no:high:Op
     printf '%s' "$out" | grep -qF "$model" && pass "--plan $1 --fable $2 names $model" || fail "expected $model in the output" "$out"
     printf '%s' "$out" | grep -q 'nothing written' && pass "--plan $1 --fable $2 writes nothing" || fail "dry run should write nothing"
 done
+out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable no --dry-run 2>&1)
+printf '%s' "$out" | grep -q '"fable' && fail "--fable no must drop fable from the settings" "$out" || pass "--fable no drops fable from the settings"
 
 echo "== pro: opusplan session, EXPERT tier pinned to opus"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan pro --dry-run 2>&1)
@@ -58,7 +60,8 @@ for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Ex
          skills/ai-audit/SKILL.md skills/ai-status/SKILL.md skills/project-init/SKILL.md \
          skills/sdlc-intent/SKILL.md skills/sdlc-spec/SKILL.md skills/sdlc-plan/SKILL.md \
          skills/ai-init/templates/.ai/AGENTS.md skills/project-init/templates/intent.md \
-         skills/project-update/SKILL.md skills/project-update/update.py skills/project-update/history/index.json; do
+         skills/project-update/SKILL.md skills/project-update/update.py skills/project-update/history/index.json \
+         skills/usage-report/SKILL.md skills/usage-report/usage-report.py hooks/fable-gate.py; do
     [ -e "$DIR/$f" ] && pass "$f installed" || fail "$f missing"
 done
 [ -x "$DIR/hooks/ai-git-guard.sh" ] && pass "hooks are executable" || fail "hooks should be executable"
@@ -81,7 +84,7 @@ grep -q '^model: opus$' "$DIR/agents/architect.md" && fail "max: architect must 
 
 echo "== settings.json"
 n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/settings.json")
-[ "$n" = 4 ] && pass "four PreToolUse hooks registered" || fail "expected 4 PreToolUse commands, got $n"
+[ "$n" = 5 ] && pass "five PreToolUse hooks registered (four guards + fable-gate on a Fable install)" || fail "expected 5 PreToolUse commands, got $n"
 jq -e '.hooks.Setup[0].hooks[0].command | test("project-scaffold")' "$DIR/settings.json" >/dev/null \
     && pass "the Setup:init scaffold hook is registered" || fail "Setup hook missing"
 [ "$(jq -r .model "$DIR/settings.json")" = "opus[1m]" ] && pass "the max session model is Opus 5 [1m], not Fable" || fail "model not set"
@@ -91,7 +94,8 @@ DIRN="$TMP/claude-nofable"; mkdir -p "$DIRN"
 CLAUDE_DIR="$DIRN" bash "$INSTALL" --plan max --fable no >/dev/null 2>&1
 grep -q '^model:' "$DIRN/agents/architect.md" && fail "with --fable no, architect must inherit the session" || pass "with --fable no, architect inherits the Opus session"
 jq -e '.availableModels | index("fable[1m]")' "$DIRN/settings.json" >/dev/null && fail "fable should be removed with --fable no" || pass "with --fable no, fable is not offered"
-[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "600000" ] && pass "the compaction window is set" || fail "compaction not set"
+[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "300000" ] && pass "the compaction window is set" || fail "compaction not set"
+[ "$(jq -r '.modelSettings["claude-opus-5"].effortLevel' "$DIR/settings.json")" = "medium" ] && pass "Opus runs at medium" || fail "opus effort not medium"
 [ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL' "$DIR/settings.json")" = "sonnet" ] && pass "the subagent default is sonnet" || fail "subagent default not set"
 grep -q 'claude-agentic:start' "$DIR/CLAUDE.md" && pass "the CLAUDE.md block is written" || fail "block missing"
 
@@ -109,7 +113,7 @@ CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 echo "== re-install is idempotent"
 CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/settings.json")
-[ "$n" = 4 ] && pass "hook entries are not duplicated on re-install" || fail "hooks duplicated: $n"
+[ "$n" = 5 ] && pass "hook entries are not duplicated on re-install" || fail "hooks duplicated: $n"
 [ "$(jq '[.hooks.Setup[].hooks[].command] | length' "$DIR/settings.json")" = 1 ] \
     && pass "the Setup hook is not duplicated either" || fail "Setup hook duplicated"
 b=$(grep -c 'claude-agentic:start' "$DIR/CLAUDE.md")
@@ -127,8 +131,8 @@ jq -n '{permissions:{allow:["Bash(ls:*)"]}, hooks:{PreToolUse:[{matcher:"Edit|Wr
 CLAUDE_DIR="$DIR2" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 jq -e '[.hooks.PreToolUse[].hooks[].command] | index("\"$HOME/.claude/hooks/vendor-write-guard.sh\"")' "$DIR2/settings.json" >/dev/null \
   && pass "a third-party hook survives the merge" || fail "the user's own hook was clobbered"
-[ "$(jq '[.hooks.PreToolUse[].hooks[].command]|length' "$DIR2/settings.json")" = 5 ] \
-  && pass "our four PreToolUse hooks are appended alongside it" || fail "expected 5 hook commands total"
+[ "$(jq '[.hooks.PreToolUse[].hooks[].command]|length' "$DIR2/settings.json")" = 6 ] \
+  && pass "our five PreToolUse hooks are appended alongside it" || fail "expected 6 hook commands total"
 jq -e '.permissions.allow | index("Bash(ls:*)")' "$DIR2/settings.json" >/dev/null \
   && pass "unrelated settings keys are preserved" || fail "unrelated settings were lost"
 

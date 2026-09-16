@@ -1,36 +1,47 @@
 # The agents
 
-Ten static definitions plus two rendered at install time. They live in
-`~/.claude/agents/` and are identical in every project; the project-specific half
-of their instructions comes from `.ai/policies/` and `.ai/agents/`, which they
-read at the start of a run.
+Ten static definitions plus two rendered at install time. They are identical in
+every project; the project-specific half of their instructions comes from
+`.ai/policies/` and `.ai/agents/`, which they read at the start of a run.
+
+The roster and the tiers are the same in both runtimes. The prompt bodies are
+written once, in `agents/*.md`; `scripts/render-codex-agents.py` converts them
+into `~/.codex/agents/*.toml` using the tier and sandbox mode declared for each
+role in `profiles/codex.json`, plus two Codex-only variants, `ai-risk-strong`
+and `ai-planner-strong`, that pin Sol — Codex reads an agent's own file ahead of
+the model passed at spawn time, so "run `ai-risk` on a stronger model" cannot
+work there. Under Claude Code the same escalation is `model: opus` on the
+ordinary agent.
 
 Which of them a task actually spawns depends on `pipeline_profile` in
 `.ai/policies/risk-tiers.json`. In the default `solo` profile a T1 task spawns
 none and a T2 task spawns one (`ai-reviewer`); the rest run inline in the
 session. See `docs/risk-tiers.md`.
 
-| Agent | Model | Effort | Writes? | Runs at |
-|---|---|---|---|---|
-| `ai-indexer` | haiku | low | no | the start of discovery |
-| `ai-discovery` | sonnet | low | no | discovery, impact analysis |
-| `ai-context` | sonnet | medium | no | context |
-| `ai-risk` | sonnet (opus on re-run) | medium | no | risk classification |
-| `ai-planner` | sonnet (opus at T3/T4) | medium | no | plan |
-| `ai-implementer` | sonnet | medium | **yes** | mechanical steps only |
-| `ai-tester` | sonnet | low | no | once after the last step (team profile, or an unfamiliar test setup) |
-| `ai-reviewer` | opus | high | no | plan review, adversarial review |
-| `ai-security` | opus | high | no | T4, T5, auth or personal data |
-| `ai-release` | sonnet | low | the report | release report at T4/T5 (solo) or from T2 (team) |
-| `ai-expert` | the session model (Opus 5 [1m] on Max); `opus`, pinned, on Pro | high | no | escalation only |
+| Agent | Claude | Codex | Effort | Writes? | Runs at |
+|---|---|---|---|---|---|
+| `ai-indexer` | haiku | Terra | low | no | the start of discovery |
+| `ai-discovery` | sonnet | Terra | low | no | discovery, impact analysis |
+| `ai-context` | sonnet | Terra | medium | no | context |
+| `ai-risk` | sonnet (opus on re-run) | Terra (`ai-risk-strong` on Sol for the re-run) | medium | no | risk classification |
+| `ai-planner` | sonnet (opus at T3/T4) | Terra (`ai-planner-strong` on Sol at T3/T4) | medium | no | plan |
+| `ai-implementer` | sonnet | Terra | medium | **yes** | mechanical steps only |
+| `ai-tester` | sonnet | Terra | low | no | once after the last step (team profile, or an unfamiliar test setup) |
+| `ai-reviewer` | opus | Sol | high | no | plan review, adversarial review |
+| `ai-security` | opus | Sol | high | no | T4, T5, auth or personal data |
+| `ai-release` | sonnet | Terra | low | the report | release report at T4/T5 (solo) or from T2 (team) |
+| `ai-expert` | the session model (Opus 5 [1m] on Max); `opus`, pinned, on Pro | Astra, xhigh | high | no | escalation only |
 
 Three more come from the routing half, and are not part of the pipeline:
 
-| Agent | Model | Effort | Role |
-|---|---|---|---|
-| `architect` | `fable[1m]`, pinned, on Max with Fable; the session model with `--fable no`; `opus`, pinned, on Pro | xhigh on Fable, else high | design questions outside a task, or in a repository without `.ai/`. Returns a design and an ordered plan; never writes code |
-| `Explore` | sonnet | low | fast read-only search: which files matter, and why |
-| `log-reader` | sonnet | low | logs, test output, CI, kubectl and helm output, condensed to the errors that matter |
+| Agent | Claude | Codex | Effort | Role |
+|---|---|---|---|---|
+| `architect` | `fable[1m]`, pinned, on Max with Fable; the session model with `--fable no`; `opus`, pinned, on Pro | Sol | xhigh on Fable, else high | design questions outside a task, or in a repository without `.ai/`. Returns a design and an ordered plan; never writes code |
+| `Explore` | sonnet | Terra | low | fast read-only search: which files matter, and why |
+| `log-reader` | sonnet | Terra | low | logs, test output, CI, kubectl and helm output, condensed to the errors that matter |
+
+The main session runs Opus 5 [1m] at `medium` on Max, `opusplan` on Pro, Sol at
+`high` under Codex.
 
 `reviewer` used to sit here too. `ai-reviewer` replaces it: adversarial rather
 than descriptive, aware of the task's risk tier, and reading the project's own
@@ -39,7 +50,9 @@ policies. The installer retires the old file when you have not edited it.
 Everything except `ai-implementer` and `ai-release` is read-only, and the
 read-only ones declare `disallowedTools: Edit, Write, NotebookEdit` as well as
 omitting those tools — belt and braces, because a review agent that can edit is a
-review agent that will eventually edit.
+review agent that will eventually edit. The Codex renderer expresses the same
+thing as `sandbox_mode = "read-only"`, with `workspace-write` for exactly those
+two agents.
 
 ## Output contracts
 
@@ -72,11 +85,15 @@ Two mechanisms, deliberately different:
   `opus` pinned on Pro, where the session runs `opusplan` and an inherited model
   would be Sonnet outside plan mode. Fable, where enabled, is pinned on
   `architect` alone — design questions outside a task — and nothing else ever
-  runs on it. Baking the resolution into the frontmatter at install time means
-  every skill can just say "call `ai-expert`" and be correct on any plan.
+  runs on it. Under Codex `ai-expert` is pinned to Astra, and `codex-model-gate`
+  rewrites an Astra launch to Sol while Astra is rate-limited or unavailable.
+  Baking the resolution into the frontmatter at install time means every skill
+  can just say "call `ai-expert`" and be correct on any plan and runtime.
 
-Escalate one task at a time, on a trigger from `risk-tiers.json`. Never re-run
-the whole fleet expensive, and never start at EXPERT because it exists.
+The triggers for each tier are in the managed instruction block and in
+`.ai/policies/model-routing.md`. Escalate one task at a time, on a named trigger.
+Never re-run the whole fleet expensive, and never start at EXPERT because it
+exists.
 
 ## The honest answers
 
@@ -84,8 +101,8 @@ Three agents are explicitly allowed — and expected — to admit they could not
 settle something:
 
 - `ai-discovery` returns **UNKNOWN** with what would answer it;
-- `ai-risk` returns `confidence: uncertain`, which triggers a re-run on a stronger
-  model instead of a guess;
+- `ai-risk` returns `confidence: uncertain`, which triggers a re-run at STRONG
+  instead of a guess;
 - `ai-tester` returns **UNKNOWN** rather than inventing a diagnosis.
 
 This is the point. A confident wrong answer at the discovery stage propagates
