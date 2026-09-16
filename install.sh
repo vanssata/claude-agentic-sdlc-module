@@ -333,7 +333,7 @@ install_skills() {
   for d in "$SRC"/skills/*/; do
     name=$(basename "$d")
     dst="$root/skills/$name"
-    if [ -d "$dst" ] && ! diff -rq "$d" "$dst" >/dev/null 2>&1; then
+    if [ -d "$dst" ] && ! diff -rq -x __pycache__ "$d" "$dst" >/dev/null 2>&1; then
       mkdir -p "$backups"
       rm -rf "$backups/$name"; cp -r "$dst" "$backups/$name"
       echo "backup: skills/$name -> backups/skills/$name"
