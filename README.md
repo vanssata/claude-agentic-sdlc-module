@@ -60,7 +60,7 @@ Re-running the installer updates in place: it backs up what it replaces to
 | `agents/{ai-expert,architect}.md.tmpl` | `~/.claude/agents/` | the EXPERT-tier agents, model line and effort rendered per plan |
 | `agents/{Explore,log-reader}.md` | `~/.claude/agents/` | fast search, log reading |
 | `hooks/*` | `~/.claude/hooks/` | five hooks, the shared library and the guards' default config |
-| `skills/*/` | `~/.claude/skills/` | `/ai-init`, `/ai-audit`, `/ai-task`, `/ai-status`, `/project-init`, `/sdlc-intent`, `/sdlc-spec`, `/sdlc-plan` |
+| `skills/*/` | `~/.claude/skills/` | `/ai-init`, `/ai-audit`, `/ai-task`, `/ai-status`, `/project-init`, `/project-update`, `/sdlc-intent`, `/sdlc-spec`, `/sdlc-plan` |
 
 ### Limits it sets
 
@@ -85,6 +85,39 @@ through, so reading something large stays possible but has to be deliberate.
 /ai-status               # where does the current task stand
 /ai-audit                # score the repo against the twelve AI-SDLC plays
 ```
+
+### Updating a project after the plugin changes
+
+`install.sh` updates `~/.claude/`; the rules a project carries in `.ai/`,
+`docs/sdlc/` and its `CLAUDE.md` block are copies, and stay as they were. Pull
+the new ones in with:
+
+```bash
+/project-update          # dry run, confirm the policy changes, apply, merge conflicts
+```
+
+Running `/ai-init` or `/project-init` again in an initialised project does the
+same. `/ai-status` says when a project is behind.
+
+The plugin ships every version of every template it has ever installed
+(`skills/project-update/history/`, built from git by
+`tools/build-template-history.py`). That is how the update tells files apart:
+
+| The project file is | What happens |
+|---|---|
+| missing | created |
+| a version the plugin once shipped | replaced — nobody edited it |
+| edited, markdown | three-way merged against the closest shipped version; every edit kept |
+| edited, JSON policy | merged key by key; the project's value wins wherever both changed |
+| edited where the plugin changed the same lines | left alone; the plugin's version goes to `.ai/local/plugin-update/` for a merge |
+| `.ai/project/**`, `CLAUDE.md` outside the block, `.claude/settings.json` | never touched |
+
+Changes to `.ai/policies/*.json` are listed per key and need a confirmation
+before they are applied. A risk-tier mirror that was in sync stays in sync; one
+that was already stale stays flagged.
+
+Changed a template? Run `tools/build-template-history.py` and commit the result;
+the test suite fails until you do.
 
 For work that needs a written intent and specification before any code:
 
@@ -224,7 +257,7 @@ one; nothing references it any more.
 bash tests/run-all.sh
 ```
 
-Eight suites, 257 assertions: the three guards against JSON fixtures, the state
+Nine suites, 287 assertions: the three guards against JSON fixtures, the state
 machine, scaffold idempotency, installer rendering for all three plan
 combinations, the migration off `claude-routing`, and an end-to-end run that
 installs into a scratch directory, scaffolds a throwaway repository and drives a

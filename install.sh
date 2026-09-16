@@ -260,7 +260,8 @@ for stale in "$CLAUDE_DIR"/skills/*.bak; do
   mv "$stale" "$SKILL_BACKUPS/$(basename "${stale%.bak}")-old"
   echo "moved: skills/$(basename "$stale") -> backups/skills/ (it was loading as a duplicate skill)"
 done
-chmod +x "$CLAUDE_DIR/skills/ai-init/scaffold-ai.sh" "$CLAUDE_DIR/skills/ai-task/state.py"
+chmod +x "$CLAUDE_DIR/skills/ai-init/scaffold-ai.sh" "$CLAUDE_DIR/skills/ai-task/state.py" \
+         "$CLAUDE_DIR/skills/project-update/update.py"
 
 # ---------------------------------------------------------------- 4. settings.json
 SETTINGS="$CLAUDE_DIR/settings.json"
@@ -371,4 +372,5 @@ Restart Claude Code, then:
   /hooks         lists the five hooks
   /skills        lists ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*
   /ai-init       in a project, to survey it and build .ai/
+  /project-update in a project that already has .ai/ or docs/sdlc/, to pull in these rules
 SUM

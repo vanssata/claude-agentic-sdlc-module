@@ -57,7 +57,8 @@ for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Ex
          skills/ai-init/SKILL.md skills/ai-init/scaffold-ai.sh skills/ai-task/state.py \
          skills/ai-audit/SKILL.md skills/ai-status/SKILL.md skills/project-init/SKILL.md \
          skills/sdlc-intent/SKILL.md skills/sdlc-spec/SKILL.md skills/sdlc-plan/SKILL.md \
-         skills/ai-init/templates/.ai/AGENTS.md skills/project-init/templates/intent.md; do
+         skills/ai-init/templates/.ai/AGENTS.md skills/project-init/templates/intent.md \
+         skills/project-update/SKILL.md skills/project-update/update.py skills/project-update/history/index.json; do
     [ -e "$DIR/$f" ] && pass "$f installed" || fail "$f missing"
 done
 [ -x "$DIR/hooks/ai-git-guard.sh" ] && pass "hooks are executable" || fail "hooks should be executable"

@@ -5,7 +5,7 @@ description: Scaffold a repo for Claude Code and the AI-Native SDLC flow — cre
 
 # /project-init
 
-Idempotent project bootstrap. Safe to run again: existing files are never overwritten.
+Idempotent project bootstrap. Safe to run again: existing files are never overwritten by the scaffold, and a second run updates the plugin-owned files through `/project-update`.
 
 ## Steps
 
@@ -16,6 +16,9 @@ Idempotent project bootstrap. Safe to run again: existing files are never overwr
    ```
 
    It creates only what is missing and prints the list. Note whether `CLAUDE.md` is in that list.
+
+   If it reports nothing to do, the project was already scaffolded, and running this again means
+   bringing it up to date: follow `$HOME/.claude/skills/project-update/SKILL.md`, then stop.
 
 2. **Fill `CLAUDE.md`** — only if the script just created it (otherwise leave the user's file alone and skip to step 3). Apply the built-in `/init` reasoning to replace the placeholder comments in **Commands / Conventions / Architecture**:
    - Detect the stack from what exists at the repo root: `composer.json` (PHP/Symfony/Sylius — read `scripts`, `require`), `package.json` (`scripts`), `Makefile` (targets), `pyproject.toml`, `go.mod`, `Chart.yaml` / `charts/` / `argocd/` (Helm/ArgoCD), `docker-compose*.yml`, `.github/workflows` / `.gitlab-ci.yml`.

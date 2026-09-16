@@ -1,0 +1,3 @@
+# claude-agentic (sdlc)
+.claude/settings.local.json
+.claude/memory/local/

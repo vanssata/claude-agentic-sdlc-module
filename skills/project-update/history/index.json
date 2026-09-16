@@ -1,0 +1,195 @@
+{
+ "ai-init/.ai/AGENTS.md": [
+  "77bd4e864d23176abc6bb8af8fba77775d88a0b135f5c985574d796a396d431d"
+ ],
+ "ai-init/.ai/agents/context.md": [
+  "a213099429aff491b00e885c8d556465be2405072efbb9a3a297890a15a5b4ca"
+ ],
+ "ai-init/.ai/agents/discovery.md": [
+  "b64c4cd4bb10c44458ac83b95c8ed247f95bbf834f3a15687b9dba55bd21928c"
+ ],
+ "ai-init/.ai/agents/implementer.md": [
+  "7e5c824bb71fe5353ec8a67827145b8fbc22ecd902ade1ad3005fafeed4ffb71"
+ ],
+ "ai-init/.ai/agents/manager.md": [
+  "0aeb04b04262683cac6513545683486a73dc473b447bba43b5aaab18403957a6",
+  "da3ecd4c4c414c93d04488685931df39a56bf959bfeb9c45cb1aea2c13bd991b"
+ ],
+ "ai-init/.ai/agents/planner.md": [
+  "e1765d5260a1a87a7fba94c55d225578b7851c5c5f9531c421029e83980097f8"
+ ],
+ "ai-init/.ai/agents/release.md": [
+  "40c0f81e7a110e3bc5094211e67cb6681dcc2953e81f81d7f07f0ab740640c53"
+ ],
+ "ai-init/.ai/agents/reviewer.md": [
+  "9fa7a0904f61f2519ba4d38c3645c722efc5c08ba871ad215c5b3ae298c60134"
+ ],
+ "ai-init/.ai/agents/risk.md": [
+  "d7146a591898984115124c83174a2c93cc080ad594f132f3d89c8b41b006c805"
+ ],
+ "ai-init/.ai/agents/security.md": [
+  "871d3d7dbeef4d7d438e9357c9bbd135f15c92c54d32e98d85aeef444e47acc0"
+ ],
+ "ai-init/.ai/agents/tester.md": [
+  "7f713c6ecd00bc2379deda511d8bda786341dbe5f5187f3b899302d904fed6bc"
+ ],
+ "ai-init/.ai/policies/coding.md": [
+  "3dd55bf5f9d9471c68af3353166da11593a11e639f7557397ce46787291fa629"
+ ],
+ "ai-init/.ai/policies/context-management.md": [
+  "230df2220e9c73c563c3c926d26f5c6dbe249df26a56fa43b7b321cdee2d5783"
+ ],
+ "ai-init/.ai/policies/database.md": [
+  "894a37936b769203bbb880ff842cc0a04e62d53e01deb07af83179f6b1359cf4"
+ ],
+ "ai-init/.ai/policies/git.md": [
+  "6bbcb8ea55726cdd49e0544725d224ac6d728cd1db757a269399342da92677ca"
+ ],
+ "ai-init/.ai/policies/model-routing.md": [
+  "af850b579029a6f5ce392ac29693ede8f9ae4753c08c06b241c991e9f5ca0052"
+ ],
+ "ai-init/.ai/policies/path-guard.json": [
+  "099f3debfe1ce808502661de4a31c3a349f149f5fe7246691d41a4966179a63c"
+ ],
+ "ai-init/.ai/policies/production.md": [
+  "13340bdd5d85314a2f7a9bac1776951178f9840cb8b75479d762a8082ab45d3a"
+ ],
+ "ai-init/.ai/policies/release.md": [
+  "7afd6c68d910439c19c1c190868be7596f487d30f867a1593d2084da6feea3bf"
+ ],
+ "ai-init/.ai/policies/risk-tiers.json": [
+  "01c32f8ff038787e49070b8b0eb160eb4b4704a020b050678292051fc73a4fc6",
+  "d8011741c086a124cf69b2988e0452ee2eb4ccccc6a6696b02069ddf7db35bd1",
+  "e7cc8b00983d6022206aa576187a2d4dccc656aaea41b26dc32123b4b064e965"
+ ],
+ "ai-init/.ai/policies/risk-tiers.md": [
+  "a5ef05d1ec2323ffd61ae60f98f3dacd212cae507b798d7421c3a9f418806506",
+  "6f098b31327fe52bfe1418b9f53af40e8734f027c7f1e21b02c1db1fabacdf15",
+  "0fab5540c131185e2ccdc10baad52783d7d4ff164843cae7f1b7f310c7d102ec"
+ ],
+ "ai-init/.ai/policies/safety.md": [
+  "0f00cbb216a20c7f67749ffb88835bcaaa29cc1a4c15d468edb3c6039bd291d3"
+ ],
+ "ai-init/.ai/policies/security.md": [
+  "cc808d5b940109f1703abfb3ca0334a3fcfd34267feefb2323627d0decc8b89a"
+ ],
+ "ai-init/.ai/policies/testing.md": [
+  "930ccfac4ba1306341e32279278410b451246a52223c42e0597b5ee83706ff00",
+  "1ad77786ae3fed570aafe7612eac1d94ef1f52c3106fd64733951592dea759ff",
+  "cb8b8328efd818835822dc60537e3ecdb648d4ca04e21a7c47c88bf1198a5474"
+ ],
+ "ai-init/.ai/project/architecture.md": [
+  "5cbaaabe2c8d0e24582877aab05eeaaf4d53cb5e9515e81cd18368d13d2fe79e"
+ ],
+ "ai-init/.ai/project/business-rules.md": [
+  "ab13c708e91c1de2adbc9ccdb1caec5c320197708bcaaa6d5cfd30c18a7dac34"
+ ],
+ "ai-init/.ai/project/dependencies.md": [
+  "0ec82daa4a17bcd5bf9d4df20ce90fd09312d3d439f7064baf7c8dd77a6c44fc"
+ ],
+ "ai-init/.ai/project/glossary.md": [
+  "d9abea96dbe584fd77c27d5ed0523eb20d048f2d146e4909d16b2a7948db38c5"
+ ],
+ "ai-init/.ai/project/initial-assessment.md": [
+  "6af1b12f814384e517e8f09131b0524930ac1c849350db765d8a77c7a59905b9"
+ ],
+ "ai-init/.ai/project/integrations.md": [
+  "1c2c3e5bbb132a152163ebeb678d57f0f7162a56ea92b84acc43cd2dedd4a935"
+ ],
+ "ai-init/.ai/project/known-risks.md": [
+  "1b554eff73a270086f8cf8cba73f7d9ce162c6b6b9c288b822db36841b8a9228"
+ ],
+ "ai-init/.ai/project/legacy.md": [
+  "1987654b78c747f378109dbde1d51c4f31fd0eabc878ff16b3bcfaeaf99c8ff4"
+ ],
+ "ai-init/.ai/project/modules.md": [
+  "ab0ce5062b41aaff12b0525d56b42de6b9dee9ce9e1de2938f72675435013c6a"
+ ],
+ "ai-init/.ai/project/overview.md": [
+  "53376d1fca268d8fdb59a5a0d0e0a4fe2d3bc2a7689a79c00a227f41bd5a2165"
+ ],
+ "ai-init/.ai/reports/.gitkeep": [
+  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+ ],
+ "ai-init/.ai/state/README.md": [
+  "30b6dcbdcfbb8e9223af11edacc387b1102868261bbe7051c2d85ad1a18384e5"
+ ],
+ "ai-init/.ai/templates/architecture-decision.md": [
+  "78619b522826ba8f5f0422e9deb7359c8002553d1aeb29a3719da5ab11ff13a1"
+ ],
+ "ai-init/.ai/templates/impact-report.md": [
+  "c62c6150c945f44b07ec7741e500b65bf32008929c83f2254a2712011e48bd66"
+ ],
+ "ai-init/.ai/templates/implementation-plan.md": [
+  "e5584d43d04190f740aee47470982969381d5473f41eb45e7c0b556b8caf9c91"
+ ],
+ "ai-init/.ai/templates/release-report.md": [
+  "c5c690bf89310358ec7f110fcdcfe1a32fe0b1d5ecf207bc77977b698c42ae1f"
+ ],
+ "ai-init/.ai/templates/review-report.md": [
+  "739d9252de9dbd013586ee0d373158cf21dc2821547a3eacd253df7e73a244fb"
+ ],
+ "ai-init/.ai/templates/task-context.md": [
+  "0a24844d90640f49ce86faca53c89e9d39fa3a20f1377646534afc598f42c7b7"
+ ],
+ "ai-init/.ai/workflows/bugfix.md": [
+  "ceed2f3bd937f862d0e6ca59ce1b1e3603e19a0d7f85d90d6dfeb7bf690153be",
+  "00f5e27ce2d66e3a1d8b222b013ae8fa1fed32612d91a551e0c661cee3ef9c2d",
+  "f6af4581bafbf62b257d57e06c3ae2c5998aeca608ee7df037fcc3c3e4b563a9"
+ ],
+ "ai-init/.ai/workflows/feature.md": [
+  "e129bf71a5a922e24b2c1bc8daa8a5d2b5589b0069770e17ce17e7db5ed4e7a4",
+  "0a6b1b6dd06a35582b2e9989a1f41c40abc29254b8e482714fcc6f0a7b16c406",
+  "b3839425f9d0ab2efa42a6f5e9488ec2d26ca5fb8dcd694b8ab098e10743ca46"
+ ],
+ "ai-init/.ai/workflows/hotfix.md": [
+  "b28721136482dafb9fd2801af340364cb97e9f6eaa987908606c786045b8d334",
+  "637971cfb844ef4285e2886a4b1c834fb2ed5c46e773adb88c2c147fea626ad3"
+ ],
+ "ai-init/.ai/workflows/investigation.md": [
+  "b3726422d767f9219fea633bea77f0c99ad9af843c591e6e928e1ccd2a47f374",
+  "c980d74f76a4bdfb38c94b573ac10a54eb50b850b052e15fa6f2442889b36ccb"
+ ],
+ "ai-init/.ai/workflows/refactoring.md": [
+  "87f0855859ff68cc6c988cc0b631ee7f56af7fbba062172bf80e01f4982cc054",
+  "1f824645299579cbdd8141642ddbb4bca9fd5fe9d3112f036d8221f0811e0abf"
+ ],
+ "ai-init/CLAUDE.block.md": [
+  "504ac6f9c5efb8ecb404bb62fbb08c819e8cff0c6b522efeeeb383cb30d2778e",
+  "ba9bb685dc2bb6de0ed5a8d601ef7ecedb517bb737565f75f6d4fff4ab4cd79c"
+ ],
+ "ai-init/CLAUDE.minimal.md": [
+  "7578025c0ce0a64dd37fe4c999541db5681199763df8b373ed0bfba11e2f581e",
+  "e7c01b6590c4e308cd2681beaa3b2242cd1e10a5ba851d9f756f4d49d301d144"
+ ],
+ "ai-init/gitignore.snippet": [
+  "5c0619c1ee059477c9d92cf70b72da5d238d9176fc27ab0d38104ecba795624c"
+ ],
+ "project-init/CLAUDE.md": [
+  "b486fe10685d437b73c8fa2a3141621e29c36d70ec88b2a36e4573133504507b"
+ ],
+ "project-init/adr.md": [
+  "a349aaad234825ea429df33cafb7928579c0cb5b1801f0a237e103aa8d159642"
+ ],
+ "project-init/gitignore.snippet": [
+  "965a03be82000866cb5275acda18ebb2172c9a50f0011df2fa475f74a1124c35"
+ ],
+ "project-init/intent.md": [
+  "cdc2432f3581ad9dbf5bc215de1e0cb0b49a44e1303b4222a4df4c72d0e96cc3"
+ ],
+ "project-init/memory-README.md": [
+  "8c97cfd63ee3dfba7aa61d9104e87fdbb086d3bf46cf648d349636912836c6d9"
+ ],
+ "project-init/plan.md": [
+  "f00317bd27dc8184222e4b8ffe97f27e72d442d36a2bd67552f57f802590dd79"
+ ],
+ "project-init/project-settings.json": [
+  "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+ ],
+ "project-init/sdlc-README.md": [
+  "a8cf15b33301a76e1d899064d5cb95914cc49412ab223f00394b702c4a4508f1"
+ ],
+ "project-init/spec.md": [
+  "61d0e67d59802a695f546e0a77e11a4daf1fafe77f50bead5f94bc7f08fb8457"
+ ]
+}

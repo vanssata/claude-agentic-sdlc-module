@@ -108,6 +108,16 @@ if it is empty when a task reaches TEST, the task takes the command from the
 project `CLAUDE.md` or the CI config and writes it there. One command, one
 healthy-output example — that is the feedback loop the playbook asks for.
 
+## I reinstalled the plugin. Why does my project still follow the old rules?
+
+The installer updates `~/.claude/`. A project's `.ai/`, `docs/sdlc/` templates
+and `CLAUDE.md` block are copies made when it was initialised. Run
+`/project-update` in the project — or `/ai-init` again, which does the same.
+Files you never edited are replaced, edited ones are merged keeping your edits,
+and a real conflict is never overwritten: the plugin's version lands in
+`.ai/local/plugin-update/` and the skill merges it with you. Policy JSON changes
+are shown key by key and applied only after you confirm.
+
 ## Do I have to run `/ai-init` before `/ai-task`?
 
 Yes. Without `.ai/` there are no policies, no tier table, no state directory and

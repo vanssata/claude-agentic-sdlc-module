@@ -71,7 +71,16 @@ Read-only. This skill never changes state; it reports it.
    If they differ, warn in one line that the JSON changed and the markdown mirror
    did not. The JSON is the source of truth; the warning is not an error.
 
-6. **Guards.** Say in one line each whether the three hooks are active here:
+6. **Plugin version.** One line from:
+
+   ```bash
+   python3 "$HOME/.claude/skills/project-update/update.py" "$PWD" --check
+   ```
+
+   When it exits 1, the project's rules are older than the installed plugin:
+   say so and point at `/project-update`.
+
+7. **Guards.** Say in one line each whether the three hooks are active here:
    `ai-git-guard` always is; `ai-path-guard` and `ai-scope-guard` are active
    because `.ai/` exists; the scope guard is armed only while a step is current.
 

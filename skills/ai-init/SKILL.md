@@ -35,9 +35,14 @@ Then the agentic scaffold:
 "$HOME/.claude/skills/ai-init/scaffold-ai.sh" "$PWD"
 ```
 
-Both are idempotent and never overwrite. Note which files they report creating —
-if `.ai/project/overview.md` was **not** created, this project was already
-initialised: ask whether to refresh the survey or stop.
+Both are idempotent and never overwrite. Note which files they report creating.
+
+If `.ai/project/overview.md` was **not** created, this project was already
+initialised, and running `/ai-init` again means bringing it up to date: follow
+`$HOME/.claude/skills/project-update/SKILL.md` from step 1. When it is done, ask
+whether the survey in `.ai/project/` should be refreshed as well; if not, stop
+here. A refresh continues with step 2 below and must not overwrite a
+`.ai/project/` file a human has edited without saying so first.
 
 ### 2. Detect the stack yourself
 

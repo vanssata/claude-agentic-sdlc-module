@@ -125,6 +125,18 @@ questions only your team can answer.
 
 It writes that one file and nothing else.
 
+## 6. After the plugin changes
+
+Reinstall, then in each project:
+
+```
+/project-update
+```
+
+It shows what would change, asks you to confirm policy changes, applies the
+rest and merges anything you had edited. `/ai-status` tells you when a project
+is behind.
+
 ## Where to go next
 
 - `docs/hooks.md` — what exactly is blocked, and how to adjust it
