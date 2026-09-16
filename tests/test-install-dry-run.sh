@@ -8,7 +8,7 @@ INSTALL="$PLUGIN_ROOT/install.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
 echo "== dry run renders for every plan"
-for combo in "max yes:xhigh:fable[1m]" "max no:high:Opus 5 [1m]" "pro no:high:Opus 5"; do
+for combo in "max yes:xhigh:fable[1m]" "max no:high:Opus 5 with the 200k window" "pro no:high:Opus 5"; do
     args="${combo%%:*}"; rest="${combo#*:}"; effort="${rest%%:*}"; model="${rest#*:}"
     set -- $args
     out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan "$1" --fable "$2" --dry-run 2>&1)
@@ -87,14 +87,14 @@ n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/settings.json")
 [ "$n" = 5 ] && pass "five PreToolUse hooks registered (four guards + fable-gate on a Fable install)" || fail "expected 5 PreToolUse commands, got $n"
 jq -e '.hooks.Setup[0].hooks[0].command | test("project-scaffold")' "$DIR/settings.json" >/dev/null \
     && pass "the Setup:init scaffold hook is registered" || fail "Setup hook missing"
-[ "$(jq -r .model "$DIR/settings.json")" = "opus[1m]" ] && pass "the max session model is Opus 5 [1m], not Fable" || fail "model not set"
+[ "$(jq -r .model "$DIR/settings.json")" = "opus" ] && pass "the max session model is Opus 5 with the 200k window, not opus[1m] and not Fable" || fail "model not set"
 [ "$(jq -r .effortLevel "$DIR/settings.json")" = "medium" ] && pass "the default effort is medium" || fail "effort not set"
 jq -e '.availableModels | index("fable[1m]")' "$DIR/settings.json" >/dev/null && pass "fable[1m] stays available for architect" || fail "fable should remain in availableModels"
 DIRN="$TMP/claude-nofable"; mkdir -p "$DIRN"
 CLAUDE_DIR="$DIRN" bash "$INSTALL" --plan max --fable no >/dev/null 2>&1
 grep -q '^model:' "$DIRN/agents/architect.md" && fail "with --fable no, architect must inherit the session" || pass "with --fable no, architect inherits the Opus session"
 jq -e '.availableModels | index("fable[1m]")' "$DIRN/settings.json" >/dev/null && fail "fable should be removed with --fable no" || pass "with --fable no, fable is not offered"
-[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "300000" ] && pass "the compaction window is set" || fail "compaction not set"
+[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "150000" ] && pass "the compaction window is 150k on max" || fail "compaction not set"
 [ "$(jq -r '.modelSettings["claude-opus-5"].effortLevel' "$DIR/settings.json")" = "medium" ] && pass "Opus runs at medium" || fail "opus effort not medium"
 [ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL' "$DIR/settings.json")" = "sonnet" ] && pass "the subagent default is sonnet" || fail "subagent default not set"
 grep -q 'claude-agentic:start' "$DIR/CLAUDE.md" && pass "the CLAUDE.md block is written" || fail "block missing"

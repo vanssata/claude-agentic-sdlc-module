@@ -1,6 +1,6 @@
 ---
 name: ai-task
-description: Run one task through the agentic pipeline — discovery, context, impact, risk tier, plan, implementation, test, adversarial review, security review, release report, human approval — with the gates the risk tier requires and the delegation the project's pipeline_profile allows (solo by default, stages up to T2 inline). Resumes an interrupted task from .ai/state/current.json. Use for any change in a repository that has .ai/.
+description: Run one task through the agentic pipeline with the gates its risk tier requires. In the default solo profile T0–T2 run in direct mode (name the files, edit, one verification run at the end, failures fixed as one batch, one sonnet review at T2) and T3–T5 run the full SDLC pipeline — discovery, context, impact, risk tier, plan, plan review, implementation, test, adversarial review, security review, release report, human approval. Resumes an interrupted task from .ai/state/current.json. Use for any change in a repository that has .ai/.
 argument-hint: <what you want done> | --resume | --abandon
 ---
 
@@ -59,11 +59,58 @@ jq -r '.pipeline_profile // "team"' .ai/policies/risk-tiers.json
 
 The stages are the same in every profile; the profile decides **who does each
 one**. `pipeline_profiles.<profile>.delegated_stages[<tier>]` in that file lists
-the stages that go to a subagent. Every other stage you do yourself, inline, in a
-few lines — and you record it. `solo`, the default, is written for one developer
-who knows this codebase: their request is the first source of context,
-deterministic tools are the second, and a subagent is spawned only where a
-second context window buys something. Until the tier is known, act as for T2.
+the stages that go to a subagent. `solo`, the default, has two modes:
+
+- **direct** (T0–T2): no ceremony. You name the files, edit, run the
+  verification command once at the end and fix every failure as one batch.
+  The only subagents are cheap readers (`Explore`, `log-reader`) and, at T2,
+  one `ai-reviewer` on `sonnet`. Nothing runs on `opus` below T3.
+- **sdlc** (T3–T5): the full pipeline below, recorded stage by stage, with the
+  delegations the profile lists.
+
+Decide the tier **first**, from the trigger table, before anything else; when
+two tiers are arguable take the higher. Until it is known, act as for T2.
+
+## 1a. Direct mode — T0, T1, T2
+
+Skip `$STATE init` above for T0–T2; direct mode has its own single call.
+
+1. **Tier and files.** Take the entry points from the request; confirm them with
+   `grep -n`. Say the tier, the trigger and the files you will touch, in one to
+   five lines. At T2 that is the plan. Use `Explore` (haiku) when a file is not
+   found in a few `grep` calls, never a six-agent fan-out.
+2. **Record — T2 only.** One call arms the scope guard and writes the audit
+   trail; T0 and T1 keep no state file at all, the commit is the record:
+
+   ```bash
+   $STATE quick --goal "<one sentence>" --workflow <workflow> --tier T2 --files "<a>,<b>" --note "<trigger>"
+   ```
+
+3. **Implement**, yourself, in this session. `ai-implementer` (sonnet, low) only
+   for a mechanical pattern-copy the human asks for. No tests during the edit,
+   except the failing test a bugfix shows first.
+4. **Verify once, to the end.** Run the verification command from
+   `.ai/policies/testing.md` with no fail-fast flag, through `tail -40`, or
+   through `log-reader` when the output is long. T0 runs nothing. Collect
+   **every** failure, classify each (new regression, existing, environment),
+   then fix all new regressions in **one** remediation step and run once more:
+
+   ```bash
+   $STATE step-done 1 && $STATE remediate --files "<failing tests>" --note "<n> regressions"   # T2
+   ```
+
+   At T0/T1 there is no state: just fix the batch and re-run. Two rounds at
+   most; a third means the human decides. One failure never restarts the task.
+5. **Review — T2 only.** After the tests pass, one `ai-reviewer` with
+   `model: sonnet` over `git diff`, no ledger and no probe. Fix BLOCKER and
+   HIGH findings as one batch (`$STATE remediate`), re-run the verification
+   command, and ask for one scoped re-review only when a BLOCKER was fixed.
+6. **Close.** Print what changed, the verification command and its result, the
+   review verdict and the rollback (`git revert`), as the commit message body.
+   Then stop for the human. At T2: `$STATE close`.
+
+That is the whole path. The sections below are for T3 and above, and for the
+`team` profile.
 
 ## 1. Walk the pipeline
 
@@ -75,23 +122,13 @@ $STATE stage <stage> --note "<what happened>"
 
 ### TRIAGE — discovery, context, impact and risk
 
-**solo, T0–T2:** take the entry points from the request — if it names none, ask
-one question rather than searching the repository. Confirm each with `grep -n`,
-follow the callers with `grep -rn`, and check what `.ai/project/` already
-records. Decide the tier from the trigger table in `.ai/policies/risk-tiers.json`
-and name the trigger; when two tiers are arguable, take the higher. Then record
-all four stages in one call:
+**solo, T0–T2:** direct mode, section 1a. If a task that started as T2 turns
+out to be T3+, say so, `$STATE close` the quick record and start it here.
+
+**`team` below T3:** record the four stages in one call and go on to PLAN:
 
 ```bash
 $STATE triage T<n> --note "<the trigger>" --context "<entry points, callers, what must stay unaffected — a few lines>"
-```
-
-No report file below T2. For T2, start `.ai/reports/<task-id>/task.md` with
-that context in the fixed shape of `.ai/templates/task-context.md`, at most ~30
-lines with `file:line` for every fact, and record its path:
-
-```bash
-$STATE set context_summary_ref ".ai/reports/<task-id>/task.md"
 ```
 
 **T3 and above, or `team`:** the stages run one at a time and are recorded one
@@ -118,13 +155,8 @@ impression of how big the task feels.
 
 ### PLAN — only when the tier needs one
 
-**T0, T1:** no plan. Say in one line which files you will touch and go to
-IMPLEMENTATION. The scope guard is not armed for these tiers; the line you
-just wrote is the scope.
-
-**T2 in solo:** a short numbered list of steps, each with its files, appended
-to `task.md` — usually one to three steps. Use plan mode only when the change
-spans several modules. Register it:
+**T0–T2 in solo:** handled in direct mode (1a). **`team` below T3:** a short
+numbered list of steps, each with its files, registered with:
 
 ```bash
 $STATE plan --ref ".ai/reports/<task-id>/task.md" --steps /tmp/steps.json
@@ -150,7 +182,7 @@ required, not optional.
 $STATE stage implementation
 ```
 
-T0 and T1 have no steps: make the edit. From T2, for each step in order:
+For each step in order:
 
 ```bash
 $STATE step <step_id>          # arms the scope guard for this step
@@ -168,26 +200,36 @@ replanned.
 $STATE step-done <step_id>
 ```
 
-### TEST — the feedback loop, once
+### TEST — once, to the end, then one batch of fixes
 
 After the **last** step, not after each one. Run the verification command from
 the **Verification** section of `.ai/policies/testing.md`; if that section is
 empty, take it from the project `CLAUDE.md` or the CI config and write it into
-`testing.md` as part of this task, so the next task has it. Pipe the output
-through `tail -40`. When more than that matters, hand the full output to
-`log-reader`; use `ai-tester` in the `team` profile or when the test setup is
-unfamiliar.
+`testing.md` as part of this task, so the next task has it. Run it **to the
+end** — no fail-fast flag, no stopping at the first red test. Pipe the output
+through `tail -40`; when more than that matters, hand the full output to
+`log-reader` (haiku) and take back the list of failures; use `ai-tester`
+(haiku) in the `team` profile or when the test setup is unfamiliar.
 
-During a step, run only that step's own single test (`single_test` in
-`testing.md`) when it is cheap and the step touched logic. T0 runs nothing.
+Nothing runs during a step. For a bugfix the failing test is written and
+**shown failing** before the fix — that one test, not the suite.
 
 ```bash
 $STATE set test_status <passing|existing_failure|new_regression|env_failure|unknown>
 ```
 
-For a bugfix the failing test is written and **shown failing** before the fix —
-that one test, not the suite. `new_regression` sends you back to
-IMPLEMENTATION; fix, then run the verification command again.
+**Fix as one batch.** Classify every failure first. Then open **one**
+remediation step whose scope is every finished step plus the failing tests,
+fix all the new regressions in it, and run the verification command once more:
+
+```bash
+$STATE remediate --files "<failing test files>" --note "<n> regressions: <one line each>"
+… fix them all …
+$STATE step-done R1
+```
+
+A remediation never re-triages or re-plans: the tier, the plan and the finished
+steps stand. Two rounds at most; a third round means the human decides.
 `existing_failure` is recorded and reported, not fixed inside this task. Never
 let a test be edited to make it pass.
 
@@ -210,8 +252,10 @@ when the change is wide. Full rules: `.ai/policies/review-economy.md`.
 $STATE set review_status <passed|blockers_open>
 ```
 
-A BLOCKER or HIGH goes back to IMPLEMENTATION, or to PLAN when the cause is the
-plan. Findings that are real but out of scope go to `.ai/project/known-risks.md`.
+Every BLOCKER and HIGH is fixed together, in one `$STATE remediate` step, then
+the verification command runs once and one scoped re-review closes the named
+findings — never one finding, one fix, one re-review at a time. A finding whose
+cause is the plan goes back to PLAN for that step only. Findings that are real but out of scope go to `.ai/project/known-risks.md`.
 When a finding is a mistake this repository has seen before, add one line to the
 project `CLAUDE.md` in this task: the second occurrence is when a correction
 belongs there.
@@ -228,11 +272,11 @@ When it is not applicable, say why in the note. Silence is not a verdict.
 
 ### RELEASE REPORT
 
-**solo, T0–T3:** write the short form yourself: what changed, what was
+**solo, T3:** write the short form yourself: what changed, what was
 deliberately preserved, the verification command and its result, the review
 verdict, the rollback (usually one `git revert`), open risks. It becomes the
-commit message body. At T0/T1 it exists only there and in the final message;
-at T2/T3 append it to `task.md`. **T4, T5, and `team` from T2 up:**
+commit message body and is appended to `task.md`. (T0–T2 wrote it in direct
+mode, step 6.) **T4, T5, and `team` from T2 up:**
 `ai-release` fills the full template into
 `.ai/reports/<task-id>/release-report.md`.
 
@@ -255,9 +299,9 @@ in this turn.
 
 - Inline does not mean verbose: a stage you do yourself is a few lines, and
   below T2 not even a file — the state archive is the record.
-- One tool call where one will do: `triage` instead of four `stage` calls, one
-  `task.md` instead of four report files, one verification run instead of one
-  per step.
+- One tool call where one will do: `quick` below T3, `triage` instead of four
+  `stage` calls, one `task.md` instead of four report files, one verification
+  run instead of one per step, one `remediate` step instead of one per failure.
 - Never read logs, test output or large files into this session; `tail`, then
   `log-reader`.
 - Keep the agents' structured outputs as files under `.ai/reports/<task-id>/`
@@ -272,7 +316,12 @@ in this turn.
 
 - No required stage is skipped. `stages_required` per tier says which exist —
   T0 and T1 have no plan stage at all — and the profile decides who does each.
-  Cheap tasks get cheap stages, not skipped ones.
+  Cheap tasks get cheap stages, not skipped ones: in direct mode they are a
+  line each, not a file each.
+- Failures are fixed in batches. One red test or one review finding never
+  restarts the task, re-runs the suite on its own, or re-opens the plan.
+- Nothing below T3 runs on `opus`. Readers and runners are `haiku`; the T2
+  review is `sonnet`; STRONG is paid for from T3.
 - The tier decides the gates. Your sense of how risky it feels does not.
 - The scope guard is not an obstacle to route around; it is the plan being
   enforced.

@@ -4,7 +4,7 @@ description: Compresses discovery output into the single structured task-context
 tools: Read, Grep, Glob
 disallowedTools: Edit, Write, NotebookEdit
 model: sonnet
-effort: medium
+effort: low
 color: cyan
 ---
 You turn scattered findings into one document that stands on its own, so that the

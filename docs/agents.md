@@ -14,9 +14,10 @@ work there. Under Claude Code the same escalation is `model: opus` on the
 ordinary agent.
 
 Which of them a task actually spawns depends on `pipeline_profile` in
-`.ai/policies/risk-tiers.json`. In the default `solo` profile a T1 task spawns
-none and a T2 task spawns one (`ai-reviewer`); the rest run inline in the
-session. See `docs/risk-tiers.md`.
+`.ai/policies/risk-tiers.json`. In the default `solo` profile T0–T2 run in
+direct mode: a T1 task spawns none, a T2 task spawns one (`ai-reviewer` on
+`sonnet`), plus cheap readers on `haiku` when a search or a test run is long.
+The full pipeline starts at T3. See `docs/risk-tiers.md`.
 
 | Agent | Claude | Codex | Effort | Writes? | Runs at |
 |---|---|---|---|---|---|

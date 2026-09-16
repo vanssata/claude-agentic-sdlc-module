@@ -36,7 +36,7 @@
     "ai-context":   { "source": "ai-context.md",   "tier": "BALANCED", "sandbox_mode": "read-only" },
     "ai-risk":      { "source": "ai-risk.md",      "tier": "BALANCED", "sandbox_mode": "read-only" },
     "ai-planner":   { "source": "ai-planner.md",   "tier": "BALANCED", "sandbox_mode": "read-only" },
-    "ai-tester":    { "source": "ai-tester.md",    "tier": "BALANCED", "sandbox_mode": "read-only" },
+    "ai-tester":    { "source": "ai-tester.md",    "tier": "FAST",     "sandbox_mode": "read-only" },
     "ai-release":   { "source": "ai-release.md",   "tier": "BALANCED", "sandbox_mode": "workspace-write" },
     "ai-implementer": { "source": "ai-implementer.md", "tier": "BALANCED", "sandbox_mode": "workspace-write" },
 

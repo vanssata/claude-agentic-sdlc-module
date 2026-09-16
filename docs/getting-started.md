@@ -128,7 +128,8 @@ The same pipeline, and a very different shape:
    section.
 3. Planning goes to `ai-planner` on `opus`, and the plan must name the
    characterization tests that pin the current fee behaviour **before** anything
-   changes. This is the tier where the `solo` profile starts delegating.
+   changes. This is the tier where the `solo` profile leaves direct mode and
+   runs the full pipeline.
 4. You are shown the plan and the review, and asked to approve it. Nothing is
    implemented until you do.
 5. Implementation goes step by step, each one scope-guarded; the verification

@@ -4,9 +4,10 @@ Something behaves wrongly. The goal is the smallest change that fixes it without
 changing anything else.
 
 > Who runs a stage is set by `pipeline_profile` in `policies/risk-tiers.json`.
-> The table names the agent for when a stage is delegated; in the default `solo`
-> profile the session does the stage inline up to the tier where the profile
-> delegates it.
+> The table names the agent for when a stage is delegated. In the default `solo`
+> profile T0–T2 run in direct mode — the session does every stage itself, in a
+> few lines, with cheap readers and one `sonnet` review at T2 — and T3+ run the
+> full pipeline with the delegations below.
 
 | Stage | Who | Notes |
 |---|---|---|
@@ -16,7 +17,7 @@ changing anything else.
 | RISK CLASSIFICATION | `ai-risk` | a bug in a payment path is still T4 |
 | PLAN | `ai-planner` | failing test first, then the fix |
 | IMPLEMENTATION | the session | the failing test is its own step |
-| TEST | the session (`ai-tester` in `team`) | the new test is shown failing before the fix; the full verification command runs once at the end |
+| TEST | the session (`ai-tester` in `team`) | the new test is shown failing before the fix; the full verification command runs once at the end, to the end; every failure fixed as one batch |
 | ADVERSARIAL REVIEW | `ai-reviewer` | T2 and above |
 | SECURITY REVIEW | `ai-security` | if the bug was a security bug, always |
 | RELEASE REPORT | `ai-release` | |

@@ -4,9 +4,10 @@ Changing the shape of code without changing what it does. The most dangerous
 workflow in a legacy codebase, because success is invisible.
 
 > Who runs a stage is set by `pipeline_profile` in `policies/risk-tiers.json`.
-> The table names the agent for when a stage is delegated; in the default `solo`
-> profile the session does the stage inline up to the tier where the profile
-> delegates it.
+> The table names the agent for when a stage is delegated. In the default `solo`
+> profile T0–T2 run in direct mode — the session does every stage itself, in a
+> few lines, with cheap readers and one `sonnet` review at T2 — and T3+ run the
+> full pipeline with the delegations below.
 
 | Stage | Who | Notes |
 |---|---|---|
@@ -17,7 +18,7 @@ workflow in a legacy codebase, because success is invisible.
 | PLAN | `ai-planner` | characterization tests as their own steps, before anything moves |
 | PLAN REVIEW | `ai-reviewer` | always, whatever the tier |
 | IMPLEMENTATION | the session | one mechanical transformation per step |
-| TEST | `ai-tester` | the same tests, unchanged, must still pass |
+| TEST | the session (`ai-tester` in `team`) | the same tests, unchanged, must still pass; one full run at the end, failures fixed as one batch |
 | ADVERSARIAL REVIEW | `ai-reviewer` | looking specifically for behaviour drift |
 | RELEASE REPORT | `ai-release` | |
 | HUMAN APPROVAL | the human | |

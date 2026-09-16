@@ -9,8 +9,9 @@ This repository has an agentic engineering setup under `.ai/`. Read
 - Work runs through `/ai-task <request>`: discovery, context, impact, risk tier,
   plan, implementation, test, review, security review, release report, human
   approval. `pipeline_profile` in `.ai/policies/risk-tiers.json` says which of
-  those the session does inline (solo: everything up to T2) and which go to an
-  agent. `/ai-status` shows where a task stands.
+  those the session does inline (solo: T0–T2 directly, with cheap readers and
+  one `sonnet` review at T2; the full pipeline from T3) and which go to an
+  agent. Tests run once at the end and every failure is fixed as one batch. `/ai-status` shows where a task stands.
 - Verify before reporting done: run the command in the Verification section of
   `.ai/policies/testing.md` and show its output. A bugfix starts with the
   failing test. When a review flags the same mistake twice, the correction goes

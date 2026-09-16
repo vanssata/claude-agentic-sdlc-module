@@ -3,7 +3,7 @@ name: log-reader
 description: Use proactively to read logs, test output, stack traces, CI/CD pipeline output, kubectl/helm/argocd output, PHPUnit/Behat/Playwright results. Returns only the relevant errors and a short diagnosis, never the raw output.
 tools: Read, Grep, Glob, Bash
 disallowedTools: Write, Edit
-model: sonnet
+model: haiku
 effort: low
 color: cyan
 ---
@@ -15,4 +15,4 @@ For every task return exactly:
 3. A one-paragraph root-cause hypothesis, with the file/line if you can locate it.
 4. What to check next if the hypothesis is wrong.
 
-Do not attempt fixes. Do not paste full logs.
+Do not attempt fixes. Do not paste full logs. When the output holds several failures, list every one of them — the caller fixes them as a batch, not one per run.

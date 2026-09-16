@@ -57,9 +57,10 @@ deciding, which is the distinction that matters.
 
 ## Why did `/ai-task` not spawn any agents?
 
-Because the project's `pipeline_profile` is `solo` and the tier was T0 or T1.
-Every stage still ran — look at `history[]` in the state file — but the session
-did them inline: your request plus `grep -n` was the discovery, the trigger
+Because the project's `pipeline_profile` is `solo` and the tier was T0–T2:
+direct mode. Every stage still ran, in a line each (at T2 the `state.py quick`
+record shows them in `history[]`; at T0/T1 there is no state file at all — the
+commit message is the record), but the session did them inline: your request plus `grep -n` was the discovery, the trigger
 table was the risk classification, the verification command was the test. A
 subagent costs its own context window, and for a change you could describe in
 one sentence it buys nothing. From T2 the review is always a separate context,

@@ -12,16 +12,17 @@ not settle — never for fact collection.
 | Tier | Claude Code | Codex | Used for |
 |---|---|---|---|
 | **LOCAL** | *not available* | *not available* | see the note below |
-| **FAST** | `haiku`, effort `low` | `gpt-5.6-terra`, effort `low` | file and symbol inventories, listings, counting, running a command and reporting its output |
-| **BALANCED** — default for agents | `sonnet`, effort `low`–`medium` | `gpt-5.6-terra`, effort `medium` | discovery with judgment, context compression, planning up to T2, tests, release assembly |
+| **FAST** | `haiku`, effort `low` | `gpt-5.6-terra`, effort `low` | reading and running: file search, inventories, counting, logs and test output, running a command and reporting it (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
+| **BALANCED** — default for agents | `sonnet`, effort `low`–`medium` | `gpt-5.6-terra`, effort `medium` | discovery with judgment, context compression, planning up to T2, mechanical edits, release assembly, the T2 review |
 | **STRONG** | `opus`, effort `high` | `gpt-5.6-sol`, effort `high` | the STRONG triggers below |
 | **EXPERT** | `ai-expert` inherits the session model on Max (Opus 5 [1m]) and pins `opus` on Pro; Fable 5.1 [1m] runs `architect` alone, where enabled | `ai-expert`, pinned to `gpt-6-astra` at `xhigh` | the EXPERT triggers below |
 
 The main session runs the model the installed profile sets — Opus 5 [1m] at
 `medium` on Max and `opusplan` on Pro under Claude Code, Sol at `high` under
 Codex — and does the implementation itself. Which stages spawn an agent at all
-is decided by `pipeline_profile` in `risk-tiers.json`: in `solo`, nothing below
-T2 does, and tests run once after the last step.
+is decided by `pipeline_profile` in `risk-tiers.json`: in `solo`, T0–T2 run in
+direct mode — nothing on `opus`, one `sonnet` review at T2 — and tests run once
+after the last step, to the end, with every failure fixed as one batch.
 
 **Codex agent precedence.** A value written into a Codex agent file wins over the
 model asked for when the agent is spawned. So "re-run `ai-risk` on a stronger

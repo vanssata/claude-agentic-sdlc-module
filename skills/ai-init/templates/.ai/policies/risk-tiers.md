@@ -1,4 +1,4 @@
-<!-- generated from risk-tiers.json sha256:6b30b86994c130697aea047256ef20ef724f6fea42a4490dc220919e57453659 -->
+<!-- generated from risk-tiers.json sha256:0e221e9337f050ffe0e834be12c1a5b46d82dec446b57ebcfbaa0ec8996bd54c -->
 <!-- If /ai-status reports this hash as stale, risk-tiers.json changed and this
      mirror did not. The JSON file is the source of truth; update this by hand. -->
 
@@ -24,7 +24,7 @@ either way.
 
 | Tier | Plans and reviews on | Claude Code | Codex |
 |---|---|---|---|
-| T0, T1 | FAST — the cheapest model that can follow an instruction | `haiku` | `gpt-5.6-terra` |
+| T0, T1 | the session, directly; readers on FAST | `haiku` for readers | `gpt-5.6-terra` |
 | T2 | BALANCED | `sonnet` | `gpt-5.6-terra` |
 | T3, T4 | STRONG | `opus` | `gpt-5.6-sol` |
 | T5 | EXPERT — `ai-expert` | the session model on Max (Opus 5 [1m]); `opus`, pinned, on Pro | `gpt-6-astra` |
@@ -48,20 +48,33 @@ written into the task record with the reason.
 
 `pipeline_profile` in `risk-tiers.json` decides who runs a stage, never whether
 it runs. Every tier keeps its `stages_required`; the profile says which of them
-go to a subagent.
+go to a subagent. The default `solo` profile has two modes:
+
+- **direct** (T0–T2): no pipeline ceremony. The session names the files, edits,
+  runs the verification command once at the end and fixes every failure as one
+  batch. T0/T1 keep no state file at all; T2 is one `state.py quick` call that
+  arms the scope guard and one `state.py close` at the end. The only subagents
+  are cheap readers (`Explore`, `log-reader` on FAST) and, at T2, one
+  `ai-reviewer` on `sonnet` over the diff.
+- **sdlc** (T3–T5): the full pipeline, recorded stage by stage, with the plan,
+  plan review, adversarial review, security review and release report delegated
+  to the STRONG and EXPERT tiers as the table says.
 
 | Tier | `solo` (default) delegates | `team` delegates |
 |---|---|---|
-| T0, T1 | nothing — no plan either: one `triage` call, say which files, edit, verify (T1) | discovery (and the test run at T1) |
-| T2 | the adversarial review, on `sonnet`; the plan is a short inline list of steps | every stage except implementation |
+| T0, T1 | nothing — direct mode, no state file: say which files, edit, verify (T1) | discovery (and the test run at T1) |
+| T2 | the adversarial review, on `sonnet`; the plan is three to five lines in the conversation | every stage except implementation |
 | T3 | plan, plan review, adversarial review — on `opus` | every stage except implementation |
 | T4 | plan, plan review, adversarial review, security review, release report | every stage except implementation |
 | T5 | discovery and impact as well; the plan goes to `ai-expert` | every stage except implementation |
 
-Tests run **once, after the last step** — the verification command in
-`testing.md` — plus the step's own single test when that is cheap, and the
-failing test first for a bugfix. T0 and T1 have no plan, so the scope guard is
-not armed for them; the session names the files it will touch instead.
+Tests run **once, after the last step, to the end** — the verification command
+in `testing.md` with no fail-fast flag. Every failure is collected and
+classified first; every new regression is then fixed in **one** remediation
+step (`state.py remediate`) and the command runs once more. At most two rounds,
+then the human decides. Review findings are handled the same way: one batch, one
+scoped re-review only when a blocker was fixed. A bugfix still shows its failing
+test first.
 
 In `solo` the session still delegates one `ai-discovery` when the area is
 unfamiliar or the plan depends on an `UNKNOWN`, `ai-risk` on `opus` when a T3+

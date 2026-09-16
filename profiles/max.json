@@ -1,5 +1,5 @@
 {
-  "model": "opus[1m]",
+  "model": "opus",
   "availableModels": ["opus[1m]", "opus", "fable[1m]", "sonnet", "haiku"],
   "fallbackModel": ["sonnet"],
   "effortLevel": "medium",
@@ -9,6 +9,6 @@
     "claude-sonnet-5": { "effortLevel": "medium" },
     "claude-haiku-4-5-20251001": { "effortLevel": "low" }
   },
-  "autoCompactWindow": 300000,
+  "autoCompactWindow": 150000,
   "env": { "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet" }
 }

@@ -150,8 +150,9 @@ no feedback loop. Put the same command under `## Verification` in the project
 `CLAUDE.md`.
 
 Set `pipeline_profile` in `risk-tiers.json`: `solo` (the default) when one
-developer who knows the codebase will run the tasks, `team` when several people
-or an unfamiliar codebase need every stage delegated.
+developer who knows the codebase will run the tasks — T0–T2 directly, the full
+pipeline from T3 — `team` when several people or an unfamiliar codebase need
+every stage delegated.
 
 Adjust `.ai/policies/risk-tiers.json` to this project — the tier examples should
 name this codebase's actual critical areas, not generic ones. If you change the

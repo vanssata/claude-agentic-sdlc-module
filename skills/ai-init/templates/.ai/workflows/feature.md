@@ -3,9 +3,10 @@
 New behaviour that someone asked for. The default workflow.
 
 > Who runs a stage is set by `pipeline_profile` in `policies/risk-tiers.json`.
-> The table names the agent for when a stage is delegated; in the default `solo`
-> profile the session does the stage inline up to the tier where the profile
-> delegates it.
+> The table names the agent for when a stage is delegated. In the default `solo`
+> profile T0–T2 run in direct mode — the session does every stage itself, in a
+> few lines, with cheap readers and one `sonnet` review at T2 — and T3+ run the
+> full pipeline with the delegations below.
 
 | Stage | Who | Notes |
 |---|---|---|
@@ -16,7 +17,7 @@ New behaviour that someone asked for. The default workflow.
 | PLAN | none at T0/T1; the session at T2; `ai-planner` from T3 | steps with `allowed_files`; STRONG for T3/T4, `ai-expert` for T5 |
 | PLAN REVIEW | `ai-reviewer` | T3 and above |
 | IMPLEMENTATION | the session, one step at a time | scope-guarded |
-| TEST | the session (`ai-tester` in `team`) | once, after the last step; a step's own single test when cheap |
+| TEST | the session (`ai-tester` in `team`) | once, after the last step, to the end; every failure fixed as one batch, then one more run |
 | ADVERSARIAL REVIEW | `ai-reviewer` | T2 and above |
 | SECURITY REVIEW | `ai-security` | T4, T5, and anything touching auth or personal data |
 | RELEASE REPORT | `ai-release` | full report from T2 up |

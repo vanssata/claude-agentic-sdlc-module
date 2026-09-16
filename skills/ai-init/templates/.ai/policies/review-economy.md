@@ -69,7 +69,14 @@ Rules:
 
 The ledger is what replaces agent memory. Without it, every pass is pass one.
 
-## 3. Re-review is scoped, not repeated
+## 3. Findings are fixed as one batch, and re-review is scoped, not repeated
+
+A review returns all its findings at once, and they are fixed at once: one
+`state.py remediate` step whose scope is the finished steps plus what the
+findings name, every BLOCKER and HIGH addressed in it, then the verification
+command once. Never one fix, one run, one re-review per finding — that is the
+serial loop the measurements below describe, and the remediation of one finding
+is where the next regression comes from.
 
 A review after remediation answers two questions and no others:
 

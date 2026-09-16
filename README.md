@@ -53,7 +53,7 @@ registered, and which model each tier resolves to.
 | BALANCED | `sonnet` | `gpt-5.6-terra` (Terra) |
 | STRONG | `opus` | `gpt-5.6-sol` (Sol) |
 | EXPERT | Fable 5.1, or Opus 5 with `--fable no` | `gpt-6-astra` (Astra) |
-| session | Opus 5 [1m] at `medium` (Sonnet on Pro) | Sol at `high` |
+| session | Opus 5 (200k window) at `medium`, `opus[1m]` per task (Sonnet on Pro) | Sol at `high` |
 
 A repository can carry both instruction files over one `.ai/` tree. The task
 state is `.ai/state/current.json` either way, so a task started in one runtime
@@ -68,7 +68,7 @@ resumes in the other.
 
 # Claude-side options (the plan is auto-detected from ~/.claude.json):
 ./install.sh --plan pro            # Pro and Team: opusplan session, opus pinned for EXPERT
-./install.sh --plan max            # Max 5x and 20x: Opus 5 [1m] session, Fable only on architect
+./install.sh --plan max            # Max 5x and 20x: Opus 5 session (200k window), Fable only on architect
 ./install.sh --plan max --fable no # no Fable anywhere; architect inherits the Opus session
 ```
 
@@ -134,8 +134,8 @@ it should not be the most expensive model by default.
 | `taskOutputMaxChars` (Claude) | 80 000 | — |
 | `MAX_MCP_OUTPUT_TOKENS` (Claude) | 40 000 | 25 000 |
 | `cap-large-read.py` (Claude) | refuses an unbounded `Read` over 4 000 lines or 250 KB | no limit |
-| `autoCompactWindow` (Claude) | 300 000 on both plans | the model window |
-| `model` (Claude) | `opusplan` on Pro: Opus in plan mode, Sonnet when executing; `opus[1m]` on Max | Sonnet 5 on Pro |
+| `autoCompactWindow` (Claude) | 150 000 on Max, 300 000 on Pro | the model window |
+| `model` (Claude) | `opusplan` on Pro: Opus in plan mode, Sonnet when executing; `opus` (200k window) on Max, `opus[1m]` available per task | Sonnet 5 on Pro |
 | `effortLevel` (Claude) | `medium` on both plans; agents raise it per task | — |
 | `model` (Codex) | `gpt-5.6-sol` at `high`; subagents `gpt-5.6-terra` at `medium` | — |
 | `max_concurrent_threads_per_session` (Codex) | 6 | runtime default |
@@ -230,21 +230,26 @@ The machine-readable source of truth is `.ai/policies/risk-tiers.json`, which
 ### Who does each stage: the pipeline profile
 
 The tier decides *whether* a stage runs; `pipeline_profile` in the same file
-decides *who* runs it. The default is `solo`:
+decides *who* runs it. The default is `solo`, which has two modes: **direct**
+for T0–T2 — no pipeline ceremony, no report files, cheap readers only, one
+`sonnet` review at T2 — and **sdlc** for T3–T5, the full pipeline:
 
 | Tier | `solo` delegates to a subagent | `team` delegates |
 |---|---|---|
-| T0, T1 | nothing — one `triage` call, no plan, edit, verify (T1); no report files | discovery, test |
-| T2 | the adversarial review, on `sonnet`; the plan is a short inline step list in one `task.md` | everything except implementation |
+| T0, T1 | nothing — direct mode, no state file: say which files, edit, verify (T1) | discovery, test |
+| T2 | the adversarial review, on `sonnet`; the plan is a few lines in the conversation, recorded by one `state.py quick` call | everything except implementation |
 | T3 | plan, plan review, adversarial review — on `opus` | everything except implementation |
 | T4 | plus security review and the release report | everything except implementation |
 | T5 | plus discovery and impact; the plan goes to `ai-expert` | everything except implementation |
 
 In `solo`, discovery, context, impact and risk come from the request plus
-`grep -n` and are recorded in one `state.py triage` call; T0 and T1 have no plan
-stage at all; the verification command runs **once, after the last step** (plus
-a step's own single test when cheap, and the failing test first for a bugfix);
-and the release report becomes the commit message. A subagent is still sent on a stated trigger: an unfamiliar
+`grep -n`; below T3 they are a few lines in the conversation, from T3 they are
+recorded stage by stage. The verification command runs **once, after the last
+step, to the end** (no fail-fast flag; the failing test first for a bugfix), and
+every failure is then fixed as **one batch** in a `state.py remediate` step
+before one more run — at most two rounds, then the human decides. Review
+findings are handled the same way. Below T3 the release report is the commit
+message. A subagent is still sent on a stated trigger: an unfamiliar
 area, an `UNKNOWN` the plan depends on, a non-obvious T3+ classification, or
 verification output too long to read inline. Switch to `team` by editing the
 key. No stage is ever skipped; the profile only changes who does it.
@@ -253,17 +258,18 @@ key. No stage is ever skipped; the profile only changes who does it.
 
 | Tier | Claude Code | Codex | Does |
 |---|---|---|---|
-| FAST | `haiku`, low | Terra, low | inventories, listings, counting (`ai-indexer`) |
-| BALANCED — default for agents | `sonnet` | Terra, medium | discovery, context, planning up to T2, tests, release (`Explore`, `log-reader`, most `ai-*`) |
+| FAST | `haiku`, low | Terra, low | reading and running: file search, inventories, logs, test output (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
+| BALANCED — default for agents | `sonnet` | Terra, medium | discovery, context, planning up to T2, mechanical edits, release, the T2 review (`ai-discovery`, `ai-context`, `ai-implementer`, `ai-release`) |
 | STRONG | `opus`, high | Sol, high | adversarial and security review, T3/T4 risk and planning, root cause after a first diagnosis failed, reversible design (`ai-reviewer`, `ai-security`, `architect`) |
-| EXPERT | the session model (Opus 5 [1m]) on Max, `opus` pinned on Pro; Fable 5.1 [1m] on `architect` only | Astra, `xhigh` | T5, irreversible design, what STRONG could not settle |
+| EXPERT | the session model (Opus 5) on Max, `opus` pinned on Pro; Fable 5.1 [1m] on `architect` only | Astra, `xhigh` | T5, irreversible design, what STRONG could not settle |
 
 The main session does the implementation itself. Agents default to the BALANCED
 tier, and a STRONG or EXPERT agent runs only when a named trigger fires; the
 triggers are listed in `.ai/policies/model-routing.md`.
 
-On a Max plan the session runs Opus 5 [1m] at `medium` effort and escalates from
-there: `ai-expert` omits `model:` and inherits it, so the session's fallback
+On a Max plan the session runs Opus 5 with the 200k window at `medium` effort,
+compacting at 150k tokens — `opus[1m]` stays in `availableModels` for a task
+that genuinely needs it — and escalates from there: `ai-expert` omits `model:` and inherits it, so the session's fallback
 chain applies to it too. Fable 5.1 [1m] is pinned on `architect` alone, at
 `xhigh`, for design questions outside a task; nothing else ever runs on it, and
 `fable-gate` sends it to Opus while Fable is rate-limited or its weekly limit is

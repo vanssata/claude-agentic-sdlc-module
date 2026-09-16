@@ -3,9 +3,10 @@
 Production is broken now. Stages get shorter; none of them disappears.
 
 > Who runs a stage is set by `pipeline_profile` in `policies/risk-tiers.json`.
-> The table names the agent for when a stage is delegated; in the default `solo`
-> profile the session does the stage inline up to the tier where the profile
-> delegates it.
+> The table names the agent for when a stage is delegated. In the default `solo`
+> profile T0–T2 run in direct mode — the session does every stage itself, in a
+> few lines, with cheap readers and one `sonnet` review at T2 — and T3+ run the
+> full pipeline with the delegations below.
 
 | Stage | Who | Notes |
 |---|---|---|
@@ -14,7 +15,7 @@ Production is broken now. Stages get shorter; none of them disappears.
 | RISK CLASSIFICATION | `ai-risk` | the tier of the code being touched, not of the urgency |
 | PLAN | `ai-planner` or the session | the smallest change that stops the bleeding |
 | IMPLEMENTATION | the session | one step |
-| TEST | `ai-tester` | at minimum, a test that reproduces the incident |
+| TEST | the session (`ai-tester` in `team`) | at minimum, a test that reproduces the incident; the full command once, failures fixed as one batch |
 | ADVERSARIAL REVIEW | `ai-reviewer` | short, focused on "what else does this touch" |
 | SECURITY REVIEW | `ai-security` | if the incident is a security incident |
 | RELEASE REPORT | `ai-release` | short form, but rollback is mandatory |

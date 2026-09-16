@@ -4,9 +4,10 @@ A question, not a change. "Why does this happen?", "where is this handled?",
 "can we do X?". The deliverable is an answer with evidence.
 
 > Who runs a stage is set by `pipeline_profile` in `policies/risk-tiers.json`.
-> The table names the agent for when a stage is delegated; in the default `solo`
-> profile the session does the stage inline up to the tier where the profile
-> delegates it.
+> The table names the agent for when a stage is delegated. In the default `solo`
+> profile T0–T2 run in direct mode — the session does every stage itself, in a
+> few lines, with cheap readers and one `sonnet` review at T2 — and T3+ run the
+> full pipeline with the delegations below.
 
 | Stage | Who | Notes |
 |---|---|---|

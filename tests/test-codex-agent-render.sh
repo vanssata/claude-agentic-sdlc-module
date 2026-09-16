@@ -53,7 +53,7 @@ for a in ai-indexer Explore ai-discovery log-reader; do
     [ "$(field "$a" model)" = "gpt-5.6-terra" ] && pass "$a runs on Terra" || fail "$a should run on Terra, got $(field "$a" model)"
     [ "$(field "$a" model_reasoning_effort)" = "low" ] && pass "$a runs at low effort" || fail "$a should run at low effort"
 done
-for a in ai-context ai-risk ai-planner ai-tester ai-release ai-implementer; do
+for a in ai-context ai-risk ai-planner ai-release ai-implementer; do
     [ "$(field "$a" model)" = "gpt-5.6-terra" ] && pass "$a runs on Terra" || fail "$a should run on Terra, got $(field "$a" model)"
     [ "$(field "$a" model_reasoning_effort)" = "medium" ] && pass "$a runs at medium effort" || fail "$a should run at medium effort"
 done

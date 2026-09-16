@@ -5,8 +5,8 @@ Applies everywhere a model can be chosen: an explicit spawn request, a custom ag
 
 | Tier | Model | Effort | Role |
 |---|---|---|---|
-| FAST | `{{FAST_MODEL_ID}}` | `low` | verbatim extraction, file and symbol inventories, listings, counting, running a command and reporting its output (`ai-indexer`, `Explore`, `ai-discovery`, `log-reader`) |
-| BALANCED — default for agents | `{{BALANCED_MODEL_ID}}` | `medium` | context compression, planning up to T2, tests, release assembly, mechanical edits (`ai-context`, `ai-risk`, `ai-planner`, `ai-tester`, `ai-release`, `ai-implementer`) |
+| FAST | `{{FAST_MODEL_ID}}` | `low` | verbatim extraction, file and symbol inventories, listings, counting, logs and test output, running a command and reporting it (`ai-indexer`, `Explore`, `ai-discovery`, `log-reader`, `ai-tester`) |
+| BALANCED — default for agents | `{{BALANCED_MODEL_ID}}` | `medium` | context compression, planning up to T2, release assembly, mechanical edits (`ai-context`, `ai-risk`, `ai-planner`, `ai-release`, `ai-implementer`) |
 | STRONG | `{{STRONG_MODEL_ID}}` | `high` | the {{STRONG_MODEL}} triggers below (`ai-reviewer`, `ai-security`, `architect`, `ai-risk-strong`, `ai-planner-strong`) |
 | EXPERT | `{{EXPERT_MODEL_ID}}` | `{{EXPERT_EFFORT}}` | the EXPERT triggers below (`ai-expert`) |
 
@@ -54,7 +54,8 @@ The main session re-reads its whole context every turn, so context length — mo
 - Never `cat` logs, test output, migrations, lockfiles or generated code into the main context.
 - Search with `rg -n` and read the hits, instead of reading whole files to search them.
 - Prefer one subagent that returns twenty lines over five tool calls whose output stays in context all session.
-- Start a new thread when switching tasks. A compacted session is a summary of the old task, not a clean start.
+- Start a new thread when switching tasks, and after every task that ran a review. A compacted session is a summary of the old task, not a clean start.
+- Run tests once, to the end, and fix every failure as one batch. Never one failure, one fix, one run.
 - Prefer deterministic tools — `rg`, `git`, `jq`, the framework CLI, the test runner — over asking a model to infer what they answer exactly.
 - `/usage-report` shows where the tokens went, at zero model cost. `--provider both` reports Codex and Claude Code side by side.
 
@@ -62,7 +63,7 @@ The main session re-reads its whole context every turn, so context length — mo
 
 `.ai/AGENTS.md` is the entry point, `.ai/policies/` are binding, and **production behaviour is the source of truth**: document problems outside the task, do not fix them.
 
-- A change runs through `/ai-task <request>`. `.ai/policies/risk-tiers.json` sets the tier (T0–T5) and the `pipeline_profile`. In the default `solo` profile the developer's knowledge is the first source of context; T0–T2 triage in one `state.py triage` call, T0/T1 have no plan (say which files, edit, verify), T2 gets a short inline step list, and a subagent is spawned only where the tier needs a second context window: review at T2+, planning at T3+ (`ai-planner-strong`), security at T4+. Tests run once, after the last step, not per step.
+- A change runs through `/ai-task <request>`. `.ai/policies/risk-tiers.json` sets the tier (T0–T5) and the `pipeline_profile`. In the default `solo` profile T0–T2 run in **direct mode**: name the files, edit, one verification run at the end, failures fixed as one batch, one review at T2, no report files (T2 is one `state.py quick` call so the scope guard is armed). The full SDLC pipeline — `ai-planner-strong`, plan review, adversarial review, security at T4+, release report — runs from T3. Tests run once, after the last step, to the end, then one `state.py remediate` step fixes every regression together.
 - Payments, tax, fiscal, auth, order state transitions and customer data are T4; migrations, infrastructure and production architecture are T5. An agent may raise a tier; only a human lowers one.
 - Each step names the files it may touch; an edit outside them is refused — answer `SCOPE_CHANGE_REQUIRED` and amend the step. One `apply_patch` is checked file by file, so a patch that reaches outside the step is refused whole. Legacy behaviour without a test gets a characterization test first. Never mix a refactoring with a feature change.
 - Verify before reporting done: run the verification command from `.ai/policies/testing.md` (or the project `AGENTS.md`) and show its output. A bugfix starts with the failing test.

@@ -1,9 +1,9 @@
 {
   "_comment": "SOURCE OF TRUTH for risk classification. /ai-task reads this file to decide which stages are mandatory, which model tier plans and reviews the change, whether a human must approve before anything leaves the branch, and — through pipeline_profile — which stages the main session does inline and which go to a subagent. risk-tiers.md is a human-readable mirror of this file; when they disagree, this file wins. Adjust the triggers to the project after /ai-init — the defaults are generic.",
-  "version": 1,
+  "version": 2,
   "pipeline_profile": "solo",
   "pipeline_profiles": {
-    "_comment": "WHO runs a stage, not WHETHER it runs: stages_required is fixed per tier, the profile decides which of them are delegated to a subagent and which the main session does inline in a few lines. 'solo' is for one developer who knows the codebase: their knowledge is the first source of context, deterministic tools (grep, git, the test runner) are the second, and a subagent is spawned only where a second context window buys something — an independent review, or reasoning at a tier the session model should not do alone. 'team' is the fully delegated pipeline. Switch by editing pipeline_profile.",
+    "_comment": "WHO runs a stage, not WHETHER it runs: stages_required is fixed per tier, the profile decides which of them are delegated to a subagent and which the main session does inline in a few lines. 'solo' is for one developer who knows the codebase and has two modes. DIRECT (T0–T2): no pipeline ceremony — the session names the files, edits, runs the verification command once at the end, fixes every failure as one batch; the only subagents are cheap readers (Explore, log-reader) and, at T2, one review on the BALANCED model. SDLC (T3–T5): the full pipeline with delegated plan, plan review, adversarial review, security review and release report, on the STRONG and EXPERT tiers. 'team' is the fully delegated pipeline. Switch by editing pipeline_profile.",
     "solo": {
       "delegated_stages": {
         "T0": [],
@@ -34,10 +34,10 @@
         ]
       },
       "delegate_anyway_when": [
-        "the developer says the area is unfamiliar, or the request names no entry point and grep does not find one within a few calls (ai-discovery, one agent)",
+        "the developer says the area is unfamiliar, or the request names no entry point and grep does not find one within a few calls (Explore on FAST, then ai-discovery if Explore returned nothing usable)",
         "the inline context summary has an UNKNOWN the plan depends on (ai-discovery, one agent)",
         "the risk tier is T3 or above and not obvious from the trigger table (ai-risk with model: opus)",
-        "the verification command prints more than ~40 lines (log-reader), or the test setup is unfamiliar (ai-tester)"
+        "the verification command prints more than ~40 lines (log-reader on FAST), or the test setup is unfamiliar (ai-tester on FAST)"
       ],
       "review_model": {
         "T2": "sonnet",
@@ -45,24 +45,40 @@
         "T4": "opus",
         "T5": "opus"
       },
-      "release_report": "T0–T3: the session writes the short form inline and it becomes the commit message body; T4 and T5: ai-release",
+      "release_report": "T0–T2: the commit message body; T3: the session writes the short form into task.md; T4 and T5: ai-release",
       "plan": {
         "T0": "none",
         "T1": "none",
-        "T2": "short inline list of steps and files; plan mode only when the change spans several modules",
+        "T2": "three to five lines in the conversation, registered through `state.py quick`; plan mode only when the change spans several modules",
         "T3": "ai-planner on opus, in plan mode",
         "T4": "ai-planner on opus, in plan mode",
         "T5": "ai-expert"
       },
-      "test": "once, after the last step: the verification command, tail -40. During a step only the step's own single test, when it is cheap. A bugfix shows its failing test before the fix.",
-      "triage": "T0–T2: discovery, context, impact and risk are one `state.py triage` call with the tier, the trigger and a few lines of context; no report file below T2",
+      "test": "once, after the last step, to the end: the verification command with no fail-fast flag, output through tail -40 or log-reader. Every failure is collected and classified first; every NEW REGRESSION is then fixed in ONE `state.py remediate` step and the command runs once more. At most two remediation rounds, then the human decides. No test runs during a step except the single failing test a bugfix shows before its fix.",
+      "triage": "T0/T1: no state file. T2: `state.py quick` records discovery, context, impact, risk and the one-step plan in a single call. T3+: the stages run and are recorded one at a time.",
       "artifacts": {
-        "T0": "none — the state archive and the commit message",
-        "T1": "none — the state archive and the commit message",
-        "T2": "one file, .ai/reports/<task-id>/task.md: context, steps, review verdict, release notes",
+        "T0": "none — the commit message",
+        "T1": "none — the commit message",
+        "T2": "none — the state archive and the commit message",
         "T3": "task.md plus the delegated plan and review reports",
         "T4": "the full set",
         "T5": "the full set"
+      },
+      "mode": {
+        "T0": "direct",
+        "T1": "direct",
+        "T2": "direct",
+        "T3": "sdlc",
+        "T4": "sdlc",
+        "T5": "sdlc"
+      },
+      "direct": {
+        "state": "T0/T1: none — the commit message is the record. T2: one `state.py quick` call (init + triage + one-step plan) so the scope guard is armed; `state.py close` at the end",
+        "plan": "T0/T1: say which files, in one line. T2: three to five lines in the conversation — steps and files — never a file",
+        "artifacts": "none below T3",
+        "agents": "Explore and log-reader on FAST for reading; ai-implementer on BALANCED for a mechanical pattern-copy step; ai-reviewer on BALANCED once at T2 — nothing on STRONG",
+        "review": "T0/T1: none. T2: one ai-reviewer on the BALANCED model over the diff, after the tests pass; findings fixed as one batch in a `state.py remediate` step; one scoped re-review only when a BLOCKER was fixed",
+        "release": "the commit message body: what changed, verification command and result, rollback"
       }
     },
     "team": {
@@ -126,7 +142,7 @@
         "T4": "opus",
         "T5": "opus"
       },
-      "test": "ai-tester once after the last step, and after any step whose required_tests are named"
+      "test": "ai-tester once after the last step, to the end with no fail-fast flag; every failure is fixed as one batch in a `state.py remediate` step, then one more run"
     }
   },
   "tiers": {
@@ -317,16 +333,17 @@
       "note": "No local model runs inside Claude Code or Codex. The work this tier would do — indexing, listing, counting, summarising git history — is done by deterministic tools (rg, git, jq, the framework CLI) and by ai-indexer on the cheapest model."
     },
     "FAST": {
-      "agent": "ai-indexer",
+      "agent": "ai-indexer, Explore, log-reader, ai-tester",
       "model": "haiku",
       "codex_model": "gpt-5.6-terra",
-      "effort": "low"
+      "effort": "low",
+      "note": "readers and runners: they collect, run and report; anything they cannot settle is escalated one tier, never retried on the same one"
     },
     "BALANCED": {
-      "agent": "ai-discovery, ai-context, ai-risk, ai-planner, ai-tester, ai-release, ai-implementer",
+      "agent": "ai-discovery, ai-context, ai-risk, ai-planner, ai-release, ai-implementer; ai-reviewer at T2",
       "model": "sonnet",
       "codex_model": "gpt-5.6-terra",
-      "effort": "medium",
+      "effort": "low for compression and mechanical edits, medium for judgement",
       "note": "the default tier for agents; the main session runs the installed profile's model and does the implementation itself"
     },
     "STRONG": {
@@ -350,5 +367,6 @@
     "the cost of being wrong is very high (money, data loss, legal or fiscal exposure)"
   ],
   "escalation_rule": "Start at the tier the table gives. Escalate one step, for one task, when a trigger fires — never escalate the whole pipeline, and never start at EXPERT because it exists. Never retry a failed reasoning task on a cheaper tier; downgrading is for mechanical work only.",
-  "downgrade_rule": "A tier may be lowered only by a human, in writing, in the task record. An agent may propose a lower tier with evidence; it may not apply one."
+  "downgrade_rule": "A tier may be lowered only by a human, in writing, in the task record. An agent may propose a lower tier with evidence; it may not apply one.",
+  "remediation_rule": "Failures are fixed in batches, never one at a time. After the verification run (and after a review) collect every finding, classify each, open ONE `state.py remediate` step whose scope is the union of the finished steps plus the failing tests, fix them all, then run the verification command once more. A remediation never re-triages or re-plans the task; at most two rounds before the human decides."
 }
