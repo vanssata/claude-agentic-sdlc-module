@@ -1,0 +1,372 @@
+{
+  "_comment": "SOURCE OF TRUTH for risk classification. /ai-task reads this file to decide which stages are mandatory, which model tier plans and reviews the change, whether a human must approve before anything leaves the branch, and — through pipeline_profile — which stages the main session does inline and which go to a subagent. risk-tiers.md is a human-readable mirror of this file; when they disagree, this file wins. Adjust the triggers to the project after /ai-init — the defaults are generic.",
+  "version": 2,
+  "pipeline_profile": "solo",
+  "pipeline_profiles": {
+    "_comment": "WHO runs a stage, not WHETHER it runs: stages_required is fixed per tier, the profile decides which of them are delegated to a subagent and which the main session does inline in a few lines. 'solo' is for one developer who knows the codebase and has two modes. DIRECT (T0–T2): no pipeline ceremony — the session names the files, edits, runs the verification command once at the end, fixes every failure as one batch; the only subagents are cheap readers (Explore, log-reader) and, at T2, one review on the BALANCED model. SDLC (T3–T5): the full pipeline with delegated plan, plan review, adversarial review, security review and release report, on the STRONG and EXPERT tiers. 'team' is the fully delegated pipeline. Switch by editing pipeline_profile.",
+    "solo": {
+      "delegated_stages": {
+        "T0": [],
+        "T1": [],
+        "T2": [
+          "adversarial_review"
+        ],
+        "T3": [
+          "plan",
+          "plan_review",
+          "adversarial_review"
+        ],
+        "T4": [
+          "plan",
+          "plan_review",
+          "adversarial_review",
+          "security_review",
+          "release_report"
+        ],
+        "T5": [
+          "discovery",
+          "impact_analysis",
+          "plan",
+          "plan_review",
+          "adversarial_review",
+          "security_review",
+          "release_report"
+        ]
+      },
+      "delegate_anyway_when": [
+        "the developer says the area is unfamiliar, or the request names no entry point and grep does not find one within a few calls (Explore on FAST, then ai-discovery if Explore returned nothing usable)",
+        "the inline context summary has an UNKNOWN the plan depends on (ai-discovery, one agent)",
+        "the risk tier is T3 or above and not obvious from the trigger table (ai-risk with model: opus)",
+        "the verification command prints more than ~40 lines (log-reader on FAST), or the test setup is unfamiliar (ai-tester on FAST)"
+      ],
+      "review_model": {
+        "T2": "sonnet",
+        "T3": "opus",
+        "T4": "opus",
+        "T5": "opus"
+      },
+      "release_report": "T0–T2: the commit message body; T3: the session writes the short form into task.md; T4 and T5: ai-release",
+      "plan": {
+        "T0": "none",
+        "T1": "none",
+        "T2": "three to five lines in the conversation, registered through `state.py quick`; plan mode only when the change spans several modules",
+        "T3": "ai-planner on opus, in plan mode",
+        "T4": "ai-planner on opus, in plan mode",
+        "T5": "ai-expert"
+      },
+      "test": "once, after the last step, to the end: the verification command with no fail-fast flag, output through tail -40 or log-reader. Every failure is collected and classified first; every NEW REGRESSION is then fixed in ONE `state.py remediate` step and the command runs once more. At most two remediation rounds, then the human decides. No test runs during a step except the single failing test a bugfix shows before its fix.",
+      "triage": "T0/T1: no state file. T2: `state.py quick` records discovery, context, impact, risk and the one-step plan in a single call. T3+: the stages run and are recorded one at a time.",
+      "artifacts": {
+        "T0": "none — the commit message",
+        "T1": "none — the commit message",
+        "T2": "none — the state archive and the commit message",
+        "T3": "task.md plus the delegated plan and review reports",
+        "T4": "the full set",
+        "T5": "the full set"
+      },
+      "mode": {
+        "T0": "direct",
+        "T1": "direct",
+        "T2": "direct",
+        "T3": "sdlc",
+        "T4": "sdlc",
+        "T5": "sdlc"
+      },
+      "direct": {
+        "state": "T0/T1: none — the commit message is the record. T2: one `state.py quick` call (init + triage + one-step plan) so the scope guard is armed; `state.py close` at the end",
+        "plan": "T0/T1: say which files, in one line. T2: three to five lines in the conversation — steps and files — never a file",
+        "artifacts": "none below T3",
+        "agents": "Explore and log-reader on FAST for reading; ai-implementer on BALANCED for a mechanical pattern-copy step; ai-reviewer on BALANCED once at T2 — nothing on STRONG",
+        "review": "T0/T1: none. T2: one ai-reviewer on the BALANCED model over the diff, after the tests pass; findings fixed as one batch in a `state.py remediate` step; one scoped re-review only when a BLOCKER was fixed",
+        "release": "the commit message body: what changed, verification command and result, rollback"
+      }
+    },
+    "team": {
+      "delegated_stages": {
+        "T0": [
+          "discovery"
+        ],
+        "T1": [
+          "discovery",
+          "test"
+        ],
+        "T2": [
+          "discovery",
+          "context",
+          "impact_analysis",
+          "risk_classification",
+          "plan",
+          "test",
+          "adversarial_review",
+          "release_report"
+        ],
+        "T3": [
+          "discovery",
+          "context",
+          "impact_analysis",
+          "risk_classification",
+          "plan",
+          "plan_review",
+          "test",
+          "adversarial_review",
+          "release_report"
+        ],
+        "T4": [
+          "discovery",
+          "context",
+          "impact_analysis",
+          "risk_classification",
+          "plan",
+          "plan_review",
+          "test",
+          "adversarial_review",
+          "security_review",
+          "release_report"
+        ],
+        "T5": [
+          "discovery",
+          "context",
+          "impact_analysis",
+          "risk_classification",
+          "plan",
+          "plan_review",
+          "test",
+          "adversarial_review",
+          "security_review",
+          "release_report"
+        ]
+      },
+      "review_model": {
+        "T2": "opus",
+        "T3": "opus",
+        "T4": "opus",
+        "T5": "opus"
+      },
+      "test": "ai-tester once after the last step, to the end with no fail-fast flag; every failure is fixed as one batch in a `state.py remediate` step, then one more run"
+    }
+  },
+  "tiers": {
+    "T0": {
+      "label": "documentation only",
+      "examples": [
+        "comments",
+        "README and docs",
+        "translation strings with no logic"
+      ],
+      "model_tier": "FAST",
+      "stages_required": [
+        "discovery",
+        "context",
+        "implementation"
+      ],
+      "plan_review": false,
+      "human_plan_approval": false,
+      "adversarial_review": false,
+      "security_review": false,
+      "release_report": "light",
+      "human_approval": false,
+      "plan": "none — say which files you will touch, then edit"
+    },
+    "T1": {
+      "label": "isolated low-risk change",
+      "examples": [
+        "formatting",
+        "an isolated admin template",
+        "a label or a small presentation tweak"
+      ],
+      "model_tier": "FAST",
+      "stages_required": [
+        "discovery",
+        "context",
+        "implementation",
+        "test"
+      ],
+      "plan_review": false,
+      "human_plan_approval": false,
+      "adversarial_review": false,
+      "security_review": false,
+      "release_report": "light",
+      "human_approval": false,
+      "plan": "none — say which files you will touch, then edit"
+    },
+    "T2": {
+      "label": "normal feature",
+      "examples": [
+        "an isolated business feature",
+        "a new service with limited blast radius",
+        "a non-critical API extension"
+      ],
+      "model_tier": "BALANCED",
+      "stages_required": [
+        "discovery",
+        "context",
+        "impact_analysis",
+        "risk_classification",
+        "plan",
+        "implementation",
+        "test",
+        "adversarial_review"
+      ],
+      "plan_review": false,
+      "human_plan_approval": false,
+      "adversarial_review": true,
+      "security_review": false,
+      "release_report": "full",
+      "human_approval": false,
+      "plan": "a short numbered list of steps with their files, inline"
+    },
+    "T3": {
+      "label": "shared domain behaviour",
+      "examples": [
+        "shared services",
+        "order processing",
+        "state machines and workflows",
+        "asynchronous processing",
+        "an important integration"
+      ],
+      "model_tier": "STRONG",
+      "stages_required": [
+        "discovery",
+        "context",
+        "impact_analysis",
+        "risk_classification",
+        "plan",
+        "plan_review",
+        "implementation",
+        "test",
+        "adversarial_review",
+        "release_report"
+      ],
+      "plan_review": true,
+      "human_plan_approval": true,
+      "adversarial_review": true,
+      "security_review": "when the change touches authentication, authorization or personal data",
+      "release_report": "full",
+      "human_approval": true,
+      "characterization_tests": "required before changing legacy behaviour"
+    },
+    "T4": {
+      "label": "critical business or system behaviour",
+      "examples": [
+        "payments",
+        "accounting",
+        "taxation",
+        "fiscal devices and reporting",
+        "authentication",
+        "authorization",
+        "order state transitions",
+        "customer data",
+        "external financial systems"
+      ],
+      "model_tier": "STRONG",
+      "stages_required": [
+        "discovery",
+        "context",
+        "impact_analysis",
+        "risk_classification",
+        "plan",
+        "plan_review",
+        "implementation",
+        "test",
+        "adversarial_review",
+        "security_review",
+        "release_report",
+        "human_approval"
+      ],
+      "plan_review": true,
+      "human_plan_approval": true,
+      "adversarial_review": true,
+      "security_review": true,
+      "release_report": "full",
+      "human_approval": true,
+      "characterization_tests": "required",
+      "extra_requirements": [
+        "rollback section is mandatory",
+        "monitoring section is mandatory",
+        "idempotency and retry behaviour must be stated explicitly"
+      ]
+    },
+    "T5": {
+      "label": "system level, irreversible, production architecture",
+      "examples": [
+        "database migration strategy",
+        "infrastructure architecture",
+        "Kubernetes topology",
+        "production deployment mechanics",
+        "data migration",
+        "destructive schema changes",
+        "distributed transactions",
+        "cross-system migration"
+      ],
+      "model_tier": "EXPERT",
+      "stages_required": [
+        "discovery",
+        "context",
+        "impact_analysis",
+        "risk_classification",
+        "plan",
+        "plan_review",
+        "implementation",
+        "test",
+        "adversarial_review",
+        "security_review",
+        "release_report",
+        "human_approval"
+      ],
+      "plan_review": true,
+      "human_plan_approval": true,
+      "adversarial_review": true,
+      "security_review": true,
+      "release_report": "full",
+      "human_approval": true,
+      "characterization_tests": "required",
+      "extra_requirements": [
+        "migration analysis: locks, table size, duration, deployment ordering, old-version compatibility",
+        "a rehearsed rollback plan, not a described one",
+        "destructive operations need explicit, separate human approval naming the operation"
+      ]
+    }
+  },
+  "model_tiers": {
+    "LOCAL": {
+      "agent": null,
+      "note": "No local model runs inside Claude Code or Codex. The work this tier would do — indexing, listing, counting, summarising git history — is done by deterministic tools (rg, git, jq, the framework CLI) and by ai-indexer on the cheapest model."
+    },
+    "FAST": {
+      "agent": "ai-indexer, Explore, log-reader, ai-tester",
+      "model": "haiku",
+      "codex_model": "gpt-5.6-terra",
+      "effort": "low",
+      "note": "readers and runners: they collect, run and report; anything they cannot settle is escalated one tier, never retried on the same one"
+    },
+    "BALANCED": {
+      "agent": "ai-discovery, ai-context, ai-risk, ai-planner, ai-release, ai-implementer; ai-reviewer at T2",
+      "model": "sonnet",
+      "codex_model": "gpt-5.6-terra",
+      "effort": "low for compression and mechanical edits, medium for judgement",
+      "note": "the default tier for agents; the main session runs the installed profile's model and does the implementation itself"
+    },
+    "STRONG": {
+      "agent": "ai-reviewer, ai-security; ai-planner and ai-risk with model: opus (under Codex the ai-planner-strong and ai-risk-strong agents, because a Codex agent file outranks a spawn-time model)",
+      "model": "opus",
+      "codex_model": "gpt-5.6-sol",
+      "effort": "high"
+    },
+    "EXPERT": {
+      "agent": "ai-expert; architect for design outside a task",
+      "model": "inherits the session model on Max (Opus 5 [1m]); opus, pinned, on Pro; Fable 5.1 [1m] only on architect where enabled",
+      "codex_model": "gpt-6-astra",
+      "effort": "set at install time"
+    }
+  },
+  "escalation_triggers": [
+    "the STRONG tier could not resolve an ambiguity and said so",
+    "two constraints in the architecture contradict each other",
+    "the task is classified T5",
+    "several viable high-risk designs remain and the choice is not reversible",
+    "the cost of being wrong is very high (money, data loss, legal or fiscal exposure)"
+  ],
+  "escalation_rule": "Start at the tier the table gives. Escalate one step, for one task, when a trigger fires — never escalate the whole pipeline, and never start at EXPERT because it exists. Never retry a failed reasoning task on a cheaper tier; downgrading is for mechanical work only.",
+  "downgrade_rule": "A tier may be lowered only by a human, in writing, in the task record. An agent may propose a lower tier with evidence; it may not apply one.",
+  "remediation_rule": "Failures are fixed in batches, never one at a time. After the verification run (and after a review) collect every finding, classify each, open ONE `state.py remediate` step whose scope is the union of the finished steps plus the failing tests, fix them all, then run the verification command once more. A remediation never re-triages or re-plans the task; at most two rounds before the human decides."
+}
