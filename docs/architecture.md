@@ -73,14 +73,16 @@ stage, never whether it runs. The default, `solo`, is for one developer who
 knows the codebase — the setting the playbook describes for a team of one to
 five: CLAUDE.md, plan mode and a feedback loop, with light review.
 
-- Discovery, context and impact come from the request plus `grep -n`, written
-  by the session into the same fixed-shape summary an agent would produce.
-- Risk comes from the trigger table; `ai-risk` on `opus` only when a T3+ answer
-  is not obvious.
-- T0–T2 plans are written by the session, T2 in plan mode; `ai-planner` on
-  `opus` from T3, `ai-expert` at T5.
-- Tests are the project's one verification command, piped through `tail`;
-  `log-reader` when the output is long.
+- Discovery, context, impact and risk come from the request plus `grep -n`,
+  and up to T2 are recorded in one `state.py triage` call — four audit-trail
+  entries, one round trip. `ai-risk` on `opus` only when a T3+ answer is not
+  obvious.
+- T0 and T1 have no plan stage: the session says which files it will touch and
+  edits. T2 gets a short inline step list in a single `task.md`; `ai-planner`
+  on `opus` from T3, `ai-expert` at T5.
+- Tests are the project's one verification command, run once after the last
+  step and piped through `tail`; a step's own single test in between when it is
+  cheap; `log-reader` when the output is long.
 - The adversarial review is always a subagent from T2 up — a context that did
   not write the code — on `sonnet` at T2 and `opus` above.
 - Security review at T4/T5 is unchanged. The release report is inline up to T3
@@ -156,7 +158,9 @@ Context length, not model choice, dominates the cost of a session, so:
 - where discovery does fan out, it is on the cheapest tier, and `ai-indexer`
   runs first so each agent gets a file list instead of globbing the repository;
 - on Pro the session model is `opusplan`, so Opus is paid for the plan and
-  Sonnet for the implementation;
+  Sonnet for the implementation; on Max the session is Opus 5 [1m] and Fable is
+  spent only on `architect`;
+- below T2 a task writes no report files and runs the test suite once;
 - artifacts live on disk and are referenced by path between stages.
 
 The expensive tier is reserved for design, adversarial review and the conclusions

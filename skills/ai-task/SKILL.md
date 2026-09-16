@@ -61,64 +61,69 @@ Record every stage transition, so the state file is a true audit trail:
 $STATE stage <stage> --note "<what happened>"
 ```
 
-### DISCOVERY, CONTEXT, IMPACT ANALYSIS
+### TRIAGE — discovery, context, impact and risk
 
-**solo:** take the entry points from the request — if it names none, ask one
-question rather than searching the repository. Confirm each with `grep -n`,
+**solo, T0–T2:** take the entry points from the request — if it names none, ask
+one question rather than searching the repository. Confirm each with `grep -n`,
 follow the callers with `grep -rn`, and check what `.ai/project/` already
-records. Then write the context summary yourself, in the fixed shape of
-`.ai/templates/task-context.md`: at most ~30 lines, `file:line` for every fact,
-`UNKNOWN` for what you could not confirm, and an `impact:` block — callers,
-data, contracts, other environments, what must stay unaffected. Save it to
-`.ai/reports/<task-id>/context-summary.md`, record all three stages, and:
+records. Decide the tier from the trigger table in `.ai/policies/risk-tiers.json`
+and name the trigger; when two tiers are arguable, take the higher. Then record
+all four stages in one call:
 
 ```bash
-$STATE set context_summary_ref ".ai/reports/<task-id>/context-summary.md"
+$STATE triage T<n> --note "<the trigger>" --context "<entry points, callers, what must stay unaffected — a few lines>"
 ```
 
-Delegate only on a trigger from `delegate_anyway_when`: one `ai-discovery` for
-an area the developer says is unfamiliar, or for an `UNKNOWN` the plan depends
-on. Never the six-agent fan-out — that is `/ai-init`'s job, once.
+No report file below T2. For T2, start `.ai/reports/<task-id>/task.md` with
+that context in the fixed shape of `.ai/templates/task-context.md`, at most ~30
+lines with `file:line` for every fact, and record its path:
 
-**team:** `ai-indexer` for the inventory, then `ai-discovery` one agent per
-area in parallel, in a single message, merged into
-`.ai/reports/<task-id>/discovery.md`; `ai-context` for the summary; a second
-`ai-discovery` pass answering `.ai/templates/impact-report.md`.
+```bash
+$STATE set context_summary_ref ".ai/reports/<task-id>/task.md"
+```
 
-### RISK CLASSIFICATION
-
-Read the trigger table in `.ai/policies/risk-tiers.json` and name the trigger
-that decides the tier. When two tiers are arguable, take the higher. Delegate to
-`ai-risk` with `model: opus` when the answer lands on T3 or above and is not
-obvious, when the developer disputes it, or always in the `team` profile
-(re-run on opus when it returns `confidence: uncertain` or T3+).
+**T3 and above, or `team`:** the stages run one at a time and are recorded one
+at a time. `ai-discovery` — one agent per area in parallel, after `ai-indexer`
+when the area is large — into `discovery.md`; `ai-context` for the summary; a
+second `ai-discovery` pass for `.ai/templates/impact-report.md`; `ai-risk` with
+`model: opus` for the tier, re-run when it says `confidence: uncertain`.
+In `solo` you may still write context and impact yourself at T3 when the area
+is one you know; the risk call on `opus` is not optional there.
 
 ```bash
 $STATE risk T<n> --note "<the trigger that decided it>"
 ```
 
+Delegate below T3 only on a trigger from `delegate_anyway_when`: one
+`ai-discovery` for an area the developer says is unfamiliar, or for an
+`UNKNOWN` the plan depends on. Never the six-agent fan-out — that is
+`/ai-init`'s job, once.
+
 Now state which later stages the tier makes mandatory and which of them this
 profile delegates. Everything after this point follows that answer, not your
 impression of how big the task feels.
 
-### PLAN
+### PLAN — only when the tier needs one
 
-**T0–T2 in solo:** plan yourself. For T2, do it in plan mode — on `opusplan`
-that is exactly where Opus is used — and leave plan mode once the plan is
-written. Follow `.ai/templates/implementation-plan.md`: steps, each with the
-files it may touch, what must stay unchanged, the tests, the rollback.
+**T0, T1:** no plan. Say in one line which files you will touch and go to
+IMPLEMENTATION. The scope guard is not armed for these tiers; the line you
+just wrote is the scope.
 
-**T3 and T4:** `ai-planner` with `model: opus`. **T5:** `ai-expert`.
-
-Save to `.ai/reports/<task-id>/implementation-plan.md`, convert the steps to
-JSON and register them:
+**T2 in solo:** a short numbered list of steps, each with its files, appended
+to `task.md` — usually one to three steps. Use plan mode only when the change
+spans several modules. Register it:
 
 ```bash
-$STATE plan --ref ".ai/reports/<task-id>/implementation-plan.md" --steps /tmp/steps.json
+$STATE plan --ref ".ai/reports/<task-id>/task.md" --steps /tmp/steps.json
 ```
 
-`allowed_files` is enforced by a hook, so it must be accurate. A plan with a
-**(blocking)** open question is not approved: put the question to the human.
+**T3 and T4:** `ai-planner` with `model: opus`, in plan mode. **T5:**
+`ai-expert`. Save to `.ai/reports/<task-id>/implementation-plan.md` following
+`.ai/templates/implementation-plan.md`, register the steps as above.
+
+`allowed_files` is enforced by a hook from T2 up, so it must be accurate. A
+plan with a **(blocking)** open question is not approved: put the question to
+the human.
 
 ### PLAN REVIEW (T3 and above)
 
@@ -128,7 +133,11 @@ required, not optional.
 
 ### IMPLEMENTATION
 
-For each step, in order:
+```bash
+$STATE stage implementation
+```
+
+T0 and T1 have no steps: make the edit. From T2, for each step in order:
 
 ```bash
 $STATE step <step_id>          # arms the scope guard for this step
@@ -146,22 +155,26 @@ replanned.
 $STATE step-done <step_id>
 ```
 
-### TEST — the feedback loop
+### TEST — the feedback loop, once
 
-After each step, not only at the end. Run the verification command from the
-**Verification** section of `.ai/policies/testing.md`; if that section is empty,
-take it from the project `CLAUDE.md` or the CI config, and write it into
+After the **last** step, not after each one. Run the verification command from
+the **Verification** section of `.ai/policies/testing.md`; if that section is
+empty, take it from the project `CLAUDE.md` or the CI config and write it into
 `testing.md` as part of this task, so the next task has it. Pipe the output
 through `tail -40`. When more than that matters, hand the full output to
 `log-reader`; use `ai-tester` in the `team` profile or when the test setup is
 unfamiliar.
 
+During a step, run only that step's own single test (`single_test` in
+`testing.md`) when it is cheap and the step touched logic. T0 runs nothing.
+
 ```bash
 $STATE set test_status <passing|existing_failure|new_regression|env_failure|unknown>
 ```
 
-For a bugfix the failing test is written and **shown failing** before the fix.
-`new_regression` sends you back to IMPLEMENTATION for that step.
+For a bugfix the failing test is written and **shown failing** before the fix —
+that one test, not the suite. `new_regression` sends you back to
+IMPLEMENTATION; fix, then run the verification command again.
 `existing_failure` is recorded and reported, not fixed inside this task. Never
 let a test be edited to make it pass.
 
@@ -193,11 +206,12 @@ When it is not applicable, say why in the note. Silence is not a verdict.
 
 ### RELEASE REPORT
 
-**solo, T0–T3:** write the short form yourself, from the artifacts on disk: what
-changed, what was deliberately preserved, the verification command and its
-result, the review verdict, the rollback (usually one `git revert`), open risks.
-It becomes the commit message body. **T4, T5, and `team` from T2 up:**
-`ai-release` fills the full template. Either way it lands in
+**solo, T0–T3:** write the short form yourself: what changed, what was
+deliberately preserved, the verification command and its result, the review
+verdict, the rollback (usually one `git revert`), open risks. It becomes the
+commit message body. At T0/T1 it exists only there and in the final message;
+at T2/T3 append it to `task.md`. **T4, T5, and `team` from T2 up:**
+`ai-release` fills the full template into
 `.ai/reports/<task-id>/release-report.md`.
 
 ### HUMAN APPROVAL
@@ -217,8 +231,11 @@ in this turn.
 
 ## Keeping context small
 
-- Inline does not mean verbose: a stage you do yourself is a few lines and a
-  file on disk, not a page in the conversation.
+- Inline does not mean verbose: a stage you do yourself is a few lines, and
+  below T2 not even a file — the state archive is the record.
+- One tool call where one will do: `triage` instead of four `stage` calls, one
+  `task.md` instead of four report files, one verification run instead of one
+  per step.
 - Never read logs, test output or large files into this session; `tail`, then
   `log-reader`.
 - Keep the agents' structured outputs as files under `.ai/reports/<task-id>/`
@@ -231,8 +248,9 @@ in this turn.
 
 ## Rules
 
-- No stage is skipped. The profile decides who does a stage, never whether it
-  happens. Cheap tasks get cheap stages, not fewer of them.
+- No required stage is skipped. `stages_required` per tier says which exist —
+  T0 and T1 have no plan stage at all — and the profile decides who does each.
+  Cheap tasks get cheap stages, not skipped ones.
 - The tier decides the gates. Your sense of how risky it feels does not.
 - The scope guard is not an obstacle to route around; it is the plan being
   enforced.

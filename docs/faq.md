@@ -59,6 +59,30 @@ subagent costs its own context window, and for a change you could describe in
 one sentence it buys nothing. From T2 the review is always a separate context,
 and from T3 planning is too.
 
+## Why was there no plan, and why did the scope guard not fire?
+
+T0 and T1 have no plan stage — `stages_required` in `risk-tiers.json` says so.
+The scope guard arms only for a registered step, so for those tiers the scope
+is the line where the session says which files it will touch, and the
+verification run at the end. From T2 there is always a registered step list,
+and the guard is live.
+
+## Why did the tests run only once?
+
+By design: the verification command runs after the last step, not after each
+one. A step's own single test may run in between when it is cheap, and a
+bugfix shows its failing test first. Running a full suite per step multiplied
+the slowest part of a task by the number of steps and found nothing the final
+run would not.
+
+## Where is Fable used on Max?
+
+Only on `architect`, and only when installed with `--fable yes` (the default on
+Max). The session itself is Opus 5 [1m], `ai-expert` escalates by inheriting
+it, and every reader and reviewer runs on Sonnet or Opus. Design questions
+outside a task are the one place a stronger model changes the outcome enough
+to pay for.
+
 ## How do I get the fully delegated pipeline back?
 
 Set `"pipeline_profile": "team"` in `.ai/policies/risk-tiers.json`. Every stage

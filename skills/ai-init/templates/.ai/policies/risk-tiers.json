@@ -45,8 +45,25 @@
         "T4": "opus",
         "T5": "opus"
       },
-      "plan_mode": "T2 and above: write the plan in plan mode before implementing; on opusplan that is where Opus is used",
-      "release_report": "T0–T3: the session writes the short form inline and it becomes the commit message body; T4 and T5: ai-release"
+      "release_report": "T0–T3: the session writes the short form inline and it becomes the commit message body; T4 and T5: ai-release",
+      "plan": {
+        "T0": "none",
+        "T1": "none",
+        "T2": "short inline list of steps and files; plan mode only when the change spans several modules",
+        "T3": "ai-planner on opus, in plan mode",
+        "T4": "ai-planner on opus, in plan mode",
+        "T5": "ai-expert"
+      },
+      "test": "once, after the last step: the verification command, tail -40. During a step only the step's own single test, when it is cheap. A bugfix shows its failing test before the fix.",
+      "triage": "T0–T2: discovery, context, impact and risk are one `state.py triage` call with the tier, the trigger and a few lines of context; no report file below T2",
+      "artifacts": {
+        "T0": "none — the state archive and the commit message",
+        "T1": "none — the state archive and the commit message",
+        "T2": "one file, .ai/reports/<task-id>/task.md: context, steps, review verdict, release notes",
+        "T3": "task.md plus the delegated plan and review reports",
+        "T4": "the full set",
+        "T5": "the full set"
+      }
     },
     "team": {
       "delegated_stages": {
@@ -108,7 +125,8 @@
         "T3": "opus",
         "T4": "opus",
         "T5": "opus"
-      }
+      },
+      "test": "ai-tester once after the last step, and after any step whose required_tests are named"
     }
   },
   "tiers": {
@@ -123,7 +141,6 @@
       "stages_required": [
         "discovery",
         "context",
-        "plan",
         "implementation"
       ],
       "plan_review": false,
@@ -131,7 +148,8 @@
       "adversarial_review": false,
       "security_review": false,
       "release_report": "light",
-      "human_approval": false
+      "human_approval": false,
+      "plan": "none — say which files you will touch, then edit"
     },
     "T1": {
       "label": "isolated low-risk change",
@@ -144,7 +162,6 @@
       "stages_required": [
         "discovery",
         "context",
-        "plan",
         "implementation",
         "test"
       ],
@@ -153,7 +170,8 @@
       "adversarial_review": false,
       "security_review": false,
       "release_report": "light",
-      "human_approval": false
+      "human_approval": false,
+      "plan": "none — say which files you will touch, then edit"
     },
     "T2": {
       "label": "normal feature",
@@ -178,7 +196,8 @@
       "adversarial_review": true,
       "security_review": false,
       "release_report": "full",
-      "human_approval": false
+      "human_approval": false,
+      "plan": "a short numbered list of steps with their files, inline"
     },
     "T3": {
       "label": "shared domain behaviour",

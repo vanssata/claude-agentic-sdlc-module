@@ -18,17 +18,17 @@ session. See `docs/risk-tiers.md`.
 | `ai-risk` | sonnet (opus on re-run) | medium | no | risk classification |
 | `ai-planner` | sonnet (opus at T3/T4) | medium | no | plan |
 | `ai-implementer` | sonnet | medium | **yes** | mechanical steps only |
-| `ai-tester` | sonnet | low | no | after every step (team profile, or an unfamiliar test setup) |
+| `ai-tester` | sonnet | low | no | once after the last step (team profile, or an unfamiliar test setup) |
 | `ai-reviewer` | opus | high | no | plan review, adversarial review |
 | `ai-security` | opus | high | no | T4, T5, auth or personal data |
 | `ai-release` | sonnet | low | the report | release report at T4/T5 (solo) or from T2 (team) |
-| `ai-expert` | the session model on Max; `opus`, pinned, on Pro | per plan | no | escalation only |
+| `ai-expert` | the session model (Opus 5 [1m] on Max); `opus`, pinned, on Pro | high | no | escalation only |
 
 Three more come from the routing half, and are not part of the pipeline:
 
 | Agent | Model | Effort | Role |
 |---|---|---|---|
-| `architect` | the session model on Max; `opus`, pinned, on Pro | high | design questions outside a task, or in a repository without `.ai/`. Returns a design and an ordered plan; never writes code |
+| `architect` | `fable[1m]`, pinned, on Max with Fable; the session model with `--fable no`; `opus`, pinned, on Pro | xhigh on Fable, else high | design questions outside a task, or in a repository without `.ai/`. Returns a design and an ordered plan; never writes code |
 | `Explore` | sonnet | low | fast read-only search: which files matter, and why |
 | `log-reader` | sonnet | low | logs, test output, CI, kubectl and helm output, condensed to the errors that matter |
 
@@ -68,10 +68,12 @@ Two mechanisms, deliberately different:
   `ai-risk` and `ai-planner` are written to work at either level; the caller
   decides based on the tier or on a `confidence: uncertain` answer.
 - **To EXPERT**, call `ai-expert`, which is a separate definition because EXPERT
-  resolves differently per plan: the session model on Max, and `opus` pinned on
-  Pro, where the session runs `opusplan` and an inherited model would be Sonnet
-  outside plan mode. Baking the resolution into its frontmatter at install time
-  means every skill can just say "call `ai-expert`" and be correct on any plan.
+  resolves differently per plan: the session model (Opus 5 [1m]) on Max, and
+  `opus` pinned on Pro, where the session runs `opusplan` and an inherited model
+  would be Sonnet outside plan mode. Fable, where enabled, is pinned on
+  `architect` alone — design questions outside a task — and nothing else ever
+  runs on it. Baking the resolution into the frontmatter at install time means
+  every skill can just say "call `ai-expert`" and be correct on any plan.
 
 Escalate one task at a time, on a trigger from `risk-tiers.json`. Never re-run
 the whole fleet expensive, and never start at EXPERT because it exists.

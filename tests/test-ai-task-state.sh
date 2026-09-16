@@ -82,6 +82,16 @@ out=$(S init --goal "third task" --workflow bugfix 2>&1 || true)
 printf '%s' "$out" | grep -q "still at stage" && pass "starting a second task over a live one is refused" || fail "should refuse to clobber a live task" "$out"
 S init --goal "third task" --workflow bugfix --force >/dev/null && pass "--force starts a fresh task anyway" || fail "--force should work"
 
+echo "== triage records the four inline stages in one call"
+S triage T1 --note "isolated label change" --context "template + translation key" >/dev/null && pass "triage accepts a tier" || fail "triage failed"
+[ "$(S get --field risk_tier)" = T1 ] && pass "triage sets the tier" || fail "triage should set the tier"
+[ "$(S get --field current_stage)" = risk_classification ] && pass "triage lands on risk_classification" || fail "triage stage wrong"
+n=$(S get --field history | jq '[.[] | select(.event=="stage" and (.detail|test("inline")))] | length')
+[ "$n" = 4 ] && pass "all four stages are in the audit trail" || fail "expected 4 inline stage records, got $n"
+S get --field context_summary_ref | grep -q '^inline: template' && pass "the inline context is kept in the state" || fail "context not stored"
+out=$(S triage T9 2>&1 || true)
+printf '%s' "$out" | grep -q "risk tier must be one of" && pass "triage rejects an unknown tier" || fail "triage should reject T9" "$out"
+
 echo "== a corrupt state file is loud, not silently replaced"
 printf 'not json at all' > "$ROOT/.ai/state/current.json"
 out=$(S get 2>&1 || true)

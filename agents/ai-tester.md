@@ -1,6 +1,6 @@
 ---
 name: ai-tester
-description: Runs the project's tests for a change and classifies the outcome as PASS, EXISTING TEST FAILURE, NEW REGRESSION, TEST ENVIRONMENT FAILURE or UNKNOWN, with evidence. Never edits a test to make it pass. Use after every implementation step.
+description: Runs the project's tests for a change and classifies the outcome as PASS, EXISTING TEST FAILURE, NEW REGRESSION, TEST ENVIRONMENT FAILURE or UNKNOWN, with evidence. Never edits a test to make it pass. Use once after the last implementation step, in the team profile or when the test setup is unfamiliar.
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, NotebookEdit
 model: sonnet

@@ -2,7 +2,8 @@
 # claude-agentic installer.
 #   ./install.sh [--plan pro|max] [--fable auto|yes|no] [--dry-run]
 # --plan   defaults to auto-detect from ~/.claude.json (organizationType); prompts if unknown.
-# --fable  auto = yes on max, no on pro. Sets the session model and the EXPERT tier's effort.
+# --fable  auto = yes on max, no on pro. On max the session runs Opus 5 [1m] either way;
+#          yes pins Fable 5.1 [1m] on the architect agent alone.
 # --dry-run prints everything that would be written, and writes nothing.
 #
 # Installs into ~/.claude/: model, effort and context settings for the detected
@@ -11,6 +12,7 @@
 #
 # pro (and Team Standard, which shares its models): session model `opusplan` —
 # Opus in plan mode, Sonnet when executing — and the EXPERT tier pinned to opus.
+# max: session model Opus 5 [1m], ai-expert inherits it, architect alone on Fable.
 #
 # This plugin supersedes claude-routing. On the first run it migrates that
 # plugin's managed block into this one's, so the two never coexist.
@@ -67,9 +69,7 @@ fi
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 PROFILE="$SRC/profiles/$PLAN.json"
 if [ "$PLAN" = max ] && [ "$FABLE" = no ]; then
-  jq '.model = "opus[1m]"
-      | .fallbackModel = ["sonnet"]
-      | .availableModels = (.availableModels | map(select(startswith("fable") | not)))
+  jq '.availableModels = (.availableModels | map(select(startswith("fable") | not)))
       | del(.modelSettings["claude-fable-5-1"])' "$PROFILE" > "$TMP/profile.json"
 else
   cp "$PROFILE" "$TMP/profile.json"
@@ -100,24 +100,30 @@ if [ "$PLAN" = pro ]; then
   PLAN_LABEL="Pro"
   EXPERT_EFFORT="high"
   # On opusplan a subagent that omits `model:` inherits Sonnet outside plan mode,
-  # so the EXPERT tier pins opus explicitly on this plan.
+  # so both EXPERT-tier agents pin opus explicitly on this plan.
   EXPERT_MODEL_LINE="model: opus"
+  ARCHITECT_MODEL_LINE="model: opus"
+  ARCHITECT_EFFORT="high"
   EXPERT_ROW="\`opus\` / \`high\`, pinned — on opusplan an inherited model is Sonnet outside plan mode"
-  PLAN_SPECIFIC="- Session model is \`opusplan\`: Opus 5 in plan mode, Sonnet 5 when executing. Plan in plan mode for anything above T1 — that is where Opus is paid for. Fable is off this plan; never request it. \`xhigh\`/\`max\` are unavailable. STRONG and EXPERT both pin \`model: opus\` explicitly."
+  PLAN_SPECIFIC="- Session model is \`opusplan\`: Opus 5 in plan mode, Sonnet 5 when executing. Use plan mode for T3+ and for a T2 that spans several modules — that is where Opus is paid for. Fable is off this plan; never request it. \`xhigh\`/\`max\` are unavailable. STRONG and EXPERT both pin \`model: opus\` explicitly."
   EFFORT_RULE="Raise to \`high\` only for architecture, root-cause analysis and adversarial verification, and say that you are raising it."
 else
   PLAN_LABEL="Max"
-  EXPERT_MODEL_LINE="# model: intentionally omitted — inherits the session model, so the session's fallback chain applies here too"
+  EXPERT_EFFORT="high"
+  # The session runs Opus 5 [1m]; ai-expert escalates from it by inheriting it.
+  EXPERT_MODEL_LINE="# model: intentionally omitted — inherits the session model (Opus 5 [1m]), so the session's fallback chain applies here too"
   if [ "$FABLE" = yes ]; then
-    EXPERT_EFFORT="xhigh"
-    EXPERT_ROW="omit \`model:\` — inherits the session (Fable 5.1 [1m]) / \`xhigh\` for the hardest verify/judge stages"
-    PLAN_SPECIFIC="- \`xhigh\` is allowed only for \`architect\`, \`ai-expert\` and verify/judge stages while the session runs Fable; \`max\` stays off. Never pin \`model: fable\` — omit \`model:\` so the Fable to Opus fallback comes free."
+    ARCHITECT_MODEL_LINE="model: fable[1m]"
+    ARCHITECT_EFFORT="xhigh"
+    EXPERT_ROW="omit \`model:\` — inherits the session (Opus 5 [1m]) / \`high\`; \`architect\` alone pins \`fable[1m]\` / \`xhigh\`"
+    PLAN_SPECIFIC="- Session model is Opus 5 [1m]; \`ai-expert\` escalates from it by inheriting it. Fable 5.1 [1m] is reserved for \`architect\` (pinned \`model: fable[1m]\`, \`xhigh\`) — never for the session, a reader, a reviewer or \`ai-expert\`. \`max\` stays off."
   else
-    EXPERT_EFFORT="high"
+    ARCHITECT_MODEL_LINE="# model: intentionally omitted — inherits the session model (Opus 5 [1m], Fable disabled in this install)"
+    ARCHITECT_EFFORT="high"
     EXPERT_ROW="omit \`model:\` — inherits the session (Opus 5 [1m]) / \`high\`"
-    PLAN_SPECIFIC="- Fable is disabled in this install (\`--fable no\`); the session runs Opus 5 [1m]. Do not request \`model: fable\` anywhere. \`xhigh\`/\`max\` stay off. Never pin \`model: opus\` for the thinking tier — omit \`model:\` so the fallback comes free."
+    PLAN_SPECIFIC="- Session model is Opus 5 [1m]; Fable is disabled in this install (\`--fable no\`). Do not request \`model: fable\` anywhere. \`xhigh\`/\`max\` stay off. Never pin \`model: opus\` for the thinking tier — omit \`model:\` so the fallback comes free."
   fi
-  EFFORT_RULE="Lower to \`medium\` for routine edits when the session is long; raise above \`high\` only per the plan rule above, and say that you are raising it."
+  EFFORT_RULE="Raise to \`high\` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; readers stay at \`low\`."
 fi
 
 render() {  # render <src> <dst>
@@ -125,6 +131,7 @@ render() {  # render <src> <dst>
   EFFORT="$EFFORT" COMPACT="$COMPACT" READ_LINES="$READ_LINES" \
   PLAN_SPECIFIC="$PLAN_SPECIFIC" EFFORT_RULE="$EFFORT_RULE" \
   EXPERT_EFFORT="$EXPERT_EFFORT" EXPERT_MODEL_LINE="$EXPERT_MODEL_LINE" EXPERT_ROW="$EXPERT_ROW" \
+  ARCHITECT_MODEL_LINE="$ARCHITECT_MODEL_LINE" ARCHITECT_EFFORT="$ARCHITECT_EFFORT" \
   python3 - "$1" "$2" <<'PY'
 import os, sys
 src, dst = sys.argv[1], sys.argv[2]
@@ -141,6 +148,8 @@ for key, value in {
     "{{EXPERT_EFFORT}}": os.environ["EXPERT_EFFORT"],
     "{{EXPERT_MODEL_LINE}}": os.environ["EXPERT_MODEL_LINE"],
     "{{EXPERT_ROW}}": os.environ["EXPERT_ROW"],
+    "{{ARCHITECT_MODEL_LINE}}": os.environ["ARCHITECT_MODEL_LINE"],
+    "{{ARCHITECT_EFFORT}}": os.environ["ARCHITECT_EFFORT"],
 }.items():
     text = text.replace(key, value)
 assert "{{" not in text, "unrendered placeholder in %s" % src
@@ -348,7 +357,8 @@ Done.
   plan            $PLAN  (fable=$FABLE)
   session model   $SESSION_MODEL ($SESSION_HUMAN), effort $EFFORT
   fallback        $FALLBACK
-  EXPERT tier     $( [ "$PLAN" = pro ] && echo "opus, pinned" || echo "the session model" ) at effort $EXPERT_EFFORT (architect, ai-expert)
+  EXPERT tier     ai-expert on $( [ "$PLAN" = pro ] && echo "opus, pinned" || echo "the session model" ) at effort $EXPERT_EFFORT;
+                  architect on $( [ "$PLAN" = pro ] && echo "opus, pinned" || { [ "$FABLE" = yes ] && echo "fable[1m], pinned" || echo "the session model"; } ) at effort $ARCHITECT_EFFORT
   compaction      $COMPACT tokens
   read guard      an unbounded Read is refused above $READ_LINES lines / $READ_BYTES bytes
   agents          $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd' ')

@@ -1,4 +1,4 @@
-<!-- generated from risk-tiers.json sha256:d8011741c086a124cf69b2988e0452ee2eb4ccccc6a6696b02069ddf7db35bd1 -->
+<!-- generated from risk-tiers.json sha256:e7cc8b00983d6022206aa576187a2d4dccc656aaea41b26dc32123b4b064e965 -->
 <!-- If /ai-status reports this hash as stale, risk-tiers.json changed and this
      mirror did not. The JSON file is the source of truth; update this by hand. -->
 
@@ -41,11 +41,16 @@ go to a subagent.
 
 | Tier | `solo` (default) delegates | `team` delegates |
 |---|---|---|
-| T0, T1 | nothing — the session does every stage inline | discovery (and the test run at T1) |
-| T2 | the adversarial review, on `sonnet` | every stage except implementation |
+| T0, T1 | nothing — no plan either: one `triage` call, say which files, edit, verify (T1) | discovery (and the test run at T1) |
+| T2 | the adversarial review, on `sonnet`; the plan is a short inline list of steps | every stage except implementation |
 | T3 | plan, plan review, adversarial review — on `opus` | every stage except implementation |
 | T4 | plan, plan review, adversarial review, security review, release report | every stage except implementation |
 | T5 | discovery and impact as well; the plan goes to `ai-expert` | every stage except implementation |
+
+Tests run **once, after the last step** — the verification command in
+`testing.md` — plus the step's own single test when that is cheap, and the
+failing test first for a bugfix. T0 and T1 have no plan, so the scope guard is
+not armed for them; the session names the files it will touch instead.
 
 In `solo` the session still delegates one `ai-discovery` when the area is
 unfamiliar or the plan depends on an `UNKNOWN`, `ai-risk` on `opus` when a T3+

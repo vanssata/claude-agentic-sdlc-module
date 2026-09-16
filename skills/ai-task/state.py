@@ -14,6 +14,7 @@ Usage:
   state.py get    [--field current_stage] [--root DIR]
   state.py stage  <stage> [--note TEXT]
   state.py risk   <T0..T5> [--note TEXT]
+  state.py triage <T0..T5> [--note TEXT] [--context TEXT]   discovery+context+impact+risk in one call
   state.py plan   --ref PATH --steps STEPS.json
   state.py step   <step_id>
   state.py step-done <step_id>
@@ -189,6 +190,25 @@ def cmd_risk(args, root):
     print(args.tier)
 
 
+def cmd_triage(args, root):
+    """The four inline stages of a small task, recorded in one call so the audit
+    trail still shows each of them without four round trips."""
+    if args.tier not in TIERS:
+        die("risk tier must be one of: %s" % ", ".join(TIERS))
+    state = load(root)
+    previous = state["current_stage"]
+    for stage in ("discovery", "context", "impact_analysis", "risk_classification"):
+        record(state, "stage", "%s -> %s: inline" % (previous, stage))
+        previous = stage
+    state["current_stage"] = "risk_classification"
+    state["risk_tier"] = args.tier
+    if args.context:
+        state["context_summary_ref"] = "inline: " + args.context
+    record(state, "risk_classified", "%s%s" % (args.tier, ": " + args.note if args.note else ""))
+    save(root, state)
+    print("%s, triaged inline through risk_classification" % args.tier)
+
+
 def cmd_plan(args, root):
     state = load(root)
     try:
@@ -335,6 +355,9 @@ def main():
 
     p = sub.add_parser("risk"); p.add_argument("tier"); p.add_argument("--note", default="")
     p.set_defaults(func=cmd_risk)
+
+    p = sub.add_parser("triage"); p.add_argument("tier"); p.add_argument("--note", default="")
+    p.add_argument("--context", default=""); p.set_defaults(func=cmd_triage)
 
     p = sub.add_parser("plan"); p.add_argument("--ref", required=True)
     p.add_argument("--steps", required=True); p.set_defaults(func=cmd_plan)

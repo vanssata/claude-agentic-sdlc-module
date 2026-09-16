@@ -45,7 +45,13 @@ Read-only. This skill never changes state; it reports it.
    sonnet, STRONG is opus, and **EXPERT is whatever `model` says** — name it, so
    the reader knows what an escalation would actually cost. When `model` is
    `opusplan`, say so in one line: Opus in plan mode, Sonnet when executing,
-   and `ai-expert` and `architect` pin `opus` explicitly.
+   and `ai-expert` and `architect` pin `opus` explicitly. On Max the session is
+   Opus 5 [1m], `ai-expert` inherits it, and `architect` alone may be pinned to
+   `fable[1m]` — check its frontmatter:
+
+   ```bash
+   grep -E '^model:' ~/.claude/agents/architect.md || echo "architect inherits the session model"
+   ```
 
    Also print the pipeline profile, because it decides how much of a task is
    delegated:

@@ -38,8 +38,8 @@ A fully delegated `team` profile is one JSON key away.
 ```bash
 ./install.sh                       # auto-detects the plan from ~/.claude.json
 ./install.sh --plan pro            # Pro and Team: opusplan session, opus pinned for EXPERT
-./install.sh --plan max            # Max 5x and 20x share this profile
-./install.sh --plan max --fable no # Opus at the EXPERT tier instead of Fable
+./install.sh --plan max            # Max 5x and 20x: Opus 5 [1m] session, Fable only on architect
+./install.sh --plan max --fable no # no Fable anywhere; architect inherits the Opus session
 ./install.sh --dry-run             # print what would be written, write nothing
 ```
 
@@ -71,7 +71,8 @@ Re-running the installer updates in place: it backs up what it replaces to
 | `MAX_MCP_OUTPUT_TOKENS` | 40 000 | 25 000 |
 | `cap-large-read.py` | refuses an unbounded `Read` over 4 000 lines or 250 KB | no limit |
 | `autoCompactWindow` | 600 000 on Max, 180 000 on Pro | the model window |
-| `model` | `opusplan` on Pro: Opus in plan mode, Sonnet when executing | Sonnet 5 on Pro |
+| `model` | `opusplan` on Pro: Opus in plan mode, Sonnet when executing; `opus[1m]` on Max | Sonnet 5 on Pro |
+| `effortLevel` | `medium` on both plans; agents raise it per task | — |
 
 The Read guard is a guardrail, not a cage: an explicit `limit` always goes
 through, so reading something large stays possible but has to be deliberate.
@@ -130,16 +131,17 @@ decides *who* runs it. The default is `solo`:
 
 | Tier | `solo` delegates to a subagent | `team` delegates |
 |---|---|---|
-| T0, T1 | nothing — every stage is a few inline lines, recorded in the state file | discovery, test |
-| T2 | the adversarial review, on `sonnet` | everything except implementation |
+| T0, T1 | nothing — one `triage` call, no plan, edit, verify (T1); no report files | discovery, test |
+| T2 | the adversarial review, on `sonnet`; the plan is a short inline step list in one `task.md` | everything except implementation |
 | T3 | plan, plan review, adversarial review — on `opus` | everything except implementation |
 | T4 | plus security review and the release report | everything except implementation |
 | T5 | plus discovery and impact; the plan goes to `ai-expert` | everything except implementation |
 
-In `solo`, discovery, context and impact come from the request plus `grep -n`,
-risk from the trigger table, the plan is written in plan mode, tests run through
-the project's one verification command, and the release report becomes the
-commit message. A subagent is still sent on a stated trigger: an unfamiliar
+In `solo`, discovery, context, impact and risk come from the request plus
+`grep -n` and are recorded in one `state.py triage` call; T0 and T1 have no plan
+stage at all; the verification command runs **once, after the last step** (plus
+a step's own single test when cheap, and the failing test first for a bugfix);
+and the release report becomes the commit message. A subagent is still sent on a stated trigger: an unfamiliar
 area, an `UNKNOWN` the plan depends on, a non-obvious T3+ classification, or
 verification output too long to read inline. Switch to `team` by editing the
 key. No stage is ever skipped; the profile only changes who does it.
@@ -153,9 +155,11 @@ key. No stage is ever skipped; the profile only changes who does it.
 | STRONG | `opus`, high | risk at T3+, high-tier planning, adversarial review, security |
 | EXPERT | the session model | design (`architect`) and what STRONG could not settle (`ai-expert`) |
 
-On a Max plan with Fable enabled, EXPERT is Fable 5.1 [1m] at `xhigh` effort; with
-`--fable no` it is Opus 5 [1m]. There `ai-expert` and `architect` omit `model:`
-on purpose, so the session's own fallback chain applies to them too.
+On a Max plan the session runs Opus 5 [1m] at `medium` effort and escalates from
+there: `ai-expert` omits `model:` and inherits it, so the session's fallback
+chain applies to it too. Fable 5.1 [1m] is pinned on `architect` alone, at
+`xhigh`, for design questions outside a task; nothing else ever runs on it.
+`--fable no` leaves `architect` on the Opus session as well.
 
 On Pro (and Team, which shares its models) the session model is `opusplan`:
 Opus 5 in plan mode, Sonnet 5 when executing. That is the playbook's "plan mode"
@@ -220,7 +224,7 @@ one; nothing references it any more.
 bash tests/run-all.sh
 ```
 
-Eight suites, 245 assertions: the three guards against JSON fixtures, the state
+Eight suites, 257 assertions: the three guards against JSON fixtures, the state
 machine, scaffold idempotency, installer rendering for all three plan
 combinations, the migration off `claude-routing`, and an end-to-end run that
 installs into a scratch directory, scaffolds a throwaway repository and drives a

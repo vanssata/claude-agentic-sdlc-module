@@ -13,10 +13,10 @@ New behaviour that someone asked for. The default workflow.
 | CONTEXT | `ai-context` | the structured summary everything downstream reads |
 | IMPACT ANALYSIS | `ai-discovery` (second pass) | callers, data, contracts, other environments |
 | RISK CLASSIFICATION | `ai-risk` | one tier, from `policies/risk-tiers.json` |
-| PLAN | `ai-planner` | steps with `allowed_files`; STRONG for T3/T4, `ai-expert` for T5 |
+| PLAN | none at T0/T1; the session at T2; `ai-planner` from T3 | steps with `allowed_files`; STRONG for T3/T4, `ai-expert` for T5 |
 | PLAN REVIEW | `ai-reviewer` | T3 and above |
 | IMPLEMENTATION | the session, one step at a time | scope-guarded |
-| TEST | `ai-tester` | after every step, not only at the end |
+| TEST | the session (`ai-tester` in `team`) | once, after the last step; a step's own single test when cheap |
 | ADVERSARIAL REVIEW | `ai-reviewer` | T2 and above |
 | SECURITY REVIEW | `ai-security` | T4, T5, and anything touching auth or personal data |
 | RELEASE REPORT | `ai-release` | full report from T2 up |

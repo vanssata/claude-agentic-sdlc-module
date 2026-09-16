@@ -45,8 +45,9 @@ deleting evidence is the worst available option.
 ## Verification
 
 One command that proves the project is healthy, and what healthy looks like.
-`/ai-task` runs it after every implementation step and before reporting a task
-done; a bugfix additionally shows its new test failing first. Keep it to one
+`/ai-task` runs it once, after the last implementation step and before
+reporting a task done; during a step only the step's own single test runs, when
+it is cheap. A bugfix additionally shows its new test failing first. Keep it to one
 command — chain the pieces in a Makefile or composer script if there are several.
 
 ```

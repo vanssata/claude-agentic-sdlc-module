@@ -72,19 +72,18 @@ What happens:
 
 1. It classifies this as a **feature** (or you correct it), and starts a task.
 2. You said where the column lives, or it asks; `grep -n` confirms the template
-   and the translation key. Discovery, context and impact are one short
-   summary, written inline and recorded — a lightweight stage is still a stage.
-3. The trigger table says **T1**: an isolated presentation change. No agent was
-   needed to say so.
-4. T1 needs no plan review, no adversarial review, no security review and no
-   human approval, so the plan is a few lines and implementation starts.
-5. The step names the template and the translation file. If you now try to edit
-   the pricing service, the scope guard refuses it.
-6. The verification command from `testing.md` runs; its last lines are shown.
-7. A short release report, which is also the commit message body, and the
+   and the translation key. The trigger table says **T1**: an isolated
+   presentation change. Discovery, context, impact and the tier go into the
+   audit trail with one `triage` call — a lightweight stage is still a stage.
+3. T1 has no plan stage and no reviews. It says which two files it will touch
+   and edits them.
+4. The verification command from `testing.md` runs once; its last lines are
+   shown.
+5. A short release report, which is also the commit message body, and the
    command that would commit it.
 
-Total: minutes, no subagent spawned, and on Pro the whole thing ran on Sonnet.
+Total: a few minutes, no subagent spawned, no report files, and on Pro the
+whole thing ran on Sonnet.
 
 ## 4. A dangerous task, end to end
 
@@ -103,7 +102,8 @@ The same pipeline, and a very different shape:
    changes. This is the tier where the `solo` profile starts delegating.
 4. You are shown the plan and the review, and asked to approve it. Nothing is
    implemented until you do.
-5. Implementation goes step by step, each one scope-guarded.
+5. Implementation goes step by step, each one scope-guarded; the verification
+   command runs once at the end, the characterization tests as each step lands.
 6. `ai-reviewer` looks for rounding, currency, refunds, existing orders,
    idempotency and what happens on a retry.
 7. `ai-security` reviews it against the full checklist and reports what it

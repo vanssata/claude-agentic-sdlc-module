@@ -63,8 +63,8 @@ If you change the JSON, update the markdown and its hash comment.
 
 | Tier | Plans and reviews on | Extra obligations |
 |---|---|---|
-| T0, T1 | the session, inline | — |
-| T2 | the session plans (in plan mode); BALANCED reviews | adversarial review |
+| T0, T1 | the session, inline; no plan stage | — |
+| T2 | the session writes a short step list; BALANCED reviews | adversarial review |
 | T3 | STRONG | plan review, human plan approval, characterization tests before touching legacy |
 | T4 | STRONG | all of T3, plus security review, a mandatory rollback and monitoring section, and explicit idempotency and retry behaviour |
 | T5 | EXPERT | all of T4, plus migration analysis (locks, table size, duration, deploy order, old-version compatibility) and a **rehearsed** rollback |

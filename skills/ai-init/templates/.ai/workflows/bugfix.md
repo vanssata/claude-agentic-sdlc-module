@@ -16,7 +16,7 @@ changing anything else.
 | RISK CLASSIFICATION | `ai-risk` | a bug in a payment path is still T4 |
 | PLAN | `ai-planner` | failing test first, then the fix |
 | IMPLEMENTATION | the session | the failing test is its own step |
-| TEST | `ai-tester` | the new test fails before the fix and passes after |
+| TEST | the session (`ai-tester` in `team`) | the new test is shown failing before the fix; the full verification command runs once at the end |
 | ADVERSARIAL REVIEW | `ai-reviewer` | T2 and above |
 | SECURITY REVIEW | `ai-security` | if the bug was a security bug, always |
 | RELEASE REPORT | `ai-release` | |
