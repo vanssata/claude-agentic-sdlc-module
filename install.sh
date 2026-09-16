@@ -683,8 +683,8 @@ Done (Codex).
   target          $CODEX_DIR
   session model   $CODEX_SESSION_MODEL at effort $CODEX_SESSION_EFFORT
   subagent default $CODEX_SUBAGENT_MODEL at medium, at most $CODEX_MAX_THREADS threads at once
-  FAST tier       $CODEX_FAST at low (ai-indexer, Explore, ai-discovery, log-reader)
-  BALANCED tier   $CODEX_BALANCED at medium (ai-context, ai-risk, ai-planner, ai-tester, ai-release, ai-implementer)
+  FAST tier       $CODEX_FAST at low (ai-indexer, Explore, ai-discovery, log-reader, ai-tester)
+  BALANCED tier   $CODEX_BALANCED at medium (ai-context, ai-risk, ai-planner, ai-release, ai-implementer)
   STRONG tier     $CODEX_STRONG at high (ai-reviewer, ai-security, architect, ai-risk-strong, ai-planner-strong)
   EXPERT tier     $CODEX_EXPERT at $CODEX_EXPERT_EFFORT (ai-expert)
   expert gate     codex-model-gate sends EXPERT work to $CODEX_STRONG while $CODEX_EXPERT is
