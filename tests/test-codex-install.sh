@@ -9,6 +9,9 @@ set -uo pipefail
 INSTALL="$PLUGIN_ROOT/install.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 DIR="$TMP/codex"
+# An isolated HOME: the plan must come from the test, never from this
+# machine's ~/.codex/auth.json.
+export HOME="$TMP/home"; mkdir -p "$HOME"
 
 toml_get() {  # toml_get <file> <dotted.key>
     python3 - "$1" "$2" <<'PY'
@@ -30,10 +33,37 @@ out=$(CODEX_DIR="$TMP/probe" bash "$INSTALL" --target codex --dry-run 2>&1); rc=
 printf '%s' "$out" | grep -q 'would have added model = "gpt-5.6-sol"' && pass "the dry run names the model it would set" || fail "expected the model change in the dry run" "$out"
 printf '%s' "$out" | grep -q '{{' && fail "an unrendered placeholder reached the output" || pass "the AGENTS.md block renders completely"
 printf '%s' "$out" | grep -q 'claude-agentic:start' && pass "the managed block is shown" || fail "the managed block should be printed"
+printf '%s' "$out" | grep -q 'plan=pro (Pro)' && pass "with no ChatGPT login the pro profile is assumed" || fail "no auth.json should fall back to pro" "$out"
+printf '%s' "$out" | grep -q -- '--codex-plan plus' && pass "the fallback says how to pick plus" || fail "the fallback should mention --codex-plan plus" "$out"
+
+echo "== the plus plan renders its own profile"
+out=$(CODEX_DIR="$TMP/probe" bash "$INSTALL" --target codex --codex-plan plus --dry-run 2>&1); rc=$?
+[ $rc -eq 0 ] && pass "--codex-plan plus exits 0" || fail "--codex-plan plus should exit 0" "$out"
+printf '%s' "$out" | grep -q 'plan=plus (Plus)' && pass "plus is reported" || fail "plus should be reported" "$out"
+printf '%s' "$out" | grep -q 'would have added model_reasoning_effort = "medium"' && pass "plus runs the session at medium" || fail "plus should set medium" "$out"
+printf '%s' "$out" | grep -q 'would have added max_concurrent_threads_per_session = 3' && pass "plus caps agent threads at 3" || fail "plus should cap threads at 3" "$out"
+printf '%s' "$out" | grep -q 'ChatGPT Plus plan' && pass "the AGENTS.md block names the Plus plan" || fail "block should name Plus" "$out"
+printf '%s' "$out" | grep -q '`xhigh` stays off' && pass "the AGENTS.md block keeps xhigh off on Plus" || fail "block should keep xhigh off" "$out"
+printf '%s' "$out" | grep -q '{{' && fail "plus left an unrendered placeholder" "$out" || pass "the plus block renders completely"
+out=$(CODEX_DIR="$TMP/probe" bash "$INSTALL" --target codex --codex-plan team --dry-run 2>&1); rc=$?
+[ $rc -ne 0 ] && pass "an unknown --codex-plan is rejected" || fail "unknown codex plan should fail" "$out"
+
+echo "== the plan is read from the ChatGPT login"
+HOME_P="$TMP/home-plus"; mkdir -p "$HOME_P/.codex"
+jwt=$(python3 -c '
+import base64, json
+b64 = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip("=")
+print(b64({"alg":"none"}) + "." + b64({"https://api.openai.com/auth":{"chatgpt_plan_type":"plus"}}) + ".sig")')
+printf '{"auth_mode":"chatgpt","tokens":{"id_token":"%s"}}' "$jwt" > "$HOME_P/.codex/auth.json"
+out=$(HOME="$HOME_P" CODEX_DIR="$HOME_P/.codex" bash "$INSTALL" --target codex --dry-run 2>&1 </dev/null)
+printf '%s' "$out" | grep -q 'detected codex plan: plus' && pass "chatgpt_plan_type=plus is detected" || fail "plus should be detected from auth.json" "$out"
+printf '%s' "$out" | grep -q 'plan=plus (Plus)' && pass "the detected plan selects the plus profile" || fail "detected plus should select the plus profile" "$out"
 
 echo "== real install"
 out=$(CODEX_DIR="$DIR" bash "$INSTALL" --target codex 2>&1); rc=$?
 [ $rc -eq 0 ] && pass "install exits 0" || fail "install should exit 0" "$out"
+
+printf '%s' "$out" | grep -q 'plan            pro' && pass "the summary names the plan" || fail "summary should name the plan" "$out"
 
 for f in agents/ai-expert.toml agents/ai-reviewer.toml agents/ai-risk-strong.toml \
          agents/ai-planner-strong.toml agents/architect.toml agents/Explore.toml \

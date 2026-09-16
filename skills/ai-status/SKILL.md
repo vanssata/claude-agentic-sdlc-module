@@ -67,11 +67,11 @@ done
    | FAST | haiku | `gpt-5.6-terra` (Terra) |
    | BALANCED | sonnet | `gpt-5.6-terra` (Terra) |
    | STRONG | opus | `gpt-5.6-sol` (Sol) |
-   | EXPERT | `ai-expert`: the session model on Max, `opus` pinned on Pro | the `model` pinned in `ai-expert.toml` |
+   | EXPERT | `ai-expert`: the session model on Max and Team Max, `opus` pinned on Pro and Team Pro | the `model` pinned in `ai-expert.toml` (`xhigh` on Pro, `high` on Plus) |
 
    Under Claude Code, when `model` is `opusplan`, say so in one line: Opus in
    plan mode, Sonnet when executing, and `ai-expert` and `architect` pin `opus`
-   explicitly. On Max the session is Opus 5 [1m], `ai-expert` inherits it, and
+   explicitly. On Max and Team Max the session is Opus 5, `ai-expert` inherits it, and
    `architect` alone may be pinned to `fable[1m]` — check its frontmatter:
 
    ```bash

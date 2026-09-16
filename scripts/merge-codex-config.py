@@ -21,7 +21,7 @@ abandoned unless the *only* difference between the two parses is inside that
 managed set. A prose key name inside a multi-line string cannot slip through
 that check, because it would show up as an unexpected difference.
 
-  merge-codex-config.py <config.toml> --profile <codex.json> [--dry-run] [--no-backup]
+  merge-codex-config.py <config.toml> --profile <codex-plus.json|codex-pro.json> [--dry-run] [--no-backup]
 """
 import argparse
 import json

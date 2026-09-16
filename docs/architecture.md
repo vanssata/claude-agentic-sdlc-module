@@ -16,8 +16,8 @@ fallback behaviour, the default effort, the output caps and the subagent default
 Under Claude Code that is a deep merge into `~/.claude/settings.json` from
 `profiles/{pro,max}.json` plus `settings.common.json`. Under Codex it is six
 managed keys in `~/.codex/config.toml` — `model`, `model_reasoning_effort`, and
-four under `[agents]` — taken from `profiles/codex.json`, which is also what the
-agent renderer reads, so a Codex routing decision has exactly one home.
+four under `[agents]` — taken from `profiles/codex-{plus,pro}.json`, one file
+per ChatGPT plan, which is also what the agent renderer reads, so a Codex routing decision has exactly one home.
 
 It also writes one managed block into the global instruction file —
 `~/.claude/CLAUDE.md` or `~/.codex/AGENTS.md` — carrying the tier table, the
@@ -111,7 +111,7 @@ and the full pipeline from T3.
 Each subagent costs its own context window and a system prompt; in `solo` the
 pipeline spawns none for a T1 change and one for a T2 change, against nine or
 ten in `team`. That is the whole difference, and it is the difference between a
-task that fits a Pro usage window and one that does not.
+task that fits a Pro or Plus usage window and one that does not.
 
 ## Why the session implements
 
@@ -193,9 +193,10 @@ Context length, not model choice, dominates the cost of a session, so:
   spawns an agent only where the tier needs a second context window;
 - where discovery does fan out, it is on the cheapest tier, and `ai-indexer`
   runs first so each agent gets a file list instead of globbing the repository;
-- on Pro the session model is `opusplan`, so Opus is paid for the plan and
-  Sonnet for the implementation; on Max the session is Opus 5 [1m] and Fable is
-  spent only on `architect`;
+- on Pro and Team Pro the session model is `opusplan`, so Opus is paid for the
+  plan and Sonnet for the implementation; on Max and Team Max the session is
+  Opus 5 and Fable is spent only on `architect`; under Codex the Plus profile
+  keeps the session at `medium`, three threads and no `xhigh`;
 - below T2 a task writes no report files and runs the test suite once;
 - artifacts live on disk and are referenced by path between stages.
 

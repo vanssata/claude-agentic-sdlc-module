@@ -7,7 +7,7 @@ every project; the project-specific half of their instructions comes from
 The roster and the tiers are the same in both runtimes. The prompt bodies are
 written once, in `agents/*.md`; `scripts/render-codex-agents.py` converts them
 into `~/.codex/agents/*.toml` using the tier and sandbox mode declared for each
-role in `profiles/codex.json`, plus two Codex-only variants, `ai-risk-strong`
+role in `profiles/codex-{plus,pro}.json`, plus two Codex-only variants, `ai-risk-strong`
 and `ai-planner-strong`, that pin Sol — Codex reads an agent's own file ahead of
 the model passed at spawn time, so "run `ai-risk` on a stronger model" cannot
 work there. Under Claude Code the same escalation is `model: opus` on the
@@ -31,18 +31,18 @@ The full pipeline starts at T3. See `docs/risk-tiers.md`.
 | `ai-reviewer` | opus | Sol | high | no | plan review, adversarial review |
 | `ai-security` | opus | Sol | high | no | T4, T5, auth or personal data |
 | `ai-release` | sonnet | Terra | low | the report | release report at T4/T5 (solo) or from T2 (team) |
-| `ai-expert` | the session model (Opus 5 [1m] on Max); `opus`, pinned, on Pro | Astra, xhigh | high | no | escalation only |
+| `ai-expert` | the session model (Opus 5 on Max and Team Max); `opus`, pinned, on Pro and Team Pro | Astra, xhigh on Pro, high on Plus | high | no | escalation only |
 
 Three more come from the routing half, and are not part of the pipeline:
 
 | Agent | Claude | Codex | Effort | Role |
 |---|---|---|---|---|
-| `architect` | `fable[1m]`, pinned, on Max with Fable; the session model with `--fable no`; `opus`, pinned, on Pro | Sol | xhigh on Fable, else high | design questions outside a task, or in a repository without `.ai/`. Returns a design and an ordered plan; never writes code |
+| `architect` | `fable[1m]`, pinned, on Max and Team Max with Fable; the session model with `--fable no`; `opus`, pinned, on Pro and Team Pro | Sol | xhigh on Fable, else high | design questions outside a task, or in a repository without `.ai/`. Returns a design and an ordered plan; never writes code |
 | `Explore` | sonnet | Terra | low | fast read-only search: which files matter, and why |
 | `log-reader` | sonnet | Terra | low | logs, test output, CI, kubectl and helm output, condensed to the errors that matter |
 
-The main session runs Opus 5 [1m] at `medium` on Max, `opusplan` on Pro, Sol at
-`high` under Codex.
+The main session runs Opus 5 at `medium` on Max and Team Max, `opusplan` on Pro
+and Team Pro, Sol at `high` under Codex on Pro and at `medium` on Plus.
 
 `reviewer` used to sit here too. `ai-reviewer` replaces it: adversarial rather
 than descriptive, aware of the task's risk tier, and reading the project's own
@@ -82,8 +82,8 @@ Two mechanisms, deliberately different:
   `ai-risk` and `ai-planner` are written to work at either level; the caller
   decides based on the tier or on a `confidence: uncertain` answer.
 - **To EXPERT**, call `ai-expert`, which is a separate definition because EXPERT
-  resolves differently per plan: the session model (Opus 5 [1m]) on Max, and
-  `opus` pinned on Pro, where the session runs `opusplan` and an inherited model
+  resolves differently per plan: the session model (Opus 5) on Max and Team
+  Max, and `opus` pinned on Pro and Team Pro, where the session runs `opusplan` and an inherited model
   would be Sonnet outside plan mode. Fable, where enabled, is pinned on
   `architect` alone — design questions outside a task — and nothing else ever
   runs on it. Under Codex `ai-expert` is pinned to Astra, and `codex-model-gate`

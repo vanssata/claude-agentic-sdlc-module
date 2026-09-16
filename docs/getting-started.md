@@ -111,8 +111,9 @@ What happens:
 5. A short release report, which is also the commit message body, and the
    command that would commit it.
 
-Total: a few minutes, no subagent spawned, no report files, and on Pro the
-whole thing ran on Sonnet. Under Codex the same task runs the same way on Sol.
+Total: a few minutes, no subagent spawned, no report files, and on Pro or Team
+Pro the whole thing ran on Sonnet. Under Codex the same task runs the same way
+on Sol, at `high` on Pro and `medium` on Plus.
 
 ## 4. A dangerous task, end to end
 

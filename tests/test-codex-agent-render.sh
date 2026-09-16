@@ -68,6 +68,18 @@ echo "== the expert resolves to Astra"
 [ "$(field ai-expert model)" = "gpt-6-astra" ] && pass "ai-expert runs on Astra" || fail "ai-expert should run on Astra"
 [ "$(field ai-expert model_reasoning_effort)" = "xhigh" ] && pass "ai-expert runs at xhigh" || fail "ai-expert should run at xhigh"
 
+echo "== the plus profile keeps xhigh off"
+OUTP="$TMP/plus"
+python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$OUTP" --profile "$PLUGIN_ROOT/profiles/codex-plus.json" >/dev/null 2>&1 \
+  && pass "the plus profile renders" || fail "the plus profile should render"
+grep -q '^model_reasoning_effort = "xhigh"' "$OUTP/ai-expert.toml" && fail "ai-expert must not run at xhigh on plus" || pass "ai-expert stays below xhigh on plus"
+grep -q '^model = "gpt-6-astra"' "$OUTP/ai-expert.toml" && pass "ai-expert still runs on Astra on plus" || fail "ai-expert should run on Astra on plus"
+grep -rq 'xhigh' "$OUTP" && fail "no plus agent may run at xhigh" || pass "no plus agent runs at xhigh"
+for p in codex-plus codex-pro; do
+    diff <(jq -S .roles "$PLUGIN_ROOT/profiles/$p.json") <(jq -S .roles "$PLUGIN_ROOT/profiles/codex-pro.json") >/dev/null \
+      && pass "$p has the same roster as codex-pro" || fail "$p roster differs from codex-pro"
+done
+
 echo "== the strong variants exist so an escalation cannot be pinned back to Terra"
 field ai-risk-strong developer_instructions | grep -q 'STRONG re-run' \
     && pass "ai-risk-strong says it is the escalation" || fail "ai-risk-strong is missing its escalation note"

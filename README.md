@@ -24,7 +24,7 @@ The design goal is asymmetry: **it should be harder for an agent to damage the
 project than to make a small, well-defined change safely.**
 
 The defaults are tuned for **one developer who knows the codebase, on a Pro or
-Team plan**, following the [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook):
+Team Pro plan**, following the [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook):
 the developer's knowledge is the first source of context, one verification
 command is the feedback loop, plan mode is where the expensive model is spent,
 and a subagent is spawned only where a second context window buys something.
@@ -67,9 +67,15 @@ resumes in the other.
 ./install.sh --dry-run             # print what would be written, write nothing
 
 # Claude-side options (the plan is auto-detected from ~/.claude.json):
-./install.sh --plan pro            # Pro and Team: opusplan session, opus pinned for EXPERT
+./install.sh --plan pro            # Pro: opusplan session, opus pinned for EXPERT
+./install.sh --plan team-pro       # Team, Standard seat: the pro profile with the Team label
+./install.sh --plan team-max       # Team, Premium seat: the max profile, Fable on architect
 ./install.sh --plan max            # Max 5x and 20x: Opus 5 session (200k window), Fable only on architect
 ./install.sh --plan max --fable no # no Fable anywhere; architect inherits the Opus session
+
+# Codex-side options (the ChatGPT plan is auto-detected from ~/.codex/auth.json):
+./install.sh --codex-plan plus     # Plus: Sol at medium, three agent threads, Astra at high, no xhigh
+./install.sh --codex-plan pro      # Pro: Sol at high, six agent threads, Astra at xhigh for ai-expert
 ```
 
 `--target auto` installs for each runtime it finds — the CLI on `PATH`, or an
@@ -92,7 +98,7 @@ duplicates a hook entry, and never overwrites your edits to `ai-git-guard.json`.
 | Source | Claude target | Codex target |
 |---|---|---|
 | `profiles/{pro,max}.json` + `settings.common.json` | deep-merged into `settings.json` | — |
-| `profiles/codex.json` | — | six managed keys in `config.toml` |
+| `profiles/codex-{plus,pro}.json` | — | six managed keys in `config.toml` |
 | `CLAUDE.snippet.md` / `AGENTS.snippet.md` | a managed block in `~/.claude/CLAUDE.md` | a managed block in `~/.codex/AGENTS.md` |
 | `agents/*.md` | `~/.claude/agents/` | rendered to `~/.codex/agents/*.toml` |
 | `agents/{ai-expert,architect}.md.tmpl` | the EXPERT-tier agents, model line and effort rendered per plan | `ai-expert.toml` pinned to Astra, `architect.toml` to Sol |
@@ -107,7 +113,8 @@ The Codex install is a strict subset in one place: `cap-large-read.py` is not
 installed there, because Codex's read tool is not on the hook path. The rule it
 enforces is still written into `AGENTS.md`; it is just not mechanical there.
 
-`profiles/codex.json` is the machine-readable routing contract — session model,
+`profiles/codex-{plus,pro}.json` is the machine-readable routing contract, one
+file per ChatGPT plan — session model and effort, thread cap,
 `[agents]` defaults, the four tiers and every role's tier and sandbox mode. Both
 the agent renderer and the config merge read it, so there is one place to change
 a Codex routing decision.
@@ -134,11 +141,12 @@ it should not be the most expensive model by default.
 | `taskOutputMaxChars` (Claude) | 80 000 | — |
 | `MAX_MCP_OUTPUT_TOKENS` (Claude) | 40 000 | 25 000 |
 | `cap-large-read.py` (Claude) | refuses an unbounded `Read` over 4 000 lines or 250 KB | no limit |
-| `autoCompactWindow` (Claude) | 150 000 on Max, 300 000 on Pro | the model window |
-| `model` (Claude) | `opusplan` on Pro: Opus in plan mode, Sonnet when executing; `opus` (200k window) on Max, `opus[1m]` available per task | Sonnet 5 on Pro |
+| `autoCompactWindow` (Claude) | 150 000 on Max and Team Max, 300 000 on Pro and Team Pro | the model window |
+| `model` (Claude) | `opusplan` on Pro and Team Pro: Opus in plan mode, Sonnet when executing; `opus` (200k window) on Max and Team Max, `opus[1m]` available per task | Sonnet 5 on Pro |
 | `effortLevel` (Claude) | `medium` on both plans; agents raise it per task | — |
-| `model` (Codex) | `gpt-5.6-sol` at `high`; subagents `gpt-5.6-terra` at `medium` | — |
-| `max_concurrent_threads_per_session` (Codex) | 6 | runtime default |
+| `model` (Codex) | `gpt-5.6-sol` at `high` on Pro, `medium` on Plus; subagents `gpt-5.6-terra` at `medium` | — |
+| `max_concurrent_threads_per_session` (Codex) | 6 on Pro, 3 on Plus | runtime default |
+| `ai-expert` effort (Codex) | `xhigh` on Pro, `high` on Plus; `xhigh` is never used on Plus | — |
 
 The Read guard is a guardrail, not a cage: an explicit `limit` always goes
 through, so reading something large stays possible but has to be deliberate.
@@ -275,13 +283,26 @@ chain applies to it too. Fable 5.1 [1m] is pinned on `architect` alone, at
 `fable-gate` sends it to Opus while Fable is rate-limited or its weekly limit is
 nearly used. `--fable no` leaves `architect` on the Opus session as well.
 
-On Pro (and Team, which shares its models) the session model is `opusplan`:
+Team accounts map by seat: a Standard seat installs as `team-pro` and gets the
+Pro profile, a Premium seat installs as `team-max` and gets the Max profile with
+Fable on `architect`. The installer reads the seat from `~/.claude.json` and
+falls back to `team-pro` when it cannot tell; `--plan team-max` overrides.
+
+On Pro and Team Pro the session model is `opusplan`:
 Opus 5 in plan mode, Sonnet 5 when executing. That is the playbook's "plan mode"
 play priced for a $20 plan — the expensive model is spent on the plan, and the
 cheaper one on typing it out. Because a subagent that omits `model:` would
 inherit Sonnet outside plan mode, the installer pins `model: opus` on
 `ai-expert` and `architect` for this plan. `log-reader`, `ai-tester` and
 `ai-release` run at `low` effort: they read and report, they do not think.
+
+Under Codex the ChatGPT plan chooses the profile. On Pro the session runs Sol
+at `high` with six agent threads and `ai-expert` runs Astra at `xhigh`. On Plus
+the usage window is a fraction of Pro's, so the session runs Sol at `medium`,
+three agent threads, and `ai-expert` runs Astra at `high` — `xhigh` stays off
+everywhere. The plan is read from `chatgpt_plan_type` in `~/.codex/auth.json`;
+`--codex-plan plus|pro` overrides it, and an install that cannot tell assumes
+Pro and says so.
 
 **One difference worth knowing.** Under Claude Code you escalate by spawning
 `ai-risk` or `ai-planner` with `model: opus`. Codex resolves an agent's own file

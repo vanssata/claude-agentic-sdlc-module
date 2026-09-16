@@ -170,9 +170,9 @@ This is the hook that makes the plan real. Without it, "the step may touch these
 files" is a sentence in a document; with it, the sentence is enforced by the
 harness, and widening scope requires amending the plan.
 
-## fable-gate — Max with Fable only
+## fable-gate — Max and Team Max with Fable only
 
-On Max with `--fable yes`, `architect` is pinned to `model: fable[1m]` — the one
+On Max or Team Max with `--fable yes`, `architect` is pinned to `model: fable[1m]` — the one
 agent that runs on Fable; the session and every other agent stay on Opus.
 `fallbackModel` moves such an agent to Opus when Fable is **overloaded** — but a
 rate limit, a used-up usage limit, or a model the account cannot reach
@@ -216,7 +216,7 @@ At `CLAUDE_FABLE_GATE_WEEKLY_PCT` (90) percent of `rate_limits.seven_day` used,
 Fable agents go to Opus until `resets_at`. The limit is account-wide, not
 Fable's own, so this is a spend guard rather than an availability check.
 
-Re-installing never wraps twice; `--fable no` or a Pro install puts your
+Re-installing never wraps twice; `--fable no` or a Pro or Team Pro install puts your
 original command back byte for byte, or removes the statusline it added. If
 `/statusline` later rewrites the command, re-run the installer to wire the
 check again. To keep the statusline but skip every check, set
@@ -226,7 +226,7 @@ Tuning: `CLAUDE_FABLE_GATE=off` disables it; `CLAUDE_FABLE_GATE_TTL`,
 `_NOT_FOUND_TTL`, `_OVERLOAD_TTL`, `_LAUNCH_WINDOW`, `_WEEKLY_PCT`, `_FALLBACK` and
 `_STATE` override the defaults.
 
-An install with `--fable no`, or on Pro, does not register the gate, and removes
+An install with `--fable no`, or on Pro or Team Pro, does not register the gate, and removes
 the entries a previous Fable install left — your own hooks on the same events
 stay, and the statusline is unwrapped.
 
@@ -235,7 +235,8 @@ stay, and the statusline is unwrapped.
 The same problem as `fable-gate`, one tier up the Codex ladder. `ai-expert` is
 pinned to `gpt-6-astra`; when Astra is rate-limited or the account cannot reach
 it, the agent fails, and so does the next one. The gate records that and sends
-EXPERT launches to Sol at `high` until it expires.
+EXPERT launches to Sol at `high` until it expires. On Plus `ai-expert` is
+already at `high` rather than `xhigh`; the fallback model is the same.
 
 | Event | Does |
 |---|---|

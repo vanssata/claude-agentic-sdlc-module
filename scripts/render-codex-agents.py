@@ -8,7 +8,7 @@ with YAML frontmatter); Codex needs one standalone TOML file per agent under
 
 Every generated file carries the three fields Codex requires — ``name``,
 ``description``, ``developer_instructions`` — plus the model, reasoning effort
-and sandbox the role needs, taken from ``profiles/codex.json``.
+and sandbox the role needs, taken from the Codex plan profile (``profiles/codex-pro.json`` or ``profiles/codex-plus.json``).
 
 Why the model is always written out: a Codex custom-agent file that omits
 ``model`` inherits the resolved value — an explicit spawn value, then the
@@ -123,10 +123,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--src", required=True, help="repository root")
     parser.add_argument("--out", required=True, help="directory to write TOML into")
-    parser.add_argument("--profile", help="defaults to <src>/profiles/codex.json")
+    parser.add_argument("--profile", help="defaults to <src>/profiles/codex-pro.json")
     args = parser.parse_args()
 
-    profile_path = args.profile or os.path.join(args.src, "profiles", "codex.json")
+    profile_path = args.profile or os.path.join(args.src, "profiles", "codex-pro.json")
     try:
         with open(profile_path, encoding="utf-8") as fh:
             profile = json.load(fh)

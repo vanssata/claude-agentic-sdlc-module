@@ -8,7 +8,8 @@ INSTALL="$PLUGIN_ROOT/install.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
 echo "== dry run renders for every plan"
-for combo in "max yes:xhigh:fable[1m]" "max no:high:Opus 5 with the 200k window" "pro no:high:Opus 5"; do
+for combo in "max yes:xhigh:fable[1m]" "max no:high:Opus 5 with the 200k window" "pro no:high:Opus 5" \
+             "team-max yes:xhigh:fable[1m]" "team-max no:high:Opus 5 with the 200k window" "team-pro no:high:Opus 5"; do
     args="${combo%%:*}"; rest="${combo#*:}"; effort="${rest%%:*}"; model="${rest#*:}"
     set -- $args
     out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan "$1" --fable "$2" --dry-run 2>&1)
@@ -31,11 +32,41 @@ printf '%s' "$out" | grep -q 'solo' && pass "the block mentions the solo pipelin
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable yes --dry-run 2>&1)
 printf '%s' "$out" | grep -q '^model: opus' && fail "max must not pin opus on the EXPERT agents" "$out" || pass "max leaves the EXPERT agents on the session model"
 
-echo "== plan detection maps a Team org to the pro profile"
+echo "== team-pro and team-max share the pro and max profiles"
+out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan team-pro --dry-run 2>&1)
+printf '%s' "$out" | grep -q 'plan=team-pro (Team Pro, pro profile)' && pass "team-pro uses the pro profile" || fail "team-pro should use the pro profile" "$out"
+printf '%s' "$out" | grep -q '"model": "opusplan"' && pass "team-pro sets the session model to opusplan" || fail "team-pro should set opusplan" "$out"
+printf '%s' "$out" | grep -q '^model: opus' && pass "team-pro pins model: opus on the EXPERT agents" || fail "EXPERT agents should pin opus on team-pro" "$out"
+printf '%s' "$out" | grep -q 'Model routing (Team Pro plan)' && pass "team-pro is named in the CLAUDE.md block" || fail "block should say Team Pro" "$out"
+out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan team-pro --fable yes --dry-run 2>&1)
+printf '%s' "$out" | grep -q 'fable=no' && pass "team-pro forces --fable no" || fail "team-pro should refuse Fable" "$out"
+out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan team-max --dry-run 2>&1)
+printf '%s' "$out" | grep -q 'plan=team-max (Team Max, max profile) fable=yes fable-gate=on' && pass "team-max uses the max profile with Fable and the gate" || fail "team-max should behave like max" "$out"
+printf '%s' "$out" | grep -q '^model: fable\[1m\]' && pass "team-max pins fable[1m] on architect" || fail "team-max should pin fable on architect" "$out"
+printf '%s' "$out" | grep -q 'Model routing (Team Max plan)' && pass "team-max is named in the CLAUDE.md block" || fail "block should say Team Max" "$out"
+out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan team-premium --dry-run 2>&1)
+printf '%s' "$out" | grep -q 'plan=team-max' && pass "team-premium is an alias of team-max" || fail "team-premium should map to team-max" "$out"
+out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan team-standard --dry-run 2>&1)
+printf '%s' "$out" | grep -q 'plan=team-pro' && pass "team-standard is an alias of team-pro" || fail "team-standard should map to team-pro" "$out"
+
+echo "== plan detection reads the seat of a Team org"
 HOME_T="$TMP/home-team"; mkdir -p "$HOME_T"
 printf '{"oauthAccount":{"organizationType":"claude_team"}}' > "$HOME_T/.claude.json"
-out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1)
-printf '%s' "$out" | grep -q 'plan=pro' && pass "claude_team is detected as the pro profile" || fail "team org should map to pro" "$out"
+out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
+printf '%s' "$out" | grep -q 'plan=team-pro' && pass "claude_team with no seat falls back to team-pro" || fail "team org without a seat should map to team-pro" "$out"
+printf '%s' "$out" | grep -q -- '--plan team-max' && pass "the fallback says how to pick team-max" || fail "the fallback should mention --plan team-max" "$out"
+printf '{"oauthAccount":{"organizationType":"claude_team","seatTier":"standard"}}' > "$HOME_T/.claude.json"
+out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
+printf '%s' "$out" | grep -q 'detected plan: team-pro' && pass "a standard seat is detected as team-pro" || fail "standard seat should map to team-pro" "$out"
+printf '{"oauthAccount":{"organizationType":"claude_team","seatTier":"premium"}}' > "$HOME_T/.claude.json"
+out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
+printf '%s' "$out" | grep -q 'detected plan: team-max' && pass "a premium seat is detected as team-max" || fail "premium seat should map to team-max" "$out"
+printf '{"oauthAccount":{"organizationType":"claude_team","organizationRateLimitTier":"default_claude_max_5x"}}' > "$HOME_T/.claude.json"
+out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
+printf '%s' "$out" | grep -q 'detected plan: team-max' && pass "a max rate-limit tier is detected as team-max" || fail "max rate-limit tier should map to team-max" "$out"
+printf '{"oauthAccount":{"organizationType":"claude_max"}}' > "$HOME_T/.claude.json"
+out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
+printf '%s' "$out" | grep -q 'plan=max (Max' && pass "claude_max is still detected as max" || fail "max org should map to max" "$out"
 
 echo "== dry run writes nothing at all"
 PROBE="$TMP/probe"; mkdir -p "$PROBE"

@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # claude-agentic installer (Claude Code and/or Codex).
-#   ./install.sh [--target auto|claude|codex|both] [--plan pro|max] [--fable auto|yes|no] [--dry-run]
+#   ./install.sh [--target auto|claude|codex|both] [--plan pro|team-pro|team-max|max]
+#                [--fable auto|yes|no] [--codex-plan plus|pro] [--dry-run]
 # --target defaults to auto: each runtime is installed only if it is present.
-# --plan   Claude only. Defaults to auto-detect from ~/.claude.json (organizationType); prompts if unknown.
-# --fable  Claude only. auto = yes on max, no on pro. On max the session runs Opus 5 (200k window)
-#          either way; yes pins Fable 5.1 [1m] on the architect agent alone.
+# --plan   Claude only: pro, team-pro (Team Standard seat), team-max (Team Premium seat) or max.
+#          Defaults to auto-detect from ~/.claude.json (organizationType, then the seat and
+#          rate-limit tiers for a Team org); prompts if unknown.
+# --fable  Claude only. auto = yes on max and team-max, no on pro and team-pro. On max the
+#          session runs Opus 5 (200k window) either way; yes pins Fable 5.1 [1m] on architect alone.
+# --codex-plan  Codex only: plus or pro. Defaults to auto-detect from the ChatGPT login in
+#          ~/.codex/auth.json (chatgpt_plan_type); prompts if unknown, and assumes pro when it cannot.
 # --dry-run prints everything that would be written, per runtime, and writes nothing.
 #
 # Claude Code (~/.claude): model, effort and context settings for the detected
@@ -12,15 +17,18 @@
 # Explore and log-reader; five hooks, plus fable-gate on a Fable install; the
 # skills; and one managed block in ~/.claude/CLAUDE.md.
 #
-# Codex (~/.codex): the same pipeline on the Terra -> Sol -> Astra ladder. The
-# session runs gpt-5.6-sol at high effort, subagents default to gpt-5.6-terra,
+# Codex (~/.codex): the same pipeline on the Terra -> Sol -> Astra ladder, sized
+# per ChatGPT plan (profiles/codex-{plus,pro}.json). Pro: session gpt-5.6-sol at
+# high, six agent threads, ai-expert on gpt-6-astra at xhigh. Plus: Sol at medium,
+# three threads, Astra at high and xhigh off. Subagents default to gpt-5.6-terra,
 # the agents are rendered as custom-agent TOML files, the guards are registered
 # in ~/.codex/hooks.json, and one managed block is written to ~/.codex/AGENTS.md.
 # Codex lists a non-managed hook until you trust it: run /hooks once afterwards.
 #
-# pro (and Team Standard, which shares its models): session model `opusplan` —
-# Opus in plan mode, Sonnet when executing — and the EXPERT tier pinned to opus.
-# max: session model Opus 5 (200k window, opus[1m] per task), ai-expert inherits it, architect alone on Fable.
+# pro and team-pro (a Team Standard seat has Pro's models and limits): session model
+# `opusplan` — Opus in plan mode, Sonnet when executing — and the EXPERT tier pinned to opus.
+# max and team-max (a Team Premium seat has Max's models): session model Opus 5 (200k window,
+# opus[1m] per task), ai-expert inherits it, architect alone on Fable.
 #
 # This plugin supersedes claude-routing. On the first run it migrates that
 # plugin's managed block into this one's, so the two never coexist.
@@ -40,6 +48,7 @@ CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
 CODEX_DIR="${CODEX_DIR:-$HOME/.codex}"
 SRC="$(cd "$(dirname "$0")" && pwd)"
 PLAN="" FABLE="auto" DRY=0 TARGET=auto PLAN_GIVEN=0
+CODEX_PLAN="" CODEX_PLAN_GIVEN=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -49,8 +58,10 @@ while [ $# -gt 0 ]; do
     --plan=*) PLAN="${1#*=}"; PLAN_GIVEN=1; shift;;
     --fable) FABLE="${2:?missing value for --fable}"; PLAN_GIVEN=1; shift 2;;
     --fable=*) FABLE="${1#*=}"; PLAN_GIVEN=1; shift;;
+    --codex-plan) CODEX_PLAN="${2:?missing value for --codex-plan}"; CODEX_PLAN_GIVEN=1; shift 2;;
+    --codex-plan=*) CODEX_PLAN="${1#*=}"; CODEX_PLAN_GIVEN=1; shift;;
     --dry-run) DRY=1; shift;;
-    -h|--help) sed -n '2,26p' "$0"; exit 0;;
+    -h|--help) sed -n '2,32p' "$0"; exit 0;;
     *) echo "unknown option: $1" >&2; exit 2;;
   esac
 done
@@ -72,7 +83,7 @@ case "$TARGET" in
       DO_CODEX=1
     else
       if command -v claude >/dev/null 2>&1 || [ -d "$CLAUDE_DIR" ] || [ "$PLAN_GIVEN" = 1 ]; then DO_CLAUDE=1; fi
-      if command -v codex  >/dev/null 2>&1 || [ -d "$CODEX_DIR"  ]; then DO_CODEX=1; fi
+      if command -v codex  >/dev/null 2>&1 || [ -d "$CODEX_DIR"  ] || [ "$CODEX_PLAN_GIVEN" = 1 ]; then DO_CODEX=1; fi
     fi;;
 esac
 if [ "$DO_CLAUDE" = 0 ] && [ "$DO_CODEX" = 0 ]; then
@@ -119,33 +130,62 @@ PY
 claude_render() {
 
 # ---------------------------------------------------------------- plan detection
+# Four plans, two tiers. pro and team-pro (a Team Standard seat) share the pro
+# profile; max and team-max (a Team Premium seat) share the max profile. A Team
+# org says nothing about the seat in organizationType, so the seat and rate-limit
+# tier fields decide, and an undetectable Team seat is asked for on a tty.
 if [ -z "$PLAN" ]; then
   org=$(jq -r '.oauthAccount.organizationType // .organizationType // empty' "$HOME/.claude.json" 2>/dev/null || true)
   case "$org" in
     claude_max*|*max*) PLAN=max; echo "detected plan: max ($org)";;
     claude_pro*|*pro*) PLAN=pro; echo "detected plan: pro ($org)";;
-    claude_team*|*team*) PLAN=pro; echo "detected plan: team ($org) — uses the pro profile (same models and limits)";;
+    claude_team*|*team*|claude_enterprise*|*enterprise*)
+      seat=$(jq -r '.oauthAccount | [.seatTier, .userRateLimitTier, .organizationRateLimitTier] | map(select(. != null and . != "")) | join(" ")' \
+             "$HOME/.claude.json" 2>/dev/null || true)
+      case "$seat" in
+        *premium*|*max*) PLAN=team-max; echo "detected plan: team-max ($org, seat '$seat')";;
+        *standard*|*pro*) PLAN=team-pro; echo "detected plan: team-pro ($org, seat '$seat')";;
+        *)
+          if [ -t 0 ]; then
+            read -r -p "Team org detected ($org) but not the seat. Enter plan [team-pro/team-max]: " PLAN
+          else
+            PLAN=team-pro
+            echo "detected plan: team ($org) — seat unknown, using team-pro (Pro's models and limits); pass --plan team-max for a Premium seat" >&2
+          fi;;
+      esac;;
     *)
       if [ -t 0 ]; then
-        read -r -p "Could not detect plan (organizationType='$org'). Enter plan [pro/max]: " PLAN
+        read -r -p "Could not detect plan (organizationType='$org'). Enter plan [pro/team-pro/team-max/max]: " PLAN
       else
-        echo "Could not detect plan; pass --plan pro|max" >&2; exit 1
+        echo "Could not detect plan; pass --plan pro|team-pro|team-max|max" >&2; exit 1
       fi;;
   esac
 fi
-case "$PLAN" in pro|max) ;; *) echo "--plan must be pro or max (got '$PLAN')" >&2; exit 2;; esac
+case "$PLAN" in
+  team-standard|team_standard|team) PLAN=team-pro;;
+  team-premium|team_premium) PLAN=team-max;;
+  team_pro) PLAN=team-pro;;
+  team_max) PLAN=team-max;;
+esac
+case "$PLAN" in
+  pro)      TIER=pro; PLAN_LABEL="Pro";;
+  team-pro) TIER=pro; PLAN_LABEL="Team Pro";;
+  team-max) TIER=max; PLAN_LABEL="Team Max";;
+  max)      TIER=max; PLAN_LABEL="Max";;
+  *) echo "--plan must be pro, team-pro, team-max or max (got '$PLAN')" >&2; exit 2;;
+esac
 case "$FABLE" in
-  auto) [ "$PLAN" = max ] && FABLE=yes || FABLE=no;;
+  auto) [ "$TIER" = max ] && FABLE=yes || FABLE=no;;
   yes|no) ;;
   *) echo "--fable must be auto|yes|no" >&2; exit 2;;
 esac
-if [ "$PLAN" = pro ] && [ "$FABLE" = yes ]; then
-  echo "Fable is not available on the pro plan; using --fable no" >&2; FABLE=no
+if [ "$TIER" = pro ] && [ "$FABLE" = yes ]; then
+  echo "Fable is not available on the $PLAN plan; using --fable no" >&2; FABLE=no
 fi
 
 # ---------------------------------------------------------------- render settings
-PROFILE="$SRC/profiles/$PLAN.json"
-if [ "$PLAN" = max ] && [ "$FABLE" = no ]; then
+PROFILE="$SRC/profiles/$TIER.json"
+if [ "$TIER" = max ] && [ "$FABLE" = no ]; then
   jq '.availableModels = (.availableModels | map(select(startswith("fable") | not)))
       | del(.modelSettings["claude-fable-5-1"])' "$PROFILE" > "$TMP/profile.json"
 else
@@ -165,12 +205,11 @@ FALLBACK_HUMAN=$(jq -r '.fallbackModel | if type=="array" then .[] else . end' "
                  | while read -r m; do pretty "$m"; done | paste -sd'|' | sed 's/|/, then /g')
 
 # Agents default to Sonnet (CLAUDE_CODE_SUBAGENT_MODEL). The EXPERT-tier agents
-# are rendered per plan: on pro both pin opus (an inherited model would be Sonnet
-# outside plan mode); on max ai-expert inherits the Opus 5 session and
-# architect alone is pinned to fable[1m] when Fable is enabled. fallbackModel
-# applies to pinned subagents too, so a Fable outage still falls back.
-if [ "$PLAN" = pro ]; then
-  PLAN_LABEL="Pro"
+# are rendered per tier: on pro/team-pro both pin opus (an inherited model would
+# be Sonnet outside plan mode); on max/team-max ai-expert inherits the Opus 5
+# session and architect alone is pinned to fable[1m] when Fable is enabled.
+# fallbackModel applies to pinned subagents too, so a Fable outage still falls back.
+if [ "$TIER" = pro ]; then
   EXPERT_EFFORT="high"
   # On opusplan a subagent that omits `model:` inherits Sonnet outside plan mode,
   # so both EXPERT-tier agents pin opus explicitly on this plan.
@@ -181,7 +220,6 @@ if [ "$PLAN" = pro ]; then
   PLAN_SPECIFIC="- Session model is \`opusplan\`: Opus 5 in plan mode, Sonnet 5 when executing. Use plan mode for T3+ and for a T2 that spans several modules — that is where Opus is paid for. Fable is off this plan; never request it. \`xhigh\`/\`max\` are unavailable. STRONG and EXPERT both pin \`model: opus\` explicitly."
   EFFORT_RULE="Raise to \`high\` only for architecture, root-cause analysis and adversarial verification, and say that you are raising it."
 else
-  PLAN_LABEL="Max"
   EXPERT_EFFORT="high"
   # The session runs Opus 5 with the 200k window (opus[1m] stays available for a
   # task that needs it); ai-expert escalates from it by inheriting it.
@@ -204,7 +242,7 @@ fi
 # The Fable gate exists only where Fable does — on Max with --fable yes, where
 # architect is pinned to fable[1m]. Its hooks are merged into the snippet on
 # such an install, and stripped from settings.json on any other.
-if [ "$PLAN" = max ] && [ "$FABLE" = yes ]; then
+if [ "$TIER" = max ] && [ "$FABLE" = yes ]; then
   GATE=on
   jq -s '.[0] as $base | reduce (.[1].hooks | to_entries[]) as $e
            ($base; .hooks[$e.key] = ((.hooks[$e.key] // []) + $e.value))' \
@@ -296,7 +334,7 @@ PY
 }
 
 claude_dry_run() {
-  echo "== claude: plan=$PLAN fable=$FABLE fable-gate=$GATE (dry run, nothing written)"
+  echo "== claude: plan=$PLAN ($PLAN_LABEL, $TIER profile) fable=$FABLE fable-gate=$GATE (dry run, nothing written)"
   echo "== claude: target directory $CLAUDE_DIR"
   statusline_gate "$CLAUDE_DIR/settings.json" "$GATE" dry | sed 's/^/== /'
   echo "== settings snippet (merged into $CLAUDE_DIR/settings.json):"
@@ -534,11 +572,11 @@ cat <<SUM
 
 Done (Claude Code).
   target          $CLAUDE_DIR
-  plan            $PLAN  (fable=$FABLE)
+  plan            $PLAN  ($PLAN_LABEL, $TIER profile, fable=$FABLE)
   session model   $SESSION_MODEL ($SESSION_HUMAN), effort $EFFORT
   fallback        $FALLBACK
-  EXPERT tier     ai-expert on $( [ "$PLAN" = pro ] && echo "opus, pinned" || echo "the session model" ) at effort $EXPERT_EFFORT;
-                  architect on $( [ "$PLAN" = pro ] && echo "opus, pinned" || { [ "$FABLE" = yes ] && echo "fable[1m], pinned" || echo "the session model"; } ) at effort $ARCHITECT_EFFORT
+  EXPERT tier     ai-expert on $( [ "$TIER" = pro ] && echo "opus, pinned" || echo "the session model" ) at effort $EXPERT_EFFORT;
+                  architect on $( [ "$TIER" = pro ] && echo "opus, pinned" || { [ "$FABLE" = yes ] && echo "fable[1m], pinned" || echo "the session model"; } ) at effort $ARCHITECT_EFFORT
   compaction      $COMPACT tokens
   read guard      an unbounded Read is refused above $READ_LINES lines / $READ_BYTES bytes
   agents          $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd' ')
@@ -558,25 +596,90 @@ SUM
 }
 
 # ======================================================================= Codex
-CODEX_PROFILE="$SRC/profiles/codex.json"
+# Two ChatGPT plans, two profiles. Pro (profiles/codex-pro.json) runs the session
+# on Sol at high with six agent threads and Astra at xhigh for EXPERT; Plus
+# (profiles/codex-plus.json) has a smaller usage window, so the session runs Sol
+# at medium, three threads, and Astra at high with xhigh off. The plan is read
+# from the ChatGPT login: the JWT in ~/.codex/auth.json carries chatgpt_plan_type.
+codex_detect_plan() {
+  python3 - "$CODEX_DIR/auth.json" "${HOME:-/nonexistent}/.codex/auth.json" <<'PY'
+import base64, json, sys
+def claim(tok):
+    try:
+        body = tok.split(".")[1]
+        pad = base64.urlsafe_b64decode(body + "=" * (-len(body) % 4))
+        auth = json.loads(pad).get("https://api.openai.com/auth") or {}
+        return auth.get("chatgpt_plan_type") or ""
+    except Exception:
+        return ""
+for path in sys.argv[1:]:
+    try:
+        data = json.load(open(path))
+    except (OSError, ValueError):
+        continue
+    tokens = data.get("tokens") or {}
+    for key in ("id_token", "access_token"):
+        plan = claim(tokens.get(key) or "")
+        if plan:
+            print(plan.lower()); sys.exit(0)
+print("")
+PY
+}
 
 codex_render() {
+  if [ -z "$CODEX_PLAN" ]; then
+    detected=$(codex_detect_plan 2>/dev/null || true)
+    case "$detected" in
+      plus)   CODEX_PLAN=plus; echo "detected codex plan: plus (chatgpt_plan_type)";;
+      pro)    CODEX_PLAN=pro;  echo "detected codex plan: pro (chatgpt_plan_type)";;
+      team*|business*|enterprise*|edu*)
+              CODEX_PLAN=pro;  echo "detected codex plan: $detected (chatgpt_plan_type) — uses the pro profile";;
+      *)
+        if [ -t 0 ]; then
+          read -r -p "Could not detect the ChatGPT plan (chatgpt_plan_type='$detected'). Enter plan [plus/pro]: " CODEX_PLAN
+        else
+          CODEX_PLAN=pro
+          echo "could not detect the ChatGPT plan; using the pro profile — pass --codex-plan plus on Plus" >&2
+        fi;;
+    esac
+  fi
+  case "$CODEX_PLAN" in
+    plus) CODEX_PLAN_LABEL="Plus";;
+    pro)  CODEX_PLAN_LABEL="Pro";;
+    *) echo "--codex-plan must be plus or pro (got '$CODEX_PLAN')" >&2; exit 2;;
+  esac
+  CODEX_PROFILE="$SRC/profiles/codex-$CODEX_PLAN.json"
+
   CODEX_SESSION_MODEL=$(jq -r .session.model "$CODEX_PROFILE")
   CODEX_SESSION_EFFORT=$(jq -r .session.model_reasoning_effort "$CODEX_PROFILE")
   CODEX_SUBAGENT_MODEL=$(jq -r .agents.default_subagent_model "$CODEX_PROFILE")
+  CODEX_SUBAGENT_EFFORT=$(jq -r .agents.default_subagent_reasoning_effort "$CODEX_PROFILE")
   CODEX_MAX_THREADS=$(jq -r .agents.max_concurrent_threads_per_session "$CODEX_PROFILE")
   CODEX_FAST=$(jq -r .tiers.FAST.model "$CODEX_PROFILE")
+  CODEX_FAST_EFFORT=$(jq -r .tiers.FAST.effort "$CODEX_PROFILE")
   CODEX_BALANCED=$(jq -r .tiers.BALANCED.model "$CODEX_PROFILE")
+  CODEX_BALANCED_EFFORT=$(jq -r .tiers.BALANCED.effort "$CODEX_PROFILE")
   CODEX_STRONG=$(jq -r .tiers.STRONG.model "$CODEX_PROFILE")
+  CODEX_STRONG_EFFORT=$(jq -r .tiers.STRONG.effort "$CODEX_PROFILE")
   CODEX_EXPERT=$(jq -r .tiers.EXPERT.model "$CODEX_PROFILE")
   CODEX_EXPERT_EFFORT=$(jq -r .tiers.EXPERT.effort "$CODEX_PROFILE")
   codex_label() { jq -r --arg m "$1" '.labels[$m] // $m' "$CODEX_PROFILE"; }
+  # The profile's plan rule names the EXPERT model by placeholder; render() makes
+  # one pass, so it is filled in here before the snippet is rendered.
+  CODEX_PLAN_RULE=$(jq -r '.plan_rule // empty' "$CODEX_PROFILE")
+  CODEX_PLAN_RULE=${CODEX_PLAN_RULE//\{\{EXPERT_MODEL\}\}/$(codex_label "$CODEX_EXPERT")}
 
-  python3 "$SRC/scripts/render-codex-agents.py" --src "$SRC" --out "$TMP/codex-agents" >/dev/null
+  python3 "$SRC/scripts/render-codex-agents.py" --src "$SRC" --out "$TMP/codex-agents" --profile "$CODEX_PROFILE" >/dev/null
 
+  RENDER_CODEX_PLAN="$CODEX_PLAN_LABEL" \
+  RENDER_CODEX_PLAN_RULE="$CODEX_PLAN_RULE" \
   RENDER_SESSION_MODEL="$(codex_label "$CODEX_SESSION_MODEL")" \
   RENDER_SESSION_MODEL_ID="$CODEX_SESSION_MODEL" \
   RENDER_SESSION_EFFORT="$CODEX_SESSION_EFFORT" \
+  RENDER_SUBAGENT_EFFORT="$CODEX_SUBAGENT_EFFORT" \
+  RENDER_FAST_EFFORT="$CODEX_FAST_EFFORT" \
+  RENDER_BALANCED_EFFORT="$CODEX_BALANCED_EFFORT" \
+  RENDER_STRONG_EFFORT="$CODEX_STRONG_EFFORT" \
   RENDER_FAST_MODEL="$(codex_label "$CODEX_FAST")" \
   RENDER_FAST_MODEL_ID="$CODEX_FAST" \
   RENDER_BALANCED_MODEL="$(codex_label "$CODEX_BALANCED")" \
@@ -592,7 +695,7 @@ codex_render() {
 }
 
 codex_dry_run() {
-  echo "== codex: session $CODEX_SESSION_MODEL at $CODEX_SESSION_EFFORT (dry run, nothing written)"
+  echo "== codex: plan=$CODEX_PLAN ($CODEX_PLAN_LABEL) session $CODEX_SESSION_MODEL at $CODEX_SESSION_EFFORT (dry run, nothing written)"
   echo "== codex: target directory $CODEX_DIR"
   python3 "$SRC/scripts/merge-codex-config.py" "$CODEX_DIR/config.toml" \
           --profile "$CODEX_PROFILE" --dry-run | sed 's/^/== /'
@@ -681,11 +784,12 @@ cat <<SUM
 
 Done (Codex).
   target          $CODEX_DIR
+  plan            $CODEX_PLAN  ($CODEX_PLAN_LABEL)
   session model   $CODEX_SESSION_MODEL at effort $CODEX_SESSION_EFFORT
-  subagent default $CODEX_SUBAGENT_MODEL at medium, at most $CODEX_MAX_THREADS threads at once
-  FAST tier       $CODEX_FAST at low (ai-indexer, Explore, ai-discovery, log-reader, ai-tester)
-  BALANCED tier   $CODEX_BALANCED at medium (ai-context, ai-risk, ai-planner, ai-release, ai-implementer)
-  STRONG tier     $CODEX_STRONG at high (ai-reviewer, ai-security, architect, ai-risk-strong, ai-planner-strong)
+  subagent default $CODEX_SUBAGENT_MODEL at $CODEX_SUBAGENT_EFFORT, at most $CODEX_MAX_THREADS threads at once
+  FAST tier       $CODEX_FAST at $CODEX_FAST_EFFORT (ai-indexer, Explore, ai-discovery, log-reader, ai-tester)
+  BALANCED tier   $CODEX_BALANCED at $CODEX_BALANCED_EFFORT (ai-context, ai-risk, ai-planner, ai-release, ai-implementer)
+  STRONG tier     $CODEX_STRONG at $CODEX_STRONG_EFFORT (ai-reviewer, ai-security, architect, ai-risk-strong, ai-planner-strong)
   EXPERT tier     $CODEX_EXPERT at $CODEX_EXPERT_EFFORT (ai-expert)
   expert gate     codex-model-gate sends EXPERT work to $CODEX_STRONG while $CODEX_EXPERT is
                   rate-limited or unavailable; 'codex-model-gate.py status' shows it

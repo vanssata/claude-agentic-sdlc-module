@@ -85,7 +85,7 @@ run would not.
 ## Where is Fable used on Max?
 
 Only on `architect`, and only when installed with `--fable yes` (the default on
-Max). The session itself is Opus 5 [1m], `ai-expert` escalates by inheriting
+Max and Team Max). The session itself is Opus 5 [1m], `ai-expert` escalates by inheriting
 it, and every reader and reviewer runs on Sonnet or Opus. Design questions
 outside a task are the one place a stronger model changes the outcome enough
 to pay for.
@@ -97,7 +97,7 @@ then goes to its agent at every tier, as in the tables in `docs/agents.md`. You
 can also delegate a single stage in `solo` without switching: say so in the
 request, or hit one of the `delegate_anyway_when` triggers.
 
-## Why is the session model `opusplan` on Pro?
+## Why is the session model `opusplan` on Pro and Team Pro?
 
 Opus consumes the usage window far faster than Sonnet, and the main session
 re-reads its whole context every turn, so the session model is the largest cost
@@ -107,6 +107,23 @@ inherit Sonnet outside plan mode, the installer pins `model: opus` on
 `ai-expert` and `architect` for this plan. Prefer Opus everywhere? Set `model` to
 `opus` in `~/.claude/settings.json` and reinstall with `--plan pro`; nothing else
 changes.
+
+## Which plan does a Team account get?
+
+It depends on the seat. A Standard seat has Pro's models and limits, so it
+installs as `team-pro` and gets the Pro profile. A Premium seat has Max's, so it
+installs as `team-max` and gets the Max profile, Fable on `architect` included.
+The installer reads the seat from `~/.claude.json`; when it cannot tell, it
+uses `team-pro` and says so — pass `--plan team-max` for a Premium seat.
+
+## What changes between ChatGPT Plus and Pro under Codex?
+
+The Plus usage window is a fraction of Pro's, so `profiles/codex-plus.json`
+runs the session on Sol at `medium`, caps agent threads at three and runs
+`ai-expert` on Astra at `high`; `xhigh` is never used. `profiles/codex-pro.json`
+keeps Sol at `high`, six threads and Astra at `xhigh` for `ai-expert`. The plan
+is read from `chatgpt_plan_type` in `~/.codex/auth.json`; `--codex-plan plus|pro`
+overrides it.
 
 ## Where does the verification command come from?
 
@@ -171,10 +188,10 @@ to. See the table at the top of the README.
 
 Deliberately. The session model is the largest single cost in a long session —
 most of it is re-reading context, not generating output — so the routing puts the
-session on Sol at `high` and keeps Astra as the EXPERT escalation, one named
+session on Sol at `high` (`medium` on Plus) and keeps Astra as the EXPERT escalation, one named
 trigger away. If you want it back, set `model` in `~/.codex/config.toml`; the
-installer will set it again on the next run, so change `profiles/codex.json`
-instead if you want the decision to stick.
+installer will set it again on the next run, so change `profiles/codex-pro.json`
+(or `codex-plus.json`) instead if you want the decision to stick.
 
 ## Will installing overwrite my `config.toml`?
 

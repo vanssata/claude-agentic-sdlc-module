@@ -1,13 +1,13 @@
 <!-- claude-agentic:start -->
-# Model allocation by task and scope (host-wide)
+# Model allocation by task and scope (host-wide, ChatGPT {{CODEX_PLAN}} plan)
 
 Applies everywhere a model can be chosen: an explicit spawn request, a custom agent file under `~/.codex/agents/` or `.codex/agents/`, the `[agents]` defaults in `config.toml`, and any skill that asks for delegation. **The session runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}`; subagents default to {{BALANCED_MODEL}}, and STRONG and EXPERT agents are paid for only on a named trigger.** Facts are collected cheaply; the expensive tiers are for adversarial review, high-risk decisions and what a cheaper tier could not settle — never for fact collection.
 
 | Tier | Model | Effort | Role |
 |---|---|---|---|
-| FAST | `{{FAST_MODEL_ID}}` | `low` | verbatim extraction, file and symbol inventories, listings, counting, logs and test output, running a command and reporting it (`ai-indexer`, `Explore`, `ai-discovery`, `log-reader`, `ai-tester`) |
-| BALANCED — default for agents | `{{BALANCED_MODEL_ID}}` | `medium` | context compression, planning up to T2, release assembly, mechanical edits (`ai-context`, `ai-risk`, `ai-planner`, `ai-release`, `ai-implementer`) |
-| STRONG | `{{STRONG_MODEL_ID}}` | `high` | the {{STRONG_MODEL}} triggers below (`ai-reviewer`, `ai-security`, `architect`, `ai-risk-strong`, `ai-planner-strong`) |
+| FAST | `{{FAST_MODEL_ID}}` | `{{FAST_EFFORT}}` | verbatim extraction, file and symbol inventories, listings, counting, logs and test output, running a command and reporting it (`ai-indexer`, `Explore`, `ai-discovery`, `log-reader`, `ai-tester`) |
+| BALANCED — default for agents | `{{BALANCED_MODEL_ID}}` | `{{BALANCED_EFFORT}}` | context compression, planning up to T2, release assembly, mechanical edits (`ai-context`, `ai-risk`, `ai-planner`, `ai-release`, `ai-implementer`) |
+| STRONG | `{{STRONG_MODEL_ID}}` | `{{STRONG_EFFORT}}` | the {{STRONG_MODEL}} triggers below (`ai-reviewer`, `ai-security`, `architect`, `ai-risk-strong`, `ai-planner-strong`) |
 | EXPERT | `{{EXPERT_MODEL_ID}}` | `{{EXPERT_EFFORT}}` | the EXPERT triggers below (`ai-expert`) |
 
 The main session itself runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}` and does the implementation; the tiers above are for agents.
@@ -41,9 +41,9 @@ The main session itself runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}` and does 
 
 - Session model is {{SESSION_MODEL_ID}} at `{{SESSION_EFFORT}}`. Implement code yourself in the main conversation; `ai-implementer` is for mechanical pattern-copying steps or when the user asks.
 - Do not switch a running session to a stronger model for one hard question. Send the question to `architect` or `ai-expert` with a brief instead, and keep the session where it is.
-- `xhigh` is allowed only for `ai-expert` and verify/judge stages on {{EXPERT_MODEL}}; `max` and `ultra` stay off. Readers never go above `low`.
+{{CODEX_PLAN_RULE}} Readers never go above `low`.
 - `codex-model-gate` checks {{EXPERT_MODEL}} at run time. After a rate-limit or model-unavailable failure from an {{EXPERT_MODEL}} subagent, the gate sends every EXPERT launch to {{STRONG_MODEL}} until the record expires, and says so in the agent's context. `~/.codex/hooks/codex-model-gate.py status` shows the gate; `clear` re-enables {{EXPERT_MODEL}} early. An ordinary low-confidence or wrong answer never activates it.
-- `medium` is the default effort for agents. Raise to `high` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; above `high` only per the rule above.
+- `{{SUBAGENT_EFFORT}}` is the default effort for agents. Raise to `high` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; above `high` only per the rule above.
 - Delegate logs, test output, CI/CD and kubectl/helm output to `log-reader`. Never read raw logs in the main context.
 
 # Context hygiene
