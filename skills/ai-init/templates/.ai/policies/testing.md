@@ -42,6 +42,20 @@ Classify before fixing. The four answers are:
 unexpectedly.** A test that suddenly disagrees with the code is evidence, and
 deleting evidence is the worst available option.
 
+## Verification
+
+One command that proves the project is healthy, and what healthy looks like.
+`/ai-task` runs it after every implementation step and before reporting a task
+done; a bugfix additionally shows its new test failing first. Keep it to one
+command — chain the pieces in a Makefile or composer script if there are several.
+
+```
+verify_command:      # e.g. make check   |   composer qa && vendor/bin/phpunit
+healthy_output:      # two or three lines of what a green run ends with
+runtime:             # roughly, so a hang is recognisable
+single_test:         # how to run one test, for the bugfix loop
+```
+
 ## Project specifics
 
 <!-- The real commands: how to run unit tests, integration tests, a single test.

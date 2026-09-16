@@ -64,6 +64,7 @@ for f in "$PLUGIN_ROOT"/agents/*.md; do
     grep -qE '^effort:' "$f" || fail "$name declares no effort:"
 done
 pass "every agent declares effort:"
-grep -qE '^model:' "$PLUGIN_ROOT/agents/architect.md" && fail "architect must not pin a model" || pass "architect inherits the session model"
+grep -q '{{EXPERT_MODEL_LINE}}' "$PLUGIN_ROOT/agents/architect.md.tmpl" && pass "architect's model line is rendered per plan" || fail "architect.md.tmpl should carry the EXPERT model placeholder"
+grep -qE '^model:' "$DIR4/agents/architect.md" && fail "on max, architect must not pin a model" || pass "on max, architect inherits the session model"
 
 summary "merge migration"

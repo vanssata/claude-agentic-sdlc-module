@@ -1,4 +1,4 @@
-<!-- generated from risk-tiers.json sha256:01c32f8ff038787e49070b8b0eb160eb4b4704a020b050678292051fc73a4fc6 -->
+<!-- generated from risk-tiers.json sha256:d8011741c086a124cf69b2988e0452ee2eb4ccccc6a6696b02069ddf7db35bd1 -->
 <!-- If /ai-status reports this hash as stale, risk-tiers.json changed and this
      mirror did not. The JSON file is the source of truth; update this by hand. -->
 
@@ -32,6 +32,25 @@ contradictory or empty evidence gets escalated, and nothing starts expensive
 
 A tier can be raised by anyone at any moment. Lowering one is a human decision,
 written into the task record with the reason.
+
+## Who does each stage: the pipeline profile
+
+`pipeline_profile` in `risk-tiers.json` decides who runs a stage, never whether
+it runs. Every tier keeps its `stages_required`; the profile says which of them
+go to a subagent.
+
+| Tier | `solo` (default) delegates | `team` delegates |
+|---|---|---|
+| T0, T1 | nothing — the session does every stage inline | discovery (and the test run at T1) |
+| T2 | the adversarial review, on `sonnet` | every stage except implementation |
+| T3 | plan, plan review, adversarial review — on `opus` | every stage except implementation |
+| T4 | plan, plan review, adversarial review, security review, release report | every stage except implementation |
+| T5 | discovery and impact as well; the plan goes to `ai-expert` | every stage except implementation |
+
+In `solo` the session still delegates one `ai-discovery` when the area is
+unfamiliar or the plan depends on an `UNKNOWN`, `ai-risk` on `opus` when a T3+
+classification is not obvious, and `log-reader` when the verification output is
+long. The triggers are listed under `delegate_anyway_when`.
 
 ## Extra obligations by tier
 

@@ -2,6 +2,11 @@
 
 Production is broken now. Stages get shorter; none of them disappears.
 
+> Who runs a stage is set by `pipeline_profile` in `policies/risk-tiers.json`.
+> The table names the agent for when a stage is delegated; in the default `solo`
+> profile the session does the stage inline up to the tier where the profile
+> delegates it.
+
 | Stage | Who | Notes |
 |---|---|---|
 | DISCOVERY | `ai-discovery` | narrow: the failing path only |

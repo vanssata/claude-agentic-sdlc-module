@@ -37,9 +37,16 @@ In the repository you want to work in:
 /ai-init
 ```
 
-It runs the scaffold, detects the stack, fans out discovery agents across six
-areas, and writes `.ai/`. On a large legacy codebase this takes a while and costs
-real tokens — the fan-out is on the cheapest model for exactly that reason.
+It runs the scaffold, detects the stack, asks you what you already know about
+the project and confirms it with `grep`, sends two discovery agents to the
+places memory is least reliable — legacy and risks, tests and data — and writes
+`.ai/`. For a codebase you do not know, `/ai-init --survey full` fans out six
+agents instead; on a large legacy codebase that costs real tokens, and the
+fan-out is on the cheapest model for exactly that reason.
+
+Before it finishes it asks for the one command that proves the project is
+healthy and writes it into `.ai/policies/testing.md`. That command is the
+feedback loop every later task closes before reporting done.
 
 It does not touch application code. When it finishes, read
 `.ai/project/initial-assessment.md` first: fourteen sections, ending with
@@ -64,18 +71,20 @@ git commit -m "add agentic engineering infrastructure"
 What happens:
 
 1. It classifies this as a **feature** (or you correct it), and starts a task.
-2. Discovery finds the template and the translation key.
-3. Context is two sentences, written inline — a lightweight stage is still a
-   stage, and it is recorded.
-4. `ai-risk` returns **T1**: an isolated presentation change.
-5. T1 needs no plan review, no adversarial review, no security review and no
-   human approval, so the plan is short and implementation starts.
-6. The step names the template and the translation file. If you now try to edit
+2. You said where the column lives, or it asks; `grep -n` confirms the template
+   and the translation key. Discovery, context and impact are one short
+   summary, written inline and recorded — a lightweight stage is still a stage.
+3. The trigger table says **T1**: an isolated presentation change. No agent was
+   needed to say so.
+4. T1 needs no plan review, no adversarial review, no security review and no
+   human approval, so the plan is a few lines and implementation starts.
+5. The step names the template and the translation file. If you now try to edit
    the pricing service, the scope guard refuses it.
-7. `ai-tester` runs the suite.
-8. A short release report, and the commands that would commit it.
+6. The verification command from `testing.md` runs; its last lines are shown.
+7. A short release report, which is also the commit message body, and the
+   command that would commit it.
 
-Total: minutes, and one cheap model did most of it.
+Total: minutes, no subagent spawned, and on Pro the whole thing ran on Sonnet.
 
 ## 4. A dangerous task, end to end
 
@@ -89,8 +98,9 @@ The same pipeline, and a very different shape:
 2. From the tier table, T4 requires: plan review, human approval of the plan,
    adversarial review, security review, a rollback section and a monitoring
    section.
-3. Planning runs on `opus`, and the plan must name the characterization tests
-   that pin the current fee behaviour **before** anything changes.
+3. Planning goes to `ai-planner` on `opus`, and the plan must name the
+   characterization tests that pin the current fee behaviour **before** anything
+   changes. This is the tier where the `solo` profile starts delegating.
 4. You are shown the plan and the review, and asked to approve it. Nothing is
    implemented until you do.
 5. Implementation goes step by step, each one scope-guarded.

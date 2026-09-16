@@ -20,6 +20,21 @@ for combo in "max yes:xhigh:Fable 5.1 [1m]" "max no:high:Opus 5 [1m]" "pro no:hi
     printf '%s' "$out" | grep -q 'nothing written' && pass "--plan $1 --fable $2 writes nothing" || fail "dry run should write nothing"
 done
 
+echo "== pro: opusplan session, EXPERT tier pinned to opus"
+out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan pro --dry-run 2>&1)
+printf '%s' "$out" | grep -q '"model": "opusplan"' && pass "pro sets the session model to opusplan" || fail "pro should set opusplan" "$out"
+printf '%s' "$out" | grep -q 'Opus 5 in plan mode' && pass "pro names opusplan in the CLAUDE.md block" || fail "block should explain opusplan" "$out"
+printf '%s' "$out" | grep -q '^model: opus' && pass "pro pins model: opus on the EXPERT agents" || fail "EXPERT agents should pin opus on pro" "$out"
+printf '%s' "$out" | grep -q 'solo' && pass "the block mentions the solo pipeline profile" || fail "block should mention the solo profile" "$out"
+out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable yes --dry-run 2>&1)
+printf '%s' "$out" | grep -q '^model: opus' && fail "max must not pin opus on the EXPERT agents" "$out" || pass "max leaves the EXPERT agents on the session model"
+
+echo "== plan detection maps a Team org to the pro profile"
+HOME_T="$TMP/home-team"; mkdir -p "$HOME_T"
+printf '{"oauthAccount":{"organizationType":"claude_team"}}' > "$HOME_T/.claude.json"
+out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1)
+printf '%s' "$out" | grep -q 'plan=pro' && pass "claude_team is detected as the pro profile" || fail "team org should map to pro" "$out"
+
 echo "== dry run writes nothing at all"
 PROBE="$TMP/probe"; mkdir -p "$PROBE"
 CLAUDE_DIR="$PROBE" bash "$INSTALL" --plan max --dry-run >/dev/null 2>&1
@@ -49,6 +64,17 @@ done
 [ -x "$DIR/skills/ai-init/scaffold-ai.sh" ] && pass "scaffold-ai.sh is executable" || fail "scaffold should be executable"
 grep -q 'effort: xhigh' "$DIR/agents/ai-expert.md" && pass "ai-expert renders at xhigh on max+fable" || fail "expert effort wrong"
 grep -q '^model:' "$DIR/agents/ai-expert.md" && fail "ai-expert must NOT pin a model" || pass "ai-expert omits model: so it inherits the session"
+
+echo "== real pro install"
+DIRP="$TMP/claude-pro"; mkdir -p "$DIRP"
+CLAUDE_DIR="$DIRP" bash "$INSTALL" --plan pro >/dev/null 2>&1 && pass "pro install exits 0" || fail "pro install should exit 0"
+grep -q '^model: opus' "$DIRP/agents/ai-expert.md" && pass "pro: ai-expert pins opus" || fail "pro: ai-expert should pin opus"
+grep -q '^model: opus' "$DIRP/agents/architect.md" && pass "pro: architect pins opus" || fail "pro: architect should pin opus"
+grep -q '^effort: high' "$DIRP/agents/ai-expert.md" && pass "pro: ai-expert runs at high" || fail "pro: expert effort wrong"
+[ "$(jq -r .model "$DIRP/settings.json")" = "opusplan" ] && pass "pro: settings.json model is opusplan" || fail "pro: model not opusplan"
+[ "$(jq -r '.fallbackModel[0]' "$DIRP/settings.json")" = "sonnet" ] && pass "pro: fallback is sonnet" || fail "pro: fallback wrong"
+[ "$(jq -r .effortLevel "$DIRP/settings.json")" = "medium" ] && pass "pro: default effort is medium" || fail "pro: effort wrong"
+grep -q '^model:' "$DIR/agents/architect.md" && fail "max: architect must not pin a model" || pass "max: architect inherits the session model"
 
 echo "== settings.json"
 n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/settings.json")

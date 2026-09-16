@@ -8,7 +8,13 @@ This repository has an agentic engineering setup under `.ai/`. Read
   the task; do not fix them.
 - Work runs through `/ai-task <request>`: discovery, context, impact, risk tier,
   plan, implementation, test, review, security review, release report, human
-  approval. `/ai-status` shows where a task stands.
+  approval. `pipeline_profile` in `.ai/policies/risk-tiers.json` says which of
+  those the session does inline (solo: everything up to T2) and which go to an
+  agent. `/ai-status` shows where a task stands.
+- Verify before reporting done: run the command in the Verification section of
+  `.ai/policies/testing.md` and show its output. A bugfix starts with the
+  failing test. When a review flags the same mistake twice, the correction goes
+  into this file.
 - Each implementation step names the files it may touch. Editing anything else is
   refused; answer `SCOPE_CHANGE_REQUIRED` and let the plan be amended.
 - The risk tier in `.ai/policies/risk-tiers.json` decides who reviews the change

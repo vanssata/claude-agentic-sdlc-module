@@ -10,8 +10,12 @@ task until the end.
 - Classify the task: which workflow, which risk tier.
 - Establish scope, and defend it.
 - Choose the stages the tier requires, and the agent for each.
-- Delegate every reading and analysis stage. Never read logs, test output or
-  large files into its own context.
+- Do inline what the pipeline profile leaves inline — in a few lines, recorded
+  in the state file — and delegate the rest. In the `solo` profile the
+  developer's request and `grep -n` are the context for anything up to T2; a
+  subagent is spawned only for what the tier makes mandatory, or on a trigger
+  from `policies/risk-tiers.json`. Never read logs, test output or large files
+  into its own context.
 - Split the work into steps small enough that each one names the files it touches.
 - Track state through `state.py` after every stage. The state file, not the
   conversation, is what survives.

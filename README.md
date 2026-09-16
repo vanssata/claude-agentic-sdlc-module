@@ -22,6 +22,13 @@ It gives a machine and a repository four things:
 The design goal is asymmetry: **it should be harder for an agent to damage the
 project than to make a small, well-defined change safely.**
 
+The defaults are tuned for **one developer who knows the codebase, on a Pro or
+Team plan**, following the [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook):
+the developer's knowledge is the first source of context, one verification
+command is the feedback loop, plan mode is where the expensive model is spent,
+and a subagent is spawned only where a second context window buys something.
+A fully delegated `team` profile is one JSON key away.
+
 > This plugin absorbs the former `claude-routing`. Installing it migrates that
 > plugin's managed `CLAUDE.md` block into its own, so the two never coexist; see
 > [Migrating from claude-routing](#migrating-from-claude-routing).
@@ -30,9 +37,9 @@ project than to make a small, well-defined change safely.**
 
 ```bash
 ./install.sh                       # auto-detects the plan from ~/.claude.json
+./install.sh --plan pro            # Pro and Team: opusplan session, opus pinned for EXPERT
 ./install.sh --plan max            # Max 5x and 20x share this profile
 ./install.sh --plan max --fable no # Opus at the EXPERT tier instead of Fable
-./install.sh --plan pro            # Opus is the top tier on Pro
 ./install.sh --dry-run             # print what would be written, write nothing
 ```
 
@@ -50,8 +57,8 @@ Re-running the installer updates in place: it backs up what it replaces to
 | `profiles/{pro,max}.json` + `settings.common.json` | deep-merged into `~/.claude/settings.json` | model, fallback, effort, compaction, output limits and the hook registrations |
 | `CLAUDE.snippet.md` | a managed block in `~/.claude/CLAUDE.md` | the rules, between `<!-- claude-agentic:start/end -->`, with the plan's numbers filled in |
 | `agents/ai-*.md` | `~/.claude/agents/` | the ten pipeline agents |
-| `agents/ai-expert.md.tmpl` | `~/.claude/agents/ai-expert.md` | the escalation agent, effort rendered per plan |
-| `agents/{architect,Explore,log-reader}.md` | `~/.claude/agents/` | design, fast search, log reading |
+| `agents/{ai-expert,architect}.md.tmpl` | `~/.claude/agents/` | the EXPERT-tier agents, model line and effort rendered per plan |
+| `agents/{Explore,log-reader}.md` | `~/.claude/agents/` | fast search, log reading |
 | `hooks/*` | `~/.claude/hooks/` | five hooks, the shared library and the guards' default config |
 | `skills/*/` | `~/.claude/skills/` | `/ai-init`, `/ai-audit`, `/ai-task`, `/ai-status`, `/project-init`, `/sdlc-intent`, `/sdlc-spec`, `/sdlc-plan` |
 
@@ -64,6 +71,7 @@ Re-running the installer updates in place: it backs up what it replaces to
 | `MAX_MCP_OUTPUT_TOKENS` | 40 000 | 25 000 |
 | `cap-large-read.py` | refuses an unbounded `Read` over 4 000 lines or 250 KB | no limit |
 | `autoCompactWindow` | 600 000 on Max, 180 000 on Pro | the model window |
+| `model` | `opusplan` on Pro: Opus in plan mode, Sonnet when executing | Sonnet 5 on Pro |
 
 The Read guard is a guardrail, not a cage: an explicit `limit` always goes
 through, so reading something large stays possible but has to be deliberate.
@@ -91,7 +99,12 @@ want the agentic pipeline.
 
 `/ai-init` reads the codebase and writes `.ai/`. It does not touch application
 code — not a rename, not a formatting fix. Problems it finds are documented in
-`.ai/project/known-risks.md`, not fixed.
+`.ai/project/known-risks.md`, not fixed. By default it runs a **light** survey:
+it asks you for what you know, confirms it with `grep`, and sends only two
+discovery agents to the places memory is least reliable — legacy and risks,
+tests and data. `/ai-init --survey full` fans out six agents for a codebase new
+to you. Either way it ends with the one verification command written into
+`.ai/policies/testing.md`, which every later task runs before reporting done.
 
 ## Risk tiers
 
@@ -110,6 +123,27 @@ reviews it, and whether a human signs it off.
 The machine-readable source of truth is `.ai/policies/risk-tiers.json`, which
 `/ai-init` copies into each project so the tiers can be tuned to that codebase.
 
+### Who does each stage: the pipeline profile
+
+The tier decides *whether* a stage runs; `pipeline_profile` in the same file
+decides *who* runs it. The default is `solo`:
+
+| Tier | `solo` delegates to a subagent | `team` delegates |
+|---|---|---|
+| T0, T1 | nothing — every stage is a few inline lines, recorded in the state file | discovery, test |
+| T2 | the adversarial review, on `sonnet` | everything except implementation |
+| T3 | plan, plan review, adversarial review — on `opus` | everything except implementation |
+| T4 | plus security review and the release report | everything except implementation |
+| T5 | plus discovery and impact; the plan goes to `ai-expert` | everything except implementation |
+
+In `solo`, discovery, context and impact come from the request plus `grep -n`,
+risk from the trigger table, the plan is written in plan mode, tests run through
+the project's one verification command, and the release report becomes the
+commit message. A subagent is still sent on a stated trigger: an unfamiliar
+area, an `UNKNOWN` the plan depends on, a non-obvious T3+ classification, or
+verification output too long to read inline. Switch to `team` by editing the
+key. No stage is ever skipped; the profile only changes who does it.
+
 ## Model tiers
 
 | Tier | Runs on | Does |
@@ -120,8 +154,16 @@ The machine-readable source of truth is `.ai/policies/risk-tiers.json`, which
 | EXPERT | the session model | design (`architect`) and what STRONG could not settle (`ai-expert`) |
 
 On a Max plan with Fable enabled, EXPERT is Fable 5.1 [1m] at `xhigh` effort; with
-`--fable no` it is Opus 5 [1m]; on Pro it is Opus 5. `ai-expert.md` omits `model:`
-on purpose, so the session's own fallback chain applies to it too.
+`--fable no` it is Opus 5 [1m]. There `ai-expert` and `architect` omit `model:`
+on purpose, so the session's own fallback chain applies to them too.
+
+On Pro (and Team, which shares its models) the session model is `opusplan`:
+Opus 5 in plan mode, Sonnet 5 when executing. That is the playbook's "plan mode"
+play priced for a $20 plan — the expensive model is spent on the plan, and the
+cheaper one on typing it out. Because a subagent that omits `model:` would
+inherit Sonnet outside plan mode, the installer pins `model: opus` on
+`ai-expert` and `architect` for this plan. `log-reader`, `ai-tester` and
+`ai-release` run at `low` effort: they read and report, they do not think.
 
 There is no LOCAL tier: Claude Code has no local-model backend. The work it would
 have done is done by deterministic tools and by `ai-indexer` on the cheapest
@@ -178,7 +220,7 @@ one; nothing references it any more.
 bash tests/run-all.sh
 ```
 
-Eight suites, 224 assertions: the three guards against JSON fixtures, the state
+Eight suites, 245 assertions: the three guards against JSON fixtures, the state
 machine, scaffold idempotency, installer rendering for all three plan
 combinations, the migration off `claude-routing`, and an end-to-end run that
 installs into a scratch directory, scaffolds a throwaway repository and drives a

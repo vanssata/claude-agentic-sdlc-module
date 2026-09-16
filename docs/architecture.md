@@ -59,12 +59,37 @@ REQUEST
 
 The manager is the **main session**, not a subagent. Claude Code has no cheap
 orchestrator process, and an orchestrator that cannot see the conversation is
-worse than none. What keeps the session's context small is that every reading
-stage is delegated and every artifact is written to a file and referred to by
+worse than none. What keeps the session's context small is that reading is
+delegated or bounded, and every artifact is written to a file and referred to by
 path.
 
 Stages are lightweight for a T0 change and heavy for a T5 one. None is skipped —
 that judgement is exactly what risk classification exists to replace.
+
+## Who does a stage: the pipeline profile
+
+`pipeline_profile` in `.ai/policies/risk-tiers.json` decides who runs each
+stage, never whether it runs. The default, `solo`, is for one developer who
+knows the codebase — the setting the playbook describes for a team of one to
+five: CLAUDE.md, plan mode and a feedback loop, with light review.
+
+- Discovery, context and impact come from the request plus `grep -n`, written
+  by the session into the same fixed-shape summary an agent would produce.
+- Risk comes from the trigger table; `ai-risk` on `opus` only when a T3+ answer
+  is not obvious.
+- T0–T2 plans are written by the session, T2 in plan mode; `ai-planner` on
+  `opus` from T3, `ai-expert` at T5.
+- Tests are the project's one verification command, piped through `tail`;
+  `log-reader` when the output is long.
+- The adversarial review is always a subagent from T2 up — a context that did
+  not write the code — on `sonnet` at T2 and `opus` above.
+- Security review at T4/T5 is unchanged. The release report is inline up to T3
+  and becomes the commit message body.
+
+Each subagent costs its own context window and a system prompt; in `solo` the
+pipeline spawns none for a T1 change and one for a T2 change, against nine or
+ten in `team`. That is the whole difference, and it is the difference between a
+task that fits a Pro usage window and one that does not.
 
 ## Why the session implements
 
@@ -126,10 +151,12 @@ these are defence-in-depth, and a broken guard must never make the tool unusable
 Context length, not model choice, dominates the cost of a session, so:
 
 - the main session delegates reading and keeps summaries, not output;
-- discovery fans out five or six agents at once, which is exactly why that
-  fan-out is on the cheapest tier;
-- `ai-indexer` runs first so each discovery agent gets a file list instead of
-  globbing the repository itself;
+- in the `solo` profile the fan-out happens once, in `/ai-init`, and a task
+  spawns an agent only where the tier needs a second context window;
+- where discovery does fan out, it is on the cheapest tier, and `ai-indexer`
+  runs first so each agent gets a file list instead of globbing the repository;
+- on Pro the session model is `opusplan`, so Opus is paid for the plan and
+  Sonnet for the implementation;
 - artifacts live on disk and are referenced by path between stages.
 
 The expensive tier is reserved for design, adversarial review and the conclusions

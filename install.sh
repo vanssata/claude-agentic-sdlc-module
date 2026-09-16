@@ -9,6 +9,9 @@
 # plan; the ai-* pipeline agents plus architect, Explore and log-reader; five
 # hooks; eight skills; and one managed block in ~/.claude/CLAUDE.md.
 #
+# pro (and Team Standard, which shares its models): session model `opusplan` —
+# Opus in plan mode, Sonnet when executing — and the EXPERT tier pinned to opus.
+#
 # This plugin supersedes claude-routing. On the first run it migrates that
 # plugin's managed block into this one's, so the two never coexist.
 #
@@ -41,6 +44,7 @@ if [ -z "$PLAN" ]; then
   case "$org" in
     claude_max*|*max*) PLAN=max; echo "detected plan: max ($org)";;
     claude_pro*|*pro*) PLAN=pro; echo "detected plan: pro ($org)";;
+    claude_team*|*team*) PLAN=pro; echo "detected plan: team ($org) — uses the pro profile (same models and limits)";;
     *)
       if [ -t 0 ]; then
         read -r -p "Could not detect plan (organizationType='$org'). Enter plan [pro/max]: " PLAN
@@ -81,7 +85,8 @@ READ_BYTES=$(jq -r '.env.CLAUDE_READ_MAX_BYTES' "$TMP/settings.snippet.json")
 
 pretty() {  # model id -> human name
   case "$1" in
-    fable*) echo "Fable 5.1 [1m]";; "opus[1m]") echo "Opus 5 [1m]";; opus*) echo "Opus 5";;
+    fable*) echo "Fable 5.1 [1m]";; opusplan) echo "Opus 5 in plan mode, Sonnet 5 when executing (opusplan)";;
+    "opus[1m]") echo "Opus 5 [1m]";; opus*) echo "Opus 5";;
     sonnet*) echo "Sonnet 5";; haiku*) echo "Haiku 4.5";; *) echo "$1";;
   esac
 }
@@ -94,19 +99,23 @@ FALLBACK_HUMAN=$(jq -r '.fallbackModel | if type=="array" then .[] else . end' "
 if [ "$PLAN" = pro ]; then
   PLAN_LABEL="Pro"
   EXPERT_EFFORT="high"
-  PLAN_SPECIFIC="- Fable is off this plan; never request it (\`model: fable\`, \`fable[1m]\`) anywhere. Opus 5 is the top tier here; Sonnet 5 is the fallback and the subagent default. \`xhigh\`/\`max\` are not supported — treat them as unavailable."
+  # On opusplan a subagent that omits `model:` inherits Sonnet outside plan mode,
+  # so the EXPERT tier pins opus explicitly on this plan.
+  EXPERT_MODEL_LINE="model: opus"
+  EXPERT_ROW="\`opus\` / \`high\`, pinned — on opusplan an inherited model is Sonnet outside plan mode"
+  PLAN_SPECIFIC="- Session model is \`opusplan\`: Opus 5 in plan mode, Sonnet 5 when executing. Plan in plan mode for anything above T1 — that is where Opus is paid for. Fable is off this plan; never request it. \`xhigh\`/\`max\` are unavailable. STRONG and EXPERT both pin \`model: opus\` explicitly."
   EFFORT_RULE="Raise to \`high\` only for architecture, root-cause analysis and adversarial verification, and say that you are raising it."
-  EXPERT_SESSION_NOTE="# model: intentionally omitted — inherits the session model (Opus 5 on the pro plan)"
 else
   PLAN_LABEL="Max"
+  EXPERT_MODEL_LINE="# model: intentionally omitted — inherits the session model, so the session's fallback chain applies here too"
   if [ "$FABLE" = yes ]; then
     EXPERT_EFFORT="xhigh"
-    PLAN_SPECIFIC="- \`xhigh\` is allowed only for \`architect\`, \`ai-expert\` and verify/judge stages while the session runs Fable; \`max\` stays off. Readers never go above \`low\`."
-    EXPERT_SESSION_NOTE="# model: intentionally omitted — inherits the session model (Fable 5.1 [1m] on this install), so the Fable to Opus fallback applies here too"
+    EXPERT_ROW="omit \`model:\` — inherits the session (Fable 5.1 [1m]) / \`xhigh\` for the hardest verify/judge stages"
+    PLAN_SPECIFIC="- \`xhigh\` is allowed only for \`architect\`, \`ai-expert\` and verify/judge stages while the session runs Fable; \`max\` stays off. Never pin \`model: fable\` — omit \`model:\` so the Fable to Opus fallback comes free."
   else
     EXPERT_EFFORT="high"
-    PLAN_SPECIFIC="- Fable is disabled in this install (\`--fable no\`); the session runs Opus 5 [1m]. Do not request \`model: fable\` anywhere. \`xhigh\`/\`max\` stay off."
-    EXPERT_SESSION_NOTE="# model: intentionally omitted — inherits the session model (Opus 5 [1m] on this install, Fable disabled)"
+    EXPERT_ROW="omit \`model:\` — inherits the session (Opus 5 [1m]) / \`high\`"
+    PLAN_SPECIFIC="- Fable is disabled in this install (\`--fable no\`); the session runs Opus 5 [1m]. Do not request \`model: fable\` anywhere. \`xhigh\`/\`max\` stay off. Never pin \`model: opus\` for the thinking tier — omit \`model:\` so the fallback comes free."
   fi
   EFFORT_RULE="Lower to \`medium\` for routine edits when the session is long; raise above \`high\` only per the plan rule above, and say that you are raising it."
 fi
@@ -115,7 +124,7 @@ render() {  # render <src> <dst>
   PLAN_LABEL="$PLAN_LABEL" SESSION_HUMAN="$SESSION_HUMAN" FALLBACK_HUMAN="$FALLBACK_HUMAN" \
   EFFORT="$EFFORT" COMPACT="$COMPACT" READ_LINES="$READ_LINES" \
   PLAN_SPECIFIC="$PLAN_SPECIFIC" EFFORT_RULE="$EFFORT_RULE" \
-  EXPERT_EFFORT="$EXPERT_EFFORT" EXPERT_SESSION_NOTE="$EXPERT_SESSION_NOTE" \
+  EXPERT_EFFORT="$EXPERT_EFFORT" EXPERT_MODEL_LINE="$EXPERT_MODEL_LINE" EXPERT_ROW="$EXPERT_ROW" \
   python3 - "$1" "$2" <<'PY'
 import os, sys
 src, dst = sys.argv[1], sys.argv[2]
@@ -130,7 +139,8 @@ for key, value in {
     "{{PLAN_SPECIFIC_ROUTING}}": os.environ["PLAN_SPECIFIC"],
     "{{EFFORT_RULE}}": os.environ["EFFORT_RULE"],
     "{{EXPERT_EFFORT}}": os.environ["EXPERT_EFFORT"],
-    "{{EXPERT_SESSION_NOTE}}": os.environ["EXPERT_SESSION_NOTE"],
+    "{{EXPERT_MODEL_LINE}}": os.environ["EXPERT_MODEL_LINE"],
+    "{{EXPERT_ROW}}": os.environ["EXPERT_ROW"],
 }.items():
     text = text.replace(key, value)
 assert "{{" not in text, "unrendered placeholder in %s" % src
@@ -139,6 +149,7 @@ PY
 }
 
 render "$SRC/agents/ai-expert.md.tmpl" "$TMP/ai-expert.md"
+render "$SRC/agents/architect.md.tmpl" "$TMP/architect.md"
 render "$SRC/CLAUDE.snippet.md" "$TMP/CLAUDE.block.md"
 
 if [ "$DRY" = 1 ]; then
@@ -147,6 +158,8 @@ if [ "$DRY" = 1 ]; then
   jq . "$TMP/settings.snippet.json"
   echo "== agents/ai-expert.md (rendered head):"
   sed -n '1,10p' "$TMP/ai-expert.md"
+  echo "== agents/architect.md (rendered head):"
+  sed -n '1,8p' "$TMP/architect.md"
   echo "== CLAUDE.md managed block:"
   cat "$TMP/CLAUDE.block.md"
   echo "== would install:"
@@ -176,6 +189,7 @@ for f in "$SRC"/agents/*.md; do
   install_file "$f" "$CLAUDE_DIR/agents/$(basename "$f")"
 done
 install_file "$TMP/ai-expert.md" "$CLAUDE_DIR/agents/ai-expert.md"
+install_file "$TMP/architect.md" "$CLAUDE_DIR/agents/architect.md"
 
 # `reviewer` is superseded by `ai-reviewer`, which is adversarial, tier-aware and
 # reads the project's policies. Retire it only when it is byte-identical to the
@@ -334,7 +348,7 @@ Done.
   plan            $PLAN  (fable=$FABLE)
   session model   $SESSION_MODEL ($SESSION_HUMAN), effort $EFFORT
   fallback        $FALLBACK
-  EXPERT tier     the session model at effort $EXPERT_EFFORT (architect, ai-expert)
+  EXPERT tier     $( [ "$PLAN" = pro ] && echo "opus, pinned" || echo "the session model" ) at effort $EXPERT_EFFORT (architect, ai-expert)
   compaction      $COMPACT tokens
   read guard      an unbounded Read is refused above $READ_LINES lines / $READ_BYTES bytes
   agents          $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd' ')

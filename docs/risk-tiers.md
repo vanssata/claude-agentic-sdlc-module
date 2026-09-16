@@ -15,6 +15,18 @@ the judgement "this looks easy", which is the judgement that causes incidents.
 | **T4** | payments, accounting, tax, fiscal, authentication, authorization, order state transitions, customer data |
 | **T5** | migration strategy, infrastructure, Kubernetes, production deployment, destructive schema change, cross-system migration |
 
+## Who does each stage
+
+The tier decides whether a stage runs. `pipeline_profile` in the same JSON
+decides who runs it — the session inline, or a subagent with its own context
+window. The default `solo` profile delegates nothing at T0/T1, the review at T2
+(on `sonnet`), plan and reviews on `opus` at T3, security and the release report
+as well at T4, and discovery too at T5. `team` delegates every stage except
+implementation at every tier. The full table is in the mirror each project
+carries, `.ai/policies/risk-tiers.md`, and the triggers that make `solo`
+delegate anyway — an unfamiliar area, an `UNKNOWN` the plan depends on, a
+non-obvious T3+ tier, long test output — are under `delegate_anyway_when`.
+
 ## Two files, one source of truth
 
 `/ai-init` copies both into every project:
@@ -51,8 +63,8 @@ If you change the JSON, update the markdown and its hash comment.
 
 | Tier | Plans and reviews on | Extra obligations |
 |---|---|---|
-| T0, T1 | FAST | — |
-| T2 | BALANCED | adversarial review |
+| T0, T1 | the session, inline | — |
+| T2 | the session plans (in plan mode); BALANCED reviews | adversarial review |
 | T3 | STRONG | plan review, human plan approval, characterization tests before touching legacy |
 | T4 | STRONG | all of T3, plus security review, a mandatory rollback and monitoring section, and explicit idempotency and retry behaviour |
 | T5 | EXPERT | all of T4, plus migration analysis (locks, table size, duration, deploy order, old-version compatibility) and a **rehearsed** rollback |

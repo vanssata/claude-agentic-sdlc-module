@@ -2,6 +2,11 @@
 
 New behaviour that someone asked for. The default workflow.
 
+> Who runs a stage is set by `pipeline_profile` in `policies/risk-tiers.json`.
+> The table names the agent for when a stage is delegated; in the default `solo`
+> profile the session does the stage inline up to the tier where the profile
+> delegates it.
+
 | Stage | Who | Notes |
 |---|---|---|
 | DISCOVERY | `ai-indexer` then `ai-discovery` | where the feature lands, what it will touch |

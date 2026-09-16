@@ -1,6 +1,6 @@
 {
-  "model": "opus",
-  "availableModels": ["opus", "sonnet", "haiku"],
+  "model": "opusplan",
+  "availableModels": ["opusplan", "opus", "sonnet", "haiku"],
   "fallbackModel": ["sonnet"],
   "effortLevel": "medium",
   "modelSettings": {

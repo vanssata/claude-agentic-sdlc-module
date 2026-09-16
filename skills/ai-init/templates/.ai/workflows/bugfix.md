@@ -3,6 +3,11 @@
 Something behaves wrongly. The goal is the smallest change that fixes it without
 changing anything else.
 
+> Who runs a stage is set by `pipeline_profile` in `policies/risk-tiers.json`.
+> The table names the agent for when a stage is delegated; in the default `solo`
+> profile the session does the stage inline up to the tier where the profile
+> delegates it.
+
 | Stage | Who | Notes |
 |---|---|---|
 | DISCOVERY | `ai-discovery` | reproduce first: find the exact path that produces the symptom |

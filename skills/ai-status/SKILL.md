@@ -43,7 +43,16 @@ Read-only. This skill never changes state; it reports it.
 
    Report what the tiers resolve to on this machine: FAST is haiku, BALANCED is
    sonnet, STRONG is opus, and **EXPERT is whatever `model` says** — name it, so
-   the reader knows what an escalation would actually cost.
+   the reader knows what an escalation would actually cost. When `model` is
+   `opusplan`, say so in one line: Opus in plan mode, Sonnet when executing,
+   and `ai-expert` and `architect` pin `opus` explicitly.
+
+   Also print the pipeline profile, because it decides how much of a task is
+   delegated:
+
+   ```bash
+   jq -r '.pipeline_profile // "team"' .ai/policies/risk-tiers.json
+   ```
 
 5. **Risk-tier mirror staleness.** `.ai/policies/risk-tiers.md` carries the
    sha256 of the JSON it was generated from:

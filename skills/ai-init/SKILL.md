@@ -1,7 +1,7 @@
 ---
 name: ai-init
 description: Survey an existing production codebase and build the .ai/ agentic engineering infrastructure around it — knowledge base, policies, risk tiers, workflows, agent contracts — then write an initial assessment. Read-only with respect to application code. Use on "set up agentic infrastructure", "analyse this project for AI work", "/ai-init", before the first /ai-task in a repository.
-argument-hint: [team/CI/tracker context, optional]
+argument-hint: [--survey light|full] [team/CI/tracker context, optional]
 ---
 
 # /ai-init $ARGUMENTS
@@ -56,13 +56,33 @@ Platform resources, Sylius resources, payment methods, shipping, tax calculation
 promotions, channels, the customer/order/payment model, installed plugins,
 custom state machines, and ERP, accounting or fiscal integrations.
 
-### 3. One inventory pass, then fan out
+### 3. One inventory pass, then a survey sized to what is already known
 
 Run `ai-indexer` once for a repository-wide inventory: top-level layout, file
 counts per area, the largest files, entry points, and a summary of recent commit
 subjects. It is on the cheapest model precisely so this pass is free.
 
-Then fan out `ai-discovery` agents **in parallel, in one message**, one per area,
+Then choose the survey. `$ARGUMENTS` may say `--survey light` or
+`--survey full`; the default is **light**.
+
+**light** — the default, for a developer who knows this project. Their knowledge
+is the cheapest and most reliable source there is, so ask for it first: a
+ten-minute brain dump of the entry points, the modules that matter, the
+integrations, the business rules nobody wrote down, and the areas nobody dares
+touch. Confirm every claim with `grep -n` and label it — **KNOWN FACT** with
+`file:line` when the code agrees, **INFERENCE** when it does not quite. That
+fills `project/overview.md`, `architecture.md`, `modules.md`, `integrations.md`,
+`business-rules.md` and `glossary.md`. Then fan out exactly **two**
+`ai-discovery` agents, in one message, on the areas where memory is least
+reliable:
+
+1. legacy, risks and code that looks unused — what is old, strange, or
+   load-bearing by accident;
+2. tests, CI/CD, data and configuration — what actually runs, the schema,
+   migrations, queues, and how secrets are supplied (never their values).
+
+**full** — for a codebase new to you, or a knowledge base a team will share.
+Fan out `ai-discovery` agents **in parallel, in one message**, one per area,
 each handed the slice of the inventory it needs so it does not glob the
 repository itself:
 
@@ -76,7 +96,7 @@ repository itself:
 6. data and configuration — schema, migrations, queues, caches, environment
    configuration and how secrets are supplied (never their values).
 
-This is a wide fan-out, so it stays on the cheap tier. Do not raise it.
+Either way the fan-out stays on the cheap tier. Do not raise it.
 
 ### 4. Synthesise into `.ai/project/`
 
@@ -99,6 +119,16 @@ Do not resolve the contradiction. Record it.
 Fill the "project specifics" sections of `.ai/policies/coding.md`,
 `testing.md`, `database.md` and `release.md` **only if those files were created
 in step 1**. If they already existed, someone has edited them: leave them alone.
+
+In `testing.md`, fill the **Verification** section: the one command that proves
+the project is healthy, and two or three lines of what healthy output looks
+like. Every `/ai-task` runs it before reporting a step done; without it there is
+no feedback loop. Put the same command under `## Verification` in the project
+`CLAUDE.md`.
+
+Set `pipeline_profile` in `risk-tiers.json`: `solo` (the default) when one
+developer who knows the codebase will run the tasks, `team` when several people
+or an unfamiliar codebase need every stage delegated.
 
 Adjust `.ai/policies/risk-tiers.json` to this project — the tier examples should
 name this codebase's actual critical areas, not generic ones. If you change the

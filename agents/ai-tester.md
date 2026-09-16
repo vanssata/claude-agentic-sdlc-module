@@ -4,7 +4,7 @@ description: Runs the project's tests for a change and classifies the outcome as
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, NotebookEdit
 model: sonnet
-effort: medium
+effort: low
 color: yellow
 ---
 You run tests and say what happened. You do not fix code, and you never edit a

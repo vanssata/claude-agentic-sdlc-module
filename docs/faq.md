@@ -49,6 +49,41 @@ approval; the commands that would run next are printed, not executed.
 If you ask for a commit in your own message, the agent commits. That is a person
 deciding, which is the distinction that matters.
 
+## Why did `/ai-task` not spawn any agents?
+
+Because the project's `pipeline_profile` is `solo` and the tier was T0 or T1.
+Every stage still ran — look at `history[]` in the state file — but the session
+did them inline: your request plus `grep -n` was the discovery, the trigger
+table was the risk classification, the verification command was the test. A
+subagent costs its own context window, and for a change you could describe in
+one sentence it buys nothing. From T2 the review is always a separate context,
+and from T3 planning is too.
+
+## How do I get the fully delegated pipeline back?
+
+Set `"pipeline_profile": "team"` in `.ai/policies/risk-tiers.json`. Every stage
+then goes to its agent at every tier, as in the tables in `docs/agents.md`. You
+can also delegate a single stage in `solo` without switching: say so in the
+request, or hit one of the `delegate_anyway_when` triggers.
+
+## Why is the session model `opusplan` on Pro?
+
+Opus consumes the usage window far faster than Sonnet, and the main session
+re-reads its whole context every turn, so the session model is the largest cost
+lever there is. `opusplan` spends Opus where it changes the outcome — the plan —
+and Sonnet on implementing it. Because a subagent that omits `model:` would
+inherit Sonnet outside plan mode, the installer pins `model: opus` on
+`ai-expert` and `architect` for this plan. Prefer Opus everywhere? Set `model` to
+`opus` in `~/.claude/settings.json` and reinstall with `--plan pro`; nothing else
+changes.
+
+## Where does the verification command come from?
+
+`.ai/policies/testing.md`, section **Verification**. `/ai-init` asks for it;
+if it is empty when a task reaches TEST, the task takes the command from the
+project `CLAUDE.md` or the CI config and writes it there. One command, one
+healthy-output example — that is the feedback loop the playbook asks for.
+
 ## Do I have to run `/ai-init` before `/ai-task`?
 
 Yes. Without `.ai/` there are no policies, no tier table, no state directory and

@@ -42,6 +42,14 @@ bash "$SCAFFOLD" "$ROOT" >/dev/null 2>&1
 grep -q 'my own notes' "$ROOT/.ai/project/overview.md" && pass "a hand-edited template is not overwritten" || fail "hand edits must survive"
 grep -q 'custom' "$ROOT/CLAUDE.md" && pass "hand-edited CLAUDE.md content survives" || fail "CLAUDE.md edits must survive"
 
+echo "== the shipped risk-tier mirror matches its JSON"
+want=$(sha256sum "$CLAUDE_AGENTIC_TEMPLATES/.ai/policies/risk-tiers.json" | cut -d' ' -f1)
+grep -q "sha256:$want" "$CLAUDE_AGENTIC_TEMPLATES/.ai/policies/risk-tiers.md" \
+    && pass "risk-tiers.md carries the sha256 of the shipped risk-tiers.json" || fail "risk-tiers.md hash is stale — regenerate it"
+[ "$(jq -r .pipeline_profile "$ROOT/.ai/policies/risk-tiers.json")" = solo ] && pass "the scaffolded profile is solo" || fail "pipeline_profile should default to solo"
+jq -e '.pipeline_profiles.solo.delegated_stages.T4 | index("security_review")' "$ROOT/.ai/policies/risk-tiers.json" >/dev/null \
+    && pass "solo still delegates the security review at T4" || fail "solo T4 must delegate security_review"
+
 echo "== an existing CLAUDE.md is extended, not replaced"
 ROOT2="$TMP/project2"; mkdir -p "$ROOT2"
 printf '# Existing project\n\n## Commands\n\nmake test\n' > "$ROOT2/CLAUDE.md"
