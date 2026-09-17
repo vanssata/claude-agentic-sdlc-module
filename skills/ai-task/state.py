@@ -22,7 +22,7 @@ Usage:
                                          allowed = every finished step's files + the ones named
   state.py step   <step_id>
   state.py step-done <step_id>
-  state.py set    <field> <value>        # test_status, review_status, security_status, next_action
+  state.py set    <field> <value>        # test_status, e2e_status, review_status, security_status, next_action
   state.py risks  --add TEXT | --clear
   state.py approve --by NAME
   state.py done
@@ -44,11 +44,13 @@ STAGES = [
 TIERS = ["T0", "T1", "T2", "T3", "T4", "T5"]
 WORKFLOWS = ["feature", "bugfix", "refactoring", "hotfix", "investigation"]
 TEST_STATUS = ["not_run", "passing", "existing_failure", "new_regression", "env_failure", "unknown"]
+E2E_STATUS = ["not_run", "passing", "failing", "not_applicable"]
 REVIEW_STATUS = ["not_started", "in_progress", "blockers_open", "passed"]
 SECURITY_STATUS = ["not_applicable", "not_started", "in_progress", "passed", "failed"]
 
 SETTABLE = {
     "test_status": TEST_STATUS,
+    "e2e_status": E2E_STATUS,
     "review_status": REVIEW_STATUS,
     "security_status": SECURITY_STATUS,
     "next_action": None,
@@ -141,6 +143,7 @@ def cmd_init(args, root):
         "approved_plan": {"ref": None, "current_step_id": None, "steps": []},
         "completed_steps": [],
         "test_status": "not_run",
+        "e2e_status": "not_run",
         "review_status": "not_started",
         "security_status": "not_started",
         "open_risks": [],
@@ -254,6 +257,9 @@ def cmd_step(args, root):
     print("allowed: %s" % ", ".join(match[0]["allowed_files"]))
     if match[0]["forbidden_files"]:
         print("forbidden: %s" % ", ".join(match[0]["forbidden_files"]))
+    # Only this step's own tests run inside it; the full suite runs once after
+    # the last step and the e2e suite once after that.
+    print("step tests: %s" % (", ".join(match[0].get("required_tests") or []) or "none"))
 
 
 def cmd_step_done(args, root):
@@ -272,6 +278,8 @@ def cmd_step_done(args, root):
     save(root, state)
     remaining = [s["step_id"] for s in steps if s["status"] != "done"]
     print("step %s done; remaining: %s" % (args.step_id, ", ".join(remaining) or "none"))
+    if not remaining:
+        print("last step: run verify_command once, to the end, then e2e_command once")
 
 
 def _split_files(text):
@@ -307,7 +315,7 @@ def cmd_quick(args, root):
     state["current_stage"] = "implementation"
     record(state, "stage", "risk_classification -> plan -> implementation: quick")
     record(state, "step_started", "1: %s" % args.goal)
-    state["next_action"] = "implement, then run the verification command once"
+    state["next_action"] = "implement (step tests only), then the verification command once, then e2e once"
     save(root, state)
     print("%s %s: step 1 armed for %s" % (state["task_id"], args.tier, ", ".join(files)))
 

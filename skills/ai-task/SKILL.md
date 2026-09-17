@@ -61,8 +61,9 @@ The stages are the same in every profile; the profile decides **who does each
 one**. `pipeline_profiles.<profile>.delegated_stages[<tier>]` in that file lists
 the stages that go to a subagent. `solo`, the default, has two modes:
 
-- **direct** (T0–T2): no ceremony. You name the files, edit, run the
-  verification command once at the end and fix every failure as one batch.
+- **direct** (T0–T2): no ceremony. You name the files, edit, run each step's
+  own scoped tests, then the verification command once at the end and the e2e
+  suite once after it, and fix every failure as one batch.
   The only subagents are cheap readers (`Explore`, `log-reader`) and, at T2,
   one `ai-reviewer` on `sonnet`. Nothing runs on `opus` below T3.
 - **sdlc** (T3–T5): the full pipeline below, recorded stage by stage, with the
@@ -78,7 +79,16 @@ Skip `$STATE init` above for T0–T2; direct mode has its own single call.
 1. **Tier and files.** Take the entry points from the request; confirm them with
    `grep -n`. Say the tier, the trigger and the files you will touch, in one to
    five lines. At T2 that is the plan. Use `Explore` (haiku) when a file is not
-   found in a few `grep` calls, never a six-agent fan-out.
+   found in a few `grep` calls, never a six-agent fan-out — and when a file is
+   too large to open, that reader brings back the excerpt, not the file.
+   If this task needs a tool or MCP server the project does not enable by
+   default, say so here in one line and turn it off when the task ends:
+
+   ```
+   tools_for_this_task: <server-or-tool> — <why> — <when it goes off again>
+   ```
+
+   Most tasks need none. See `.ai/policies/tooling.md`.
 2. **Record — T2 only.** One call arms the scope guard and writes the audit
    trail; T0 and T1 keep no state file at all, the commit is the record:
 
@@ -87,8 +97,11 @@ Skip `$STATE init` above for T0–T2; direct mode has its own single call.
    ```
 
 3. **Implement**, yourself, in this session. `ai-implementer` (sonnet, low) only
-   for a mechanical pattern-copy the human asks for. No tests during the edit,
-   except the failing test a bugfix shows first.
+   for a mechanical pattern-copy the human asks for. When you finish a piece of
+   work, run **only its own tests** — `step_test_command` from
+   `.ai/policies/testing.md` scoped to the files you just touched — and fix
+   those failures there. Never the full suite mid-edit, never e2e. A bugfix
+   shows its failing test first, that one test.
 4. **Verify once, to the end.** Run the verification command from
    `.ai/policies/testing.md` with no fail-fast flag, through `tail -40`, or
    through `log-reader` when the output is long. T0 runs nothing. Collect
@@ -101,6 +114,14 @@ Skip `$STATE init` above for T0–T2; direct mode has its own single call.
 
    At T0/T1 there is no state: just fix the batch and re-run. Two rounds at
    most; a third means the human decides. One failure never restarts the task.
+
+   Then, **once**, after the fast suite is green: `e2e_command`. T0 and T1 skip
+   it. At T2 run it when the change can reach a flow the e2e suite covers; when
+   it cannot, say so in one line instead. It never runs inside step 3.
+
+   ```bash
+   $STATE set e2e_status <passing|failing|not_applicable>   # T2
+   ```
 5. **Review — T2 only.** After the tests pass, one `ai-reviewer` with
    `model: sonnet` over `git diff`, no ledger and no probe. Fix BLOCKER and
    HIGH findings as one batch (`$STATE remediate`), re-run the verification
@@ -149,6 +170,12 @@ Delegate below T3 only on a trigger from `delegate_anyway_when`: one
 `UNKNOWN` the plan depends on. Never the six-agent fan-out — that is
 `/ai-init`'s job, once.
 
+If the task needs a tool or MCP server beyond what the project enables by
+default, record it now, once, as `tools_for_this_task: <server-or-tool> — <why>
+— <when it goes off again>` in the task record, and disable it again when the
+task closes (`.ai/policies/tooling.md`). Agents keep the tool list their
+definition gives them; an agent short of a tool answers `SCOPE_CHANGE_REQUIRED`.
+
 Now state which later stages the tier makes mandatory and which of them this
 profile delegates. Everything after this point follows that answer, not your
 impression of how big the task feels.
@@ -196,11 +223,18 @@ Say which file is needed and why, return to PLAN for that one step, amend it,
 re-register the plan, and continue. One step's scope is amended — not the task
 replanned.
 
+Close the step with **its own tests only** — the ones the plan named for it,
+through `step_test_command` scoped to that step's files (`$STATE step` prints
+them). Not the full suite, not e2e: those belong to the end of the task. The
+scoped run still goes to the end, and its failures are fixed inside the step —
+no `remediate` step for them. If the plan named no test for the step, nothing
+runs.
+
 ```bash
 $STATE step-done <step_id>
 ```
 
-### TEST — once, to the end, then one batch of fixes
+### TEST — the step's tests inside the step, the suite once, e2e once
 
 After the **last** step, not after each one. Run the verification command from
 the **Verification** section of `.ai/policies/testing.md`; if that section is
@@ -211,8 +245,9 @@ through `tail -40`; when more than that matters, hand the full output to
 `log-reader` (haiku) and take back the list of failures; use `ai-tester`
 (haiku) in the `team` profile or when the test setup is unfamiliar.
 
-Nothing runs during a step. For a bugfix the failing test is written and
-**shown failing** before the fix — that one test, not the suite.
+Only the step's own scoped tests run during a step — never the full suite and
+never e2e. For a bugfix the failing test is written and **shown failing**
+before the fix — that one test, not the suite.
 
 ```bash
 $STATE set test_status <passing|existing_failure|new_regression|env_failure|unknown>
@@ -232,6 +267,18 @@ A remediation never re-triages or re-plans: the tier, the plan and the finished
 steps stand. Two rounds at most; a third round means the human decides.
 `existing_failure` is recorded and reported, not fixed inside this task. Never
 let a test be edited to make it pass.
+
+**E2E — once, at the end of the task.** After the fast suite is green and
+before the adversarial review, run `e2e_command` from `testing.md`, once, to
+the end, output through `tail -40` or `log-reader`. It never runs inside a step
+and never twice. Skip it when the change cannot reach a flow it covers and say
+which, in one line; at T4/T5 it is not skipped, and its result goes into the
+release report. Its failures are classified and fixed as one batch, like the
+suite's.
+
+```bash
+$STATE set e2e_status <passing|failing|not_applicable>
+```
 
 ### ADVERSARIAL REVIEW (T2 and above)
 
@@ -301,9 +348,14 @@ in this turn.
   below T2 not even a file — the state archive is the record.
 - One tool call where one will do: `quick` below T3, `triage` instead of four
   `stage` calls, one `task.md` instead of four report files, one verification
-  run instead of one per step, one `remediate` step instead of one per failure.
-- Never read logs, test output or large files into this session; `tail`, then
-  `log-reader`.
+  run and one e2e run instead of one per step, one `remediate` step instead of
+  one per failure.
+- Never read logs, test output or large files into this session. `grep -n`
+  first and read the ranges that matched; past that, `tail`, then a FAST reader
+  on the cheapest model — `log-reader` for output, `Explore` for code — which
+  returns the excerpt with `file:line`, never the file.
+- Tools and MCP servers are context too. Anything the task does not name stays
+  off, and deferred tools are loaded in one batched call, not one per tool.
 - Keep the agents' structured outputs as files under `.ai/reports/<task-id>/`
   and refer to them by path; do not carry their full text through the
   conversation.
@@ -319,9 +371,15 @@ in this turn.
   Cheap tasks get cheap stages, not skipped ones: in direct mode they are a
   line each, not a file each.
 - Failures are fixed in batches. One red test or one review finding never
-  restarts the task, re-runs the suite on its own, or re-opens the plan.
+  restarts the task, re-runs the suite on its own, or re-opens the plan. A
+  step's own scoped tests are the exception: they are fixed in that step.
+- A step runs its own tests, and only those. The full suite runs once after the
+  last step; the e2e suite runs once after that. Never per step.
 - Nothing below T3 runs on `opus`. Readers and runners are `haiku`; the T2
-  review is `sonnet`; STRONG is paid for from T3.
+  review is `sonnet`; STRONG is paid for from T3. Large files are read by the
+  cheapest model, and only the relevant part comes back.
+- Tools and MCP servers are off unless the task named them, and go off again
+  when it closes.
 - The tier decides the gates. Your sense of how risky it feels does not.
 - The scope guard is not an obstacle to route around; it is the plan being
   enforced.

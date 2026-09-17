@@ -140,14 +140,30 @@ Risk:
 Do not resolve the contradiction. Record it.
 
 Fill the "project specifics" sections of `.ai/policies/coding.md`,
-`testing.md`, `database.md` and `release.md` **only if those files were created
-in step 1**. If they already existed, someone has edited them: leave them alone.
+`testing.md`, `database.md`, `tooling.md` and `release.md` **only if those files
+were created in step 1**. If they already existed, someone has edited them: leave them alone.
 
-In `testing.md`, fill the **Verification** section: the one command that proves
-the project is healthy, and two or three lines of what healthy output looks
-like. Every `/ai-task` runs it before reporting a step done; without it there is
-no feedback loop. Put the same command under `## Verification` in the project
-`CLAUDE.md`.
+In `testing.md`, fill the **Verification** section: the three commands, and
+two or three lines of what healthy output looks like.
+
+- `verify_command` — the full fast suite, with the e2e group or tag **excluded**.
+  Every `/ai-task` runs it once, after the last step, before reporting done.
+- `step_test_command` — the same runner scoped to a path or a filter, so one
+  implementation step can run its own tests and nothing else.
+- `e2e_command` — the end-to-end suite, run once at the end of a task. Write
+  `none` when the project has no such suite, so the next task stops looking.
+
+Without them there is no feedback loop. Say which group, tag or directory marks
+the e2e tests and how `verify_command` excludes them. Put the same commands
+under `## Verification` in the project `CLAUDE.md`.
+
+In `tooling.md`, fill **Project specifics**: which MCP servers this repository
+enables for every task and why, which ones are deliberately off, and any tool a
+task must ask for explicitly. The default is none — a server nobody can justify
+in one line does not belong there. Check `.claude/settings.json` keeps
+`"enableAllProjectMcpServers": false`, and that anything in a checked-in
+`.mcp.json` is listed in `enabledMcpjsonServers` only if it earned it, in
+`disabledMcpjsonServers` otherwise.
 
 Set `pipeline_profile` in `risk-tiers.json`: `solo` (the default) when one
 developer who knows the codebase will run the tasks — T0–T2 directly, the full

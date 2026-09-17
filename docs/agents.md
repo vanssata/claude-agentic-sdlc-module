@@ -27,7 +27,7 @@ The full pipeline starts at T3. See `docs/risk-tiers.md`.
 | `ai-risk` | sonnet (opus on re-run) | Terra (`ai-risk-strong` on Sol for the re-run) | medium | no | risk classification |
 | `ai-planner` | sonnet (opus at T3/T4) | Terra (`ai-planner-strong` on Sol at T3/T4) | medium | no | plan |
 | `ai-implementer` | sonnet | Terra | medium | **yes** | mechanical steps only |
-| `ai-tester` | sonnet | Terra | low | no | once after the last step (team profile, or an unfamiliar test setup) |
+| `ai-tester` | sonnet | Terra | low | no | one named scope at a time: a step's own tests, the suite after the last step, e2e once at the end (team profile, or an unfamiliar test setup) |
 | `ai-reviewer` | opus | Sol | high | no | plan review, adversarial review |
 | `ai-security` | opus | Sol | high | no | T4, T5, auth or personal data |
 | `ai-release` | sonnet | Terra | low | the report | release report at T4/T5 (solo) or from T2 (team) |

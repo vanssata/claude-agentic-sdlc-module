@@ -76,11 +76,23 @@ and the guard is live.
 
 ## Why did the tests run only once?
 
-By design: the verification command runs after the last step, not after each
-one. A step's own single test may run in between when it is cheap, and a
-bugfix shows its failing test first. Running a full suite per step multiplied
-the slowest part of a task by the number of steps and found nothing the final
-run would not.
+The full suite did. By design there are three scopes, and each runs at its own
+moment: a step runs **only the tests its plan step names**, through
+`step_test_command` scoped to the files it touched; the verification command
+runs **once, after the last step**; the e2e suite runs **once after that**, at
+the end of the task. A bugfix still shows its failing test first.
+
+Running the full suite per step multiplied the slowest part of a task by the
+number of steps and found nothing the final run would not — and the e2e suite
+is slower still, so it runs once, at the end, when there is a finished change
+for it to exercise. What a step does need is its own tests, immediately: a
+regression in the code you just wrote is cheapest to fix while you are still
+in it.
+
+## What if the project has no e2e suite?
+
+Write `e2e_command: none` in `.ai/policies/testing.md`. An empty line means
+"not written down yet", and the next task will go looking for it.
 
 ## Where is Fable used on Max?
 
@@ -127,10 +139,13 @@ overrides it.
 
 ## Where does the verification command come from?
 
-`.ai/policies/testing.md`, section **Verification**. `/ai-init` asks for it;
-if it is empty when a task reaches TEST, the task takes the command from the
-project `CLAUDE.md` or the CI config and writes it there. One command, one
-healthy-output example — that is the feedback loop the playbook asks for.
+`.ai/policies/testing.md`, section **Verification**. It holds three commands:
+`step_test_command` (a scoped subset, for one step), `verify_command` (the full
+fast suite, e2e excluded) and `e2e_command` (once, at the end of a task).
+`/ai-init` asks for them; if one is empty when a task reaches TEST, the task
+takes it from the project `CLAUDE.md` or the CI config and writes it there.
+One command per scope, one healthy-output example — that is the feedback loop
+the playbook asks for.
 
 ## I reinstalled the plugin. Why does my project still follow the old rules?
 
@@ -215,6 +230,27 @@ when the agent is spawned. "Run `ai-risk` on a stronger model" is silently ignor
 there, so the STRONG re-run is a separate agent that pins Sol. Under Claude Code
 the same escalation is `model: opus` on the ordinary agent. Same tier, same
 trigger.
+
+## Why are my MCP servers off in this project?
+
+Because every connected server is in the system prompt of every turn, used or
+not, and the context is re-read each turn. The scaffolded `.claude/settings.json`
+sets `enableAllProjectMcpServers: false`, so a checked-in `.mcp.json` is a
+catalogue rather than a start-up list. Put a server in `enabledMcpjsonServers`
+when nearly every task in the repository needs it, and record why in
+`.ai/policies/tooling.md`. For a server one task needs, enable it, write one
+`tools_for_this_task:` line in the task record, and turn it off when the task
+closes.
+
+## Why did Claude send a subagent to read one file?
+
+Because the file was too large to read into the session. Over ~4000 lines or
+~250KB the `cap-large-read` hook refuses an unbounded `Read` — and a `limit`
+larger than that budget, since it costs the same. The file is then read by the
+cheapest model: `Explore` for code, `log-reader` for logs and test output, both
+on `haiku`. What comes back is the matching ranges with `file:line` and one line
+on why each matters — never the file. Paying the session model to scroll through
+a file is the most expensive way to do the cheapest job in the pipeline.
 
 ## Why is there no large-read cap under Codex?
 

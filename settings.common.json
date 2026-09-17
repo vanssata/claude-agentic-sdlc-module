@@ -6,6 +6,7 @@
     "CLAUDE_READ_MAX_LINES": "4000",
     "CLAUDE_READ_MAX_BYTES": "250000"
   },
+  "enableAllProjectMcpServers": false,
   "autoCompactEnabled": true,
   "precomputeCompactionEnabled": false,
   "showClearContextOnPlanAccept": true,
