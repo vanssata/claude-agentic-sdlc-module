@@ -291,7 +291,7 @@ def main():
         handler = HANDLERS.get(payload.get("hook_event_name"))
         if handler:
             handler(payload)
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         pass                                     # fail open: never break a spawn
     return 0
 

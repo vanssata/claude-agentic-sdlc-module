@@ -1,0 +1,27 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        # tomllib (3.11+) is needed; older versions make the Codex suites skip
+        python-version: '3.12'
+    - name: Check required tools
+      run: |
+        for tool in bash jq git python3 patch diff; do
+          command -v "$tool" || { echo "missing $tool"; exit 1; }
+        done
+    - name: Run the test suite
+      run: bash tests/run-all.sh

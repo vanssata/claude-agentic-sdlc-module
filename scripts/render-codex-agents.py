@@ -156,7 +156,7 @@ def main():
             try:
                 with open(path, "rb") as fh:
                     data = tomllib.load(fh)
-            except Exception as exc:
+            except (OSError, ValueError) as exc:
                 die(f"{path} is not valid TOML: {exc}")
             for required in ("name", "description", "developer_instructions"):
                 if not data.get(required):
