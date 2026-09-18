@@ -107,7 +107,8 @@ What happens:
 3. T1 has no plan stage and no reviews. It says which two files it will touch
    and edits them.
 4. The verification command from `testing.md` runs once; its last lines are
-   shown.
+   shown. At T1 there is no e2e run — the change cannot reach a flow it covers,
+   and the report says so in a line.
 5. A short release report, which is also the commit message body, and the
    command that would commit it.
 

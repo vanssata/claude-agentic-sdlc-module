@@ -4,7 +4,10 @@
 The main session re-reads its whole context on every turn, so one 500K-character
 Read is paid for again on every subsequent turn of the session. This hook does
 not cap what can be read — it only insists that reading something large is an
-explicit act: pass `limit`, and the read goes through untouched.
+explicit act: pass a `limit` within the budget, and the read goes through
+untouched. A `limit` larger than the budget is refused like an unbounded read:
+the point is the size that lands in the context, not the presence of the
+argument.
 
 Claude Code only. It matches a tool named `Read` that takes a `file_path` and an
 optional `limit`. Codex has no equivalent on the hook path: its file reads go
@@ -61,10 +64,25 @@ def main():
         allow()
 
     tool_input = payload.get("tool_input") or {}
-    if tool_input.get("limit"):          # an explicit range is always honoured
-        allow()
-
     path = tool_input.get("file_path")
+    limit = tool_input.get("limit")
+    if limit:
+        try:
+            limit = int(limit)
+        except (TypeError, ValueError):
+            allow()
+        if limit <= MAX_LINES:           # an explicit, bounded range is honoured
+            allow()
+        deny(
+            f"limit={limit} is larger than the {MAX_LINES}-line budget, so this read costs "
+            "the same as an unbounded one — and the context is re-read on every turn.\n"
+            "Do one of these instead:\n"
+            f"  - grep -n 'pattern' {path}  then Read only the ranges that matched\n"
+            f"  - Read with a limit of {MAX_LINES} or less\n"
+            "  - send a FAST reader (Explore for code, log-reader for logs) and keep only "
+            "the excerpt it returns"
+        )
+
     if not path or os.path.splitext(path)[1].lower() in BINARY:
         allow()
 
@@ -84,8 +102,10 @@ def main():
         "because the context is re-read each time.\n"
         "Do one of these instead:\n"
         f"  - grep -n 'pattern' {path}  then Read only the ranges that matched\n"
-        f"  - Read with an explicit offset and limit (any limit is allowed through)\n"
-        "  - send a subagent (Explore for code, log-reader for logs) and keep its summary"
+        f"  - Read with an explicit offset and a limit of {MAX_LINES} or less\n"
+        "  - send a FAST reader on the cheapest model (Explore for code, log-reader for "
+        "logs and test output) and keep only the excerpt it returns — the ranges with "
+        "file:line, never the file"
     )
 
 

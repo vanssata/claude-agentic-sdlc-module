@@ -50,13 +50,14 @@ The main session itself runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}` and does 
 
 The main session re-reads its whole context every turn, so context length — more than model choice — is the largest cost.
 
-- Do not pull a file longer than ~{{READ_LINES}} lines into the main context. Read the ranges you need, or send a subagent.
+- Do not pull a file longer than ~{{READ_LINES}} lines into the main context. Read the ranges you need, or send a FAST reader — `Explore` for code, `log-reader` for output — which returns only the relevant excerpt with `file:line`, never the file.
 - Never `cat` logs, test output, migrations, lockfiles or generated code into the main context.
 - Search with `rg -n` and read the hits, instead of reading whole files to search them.
 - Prefer one subagent that returns twenty lines over five tool calls whose output stays in context all session.
 - Start a new thread when switching tasks, and after every task that ran a review. A compacted session is a summary of the old task, not a clean start.
 - Run tests once, to the end, and fix every failure as one batch. Never one failure, one fix, one run.
 - Prefer deterministic tools — `rg`, `git`, `jq`, the framework CLI, the test runner — over asking a model to infer what they answer exactly.
+- Tools and MCP servers are context too, in every turn, used or not. Default off: a project enables only what nearly every task needs, a task names anything extra in one line and turns it off again, and `--strict-mcp-config` beats disabling servers afterwards. See `.ai/policies/tooling.md`.
 - `/usage-report` shows where the tokens went, at zero model cost. `--provider both` reports Codex and Claude Code side by side.
 
 # Agentic pipeline (in any repository with `.ai/`)
@@ -66,7 +67,7 @@ The main session re-reads its whole context every turn, so context length — mo
 - A change runs through `/ai-task <request>`. `.ai/policies/risk-tiers.json` sets the tier (T0–T5) and the `pipeline_profile`. In the default `solo` profile T0–T2 run in **direct mode**: name the files, edit, one verification run at the end, failures fixed as one batch, one review at T2, no report files (T2 is one `state.py quick` call so the scope guard is armed). The full SDLC pipeline — `ai-planner-strong`, plan review, adversarial review, security at T4+, release report — runs from T3. Tests run once, after the last step, to the end, then one `state.py remediate` step fixes every regression together.
 - Payments, tax, fiscal, auth, order state transitions and customer data are T4; migrations, infrastructure and production architecture are T5. An agent may raise a tier; only a human lowers one.
 - Each step names the files it may touch; an edit outside them is refused — answer `SCOPE_CHANGE_REQUIRED` and amend the step. One `apply_patch` is checked file by file, so a patch that reaches outside the step is refused whole. Legacy behaviour without a test gets a characterization test first. Never mix a refactoring with a feature change.
-- Verify before reporting done: run the verification command from `.ai/policies/testing.md` (or the project `AGENTS.md`) and show its output. A bugfix starts with the failing test.
+- Tests come in three scopes: a step runs only the tests that step names (`step_test_command`, scoped to its files), the full verification command runs once after the last step, and the e2e suite (`e2e_command`) runs once after that, at the end of the task — never inside a step. Verify before reporting done: show the output of the verification command from `.ai/policies/testing.md` (or the project `AGENTS.md`), and of the e2e run. A bugfix starts with the failing test.
 - When a review flags the same mistake a second time, the correction goes into the project `AGENTS.md`.
 - `architect` is for design questions outside a task, or in a repository without `.ai/`. Inside a task, `ai-planner`/`ai-planner-strong` plans and `ai-expert` is the escalation.
 - `ai-git-guard` runs in every repository: no force push, history rewrite, push or merge to a protected branch, `--no-verify`, staged secret or production deploy. `ai-path-guard` and `ai-scope-guard` arm only where `.ai/` exists. All three see `Bash` and `apply_patch`; run `/hooks` once after installing to review and trust them, or they are skipped. No agent commits, merges or deploys on its own; the pipeline ends at human approval.

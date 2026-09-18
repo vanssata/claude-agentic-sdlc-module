@@ -1,2 +1,6 @@
 __pycache__/
 *.pyc
+# claude-agentic (sdlc)
+.claude/settings.local.json
+.claude/memory/local/
+.codex/memory/local/

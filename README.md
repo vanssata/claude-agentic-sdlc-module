@@ -215,8 +215,19 @@ code — not a rename, not a formatting fix. Problems it finds are documented in
 it asks you for what you know, confirms it with `grep`, and sends only two
 discovery agents to the places memory is least reliable — legacy and risks,
 tests and data. `/ai-init --survey full` fans out six agents for a codebase new
-to you. Either way it ends with the one verification command written into
-`.ai/policies/testing.md`, which every later task runs before reporting done.
+to you. Either way it ends with the test commands written into
+`.ai/policies/testing.md` — the scoped one a step runs, the full verification
+command, and the e2e suite — which every later task runs before reporting
+done.
+
+It also writes `.ai/policies/tooling.md`: which MCP servers this repository
+enables for every task and why, which stay off, and how a single task asks for
+one. The default is none. A connected server is in the system prompt of every
+turn whether a task calls it or not, so the scaffolded `.claude/settings.json`
+ships with `enableAllProjectMcpServers: false` and an empty
+`enabledMcpjsonServers`. The same file holds the reading rule: a file too large
+to open is read by the cheapest model — `Explore` for code, `log-reader` for
+logs — which hands back the matching ranges with `file:line`, never the file.
 
 ## Risk tiers
 
@@ -252,10 +263,13 @@ for T0–T2 — no pipeline ceremony, no report files, cheap readers only, one
 
 In `solo`, discovery, context, impact and risk come from the request plus
 `grep -n`; below T3 they are a few lines in the conversation, from T3 they are
-recorded stage by stage. The verification command runs **once, after the last
-step, to the end** (no fail-fast flag; the failing test first for a bugfix), and
-every failure is then fixed as **one batch** in a `state.py remediate` step
-before one more run — at most two rounds, then the human decides. Review
+recorded stage by stage. Tests run in three scopes: a step runs **only the
+tests it names**, the verification command runs **once, after the last step, to
+the end** (no fail-fast flag; the failing test first for a bugfix), and the
+**e2e suite runs once after that**, at the end of the task — never per step.
+Every failure of the two end-of-task runs is then fixed as **one batch** in a
+`state.py remediate` step before one more run — at most two rounds, then the
+human decides. Review
 findings are handled the same way. Below T3 the release report is the commit
 message. A subagent is still sent on a stated trigger: an unfamiliar
 area, an `UNKNOWN` the plan depends on, a non-obvious T3+ classification, or

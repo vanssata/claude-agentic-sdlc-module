@@ -372,8 +372,16 @@ def build_plan(root):
         testing = plan.final.get(".ai/policies/testing.md")
         if testing is None and os.path.exists(os.path.join(root, ".ai/policies/testing.md")):
             testing = read(os.path.join(root, ".ai/policies/testing.md"))
-        if testing is not None and re.search(rb"(?m)^verify_command:[ \t]*(#.*)?$", testing):
-            plan.hints.append(".ai/policies/testing.md: verify_command is empty — the feedback loop needs it")
+        if testing is not None:
+            for field, why in (
+                ("verify_command", "the feedback loop needs it"),
+                ("step_test_command", "a step runs only its own tests"),
+                ("e2e_command", "e2e runs once at the end of a task; write 'none' if there is no suite"),
+            ):
+                if re.search(rb"(?m)^" + field.encode() + rb":[ \t]*(#.*)?$", testing):
+                    plan.hints.append(".ai/policies/testing.md: %s is empty — %s" % (field, why))
+                elif not re.search(rb"(?m)^" + field.encode() + rb":", testing):
+                    plan.hints.append(".ai/policies/testing.md: %s is missing — %s" % (field, why))
     return plan
 
 

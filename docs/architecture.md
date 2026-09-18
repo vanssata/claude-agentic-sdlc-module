@@ -39,7 +39,7 @@ edited by humans afterwards — the scaffold never overwrites an existing file.
 .ai/
   AGENTS.md            the entry point: read this first
   project/             what this system IS, discovered from the code
-  policies/            what agents may and may not do here
+  policies/            what agents may and may not do here (incl. tooling/MCP)
   agents/              the role contract for each pipeline agent
   workflows/           feature, bugfix, refactoring, hotfix, investigation
   templates/           the shape of every artifact a task produces
@@ -68,7 +68,8 @@ REQUEST
   → PLAN                 ai-planner (STRONG at T3/T4, ai-expert at T5)
   → PLAN REVIEW          ai-reviewer, T3 and above
   → IMPLEMENTATION       the session itself, one step at a time
-  → TEST                 the session, once after the last step (ai-tester in team)
+  → TEST                 step tests in each step; the suite once after the last
+                         step, then e2e once (ai-tester in team)
   → ADVERSARIAL REVIEW   ai-reviewer, T2 and above
   → SECURITY REVIEW      ai-security, T4 and T5
   → RELEASE REPORT       ai-release
@@ -100,9 +101,11 @@ and the full pipeline from T3.
 - T0 and T1 have no plan stage: the session says which files it will touch and
   edits. T2 gets a short inline step list in a single `task.md`; `ai-planner`
   on `opus` from T3, `ai-expert` at T5.
-- Tests are the project's one verification command, run once after the last
-  step and piped through `tail`; a step's own single test in between when it is
-  cheap; `log-reader` when the output is long.
+- Tests come in three scopes: a step runs only the tests its plan step names
+  (`step_test_command`, scoped to its files), the project's verification
+  command runs once after the last step, and the e2e suite runs once after
+  that, at the end of the task. Output piped through `tail`; `log-reader` when
+  it is long.
 - The adversarial review is always a subagent from T2 up — a context that did
   not write the code — on `sonnet` at T2 and `opus` above.
 - Security review at T4/T5 is unchanged. The release report is inline up to T3
@@ -132,7 +135,7 @@ It holds facts, never transcripts:
 ```
 task_id · goal · workflow · risk_tier · current_stage · affected_modules
 context_summary_ref · approved_plan { ref, current_step_id, steps[] }
-completed_steps · test_status · review_status · security_status · open_risks
+completed_steps · test_status · e2e_status · review_status · security_status · open_risks
 next_action · human_approval · created_at · updated_at · history[]
 ```
 
@@ -198,6 +201,12 @@ Context length, not model choice, dominates the cost of a session, so:
   Opus 5 and Fable is spent only on `architect`; under Codex the Plus profile
   keeps the session at `medium`, three threads and no `xhigh`;
 - below T2 a task writes no report files and runs the test suite once;
+- a file too large to open is read by the cheapest model, which returns the
+  matching ranges with `file:line` rather than the file;
+- tools and MCP servers are off by default — they sit in the system prompt of
+  every turn whether a task calls them or not — and are enabled per project
+  only when nearly every task needs them, per task otherwise
+  (`.ai/policies/tooling.md`);
 - artifacts live on disk and are referenced by path between stages.
 
 The expensive tier is reserved for design, adversarial review and the conclusions

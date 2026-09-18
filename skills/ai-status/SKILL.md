@@ -1,6 +1,6 @@
 ---
 name: ai-status
-description: Show where the current agentic task stands — id, stage, next action, risk tier, current step and its allowed files, test/review/security status, open risks — plus which model the EXPERT tier resolves to and whether the risk-tier mirror is stale. Read-only. Use for "/ai-status", "where are we", "what is the agent working on".
+description: Show where the current agentic task stands — id, stage, next action, risk tier, current step and its allowed files, test/e2e/review/security status, open risks — plus which model the EXPERT tier resolves to and whether the risk-tier mirror is stale. Read-only. Use for "/ai-status", "where are we", "what is the agent working on".
 ---
 
 # /ai-status
@@ -35,7 +35,7 @@ done
    - the current step, if any: its description and its `allowed_files` — this is
      what the scope guard is enforcing right now;
    - completed steps out of total;
-   - test, review and security status;
+   - test, e2e, review and security status;
    - open risks;
    - human approval: required, and whether granted and by whom;
    - how long since `updated_at`. Flag a stage of `implementation` that has not

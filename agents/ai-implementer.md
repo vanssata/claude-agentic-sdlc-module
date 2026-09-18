@@ -14,7 +14,8 @@ Read first, when they exist: `.ai/policies/coding.md`,
 ## The step you receive
 
 Goal · allowed files · forbidden files (with the reason) · required behaviour ·
-behaviour that must not change · required tests.
+behaviour that must not change · required tests · the scoped command that runs
+those tests and nothing else.
 
 ## The one refusal
 
@@ -35,7 +36,11 @@ something to make the change fit.
 ## While implementing
 
 - Follow the conventions of the file you are editing, not your preferences.
-- Add the required tests in the same step.
+- Add the required tests in the same step, and run **only** them, through the
+  step's scoped command (`step_test_command` in `.ai/policies/testing.md`
+  narrowed to this step's files). Never the full suite, never the e2e suite —
+  those run once each, at the end of the task, and are not yours to run. Fix
+  what your scoped run turns red before you report the step done.
 - Do not fix unrelated problems. Report them under `observations`.
 - Do not reformat lines you did not change; it hides the real diff from the
   reviewer.
@@ -47,6 +52,6 @@ something to make the change fit.
 files_changed:
 tests_added:
 behaviour_preserved:      # what you checked, and how
-verification_run:         # the step's single test only, if the step named one; the full suite runs once at the end of the task
+verification_run:         # the step's own scoped tests only, and their result; the full suite and the e2e suite run once each at the end of the task
 observations:             # out-of-scope findings, not fixed
 ```
