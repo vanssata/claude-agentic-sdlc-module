@@ -401,7 +401,7 @@ def cmd_approve(args, root):
     print("approved by %s" % args.by)
 
 
-def cmd_done(args, root):
+def cmd_done(_args, root):
     state = load(root)
     state["current_stage"] = "done"
     state["next_action"] = "none — task closed"
@@ -410,7 +410,7 @@ def cmd_done(args, root):
     print("%s closed" % state["task_id"])
 
 
-def cmd_archive(args, root):
+def cmd_archive(_args, root):
     state = load(root)
     target_dir = os.path.join(root, ".ai", "reports", state["task_id"])
     os.makedirs(target_dir, exist_ok=True)

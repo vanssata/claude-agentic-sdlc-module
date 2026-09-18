@@ -84,7 +84,8 @@ def read(path):
 class History:
     def __init__(self, root):
         try:
-            self.index = json.load(open(os.path.join(root, "index.json")))
+            with open(os.path.join(root, "index.json"), encoding="utf-8") as fh:
+                self.index = json.load(fh)
         except (OSError, ValueError):
             self.index = {}
         self.root = root
@@ -118,8 +119,9 @@ def merge_text(ours, base, theirs):
     with tempfile.TemporaryDirectory() as d:
         paths = [os.path.join(d, n) for n in ("ours", "base", "theirs")]
         for p, c in zip(paths, (ours, base, theirs)):
-            open(p, "wb").write(c)
-        r = subprocess.run(["git", "merge-file", "-p", "--quiet", *paths], capture_output=True)
+            with open(p, "wb") as fh:
+                fh.write(c)
+        r = subprocess.run(["git", "merge-file", "-p", "--quiet", *paths], capture_output=True, check=False)
     return r.stdout if r.returncode == 0 else None
 
 

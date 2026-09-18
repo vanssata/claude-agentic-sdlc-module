@@ -279,12 +279,12 @@ def statusline_main(argv):
             payload = json.loads(data.decode("utf-8", "replace"))
             if isinstance(payload, dict):
                 statusline(payload)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught  # fail open: a bad payload never breaks the statusline
             pass
     if len(argv) >= 3 and argv[1] == "--then" and argv[2].strip():
         shell = shutil.which("bash") or "/bin/sh"
         sys.stdout.flush()
-        return subprocess.run([shell, "-c", argv[2]], input=data).returncode
+        return subprocess.run([shell, "-c", argv[2]], input=data, check=False).returncode
     return 0
 
 
@@ -303,7 +303,7 @@ def main():
         handler = HANDLERS.get(payload.get("hook_event_name"))
         if handler:
             handler(payload)
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         pass                                    # fail open: never break an Agent call
     return 0
 

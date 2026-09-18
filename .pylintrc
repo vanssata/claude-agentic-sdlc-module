@@ -1,0 +1,31 @@
+# Pylint for the plugin's hook and helper scripts.
+# The house style is deliberately compact: short one-line helpers, %-formatting,
+# long aligned comment columns, few docstrings. Convention (C) and design-limit
+# checks fight that style, so they are off. Errors, warnings and the remaining
+# refactor checks stay on; a warning that is intentional is disabled inline
+# with its reason.
+
+[MAIN]
+py-version=3.11
+
+[MESSAGES CONTROL]
+disable=
+    C,
+    too-many-locals,
+    too-many-branches,
+    too-many-statements,
+    too-many-arguments,
+    too-many-positional-arguments,
+    too-many-instance-attributes,
+    too-many-return-statements,
+    too-many-nested-blocks,
+    too-many-boolean-expressions,
+    too-few-public-methods,
+    use-dict-literal,
+    # fable-gate.py and codex-model-gate.py are standalone hooks for two runtimes;
+    # each must run as a single file, so their shared helpers are copied on purpose.
+    duplicate-code,
+
+[REFACTORING]
+# die() prints and calls sys.exit(1)
+never-returning-functions=sys.exit,argparse.parse_error,state.die

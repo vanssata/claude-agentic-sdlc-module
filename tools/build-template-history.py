@@ -44,16 +44,18 @@ def main():
         for dirpath, _, files in os.walk(base):
             for f in files:
                 full = os.path.join(dirpath, f)
-                add("%s/%s" % (name, os.path.relpath(full, base)), open(full, "rb").read())
+                with open(full, "rb") as fh:
+                    add("%s/%s" % (name, os.path.relpath(full, base)), fh.read())
 
     os.makedirs(os.path.join(OUT, "blobs"), exist_ok=True)
     for sha, content in blobs.items():
         path = os.path.join(OUT, "blobs", sha)
         if not os.path.exists(path):
-            open(path, "wb").write(content)
+            with open(path, "wb") as fh:
+                fh.write(content)
     for stale in set(os.listdir(os.path.join(OUT, "blobs"))) - set(blobs):
         os.remove(os.path.join(OUT, "blobs", stale))
-    with open(os.path.join(OUT, "index.json"), "w") as fh:
+    with open(os.path.join(OUT, "index.json"), "w", encoding="utf-8") as fh:
         json.dump(dict(sorted(index.items())), fh, indent=1)
         fh.write("\n")
     print("history: %d files, %d versions, %d commits" % (len(index), len(blobs), len(commits)))

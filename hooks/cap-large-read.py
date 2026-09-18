@@ -54,7 +54,7 @@ def deny(reason):
 def main():
     try:
         payload = json.load(sys.stdin)
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught  # fail open: unreadable payload never blocks a Read
         allow()
 
     if payload.get("tool_name") != "Read":
