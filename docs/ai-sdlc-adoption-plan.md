@@ -4,7 +4,7 @@ Date: 2026-09-18. Scope: **the distributable `claude-agentic` plugin**, its Code
 
 ## Clarification: plugin architecture and the leading plan
 
-The goal is that installing the plugin improves **accuracy, time to an accepted result and cost per task** in every supported project. Packaging on its own does not reduce tokens. The effect comes from precise triggers, a small standing context, loading instructions on demand, deterministic checks and removing duplicate installations. The plan below leads; the general CI and machine findings further down are its dependencies and secondary context.
+The goal is that installing the plugin improves **accuracy, time to an accepted result and cost per task** in every supported project. Packaging on its own does not reduce tokens. The effect comes from precise triggers, a small standing context, loading instructions on demand, deterministic checks and removing duplicate installations. The plan below leads; the general CI findings further down are its dependencies and secondary context.
 
 **Current state:** there is a `.codex-plugin/plugin.json` that declares `skills/`, but the real full installation is a global copy (`README.md:96`, `install.sh:369`). Hooks live in `codex/hooks.json` with absolute host dependencies (`:10`); there is no standard `hooks/hooks.json`. Skills look in `~/.claude` first and then in `~/.codex` (`skills/ai-task/SKILL.md:17`), which with two installations can pick a different copy of the package. A native plugin install and `install.sh` must therefore not be treated as equivalent without an integration test.
 
@@ -18,11 +18,11 @@ Proposed boundary: **one versioned package with the shared logic; separate runti
 | 4 | A shared model/risk contract from `profiles/`; runtime-specific rendering instead of Claude model names in the shared workflow. The profile governs which delegations are allowed, with no hidden change to the current session. | Named-trigger tests, correct effective model/effort and a benchmark of completed tasks. An unknown subscription must not silently choose a more expensive profile — the current fallback is Pro (`install.sh:640`). |
 | 5 | Native package lifecycle tests plus the current 16 suites in CI; a shared usage parser and a bounded eval set. | Two supported runtimes, zero double hook invocations, schema coverage and a comparison by first-pass acceptance, defects, p50/p95 time and usage per accepted task. |
 
-This is a development plan for the plugin, not a request for a new installation or for an automatic change to host settings. Removing legacy copies is acceptable only after a successful migration and a check of who owns them. Hardware maintenance is not a precondition for these improvements.
+This is a development plan for the plugin, not a request for a new installation or for an automatic change to host settings. Removing legacy copies is acceptable only after a successful migration and a check of who owns them.
 
 ## Conclusion and selection criterion
 
-The largest proven opportunity is more reliable verification of the plugin and removing the mismatches between rules, installation and reports. The hardware snapshot shows no CPU/RAM constraint. There is no measurement proving which model completes real tasks fastest and with the fewest fixes.
+The largest proven opportunity is more reliable verification of the plugin and removing the mismatches between rules, installation and reports. There is no measurement proving which model completes real tasks fastest and with the fewest fixes.
 
 The priority is **quality, then speed, then cost**: first the acceptance tests and the absence of critical defects; among the variants that pass — time to an accepted result, retries included; after that — use of the limit and spend. We do not optimise only time to first response or price per token.
 
@@ -45,26 +45,9 @@ Keeping Sol/medium for ordinary implementation, Terra/low for wide reading and t
 | Claude context | `~/.claude/settings.json:119` allows 75,000 characters of Bash output and 80,000 of task output; compaction is at 150,000. | Short extracts and log-reader first; a trial output cap of 8–12 thousand characters, with the full log in a file and extraction on demand. Do not cut away diagnostic evidence. |
 | Usage reports | Two skills with the same name: `~/.agents/skills/usage-report` and `~/.codex/skills/usage-report`. The old one reads the legacy `token_count`, the new one `token_usage_record`. | One canonical parser for both formats, deduplication and fixtures for replay/resume; explicit schema coverage. |
 
-### Local machine
-
-- Intel i9-14900HX, 24 cores/32 logical CPUs; about 62.5 GiB RAM, about 50 GiB available. A three-sample `vmstat` probe: 93–95% idle, no swap-in/out and no reported I/O wait. This is a short snapshot, not a benchmark under build load.
-- Two NVMe drives. `/`: 96 GiB, 85% used, 14 GiB free; `/home`: 148 GiB, 52% used, 69 GiB free; `/Store`: 456 GiB free. `~/.cache` is 31 GiB **on /home** — clearing it will not free the root partition. Measure `/var`, the system caches and held packages first; no blind deletion.
-- The RTX 4070 Mobile is visible over PCI, but `nvidia-smi` cannot connect to the driver. The cause has not been established. This deserves a separate diagnosis for ComfyUI/local models; it is not a proven explanation for the speed of cloud Codex.
-- CLI: Codex 0.146.0, Claude Code 2.1.276, Python 3.14.4; `shellcheck` is not on PATH. The CLI version does not prove the desktop runtime version. Update after a compatibility smoke test, not a blind reinstall.
-
-### Cost and the limits of measurement
-
-The account tool confirmed Plus: at the time of the check, 72% of the 5-hour and 63% of the weekly Codex limit remained. This is an account snapshot, not the spend of this project.
-
-The old parser reports 137.8 million Sol input tokens; the new one reports about 31.1 million fresh+cached input. They cover different event schemas and are not comparable as a full history. The old one does not deduplicate by response ID; that is a risk of double counting, not proof that particular tokens were duplicated (`~/.agents/skills/usage-report/scripts/usage-report.py:149`; `skills/usage-report/usage-report.py:228`). The new one uses the exact project path and may miss sessions from subdirectories (`:242`).
-
-The new Codex price table explicitly contains placeholders and `rates_verified=false` (`skills/usage-report/prices.json:19`). We do not use the computed dollars for a financial decision and do not present them as a subscription invoice. There is no reliable percentage of expected savings before the measurement is fixed.
-
-Fast mode trades speed for higher consumption; the official documentation states a 2.5× credit rate for Astra Fast where it is available. This is not a measured multiplier across all local sessions. Recommendation: fast for interactive work when waiting gets in the way; standard for background tasks if the deadline allows, and a comparison of completed tasks. [OpenAI Speed](https://developers.openai.com/codex/speed).
-
 ## Scores against the 12 plays
 
-0 = missing; 1 = partial/ad hoc; 2 = defined, with no proven enforcement; 3 = enforced and measured. The score is for this repository, not automatically for every project on the machine.
+0 = missing; 1 = partial/ad hoc; 2 = defined, with no proven enforcement; 3 = enforced and measured. The score is for this repository, not automatically for every project that uses the plugin.
 
 | Play | Score | Basis |
 |---|---:|---|
@@ -88,7 +71,7 @@ The dates are indicative windows, not an estimate of six weeks of continuous wor
 | Phase | Concrete change and dependencies | Ownership, control and measurement |
 |---|---|---|
 | 1, weeks 1–2: foundation | `AGENTS.md`, `install.sh`, `README.md`, `.github/workflows/verify.yml`; fix the Python minimum and the inapplicable workflows. A read-only `scripts/doctor.py` for profile/install/hook drift. Plays 4/7/10 → 2–3. No prior dependency. | Engineer; a human approves the diff; all 16 suites on PR and push, the status as a merge requirement after checking the GitHub settings. Leading: share of PRs with the runner actually executed; lagging: escaped install/guard regressions. Source: CI/PR data. |
-| 2, weeks 3–4: measurement | `skills/usage-report/usage-report.py`, `prices.json`, `tests/test-codex-usage-report.sh`; coverage of both schema formats, replay dedup, clear prices. `tests/evals/` and `docs/benchmarks/` for 12–20 real scenarios; `profiles/codex-plus.json` changes only on the results. Plays 6/8 → 3. Dependency: phase 1. | Tech lead/maintainer; identical criteria and a bounded benchmark budget. Leading: schema/scenario coverage; lagging: first-pass acceptance, review defects, p50/p95 time to an accepted result and usage per accepted task. Source: eval JSON + account snapshots. |
+| 2, weeks 3–4: measurement | `skills/usage-report/usage-report.py`, `prices.json`, `tests/test-codex-usage-report.sh`; coverage of both schema formats, replay dedup, clear prices. `tests/evals/` and `docs/benchmarks/` for 12–20 real scenarios; `profiles/codex-plus.json` changes only on the results. Plays 6/8 → 3. Dependency: phase 1. | Tech lead/maintainer; identical criteria and a bounded benchmark budget. Leading: schema/scenario coverage; lagging: first-pass acceptance, review defects, p50/p95 time to an accepted result and usage per accepted task. Source: eval JSON. |
 | 3, weeks 5–6: review/release | `REVIEW.md`, a PR review workflow and a fixed SLSA packaging workflow; `docs/sdlc/adr/` for the benchmark decision and incident feedback into intent/spec. Plays 9/11/12 → 2, then 3 with real evidence. Dependencies: evals + subagents before review; review + hooks before release; release + intent before feedback. | Maintainer/platform; human release approval, the review result visible in the PR, a sandboxed rollback rehearsal. Leading: PR/release coverage; lagging: repeated defects, rollback time and release failures. Source: PR/CI/incident records. |
 
 ## Guardrails
@@ -106,4 +89,4 @@ No credential files or secret values were read; a full secret-exposure audit is 
 
 `bash tests/run-all.sh`: **PASS**, all 16 suites, exit 0, about 33 seconds. Bash syntax (`bash -n`) and an AST parse of the Python files are also PASS. The first attempt was cut off by the 30-second tool timeout and is not counted as a result; the full run that followed completed successfully. The test runner agent used an isolated environment; no installation into the real host settings was performed. ShellCheck was not run because it is not installed. Passing fixtures do not prove effective hook trust in desktop or the quality of the models.
 
-Not verified: team/owner, tracker, staging, server-side branch protection (the GitHub API connection failed), effective hook trust in desktop, release rollback, the cause of the NVIDIA problem, network/model latency, models on an identical benchmark and current validated API prices. None of these is assumed to be an established fact.
+Not verified: team/owner, tracker, staging, server-side branch protection (the GitHub API connection failed), effective hook trust in desktop, release rollback, network/model latency, models on an identical benchmark and current validated API prices. None of these is assumed to be an established fact.
