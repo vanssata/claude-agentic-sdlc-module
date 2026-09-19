@@ -11,7 +11,8 @@ says otherwise. The runtime-specific part is deliberately thin — see
 ## The routing layer
 
 `install.sh` writes the settings a session runs on: the session model, its
-fallback behaviour, the default effort, the output caps and the subagent default.
+fallback behaviour, the default effort and the output caps. Agent models are pinned
+in each agent definition, never through `CLAUDE_CODE_SUBAGENT_MODEL`.
 
 Under Claude Code that is a deep merge into `~/.claude/settings.json` from
 `profiles/{pro,max}.json` plus `settings.common.json`. Under Codex it is six

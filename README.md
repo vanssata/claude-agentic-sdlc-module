@@ -284,13 +284,15 @@ key. No stage is ever skipped; the profile only changes who does it.
 | Tier | Claude Code | Codex | Does |
 |---|---|---|---|
 | FAST | `haiku`, low | Terra, low | reading and running: file search, inventories, logs, test output (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
-| BALANCED — default for agents | `sonnet` | Terra, medium | discovery, context, planning up to T2, mechanical edits, release, the T2 review (`ai-discovery`, `ai-context`, `ai-implementer`, `ai-release`) |
+| BALANCED | `sonnet` | Terra, medium | discovery, context, planning up to T2, mechanical edits, release, the T2 review (`ai-discovery`, `ai-context`, `ai-implementer`, `ai-release`) |
 | STRONG | `opus`, high | Sol, high | adversarial and security review, T3/T4 risk and planning, root cause after a first diagnosis failed, reversible design (`ai-reviewer`, `ai-security`, `architect`) |
 | EXPERT | the session model (Opus 5) on Max, `opus` pinned on Pro; Fable 5.1 [1m] on `architect` only | Astra, `xhigh` | T5, irreversible design, what STRONG could not settle |
 
-The main session does the implementation itself. Agents default to the BALANCED
-tier, and a STRONG or EXPERT agent runs only when a named trigger fires; the
-triggers are listed in `.ai/policies/model-routing.md`.
+The main session does the implementation itself. Every agent definition pins its
+own `model:` — most of them the BALANCED tier — and `CLAUDE_CODE_SUBAGENT_MODEL` is
+deliberately not set: before Claude Code v2.1.251 it overrides the frontmatter and
+the per-call model, which put every agent on Sonnet. A STRONG or EXPERT agent runs
+only when a named trigger fires; the triggers are listed in `.ai/policies/model-routing.md`.
 
 On a Max plan the session runs Opus 5 with the 200k window at `medium` effort,
 compacting near 100k tokens (`autoCompactWindow` 133 000) — `opus[1m]` stays in `availableModels` for a task

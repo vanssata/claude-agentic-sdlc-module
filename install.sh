@@ -13,7 +13,7 @@
 # --dry-run prints everything that would be written, per runtime, and writes nothing.
 #
 # Claude Code (~/.claude): model, effort and context settings for the detected
-# plan (agents default to Sonnet); the ai-* pipeline agents plus architect,
+# plan (each agent pins its own model); the ai-* pipeline agents plus architect,
 # Explore and log-reader; six hooks, plus fable-gate on a Fable install; the
 # skills; and one managed block in ~/.claude/CLAUDE.md.
 #
@@ -208,7 +208,11 @@ SESSION_HUMAN=$(pretty "$SESSION_MODEL")
 FALLBACK_HUMAN=$(jq -r '.fallbackModel | if type=="array" then .[] else . end' "$TMP/settings.snippet.json" \
                  | while read -r m; do pretty "$m"; done | paste -sd'|' | sed 's/|/, then /g')
 
-# Agents default to Sonnet (CLAUDE_CODE_SUBAGENT_MODEL). The EXPERT-tier agents
+# Every agent definition pins its own `model:`; CLAUDE_CODE_SUBAGENT_MODEL is not
+# set, because before Claude Code v2.1.251 (still bundled by the JetBrains ACP
+# adapter) it overrides both the frontmatter and the per-call model, and from
+# v2.1.251 it would send an agent that omits `model:` on purpose (ai-expert) to
+# Sonnet instead of the session. The EXPERT-tier agents
 # are rendered per tier: on pro/team-pro both pin opus (an inherited model would
 # be Sonnet outside plan mode); on max/team-max ai-expert inherits the Opus 5
 # session and architect alone is pinned to fable[1m] when Fable is enabled.
@@ -517,6 +521,13 @@ jq -s '
       )
 ' "$SETTINGS" "$TMP/settings.snippet.json" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 echo "merged: settings.json (backup in settings.json.bak)"
+# Earlier versions installed env.CLAUDE_CODE_SUBAGENT_MODEL=sonnet as an agent
+# default. It is an override before Claude Code v2.1.251, so the value this
+# installer wrote is removed; any other value is the user's and stays.
+if [ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL // empty' "$SETTINGS")" = "sonnet" ]; then
+  jq 'del(.env.CLAUDE_CODE_SUBAGENT_MODEL)' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+  echo "removed: env.CLAUDE_CODE_SUBAGENT_MODEL=sonnet from settings.json (it overrode every agent's model: before Claude Code v2.1.251)"
+fi
 
 # No Fable on this install: drop the gate's entries a previous Fable install left,
 # and an event list only when the gate was all it held. Other hooks stay.
@@ -555,7 +566,7 @@ if [ -n "$missing" ]; then
 fi
 if [ -n "$unpinned" ]; then
   echo
-  echo "WARNING: these agents declare no 'model:' and resolve to CLAUDE_CODE_SUBAGENT_MODEL (sonnet):"
+  echo "WARNING: these agents declare no 'model:' and inherit the session model:"
   for m in $unpinned; do echo "  - $m"; done
   echo "Pin 'model: haiku|sonnet|opus|fable' to the tier the role needs."
 fi
