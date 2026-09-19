@@ -13,7 +13,15 @@
 #   bash tests/test-guard-characterization.sh --record  # rewrite the golden file
 #
 # Record only from a guard version whose behaviour is known to be right.
+#
+# The suite runs in the C locale. The guards union their pattern lists with
+# `sort -u`, so collation decides which of two matching patterns a deny message
+# names — under en_US punctuation is ignored and "(^|/)id_rsa$" sorts before
+# "(^|/)\.ssh/", under C it does not. That is true of the guards with or without
+# this file; pinning the locale is what makes the comparison reproducible on a
+# developer's machine and on CI alike.
 set -uo pipefail
+export LC_ALL=C
 . "$(dirname "$0")/lib.sh"
 
 GOLDEN="$PLUGIN_ROOT/tests/fixtures/guard-characterization/golden.txt"
