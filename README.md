@@ -53,7 +53,7 @@ registered, and which model each tier resolves to.
 | BALANCED | `sonnet` | `gpt-5.6-terra` (Terra) |
 | STRONG | `opus` | `gpt-5.6-sol` (Sol) |
 | EXPERT | Fable 5.1, or Opus 5 with `--fable no` | `gpt-6-astra` (Astra) |
-| session | Opus 5 (200k window) at `medium`, `opus[1m]` per task (Sonnet on Pro) | Sol at `high` |
+| session | Opus 5 (200k window) at `medium`, `opus[1m]` per task through `claude-1m` (Sonnet on Pro) | Sol at `high` |
 
 A repository can carry both instruction files over one `.ai/` tree. The task
 state is `.ai/state/current.json` either way, so a task started in one runtime
@@ -144,8 +144,9 @@ it should not be the most expensive model by default.
 | `MAX_MCP_OUTPUT_TOKENS` (Claude) | 40 000 | 25 000 |
 | `cap-large-read.py` (Claude) | refuses an unbounded `Read` over 4 000 lines or 250 KB | no limit |
 | `autoCompactWindow` (Claude) | 133 000 on Max and Team Max, 300 000 on Pro and Team Pro. Compaction fires about 33k under the window, so near 100k and 267k | the model window |
+| `claude-1m [opus\|fable]` (Claude, Max and Team Max) | starts one session on `opus[1m]`, or on `fable[1m]` (Fable 5.1), with `CLAUDE_CODE_AUTO_COMPACT_WINDOW=800000`, so it compacts near 767k. `autoCompactWindow` is one value for every model and `modelSettings` takes only effort, so the window cannot be set per model in `settings.json`; the variable applies to that process alone. `CLAUDE_1M_COMPACT_WINDOW` lowers it | 133 000, like every other session |
 | `context-guard.py` (Claude) | warns from 80% of the point where compaction fires and holds a prompt back once from 120% — 80k and 120k on Max; `AI_CONTEXT_WARN_TOKENS` / `AI_CONTEXT_BLOCK_TOKENS` set them in tokens, `0` turns one off | no guard |
-| `model` (Claude) | `opusplan` on Pro and Team Pro: Opus in plan mode, Sonnet when executing; `opus` (200k window) on Max and Team Max, `opus[1m]` available per task | Sonnet 5 on Pro |
+| `model` (Claude) | `opusplan` on Pro and Team Pro: Opus in plan mode, Sonnet when executing; `opus` (200k window) on Max and Team Max, `opus[1m]` per task, started with `claude-1m` | Sonnet 5 on Pro |
 | `effortLevel` (Claude) | `medium` on both plans; agents raise it per task | — |
 | `model` (Codex) | `gpt-5.6-sol` at `high` on Pro, `medium` on Plus; subagents `gpt-5.6-terra` at `medium` | — |
 | `max_concurrent_threads_per_session` (Codex) | 6 on Pro, 3 on Plus | runtime default |
@@ -295,8 +296,8 @@ the per-call model, which put every agent on Sonnet. A STRONG or EXPERT agent ru
 only when a named trigger fires; the triggers are listed in `.ai/policies/model-routing.md`.
 
 On a Max plan the session runs Opus 5 with the 200k window at `medium` effort,
-compacting near 100k tokens (`autoCompactWindow` 133 000) — `opus[1m]` stays in `availableModels` for a task
-that genuinely needs it — and escalates from there: `ai-expert` pins `opus` at `xhigh`, so a session switched to
+compacting near 100k tokens (`autoCompactWindow` 133 000) — `opus[1m]` is for a task
+that genuinely needs it, started with `claude-1m` so that it compacts near 767k instead (picked with `/model` it would still compact near 100k) — and escalates from there: `ai-expert` pins `opus` at `xhigh`, so a session switched to
 Sonnet (the JetBrains agent's Model setting, or `/model`) cannot weaken the last-resort tier. Fable 5.1 [1m] is pinned on `architect` alone, at
 `xhigh`, for design questions outside a task; nothing else ever runs on it, and
 `fable-gate` sends it to Opus while Fable is rate-limited or its weekly limit is

@@ -31,7 +31,7 @@ The full pipeline starts at T3. See `docs/risk-tiers.md`.
 | `ai-reviewer` | opus | Sol | high | no | plan review, adversarial review |
 | `ai-security` | opus | Sol | high | no | T4, T5, auth or personal data |
 | `ai-release` | sonnet | Terra | low | the report | release report at T4/T5 (solo) or from T2 (team) |
-| `ai-expert` | the session model (Opus 5 on Max and Team Max); `opus`, pinned, on Pro and Team Pro | Astra, xhigh on Pro, high on Plus | high | no | escalation only |
+| `ai-expert` | `opus`, pinned on every plan | Astra, xhigh on Pro, high on Plus | xhigh on Max and Team Max, high on Pro and Team Pro | no | escalation only |
 
 Three more come from the routing half, and are not part of the pipeline:
 
@@ -82,9 +82,11 @@ Two mechanisms, deliberately different:
   `ai-risk` and `ai-planner` are written to work at either level; the caller
   decides based on the tier or on a `confidence: uncertain` answer.
 - **To EXPERT**, call `ai-expert`, which is a separate definition because EXPERT
-  resolves differently per plan: the session model (Opus 5) on Max and Team
-  Max, and `opus` pinned on Pro and Team Pro, where the session runs `opusplan` and an inherited model
-  would be Sonnet outside plan mode. Fable, where enabled, is pinned on
+  resolves differently per plan: `opus` is pinned everywhere — at `xhigh` on Max
+  and Team Max, at `high` on Pro and Team Pro — rather than inherited, because a
+  session may run on Sonnet (`opusplan` outside plan mode, `/model`, or an IDE
+  agent's Model setting) and the last-resort tier must not drop below the `opus`
+  reviewer it escalates from. Fable, where enabled, is pinned on
   `architect` alone — design questions outside a task — and nothing else ever
   runs on it. Under Codex `ai-expert` is pinned to Astra, and `codex-model-gate`
   rewrites an Astra launch to Sol while Astra is rate-limited or unavailable.

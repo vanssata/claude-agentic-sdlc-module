@@ -201,6 +201,14 @@ COMPACT=$(jq -r .autoCompactWindow "$TMP/settings.snippet.json")
 # compacts near 117k), so that is the number a person should read.
 # context-guard.py derives its warn and block thresholds from the same point.
 COMPACT_AT=$((COMPACT - 33000))
+# `autoCompactWindow` is one value for every model and `modelSettings` takes only
+# effort, so opus[1m] gets its window from the environment: bin/claude-1m exports
+# CLAUDE_CODE_AUTO_COMPACT_WINDOW for that one process and leaves settings.json alone.
+ONE_M_WINDOW=$(sed -n 's/^WINDOW="${CLAUDE_1M_COMPACT_WINDOW:-\([0-9]*\)}"$/\1/p' "$SRC/bin/claude-1m")
+ONE_M_AT=$((ONE_M_WINDOW - 33000))
+ONE_M_FABLE=""
+[ "$FABLE" = yes ] && ONE_M_FABLE=" and \`claude-1m fable\` for Fable 5.1 [1m]"
+ONE_M_RULE="A large context is a separate session, started with \`claude-1m\` (\`~/.claude/bin/claude-1m\`) for \`opus[1m]\`${ONE_M_FABLE}, not with \`/model\`: the launcher sets \`CLAUDE_CODE_AUTO_COMPACT_WINDOW=${ONE_M_WINDOW}\` for that one process, so it compacts near ${ONE_M_AT} while every other session keeps ${COMPACT}. Switched to with \`/model\`, a \`[1m]\` model still compacts near ${COMPACT_AT} and the large window is never used; the same holds for a \`[1m]\` subagent of an ordinary session, which gets the session's window. When a task inside an ordinary session needs one large-context read, say so and, once the user agrees, run \`claude-1m -p '<brief>'\` from Bash — its own process, its own window, only the answer comes back."
 READ_LINES=$(jq -r '.env.CLAUDE_READ_MAX_LINES' "$TMP/settings.snippet.json")
 READ_BYTES=$(jq -r '.env.CLAUDE_READ_MAX_BYTES' "$TMP/settings.snippet.json")
 
@@ -238,13 +246,13 @@ else
     ARCHITECT_MODEL_LINE="model: fable[1m]"
     ARCHITECT_EFFORT="xhigh"
     EXPERT_ROW="\`opus\` / \`xhigh\`, pinned so a Sonnet session cannot weaken it; \`architect\` alone pins \`fable[1m]\` / \`xhigh\`"
-    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice (\`/model\`) for a change that genuinely needs a huge context, never the default — above 200k every turn re-reads a context that costs more than the thinking. \`ai-expert\` pins \`opus\` at \`xhigh\` rather than inheriting the session: a session may run on Sonnet (the IDE agent's Model setting), and the last-resort tier must not drop below the \`opus\` reviewer it escalates from. Fable 5.1 [1m] is reserved for \`architect\` (pinned \`model: fable[1m]\`, \`xhigh\`) — never for the session, a reader, a reviewer or \`ai-expert\`. \`max\` stays off.
+    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice for a change that genuinely needs a huge context, never the default — above 200k every turn re-reads a context that costs more than the thinking. ${ONE_M_RULE} \`ai-expert\` pins \`opus\` at \`xhigh\` rather than inheriting the session: a session may run on Sonnet (the IDE agent's Model setting), and the last-resort tier must not drop below the \`opus\` reviewer it escalates from. Fable 5.1 [1m] is pinned on \`architect\` (\`model: fable[1m]\`, \`xhigh\`) and is the session only when the user starts one with \`claude-1m fable\` — never pick it for a reader, a reviewer or \`ai-expert\`. \`max\` stays off.
 - \`fable-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/fable-gate.py status\` shows the gate; \`clear\` re-enables Fable early."
   else
     ARCHITECT_MODEL_LINE="# model: intentionally omitted — inherits the session model (Opus 5, Fable disabled in this install)"
     ARCHITECT_EFFORT="high"
     EXPERT_ROW="\`opus\` / \`xhigh\`, pinned so a Sonnet session cannot weaken it"
-    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice, never the default. Fable is disabled in this install (\`--fable no\`). Do not request \`model: fable\` anywhere. \`ai-expert\` alone pins \`model: opus\` at \`xhigh\`, so a Sonnet session cannot weaken the last-resort tier; \`xhigh\` stays off everywhere else and \`max\` stays off."
+    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice, never the default. ${ONE_M_RULE} Fable is disabled in this install (\`--fable no\`). Do not request \`model: fable\` anywhere. \`ai-expert\` alone pins \`model: opus\` at \`xhigh\`, so a Sonnet session cannot weaken the last-resort tier; \`xhigh\` stays off everywhere else and \`max\` stays off."
   fi
   EFFORT_RULE="Raise to \`high\` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; readers stay at \`low\`."
 fi
@@ -360,6 +368,7 @@ claude_dry_run() {
   echo "== would install:"
   echo "   agents:  $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd,)"
   echo "   hooks:   $(ls "$SRC/hooks" | paste -sd,)"
+  [ "$TIER" = max ] && echo "   bin:     claude-1m (opus[1m]$( [ "$FABLE" = yes ] && echo " / fable[1m]" ), compaction window $ONE_M_WINDOW for that session only)"
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
   echo "   config:  ai-git-guard.json (only if absent)"
   echo "== would migrate: the claude-routing managed block, if present, into this one"
@@ -496,6 +505,24 @@ else
   echo "kept: hooks/ai-git-guard.json (your edits are preserved)"
 fi
 
+# ---------------------------------------------------------------- 2b. opus[1m] launcher
+# Max only: Pro has no opus[1m]. Linked into ~/.local/bin on a real install so it is
+# on PATH; a scratch CLAUDE_DIR (tests) never writes outside itself.
+if [ "$TIER" = max ]; then
+  mkdir -p "$CLAUDE_DIR/bin"
+  install_file "$SRC/bin/claude-1m" "$CLAUDE_DIR/bin/claude-1m"
+  chmod +x "$CLAUDE_DIR/bin/claude-1m"
+  LINK="$HOME/.local/bin/claude-1m"
+  if [ "$CLAUDE_DIR" = "$HOME/.claude" ] && [ -d "$HOME/.local/bin" ]; then
+    if [ ! -e "$LINK" ] || [ -L "$LINK" ]; then
+      ln -sfn "$CLAUDE_DIR/bin/claude-1m" "$LINK"
+      echo "linked: ~/.local/bin/claude-1m -> $CLAUDE_DIR/bin/claude-1m"
+    else
+      echo "kept: ~/.local/bin/claude-1m is not a link to this install; run $CLAUDE_DIR/bin/claude-1m directly"
+    fi
+  fi
+fi
+
 # ---------------------------------------------------------------- 3. skills
 install_skills "$CLAUDE_DIR"
 
@@ -603,6 +630,8 @@ Done (Claude Code).
                   architect on $( [ "$TIER" = pro ] && echo "opus, pinned" || { [ "$FABLE" = yes ] && echo "fable[1m], pinned" || echo "the session model"; } ) at effort $ARCHITECT_EFFORT
   compaction      near $COMPACT_AT tokens (autoCompactWindow $COMPACT); context-guard warns from
                   $((COMPACT_AT * 80 / 100)) and holds a prompt back once from $((COMPACT_AT * 120 / 100))
+$( [ "$TIER" = max ] && echo "  large context   claude-1m$( [ "$FABLE" = yes ] && echo " [opus|fable]" ) starts one session on opus[1m]$( [ "$FABLE" = yes ] && echo " or fable[1m] (Fable 5.1)" ) that compacts near $ONE_M_AT
+                  (CLAUDE_CODE_AUTO_COMPACT_WINDOW=$ONE_M_WINDOW, that process only)" )
   read guard      an unbounded Read is refused above $READ_LINES lines / $READ_BYTES bytes
   agents          $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd' ')
   hooks           cap-large-read, project-scaffold (Setup:init), ai-git-guard (global),
