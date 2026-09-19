@@ -176,6 +176,24 @@ cost findings, Stripe Minions, Shopify Roast, Airbnb test migration, METR, GitCl
 - Changing the concrete models or effort levels of the existing tiers.
 - Automatic deletion, automatic commits, or migration of application code.
 
+## Work packages
+
+Each package runs `/sdlc-spec` → `/sdlc-plan` → `/ai-task` on its own; specs are named
+`docs/sdlc/specs/adaptive-cross-runtime-sdlc-wp<N>-<slug>.md`.
+
+| WP | Package | Main files | Tier | Depends on | Status |
+|---|---|---|---|---|---|
+| 1 | Schema version and structural migrations | `skills/project-update/update.py`, new `migrations/`, `history/`, `tools/build-template-history.py`, `tests/test-project-update.sh`, `tests/test-merge-migration.sh` | T3 | — | spec done (`…-wp1-schema-migrations.md`) |
+| 2 | Questions file, handoff, event journal, human-turn approval | `skills/ai-task/state.py` (`ask`, `answer`, `questions`, `handoff`, `events.jsonl`, `owner_runtime`, approve outside the agent), `hooks/context-guard.py`, a session-start hook, `skills/ai-task/SKILL.md`, `skills/sdlc-intent` | T3 | 1 | not started |
+| 3 | Context diet | `CLAUDE.snippet.md`, `AGENTS.snippet.md`, `skills/ai-init/templates/*.block.md` and `*.minimal.md`, `.ai/AGENTS.md` as a router, `constitution.md` template, byte-budget test, a migration for existing projects | T2–T3 | 1, 2 | not started |
+| 4 | Deterministic gates | `risk-tiers.json` (diff budget, scopes), `state.py step-done` diff measurement, new `skills/ai-task/sensors.py`, tier re-scoring, retry rule in `ai-tester`, "test must bite" check | T3 | 1 (can run beside 3) | not started |
+| 5 | Runtimes and plans | new `profiles/max20.json`, preferred-runtime and budget tables in every profile, `install.sh` plan detection + confirmation, `fable-gate` / `codex-model-gate` → `runtime-gate`, `state.py handoff --to`, grep test that shared prompts name no model | T3 | 2 | not started |
+| 6 | `project-update --adopt` | `update.py --adopt`: detection, mapping table, `migrate` (default) / `coexist`, no-line-lost and no-dangling-reference checks, report, `--cleanup` behind approval; fixtures for Spec Kit, Kiro, Cursor, a large `CLAUDE.md` | T3 (deletion treated as T5 → approval) | 1, 3 | not started |
+| 7 | Path guard hardening | `ai-path-guard`: `.claude/`, `.codex/`, hooks and agent files protected during a task; instruction files in `vendor/`, `node_modules/` are data | T2 | — (any time) | not started |
+
+Before WP4, measure a baseline with `/usage-report` on 5–10 real tasks: tokens per task,
+review findings per 100 changed lines, share of tasks with a second `remediate`.
+
 ## Decisions taken (2026-09-20, answered by the user)
 
 1. **Max 20x vs Max 5x:** `install.sh` detects the plan, proposes it and waits for a
