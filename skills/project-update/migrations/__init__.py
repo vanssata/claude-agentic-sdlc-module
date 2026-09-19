@@ -36,7 +36,7 @@ def _files():
     return [n for n in names if n.endswith(".py") and n != "__init__.py"]
 
 
-def _path_error(path):
+def path_error(path):
     """Why a MOVES path is unusable, or None. Paths are project-relative and
     normalised, so template_key() and the plan's targets see one spelling."""
     if not isinstance(path, str) or not path:
@@ -47,8 +47,9 @@ def _path_error(path):
     return None
 
 
-def _check(mod, name, num, vacated):
-    """Validate one loaded module; vacated holds the MOVES sources of earlier migrations."""
+def _check(mod, name, num, vacated, destinations):
+    """Validate one loaded module; vacated holds the MOVES sources of earlier
+    migrations and destinations their destinations."""
     sources = set()
     version = getattr(mod, "VERSION", None)
     if type(version) is not int or version != num:  # pylint: disable=unidiomatic-typecheck  # True == 1
@@ -64,14 +65,17 @@ def _check(mod, name, num, vacated):
             raise SchemaError("%s: MOVES must be a list of (src, dst) path pairs" % name)
         src, dst = pair
         for path in (src, dst):
-            why = _path_error(path)
+            why = path_error(path)
             if why:
                 raise SchemaError("%s: MOVES path %r is %s" % (name, path, why))
         if src == dst:
             raise SchemaError("%s: MOVES pair %r moves a file onto itself" % (name, src))
         if src in vacated or src in sources:
             raise SchemaError("%s: MOVES source %r was already moved away" % (name, src))
+        if dst in destinations:
+            raise SchemaError("%s: MOVES destination %r is already the destination of another move" % (name, dst))
         sources.add(src)
+        destinations.add(dst)
     # A path once moved away is never a destination again, in this migration or a
     # later one: its history key would then name two templates, and rename chains
     # could loop.
@@ -122,10 +126,10 @@ def load():
     if nums != list(range(1, len(nums) + 1)):
         missing = sorted(set(range(1, max(nums) + 1)) - set(nums))
         raise SchemaError("migrations are not contiguous from 0001: missing %s" % ", ".join("%04d" % n for n in missing))
-    vacated = set()
+    vacated, destinations = set(), set()
     for n in nums:  # in order, so "moved away earlier" means earlier
         name, mod = by_num[n]
-        _check(mod, name, n, vacated)
+        _check(mod, name, n, vacated, destinations)
         vacated.update(src for src, _ in mod.MOVES)
     _loaded = [by_num[n][1] for n in nums]
     return _loaded

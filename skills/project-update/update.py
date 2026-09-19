@@ -29,6 +29,7 @@ in a git-ignored local directory for a human or /project-update to merge.
 """
 import argparse, copy, difflib, hashlib, json, os, re, subprocess, sys, tempfile
 from collections import OrderedDict
+from datetime import datetime, timezone
 
 sys.dont_write_bytecode = True  # never leave __pycache__ in an installed plugin
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -76,6 +77,10 @@ def project_runtimes(root):
     if not out:
         out.append("codex" if "/.codex/" in HERE + "/" else "claude")
     return out
+
+
+def utc_now():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def sha(data):
@@ -224,19 +229,116 @@ class MigrationContext:
         self.runtimes = project_runtimes(plan.root)
 
     def exists(self, path):
-        return self.plan.exists(path)
+        return self.read(path) is not None
 
     def read(self, path):
-        return self.plan.read(path)
+        self._check_path(path)
+        try:
+            return self.plan.read(path)
+        except OSError as exc:
+            raise SchemaError("%04d: %s cannot be read: %s" % (self.module.VERSION, path, exc)) from exc
+
+    def _check_path(self, path):
+        why = migrations.path_error(path)
+        if why:
+            raise SchemaError("%04d: %r is %s" % (self.module.VERSION, path, why))
 
     def read_json(self, path):
-        raw = self.plan.read(path)
+        raw = self.read(path)
         if raw is None:
             return None
         try:
             return json.loads(raw, object_pairs_hook=OrderedDict)
         except ValueError:
             return None
+
+    # ---- operations. Each is idempotent: a target already in its final state
+    # records nothing, so a re-run after an interrupted apply is a no-op.
+    def _add(self, action, target, note="", **kw):
+        self._check_path(target)
+        if not isinstance(kw.get("content", b""), bytes):
+            raise SchemaError("%04d: %s content must be bytes, not %s"
+                              % (self.module.VERSION, target, type(kw["content"]).__name__))
+        self.plan.add(action, target, note, migration=self.module.VERSION, **kw)
+
+    def create(self, path, content):
+        """Add a file the project does not have yet."""
+        if not self.exists(path):
+            self._add("create", path, content=content)
+
+    def move(self, src, dst):
+        """Move a file the project may have edited. The pair must be in MOVES, so
+        the rename is visible to the history lookup without running the migration."""
+        if (src, dst) not in self.module.MOVES:
+            raise SchemaError("%04d: move(%r, %r) is not in MOVES" % (self.module.VERSION, src, dst))
+        data = self.read(src)
+        if data is None:  # already moved, or the project never had it
+            return
+        there = self.read(dst)
+        if there is not None and there != data:
+            self._add("conflict", dst, "%s was moved here, but this file already exists" % src,
+                      conflict_copy=data, src=src)
+            return
+        # there == data means a previous apply wrote dst and stopped before
+        # removing src: the move simply finishes.
+        self._add("move", dst, content=data, src=src)
+        self.plan.remove(src)
+
+    def edit_text(self, path, fn):
+        """Rewrite a text file the project has; fn returns its input to do nothing."""
+        data = self.read(path)
+        if data is None:
+            return
+        new = fn(data)
+        if new != data:
+            self._add("update", path, "migrated", content=new)
+
+    def edit_json(self, path, fn):
+        """Rewrite a JSON file the project has. A policy file's leaf changes are
+        listed for confirmation, exactly as a merged policy change is."""
+        raw = self.read(path)
+        if raw is None:
+            return
+        try:
+            before = json.loads(raw, object_pairs_hook=OrderedDict)
+        except ValueError as exc:
+            # Not "nothing to do": the migration could not run. A conflict holds
+            # the schema version, so the next run tries again.
+            self._add("conflict", path, "is not valid JSON, so this migration could not run (%s)" % exc)
+            return
+        after = fn(copy.deepcopy(before))
+        if after == before:
+            return
+        policy = leaf_changes(before, after) if "/policies/" in "/" + path else None
+        self._add("update", path, "migrated", content=dump_json(after), policy=policy)
+
+    def patch_state(self, fn):  # noqa: D401
+        """Change the task in flight. update.py writes .ai/state/current.json the
+        way state.py does — atomically, with a history entry — so a task started
+        before the migration keeps working after it."""
+        if self.state is None:
+            return
+        after = fn(copy.deepcopy(self.state))
+        if not isinstance(after, dict):
+            raise SchemaError("%04d: patch_state must return the state object, not %s"
+                              % (self.module.VERSION, type(after).__name__))
+        if after == self.state:
+            return
+        after["updated_at"] = utc_now()
+        after.setdefault("history", []).append(
+            {"at": utc_now(), "event": "schema_migrated",
+             "detail": "%04d %s" % (self.module.VERSION, self.module.TITLE)})
+        self.state = after
+        self._add("update", STATE_FILE, "task state migrated",
+                  content=(json.dumps(after, indent=2, ensure_ascii=False) + "\n").encode())
+
+    def delete(self, path, reason):
+        """Propose a deletion. It is only listed until a human passes
+        --apply --confirm-delete NAME; nothing else in this file removes a file."""
+        if not self.exists(path):
+            return
+        confirmed = self.plan.confirm_delete
+        self._add("delete" if confirmed else "delete?", path, reason, reason=reason)
 
 
 def run_migrations(plan, version):
@@ -250,13 +352,24 @@ def run_migrations(plan, version):
         raise SchemaError("%s cannot be read: %s — a migration must see the task in flight"
                           % (STATE_FILE, exc)) from exc
     if raw is not None:
+        # state.py dies loudly on a corrupt current.json because ai-scope-guard
+        # derives its boundaries from it; a migration must not quietly skip it.
         try:
             state = json.loads(raw, object_pairs_hook=OrderedDict)
-        except ValueError:
-            state = None
+        except ValueError as exc:
+            raise SchemaError("%s is not valid JSON (%s) — inspect it by hand" % (STATE_FILE, exc)) from exc
+        if not isinstance(state, dict):
+            raise SchemaError("%s is not a task state object" % STATE_FILE)
     for mod in mods:
-        # A copy each: state changes only through the plan, never between migrations.
+        # A copy each, taken from the plan: a migration that mutates ctx.state in
+        # place without patch_state changes nothing for the next one.
+        planned = plan.final.get(STATE_FILE)
+        if planned is not None:
+            state = json.loads(planned, object_pairs_hook=OrderedDict)
         mod.plan(MigrationContext(plan, mod, version, copy.deepcopy(state)))
+    if state is not None:
+        plan.hints.append("%s: a task is in flight while the schema changes — check that the files "
+                          "its current step may touch still exist afterwards" % STATE_FILE)
     return mods
 
 
@@ -267,6 +380,8 @@ class Plan:
         self.items = []   # dicts: action, target, note, content, conflict_copy, policy
         self.hints = []
         self.schema = None  # (from, to, [migration modules]) when migrations are pending
+        self.confirm_delete = None  # the human who confirmed this run's deletions
+        self.held = None  # the schema version kept until a migration item is settled
         self.final = {}   # target -> bytes after this run (for cross-file fixes)
         self.removed = set()  # targets this run takes away
 
@@ -286,11 +401,14 @@ class Plan:
         self.final.pop(target, None)
         self.removed.add(target)
 
-    def add(self, action, target, note="", content=None, conflict_copy=None, policy=None, migration=None):
+    def add(self, action, target, note="", content=None, conflict_copy=None, policy=None,
+            migration=None, src=None, reason=None):
         self.items.append(dict(action=action, target=target, note=note, content=content,
-                               conflict_copy=conflict_copy, policy=policy, migration=migration))
+                               conflict_copy=conflict_copy, policy=policy, migration=migration,
+                               src=src, reason=reason))
         if content is not None:
             self.final[target] = content
+            self.removed.discard(target)  # planned content wins over an earlier removal
 
     @property
     def local_dir(self):
@@ -364,7 +482,7 @@ def fix_mirror(plan, target, content, ours):
     before = read(json_path) if os.path.exists(json_path) else None
     in_sync = old is not None and before is not None and old.group(0) == b"sha256:" + sha(before).encode()
     conflicted = any(i["action"] == "conflict" and i["target"] == json_target for i in plan.items)
-    after = plan.final.get(json_target, before)
+    after = plan.final.get(json_target, None if json_target in plan.removed else before)
     if in_sync and not conflicted and after is not None:
         return HASH_RE.sub(b"sha256:" + sha(after).encode(), content, count=1)
     return HASH_RE.sub(old.group(0), content, count=1) if old else content
@@ -372,6 +490,8 @@ def fix_mirror(plan, target, content, ours):
 
 def block_update(plan, history, runtime):
     name, block_tpl, minimal_tpl = INSTRUCTION_FILE[runtime]
+    if name in plan.removed:  # a migration moved this instruction file away
+        return
     tpl = read(os.path.join(TEMPLATES["ai-init"], block_tpl))
     text = plan.read(name)
     if text is None:
@@ -415,13 +535,14 @@ def gitignore_update(plan, snippet_path):
     sep = b"\n" if current and not current.endswith(b"\n") else b""
     new = current + sep + add.encode()
     # Replace an earlier .gitignore item from this run instead of stacking two.
-    plan.items = [i for i in plan.items if i["target"] != ".gitignore"]
+    plan.items = [i for i in plan.items if i["target"] != ".gitignore" or i["migration"] is not None]
     plan.add("update", ".gitignore", "entries appended: " + ", ".join(missing), content=new)
 
 
-def build_plan(root):
+def build_plan(root, confirm_delete=None):
     history = History(HISTORY)
     plan = Plan(root)
+    plan.confirm_delete = confirm_delete
     has_ai = os.path.isdir(os.path.join(root, ".ai"))
     has_sdlc = os.path.isdir(os.path.join(root, "docs", "sdlc"))
     if not (has_ai or has_sdlc):
@@ -437,11 +558,23 @@ def build_plan(root):
         if version < migrations.CURRENT:
             mods = run_migrations(plan, version)
             plan.schema = (version, migrations.CURRENT, mods)
-            # Last of the migration items: an apply that stops short leaves the
-            # version alone, and the next run plans the same migrations again.
-            plan.add("update" if plan.exists(VERSION_FILE) else "create", VERSION_FILE,
-                     "schema %d" % migrations.CURRENT, content=b"%d\n" % migrations.CURRENT,
-                     migration=migrations.CURRENT)
+            # The schema only advances when its migrations are done. Writing
+            # VERSION over an unresolved conflict, or over a deletion nobody has
+            # confirmed, would drop the operation: the next run would see a
+            # current project and plan nothing.
+            stuck = [i for i in plan.items if i["migration"] is not None
+                     and i["action"] in ("conflict", "delete?")]
+            if stuck:
+                plan.held = version
+                plan.hints.append("the schema stays at %d until %s — resolve a conflict by hand, confirm a "
+                                  "deletion with --apply --confirm-delete NAME, then run /project-update again"
+                                  % (version, ", ".join("%s (%s)" % (i["target"], i["action"]) for i in stuck)))
+            else:
+                # Last of the migration items: an apply that stops short leaves the
+                # version alone, and the next run plans the same migrations again.
+                plan.add("update" if plan.exists(VERSION_FILE) else "create", VERSION_FILE,
+                         "schema %d" % migrations.CURRENT, content=b"%d\n" % migrations.CURRENT,
+                         migration=migrations.CURRENT)
 
     if has_sdlc:
         tpl = TEMPLATES["project-init"]
@@ -450,6 +583,8 @@ def build_plan(root):
             entries += RUNTIME_MAP[rt]
         for src, target, kind in entries:
             content = read(os.path.join(tpl, src))
+            if target in plan.removed:  # a migration moved it away in this run
+                continue
             if kind == "create":
                 if not plan.exists(target):
                     plan.add("create", target, content=content.replace(
@@ -467,6 +602,8 @@ def build_plan(root):
         # JSON before markdown, so the risk-tier mirror can point at the merged JSON.
         for rel in sorted(files, key=lambda r: (not r.endswith(".json"), r)):
             if rel == VERSION_FILE:  # owned by the migration step, never merged
+                continue
+            if rel in plan.removed:  # a migration moved it away in this run
                 continue
             content = read(os.path.join(tpl, rel))
             if rel.startswith(".ai/project/") or rel.startswith(".ai/reports/"):
@@ -508,13 +645,16 @@ def apply(plan):
 
 
 def report(plan, applied):
-    auto = [i for i in plan.items if i["action"] != "conflict"]
+    auto = [i for i in plan.items if i["action"] not in ("conflict", "delete?")]
     conflicts = [i for i in plan.items if i["action"] == "conflict"]
+    deletions = [i for i in plan.items if i["action"] == "delete?"]
     head = "applied" if applied else "dry run, nothing written; --apply to write"
     print("project-update: %s (%s)" % (plan.root, head))
     if not plan.items:
         print("  up to date with the installed plugin")
-    width = max([len(i["target"]) for i in plan.items] + [10])
+    def shown(i):
+        return "%s -> %s" % (i["src"], i["target"]) if i["src"] else i["target"]
+    width = max([len(shown(i)) for i in plan.items] + [10])
     if plan.schema:
         frm, to, mods = plan.schema
         print("  %-9s %-*s  (%d migration%s: %s)" % (
@@ -523,16 +663,22 @@ def report(plan, applied):
     for i in plan.items:
         note = i["note"]
         if i["migration"] is not None:
-            note = (note + " " if note else "") + "[%04d]" % i["migration"]
-        if i["action"] == "conflict":
+            note = "[%04d]%s" % (i["migration"], " " + note if note else "")
+        if i["action"] == "delete?":
+            note += "; needs --apply --confirm-delete NAME"
+        if i["action"] == "conflict" and i["conflict_copy"] is not None:
             note += "; plugin version %s %s/%s" % ("at" if applied else "will be at", plan.local_dir, i["target"])
-        print("  %-9s %-*s  %s" % (i["action"], width, i["target"], note))
+        print("  %-9s %-*s  %s" % (i["action"], width, shown(i), note))
         for change in i["policy"] or []:
             print("  %-9s %-*s    %s" % ("policy", width, "", change))
     for h in plan.hints:
         print("  hint      " + h)
-    print("%d automatic, %d conflict(s)%s" % (len(auto), len(conflicts),
-          ", %d policy change(s) to confirm" % sum(len(i["policy"] or []) for i in auto) if any(i["policy"] for i in auto) else ""))
+    tail = ""
+    if any(i["policy"] for i in auto):
+        tail += ", %d policy change(s) to confirm" % sum(len(i["policy"] or []) for i in auto)
+    if deletions:
+        tail += ", %d deletion(s) awaiting --confirm-delete" % len(deletions)
+    print("%d automatic, %d conflict(s)%s" % (len(auto), len(conflicts), tail))
 
 
 def main():
@@ -547,7 +693,7 @@ def main():
             print("project-update: %s templates not found at %s (run claude-agentic/install.sh)" % (name, tpl), file=sys.stderr)
             return 2
     try:
-        plan = build_plan(root)
+        plan = build_plan(root, confirm_delete=getattr(args, "confirm_delete", None))
     except SchemaError as exc:
         # --check is read by /ai-status, which reads stdout: it must see the reason.
         print("project-update: %s" % exc, file=sys.stdout if args.check else sys.stderr)
@@ -556,10 +702,10 @@ def main():
         print("project-update: %s has neither .ai/ nor docs/sdlc/ — run /ai-init or /project-init first" % root,
               file=sys.stderr)
         return 2
-    pending = [i for i in plan.items if i["action"] != "conflict"]
+    pending = [i for i in plan.items if i["action"] not in ("conflict", "delete?")]
     if args.check:
-        conflicts = len(plan.items) - len(pending)
-        if pending:
+        conflicts = sum(1 for i in plan.items if i["action"] == "conflict")
+        if pending or plan.schema:
             bits = []
             if plan.schema:
                 bits.append("schema %d -> %d" % plan.schema[:2])
@@ -568,6 +714,11 @@ def main():
                 bits.append("%d file(s) to update" % files)
             if conflicts:
                 bits.append("%d need a manual merge" % conflicts)
+            deletions = sum(1 for i in plan.items if i["action"] == "delete?")
+            if deletions:
+                bits.append("%d deletion(s) a human must confirm" % deletions)
+            if plan.held is not None:
+                bits.append("the schema stays at %d until they are settled" % plan.held)
             print("project is behind the installed plugin: %s — run /project-update" % ", ".join(bits))
             return 1
         print("project matches the installed plugin" + (" (%d file(s) differ by hand-merge choice)" % conflicts if conflicts else ""))
