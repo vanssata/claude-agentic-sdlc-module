@@ -110,6 +110,7 @@ CLAUDE_DIR="$DIRP" bash "$INSTALL" --plan pro >/dev/null 2>&1 && pass "pro insta
 grep -q '^model: opus' "$DIRP/agents/ai-expert.md" && pass "pro: ai-expert pins opus" || fail "pro: ai-expert should pin opus"
 grep -q '^model: opus' "$DIRP/agents/architect.md" && pass "pro: architect pins opus" || fail "pro: architect should pin opus"
 grep -q '^effort: high' "$DIRP/agents/ai-expert.md" && pass "pro: ai-expert runs at high" || fail "pro: expert effort wrong"
+[ -e "$DIRP/bin/claude-1m" ] && fail "pro has no opus[1m]; the launcher must not be installed" || pass "pro: no opus[1m] launcher"
 [ "$(jq -r .model "$DIRP/settings.json")" = "opusplan" ] && pass "pro: settings.json model is opusplan" || fail "pro: model not opusplan"
 [ "$(jq -r '.fallbackModel[0]' "$DIRP/settings.json")" = "sonnet" ] && pass "pro: fallback is sonnet" || fail "pro: fallback wrong"
 [ "$(jq -r .effortLevel "$DIRP/settings.json")" = "medium" ] && pass "pro: default effort is medium" || fail "pro: effort wrong"
@@ -140,6 +141,20 @@ grep -q 'Compaction near 100 000 tokens' "$DIR/CLAUDE.md" && pass "the block nam
 grep -q 'warning from 80k tokens, and from 120k' "$DIR/CLAUDE.md" && pass "the block names the guard's thresholds" || fail "the guard thresholds are not rendered"
 grep -q '^# Summary instructions' "$DIR/CLAUDE.md" && pass "the block carries the summary instructions" || fail "summary instructions missing"
 grep -q '{{' "$DIR/CLAUDE.md" && fail "an unrendered placeholder is left in CLAUDE.md" || pass "every placeholder is rendered"
+[ -x "$DIR/bin/claude-1m" ] && pass "max installs the opus[1m] launcher" || fail "bin/claude-1m missing or not executable"
+printf '#!/usr/bin/env bash\necho "window=$CLAUDE_CODE_AUTO_COMPACT_WINDOW args=$*"\n' > "$TMP/fake-claude"; chmod +x "$TMP/fake-claude"
+out1m=$(CLAUDE_BIN="$TMP/fake-claude" "$DIR/bin/claude-1m" -p hi)
+[ "$out1m" = "window=800000 args=--model opus[1m] -p hi" ] && pass "claude-1m runs opus[1m] with an 800k compaction window" || fail "claude-1m launched the wrong session" "$out1m"
+out1m=$(CLAUDE_1M_COMPACT_WINDOW=500000 CLAUDE_BIN="$TMP/fake-claude" "$DIR/bin/claude-1m")
+[ "$out1m" = "window=500000 args=--model opus[1m]" ] && pass "CLAUDE_1M_COMPACT_WINDOW lowers the 1m window" || fail "the window override was ignored" "$out1m"
+out1m=$(CLAUDE_BIN="$TMP/fake-claude" "$DIR/bin/claude-1m" fable -p hi)
+[ "$out1m" = "window=800000 args=--model fable[1m] -p hi" ] && pass "claude-1m fable runs fable[1m] with the same 800k window" || fail "claude-1m fable launched the wrong session" "$out1m"
+out1m=$(CLAUDE_BIN="$TMP/fake-claude" "$DIR/bin/claude-1m" opus)
+[ "$out1m" = "window=800000 args=--model opus[1m]" ] && pass "claude-1m opus is the default spelled out" || fail "claude-1m opus launched the wrong session" "$out1m"
+grep -q 'claude-1m fable' "$DIR/CLAUDE.md" && pass "the block offers Fable 5.1 [1m] as a session through claude-1m fable" || fail "block does not mention claude-1m fable"
+CLAUDE_1M_COMPACT_WINDOW=lots CLAUDE_BIN="$TMP/fake-claude" "$DIR/bin/claude-1m" >/dev/null 2>&1 && fail "a non-numeric window must be refused" || pass "a non-numeric window is refused"
+[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "133000" ] && pass "the launcher leaves the settings window for every other model alone" || fail "settings window changed"
+grep -q 'claude-1m' "$DIR/CLAUDE.md" && pass "the CLAUDE.md block says opus[1m] starts with claude-1m" || fail "block does not mention claude-1m"
 [ "$(jq -r '.modelSettings["claude-opus-5"].effortLevel' "$DIR/settings.json")" = "medium" ] && pass "Opus runs at medium" || fail "opus effort not medium"
 [ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL // "unset"' "$DIR/settings.json")" = "unset" ] && pass "CLAUDE_CODE_SUBAGENT_MODEL is not set, so each agent's own model: applies" || fail "CLAUDE_CODE_SUBAGENT_MODEL would override every agent tier"
 jq '.env.CLAUDE_CODE_SUBAGENT_MODEL = "sonnet"' "$DIR/settings.json" > "$DIR/s.tmp" && mv "$DIR/s.tmp" "$DIR/settings.json"

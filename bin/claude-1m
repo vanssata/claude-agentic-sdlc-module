@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# claude-1m — one Claude Code session on a 1m-context model with its own compaction window.
+#
+#   claude-1m [opus|fable] [any claude argument]
+#
+#   claude-1m                    Opus 5 [1m] as the main session
+#   claude-1m fable              Fable 5.1 [1m] as the main session
+#   claude-1m fable -p '<brief>' one headless large-context run, e.g. called from another session
+#   CLAUDE_1M_COMPACT_WINDOW=500000 claude-1m     # compact earlier than 767k
+#
+# `autoCompactWindow` in settings.json is one value for every model, and
+# `modelSettings` takes only effort, so the 133 000 that keeps an `opus` session
+# near 100k would compact `opus[1m]` and `fable[1m]` near 100k too.
+# CLAUDE_CODE_AUTO_COMPACT_WINDOW outranks settings.json for this process only: this
+# session compacts near 767k, every other session keeps the window from
+# settings.json. context-guard reads the same variable, so its warning and hold-back
+# thresholds follow.
+#
+# Subagents get the session's window, capped by Claude Code at each model's own: inside
+# this session a 200k agent compacts near 167k instead of near 100k, and `architect`
+# on fable[1m] gets the full window.
+#
+# The `fable` alias is Fable 5.1 (claude-fable-5-1) on the Anthropic API, not Fable 5.
+set -euo pipefail
+
+MODEL='opus[1m]'
+case "${1:-}" in
+  opus)  shift;;
+  fable) MODEL='fable[1m]'; shift;;
+esac
+
+WINDOW="${CLAUDE_1M_COMPACT_WINDOW:-800000}"
+case "$WINDOW" in
+  ''|*[!0-9]*) echo "claude-1m: CLAUDE_1M_COMPACT_WINDOW must be a number of tokens (got '$WINDOW')" >&2; exit 2;;
+esac
+
+export CLAUDE_CODE_AUTO_COMPACT_WINDOW="$WINDOW"
+exec "${CLAUDE_BIN:-claude}" --model "$MODEL" "$@"
