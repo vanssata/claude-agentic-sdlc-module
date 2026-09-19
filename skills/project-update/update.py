@@ -369,8 +369,14 @@ class MigrationContext:
         --apply --confirm-delete NAME; nothing else in this file removes a file."""
         if not self.exists(path):
             return
-        confirmed = self.plan.confirm_delete
-        self._add("delete" if confirmed else "delete?", path, reason, reason=reason)
+        if not self.plan.confirm_delete:
+            self._add("delete?", path, reason, reason=reason)
+            return
+        self._add("delete", path, reason, reason=reason)
+        # Out of the virtual tree, so this run's template walk does not put it
+        # back. A template the plugin still ships is re-created by the next run:
+        # a migration that deletes must retire the template in the same release.
+        self.plan.remove(path)
 
 
 def run_migrations(plan, version):
@@ -416,6 +422,9 @@ class Plan:
         self.held = None  # the schema version kept until a migration item is settled
         self.final = {}   # target -> bytes after this run (for cross-file fixes)
         self.removed = set()  # targets this run takes away
+        self.seen = {}    # target -> sha of what was on disk when it was first read,
+        #                   or None when nothing was there: apply's precondition
+        self.report_dir = ".ai/reports/project-update-%s" % datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # The project as this run leaves it: planned content first, then the disk.
     # File readers in the planning path go through these, not the disk.
@@ -427,17 +436,33 @@ class Plan:
     def read(self, target):
         if target in self.final:
             return self.final[target]
-        return read(os.path.join(self.root, target)) if self.exists(target) else None
+        if not self.exists(target):
+            return None
+        data = read(os.path.join(self.root, target))
+        self.seen.setdefault(target, sha(data))  # what apply must find there
+        return data
 
     def remove(self, target):
         self.final.pop(target, None)
         self.removed.add(target)
 
+    def before(self, target):
+        """The sha of the target as this run first read it, None when it was
+        absent. Recorded by the read that planned the change, so the precondition
+        and the merge input are the same bytes. A second item for the same target
+        (a move and then its merge) is checked against what this run wrote."""
+        if target not in self.seen:
+            path = os.path.join(self.root, target)
+            self.seen[target] = sha(read(path)) if os.path.isfile(path) and not os.path.islink(path) else None
+        return self.seen[target]
+
     def add(self, action, target, note="", content=None, conflict_copy=None, policy=None,
             migration=None, src=None, reason=None):
+        expect = self.before(target)
         self.items.append(dict(action=action, target=target, note=note, content=content,
                                conflict_copy=conflict_copy, policy=policy, migration=migration,
-                               src=src, reason=reason))
+                               src=src, reason=reason, expect=expect,
+                               src_expect=self.before(src) if src else None))
         if content is not None:
             self.final[target] = content
             self.removed.discard(target)  # planned content wins over an earlier removal
@@ -665,18 +690,164 @@ def build_plan(root, confirm_delete=None):
 
 
 # ---------------------------------------------------------------- output
+class Abort(Exception):
+    """A precondition failed: the project is not what the dry run described."""
+
+    def __init__(self, item, why):
+        super().__init__(why)
+        self.item, self.why = item, why
+
+
+def current_sha(root, target):
+    """The sha of a target now, or None when it is absent. A path that is not a
+    regular file has no content this tool may replace."""
+    path = os.path.join(root, target)
+    if os.path.islink(path) or (os.path.exists(path) and not os.path.isfile(path)):
+        raise Abort(None, "%s is not a regular file" % target)
+    return sha(read(path)) if os.path.isfile(path) else None
+
+
+def check(plan, item, target, expect, written):
+    """The target must still be what the dry run read, or what this run wrote."""
+    try:
+        now_sha = current_sha(plan.root, target)
+    except Abort as exc:
+        raise Abort(item, exc.why) from exc
+    want = written.get(target, expect)
+    if now_sha != want:
+        raise Abort(item, "%s changed since the dry run read it" % target)
+
+
+def default_mode():
+    mask = os.umask(0)
+    os.umask(mask)
+    return 0o666 & ~mask
+
+
+def write_file(root, target, content, mode=None):
+    """Atomic, like state.py: a crash leaves the old file or the new one, never
+    half of one. The temp file is created with mkstemp in the target's directory,
+    so a planted name cannot redirect the write, and a symlinked target is
+    refused rather than followed. The target keeps the mode it had. A symlinked
+    *directory* on the way to it is still followed, as every writer here always
+    has."""
+    path = os.path.join(root, target)
+    if os.path.islink(path) or (os.path.exists(path) and not os.path.isfile(path)):
+        raise Abort(None, "%s is not a regular file" % target)
+    parent = os.path.dirname(path) or "."
+    os.makedirs(parent, exist_ok=True)
+    if mode is None:
+        mode = os.stat(path).st_mode & 0o7777 if os.path.isfile(path) else default_mode()
+    fd, tmp = tempfile.mkstemp(dir=parent, prefix=os.path.basename(path) + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(content)
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def keep_original(plan, target):
+    """A faithful copy of what a move or a delete takes away, mode included.
+    Nothing else is ever lost, so nothing else is copied."""
+    path = os.path.join(plan.root, target)
+    write_file(plan.root, os.path.join(plan.report_dir, "original", target),
+               read(path), mode=os.stat(path).st_mode & 0o7777)
+
+
+def record_migration(plan, ops, deletions):
+    """The record of what was taken away, rewritten after every such operation:
+    an abort must not lose the note of a deletion a human approved. A second run
+    on the same day appends to the record instead of replacing it."""
+    path = os.path.join(plan.report_dir, "migration.json")
+    existing = {}
+    full = os.path.join(plan.root, path)
+    if os.path.isfile(full):
+        try:
+            existing = json.loads(read(full), object_pairs_hook=OrderedDict)
+        except ValueError:
+            existing = {}
+        if not isinstance(existing, dict):  # hand-edited into another shape
+            existing = {}
+    record = OrderedDict()
+    record["from"] = existing.get("from", plan.schema[0] if plan.schema else None)
+    # The version the project is actually at now, read from the disk and not from
+    # the plan: this record is written before the files move, and an aborted run
+    # never reaches CURRENT.
+    version_path = os.path.join(plan.root, VERSION_FILE)
+    on_disk = read(version_path).decode().strip() if os.path.isfile(version_path) else ""
+    record["to"] = int(on_disk) if on_disk.isdigit() else record["from"]
+    if plan.schema and record["to"] != plan.schema[1]:
+        record["target"] = plan.schema[1]
+        if plan.held is not None:
+            record["held_at"] = plan.held
+    record["applied_at"] = utc_now()
+    # A recovery re-run replays the same operation: record it once.
+    record["ops"] = list(existing.get("ops", []))
+    record["ops"] += [o for o in ops if o not in record["ops"]]
+    record["deletions"] = list(existing.get("deletions", []))
+    record["deletions"] += [d for d in deletions
+                            if not any(e.get("path") == d["path"] for e in record["deletions"])]
+    write_file(plan.root, path, dump_json(record))
+
+
 def apply(plan):
+    """Write the plan, in order. Every item checks its target first; a violation
+    or a failed write aborts before the next item, leaving everything after it
+    unwritten. Every operation is idempotent, so the re-run is the recovery."""
+    written, recorded = {}, []
     for item in plan.items:
-        if item["content"] is not None:
-            path = os.path.join(plan.root, item["target"])
-            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-            with open(path, "wb") as fh:
-                fh.write(item["content"])
-        if item["conflict_copy"] is not None:
-            copy_path = os.path.join(plan.root, plan.local_dir, item["target"])
-            os.makedirs(os.path.dirname(copy_path), exist_ok=True)
-            with open(copy_path, "wb") as fh:
-                fh.write(item["conflict_copy"])
+        try:
+            apply_item(plan, item, written, recorded)
+        except Abort as exc:
+            raise Abort(exc.item or item, exc.why) from exc
+        except OSError as exc:
+            raise Abort(item, str(exc)) from exc
+    # The run finished: say which version it actually reached. Also after a run
+    # that replayed an aborted one and so recorded no operation of its own.
+    try:
+        if recorded or os.path.isfile(os.path.join(plan.root, plan.report_dir, "migration.json")):
+            record_migration(plan, [], [])
+    except OSError as exc:
+        raise Abort(None, str(exc)) from exc
+
+
+def apply_item(plan, item, written, recorded):
+    target, action = item["target"], item["action"]
+    if action == "delete?":  # listed only, until a human confirms it
+        return
+    mode = None
+    if action in ("move", "delete"):
+        source = item["src"] if action == "move" else target
+        check(plan, item, source, item["src_expect"] if action == "move" else item["expect"], written)
+        if action == "move":
+            check(plan, item, target, item["expect"], written)
+            mode = os.stat(os.path.join(plan.root, source)).st_mode & 0o7777
+        keep_original(plan, source)
+        recorded.append(target)
+        # Recorded before the file is gone: an abort later must not lose the note
+        # of what was taken away, or of who approved a deletion.
+        record_migration(plan,
+                         [dict(action=action, migration=item["migration"],
+                               **(dict(src=item["src"], dst=target) if action == "move" else dict(path=target)))],
+                         [dict(path=target, confirmed_by=plan.confirm_delete, at=utc_now())]
+                         if action == "delete" else [])
+    elif item["content"] is not None:
+        check(plan, item, target, item["expect"], written)
+    if item["content"] is not None:
+        write_file(plan.root, target, item["content"], mode=mode)
+        written[target] = sha(item["content"])
+    if action == "move":
+        os.remove(os.path.join(plan.root, item["src"]))
+        written[item["src"]] = None
+    elif action == "delete":
+        os.remove(os.path.join(plan.root, target))
+        written[target] = None
+    if item["conflict_copy"] is not None:
+        write_file(plan.root, os.path.join(plan.local_dir, target), item["conflict_copy"])
 
 
 def report(plan, applied):
@@ -721,7 +892,15 @@ def main():
     ap.add_argument("root", nargs="?", default=".")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--confirm-delete", metavar="NAME",
+                    help="a human confirms this run's proposed deletions, and is recorded in "
+                         "the migration report; only with --apply")
     args = ap.parse_args()
+    if args.confirm_delete is not None:
+        if not args.apply:
+            ap.error("--confirm-delete only makes sense with --apply")
+        if not args.confirm_delete.strip():
+            ap.error("--confirm-delete needs the name of the human who confirmed the deletion")
     root = os.path.abspath(args.root)
     for name, tpl in TEMPLATES.items():
         if not os.path.isdir(tpl):
@@ -759,7 +938,13 @@ def main():
         print("project matches the installed plugin" + (" (%d file(s) differ by hand-merge choice)" % conflicts if conflicts else ""))
         return 0
     if args.apply:
-        apply(plan)
+        try:
+            apply(plan)
+        except Abort as exc:
+            where = "%s %s" % (exc.item["action"], exc.item["target"]) if exc.item else "the update"
+            print("project-update: aborted at %s: %s — nothing after it was written; "
+                  "run the dry run again" % (where, exc.why), file=sys.stderr)
+            return 3
     report(plan, args.apply)
     return 0
 
