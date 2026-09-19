@@ -13,7 +13,7 @@
 # --dry-run prints everything that would be written, per runtime, and writes nothing.
 #
 # Claude Code (~/.claude): model, effort and context settings for the detected
-# plan (agents default to Sonnet); the ai-* pipeline agents plus architect,
+# plan (each agent pins its own tier); the ai-* pipeline agents plus architect,
 # Explore and log-reader; six hooks, plus fable-gate on a Fable install; the
 # skills; and one managed block in ~/.claude/CLAUDE.md.
 #
@@ -208,7 +208,9 @@ SESSION_HUMAN=$(pretty "$SESSION_MODEL")
 FALLBACK_HUMAN=$(jq -r '.fallbackModel | if type=="array" then .[] else . end' "$TMP/settings.snippet.json" \
                  | while read -r m; do pretty "$m"; done | paste -sd'|' | sed 's/|/, then /g')
 
-# Agents default to Sonnet (CLAUDE_CODE_SUBAGENT_MODEL). The EXPERT-tier agents
+# Every agent pins its own tier in frontmatter. CLAUDE_CODE_SUBAGENT_MODEL is not
+# set: it outranks both the frontmatter and the call's `model`, so it would run
+# every agent on one model. The EXPERT-tier agents
 # are rendered per tier: on pro/team-pro both pin opus (an inherited model would
 # be Sonnet outside plan mode); on max/team-max ai-expert inherits the Opus 5
 # session and architect alone is pinned to fable[1m] when Fable is enabled.
@@ -499,10 +501,14 @@ if [ -f "$SETTINGS" ]; then cp "$SETTINGS" "$SETTINGS.bak"; else echo '{}' > "$S
 # jq's * replaces arrays wholesale (wanted for availableModels/fallbackModel), so
 # merge everything but .hooks first, then append our hook entries only when no
 # existing entry under the same event already runs the same command.
+# Older installs set CLAUDE_CODE_SUBAGENT_MODEL=sonnet, which overrides every
+# agent's own model:, so that value is removed; any other value is the user's.
 jq -s '
   (.[1] | del(.hooks)) as $snippet
   | (.[1].hooks // {}) as $newhooks
-  | (.[0] * $snippet) as $merged
+  | (.[0] | if .env.CLAUDE_CODE_SUBAGENT_MODEL == "sonnet"
+            then del(.env.CLAUDE_CODE_SUBAGENT_MODEL) else . end) as $base
+  | ($base * $snippet) as $merged
   | reduce ($newhooks | to_entries[]) as $event
       ($merged;
         .hooks[$event.key] = (
@@ -555,9 +561,15 @@ if [ -n "$missing" ]; then
 fi
 if [ -n "$unpinned" ]; then
   echo
-  echo "WARNING: these agents declare no 'model:' and resolve to CLAUDE_CODE_SUBAGENT_MODEL (sonnet):"
+  echo "WARNING: these agents declare no 'model:' and inherit the session model:"
   for m in $unpinned; do echo "  - $m"; done
   echo "Pin 'model: haiku|sonnet|opus|fable' to the tier the role needs."
+fi
+subagent_override=$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL // empty' "$SETTINGS")
+if [ -n "$subagent_override" ]; then
+  echo
+  echo "WARNING: CLAUDE_CODE_SUBAGENT_MODEL=$subagent_override outranks every agent's 'model:' and the"
+  echo "call's own model, so the FAST/BALANCED/STRONG tiers all run on that one model. Unset it."
 fi
 
 if python3 - "$GLOBAL_MD" <<'PY'

@@ -9,6 +9,5 @@
     "claude-sonnet-5": { "effortLevel": "medium" },
     "claude-haiku-4-5-20251001": { "effortLevel": "low" }
   },
-  "autoCompactWindow": 133000,
-  "env": { "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet" }
+  "autoCompactWindow": 133000
 }

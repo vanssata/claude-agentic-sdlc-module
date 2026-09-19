@@ -183,7 +183,7 @@ the next one. `fable-gate.py` closes the gap at run time.
 |---|---|
 | `StopFailure` (`rate_limit\|model_not_found`) | when the failure is Fable's, records Fable as unavailable — 1 h for a rate limit, 6 h for model-not-found |
 | `PostToolUse:Agent` | a Fable agent that `resolvedModel`/`modelsUsed` show fell back: recorded for 15 min, so the next ones skip the failed attempt |
-| `PreToolUse:Agent` | while a record is live, returns `updatedInput` with `model: opus` for any agent that would run on Fable — an explicit `model`, the definition's frontmatter (project before user), or `CLAUDE_CODE_SUBAGENT_MODEL` — and tells Claude (`additionalContext`) and you (`permissionDecisionReason`) why |
+| `PreToolUse:Agent` | while a record is live, returns `updatedInput` with `model: opus` for any agent that would run on Fable — `CLAUDE_CODE_SUBAGENT_MODEL` (which outranks the rest), an explicit `model`, or the definition's frontmatter (project before user) — and tells Claude (`additionalContext`) and you (`permissionDecisionReason`) why |
 
 A failure is Fable's when its message names Fable, the failing agent's definition
 pins Fable, the transcript was last served by Fable, or a Fable agent launched in
