@@ -208,9 +208,11 @@ SESSION_HUMAN=$(pretty "$SESSION_MODEL")
 FALLBACK_HUMAN=$(jq -r '.fallbackModel | if type=="array" then .[] else . end' "$TMP/settings.snippet.json" \
                  | while read -r m; do pretty "$m"; done | paste -sd'|' | sed 's/|/, then /g')
 
-# Every agent pins its own tier in frontmatter. CLAUDE_CODE_SUBAGENT_MODEL is not
-# set: it outranks both the frontmatter and the call's `model`, so it would run
-# every agent on one model. The EXPERT-tier agents
+# Every agent definition pins its own `model:`; CLAUDE_CODE_SUBAGENT_MODEL is not
+# set, because before Claude Code v2.1.251 (still bundled by the JetBrains ACP
+# adapter) it overrides both the frontmatter and the per-call model, and from
+# v2.1.251 it would send an agent that omits `model:` on purpose (ai-expert) to
+# Sonnet instead of the session. The EXPERT-tier agents
 # are rendered per tier: on pro/team-pro both pin opus (an inherited model would
 # be Sonnet outside plan mode); on max/team-max ai-expert inherits the Opus 5
 # session and architect alone is pinned to fable[1m] when Fable is enabled.
