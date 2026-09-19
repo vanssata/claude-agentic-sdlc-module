@@ -98,14 +98,25 @@ CLAUDE_FABLE_GATE_FALLBACK=sonnet expect_route sonnet '{"subagent_type":"ai-expe
 echo "== the record expires on its own"
 set_marker $(( $(now) - 1 ))
 expect_route unchanged '{"subagent_type":"ai-expert","prompt":"p"}' "an expired record no longer routes Fable agents"
+reset_state
+stored=$(python3 - "$GATE" <<'PY'
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("gate", sys.argv[1])
+gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
+gate.mark(2000000000.9, "test", "test")
+print(json.load(open(gate.STATE))["unavailable"]["until"])
+PY
+)
+[ "$stored" = 2000000001 ] && pass "a fractional expiry is rounded up, never ending the record early" \
+    || fail "until should round up to 2000000001" "$stored"
 
 echo "== StopFailure records unavailability"
 reset_state
 stop_failure rate_limit '{"last_assistant_message":"API Error: 429 rate limit for claude-fable-5-1"}'
 marker_active && pass "a rate_limit that names Fable records it" || fail "rate_limit naming fable should record"
 expect_route opus '{"subagent_type":"ai-expert","prompt":"p"}' "the next Fable agent is routed to opus"
-until=$(jq -r .unavailable.until "$CLAUDE_FABLE_GATE_STATE")
-[ $(( until - $(now) )) -gt 3000 ] && [ $(( until - $(now) )) -le 3600 ] && pass "rate_limit holds for CLAUDE_FABLE_GATE_TTL (1h)" || fail "rate_limit ttl wrong: $(( until - $(now) ))s"
+until=$(jq -r .unavailable.until "$CLAUDE_FABLE_GATE_STATE")  # rounded up, so up to TTL + 1 s
+[ $(( until - $(now) )) -gt 3000 ] && [ $(( until - $(now) )) -le 3601 ] && pass "rate_limit holds for CLAUDE_FABLE_GATE_TTL (1h)" || fail "rate_limit ttl wrong: $(( until - $(now) ))s"
 
 reset_state
 stop_failure model_not_found '{"agent_type":"ai-expert"}'
@@ -148,7 +159,7 @@ marker_active && fail "a Fable agent that ran on Fable must not record" || pass 
 post '{"subagent_type":"ai-expert","prompt":"p"}' '{"status":"completed","resolvedModel":"claude-fable-5-1","modelsUsed":["claude-fable-5-1","claude-opus-5"]}'
 marker_active && pass "a mid-run swap off Fable (modelsUsed) records it" || fail "modelsUsed swap should record"
 until=$(jq -r .unavailable.until "$CLAUDE_FABLE_GATE_STATE")
-[ $(( until - $(now) )) -le 900 ] && pass "an overload fallback holds only briefly (15 min)" || fail "overload ttl too long"
+[ $(( until - $(now) )) -le 901 ] && pass "an overload fallback holds only briefly (15 min)" || fail "overload ttl too long"
 reset_state
 post '{"subagent_type":"ai-expert","prompt":"p"}' '{"status":"async_launched","resolvedModel":"claude-opus-5"}'
 marker_active && pass "a Fable agent that started on Opus records it" || fail "resolvedModel fallback should record"
