@@ -17,7 +17,9 @@
 # boundary: a determined process can still read a file through an interpreter.
 set -uo pipefail
 
-HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOOK_SRC="${BASH_SOURCE[0]}"
+case "$HOOK_SRC" in */*) HOOK_SRC="${HOOK_SRC%/*}" ;; *) HOOK_SRC=. ;; esac
+HOOK_DIR="$(cd "${HOOK_SRC:-/}" && pwd)"
 # shellcheck source=lib/ai-hook-common.sh
 . "$HOOK_DIR/lib/ai-hook-common.sh"
 
@@ -33,23 +35,54 @@ AI_ROOT=$(find_ai_root "$AI_CWD") || allow
 DEFAULTS="$HOOK_DIR/ai-path-guard-defaults.json"
 PROJECT="$AI_ROOT/.ai/policies/path-guard.json"
 
-DENY_PATTERNS=$( { json_strings "$DEFAULTS" '.deny_patterns'; json_strings "$PROJECT" '.deny_patterns'; } | sort -u)
-ALLOW_PATTERNS=$( { json_strings "$DEFAULTS" '.allow_patterns'; json_strings "$PROJECT" '.allow_patterns'; } | sort -u)
-PROTECTED_PATTERNS=$( { json_strings "$DEFAULTS" '.protected_config_patterns'; json_strings "$PROJECT" '.protected_config_patterns'; } | sort -u)
+# The three pattern lists, unioned over the shipped defaults and the project
+# policy and each sorted with `sort -u` — the order decides which pattern a deny
+# message names. One jq and one sort for all three: every line is tagged with its
+# list, and sorting on the tag and then on the rest of the line gives each list
+# the order it would have had sorted on its own.
+DENY_PATTERNS="" ALLOW_PATTERNS="" PROTECTED_PATTERNS=""
+pattern_files=()
+for f in "$DEFAULTS" "$PROJECT"; do [ -f "$f" ] && pattern_files+=("$f"); done
+if [ ${#pattern_files[@]} -gt 0 ]; then
+    while IFS= read -r tagged; do
+        case "$tagged" in
+            d$'\t'*) DENY_PATTERNS+="${tagged#?$'\t'}"$'\n' ;;
+            a$'\t'*) ALLOW_PATTERNS+="${tagged#?$'\t'}"$'\n' ;;
+            p$'\t'*) PROTECTED_PATTERNS+="${tagged#?$'\t'}"$'\n' ;;
+        esac
+    done < <(for f in "${pattern_files[@]}"; do
+                 jq -r '
+                     def tagged($tag; $list): $list // [] | .[]? | select(type == "string")
+                         | split("\n")[] | "\($tag)\t\(.)";
+                     tagged("d"; .deny_patterns), tagged("a"; .allow_patterns),
+                     tagged("p"; .protected_config_patterns)' "$f" 2>/dev/null
+             done | sort -u -t$'\t' -k1,1 -k2)
+fi
+DENY_PATTERNS=$(chomp_all "$DENY_PATTERNS")
+ALLOW_PATTERNS=$(chomp_all "$ALLOW_PATTERNS")
+PROTECTED_PATTERNS=$(chomp_all "$PROTECTED_PATTERNS")
 
 [ -n "$DENY_PATTERNS$PROTECTED_PATTERNS" ] || allow
-INTERESTING_PATTERNS=$(printf '%s\n%s\n' "$DENY_PATTERNS" "$PROTECTED_PATTERNS" | grep -v '^$')
+INTERESTING_PATTERNS=""
+LOOSE_PATTERNS=""
+while IFS= read -r pattern; do
+    [ -n "$pattern" ] || continue
+    INTERESTING_PATTERNS+="$pattern"$'\n'
+    loose="${pattern#'(^|/)'}"; loose="${loose#^}"; loose="${loose%\$}"
+    LOOSE_PATTERNS+="$loose"$'\n'
+done <<< "$DENY_PATTERNS"$'\n'"$PROTECTED_PATTERNS"
+INTERESTING_PATTERNS=$(chomp_all "$INTERESTING_PATTERNS")
+LOOSE_PATTERNS=$(chomp_all "$LOOSE_PATTERNS")
 # Anchor-free copy used only as a cheap pre-filter over a whole command line,
 # where a path is surrounded by spaces rather than by the start of the string.
 # Dropping anchors can only widen a pattern, so the pre-filter never hides a
 # path the precise per-argument pass would have caught.
-LOOSE_PATTERNS=$(printf '%s\n' "$INTERESTING_PATTERNS" | sed -e 's/^(\^|\/)//' -e 's/^\^//' -e 's/\$$//')
 
 WHY_SENSITIVE=$'\n\nProduction secrets and data dumps must not enter the model context.\nIf this path is genuinely safe (a .dist/.example file, a fixture), add a regex to\n"allow_patterns" in .ai/policies/path-guard.json. See .ai/policies/security.md.'
 WHY_PROTECTED=$'\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py; policy files are edited by a human outside an agent run,\nso a change to them is reviewable. See .ai/policies/safety.md.'
 
 # classify <abs-path> -> prints "sensitive:<pattern>", "protected:<pattern>" or
-# nothing. One joined grep decides whether the path is interesting at all; only
+# nothing. One joined match decides whether the path is interesting at all; only
 # then is the per-pattern pass run, to name the pattern in the deny message.
 classify() {
     local p="$1" hit
@@ -104,10 +137,10 @@ case "$AI_TOOL" in
         [ -n "$cmd" ] || allow
 
         # Fast path: if nothing in the whole command line looks interesting, stop
-        # here. This keeps the common case to a single grep instead of one pass
+        # here. This keeps the common case to a single match instead of one pass
         # per argument, which matters because the hook runs on every Bash call.
         matches_joined "$cmd" "$LOOSE_PATTERNS" \
-            || printf '%s' "$cmd" | grep -qE '(^|[|;&[:space:]])(ln|eval)([[:space:]]|$)' \
+            || ere_match '(^|[|;&[:space:]])(ln|eval)([[:space:]]|$)' "$cmd" \
             || allow
 
         # Word-boundary anchored, like vendor-write-guard.sh: a path mentioned
@@ -127,9 +160,9 @@ case "$AI_TOOL" in
             # Only complain when the token is actually an argument of a command
             # that reads, copies or redirects it — not when it is quoted prose.
             esc=$(ere_escape "$token")
-            if printf '%s' "$cmd" | grep -qE "${readers}[\"']?${esc}" \
-               || printf '%s' "$cmd" | grep -qE "${copiers}[\"']?${esc}" \
-               || printf '%s' "$cmd" | grep -qE "<[[:space:]]*[\"']?${esc}"; then
+            if ere_match "${readers}[\"']?${esc}" "$cmd" \
+               || ere_match "${copiers}[\"']?${esc}" "$cmd" \
+               || ere_match "<[[:space:]]*[\"']?${esc}" "$cmd"; then
                 if [ "$kind" = protected ]; then
                     deny "Refusing a shell command that reads a claude-agentic control file: $token (matched: $pattern)$WHY_PROTECTED"
                 fi
@@ -138,15 +171,27 @@ case "$AI_TOOL" in
 
             # Writing to a protected control file through the shell.
             if [ "$kind" = protected ] \
-               && printf '%s' "$cmd" | grep -qE ">>?[[:space:]]*[\"']?${esc}"; then
+               && ere_match ">>?[[:space:]]*[\"']?${esc}" "$cmd"; then
                 deny "Refusing a shell redirect into a claude-agentic control file: $token$WHY_PROTECTED"
             fi
-        done < <(printf '%s\n' "$cmd" | tr ' \t\n|;&()<>' '\n' | sed 's/^["'\'']*//; s/["'\'']*$//' | grep -v '^$' | sort -u)
+        done < <(words=()
+                 IFS=$' \t\n' read -r -d '' -a words <<< "${cmd//[|;&()<>]/ }"
+                 for w in "${words[@]}"; do
+                     while [[ $w == [\"\']* ]]; do w="${w:1}"; done     # strip surrounding quotes
+                     while [[ $w == *[\"\'] ]]; do w="${w%?}"; done
+                     [ -z "$w" ] || printf '%s\n' "$w"
+                 done | sort -u)
 
         # A symlink whose target is sensitive: the link does not exist yet at
         # hook time, so the realpath check above cannot see it.
-        if printf '%s' "$cmd" | grep -qE '(^|[|;&[:space:]])ln([[:space:]]+-[^[:space:]]+)*[[:space:]]'; then
-            src=$(printf '%s' "$cmd" | sed -nE 's/.*(^|[|;&[:space:]])ln([[:space:]]+-[^[:space:]]+)*[[:space:]]+([^[:space:];&|]+).*/\3/p')
+        if ere_match '(^|[|;&[:space:]])ln([[:space:]]+-[^[:space:]]+)*[[:space:]]' "$cmd"; then
+            # the source argument of every line that has one, as `sed -n s///p` prints them
+            ln_re='.*(^|[|;&[:space:]])ln([[:space:]]+-[^[:space:]]+)*[[:space:]]+([^[:space:];&|]+).*'
+            src=""
+            while IFS= read -r line; do
+                [[ $line =~ $ln_re ]] && src+="${BASH_REMATCH[3]}"$'\n'
+            done <<< "${cmd%$'\n'}"
+            src=$(chomp_all "$src")
             if [ -n "$src" ] && verdict=$(classify "$(abs_path "$src")") && [ -n "$verdict" ]; then
                 deny "Refusing to create a symlink to a sensitive path: $src$WHY_SENSITIVE"
             fi
@@ -154,9 +199,9 @@ case "$AI_TOOL" in
 
         # Obfuscated access: an interpreter one-liner or an eval that mentions a
         # sensitive-looking literal. Documented as a tripwire, not a boundary.
-        if printf '%s' "$cmd" | grep -qE '(^|[|;&[:space:]])(python3?|perl|ruby|node|php)([[:space:]]+-[^[:space:]]+)*[[:space:]]+-(c|e)([[:space:]]|$)' \
-           || printf '%s' "$cmd" | grep -qE '(^|[|;&[:space:]])eval([[:space:]]|$)'; then
-            if printf '%s' "$cmd" | grep -qE '\.env|secrets?/|credentials?|id_rsa|\.pem|\.aws'; then
+        if ere_match '(^|[|;&[:space:]])(python3?|perl|ruby|node|php)([[:space:]]+-[^[:space:]]+)*[[:space:]]+-(c|e)([[:space:]]|$)' "$cmd" \
+           || ere_match '(^|[|;&[:space:]])eval([[:space:]]|$)' "$cmd"; then
+            if ere_match '\.env|secrets?/|credentials?|id_rsa|\.pem|\.aws' "$cmd"; then
                 deny "Refusing an interpreter one-liner that references a sensitive path.$WHY_SENSITIVE"
             fi
         fi

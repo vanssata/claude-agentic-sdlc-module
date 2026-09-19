@@ -23,23 +23,59 @@ AI_TOOL=""
 AI_TOOL_RAW=""
 AI_CWD=""
 AI_EVENT=""
+AI_COMMAND=""
+AI_COMMAND_OK=""
 
 # read_payload — slurp stdin once and extract the fields every guard needs.
 # AI_TOOL_RAW is what the runtime sent; AI_TOOL is that name mapped onto the
 # Claude vocabulary the guards' case statements are written in.
+#
+# One jq call reads every field, because each process costs milliseconds and
+# this runs on nearly every tool call. It covers the normal payload — a single
+# JSON object whose fields are strings. Anything else takes the field-by-field
+# path below, which is the reference behaviour the fast path reproduces.
 read_payload() {
     AI_PAYLOAD=$(cat)
     [ -n "$AI_PAYLOAD" ] || exit 0
     command -v jq >/dev/null 2>&1 || exit 0
-    AI_TOOL_RAW=$(printf '%s' "$AI_PAYLOAD" | jq -r '.tool_name // empty' 2>/dev/null) || exit 0
-    AI_CWD=$(printf '%s' "$AI_PAYLOAD" | jq -r '.cwd // empty' 2>/dev/null)
-    AI_EVENT=$(printf '%s' "$AI_PAYLOAD" | jq -r '.hook_event_name // empty' 2>/dev/null)
+    local fields
+    fields=$(printf '%s' "$AI_PAYLOAD" | jq -rn '
+        def plain(v): v == null or v == false or (v | type) == "string";
+        def sh(v): (v // "") | @sh;
+        [inputs]
+        | if length == 1 and (.[0] | type) == "object"
+             and plain(.[0].tool_name) and plain(.[0].cwd) and plain(.[0].hook_event_name)
+          then .[0]
+               | "AI_TOOL_RAW=\(sh(.tool_name)) AI_CWD=\(sh(.cwd)) AI_EVENT=\(sh(.hook_event_name))"
+                 + (if .tool_input == null or .tool_input == false then " AI_COMMAND=\(sh(null)) AI_COMMAND_OK=1"
+                    elif (.tool_input | type) == "object" and plain(.tool_input.command)
+                    then " AI_COMMAND=\(sh(.tool_input.command)) AI_COMMAND_OK=1"
+                    else "" end)
+          else "SLOW" end' 2>/dev/null) || exit 0
+    if [ "$fields" = SLOW ]; then
+        AI_TOOL_RAW=$(printf '%s' "$AI_PAYLOAD" | jq -r '.tool_name // empty' 2>/dev/null) || exit 0
+        AI_CWD=$(printf '%s' "$AI_PAYLOAD" | jq -r '.cwd // empty' 2>/dev/null)
+        AI_EVENT=$(printf '%s' "$AI_PAYLOAD" | jq -r '.hook_event_name // empty' 2>/dev/null)
+    else
+        eval "$fields"
+        # $(jq -r ...) drops trailing newlines; the fast path must as well.
+        AI_TOOL_RAW=$(chomp_all "$AI_TOOL_RAW")
+        AI_CWD=$(chomp_all "$AI_CWD")
+        AI_EVENT=$(chomp_all "$AI_EVENT")
+        [ -z "$AI_COMMAND_OK" ] || AI_COMMAND=$(chomp_all "$AI_COMMAND")
+    fi
     [ -n "$AI_CWD" ] || AI_CWD="$PWD"
     case "$AI_TOOL_RAW" in
         apply_patch)                 AI_TOOL=Edit ;;   # Codex: one call, many files
         shell|exec_command|local_shell) AI_TOOL=Bash ;;
         *)                           AI_TOOL="$AI_TOOL_RAW" ;;
     esac
+}
+
+# chomp_all <string> — the string without trailing newlines, as $(...) returns it.
+chomp_all() {
+    local s="$1"
+    printf '%s' "${s%"${s##*[!$'\n']}"}"
 }
 
 # runtime_hook_config <basename> — the live (user-owned) config for a guard.
@@ -64,6 +100,7 @@ payload_field() {
 # apply_patch, whose `command` holds a patch rather than a shell command.
 bash_command() {
     [ "$AI_TOOL" = Bash ] || return 0
+    if [ -n "$AI_COMMAND_OK" ]; then printf '%s' "$AI_COMMAND"; return 0; fi
     payload_field '.tool_input.command'
 }
 
@@ -86,7 +123,15 @@ target_paths() {
 
 # ere_escape <string> — quote a literal so it can be embedded in an ERE.
 ere_escape() {
-    printf '%s' "$1" | sed -e 's/[][\\.*^$(){}?+|]/\\&/g'
+    local s="$1" out="" c i
+    for (( i = 0; i < ${#s}; i++ )); do
+        c="${s:i:1}"
+        case "$c" in
+            '['|']'|'\\'|'.'|'*'|'^'|'$'|'('|')'|'{'|'}'|'?'|'+'|'|') out+="\\$c" ;;
+            *) out+="$c" ;;
+        esac
+    done
+    printf '%s' "$out"
 }
 
 # strip_prose <command> — remove the parts of a shell command that are prose
@@ -94,6 +139,12 @@ ere_escape() {
 # match against the result, so "git commit -m 'never git push --force'" is a
 # commit, not a force push. Path-bearing rules still read the original command.
 strip_prose() {
+    # Both rewrites need a heredoc ("<<") or a message flag ("-m", which
+    # "--message" contains); without either the command is already prose-free.
+    case "$1" in
+        *'<<'*|*-m*) ;;
+        *) printf '%s' "$1"; return 0 ;;
+    esac
     printf '%s' "$1" | python3 -c '
 import re, sys
 cmd = sys.stdin.read()
@@ -127,7 +178,7 @@ find_ai_root() {
     d=$(cd "$d" 2>/dev/null && pwd) || return 1
     while [ -n "$d" ] && [ "$d" != "/" ]; do
         if [ -d "$d/.ai" ]; then printf '%s\n' "$d"; return 0; fi
-        d=$(dirname "$d")
+        d="${d%/*}"; [ -n "$d" ] || d=/      # dirname, without a process
     done
     [ -d "/.ai" ] && { printf '/\n'; return 0; }
     return 1
@@ -161,6 +212,24 @@ json_strings() {
     jq -r "${2} // [] | .[]? | select(type==\"string\")" "$1" 2>/dev/null || true
 }
 
+# ere_match <ERE> <subject> — `printf '%s' "$subject" | grep -qE "$ERE"` without
+# the two processes. grep matches line by line, so a multi-line subject is tested
+# one line at a time: a bracket expression such as [^;&|]* must not match across
+# a newline, and ^ and $ anchor at each line. An empty subject has no lines and
+# never matches; an invalid pattern never matches, as grep's error does not.
+ere_match() {
+    local re="$1" subject="$2" line
+    [ -n "$subject" ] || return 1
+    case "$subject" in
+        *$'\n'*) ;;
+        *) { [[ $subject =~ $re ]]; } 2>/dev/null; return ;;
+    esac
+    while IFS= read -r line; do
+        { [[ $line =~ $re ]]; } 2>/dev/null && return 0
+    done <<< "${subject%$'\n'}"
+    return 1
+}
+
 # matches_any <string> — reads ERE patterns from stdin (one per line) and prints
 # the first one that matches the subject; returns 1 when none does.
 # Patterns are tested one at a time on purpose: the matching pattern is quoted
@@ -169,7 +238,7 @@ matches_any() {
     local subject="$1" pattern
     while IFS= read -r pattern; do
         [ -n "$pattern" ] || continue
-        if printf '%s' "$subject" | grep -qE "$pattern" 2>/dev/null; then
+        if ere_match "$pattern" "$subject"; then
             printf '%s\n' "$pattern"
             return 0
         fi
@@ -178,11 +247,11 @@ matches_any() {
 }
 
 # matches_joined <string> <patterns> — fast pre-check against all patterns at
-# once (one grep instead of N). Use it to decide whether the slower
-# matches_any pass is worth running.
+# once (one match instead of N). Use it to decide whether the slower
+# matches_any pass is worth running. The join is what `paste -sd'|'` produced.
 matches_joined() {
-    local subject="$1" joined
-    joined=$(printf '%s' "$2" | paste -sd'|' -)
+    local subject="$1" joined="${2%$'\n'}"
+    joined="${joined//$'\n'/|}"
     [ -n "$joined" ] || return 1
-    printf '%s' "$subject" | grep -qE "$joined" 2>/dev/null
+    ere_match "$joined" "$subject"
 }
