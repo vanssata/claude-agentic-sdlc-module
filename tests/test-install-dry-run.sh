@@ -140,15 +140,16 @@ grep -q 'warning from 80k tokens, and from 120k' "$DIR/CLAUDE.md" && pass "the b
 grep -q '^# Summary instructions' "$DIR/CLAUDE.md" && pass "the block carries the summary instructions" || fail "summary instructions missing"
 grep -q '{{' "$DIR/CLAUDE.md" && fail "an unrendered placeholder is left in CLAUDE.md" || pass "every placeholder is rendered"
 [ "$(jq -r '.modelSettings["claude-opus-5"].effortLevel' "$DIR/settings.json")" = "medium" ] && pass "Opus runs at medium" || fail "opus effort not medium"
-[ "$(jq -r '.env | has("CLAUDE_CODE_SUBAGENT_MODEL")' "$DIR/settings.json")" = "false" ] && pass "CLAUDE_CODE_SUBAGENT_MODEL is not installed (it overrides every agent's model: before v2.1.251)" || fail "CLAUDE_CODE_SUBAGENT_MODEL must not be installed"
-jq '.env.CLAUDE_CODE_SUBAGENT_MODEL = "sonnet"' "$DIR/settings.json" > "$DIR/settings.json.t" && mv "$DIR/settings.json.t" "$DIR/settings.json"
+[ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL // "unset"' "$DIR/settings.json")" = "unset" ] && pass "CLAUDE_CODE_SUBAGENT_MODEL is not set, so each agent's own model: applies" || fail "CLAUDE_CODE_SUBAGENT_MODEL would override every agent tier"
+jq '.env.CLAUDE_CODE_SUBAGENT_MODEL = "sonnet"' "$DIR/settings.json" > "$DIR/s.tmp" && mv "$DIR/s.tmp" "$DIR/settings.json"
 CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
-[ "$(jq -r '.env | has("CLAUDE_CODE_SUBAGENT_MODEL")' "$DIR/settings.json")" = "false" ] && pass "a reinstall removes the stale CLAUDE_CODE_SUBAGENT_MODEL=sonnet an earlier version wrote" || fail "stale CLAUDE_CODE_SUBAGENT_MODEL=sonnet survived a reinstall"
-[ "$(jq -r '.env.CLAUDE_READ_MAX_LINES' "$DIR/settings.json")" != "null" ] && pass "removing the stale key leaves the rest of env alone" || fail "env lost its other keys"
-jq '.env.CLAUDE_CODE_SUBAGENT_MODEL = "haiku"' "$DIR/settings.json" > "$DIR/settings.json.t" && mv "$DIR/settings.json.t" "$DIR/settings.json"
-CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
-[ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL' "$DIR/settings.json")" = "haiku" ] && pass "a CLAUDE_CODE_SUBAGENT_MODEL the user set to something else is kept" || fail "the user's own CLAUDE_CODE_SUBAGENT_MODEL was removed"
-jq 'del(.env.CLAUDE_CODE_SUBAGENT_MODEL)' "$DIR/settings.json" > "$DIR/settings.json.t" && mv "$DIR/settings.json.t" "$DIR/settings.json"
+[ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL // "unset"' "$DIR/settings.json")" = "unset" ] && pass "a reinstall removes the stale sonnet override" || fail "the stale sonnet override survived a reinstall"
+[ "$(jq -r '.env.CLAUDE_READ_MAX_LINES' "$DIR/settings.json")" = "4000" ] && pass "the rest of env survives the cleanup" || fail "the cleanup dropped other env keys"
+jq '.env.CLAUDE_CODE_SUBAGENT_MODEL = "opus"' "$DIR/settings.json" > "$DIR/s.tmp" && mv "$DIR/s.tmp" "$DIR/settings.json"
+out=$(CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes 2>&1)
+[ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL' "$DIR/settings.json")" = "opus" ] && pass "a user-chosen override is kept" || fail "a user-chosen override was removed"
+grep -q 'CLAUDE_CODE_SUBAGENT_MODEL=opus outranks' <<<"$out" && pass "the installer warns that the override flattens the tiers" || fail "no warning for a user-set override"
+jq 'del(.env.CLAUDE_CODE_SUBAGENT_MODEL)' "$DIR/settings.json" > "$DIR/s.tmp" && mv "$DIR/s.tmp" "$DIR/settings.json"
 grep -q 'claude-agentic:start' "$DIR/CLAUDE.md" && pass "the CLAUDE.md block is written" || fail "block missing"
 
 echo "== backups never land inside skills/"

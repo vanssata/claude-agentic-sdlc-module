@@ -59,6 +59,7 @@ expect_route unchanged '{"subagent_type":"fork","model":"fable","prompt":"p"}' "
 expect_route unchanged '{"subagent_type":"architect","prompt":"p"}' "user-level architect (opus) is untouched"
 expect_route opus '{"subagent_type":"architect","prompt":"p"}' "a project-level architect pinned to fable wins over the user one, and is routed" "$TMP/project"
 CLAUDE_CODE_SUBAGENT_MODEL=fable expect_route opus '{"subagent_type":"no-definition","prompt":"p"}' "an agent with no definition falls back to CLAUDE_CODE_SUBAGENT_MODEL"
+CLAUDE_CODE_SUBAGENT_MODEL=fable expect_route opus '{"subagent_type":"no-definition","model":"sonnet","prompt":"p"}' "CLAUDE_CODE_SUBAGENT_MODEL outranks the call's own model"
 
 out=$(agent_call '{"subagent_type":"ai-expert","prompt":"keep me","description":"keep","run_in_background":true}')
 printf '%s' "$out" | jq -e '.hookSpecificOutput.updatedInput | .prompt == "keep me" and .description == "keep" and .run_in_background == true and .subagent_type == "ai-expert"' >/dev/null \

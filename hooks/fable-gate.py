@@ -108,8 +108,11 @@ def frontmatter_model(path):
 
 
 def agent_model(tool_input, cwd=""):
-    """The model an Agent call will request: the call's own `model`, else the
-    definition's frontmatter (project before user), else CLAUDE_CODE_SUBAGENT_MODEL."""
+    """The model an Agent call will run on, in Claude Code's order:
+    CLAUDE_CODE_SUBAGENT_MODEL, then the call's own `model`, then the
+    definition's frontmatter (project before user)."""
+    if os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL"):
+        return os.environ["CLAUDE_CODE_SUBAGENT_MODEL"]
     if tool_input.get("model"):
         return tool_input["model"]
     name = tool_input.get("subagent_type") or "general-purpose"
@@ -124,7 +127,7 @@ def agent_model(tool_input, cwd=""):
             if model and model != "inherit":
                 return model
             break
-    return os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL", "")
+    return ""
 
 
 # ------------------------------------------------------------------ hook events

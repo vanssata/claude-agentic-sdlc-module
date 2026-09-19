@@ -13,7 +13,7 @@
 # --dry-run prints everything that would be written, per runtime, and writes nothing.
 #
 # Claude Code (~/.claude): model, effort and context settings for the detected
-# plan (each agent pins its own model); the ai-* pipeline agents plus architect,
+# plan (each agent pins its own tier); the ai-* pipeline agents plus architect,
 # Explore and log-reader; six hooks, plus fable-gate on a Fable install; the
 # skills; and one managed block in ~/.claude/CLAUDE.md.
 #
@@ -503,10 +503,14 @@ if [ -f "$SETTINGS" ]; then cp "$SETTINGS" "$SETTINGS.bak"; else echo '{}' > "$S
 # jq's * replaces arrays wholesale (wanted for availableModels/fallbackModel), so
 # merge everything but .hooks first, then append our hook entries only when no
 # existing entry under the same event already runs the same command.
+# Older installs set CLAUDE_CODE_SUBAGENT_MODEL=sonnet, which overrides every
+# agent's own model:, so that value is removed; any other value is the user's.
 jq -s '
   (.[1] | del(.hooks)) as $snippet
   | (.[1].hooks // {}) as $newhooks
-  | (.[0] * $snippet) as $merged
+  | (.[0] | if .env.CLAUDE_CODE_SUBAGENT_MODEL == "sonnet"
+            then del(.env.CLAUDE_CODE_SUBAGENT_MODEL) else . end) as $base
+  | ($base * $snippet) as $merged
   | reduce ($newhooks | to_entries[]) as $event
       ($merged;
         .hooks[$event.key] = (
@@ -521,13 +525,6 @@ jq -s '
       )
 ' "$SETTINGS" "$TMP/settings.snippet.json" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 echo "merged: settings.json (backup in settings.json.bak)"
-# Earlier versions installed env.CLAUDE_CODE_SUBAGENT_MODEL=sonnet as an agent
-# default. It is an override before Claude Code v2.1.251, so the value this
-# installer wrote is removed; any other value is the user's and stays.
-if [ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL // empty' "$SETTINGS")" = "sonnet" ]; then
-  jq 'del(.env.CLAUDE_CODE_SUBAGENT_MODEL)' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-  echo "removed: env.CLAUDE_CODE_SUBAGENT_MODEL=sonnet from settings.json (it overrode every agent's model: before Claude Code v2.1.251)"
-fi
 
 # No Fable on this install: drop the gate's entries a previous Fable install left,
 # and an event list only when the gate was all it held. Other hooks stay.
@@ -569,6 +566,12 @@ if [ -n "$unpinned" ]; then
   echo "WARNING: these agents declare no 'model:' and inherit the session model:"
   for m in $unpinned; do echo "  - $m"; done
   echo "Pin 'model: haiku|sonnet|opus|fable' to the tier the role needs."
+fi
+subagent_override=$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL // empty' "$SETTINGS")
+if [ -n "$subagent_override" ]; then
+  echo
+  echo "WARNING: CLAUDE_CODE_SUBAGENT_MODEL=$subagent_override outranks every agent's 'model:' and the"
+  echo "call's own model, so the FAST/BALANCED/STRONG tiers all run on that one model. Unset it."
 fi
 
 if python3 - "$GLOBAL_MD" <<'PY'
