@@ -31,7 +31,13 @@ cost findings, Stripe Minions, Shopify Roast, Airbnb test migration, METR, GitCl
 7. **Plans differ only by model, not by budget.** There is no Max 20x profile; Max 5x and
    Max 20x, and Codex Plus and Pro, differ in quota, which should drive fan-out and
    escalation, not model names.
-8. **Existing projects cannot follow.** `project-update` merges the content of files it
+8. **The guards' cost is untracked.** They are the only part of the system that runs on
+   *every* tool call, and nobody was measuring them: `ai-git-guard` cost 148 ms per Bash
+   call and `ai-path-guard` 96 ms, 74 processes per Bash call, 30–40 s of pure waiting in
+   a 150–200-call session — wall-clock the user pays on every task, at every tier,
+   including the T0 ones the pipeline never touches. Nothing in the repository stated a
+   budget, and nothing proved that a change to a guard did not also change its decisions.
+9. **Existing projects cannot follow.** `project-update` merges the content of files it
    knows. It has no structural migrations (move, split, new schema) and cannot take in a
    project shaped by another tool (Spec Kit, Kiro, AI-DLC, Cursor rules, a large
    hand-written `CLAUDE.md`). Every improvement above would reach new projects only.
@@ -106,6 +112,18 @@ cost findings, Stripe Minions, Shopify Roast, Airbnb test migration, METR, GitCl
 - `ai-path-guard` refuses writes to `.claude/`, `.codex/`, hooks and agent definitions
   during a task, and instruction files inside dependencies are treated as data.
 
+**The hot path**
+
+- The guards have a stated per-call budget and are measured against it, not estimated.
+  The rules are the product; how they are evaluated is an implementation detail that may
+  be optimised freely — as long as the decisions do not move.
+- Any change to a guard is proved behaviour-preserving by a characterization suite that
+  compares exit code **and full deny text** byte for byte against a golden file recorded
+  from the previous revision. A deny that names a different pattern is a failure.
+- The interpreter-startup floor (~20 ms) is accepted. The Python hooks are not ported to
+  another language, and the payload JSON is not parsed in bash: both trade
+  cross-platform simplicity for ~20 ms and are refused by default.
+
 **Existing projects**
 
 - A project carries a schema version. `project-update` runs ordered, idempotent
@@ -139,8 +157,8 @@ cost findings, Stripe Minions, Shopify Roast, Airbnb test migration, METR, GitCl
 - Plugin parts: `skills/ai-task/state.py`, `skills/ai-task`, `skills/project-update`
   (`update.py`, `history/`, new `migrations/`), `skills/project-init`, `skills/ai-init`
   templates, `skills/sdlc-*`, `skills/ai-status`, `skills/usage-report`, `hooks/`
-  (`ai-path-guard`, `ai-scope-guard`, `context-guard`, a session-start hook, the model
-  gates), `profiles/`, `CLAUDE.snippet.md`, `AGENTS.snippet.md`, `scripts/render-*`,
+  (`lib/ai-hook-common.sh`, `ai-git-guard`, `ai-path-guard`, `ai-scope-guard`,
+  `context-guard`, a session-start hook, the model gates), `profiles/`, `CLAUDE.snippet.md`, `AGENTS.snippet.md`, `scripts/render-*`,
   `install.sh`, `agents/`, `tests/`, `docs/`.
 - Every repository already initialised with `/ai-init` or `/project-init`, and
   repositories shaped by other tools.
@@ -159,7 +177,9 @@ cost findings, Stripe Minions, Shopify Roast, Airbnb test migration, METR, GitCl
   about first. A task in flight survives a schema migration with defaults.
 - Adoption never touches application code, runs on a clean tree, never commits, never
   deletes without approval, and is idempotent.
-- No agent commits, merges or deploys. Git guards stay as they are.
+- No agent commits, merges or deploys. Git guard **rules** stay as they are: performance
+  work may change only how a rule is evaluated, never which calls it denies, and
+  `tests/test-guard-characterization.sh` must stay byte-identical across the change.
 - Both runtimes stay at parity and the existing test suites stay green; every migration
   and every foreign structure gets a fixture project.
 - This is several tasks, not one: each work package goes through `/sdlc-spec` →
@@ -175,6 +195,9 @@ cost findings, Stripe Minions, Shopify Roast, Airbnb test migration, METR, GitCl
 - OS-level sandboxing and network egress control; only the path guard is extended.
 - Changing the concrete models or effort levels of the existing tiers.
 - Automatic deletion, automatic commits, or migration of application code.
+- Rewriting the hooks in a compiled language, shipping per-platform binaries, or a
+  resident guard daemon — the remaining per-call floor is interpreter startup and is
+  accepted (see `docs/hook-performance.md`).
 
 ## Work packages
 
@@ -190,6 +213,7 @@ Each package runs `/sdlc-spec` → `/sdlc-plan` → `/ai-task` on its own; specs
 | 5 | Runtimes and plans | new `profiles/max20.json`, preferred-runtime and budget tables in every profile, `install.sh` plan detection + confirmation, `fable-gate` / `codex-model-gate` → `runtime-gate`, `state.py handoff --to`, grep test that shared prompts name no model | T3 | 2 | not started |
 | 6 | `project-update --adopt` | `update.py --adopt`: detection, mapping table, `migrate` (default) / `coexist`, no-line-lost and no-dangling-reference checks, report, `--cleanup` behind approval; fixtures for Spec Kit, Kiro, Cursor, a large `CLAUDE.md` | T3 (deletion treated as T5 → approval) | 1, 3 | not started |
 | 7 | Path guard hardening | `ai-path-guard`: `.claude/`, `.codex/`, hooks and agent files protected during a task; instruction files in `vendor/`, `node_modules/` are data | T2 | — (any time) | not started |
+| 8 | Guard hot-path cost | `hooks/lib/ai-hook-common.sh`, `hooks/ai-git-guard.sh`, `hooks/ai-path-guard.sh`, `hooks/ai-scope-guard.sh`, `tests/test-guard-characterization.sh`, `docs/hook-performance.md` | T2 (refactor scope: no behaviour change) | — (any time; land before 7, so the new rules are written against the fast path) | process-count work and the 721-run characterization suite done (`perf/guard-hook-process-count`); `ai-scope-guard` python/jq calls still open |
 
 Before WP4, measure a baseline with `/usage-report` on 5–10 real tasks: tokens per task,
 review findings per 100 changed lines, share of tasks with a second `remediate`.
