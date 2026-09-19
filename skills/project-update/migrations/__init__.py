@@ -19,9 +19,15 @@ import importlib.util, os, posixpath, re, sys
 DIR = os.environ.get("CLAUDE_AGENTIC_MIGRATIONS", os.path.dirname(os.path.abspath(__file__)))
 NAME_RE = re.compile(r"(\d{4})_[a-z0-9_]+\.py")
 
-# History keys of templates the plugin stopped shipping without a move: a project
-# may still carry them, and they must not count as orphans.
-RETIRED = []
+# Templates the plugin stopped shipping under a key that no MOVES pair can
+# describe: {old history key: the key that replaces it, or None when nothing
+# does}. A project-init key is the template's file name, so renaming the file
+# (sdlc-README.md -> sdlc-index.md) changes the key without moving any project
+# path; the block, minimal and gitignore templates have no project path at all.
+# A successor key here joins the rename chain, so an edited file still merges
+# against the version it was installed from. None means the template is simply
+# gone: the key is not an orphan, and there is nothing to merge against.
+RETIRED = {}
 
 
 class SchemaError(Exception):
@@ -148,11 +154,15 @@ def template_key(target, mapped=None):
 
 def renames(mapped=None):
     """{new history key: [old history keys, oldest migration first]} from every
-    migration's MOVES. A move between paths without history adds nothing. Chains
-    (A -> B, then B -> C) appear hop by hop. load() rules out cycles between paths;
-    two paths can share a history key (the per-runtime memory README), so a cycle
-    between keys is refused here too, and the map is always acyclic."""
+    migration's MOVES, plus the successors named in RETIRED. A move between paths
+    without history adds nothing. Chains (A -> B, then B -> C) appear hop by hop.
+    load() rules out cycles between paths; two paths can share a history key (the
+    per-runtime memory README), so a cycle between keys is refused here too, and
+    the map is always acyclic."""
     out = {}
+    for old, new in RETIRED.items():
+        if new:
+            out.setdefault(new, []).append(old)
     for mod in load():
         for src, dst in mod.MOVES:
             old, new = template_key(src, mapped), template_key(dst, mapped)

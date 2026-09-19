@@ -67,6 +67,17 @@ INSTRUCTION_FILE = {  # runtime -> (file, block template, minimal template)
 }
 
 
+def template_targets():
+    """{project target: history key} for the templates that land outside .ai/.
+    Every runtime's entries, not only this project's, so a rename resolves the
+    same way for a Claude, a Codex and a dual-runtime project."""
+    out = {target: "project-init/" + src for src, target, _ in PROJECT_INIT_MAP}
+    for entries in RUNTIME_MAP.values():
+        for src, target, _ in entries:
+            out[target] = "project-init/" + src
+    return out
+
+
 def project_runtimes(root):
     """The runtimes a project declares, or the one this plugin copy serves."""
     out = []
@@ -93,22 +104,43 @@ def read(path):
 
 
 class History:
-    def __init__(self, root):
+    def __init__(self, root, renames=None):
         try:
             with open(os.path.join(root, "index.json"), encoding="utf-8") as fh:
                 self.index = json.load(fh)
         except (OSError, ValueError):
             self.index = {}
         self.root = root
+        # {new key: [old keys]} from the migrations' MOVES: a template that moved
+        # keeps the versions it was shipped under its old name.
+        self.renames = renames or {}
+
+    def chain(self, key):
+        """A template's keys, the oldest name first, ending with this one. The
+        registry rules out cycles; the visited set makes the walk safe anyway."""
+        out, seen = [], set()
+
+        def walk(k):
+            if k in seen:
+                return
+            seen.add(k)
+            for old in self.renames.get(k, []):
+                walk(old)
+            out.append(k)
+        walk(key)
+        return out
 
     def versions(self, key):
-        """Every shipped version of a template, oldest first, as bytes."""
+        """Every shipped version of a template, oldest first, as bytes. A file
+        the user edited before a rename is merged against the version it was
+        installed from, which was shipped under the old key."""
         out = []
-        for h in self.index.get(key, []):
-            try:
-                out.append(read(os.path.join(self.root, "blobs", h)))
-            except OSError:
-                pass
+        for k in self.chain(key):
+            for h in self.index.get(k, []):
+                try:
+                    out.append(read(os.path.join(self.root, "blobs", h)))
+                except OSError:
+                    pass
         return out
 
 
@@ -540,13 +572,16 @@ def gitignore_update(plan, snippet_path):
 
 
 def build_plan(root, confirm_delete=None):
-    history = History(HISTORY)
     plan = Plan(root)
     plan.confirm_delete = confirm_delete
     has_ai = os.path.isdir(os.path.join(root, ".ai"))
     has_sdlc = os.path.isdir(os.path.join(root, "docs", "sdlc"))
     if not (has_ai or has_sdlc):
         return None
+    # Only a project with .ai/ runs migrations, so only it can be carrying a
+    # moved file — and a faulty registry must not break the projects that cannot.
+    # renames() validates the registry, raising the same SchemaError as load().
+    history = History(HISTORY, migrations.renames(template_targets()) if has_ai else {})
 
     runtimes = project_runtimes(root)
     if has_ai:
