@@ -92,7 +92,8 @@ for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Ex
          skills/sdlc-intent/SKILL.md skills/sdlc-spec/SKILL.md skills/sdlc-plan/SKILL.md \
          skills/ai-init/templates/.ai/AGENTS.md skills/project-init/templates/intent.md \
          skills/project-update/SKILL.md skills/project-update/update.py skills/project-update/history/index.json \
-         skills/usage-report/SKILL.md skills/usage-report/usage-report.py hooks/fable-gate.py; do
+         skills/usage-report/SKILL.md skills/usage-report/usage-report.py hooks/fable-gate.py \
+         hooks/context-guard.py; do
     [ -e "$DIR/$f" ] && pass "$f installed" || fail "$f missing"
 done
 [ -x "$DIR/hooks/ai-git-guard.sh" ] && pass "hooks are executable" || fail "hooks should be executable"
@@ -125,7 +126,19 @@ DIRN="$TMP/claude-nofable"; mkdir -p "$DIRN"
 CLAUDE_DIR="$DIRN" bash "$INSTALL" --plan max --fable no >/dev/null 2>&1
 grep -q '^model:' "$DIRN/agents/architect.md" && fail "with --fable no, architect must inherit the session" || pass "with --fable no, architect inherits the Opus session"
 jq -e '.availableModels | index("fable[1m]")' "$DIRN/settings.json" >/dev/null && fail "fable should be removed with --fable no" || pass "with --fable no, fable is not offered"
-[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "150000" ] && pass "the compaction window is 150k on max" || fail "compaction not set"
+[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "133000" ] && pass "the compaction window is 133k on max, so compaction fires near 100k" || fail "compaction not set"
+[ -x "$DIR/hooks/context-guard.py" ] && pass "context-guard is executable" || fail "context-guard should be executable"
+for ev in UserPromptSubmit PreCompact SessionStart; do
+    [ "$(jq -r --arg e "$ev" '[.hooks[$e][]?.hooks[]?.command | select(test("context-guard"))] | length' "$DIR/settings.json")" = 1 ] \
+        && pass "context-guard is registered under $ev" || fail "context-guard is not registered under $ev"
+done
+CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
+[ "$(jq -r '[.hooks.UserPromptSubmit[]?.hooks[]?.command | select(test("context-guard"))] | length' "$DIR/settings.json")" = 1 ] \
+    && pass "a second install does not register context-guard twice" || fail "context-guard registered twice"
+grep -q 'Compaction near 100 000 tokens' "$DIR/CLAUDE.md" && pass "the block names the point where compaction fires" || fail "the block should say compaction fires near 100 000"
+grep -q 'warning from 80k tokens, and from 120k' "$DIR/CLAUDE.md" && pass "the block names the guard's thresholds" || fail "the guard thresholds are not rendered"
+grep -q '^# Summary instructions' "$DIR/CLAUDE.md" && pass "the block carries the summary instructions" || fail "summary instructions missing"
+grep -q '{{' "$DIR/CLAUDE.md" && fail "an unrendered placeholder is left in CLAUDE.md" || pass "every placeholder is rendered"
 [ "$(jq -r '.modelSettings["claude-opus-5"].effortLevel' "$DIR/settings.json")" = "medium" ] && pass "Opus runs at medium" || fail "opus effort not medium"
 [ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL' "$DIR/settings.json")" = "sonnet" ] && pass "the subagent default is sonnet" || fail "subagent default not set"
 grep -q 'claude-agentic:start' "$DIR/CLAUDE.md" && pass "the CLAUDE.md block is written" || fail "block missing"

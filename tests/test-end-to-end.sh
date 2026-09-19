@@ -100,6 +100,8 @@ CODEX_DIR="$CDIR" bash "$PLUGIN_ROOT/install.sh" >/dev/null 2>&1
 [ -f "$CDIR/hooks/ai-scope-guard.sh" ] && pass "installed into a scratch CODEX_DIR" || fail "codex install failed"
 [ -f "$CDIR/agents/ai-reviewer.toml" ] && pass "the Codex agent roster is rendered" || fail "codex agents missing"
 [ -e "$CDIR/hooks/cap-large-read.py" ] && fail "cap-large-read has no Codex counterpart" || pass "no Claude-only hook is installed into Codex"
+[ -e "$CDIR/hooks/context-guard.py" ] && fail "context-guard reads Claude Code transcripts; it has no Codex counterpart" || pass "context-guard is not installed into Codex"
+grep -q 'context-guard' "$CDIR/hooks.json" 2>/dev/null && fail "context-guard is registered in the Codex hooks" || pass "context-guard is not registered in the Codex hooks"
 
 CODEX_SCOPE="$CDIR/hooks/ai-scope-guard.sh"
 CODEX_PATH="$CDIR/hooks/ai-path-guard.sh"

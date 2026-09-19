@@ -25,9 +25,14 @@ Context length, not model choice, is the largest cost: the session re-reads ever
 - Tools and MCP servers are context too, in every turn, used or not. Default off: `enableAllProjectMcpServers: false`, a project enables only what nearly every task needs, a task names anything extra in one line and turns it off again, and deferred tools are loaded in one batched call. See `.ai/policies/tooling.md`.
 - One subagent returning twenty lines beats five tool calls whose output stays in context all session.
 - Deterministic tools first: `rg`, `git`, `jq`, the framework CLI, the test runner.
-- `/clear` between tasks, and after every task that ran a review. Compaction near {{COMPACT_WINDOW}} tokens is a summary of the old task, not a clean start; a session past ~150k tokens is paying for its history on every turn.
+- `/clear` between tasks, and after every task that ran a review. Compaction near {{COMPACT_WINDOW}} tokens is a summary of the old task, not a clean start; until then every turn re-reads the whole history.
+- `context-guard` measures the context on every prompt: a one-line warning from {{CONTEXT_WARN}} tokens, and from {{CONTEXT_BLOCK}} the prompt is held back once — sending it again goes through. When its note says the prompt starts a different task, suggest `/clear` before doing the work. Before a compaction it saves the edited files, the latest instructions verbatim, the todo list and the git state, and hands them back afterwards as "Session state before compaction": trust that block over the summary where they differ, and re-read a file before editing it rather than relying on what the summary says it contains.
 - Run tests once, to the end, and fix every failure as one batch. Never one failure, one fix, one run.
 - `/usage-report` shows where the tokens went, at zero model cost; `--provider both` puts Codex next to Claude Code.
+
+# Summary instructions
+
+When compacting, keep: every decision and the reason for it; the options that were rejected and why; exact file paths and function, class and command names; what was tried and failed, with the error text; open questions and the next step; the user's latest instructions word for word. Leave out tool output that has already been acted on.
 
 # Agentic pipeline (in any repository with `.ai/`)
 
