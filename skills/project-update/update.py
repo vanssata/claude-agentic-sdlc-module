@@ -192,6 +192,23 @@ class Plan:
         self.items = []   # dicts: action, target, note, content, conflict_copy, policy
         self.hints = []
         self.final = {}   # target -> bytes after this run (for cross-file fixes)
+        self.removed = set()  # targets this run takes away
+
+    # The project as this run leaves it: planned content first, then the disk.
+    # File readers in the planning path go through these, not the disk.
+    def exists(self, target):
+        if target in self.final:
+            return True
+        return target not in self.removed and os.path.exists(os.path.join(self.root, target))
+
+    def read(self, target):
+        if target in self.final:
+            return self.final[target]
+        return read(os.path.join(self.root, target)) if self.exists(target) else None
+
+    def remove(self, target):
+        self.final.pop(target, None)
+        self.removed.add(target)
 
     def add(self, action, target, note="", content=None, conflict_copy=None, policy=None):
         self.items.append(dict(action=action, target=target, note=note, content=content,
@@ -207,11 +224,10 @@ class Plan:
 
 
 def three_way(plan, history, key, target, theirs):
-    path = os.path.join(plan.root, target)
-    if not os.path.exists(path):
+    ours = plan.read(target)
+    if ours is None:
         plan.add("create", target, content=theirs)
         return
-    ours = read(path)
     is_mirror = target.endswith(".ai/policies/risk-tiers.md")
     norm = (lambda b: HASH_RE.sub(b"sha256:" + b"0" * 64, b)) if is_mirror else (lambda b: b)
     if norm(ours) == norm(theirs):
@@ -265,6 +281,8 @@ def fix_mirror(plan, target, content, ours):
     if not target.endswith(".ai/policies/risk-tiers.md"):
         return content
     old = HASH_RE.search(ours)
+    # The disk, not the plan: the question is whether the mirror matched the JSON
+    # the project had before this run.
     json_target = target[:-3] + ".json"
     json_path = os.path.join(plan.root, json_target)
     before = read(json_path) if os.path.exists(json_path) else None
@@ -279,8 +297,7 @@ def fix_mirror(plan, target, content, ours):
 def block_update(plan, history, runtime):
     name, block_tpl, minimal_tpl = INSTRUCTION_FILE[runtime]
     tpl = read(os.path.join(TEMPLATES["ai-init"], block_tpl))
-    path = os.path.join(plan.root, name)
-    text = read(path) if os.path.exists(path) else None
+    text = plan.read(name)
     if text is None:
         created = read(os.path.join(TEMPLATES["ai-init"], minimal_tpl)).replace(
             b"{{PROJECT}}", os.path.basename(plan.root).encode())
@@ -312,10 +329,7 @@ def block_update(plan, history, runtime):
 
 def gitignore_update(plan, snippet_path):
     snippet = read(snippet_path).decode().splitlines()
-    path = os.path.join(plan.root, ".gitignore")
-    current = plan.final.get(".gitignore")
-    if current is None:
-        current = read(path) if os.path.exists(path) else b""
+    current = plan.read(".gitignore") or b""
     have = set(current.decode().splitlines())
     missing = [l for l in snippet if l.strip() and not l.startswith("#") and l not in have]
     if not missing:
@@ -346,7 +360,7 @@ def build_plan(root):
         for src, target, kind in entries:
             content = read(os.path.join(tpl, src))
             if kind == "create":
-                if not os.path.exists(os.path.join(root, target)):
+                if not plan.exists(target):
                     plan.add("create", target, content=content.replace(
                         b"{{PROJECT}}", os.path.basename(root).encode()))
             else:
@@ -363,7 +377,7 @@ def build_plan(root):
         for rel in sorted(files, key=lambda r: (not r.endswith(".json"), r)):
             content = read(os.path.join(tpl, rel))
             if rel.startswith(".ai/project/") or rel.startswith(".ai/reports/"):
-                if not os.path.exists(os.path.join(root, rel)):
+                if not plan.exists(rel):
                     plan.add("create", rel, content=content)
                 continue
             three_way(plan, history, "ai-init/" + rel, rel, content)
@@ -371,9 +385,7 @@ def build_plan(root):
             block_update(plan, history, rt)
         gitignore_update(plan, os.path.join(tpl, "gitignore.snippet"))
 
-        testing = plan.final.get(".ai/policies/testing.md")
-        if testing is None and os.path.exists(os.path.join(root, ".ai/policies/testing.md")):
-            testing = read(os.path.join(root, ".ai/policies/testing.md"))
+        testing = plan.read(".ai/policies/testing.md")
         if testing is not None:
             for field, why in (
                 ("verify_command", "the feedback loop needs it"),
