@@ -28,7 +28,7 @@
 # pro and team-pro (a Team Standard seat has Pro's models and limits): session model
 # `opusplan` — Opus in plan mode, Sonnet when executing — and the EXPERT tier pinned to opus.
 # max and team-max (a Team Premium seat has Max's models): session model Opus 5 (200k window,
-# opus[1m] per task), ai-expert inherits it, architect alone on Fable.
+# opus[1m] per task), ai-expert pinned to opus at xhigh, architect alone on Fable.
 #
 # This plugin supersedes claude-routing. On the first run it migrates that
 # plugin's managed block into this one's, so the two never coexist.
@@ -211,11 +211,11 @@ FALLBACK_HUMAN=$(jq -r '.fallbackModel | if type=="array" then .[] else . end' "
 # Every agent definition pins its own `model:`; CLAUDE_CODE_SUBAGENT_MODEL is not
 # set, because before Claude Code v2.1.251 (still bundled by the JetBrains ACP
 # adapter) it overrides both the frontmatter and the per-call model, and from
-# v2.1.251 it would send an agent that omits `model:` on purpose (ai-expert) to
-# Sonnet instead of the session. The EXPERT-tier agents
+# v2.1.251 it would send an agent that omits `model:` on purpose (architect with
+# --fable no) to Sonnet instead of the session. The EXPERT-tier agents
 # are rendered per tier: on pro/team-pro both pin opus (an inherited model would
-# be Sonnet outside plan mode); on max/team-max ai-expert inherits the Opus 5
-# session and architect alone is pinned to fable[1m] when Fable is enabled.
+# be Sonnet outside plan mode); on max/team-max ai-expert pins opus at xhigh and
+# architect alone is pinned to fable[1m] when Fable is enabled.
 # fallbackModel applies to pinned subagents too, so a Fable outage still falls back.
 if [ "$TIER" = pro ]; then
   EXPERT_EFFORT="high"
@@ -228,21 +228,23 @@ if [ "$TIER" = pro ]; then
   PLAN_SPECIFIC="- Session model is \`opusplan\`: Opus 5 in plan mode, Sonnet 5 when executing. Use plan mode for T3+ and for a T2 that spans several modules — that is where Opus is paid for. Fable is off this plan; never request it. \`xhigh\`/\`max\` are unavailable. STRONG and EXPERT both pin \`model: opus\` explicitly."
   EFFORT_RULE="Raise to \`high\` only for architecture, root-cause analysis and adversarial verification, and say that you are raising it."
 else
-  EXPERT_EFFORT="high"
-  # The session runs Opus 5 with the 200k window (opus[1m] stays available for a
-  # task that needs it); ai-expert escalates from it by inheriting it.
-  EXPERT_MODEL_LINE="# model: intentionally omitted — inherits the session model (Opus 5), so the session's fallback chain applies here too"
+  # Pinned rather than inherited: a session may run on Sonnet (the JetBrains ACP
+  # agent's Model setting, or /model), and the last-resort tier must not drop below
+  # the opus reviewer it escalates from. xhigh is what separates it from STRONG,
+  # which is already opus/high; fallbackModel still applies to a pinned agent.
+  EXPERT_EFFORT="xhigh"
+  EXPERT_MODEL_LINE="model: opus"
   if [ "$FABLE" = yes ]; then
     ARCHITECT_MODEL_LINE="model: fable[1m]"
     ARCHITECT_EFFORT="xhigh"
-    EXPERT_ROW="omit \`model:\` — inherits the session (Opus 5) / \`high\`; \`architect\` alone pins \`fable[1m]\` / \`xhigh\`"
-    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice (\`/model\`) for a change that genuinely needs a huge context, never the default — above 200k every turn re-reads a context that costs more than the thinking. \`ai-expert\` escalates from the session by inheriting it. Fable 5.1 [1m] is reserved for \`architect\` (pinned \`model: fable[1m]\`, \`xhigh\`) — never for the session, a reader, a reviewer or \`ai-expert\`. \`max\` stays off.
+    EXPERT_ROW="\`opus\` / \`xhigh\`, pinned so a Sonnet session cannot weaken it; \`architect\` alone pins \`fable[1m]\` / \`xhigh\`"
+    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice (\`/model\`) for a change that genuinely needs a huge context, never the default — above 200k every turn re-reads a context that costs more than the thinking. \`ai-expert\` pins \`opus\` at \`xhigh\` rather than inheriting the session: a session may run on Sonnet (the IDE agent's Model setting), and the last-resort tier must not drop below the \`opus\` reviewer it escalates from. Fable 5.1 [1m] is reserved for \`architect\` (pinned \`model: fable[1m]\`, \`xhigh\`) — never for the session, a reader, a reviewer or \`ai-expert\`. \`max\` stays off.
 - \`fable-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/fable-gate.py status\` shows the gate; \`clear\` re-enables Fable early."
   else
     ARCHITECT_MODEL_LINE="# model: intentionally omitted — inherits the session model (Opus 5, Fable disabled in this install)"
     ARCHITECT_EFFORT="high"
-    EXPERT_ROW="omit \`model:\` — inherits the session (Opus 5) / \`high\`"
-    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice, never the default. Fable is disabled in this install (\`--fable no\`). Do not request \`model: fable\` anywhere. \`xhigh\`/\`max\` stay off. Never pin \`model: opus\` for the thinking tier — omit \`model:\` so the fallback comes free."
+    EXPERT_ROW="\`opus\` / \`xhigh\`, pinned so a Sonnet session cannot weaken it"
+    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice, never the default. Fable is disabled in this install (\`--fable no\`). Do not request \`model: fable\` anywhere. \`ai-expert\` alone pins \`model: opus\` at \`xhigh\`, so a Sonnet session cannot weaken the last-resort tier; \`xhigh\` stays off everywhere else and \`max\` stays off."
   fi
   EFFORT_RULE="Raise to \`high\` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; readers stay at \`low\`."
 fi
@@ -552,7 +554,7 @@ for f in "$CLAUDE_DIR"/agents/*.md; do
   case "$f" in *.bak|*.superseded) continue;; esac
   [ -e "$f" ] || continue
   grep -qE '^effort:' "$f" || missing="$missing $(basename "$f")"
-  case "$(basename "$f")" in ai-expert.md|architect.md) continue;; esac  # may inherit the session on purpose
+  case "$(basename "$f")" in architect.md) continue;; esac  # may inherit the session on purpose
   grep -qE '^model:' "$f" || unpinned="$unpinned $(basename "$f")"
 done
 if [ -n "$missing" ]; then
@@ -595,7 +597,7 @@ Done (Claude Code).
   plan            $PLAN  ($PLAN_LABEL, $TIER profile, fable=$FABLE)
   session model   $SESSION_MODEL ($SESSION_HUMAN), effort $EFFORT
   fallback        $FALLBACK
-  EXPERT tier     ai-expert on $( [ "$TIER" = pro ] && echo "opus, pinned" || echo "the session model" ) at effort $EXPERT_EFFORT;
+  EXPERT tier     ai-expert on opus, pinned, at effort $EXPERT_EFFORT;
                   architect on $( [ "$TIER" = pro ] && echo "opus, pinned" || { [ "$FABLE" = yes ] && echo "fable[1m], pinned" || echo "the session model"; } ) at effort $ARCHITECT_EFFORT
   compaction      near $COMPACT_AT tokens (autoCompactWindow $COMPACT); context-guard warns from
                   $((COMPACT_AT * 80 / 100)) and holds a prompt back once from $((COMPACT_AT * 120 / 100))

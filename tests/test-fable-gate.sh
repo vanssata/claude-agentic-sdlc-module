@@ -215,7 +215,7 @@ jq -e '.hooks.PreToolUse[] | select(.hooks[0].command | test("fable-gate")) | .m
     && pass "the PreToolUse entry matches the Agent tool" || fail "PreToolUse matcher should be Agent"
 [ -x "$D/hooks/fable-gate.py" ] && pass "fable-gate.py is installed executable" || fail "fable-gate.py not executable"
 grep -qxF 'model: fable[1m]' "$D/agents/architect.md" && pass "architect keeps model: fable[1m] (the gate reroutes at run time)" || fail "architect should stay pinned to fable[1m]"
-grep -qE '^model:' "$D/agents/ai-expert.md" && fail "ai-expert must inherit the Opus session on max" || pass "ai-expert inherits the session model on max"
+grep -qx 'model: opus' "$D/agents/ai-expert.md" && pass "ai-expert is pinned to opus on max, outside the gate" || fail "ai-expert should pin model: opus on max"
 CLAUDE_DIR="$D" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 [ "$(gate_count "$D/settings.json")" = 3 ] && pass "a re-install does not duplicate the gate's three entries" || fail "gate duplicated: $(gate_count "$D/settings.json")"
 

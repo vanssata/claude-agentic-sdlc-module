@@ -30,7 +30,8 @@ printf '%s' "$out" | grep -q 'Opus 5 in plan mode' && pass "pro names opusplan i
 printf '%s' "$out" | grep -q '^model: opus' && pass "pro pins model: opus on the EXPERT agents" || fail "EXPERT agents should pin opus on pro" "$out"
 printf '%s' "$out" | grep -q 'solo' && pass "the block mentions the solo pipeline profile" || fail "block should mention the solo profile" "$out"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable yes --dry-run 2>&1)
-printf '%s' "$out" | grep -q '^model: opus' && fail "max must not pin opus on the EXPERT agents" "$out" || pass "max leaves the EXPERT agents on the session model"
+printf '%s' "$out" | grep -qx 'model: opus' && pass "max pins opus on ai-expert" || fail "ai-expert should pin opus on max" "$out"
+printf '%s' "$out" | grep -qx 'effort: xhigh' && pass "max renders the EXPERT tier at xhigh" || fail "EXPERT effort should be xhigh on max" "$out"
 
 echo "== team-pro and team-max share the pro and max profiles"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan team-pro --dry-run 2>&1)
@@ -98,8 +99,8 @@ for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Ex
 done
 [ -x "$DIR/hooks/ai-git-guard.sh" ] && pass "hooks are executable" || fail "hooks should be executable"
 [ -x "$DIR/skills/ai-init/scaffold-ai.sh" ] && pass "scaffold-ai.sh is executable" || fail "scaffold should be executable"
-grep -q 'effort: high' "$DIR/agents/ai-expert.md" && pass "ai-expert renders at high on max" || fail "expert effort wrong"
-grep -q '^model:' "$DIR/agents/ai-expert.md" && fail "ai-expert must NOT pin a model" || pass "ai-expert omits model: so it inherits the Opus session"
+grep -qx 'effort: xhigh' "$DIR/agents/ai-expert.md" && pass "ai-expert renders at xhigh on max" || fail "expert effort wrong"
+grep -qx 'model: opus' "$DIR/agents/ai-expert.md" && pass "ai-expert pins opus so a Sonnet session cannot weaken it" || fail "ai-expert should pin model: opus on max"
 grep -q '^model: fable\[1m\]' "$DIR/agents/architect.md" && pass "architect alone is pinned to fable[1m] on max+fable" || fail "architect should pin fable[1m]"
 grep -q 'effort: xhigh' "$DIR/agents/architect.md" && pass "architect runs at xhigh on Fable" || fail "architect effort wrong"
 
