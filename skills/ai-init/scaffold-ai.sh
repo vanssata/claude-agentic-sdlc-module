@@ -55,11 +55,17 @@ esac
 
 created=()
 
+# A project that already has .ai/ carries a schema version this scaffold must not
+# invent: writing .ai/VERSION here would tell /project-update that every migration
+# has already run. Only a fresh tree starts at the shipped schema.
+[ -d "$ROOT/.ai" ] && HAD_AI=1 || HAD_AI=0
+
 # Copy the .ai/ tree, file by file, skipping anything that already exists.
 while IFS= read -r src; do
   rel="${src#"$TPL"/}"
   dst="$ROOT/$rel"
   [ -e "$dst" ] && continue
+  [ "$rel" = ".ai/VERSION" ] && [ "$HAD_AI" = 1 ] && continue
   mkdir -p "$(dirname "$dst")"
   cp "$src" "$dst"
   created+=("$rel")

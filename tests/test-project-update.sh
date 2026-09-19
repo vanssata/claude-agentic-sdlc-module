@@ -33,6 +33,8 @@ python3 - "$HISTORY" "$OLD" <<'PY'
 import json, os, sys
 hist, out = sys.argv[1], sys.argv[2]
 for key, versions in json.load(open(os.path.join(hist, "index.json"))).items():
+    if key == "ai-init/.ai/VERSION":
+        continue   # a project from before schema 1 has no VERSION: that is schema 0
     name, rel = key.split("/", 1)
     dst = os.path.join(out, name, "templates", rel)
     os.makedirs(os.path.dirname(dst), exist_ok=True)
