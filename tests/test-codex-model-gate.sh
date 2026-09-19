@@ -74,7 +74,7 @@ gate status | grep -q '^inactive' && pass "a Terra rate limit leaves the expert 
 
 echo "== the record expires"
 reset
-gate set 1 "test" >/dev/null
+gate set 60 "test" >/dev/null  # expiry is simulated below; a 1 s record can lapse before status reads it
 gate status | grep -q '^active' && pass "a manual record activates the gate" || fail "set should activate the gate"
 python3 - "$STATE" <<'PY'
 import json, sys, time
