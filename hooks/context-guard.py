@@ -93,11 +93,12 @@ def compact_window():
 
 def thresholds():
     fires_at = compact_window() - COMPACT_RESERVE
-    found = []
-    for name, pct in (("AI_CONTEXT_WARN_TOKENS", WARN_PCT), ("AI_CONTEXT_BLOCK_TOKENS", BLOCK_PCT)):
+
+    def one(name, pct):
         raw = os.environ.get(name, "").strip()
-        found.append(positive_int(raw) if raw.lstrip("-").isdigit() else fires_at * pct // 100)
-    return found
+        return positive_int(raw) if raw.lstrip("-").isdigit() else fires_at * pct // 100
+
+    return one("AI_CONTEXT_WARN_TOKENS", WARN_PCT), one("AI_CONTEXT_BLOCK_TOKENS", BLOCK_PCT)
 
 
 def state_dir():
@@ -368,8 +369,6 @@ def main():
                    "SessionStart": on_session_start}.get(payload.get("hook_event_name"))
         if handler:
             handler(payload)
-    except SystemExit:
-        raise
     except Exception:  # pylint: disable=broad-exception-caught  # fail open: the guard never blocks work by crashing
         pass
     sys.exit(0)
