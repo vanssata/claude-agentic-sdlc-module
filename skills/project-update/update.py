@@ -27,16 +27,22 @@ version closest to it (git merge-file for text, per key for JSON), keeping every
 edit. A real conflict leaves the project file alone and puts the plugin's version
 in a git-ignored local directory for a human or /project-update to merge.
 """
-import argparse, difflib, hashlib, json, os, re, subprocess, sys, tempfile
+import argparse, copy, difflib, hashlib, json, os, re, subprocess, sys, tempfile
 from collections import OrderedDict
 
+sys.dont_write_bytecode = True  # never leave __pycache__ in an installed plugin
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import migrations  # noqa: E402  # lives next to this script
+from migrations import SchemaError  # noqa: E402
 SKILLS = os.path.dirname(HERE)
 TEMPLATES = {
     "ai-init": os.environ.get("CLAUDE_AGENTIC_TEMPLATES", os.path.join(SKILLS, "ai-init", "templates")),
     "project-init": os.environ.get("CLAUDE_ROUTING_TEMPLATES", os.path.join(SKILLS, "project-init", "templates")),
 }
 HISTORY = os.environ.get("CLAUDE_AGENTIC_HISTORY", os.path.join(HERE, "history"))
+VERSION_FILE = ".ai/VERSION"
+STATE_FILE = ".ai/state/current.json"
 START, END = "<!-- claude-agentic:start -->", "<!-- claude-agentic:end -->"
 MISSING = object()
 HASH_RE = re.compile(rb"sha256:[0-9a-f]{64}")
@@ -185,12 +191,82 @@ def leaf_changes(before, after):
     return sorted(out, key=lambda c: c[2:])
 
 
+# ---------------------------------------------------------------- schema
+def detect_version(plan):
+    """A project's schema version: None when .ai/ is absent (not an agentic project),
+    0 when .ai/ has no VERSION (every project scaffolded before schema 1)."""
+    if not os.path.isdir(os.path.join(plan.root, ".ai")):
+        return None
+    try:
+        raw = plan.read(VERSION_FILE)
+    except OSError as exc:  # a directory, a mode-000 file, a dangling link
+        raise SchemaError("%s cannot be read: %s" % (VERSION_FILE, exc)) from exc
+    if raw is None:
+        return 0
+    try:
+        text = raw.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        text = ""
+    if not re.fullmatch(r"\d+", text):
+        raise SchemaError("%s is not a schema number: %r" % (VERSION_FILE, raw[:40]))
+    return int(text)
+
+
+class MigrationContext:
+    """What a migration sees: the project as this run leaves it, not the disk."""
+
+    def __init__(self, plan, module, version_from, state):
+        self.plan = plan
+        self.module = module
+        self.version_from = version_from
+        self.state = state
+        self.root = plan.root
+        self.runtimes = project_runtimes(plan.root)
+
+    def exists(self, path):
+        return self.plan.exists(path)
+
+    def read(self, path):
+        return self.plan.read(path)
+
+    def read_json(self, path):
+        raw = self.plan.read(path)
+        if raw is None:
+            return None
+        try:
+            return json.loads(raw, object_pairs_hook=OrderedDict)
+        except ValueError:
+            return None
+
+
+def run_migrations(plan, version):
+    """Plan every migration this project is missing, oldest first, before the
+    three-way merge sees a single file. Returns the modules that ran."""
+    mods = [m for m in migrations.load() if version < m.VERSION <= migrations.CURRENT]
+    state = None
+    try:
+        raw = plan.read(STATE_FILE)
+    except OSError as exc:
+        raise SchemaError("%s cannot be read: %s — a migration must see the task in flight"
+                          % (STATE_FILE, exc)) from exc
+    if raw is not None:
+        try:
+            state = json.loads(raw, object_pairs_hook=OrderedDict)
+        except ValueError:
+            state = None
+    for mod in mods:
+        # A copy each: state changes only through the plan, never between migrations.
+        mod.plan(MigrationContext(plan, mod, version, copy.deepcopy(state)))
+    return mods
+
+
 # ---------------------------------------------------------------- planning
 class Plan:
     def __init__(self, root):
         self.root = root
         self.items = []   # dicts: action, target, note, content, conflict_copy, policy
         self.hints = []
+        self.schema = None  # (from, to, [migration modules]) when migrations are pending
         self.final = {}   # target -> bytes after this run (for cross-file fixes)
         self.removed = set()  # targets this run takes away
 
@@ -210,9 +286,9 @@ class Plan:
         self.final.pop(target, None)
         self.removed.add(target)
 
-    def add(self, action, target, note="", content=None, conflict_copy=None, policy=None):
+    def add(self, action, target, note="", content=None, conflict_copy=None, policy=None, migration=None):
         self.items.append(dict(action=action, target=target, note=note, content=content,
-                               conflict_copy=conflict_copy, policy=policy))
+                               conflict_copy=conflict_copy, policy=policy, migration=migration))
         if content is not None:
             self.final[target] = content
 
@@ -352,6 +428,21 @@ def build_plan(root):
         return None
 
     runtimes = project_runtimes(root)
+    if has_ai:
+        version = detect_version(plan)
+        migrations.load()  # CURRENT comes from the file names; this validates the registry
+        if version > migrations.CURRENT:
+            raise SchemaError("%s says schema %d, this plugin ships schema %d — update the plugin "
+                              "(claude-agentic/install.sh)" % (VERSION_FILE, version, migrations.CURRENT))
+        if version < migrations.CURRENT:
+            mods = run_migrations(plan, version)
+            plan.schema = (version, migrations.CURRENT, mods)
+            # Last of the migration items: an apply that stops short leaves the
+            # version alone, and the next run plans the same migrations again.
+            plan.add("update" if plan.exists(VERSION_FILE) else "create", VERSION_FILE,
+                     "schema %d" % migrations.CURRENT, content=b"%d\n" % migrations.CURRENT,
+                     migration=migrations.CURRENT)
+
     if has_sdlc:
         tpl = TEMPLATES["project-init"]
         entries = list(PROJECT_INIT_MAP)
@@ -375,6 +466,8 @@ def build_plan(root):
                 files.append(os.path.relpath(os.path.join(dirpath, n), tpl))
         # JSON before markdown, so the risk-tier mirror can point at the merged JSON.
         for rel in sorted(files, key=lambda r: (not r.endswith(".json"), r)):
+            if rel == VERSION_FILE:  # owned by the migration step, never merged
+                continue
             content = read(os.path.join(tpl, rel))
             if rel.startswith(".ai/project/") or rel.startswith(".ai/reports/"):
                 if not plan.exists(rel):
@@ -408,9 +501,9 @@ def apply(plan):
             with open(path, "wb") as fh:
                 fh.write(item["content"])
         if item["conflict_copy"] is not None:
-            copy = os.path.join(plan.root, plan.local_dir, item["target"])
-            os.makedirs(os.path.dirname(copy), exist_ok=True)
-            with open(copy, "wb") as fh:
+            copy_path = os.path.join(plan.root, plan.local_dir, item["target"])
+            os.makedirs(os.path.dirname(copy_path), exist_ok=True)
+            with open(copy_path, "wb") as fh:
                 fh.write(item["conflict_copy"])
 
 
@@ -422,8 +515,15 @@ def report(plan, applied):
     if not plan.items:
         print("  up to date with the installed plugin")
     width = max([len(i["target"]) for i in plan.items] + [10])
+    if plan.schema:
+        frm, to, mods = plan.schema
+        print("  %-9s %-*s  (%d migration%s: %s)" % (
+            "schema", width, "%d -> %d" % (frm, to), len(mods), "" if len(mods) == 1 else "s",
+            ", ".join("%04d %s" % (m.VERSION, m.TITLE) for m in mods)))
     for i in plan.items:
         note = i["note"]
+        if i["migration"] is not None:
+            note = (note + " " if note else "") + "[%04d]" % i["migration"]
         if i["action"] == "conflict":
             note += "; plugin version %s %s/%s" % ("at" if applied else "will be at", plan.local_dir, i["target"])
         print("  %-9s %-*s  %s" % (i["action"], width, i["target"], note))
@@ -446,7 +546,12 @@ def main():
         if not os.path.isdir(tpl):
             print("project-update: %s templates not found at %s (run claude-agentic/install.sh)" % (name, tpl), file=sys.stderr)
             return 2
-    plan = build_plan(root)
+    try:
+        plan = build_plan(root)
+    except SchemaError as exc:
+        # --check is read by /ai-status, which reads stdout: it must see the reason.
+        print("project-update: %s" % exc, file=sys.stdout if args.check else sys.stderr)
+        return 2
     if plan is None:
         print("project-update: %s has neither .ai/ nor docs/sdlc/ — run /ai-init or /project-init first" % root,
               file=sys.stderr)
@@ -455,8 +560,15 @@ def main():
     if args.check:
         conflicts = len(plan.items) - len(pending)
         if pending:
-            print("project is behind the installed plugin: %d file(s) to update%s — run /project-update"
-                  % (len(pending), ", %d need a manual merge" % conflicts if conflicts else ""))
+            bits = []
+            if plan.schema:
+                bits.append("schema %d -> %d" % plan.schema[:2])
+            files = sum(1 for i in pending if i["migration"] is None)
+            if files:
+                bits.append("%d file(s) to update" % files)
+            if conflicts:
+                bits.append("%d need a manual merge" % conflicts)
+            print("project is behind the installed plugin: %s — run /project-update" % ", ".join(bits))
             return 1
         print("project matches the installed plugin" + (" (%d file(s) differ by hand-merge choice)" % conflicts if conflicts else ""))
         return 0
