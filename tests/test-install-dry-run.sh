@@ -148,7 +148,8 @@ CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 jq '.env.CLAUDE_CODE_SUBAGENT_MODEL = "opus"' "$DIR/settings.json" > "$DIR/s.tmp" && mv "$DIR/s.tmp" "$DIR/settings.json"
 out=$(CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes 2>&1)
 [ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL' "$DIR/settings.json")" = "opus" ] && pass "a user-chosen override is kept" || fail "a user-chosen override was removed"
-grep -q 'CLAUDE_CODE_SUBAGENT_MODEL=opus outranks' <<<"$out" && pass "the installer warns that the override flattens the tiers" || fail "no warning for a user-set override"
+grep -q 'CLAUDE_CODE_SUBAGENT_MODEL=opus is set' <<<"$out" && pass "the installer warns about a user-set override" || fail "no warning for a user-set override"
+grep -q 'Before 2.1.251' <<<"$out" && pass "the warning says the override flattens the tiers only before Claude Code 2.1.251" || fail "the warning does not name the 2.1.251 boundary"
 jq 'del(.env.CLAUDE_CODE_SUBAGENT_MODEL)' "$DIR/settings.json" > "$DIR/s.tmp" && mv "$DIR/s.tmp" "$DIR/settings.json"
 grep -q 'claude-agentic:start' "$DIR/CLAUDE.md" && pass "the CLAUDE.md block is written" || fail "block missing"
 

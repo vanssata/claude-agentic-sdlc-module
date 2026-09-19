@@ -74,7 +74,7 @@ gate status | grep -q '^inactive' && pass "a Terra rate limit leaves the expert 
 
 echo "== the record expires"
 reset
-gate set 1 "test" >/dev/null
+gate set 60 "test" >/dev/null  # expiry is simulated below; a 1 s record can lapse before status reads it
 gate status | grep -q '^active' && pass "a manual record activates the gate" || fail "set should activate the gate"
 python3 - "$STATE" <<'PY'
 import json, sys, time
@@ -86,6 +86,17 @@ PY
 gate status | grep -q '^inactive' && pass "an expired record stops applying" || fail "the record should have expired"
 out=$(feed 30-agent-expert-launch.json)
 [ -z "$out" ] && pass "an expert launch runs on the expert model again after expiry" || fail "should be silent after expiry" "$out"
+reset
+stored=$(CODEX_HOME="$HOME_DIR" CODEX_MODEL_GATE_STATE="$STATE" python3 - "$GATE" <<'PY'
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("gate", sys.argv[1])
+gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
+gate.mark(2000000000.9, "test", "test")
+print(json.load(open(gate.STATE))["unavailable"]["until"])
+PY
+)
+[ "$stored" = 2000000001 ] && pass "a fractional expiry is rounded up, never ending the record early" \
+    || fail "until should round up to 2000000001" "$stored"
 
 echo "== clear re-enables the expert model early"
 gate set 3600 "manual" >/dev/null

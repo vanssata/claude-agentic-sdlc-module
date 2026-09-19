@@ -25,16 +25,17 @@ reset_state() { rm -f "$CLAUDE_FABLE_GATE_STATE"; }
 set_marker() { mkdir -p "$(dirname "$CLAUDE_FABLE_GATE_STATE")"; jq -n --argjson u "$1" '{unavailable:{until:$u,reason:"rate_limit",source:"test"}}' > "$CLAUDE_FABLE_GATE_STATE"; }
 marker_active() { python3 "$GATE" status | grep -q '^active'; }
 
-agent_call() {  # agent_call <tool_input-json> [cwd] -> hook stdout
-    jq -nc --argjson i "$1" --arg c "${2:-$TMP/elsewhere}" \
-        '{hook_event_name:"PreToolUse",tool_name:"Agent",cwd:$c,tool_input:$i}' | python3 "$GATE"
+agent_call() {  # agent_call <tool_input-json> [cwd] [transcript] -> hook stdout
+    jq -nc --argjson i "$1" --arg c "${2:-$TMP/elsewhere}" --arg t "${3:-}" \
+        '{hook_event_name:"PreToolUse",tool_name:"Agent",cwd:$c,tool_input:$i}
+         + (if $t == "" then {} else {transcript_path:$t} end)' | python3 "$GATE"
 }
-routed_model() {  # routed_model <tool_input-json> [cwd] -> the model after the hook, or "unchanged"
+routed_model() {  # routed_model <tool_input-json> [cwd] [transcript] -> the model after the hook, or "unchanged"
     local out; out=$(agent_call "$@")
     if [ -z "$out" ]; then echo unchanged; else printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model // "malformed"'; fi
 }
-expect_route() {  # expect_route <expected> <tool_input-json> <label> [cwd]
-    local got; got=$(routed_model "$2" "${4:-}")
+expect_route() {  # expect_route <expected> <tool_input-json> <label> [cwd] [transcript]
+    local got; got=$(routed_model "$2" "${4:-}" "${5:-}")
     [ "$got" = "$1" ] && pass "$3" || fail "$3" "expected $1, got $got"
 }
 stop_failure() {  # stop_failure <error> [extra-json]
@@ -58,8 +59,30 @@ expect_route unchanged '{"subagent_type":"Explore","model":"sonnet","prompt":"p"
 expect_route unchanged '{"subagent_type":"fork","model":"fable","prompt":"p"}' "a fork is untouched (it ignores model)"
 expect_route unchanged '{"subagent_type":"architect","prompt":"p"}' "user-level architect (opus) is untouched"
 expect_route opus '{"subagent_type":"architect","prompt":"p"}' "a project-level architect pinned to fable wins over the user one, and is routed" "$TMP/project"
+
+echo "== CLAUDE_CODE_SUBAGENT_MODEL: last since Claude Code 2.1.251, first before it"
+transcript() {  # transcript <claude-code-version> -> path of a transcript written by that version
+    printf '%s\n' "{\"type\":\"user\",\"version\":\"$1\",\"message\":{\"content\":\"the \\\"version\\\":\\\"9.9.9\\\" in a message is not one\"}}" \
+        '{"type":"summary"}' > "$TMP/transcript-$1.jsonl"
+    echo "$TMP/transcript-$1.jsonl"
+}
 CLAUDE_CODE_SUBAGENT_MODEL=fable expect_route opus '{"subagent_type":"no-definition","prompt":"p"}' "an agent with no definition falls back to CLAUDE_CODE_SUBAGENT_MODEL"
-CLAUDE_CODE_SUBAGENT_MODEL=fable expect_route opus '{"subagent_type":"no-definition","model":"sonnet","prompt":"p"}' "CLAUDE_CODE_SUBAGENT_MODEL outranks the call's own model"
+CLAUDE_CODE_SUBAGENT_MODEL=sonnet expect_route opus '{"subagent_type":"ai-expert","prompt":"p"}' "a frontmatter model: fable outranks CLAUDE_CODE_SUBAGENT_MODEL=sonnet, and is routed"
+CLAUDE_CODE_SUBAGENT_MODEL=fable expect_route unchanged '{"subagent_type":"no-definition","model":"sonnet","prompt":"p"}' "the call's own model: sonnet outranks CLAUDE_CODE_SUBAGENT_MODEL=fable, and stays on Sonnet"
+CLAUDE_CODE_SUBAGENT_MODEL=sonnet expect_route opus '{"subagent_type":"no-definition","model":"fable","prompt":"p"}' "the call's own model: fable outranks CLAUDE_CODE_SUBAGENT_MODEL=sonnet, and is routed"
+CLAUDE_CODE_SUBAGENT_MODEL=fable expect_route unchanged '{"subagent_type":"ai-reviewer","prompt":"p"}' "a frontmatter model: opus outranks CLAUDE_CODE_SUBAGENT_MODEL=fable"
+for v in 2.1.251 2.1.276 2.2.0 3.0.0; do
+    CLAUDE_CODE_SUBAGENT_MODEL=sonnet expect_route opus '{"subagent_type":"ai-expert","prompt":"p"}' "Claude Code $v: the frontmatter outranks the variable" "" "$(transcript "$v")"
+    CLAUDE_CODE_SUBAGENT_MODEL=fable expect_route unchanged '{"subagent_type":"x","model":"sonnet","prompt":"p"}' "Claude Code $v: the call's own model outranks the variable" "" "$(transcript "$v")"
+done
+for v in 2.1.219 2.1.250 2.0.76 1.0.128; do
+    CLAUDE_CODE_SUBAGENT_MODEL=sonnet expect_route unchanged '{"subagent_type":"ai-expert","prompt":"p"}' "Claude Code $v: the variable outranks the frontmatter, so nothing runs on Fable" "" "$(transcript "$v")"
+    CLAUDE_CODE_SUBAGENT_MODEL=fable expect_route opus '{"subagent_type":"x","model":"sonnet","prompt":"p"}' "Claude Code $v: the variable outranks the call's own model" "" "$(transcript "$v")"
+done
+CLAUDE_CODE_SUBAGENT_MODEL=sonnet expect_route opus '{"subagent_type":"ai-expert","prompt":"p"}' "an unreadable transcript means the current order" "" "$TMP/no-such-transcript.jsonl"
+printf 'not json\n{"version":"garbage"}\n{"version":7}\n' > "$TMP/transcript-bad.jsonl"
+CLAUDE_CODE_SUBAGENT_MODEL=sonnet expect_route opus '{"subagent_type":"ai-expert","prompt":"p"}' "a transcript with no usable version means the current order" "" "$TMP/transcript-bad.jsonl"
+expect_route opus '{"subagent_type":"ai-expert","prompt":"p"}' "with the variable unset an old Claude Code changes nothing" "" "$(transcript 2.1.219)"
 
 out=$(agent_call '{"subagent_type":"ai-expert","prompt":"keep me","description":"keep","run_in_background":true}')
 printf '%s' "$out" | jq -e '.hookSpecificOutput.updatedInput | .prompt == "keep me" and .description == "keep" and .run_in_background == true and .subagent_type == "ai-expert"' >/dev/null \
@@ -75,14 +98,25 @@ CLAUDE_FABLE_GATE_FALLBACK=sonnet expect_route sonnet '{"subagent_type":"ai-expe
 echo "== the record expires on its own"
 set_marker $(( $(now) - 1 ))
 expect_route unchanged '{"subagent_type":"ai-expert","prompt":"p"}' "an expired record no longer routes Fable agents"
+reset_state
+stored=$(python3 - "$GATE" <<'PY'
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("gate", sys.argv[1])
+gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
+gate.mark(2000000000.9, "test", "test")
+print(json.load(open(gate.STATE))["unavailable"]["until"])
+PY
+)
+[ "$stored" = 2000000001 ] && pass "a fractional expiry is rounded up, never ending the record early" \
+    || fail "until should round up to 2000000001" "$stored"
 
 echo "== StopFailure records unavailability"
 reset_state
 stop_failure rate_limit '{"last_assistant_message":"API Error: 429 rate limit for claude-fable-5-1"}'
 marker_active && pass "a rate_limit that names Fable records it" || fail "rate_limit naming fable should record"
 expect_route opus '{"subagent_type":"ai-expert","prompt":"p"}' "the next Fable agent is routed to opus"
-until=$(jq -r .unavailable.until "$CLAUDE_FABLE_GATE_STATE")
-[ $(( until - $(now) )) -gt 3000 ] && [ $(( until - $(now) )) -le 3600 ] && pass "rate_limit holds for CLAUDE_FABLE_GATE_TTL (1h)" || fail "rate_limit ttl wrong: $(( until - $(now) ))s"
+until=$(jq -r .unavailable.until "$CLAUDE_FABLE_GATE_STATE")  # rounded up, so up to TTL + 1 s
+[ $(( until - $(now) )) -gt 3000 ] && [ $(( until - $(now) )) -le 3601 ] && pass "rate_limit holds for CLAUDE_FABLE_GATE_TTL (1h)" || fail "rate_limit ttl wrong: $(( until - $(now) ))s"
 
 reset_state
 stop_failure model_not_found '{"agent_type":"ai-expert"}'
@@ -125,13 +159,30 @@ marker_active && fail "a Fable agent that ran on Fable must not record" || pass 
 post '{"subagent_type":"ai-expert","prompt":"p"}' '{"status":"completed","resolvedModel":"claude-fable-5-1","modelsUsed":["claude-fable-5-1","claude-opus-5"]}'
 marker_active && pass "a mid-run swap off Fable (modelsUsed) records it" || fail "modelsUsed swap should record"
 until=$(jq -r .unavailable.until "$CLAUDE_FABLE_GATE_STATE")
-[ $(( until - $(now) )) -le 900 ] && pass "an overload fallback holds only briefly (15 min)" || fail "overload ttl too long"
+[ $(( until - $(now) )) -le 901 ] && pass "an overload fallback holds only briefly (15 min)" || fail "overload ttl too long"
 reset_state
 post '{"subagent_type":"ai-expert","prompt":"p"}' '{"status":"async_launched","resolvedModel":"claude-opus-5"}'
 marker_active && pass "a Fable agent that started on Opus records it" || fail "resolvedModel fallback should record"
 reset_state
 post '{"subagent_type":"ai-reviewer","prompt":"p"}' '{"status":"completed","resolvedModel":"claude-sonnet-5"}'
 marker_active && fail "a non-Fable agent must not record" || pass "a fallback on a non-Fable agent is ignored"
+
+reset_state
+post_at() {  # post_at <claude-code-version> <tool_input-json> <tool_response-json>
+    jq -nc --argjson i "$2" --argjson r "$3" --arg t "$(transcript "$1")" \
+        '{hook_event_name:"PostToolUse",tool_name:"Agent",cwd:"/nowhere",transcript_path:$t,tool_input:$i,tool_response:$r}' | python3 "$GATE"
+}
+CLAUDE_CODE_SUBAGENT_MODEL=sonnet post_at 2.1.219 '{"subagent_type":"ai-expert","prompt":"p"}' '{"status":"completed","resolvedModel":"claude-sonnet-5"}'
+marker_active && fail "an old Claude Code running a Fable agent on the variable's Sonnet must not record" || pass "before 2.1.251 a Fable agent the variable sent to Sonnet is not a fallback"
+CLAUDE_CODE_SUBAGENT_MODEL=sonnet post_at 2.1.276 '{"subagent_type":"ai-expert","prompt":"p"}' '{"status":"completed","resolvedModel":"claude-opus-5"}'
+marker_active && pass "since 2.1.251 a Fable agent that started on Opus records it, whatever the variable says" || fail "the variable hid a fallback off Fable"
+reset_state
+CLAUDE_CODE_SUBAGENT_MODEL=sonnet post '{"subagent_type":"ai-expert","prompt":"p"}' '{"status":"completed","resolvedModel":"claude-sonnet-5"}'
+marker_active && fail "with no version, Sonnet may be the variable's doing: it must not record" || pass "with no readable version a disputed agent is not blamed on Fable"
+CLAUDE_CODE_SUBAGENT_MODEL=sonnet stop_failure model_not_found '{"agent_type":"ai-expert"}'
+marker_active && fail "with no version, a disputed agent's StopFailure must not record" || pass "with no readable version StopFailure does not attribute a disputed agent to Fable"
+CLAUDE_CODE_SUBAGENT_MODEL=sonnet stop_failure model_not_found "$(jq -nc --arg p "$(transcript 2.1.276)" '{agent_type:"ai-expert",transcript_path:$p}')"
+marker_active && pass "since 2.1.251 StopFailure attributes a Fable-pinned agent to Fable, whatever the variable says" || fail "the variable hid a Fable agent from StopFailure"
 
 echo "== statusline: weekly limit nearly used"
 reset_state

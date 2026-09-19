@@ -28,6 +28,7 @@ build whose spawn tool rejects an explicit `model`.
 """
 import datetime as dt
 import json
+import math
 import os
 import re
 import sys
@@ -87,11 +88,12 @@ def active(now=None):
 
 
 def mark(until, reason, source):
+    until = math.ceil(until)                     # round up: truncating would end the record up to a second early
     data = load()
     rec = data.get("unavailable")
     if isinstance(rec, dict) and float(rec.get("until", 0)) >= until:
         return                                   # a longer record already stands
-    data["unavailable"] = {"until": int(until), "reason": reason, "source": source,
+    data["unavailable"] = {"until": until, "reason": reason, "source": source,
                            "set_at": int(time.time())}
     save(data)
 

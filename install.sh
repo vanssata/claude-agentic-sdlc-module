@@ -570,8 +570,10 @@ fi
 subagent_override=$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL // empty' "$SETTINGS")
 if [ -n "$subagent_override" ]; then
   echo
-  echo "WARNING: CLAUDE_CODE_SUBAGENT_MODEL=$subagent_override outranks every agent's 'model:' and the"
-  echo "call's own model, so the FAST/BALANCED/STRONG tiers all run on that one model. Unset it."
+  echo "WARNING: CLAUDE_CODE_SUBAGENT_MODEL=$subagent_override is set. Since Claude Code 2.1.251 it only"
+  echo "applies to an agent whose call and definition name no model. Before 2.1.251 (the JetBrains ACP"
+  echo "adapter bundles 2.1.219) it outranks every agent's 'model:' and the call's own model, so the"
+  echo "FAST/BALANCED/STRONG tiers all run on that one model. Unset it."
 fi
 
 if python3 - "$GLOBAL_MD" <<'PY'

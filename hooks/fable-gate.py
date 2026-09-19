@@ -27,6 +27,7 @@ _LAUNCH_WINDOW, _WEEKLY_PCT, _FALLBACK tune it.
 """
 import datetime as dt
 import json
+import math
 import os
 import re
 import shutil
@@ -46,6 +47,10 @@ FALLBACK = os.environ.get("CLAUDE_FABLE_GATE_FALLBACK", "opus")
 # StopFailure categories that mean "Fable cannot serve this account right now".
 # Authentication, billing and account errors are account-wide: Opus would fail too.
 TTL_BY_ERROR = {"rate_limit": LIMIT_TTL, "model_not_found": NOT_FOUND_TTL}
+
+# Until this Claude Code version CLAUDE_CODE_SUBAGENT_MODEL overrode the call's own
+# `model` and the frontmatter; since it, the variable is only the fallback after them.
+ENV_FIRST_BEFORE = (2, 1, 251)
 
 
 # ------------------------------------------------------------------ state
@@ -76,11 +81,12 @@ def active(now=None):
 
 
 def mark(until, reason, source):
+    until = math.ceil(until)                     # round up: truncating would end the record up to a second early
     data = load()
     rec = data.get("unavailable")
     if isinstance(rec, dict) and float(rec.get("until", 0)) >= until:
         return                                  # a longer record already stands
-    data["unavailable"] = {"until": int(until), "reason": reason, "source": source,
+    data["unavailable"] = {"until": until, "reason": reason, "source": source,
                            "set_at": int(time.time())}
     save(data)
 
@@ -107,14 +113,37 @@ def frontmatter_model(path):
     return m.group(1) if m else ""
 
 
-def agent_model(tool_input, cwd=""):
-    """The model an Agent call will run on, in Claude Code's order:
-    CLAUDE_CODE_SUBAGENT_MODEL, then the call's own `model`, then the
-    definition's frontmatter (project before user)."""
-    if os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL"):
-        return os.environ["CLAUDE_CODE_SUBAGENT_MODEL"]
-    if tool_input.get("model"):
-        return tool_input["model"]
+def transcript_tail(path):
+    """The last megabyte of a transcript as lines, newest last; [] when unreadable."""
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            fh.seek(max(0, fh.tell() - 1_000_000))
+            return fh.read().decode("utf-8", "replace").splitlines()
+    except (OSError, TypeError):
+        return []
+
+
+def claude_code_version(path):
+    """The Claude Code version that wrote the transcript, as a tuple, or None.
+    Hooks get no version field and no documented version variable; every
+    transcript record carries the `version` of the Claude Code that wrote it."""
+    for line in reversed(transcript_tail(path)):
+        if '"version"' not in line:
+            continue
+        try:
+            version = json.loads(line).get("version")
+        except (ValueError, AttributeError):
+            continue
+        m = re.match(r"(\d+)\.(\d+)\.(\d+)", version) if isinstance(version, str) else None
+        if m:
+            return tuple(int(part) for part in m.groups())
+    return None
+
+
+def definition_model(tool_input, cwd):
+    """The `model:` of the agent's definition, project before user; "" when it
+    has none or inherits."""
     name = tool_input.get("subagent_type") or "general-purpose"
     if re.fullmatch(r"[A-Za-z0-9_.-]+", name):
         dirs = [os.environ.get("CLAUDE_PROJECT_DIR", ""), cwd]
@@ -130,6 +159,33 @@ def agent_model(tool_input, cwd=""):
     return ""
 
 
+def agent_model(tool_input, payload, guess=True):
+    """The model an Agent call will run on, in Claude Code's order: the call's
+    own `model`, then the definition's frontmatter (project before user), then
+    CLAUDE_CODE_SUBAGENT_MODEL. Before Claude Code 2.1.251 the variable came
+    first and overrode both; the version is read from the payload's transcript,
+    and only when the variable and the rest disagree about Fable.
+
+    With no readable version, rerouting guesses the current order: the old
+    order would let a pinned Fable agent launch while Fable is unavailable and
+    turn a Sonnet call into an Opus one, while a wrong guess of the current one
+    costs nothing - an old Claude Code lets the variable override the rewritten
+    `model` just as it overrode the original. Recording does not guess
+    (`guess=False` answers ""): blaming Fable for an agent the variable sent
+    elsewhere would close the gate on a healthy Fable."""
+    env = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL", "")
+    own = tool_input.get("model") or definition_model(tool_input, payload.get("cwd") or "")
+    if not env or not own:
+        return env or own
+    if is_fable(env) != is_fable(own):
+        version = claude_code_version(payload.get("transcript_path"))
+        if version is None and not guess:
+            return ""
+        if version is not None and version < ENV_FIRST_BEFORE:
+            return env
+    return own
+
+
 # ------------------------------------------------------------------ hook events
 def pre_tool_use(payload):
     tool_input = payload.get("tool_input")
@@ -137,7 +193,7 @@ def pre_tool_use(payload):
         return
     if tool_input.get("subagent_type") == "fork":   # forks ignore `model`
         return
-    if not is_fable(agent_model(tool_input, payload.get("cwd", ""))):
+    if not is_fable(agent_model(tool_input, payload)):
         return
 
     rec = active()
@@ -170,7 +226,7 @@ def post_tool_use(payload):
     if payload.get("tool_name") != "Agent" or not isinstance(tool_input, dict) \
             or not isinstance(response, dict):
         return
-    if not is_fable(agent_model(tool_input, payload.get("cwd", ""))):
+    if not is_fable(agent_model(tool_input, payload, guess=False)):
         return
     resolved = response.get("resolvedModel") or ""
     used = [m for m in (response.get("modelsUsed") or []) if isinstance(m, str)]
@@ -179,14 +235,7 @@ def post_tool_use(payload):
 
 
 def last_transcript_model(path):
-    try:
-        with open(path, "rb") as fh:
-            fh.seek(0, os.SEEK_END)
-            fh.seek(max(0, fh.tell() - 1_000_000))
-            tail = fh.read().decode("utf-8", "replace").splitlines()
-    except (OSError, TypeError):
-        return ""
-    for line in reversed(tail):
+    for line in reversed(transcript_tail(path)):
         try:
             model = (json.loads(line).get("message") or {}).get("model")
         except (ValueError, AttributeError):
@@ -206,8 +255,8 @@ def stop_failure(payload):
     fable_involved = (
         "fable" in text.lower()
         or is_fable(payload.get("model"))
-        or (isinstance(agent_type, str) and is_fable(agent_model({"subagent_type": agent_type},
-                                                                 payload.get("cwd", ""))))
+        or (isinstance(agent_type, str)
+            and is_fable(agent_model({"subagent_type": agent_type}, payload, guess=False)))
         or is_fable(last_transcript_model(payload.get("agent_transcript_path")
                                           or payload.get("transcript_path")))
         or time.time() - float(launched) <= LAUNCH_WINDOW
