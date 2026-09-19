@@ -296,8 +296,8 @@ only when a named trigger fires; the triggers are listed in `.ai/policies/model-
 
 On a Max plan the session runs Opus 5 with the 200k window at `medium` effort,
 compacting near 100k tokens (`autoCompactWindow` 133 000) — `opus[1m]` stays in `availableModels` for a task
-that genuinely needs it — and escalates from there: `ai-expert` omits `model:` and inherits it, so the session's fallback
-chain applies to it too. Fable 5.1 [1m] is pinned on `architect` alone, at
+that genuinely needs it — and escalates from there: `ai-expert` pins `opus` at `xhigh`, so a session switched to
+Sonnet (the JetBrains agent's Model setting, or `/model`) cannot weaken the last-resort tier. Fable 5.1 [1m] is pinned on `architect` alone, at
 `xhigh`, for design questions outside a task; nothing else ever runs on it, and
 `fable-gate` sends it to Opus while Fable is rate-limited or its weekly limit is
 nearly used. `--fable no` leaves `architect` on the Opus session as well.
