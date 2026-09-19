@@ -14,7 +14,7 @@
 #
 # Claude Code (~/.claude): model, effort and context settings for the detected
 # plan (agents default to Sonnet); the ai-* pipeline agents plus architect,
-# Explore and log-reader; five hooks, plus fable-gate on a Fable install; the
+# Explore and log-reader; six hooks, plus fable-gate on a Fable install; the
 # skills; and one managed block in ~/.claude/CLAUDE.md.
 #
 # Codex (~/.codex): the same pipeline on the Terra -> Sol -> Astra ladder, sized
@@ -197,6 +197,10 @@ SESSION_MODEL=$(jq -r .model "$TMP/settings.snippet.json")
 FALLBACK=$(jq -r '.fallbackModel | if type=="array" then join(", then ") else . end' "$TMP/settings.snippet.json")
 EFFORT=$(jq -r .effortLevel "$TMP/settings.snippet.json")
 COMPACT=$(jq -r .autoCompactWindow "$TMP/settings.snippet.json")
+# Auto-compaction fires about 33k under the window (measured: a 150000 window
+# compacts near 117k), so that is the number a person should read.
+# context-guard.py derives its warn and block thresholds from the same point.
+COMPACT_AT=$((COMPACT - 33000))
 READ_LINES=$(jq -r '.env.CLAUDE_READ_MAX_LINES' "$TMP/settings.snippet.json")
 READ_BYTES=$(jq -r '.env.CLAUDE_READ_MAX_BYTES' "$TMP/settings.snippet.json")
 
@@ -228,13 +232,13 @@ else
     ARCHITECT_MODEL_LINE="model: fable[1m]"
     ARCHITECT_EFFORT="xhigh"
     EXPERT_ROW="omit \`model:\` — inherits the session (Opus 5) / \`high\`; \`architect\` alone pins \`fable[1m]\` / \`xhigh\`"
-    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction at ${COMPACT} tokens; \`opus[1m]\` is a per-task choice (\`/model\`) for a change that genuinely needs a huge context, never the default — above 200k every turn re-reads a context that costs more than the thinking. \`ai-expert\` escalates from the session by inheriting it. Fable 5.1 [1m] is reserved for \`architect\` (pinned \`model: fable[1m]\`, \`xhigh\`) — never for the session, a reader, a reviewer or \`ai-expert\`. \`max\` stays off.
+    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice (\`/model\`) for a change that genuinely needs a huge context, never the default — above 200k every turn re-reads a context that costs more than the thinking. \`ai-expert\` escalates from the session by inheriting it. Fable 5.1 [1m] is reserved for \`architect\` (pinned \`model: fable[1m]\`, \`xhigh\`) — never for the session, a reader, a reviewer or \`ai-expert\`. \`max\` stays off.
 - \`fable-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/fable-gate.py status\` shows the gate; \`clear\` re-enables Fable early."
   else
     ARCHITECT_MODEL_LINE="# model: intentionally omitted — inherits the session model (Opus 5, Fable disabled in this install)"
     ARCHITECT_EFFORT="high"
     EXPERT_ROW="omit \`model:\` — inherits the session (Opus 5) / \`high\`"
-    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction at ${COMPACT} tokens; \`opus[1m]\` is a per-task choice, never the default. Fable is disabled in this install (\`--fable no\`). Do not request \`model: fable\` anywhere. \`xhigh\`/\`max\` stay off. Never pin \`model: opus\` for the thinking tier — omit \`model:\` so the fallback comes free."
+    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice, never the default. Fable is disabled in this install (\`--fable no\`). Do not request \`model: fable\` anywhere. \`xhigh\`/\`max\` stay off. Never pin \`model: opus\` for the thinking tier — omit \`model:\` so the fallback comes free."
   fi
   EFFORT_RULE="Raise to \`high\` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; readers stay at \`low\`."
 fi
@@ -256,7 +260,9 @@ RENDER_PLAN="$PLAN_LABEL" \
 RENDER_SESSION_MODEL="$SESSION_HUMAN" \
 RENDER_FALLBACK_MODEL="$FALLBACK_HUMAN" \
 RENDER_DEFAULT_EFFORT="$EFFORT" \
-RENDER_COMPACT_WINDOW="$(printf '%s' "$COMPACT" | python3 -c 'import sys;print("{:,}".format(int(sys.stdin.read())).replace(",", " "))')" \
+RENDER_COMPACT_WINDOW="$(printf '%s' "$COMPACT_AT" | python3 -c 'import sys;print("{:,}".format(int(sys.stdin.read())).replace(",", " "))')" \
+RENDER_CONTEXT_WARN="$((COMPACT_AT * 80 / 100000))k" \
+RENDER_CONTEXT_BLOCK="$((COMPACT_AT * 120 / 100000))k" \
 RENDER_READ_LINES="$READ_LINES" \
 RENDER_PLAN_SPECIFIC_ROUTING="$PLAN_SPECIFIC" \
 RENDER_EFFORT_RULE="$EFFORT_RULE" \
@@ -577,18 +583,20 @@ Done (Claude Code).
   fallback        $FALLBACK
   EXPERT tier     ai-expert on $( [ "$TIER" = pro ] && echo "opus, pinned" || echo "the session model" ) at effort $EXPERT_EFFORT;
                   architect on $( [ "$TIER" = pro ] && echo "opus, pinned" || { [ "$FABLE" = yes ] && echo "fable[1m], pinned" || echo "the session model"; } ) at effort $ARCHITECT_EFFORT
-  compaction      $COMPACT tokens
+  compaction      near $COMPACT_AT tokens (autoCompactWindow $COMPACT); context-guard warns from
+                  $((COMPACT_AT * 80 / 100)) and holds a prompt back once from $((COMPACT_AT * 120 / 100))
   read guard      an unbounded Read is refused above $READ_LINES lines / $READ_BYTES bytes
   agents          $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd' ')
   hooks           cap-large-read, project-scaffold (Setup:init), ai-git-guard (global),
-                  ai-path-guard + ai-scope-guard (active where .ai/ exists)
+                  ai-path-guard + ai-scope-guard (active where .ai/ exists),
+                  context-guard (UserPromptSubmit, PreCompact, SessionStart:compact)
   fable gate      $GATE $( [ "$GATE" = on ] && echo "(Fable agents go to Opus while Fable is rate-limited, unreachable,
                   or the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% used — checked through the statusline)" || echo "(no Fable on this install)" )
   skills          $(ls "$SRC/skills" | paste -sd' ')
 
 Restart Claude Code, then:
   /config        model and effort match the profile
-  /hooks         lists the five hooks$( [ "$GATE" = on ] && echo ", plus fable-gate on PreToolUse, PostToolUse and StopFailure" )
+  /hooks         lists the six hooks$( [ "$GATE" = on ] && echo ", plus fable-gate on PreToolUse, PostToolUse and StopFailure" )
   /skills        lists ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*, usage-report
   /ai-init       in a project, to survey it and build .ai/
   /project-update in a project that already has .ai/ or docs/sdlc/, to pull in these rules

@@ -102,16 +102,18 @@ duplicates a hook entry, and never overwrites your edits to `ai-git-guard.json`.
 | `CLAUDE.snippet.md` / `AGENTS.snippet.md` | a managed block in `~/.claude/CLAUDE.md` | a managed block in `~/.codex/AGENTS.md` |
 | `agents/*.md` | `~/.claude/agents/` | rendered to `~/.codex/agents/*.toml` |
 | `agents/{ai-expert,architect}.md.tmpl` | the EXPERT-tier agents, model line and effort rendered per plan | `ai-expert.toml` pinned to Astra, `architect.toml` to Sol |
-| `hooks/*` | `~/.claude/hooks/` — five hooks, `fable-gate` on a Fable install, the shared library and the guards' default config | `~/.codex/hooks/` + `codex/hooks.json` |
+| `hooks/*` | `~/.claude/hooks/` — six hooks, `fable-gate` on a Fable install, the shared library and the guards' default config | `~/.codex/hooks/` + `codex/hooks.json` |
 | `skills/*/` | `~/.claude/skills/` | `~/.codex/skills/` |
 
 The skills are `/ai-init`, `/ai-audit`, `/ai-task`, `/ai-status`, `/project-init`,
 `/project-update`, `/sdlc-intent`, `/sdlc-spec`, `/sdlc-plan` and
 `/usage-report`, identical in both runtimes.
 
-The Codex install is a strict subset in one place: `cap-large-read.py` is not
-installed there, because Codex's read tool is not on the hook path. The rule it
-enforces is still written into `AGENTS.md`; it is just not mechanical there.
+The Codex install is a strict subset in two places: `cap-large-read.py` is not
+installed there, because Codex's read tool is not on the hook path, and neither
+is `context-guard.py`, which reads Claude Code's transcript and compaction
+events. The read rule is still written into `AGENTS.md`; it is just not
+mechanical there.
 
 `profiles/codex-{plus,pro}.json` is the machine-readable routing contract, one
 file per ChatGPT plan — session model and effort, thread cap,
@@ -141,7 +143,8 @@ it should not be the most expensive model by default.
 | `taskOutputMaxChars` (Claude) | 80 000 | — |
 | `MAX_MCP_OUTPUT_TOKENS` (Claude) | 40 000 | 25 000 |
 | `cap-large-read.py` (Claude) | refuses an unbounded `Read` over 4 000 lines or 250 KB | no limit |
-| `autoCompactWindow` (Claude) | 150 000 on Max and Team Max, 300 000 on Pro and Team Pro | the model window |
+| `autoCompactWindow` (Claude) | 133 000 on Max and Team Max, 300 000 on Pro and Team Pro. Compaction fires about 33k under the window, so near 100k and 267k | the model window |
+| `context-guard.py` (Claude) | warns from 80% of the point where compaction fires and holds a prompt back once from 120% — 80k and 120k on Max; `AI_CONTEXT_WARN_TOKENS` / `AI_CONTEXT_BLOCK_TOKENS` set them in tokens, `0` turns one off | no guard |
 | `model` (Claude) | `opusplan` on Pro and Team Pro: Opus in plan mode, Sonnet when executing; `opus` (200k window) on Max and Team Max, `opus[1m]` available per task | Sonnet 5 on Pro |
 | `effortLevel` (Claude) | `medium` on both plans; agents raise it per task | — |
 | `model` (Codex) | `gpt-5.6-sol` at `high` on Pro, `medium` on Plus; subagents `gpt-5.6-terra` at `medium` | — |
@@ -290,7 +293,7 @@ tier, and a STRONG or EXPERT agent runs only when a named trigger fires; the
 triggers are listed in `.ai/policies/model-routing.md`.
 
 On a Max plan the session runs Opus 5 with the 200k window at `medium` effort,
-compacting at 150k tokens — `opus[1m]` stays in `availableModels` for a task
+compacting near 100k tokens (`autoCompactWindow` 133 000) — `opus[1m]` stays in `availableModels` for a task
 that genuinely needs it — and escalates from there: `ai-expert` omits `model:` and inherits it, so the session's fallback
 chain applies to it too. Fable 5.1 [1m] is pinned on `architect` alone, at
 `xhigh`, for design questions outside a task; nothing else ever runs on it, and
@@ -345,6 +348,7 @@ model, and nothing in the design depends on a local model existing.
 | `ai-scope-guard` | both | only during an implementation step | refuses editing a file the approved step does not name, with the `SCOPE_CHANGE_REQUIRED` signal |
 | `cap-large-read.py` | Claude only | every session | refuses an unbounded `Read` of a large file; an explicit `limit` passes |
 | `project-scaffold.sh` | Claude only | `Setup:init` | creates the `docs/sdlc/` and runtime layout on `/init` |
+| `context-guard.py` | Claude only | `UserPromptSubmit` / `PreCompact` / `SessionStart:compact` | reads the context size from the transcript: warns once per 10k from 80% of the compaction point, holds a prompt back once from 120% (the same prompt again passes). Before a compaction it writes a snapshot — edited files, latest instructions verbatim, todo list, git state, `.ai/` task state — and tells the summary what to keep; after it, the snapshot goes back into the context. Fails open |
 | `fable-gate.py` | Claude, Max with Fable only | `StopFailure` / `PreToolUse:Agent` / the statusline | records a Fable rate limit, model-not-found or a nearly used weekly limit, and rewrites `model: fable` (the `architect` agent) to `opus` until the reset |
 | `codex-model-gate.py` | Codex only | `PreToolUse`/`PostToolUse:Agent`, `SubagentStop` | the same idea for Astra: records a rate limit or unavailability and rewrites an Astra launch to Sol at `high` until it expires |
 
