@@ -292,3 +292,9 @@ through the real script. `tests/fixtures/codex-hooks/` holds the Codex ones,
 including `apply_patch` payloads that touch several files at once. Adding a rule
 means adding a fixture — including one that proves the rule does **not** fire
 where it should not, which is the half that gets forgotten.
+
+`tests/test-guard-characterization.sh` is the other half: it pins the exact
+behaviour of all three guards — exit code and full deny text, byte for byte —
+against a golden file, so a change made purely for speed can be proved to change
+nothing. See `docs/hook-performance.md` for what the guards cost per tool call,
+the budget they are held to, and what is deliberately not optimised.

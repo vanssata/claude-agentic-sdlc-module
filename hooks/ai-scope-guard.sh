@@ -12,7 +12,9 @@
 # Inert unless .ai/state/current.json exists and current_stage == "implementation".
 set -uo pipefail
 
-HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOOK_SRC="${BASH_SOURCE[0]}"
+case "$HOOK_SRC" in */*) HOOK_SRC="${HOOK_SRC%/*}" ;; *) HOOK_SRC=. ;; esac
+HOOK_DIR="$(cd "${HOOK_SRC:-/}" && pwd)"
 # shellcheck source=lib/ai-hook-common.sh
 . "$HOOK_DIR/lib/ai-hook-common.sh"
 
@@ -27,33 +29,63 @@ AI_ROOT=$(find_ai_root "$AI_CWD") || allow
 STATE="$AI_ROOT/.ai/state/current.json"
 [ -f "$STATE" ] || allow
 
-STAGE=$(jq -r '.current_stage // empty' "$STATE" 2>/dev/null) || allow
-[ "$STAGE" = "implementation" ] || allow
+# Everything this guard needs out of the state file, in one jq call: the guard
+# runs on every write, and each process costs milliseconds. Each list value is
+# tagged with its list and split on newlines, the way `jq -r '.allowed_files[]?'`
+# printed them; the reason comes last, as the remainder of the output, so a
+# multi-line reason survives. Nothing is printed unless the guard is armed —
+# wrong stage, no current step, a step that is not in the plan, and a state file
+# that does not parse all end here, allowing, as they did before.
+STEP_ID="" TASK_ID="" ALLOWED="" FORBIDDEN="" REASON="" IN_REASON=""
+while IFS= read -r line; do
+    if [ -n "$IN_REASON" ]; then REASON+="$line"$'\n'; continue; fi
+    case "$line" in
+        i$'\t'*) STEP_ID="${line#?$'\t'}" ;;
+        t$'\t'*) TASK_ID="${line#?$'\t'}" ;;
+        a$'\t'*) ALLOWED+="${line#?$'\t'}"$'\n' ;;
+        f$'\t'*) FORBIDDEN+="${line#?$'\t'}"$'\n' ;;
+        r)       IN_REASON=1 ;;
+    esac
+done < <(jq -r '
+    def tagged($t; $l): ($l // []) | .[]? | select(type == "string")
+        | split("\n")[] | "\($t)\t\(.)";
+    select((.current_stage // "") == "implementation")
+    | ((.approved_plan.current_step_id // "") | tostring) as $sid
+    | select($sid != "")
+    | [ .approved_plan.steps[]? | select(.step_id == $sid) ] as $steps
+    | select(($steps | length) > 0)
+    | $steps[0] as $step
+    | "i\t\($sid)", "t\t\(.task_id // "?")",
+      tagged("a"; $step.allowed_files), tagged("f"; $step.forbidden_files),
+      "r", ($step.forbidden_reason // "not part of this step")
+' "$STATE" 2>/dev/null)
+[ -n "$STEP_ID" ] || allow
 
-STEP_ID=$(jq -r '.approved_plan.current_step_id // empty' "$STATE" 2>/dev/null)
-[ -n "$STEP_ID" ] || allow          # no step selected yet: nothing to enforce
+ALLOWED=$(chomp_all "$ALLOWED")
+FORBIDDEN=$(chomp_all "$FORBIDDEN")
+REASON=$(chomp_all "$REASON")
 
-STEP=$(jq -c --arg id "$STEP_ID" '.approved_plan.steps[]? | select(.step_id == $id)' "$STATE" 2>/dev/null)
-[ -n "$STEP" ] || allow             # state integrity problem; /ai-task flags it on resume
-
-ALLOWED=$(printf '%s' "$STEP" | jq -r '.allowed_files[]?')
-FORBIDDEN=$(printf '%s' "$STEP" | jq -r '.forbidden_files[]?')
-REASON=$(printf '%s' "$STEP" | jq -r '.forbidden_reason // "not part of this step"')
-TASK_ID=$(jq -r '.task_id // "?"' "$STATE" 2>/dev/null)
-
-# match_glob <relative-path> <patterns> — shell-glob match (fnmatch semantics),
-# so a plan can say "src/Payment/*.php" or "tests/**" the way a human would.
+# match_glob <relative-path> <patterns> — true when one of the newline-separated
+# patterns matches, leaving that pattern in AI_GLOB_HIT so a deny can name it.
+# A plan says "src/Payment/*.php" or "tests/**" the way a human would; bash's own
+# pattern matching has the fnmatch semantics that wants ("*" crosses "/", "[!x]"
+# negates), so this is the test the python one-liner made, without paying for an
+# interpreter on every write. A pattern is expanded before it is matched, so a
+# glob in a plan must not contain "$", "~" or a backslash.
+AI_GLOB_HIT=""
 match_glob() {
-    AI_SUBJECT="$1" AI_PATTERNS="$2" python3 -c '
-import fnmatch, os, sys
-subject = os.environ["AI_SUBJECT"]
-patterns = [p for p in os.environ["AI_PATTERNS"].splitlines() if p.strip()]
-for pattern in patterns:
-    if fnmatch.fnmatch(subject, pattern) or fnmatch.fnmatch(subject, pattern.rstrip("/") + "/*"):
-        print(pattern)
-        sys.exit(0)
-sys.exit(1)
-' 2>/dev/null
+    local subject="$1" pattern dir
+    AI_GLOB_HIT=""
+    while IFS= read -r pattern; do
+        [ -n "${pattern//[[:space:]]/}" ] || continue
+        dir="$pattern"
+        while [ "${dir%/}" != "$dir" ]; do dir="${dir%/}"; done
+        if [[ $subject == $pattern || $subject == $dir/* ]]; then
+            AI_GLOB_HIT="$pattern"
+            return 0
+        fi
+    done <<< "$2"
+    return 1
 }
 
 while IFS= read -r f; do
@@ -61,15 +93,15 @@ while IFS= read -r f; do
     abs=$(abs_path "$f")
     rel="${abs#"$AI_ROOT"/}"
 
-    if [ -n "$FORBIDDEN" ] && hit=$(match_glob "$rel" "$FORBIDDEN"); then
-        deny "$rel is explicitly forbidden for step $STEP_ID of task $TASK_ID (matched: $hit).
+    if [ -n "$FORBIDDEN" ] && match_glob "$rel" "$FORBIDDEN"; then
+        deny "$rel is explicitly forbidden for step $STEP_ID of task $TASK_ID (matched: $AI_GLOB_HIT).
 Reason recorded in the plan: $REASON
 
 Do not edit it. If the step genuinely cannot be completed without this file, stop
 and report SCOPE_CHANGE_REQUIRED so the plan is amended and re-approved."
     fi
 
-    if [ -n "$ALLOWED" ] && ! match_glob "$rel" "$ALLOWED" >/dev/null; then
+    if [ -n "$ALLOWED" ] && ! match_glob "$rel" "$ALLOWED"; then
         deny "SCOPE_CHANGE_REQUIRED — $rel is outside the approved scope of step $STEP_ID (task $TASK_ID).
 
 Allowed for this step:
