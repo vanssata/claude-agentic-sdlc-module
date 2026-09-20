@@ -78,4 +78,42 @@ else
     fail "deny message must contain SCOPE_CHANGE_REQUIRED" "$out"
 fi
 
+# Every step carrying the current id contributes — not just the first one found.
+# A plan should never reissue a step id, but when it does (an amendment that
+# reuses one, a bug in state.py) the rules of all of them apply. The case that
+# matters: an unrestricted first duplicate must not cancel what a later one
+# forbids, because a guard with empty lists allows everything.
+echo "== ai-scope-guard (a step id used twice)"
+dup_state() {  # dup_state <first-step-allowed-files-json>
+    jq -n --argjson a "$1" '{task_id:"T-1",current_stage:"implementation",
+      approved_plan:{current_step_id:"1",steps:[
+        {step_id:"1", allowed_files:$a, forbidden_files:[], forbidden_reason:"first reason"},
+        {step_id:"1", allowed_files:["tests/x.php"], forbidden_files:["src/secret.php"],
+         forbidden_reason:"second reason"}]}}' > "$ROOT/.ai/state/current.json"
+}
+edit_of() {  # edit_of <relative path> — the guard's output for that edit
+    jq -nc --arg r "$ROOT" --arg p "$ROOT/$1" \
+        '{hook_event_name:"PreToolUse",tool_name:"Edit",cwd:$r,tool_input:{file_path:$p}}' | "$GUARD"
+}
+for first in '["src/a.php"]' '[]'; do
+    dup_state "$first"
+    out=$(edit_of src/secret.php)
+    if printf '%s' "$out" | grep -q 'explicitly forbidden'; then
+        pass "first step allowed_files=$first: the second step's forbidden_files still bite"
+    else
+        fail "first step allowed_files=$first: a forbidden file was not refused" "${out:-allowed}"
+    fi
+    out=$(edit_of tests/x.php)
+    [ -z "$out" ] && pass "first step allowed_files=$first: the second step's allowed_files count too" \
+        || fail "first step allowed_files=$first: an allowed file was refused" "$out"
+done
+dup_state '["src/a.php"]'
+out=$(edit_of src/a.php)
+[ -z "$out" ] && pass "the first step's allowed_files count as well" \
+    || fail "the first step's allowed_files were dropped" "$out"
+out=$(edit_of src/nowhere.php)
+printf '%s' "$out" | grep -q 'SCOPE_CHANGE_REQUIRED' \
+    && pass "a file in neither step is still out of scope" \
+    || fail "a file in neither step should be out of scope" "${out:-allowed}"
+
 summary "ai-scope-guard"
