@@ -1,6 +1,6 @@
 ---
 name: ai-status
-description: Show where the current agentic task stands — which .ai/ root governs this directory, id, stage, next action, risk tier, current step and its allowed files, test/e2e/review/security status, open risks — plus which model the EXPERT tier resolves to and whether the risk-tier mirror is stale. Read-only. Use for "/ai-status", "where are we", "what is the agent working on", "why did a guard fire here".
+description: Show where the current agentic task stands — which .ai/ root governs this directory, id, stage, next action, risk tier, current step and its allowed files, test/e2e/review/security status, open risks, what the always-loaded instruction block costs — plus which model the EXPERT tier resolves to and whether the risk-tier mirror is stale. Read-only. Use for "/ai-status", "where are we", "what is the agent working on", "why did a guard fire here".
 ---
 
 # /ai-status
@@ -176,7 +176,33 @@ done
    and say that `/project-update` cannot run until it is resolved; a newer
    version means this machine's plugin needs updating, not the project.
 
-7. **Guards.** Say in one line each whether the three hooks are active here:
+7. **Instruction budget.** What this project loads on every turn, before any
+   skill or policy is read. Advisory: the plugin measures its own block and
+   never refuses the project's file.
+
+   ```bash
+   for f in CLAUDE.md AGENTS.md GEMINI.md .junie/guidelines.md; do
+     [ -f "$AI_PROJECT/$f" ] && python3 "$AI_HOME/skills/project-update/render_instructions.py" \
+       measure "$AI_PROJECT/$f" --block --budget 2048
+   done
+   [ -f "$AI_PROJECT/docs/sdlc/constitution.md" ] && \
+     python3 "$AI_HOME/skills/project-update/render_instructions.py" \
+       constitution "$AI_PROJECT/docs/sdlc/constitution.md"
+   ```
+
+   One line per instruction file: the bytes of the managed block and the budget.
+   A line ending in `OVER` means the block is larger than the 2 048 B a project
+   block is meant to cost — say whose it is to fix: if `/project-update` reports
+   a conflict on that file, the block was edited here and the plugin will not
+   rewrite it, so trimming it is the project's; otherwise it is the plugin's and
+   `/project-update` will replace it. The constitution line names the count and
+   the bytes, and anything above 15 principles or 4 096 B is a prompt to move a
+   principle into `.ai/policies/`, not an error.
+
+   The global stub is not measured here — `install.sh` prints its size line on
+   every install, and `~/.claude/CLAUDE.md` is the user's file, not a project's.
+
+8. **Guards.** Say in one line each whether the three hooks are active here:
    `ai-git-guard` always is; `ai-path-guard` and `ai-scope-guard` are active
    because of the `.ai/` at `AI_PROJECT` from step 1 — name it again here if it
    was not this repository, because that is where a surprising deny comes from;

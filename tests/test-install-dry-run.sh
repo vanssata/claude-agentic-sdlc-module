@@ -28,7 +28,7 @@ out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan pro --dry-run 2>&1)
 printf '%s' "$out" | grep -q '"model": "opusplan"' && pass "pro sets the session model to opusplan" || fail "pro should set opusplan" "$out"
 printf '%s' "$out" | grep -q 'Opus 5 in plan mode' && pass "pro names opusplan in the CLAUDE.md block" || fail "block should explain opusplan" "$out"
 printf '%s' "$out" | grep -q '^model: opus' && pass "pro pins model: opus on the EXPERT agents" || fail "EXPERT agents should pin opus on pro" "$out"
-printf '%s' "$out" | grep -q 'solo' && pass "the block mentions the solo pipeline profile" || fail "block should mention the solo profile" "$out"
+printf '%s' "$out" | grep -q '/ai-task <request>' && pass "the block routes every change through /ai-task" || fail "block should name /ai-task" "$out"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable yes --dry-run 2>&1)
 printf '%s' "$out" | grep -qx 'model: opus' && pass "max pins opus on ai-expert" || fail "ai-expert should pin opus on max" "$out"
 printf '%s' "$out" | grep -qx 'effort: xhigh' && pass "max renders the EXPERT tier at xhigh" || fail "EXPERT effort should be xhigh on max" "$out"
@@ -95,7 +95,8 @@ for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Ex
          skills/project-update/SKILL.md skills/project-update/update.py skills/project-update/history/index.json \
          skills/project-update/migrations/__init__.py skills/project-update/migrations/0001_schema_version.py \
          skills/usage-report/SKILL.md skills/usage-report/usage-report.py hooks/fable-gate.py \
-         hooks/context-guard.py; do
+         hooks/context-guard.py claude-agentic/routing.md \
+         skills/project-update/render_instructions.py; do
     [ -e "$DIR/$f" ] && pass "$f installed" || fail "$f missing"
 done
 [ -x "$DIR/hooks/ai-git-guard.sh" ] && pass "hooks are executable" || fail "hooks should be executable"
@@ -138,9 +139,9 @@ done
 CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 [ "$(jq -r '[.hooks.UserPromptSubmit[]?.hooks[]?.command | select(test("context-guard"))] | length' "$DIR/settings.json")" = 1 ] \
     && pass "a second install does not register context-guard twice" || fail "context-guard registered twice"
-grep -q 'Compaction near 167 000 tokens' "$DIR/CLAUDE.md" && pass "the block names the point where compaction fires, capped at the model's window" || fail "the block should say compaction fires near 167 000"
-grep -q 'warning from 133k tokens, and from 200k' "$DIR/CLAUDE.md" && pass "the block names the guard's thresholds" || fail "the guard thresholds are not rendered"
-grep -q '^# Summary instructions' "$DIR/CLAUDE.md" && pass "the block carries the summary instructions" || fail "summary instructions missing"
+grep -q 'Compaction near 167 000 tokens' "$DIR/claude-agentic/routing.md" && pass "routing.md names the point where compaction fires, capped at the model's window" || fail "routing.md should say compaction fires near 167 000"
+grep -q 'warning from 133k tokens, and from 200k' "$DIR/claude-agentic/routing.md" && pass "routing.md names the guard's thresholds" || fail "the guard thresholds are not rendered"
+grep -q 'On compaction keep' "$DIR/CLAUDE.md" && pass "the block carries what a compaction must keep" || fail "the compaction rule is missing from the block"
 grep -q '{{' "$DIR/CLAUDE.md" && fail "an unrendered placeholder is left in CLAUDE.md" || pass "every placeholder is rendered"
 [ -x "$DIR/bin/claude-1m" ] && pass "max installs the opus[1m] launcher" || fail "bin/claude-1m missing or not executable"
 printf '#!/usr/bin/env bash\necho "window=$CLAUDE_CODE_AUTO_COMPACT_WINDOW args=$*"\n' > "$TMP/fake-claude"; chmod +x "$TMP/fake-claude"
@@ -152,10 +153,10 @@ out1m=$(CLAUDE_BIN="$TMP/fake-claude" "$DIR/bin/claude-1m" fable -p hi)
 [ "$out1m" = "window=800000 args=--model fable[1m] -p hi" ] && pass "claude-1m fable runs fable[1m] with the same 800k window" || fail "claude-1m fable launched the wrong session" "$out1m"
 out1m=$(CLAUDE_BIN="$TMP/fake-claude" "$DIR/bin/claude-1m" opus)
 [ "$out1m" = "window=800000 args=--model opus[1m]" ] && pass "claude-1m opus is the default spelled out" || fail "claude-1m opus launched the wrong session" "$out1m"
-grep -q 'claude-1m fable' "$DIR/CLAUDE.md" && pass "the block offers Fable 5.1 [1m] as a session through claude-1m fable" || fail "block does not mention claude-1m fable"
+grep -q 'claude-1m fable' "$DIR/claude-agentic/routing.md" && pass "routing.md offers Fable 5.1 [1m] as a session through claude-1m fable" || fail "routing.md does not mention claude-1m fable"
 CLAUDE_1M_COMPACT_WINDOW=lots CLAUDE_BIN="$TMP/fake-claude" "$DIR/bin/claude-1m" >/dev/null 2>&1 && fail "a non-numeric window must be refused" || pass "a non-numeric window is refused"
 [ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "800000" ] && pass "the launcher leaves the settings window for every other model alone" || fail "settings window changed"
-grep -q 'claude-1m' "$DIR/CLAUDE.md" && pass "the CLAUDE.md block says opus[1m] starts with claude-1m" || fail "block does not mention claude-1m"
+grep -q 'claude-1m' "$DIR/claude-agentic/routing.md" && pass "routing.md says opus[1m] starts with claude-1m" || fail "routing.md does not mention claude-1m"
 [ "$(jq -r '.modelSettings["claude-opus-5"].effortLevel' "$DIR/settings.json")" = "medium" ] && pass "Opus runs at medium" || fail "opus effort not medium"
 [ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL // "unset"' "$DIR/settings.json")" = "unset" ] && pass "CLAUDE_CODE_SUBAGENT_MODEL is not set, so each agent's own model: applies" || fail "CLAUDE_CODE_SUBAGENT_MODEL would override every agent tier"
 jq '.env.CLAUDE_CODE_SUBAGENT_MODEL = "sonnet"' "$DIR/settings.json" > "$DIR/s.tmp" && mv "$DIR/s.tmp" "$DIR/settings.json"

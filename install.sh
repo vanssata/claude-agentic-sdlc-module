@@ -123,6 +123,42 @@ open(dst, "w").write(text)
 PY
 }
 
+# render_stub <scope> <runtime> <dst> — the always-loaded managed block, from
+# instructions/stub.md. The RENDER_* variables its caller exports are read by the
+# renderer exactly as render() reads them.
+render_stub() {
+  python3 "$SRC/skills/project-update/render_instructions.py" render \
+          --scope "$1" --runtime "$2" --kind "${4:-block}" --source "$SRC" --out "$3"
+}
+
+# block_size <file.md> <budget> — what the always-loaded block costs, and how much
+# of the file is the user's own. Printed after every managed_block; never fatal,
+# the user's own file is not the plugin's to refuse.
+block_size() {
+  python3 -c '
+import sys
+path, budget = sys.argv[1], int(sys.argv[2])
+text = open(path, encoding="utf-8").read()
+start = text.find("<!-- claude-agentic:start -->")
+end = text.find("<!-- claude-agentic:end -->")
+block = len(text[start:end + 26].encode("utf-8")) if start >= 0 and end >= 0 else 0
+spaced = lambda n: "{:,}".format(n).replace(",", " ")
+print("%s: managed block %s B (budget %s), file %s B — the rest is yours"
+      % (path.split("/")[-1], spaced(block), spaced(budget),
+         spaced(len(text.encode("utf-8")))))
+' "$1" "$2"
+}
+
+# codex_doc_advisory <file.md> — Codex reads at most 32 KiB of project docs, and
+# the plugin owns only the block; say so once the whole file gets close.
+codex_doc_advisory() {
+  local size
+  size=$(wc -c < "$1")
+  if [ "$size" -gt 16384 ]; then
+    echo "$(basename "$1") is $size B; Codex reads at most 32 KiB of project docs — consider a project .ai/"
+  fi
+}
+
 # ================================================================= Claude Code
 # The Claude branch is unchanged from the single-runtime installer. It lives in
 # functions so the Codex branch can be skipped or run independently; the bodies
@@ -276,6 +312,7 @@ else
 fi
 
 RENDER_PLAN="$PLAN_LABEL" \
+RENDER_PLAN_LABEL="$PLAN_LABEL" \
 RENDER_SESSION_MODEL="$SESSION_HUMAN" \
 RENDER_FALLBACK_MODEL="$FALLBACK_HUMAN" \
 RENDER_DEFAULT_EFFORT="$EFFORT" \
@@ -296,7 +333,8 @@ RENDER_ARCHITECT_EFFORT="$ARCHITECT_EFFORT" \
 render_claude_files() {
   render "$SRC/agents/ai-expert.md.tmpl" "$TMP/ai-expert.md"
   render "$SRC/agents/architect.md.tmpl" "$TMP/architect.md"
-  render "$SRC/CLAUDE.snippet.md" "$TMP/CLAUDE.block.md"
+  render_stub global claude "$TMP/CLAUDE.block.md"
+  render_stub global claude "$TMP/routing.md" routing
 }
 
 pretty() {  # model id -> human name
@@ -370,12 +408,15 @@ claude_dry_run() {
   sed -n '1,8p' "$TMP/architect.md"
   echo "== CLAUDE.md managed block:"
   cat "$TMP/CLAUDE.block.md"
+  echo "== routing.md (on demand): $CLAUDE_DIR/claude-agentic/routing.md"
+  cat "$TMP/routing.md"
   echo "== would install:"
   echo "   agents:  $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd,)"
   echo "   hooks:   $(ls "$SRC/hooks" | paste -sd,)"
   [ "$TIER" = max ] && echo "   bin:     claude-1m (opus[1m]$( [ "$FABLE" = yes ] && echo " / fable[1m]" ), pins the model at launch; compacts near $ONE_M_AT)"
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
   echo "   config:  ai-git-guard.json (only if absent)"
+  echo "   routing: claude-agentic/routing.md"
   echo "== would migrate: the claude-routing managed block, if present, into this one"
 }
 
@@ -587,6 +628,9 @@ statusline_gate "$SETTINGS" "$GATE" apply
 # ---------------------------------------------------------------- 5. CLAUDE.md block
 GLOBAL_MD="$CLAUDE_DIR/CLAUDE.md"
 managed_block "$GLOBAL_MD" "$TMP/CLAUDE.block.md" "CLAUDE.md"
+mkdir -p "$CLAUDE_DIR/claude-agentic"
+install_file "$TMP/routing.md" "$CLAUDE_DIR/claude-agentic/routing.md"
+block_size "$GLOBAL_MD" 2560
 
 # ---------------------------------------------------------------- 6. audits
 missing="" unpinned=""
@@ -759,8 +803,14 @@ codex_render() {
   RENDER_EXPERT_MODEL_ID="$CODEX_EXPERT" \
   RENDER_EXPERT_EFFORT="$CODEX_EXPERT_EFFORT" \
   RENDER_MAX_THREADS="$CODEX_MAX_THREADS" \
+  RENDER_PLAN_LABEL="ChatGPT $CODEX_PLAN_LABEL" \
   RENDER_READ_LINES="$(jq -r '.env.CLAUDE_READ_MAX_LINES' "$SRC/settings.common.json")" \
-    render "$SRC/AGENTS.snippet.md" "$TMP/AGENTS.block.md"
+    codex_render_files
+}
+
+codex_render_files() {
+  render_stub global codex "$TMP/AGENTS.block.md"
+  render_stub global codex "$TMP/routing.md" routing
 }
 
 codex_dry_run() {
@@ -770,11 +820,14 @@ codex_dry_run() {
           --profile "$CODEX_PROFILE" --dry-run | sed 's/^/== /'
   echo "== AGENTS.md managed block:"
   cat "$TMP/AGENTS.block.md"
+  echo "== routing.md (on demand): $CODEX_DIR/claude-agentic/routing.md"
+  cat "$TMP/routing.md"
   echo "== would install:"
   echo "   agents:  $(ls "$TMP/codex-agents" | sed 's/\.toml$//' | paste -sd,)"
   echo "   hooks:   $(codex_hook_files | xargs -n1 basename | paste -sd,)"
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
   echo "   config:  ai-git-guard.json (only if absent)"
+  echo "   routing: claude-agentic/routing.md"
   echo "== hooks.json entries (merged into $CODEX_DIR/hooks.json):"
   jq . "$SRC/codex/hooks.json"
   echo "== reminder: Codex lists a non-managed hook until you review it in /hooks"
@@ -851,6 +904,10 @@ codex_apply() {
 
   # -------------------------------------------------------------- 6. AGENTS.md
   managed_block "$CODEX_DIR/AGENTS.md" "$TMP/AGENTS.block.md" "AGENTS.md"
+  mkdir -p "$CODEX_DIR/claude-agentic"
+  install_file "$TMP/routing.md" "$CODEX_DIR/claude-agentic/routing.md" "$CODEX_DIR"
+  block_size "$CODEX_DIR/AGENTS.md" 2560
+  codex_doc_advisory "$CODEX_DIR/AGENTS.md"
 }
 
 codex_summary() {

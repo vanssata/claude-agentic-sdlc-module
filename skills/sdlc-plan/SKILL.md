@@ -11,7 +11,8 @@ Output: `docs/sdlc/plans/<slug>.md`.
 
 ## Steps
 
-1. **Prerequisites** — spec and intent exist; `docs/sdlc/plans/TEMPLATE.md` exists (else
+1. **Prerequisites** — read `docs/sdlc/constitution.md` first: it is this project's own list of principles, `C1`…`C<n>`. Cite the ones a decision rests on as `C<n>`. If the file is absent, say so in one line and carry on — it is not a blocker.
+   Spec and intent exist; `docs/sdlc/plans/TEMPLATE.md` exists (else
    `/project-init`). If the spec's **Flagged concerns** contains unresolved items, list them and
    ask the user to resolve or explicitly accept each one before planning.
 2. **Plan-mode reasoning** — treat this as plan mode: read, do not edit code. If the

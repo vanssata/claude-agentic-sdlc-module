@@ -19,13 +19,26 @@ ACTUAL=$(find "$ROOT/.ai" -type f | wc -l)
 [ "$EXPECTED" = "$ACTUAL" ] && pass "every template file was copied ($ACTUAL)" || fail "file count mismatch" "expected $EXPECTED, got $ACTUAL"
 
 for f in AGENTS.md policies/risk-tiers.json policies/safety.md project/overview.md \
-         agents/manager.md workflows/feature.md templates/release-report.md state/README.md VERSION; do
+         agents/manager.md workflows/feature.md templates/release-report.md state/README.md \
+         rules/README.md VERSION; do
     [ -f "$ROOT/.ai/$f" ] && pass ".ai/$f exists" || fail ".ai/$f missing"
 done
 grep -qE '^[0-9]+$' "$ROOT/.ai/VERSION" && pass "a fresh scaffold starts at the shipped schema" || fail ".ai/VERSION should hold a number"
 
 grep -q '.ai/state/\*.json' "$ROOT/.gitignore" && pass ".gitignore excludes the state file" || fail ".gitignore should exclude state"
 grep -q 'claude-agentic:start' "$ROOT/CLAUDE.md" && pass "CLAUDE.md carries the managed block" || fail "CLAUDE.md should carry the block"
+
+echo "== a comma list scaffolds exactly the runtimes it names"
+FOUR="$TMP/four"; mkdir -p "$FOUR"
+bash "$SCAFFOLD" "$FOUR" --runtime claude,gemini >/dev/null
+for f in CLAUDE.md GEMINI.md; do
+    grep -q 'claude-agentic:start' "$FOUR/$f" && pass "$f carries the block" || fail "$f should carry the block"
+done
+for f in AGENTS.md .junie/guidelines.md; do
+    [ -e "$FOUR/$f" ] && fail "$f should not exist: it was not asked for" || pass "$f was not created"
+done
+out=$(bash "$SCAFFOLD" "$FOUR" --runtime nope 2>&1) && fail "an unknown runtime should exit 2" \
+    || printf '%s' "$out" | grep -q 'comma list' && pass "an unknown runtime is refused by name" || fail "wrong message for an unknown runtime" "$out"
 
 echo "== second run"
 out=$(bash "$SCAFFOLD" "$ROOT" 2>&1)

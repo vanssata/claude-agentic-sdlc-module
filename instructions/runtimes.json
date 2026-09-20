@@ -1,0 +1,48 @@
+{
+  "claude": {
+    "FILE": "CLAUDE.md",
+    "HOME": "~/.claude",
+    "RUNTIME_NAME": "Claude Code",
+    "NEW_CONTEXT": "`/clear`",
+    "MULTI_EDIT": "",
+    "TRUST": "",
+    "NOTES_DIR": ".claude/memory/",
+    "SNAPSHOT": " and the guard's \"Session state before compaction\""
+  },
+  "codex": {
+    "FILE": "AGENTS.md",
+    "HOME": "~/.codex",
+    "RUNTIME_NAME": "Codex",
+    "NEW_CONTEXT": "a new thread",
+    "MULTI_EDIT": " One `apply_patch` is checked file by file: a patch that reaches outside the step is refused whole.",
+    "TRUST": " Run `/hooks` once after installing to trust the guards, or they are skipped.",
+    "NOTES_DIR": ".codex/memory/",
+    "SNAPSHOT": ""
+  },
+  "gemini": {
+    "FILE": "GEMINI.md",
+    "HOME": "~/.gemini",
+    "RUNTIME_NAME": "Gemini",
+    "NEW_CONTEXT": "a new chat",
+    "MULTI_EDIT": "",
+    "TRUST": "",
+    "NOTES_DIR": ".gemini/memory/",
+    "SNAPSHOT": ""
+  },
+  "junie": {
+    "FILE": ".junie/guidelines.md",
+    "HOME": "~/.junie",
+    "RUNTIME_NAME": "Junie",
+    "NEW_CONTEXT": "a new session",
+    "MULTI_EDIT": "",
+    "TRUST": "",
+    "NOTES_DIR": ".junie/memory/",
+    "SNAPSHOT": ""
+  },
+  "_budgets": {
+    "global": 2560,
+    "project": 2048,
+    "skeleton": 2048,
+    "skeleton-sdlc": 2048
+  }
+}

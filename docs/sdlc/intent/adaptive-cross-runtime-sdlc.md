@@ -195,7 +195,11 @@ cost findings, Stripe Minions, Shopify Roast, Airbnb test migration, METR, GitCl
   stage, and a 99-event audit taxonomy.
 - Full mutation testing; AI-share-of-code targets; agent fleets.
 - Gemini CLI, Junie and Cursor as full runtimes (agents, hooks, state commands). They get
-  a rendered stub and the prose questionnaire only.
+  a rendered **project** stub and the prose questionnaire only — amended 2026-09-20 (WP3
+  spec concern 2): `install.sh` writes no global `GEMINI.md` or `.junie/guidelines.md`,
+  because a global file for a runtime the plugin does not install hooks or agents into
+  would claim more than it can enforce. `/ai-init` and `/project-update` render the
+  project stub for whichever of the four runtimes the repository declares.
 - OS-level sandboxing and network egress control; only the path guard is extended.
 - Changing the concrete models or effort levels of the existing tiers.
 - Automatic deletion, automatic commits, or migration of application code.
@@ -212,7 +216,7 @@ Each package runs `/sdlc-spec` → `/sdlc-plan` → `/ai-task` on its own; specs
 |---|---|---|---|---|---|
 | 1 | Schema version and structural migrations | `skills/project-update/update.py`, new `migrations/`, `history/`, `tools/build-template-history.py`, `tests/test-project-update.sh`, `tests/test-merge-migration.sh` | T3 | — | **done** (PR #15, #16, merged 2026-09-20) — schema version in `.ai/VERSION`, ordered idempotent migrations inside the dry run, template history following renames, the delete gate and `migration.json`; spec and plan under `…-wp1-schema-migrations.md` |
 | 2 | Questions file, handoff, event journal, human-turn approval | `skills/ai-task/state.py` (`ask`, `answer`, `questions`, `handoff`, `events.jsonl`, `owner_runtime`, approve outside the agent), `hooks/context-guard.py`, a session-start hook, `skills/ai-task/SKILL.md`, `skills/sdlc-intent` | **T4** (raised from T3, 2026-09-20: the deliverable is an authorization control) | 1 | spec done (`…-wp2-questions-handoff-journal.md`) — intent open questions 1 and 2 settled there; spec concerns 1, 2 and 8 answered by the user on 2026-09-20 |
-| 3 | Context diet | `CLAUDE.snippet.md`, `AGENTS.snippet.md`, `skills/ai-init/templates/*.block.md` and `*.minimal.md`, `.ai/AGENTS.md` as a router, `constitution.md` template, byte-budget test, a migration for existing projects | T2–T3 | 1, 2 | not started |
+| 3 | Context diet | `CLAUDE.snippet.md`, `AGENTS.snippet.md`, `skills/ai-init/templates/*.block.md` and `*.minimal.md`, `.ai/AGENTS.md` as a router, `constitution.md` template, byte-budget test, a migration for existing projects | T2–T3 (spec recommends **T3**) | 1, 2 | **done** (`spec/wp3-context-diet`, 2026-09-20) — one source `instructions/stub.md` rendered by `render_instructions.py`, `routing.md` installed beside the block and read on demand, `.ai/AGENTS.md` as a router, `docs/sdlc/constitution.md`, `.ai/rules/`, four runtimes, migration 0003 (schema 3) and `tests/test-instruction-budget.sh`; spec and plan under `…-wp3-context-diet.md`, all ten concerns and six open questions settled with the user |
 | 4 | Deterministic gates | `risk-tiers.json` (diff budget, scopes), `state.py step-done` diff measurement, new `skills/ai-task/sensors.py`, tier re-scoring, retry rule in `ai-tester`, "test must bite" check | T3 | 1 (can run beside 3) | not started |
 | 5 | Runtimes and plans | new `profiles/max20.json`, preferred-runtime and budget tables in every profile, `install.sh` plan detection + confirmation, `fable-gate` / `codex-model-gate` → `runtime-gate`, `state.py handoff --to`, grep test that shared prompts name no model | T3 | 2 | not started |
 | 6 | `project-update --adopt` | `update.py --adopt`: detection, mapping table, `migrate` (default) / `coexist`, no-line-lost and no-dangling-reference checks, report, `--cleanup` behind approval; fixtures for Spec Kit, Kiro, Cursor, a large `CLAUDE.md` | T3 (deletion treated as T5 → approval) | 1, 3 | not started |

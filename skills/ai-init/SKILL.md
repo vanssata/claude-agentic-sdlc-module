@@ -174,6 +174,13 @@ Adjust `.ai/policies/risk-tiers.json` to this project — the tier examples shou
 name this codebase's actual critical areas, not generic ones. If you change the
 JSON, update `risk-tiers.md` and its `sha256` comment to match.
 
+Then fill `docs/sdlc/constitution.md` from the survey. C1–C5 ship prefilled and
+are not this project's to invent; C6 onwards are, one line each, drawn from what
+the code and the tests already enforce — a rule nobody can point at in the
+codebase is not a principle. Leave a slot empty rather than writing a platitude,
+stay under fifteen, and show the list to the user for confirmation:
+`render_instructions.py constitution docs/sdlc/constitution.md` checks the cap.
+
 ### 5. Write the initial assessment
 
 `.ai/project/initial-assessment.md`, with these sections:

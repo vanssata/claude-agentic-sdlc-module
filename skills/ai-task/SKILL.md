@@ -148,6 +148,31 @@ That is the whole path. The sections below are for T3 and above, and for the
 
 ## 1. Walk the pipeline
 
+The stages, in order. Which of them exist for a task is the tier's answer, and
+which of them you delegate is the profile's; none is skipped because the change
+"looks easy" — that judgement is what the risk classification replaces.
+
+```
+REQUEST
+  → DISCOVERY            what exists, where, who calls it
+  → CONTEXT              the compressed, structured summary
+  → IMPACT ANALYSIS      what this change reaches
+  → RISK CLASSIFICATION  T0 … T5, from .ai/policies/risk-tiers.json
+  → PLAN                 steps, each with the files it may touch
+  → PLAN REVIEW          T3 and above
+  → IMPLEMENTATION       one approved step at a time
+  → TEST                 the step's own tests, then the suite once, then e2e once
+  → ADVERSARIAL REVIEW   assumes the implementation is wrong
+  → SECURITY REVIEW      mandatory at T4 and T5
+  → RELEASE REPORT
+  → HUMAN APPROVAL
+```
+
+Everything an agent writes into `.ai/project/` carries an evidence label — KNOWN
+FACT with `file:line`, INFERENCE with what it was drawn from, UNKNOWN, RISK. An
+inference is never recorded as a fact; where the documentation and the code
+disagree, both are written down and a human decides which is the bug.
+
 Record every stage transition, so the state file is a true audit trail:
 
 ```bash

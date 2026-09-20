@@ -17,7 +17,9 @@ Output: `docs/sdlc/specs/<slug>.md` with the same slug.
 
 ## Organisational skills = what this project already says
 
-Before designing, collect the policies the spec must conform to, in this order:
+Before designing, read `docs/sdlc/constitution.md` first: it is this project's own list of principles, `C1`…`C<n>`. Cite the ones a decision rests on as `C<n>`. If the file is absent, say so in one line and carry on — it is not a blocker.
+
+Then collect the policies the spec must conform to, in this order:
 
 1. the repo-root instruction file — `CLAUDE.md` and/or `AGENTS.md`, whichever exist — and the
    global one of the runtime you are in (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`), bounded reads.

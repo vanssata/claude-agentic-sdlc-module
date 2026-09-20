@@ -47,7 +47,10 @@
     "(^|/)\\.github/copilot-instructions\\.md$",
     "(^|/)\\.junie/guidelines\\.md$",
     "(^|/)\\.cursor/rules/",
-    "(^|/)\\.cursorrules$"
+    "(^|/)\\.cursorrules$",
+    "(^|/)\\.ai/rules/",
+    "(^|/)\\.claude/rules/",
+    "(^|/)docs/sdlc/constitution\\.md$"
   ],
   "dependency_instruction_patterns": [
     "(^|/)(vendor|node_modules|bower_components|third_party|Pods|site-packages|\\.venv|\\.pnpm|\\.yarn)/(.*/)?(CLAUDE|AGENTS|GEMINI|CONVENTIONS)\\.md$",

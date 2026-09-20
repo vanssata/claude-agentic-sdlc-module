@@ -76,4 +76,19 @@ for phrase in "ancestor of" "is \`\$HOME\`" "never ran \`/ai-init\`"; do
     else fail "step 1 no longer covers: $phrase" "the warning that makes an inherited root visible is gone"; fi
 done
 
+# The status report is where a project learns what its always-loaded block
+# costs: install.sh says it once, at install time, and never again for a
+# project's own files. If the step goes, nobody is told.
+echo "== the report names what loads on every turn"
+if grep -q 'render_instructions.py' "$SKILL" && grep -q 'measure .*--block --budget 2048' "$SKILL"; then
+    pass "the budget step measures the project block against 2048 B"
+else
+    fail "the instruction-budget step no longer measures the block" \
+         "expected a render_instructions.py measure --block --budget 2048 call"
+fi
+for phrase in "GEMINI.md" ".junie/guidelines.md" "docs/sdlc/constitution.md" "OVER"; do
+    if grep -qF "$phrase" "$SKILL"; then pass "the budget step covers: $phrase"
+    else fail "the budget step no longer covers: $phrase"; fi
+done
+
 summary "ai-status project root"

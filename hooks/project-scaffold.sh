@@ -40,19 +40,29 @@ fi
 # What the project already declares wins; a project that declares nothing gets
 # the runtime this copy of the plugin was installed for, so scaffolding from a
 # Codex session does not leave a stray CLAUDE.md behind (and the reverse).
-DO_CLAUDE=0 DO_CODEX=0
-case "$RUNTIME" in
-  claude) DO_CLAUDE=1;;
-  codex)  DO_CODEX=1;;
-  both)   DO_CLAUDE=1; DO_CODEX=1;;
-  auto)
-    if [ -e "$ROOT/CLAUDE.md" ] || [ -d "$ROOT/.claude" ]; then DO_CLAUDE=1; fi
-    if [ -e "$ROOT/AGENTS.md" ] || [ -d "$ROOT/.codex" ];  then DO_CODEX=1;  fi
-    if [ "$DO_CLAUDE" = 0 ] && [ "$DO_CODEX" = 0 ]; then
-      case "$HERE" in *"/.codex/"*) DO_CODEX=1;; *) DO_CLAUDE=1;; esac
-    fi;;
-  *) echo "project-scaffold: --runtime must be auto|claude|codex|both (got '$RUNTIME')" >&2; exit 2;;
-esac
+DO_CLAUDE=0 DO_CODEX=0 DO_GEMINI=0 DO_JUNIE=0
+[ "$RUNTIME" = both ] && RUNTIME="claude,codex"
+if [ "$RUNTIME" = auto ]; then
+  if [ -e "$ROOT/CLAUDE.md" ] || [ -d "$ROOT/.claude" ]; then DO_CLAUDE=1; fi
+  if [ -e "$ROOT/AGENTS.md" ] || [ -d "$ROOT/.codex" ];  then DO_CODEX=1;  fi
+  if [ -e "$ROOT/GEMINI.md" ] || [ -d "$ROOT/.gemini" ]; then DO_GEMINI=1; fi
+  if [ -d "$ROOT/.junie" ]; then DO_JUNIE=1; fi
+  if [ "$DO_CLAUDE" = 0 ] && [ "$DO_CODEX" = 0 ] && [ "$DO_GEMINI" = 0 ] && [ "$DO_JUNIE" = 0 ]; then
+    case "$HERE" in *"/.codex/"*) DO_CODEX=1;; *) DO_CLAUDE=1;; esac
+  fi
+else
+  old_ifs="$IFS"; IFS=,
+  for one in $RUNTIME; do
+    case "$one" in
+      claude) DO_CLAUDE=1;;
+      codex)  DO_CODEX=1;;
+      gemini) DO_GEMINI=1;;
+      junie)  DO_JUNIE=1;;
+      *) echo "project-scaffold: --runtime must be auto|both or a comma list of claude,codex,gemini,junie (got '$one')" >&2; exit 2;;
+    esac
+  done
+  IFS="$old_ifs"
+fi
 
 created=()
 PROJECT_ESC=$(printf '%s' "$PROJECT" | sed -e 's/[\/&\\]/\\&/g')
@@ -75,6 +85,7 @@ put intent.md              docs/sdlc/intent/TEMPLATE.md
 put spec.md                docs/sdlc/specs/TEMPLATE.md
 put plan.md                docs/sdlc/plans/TEMPLATE.md
 put adr.md                 docs/sdlc/adr/TEMPLATE.md
+put constitution.md        docs/sdlc/constitution.md "s/{{PROJECT}}/$PROJECT_ESC/g"
 
 # ---------------------------------------------------------------- per runtime
 if [ "$DO_CLAUDE" = 1 ]; then
@@ -92,6 +103,14 @@ if [ "$DO_CODEX" = 1 ]; then
   keep .codex/agents
   keep .codex/skills
   put AGENTS.md              AGENTS.md "s/{{PROJECT}}/$PROJECT_ESC/g"
+fi
+if [ "$DO_GEMINI" = 1 ]; then
+  put memory-README.md       .gemini/memory/README.md
+  put GEMINI.md              GEMINI.md "s/{{PROJECT}}/$PROJECT_ESC/g"
+fi
+if [ "$DO_JUNIE" = 1 ]; then
+  put memory-README.md       .junie/memory/README.md
+  put junie-guidelines.md    .junie/guidelines.md "s/{{PROJECT}}/$PROJECT_ESC/g"
 fi
 
 # .gitignore: append the snippet only if its first real entry is absent

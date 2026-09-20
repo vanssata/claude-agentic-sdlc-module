@@ -1,0 +1,1 @@
+{"case":"editing a directory rule while a task is in flight is denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Edit","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/.ai/rules/payment.md"}}}

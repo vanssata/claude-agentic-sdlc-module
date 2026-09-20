@@ -39,19 +39,31 @@ fi
 # ---------------------------------------------------------------- runtimes
 # What the project already declares wins; a project that declares nothing gets
 # the runtime this copy of the plugin was installed for.
-DO_CLAUDE=0 DO_CODEX=0
-case "$RUNTIME" in
-  claude) DO_CLAUDE=1;;
-  codex)  DO_CODEX=1;;
-  both)   DO_CLAUDE=1; DO_CODEX=1;;
-  auto)
-    if [ -e "$ROOT/CLAUDE.md" ] || [ -d "$ROOT/.claude" ]; then DO_CLAUDE=1; fi
-    if [ -e "$ROOT/AGENTS.md" ] || [ -d "$ROOT/.codex" ];  then DO_CODEX=1;  fi
-    if [ "$DO_CLAUDE" = 0 ] && [ "$DO_CODEX" = 0 ]; then
-      case "$HERE" in *"/.codex/"*) DO_CODEX=1;; *) DO_CLAUDE=1;; esac
-    fi;;
-  *) echo "scaffold-ai: --runtime must be auto|claude|codex|both (got '$RUNTIME')" >&2; exit 2;;
-esac
+DO_CLAUDE=0 DO_CODEX=0 DO_GEMINI=0 DO_JUNIE=0
+# `both` is the two runtimes that carry the pipeline; a comma list names any of
+# the four; `auto` takes what the project already declares.
+[ "$RUNTIME" = both ] && RUNTIME="claude,codex"
+if [ "$RUNTIME" = auto ]; then
+  if [ -e "$ROOT/CLAUDE.md" ] || [ -d "$ROOT/.claude" ]; then DO_CLAUDE=1; fi
+  if [ -e "$ROOT/AGENTS.md" ] || [ -d "$ROOT/.codex" ];  then DO_CODEX=1;  fi
+  if [ -e "$ROOT/GEMINI.md" ] || [ -d "$ROOT/.gemini" ]; then DO_GEMINI=1; fi
+  if [ -d "$ROOT/.junie" ]; then DO_JUNIE=1; fi
+  if [ "$DO_CLAUDE" = 0 ] && [ "$DO_CODEX" = 0 ] && [ "$DO_GEMINI" = 0 ] && [ "$DO_JUNIE" = 0 ]; then
+    case "$HERE" in *"/.codex/"*) DO_CODEX=1;; *) DO_CLAUDE=1;; esac
+  fi
+else
+  old_ifs="$IFS"; IFS=,
+  for one in $RUNTIME; do
+    case "$one" in
+      claude) DO_CLAUDE=1;;
+      codex)  DO_CODEX=1;;
+      gemini) DO_GEMINI=1;;
+      junie)  DO_JUNIE=1;;
+      *) echo "scaffold-ai: --runtime must be auto|both or a comma list of claude,codex,gemini,junie (got '$one')" >&2; exit 2;;
+    esac
+  done
+  IFS="$old_ifs"
+fi
 
 created=()
 
@@ -83,6 +95,7 @@ fi
 PROJECT_ESC=$(printf '%s' "$PROJECT" | sed -e 's/[\/&\\]/\\&/g')
 instruction_file() {  # instruction_file <name> <minimal-template> <block-template>
   local md="$ROOT/$1"
+  mkdir -p "$(dirname "$md")"
   if [ ! -e "$md" ]; then
     sed -e "s/{{PROJECT}}/$PROJECT_ESC/g" "$TPL/$2" > "$md"
     created+=("$1")
@@ -94,6 +107,8 @@ instruction_file() {  # instruction_file <name> <minimal-template> <block-templa
 }
 if [ "$DO_CLAUDE" = 1 ]; then instruction_file CLAUDE.md CLAUDE.minimal.md CLAUDE.block.md; fi
 if [ "$DO_CODEX"  = 1 ]; then instruction_file AGENTS.md AGENTS.minimal.md AGENTS.block.md; fi
+if [ "$DO_GEMINI" = 1 ]; then instruction_file GEMINI.md GEMINI.minimal.md GEMINI.block.md; fi
+if [ "$DO_JUNIE"  = 1 ]; then instruction_file .junie/guidelines.md junie-guidelines.minimal.md junie-guidelines.block.md; fi
 
 if [ ${#created[@]} -eq 0 ]; then
   echo "scaffold-ai: nothing to do in $ROOT (already scaffolded)"

@@ -405,6 +405,41 @@ rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing an interpreter one-liner that writes the task's own control files.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/39-bash-python-writes-session-json.json
 rc=0
+### ai-git-guard | fixture path-guard/40-edit-ai-rule-in-task.json
+rc=0
+### ai-path-guard | fixture path-guard/40-edit-ai-rule-in-task.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write runtime configuration while task T-2026-09-09-001 is in flight: __TMP__/project/.ai/rules/payment.md (matched: (^|/)\\.ai/rules/)\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/40-edit-ai-rule-in-task.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/rules/payment.md is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
+### ai-git-guard | fixture path-guard/41-read-ai-rule-in-task.json
+rc=0
+### ai-path-guard | fixture path-guard/41-read-ai-rule-in-task.json
+rc=0
+### ai-scope-guard | fixture path-guard/41-read-ai-rule-in-task.json
+rc=0
+### ai-git-guard | fixture path-guard/42-write-claude-rule-in-task.json
+rc=0
+### ai-path-guard | fixture path-guard/42-write-claude-rule-in-task.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write runtime configuration while task T-2026-09-09-001 is in flight: __TMP__/project/.claude/rules/payment.md (matched: (^|/)\\.claude/rules/)\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/42-write-claude-rule-in-task.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .claude/rules/payment.md is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
+### ai-git-guard | fixture path-guard/43-edit-constitution-in-task.json
+rc=0
+### ai-path-guard | fixture path-guard/43-edit-constitution-in-task.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write runtime configuration while task T-2026-09-09-001 is in flight: __TMP__/project/docs/sdlc/constitution.md (matched: (^|/)docs/sdlc/constitution\\.md$)\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/43-edit-constitution-in-task.json
+rc=0
+### ai-git-guard | fixture path-guard/44-read-constitution-in-task.json
+rc=0
+### ai-path-guard | fixture path-guard/44-read-constitution-in-task.json
+rc=0
+### ai-scope-guard | fixture path-guard/44-read-constitution-in-task.json
+rc=0
 ### ai-git-guard | fixture scope-guard/01-in-scope.json
 rc=0
 ### ai-path-guard | fixture scope-guard/01-in-scope.json

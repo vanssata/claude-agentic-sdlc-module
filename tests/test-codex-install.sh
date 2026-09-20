@@ -115,8 +115,9 @@ n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/hooks.json")
 
 echo "== the managed AGENTS.md block"
 [ "$(grep -c 'claude-agentic:start' "$DIR/AGENTS.md")" = 1 ] && pass "exactly one managed block" || fail "expected one managed block"
-grep -q 'gpt-5.6-terra' "$DIR/AGENTS.md" && pass "the block names the BALANCED model" || fail "the block should name Terra"
-grep -q 'gpt-6-astra' "$DIR/AGENTS.md" && pass "the block names the EXPERT model" || fail "the block should name Astra"
+grep -q 'gpt-5.6-terra' "$DIR/claude-agentic/routing.md" && pass "routing.md names the BALANCED model" || fail "routing.md should name Terra"
+grep -q 'gpt-6-astra' "$DIR/claude-agentic/routing.md" && pass "routing.md names the EXPERT model" || fail "routing.md should name Astra"
+grep -q 'Models are tiers, not names' "$DIR/AGENTS.md" && pass "the block carries tiers, not model names" || fail "the block should carry tiers, not names"
 grep -q 'ai-task' "$DIR/AGENTS.md" && pass "the block carries the pipeline contract" || fail "the pipeline contract is missing"
 
 echo "== re-install is idempotent"
