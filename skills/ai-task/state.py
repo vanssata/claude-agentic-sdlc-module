@@ -37,7 +37,8 @@ Usage:
   state.py note   decision|rejected|failed "<text>" [--why TEXT] [--error TEXT]
   state.py events [--last N] [--type t1,t2] [--task ID] [--format lines|jsonl]
   state.py event  <type> [--detail TEXT] [--data JSON]   # for hooks; type must be in EVENT_TYPES
-  state.py approve --by NAME
+  state.py approve --by NAME [--note TEXT]   # outside the agent: a TTY, or AI_UNATTENDED
+  state.py reject  --by NAME --why TEXT
   state.py done   [--abandon]
   state.py archive                       # move current.json into .ai/reports/<task_id>/state.json
   state.py close                         # done + archive in one call
@@ -125,7 +126,7 @@ RUNTIME = "unknown"
 # task from the other runtime, or writing a note about it, is not a handoff.
 MUTATING_COMMANDS = {
     "init", "stage", "risk", "triage", "quick", "plan", "remediate", "step", "step-done",
-    "set", "risks", "modules", "ask", "answer", "approve", "done", "close",
+    "set", "risks", "modules", "ask", "answer", "approve", "reject", "done", "close",
 }
 MUTATING = False
 
@@ -443,6 +444,8 @@ def cmd_stage(args, root):
     state = load(root)
     previous = state["current_stage"]
     state["current_stage"] = args.stage
+    if args.stage == "human_approval":
+        request_gate(root, state, "human_approval")
     emit(root, state, "stage_started",
          "%s -> %s%s" % (previous, args.stage, ": " + args.note if args.note else ""),
          {"from": previous, "to": args.stage, "note": args.note}, legacy="stage")
@@ -1272,19 +1275,128 @@ def guard_pending(root, command):
            " ".join("%s=<letter>" % i for i in ids), state.get("current_stage")), 4)
 
 
+def gate_question_text(task_id):
+    return "Approve %s for implementation?" % task_id
+
+
+def request_gate(root, state, gate):
+    """stage human_approval is the request: it puts the gate's own question in
+    the file, stamps requested_at and says so in the journal. A second request
+    refreshes the stamp and reuses the question rather than stacking G2, G3."""
+    path = questions_path(root, state, None)
+    with question_lock(path):
+        lines, questions = parse_questions(path)
+        pending_gate = [q for q in questions if q["kind"] == "G" and is_pending(q)]
+        if not pending_gate:
+            number = max([q["number"] for q in questions if q["kind"] == "G"] or [0]) + 1
+            while lines and not lines[-1].strip():
+                lines.pop()
+            if not any(line.startswith("# Questions") for line in lines):
+                lines = (QUESTIONS_HEADER % state["task_id"]).rstrip("\n").split("\n") + lines
+            lines.extend(question_block({
+                "id": "G%d" % number,
+                "question": "%s (gate: %s)" % (gate_question_text(state["task_id"]), gate),
+                "options": [("A", "Approve"), ("B", "Reject — answer as `B: <reason>`")],
+            }, "human_approval", None))
+            write_questions(path, lines)
+        _, questions = parse_questions(path)
+    state["human_approval"]["requested_at"] = now()
+    set_pending(root, state, questions, path)
+    emit(root, state, "gate_requested", gate,
+         {"gate": gate, "requested_at": state["human_approval"]["requested_at"]})
+
+
+def gate_requested(root, state):
+    """The durable signal is the state's requested_at; the journal line is the
+    record of it. Approval must not depend on a journal that is best effort by
+    contract (concern 10), so either is enough — and neither can be set by
+    anything but `stage human_approval`."""
+    if (state.get("human_approval") or {}).get("requested_at"):
+        return True
+    events, _ = read_journal(root, state["task_id"])
+    return any(event.get("event") == "gate_requested" for event in events)
+
+
+def close_gate(root, state, choice, text, by, via):
+    """approve and reject are the gate question's `answer`. Without this its G1
+    would stay pending and block the very next command (Risks 3); `answer` still
+    refuses a G id, because this is the only route that may close one."""
+    path = questions_path(root, state, None)
+    with question_lock(path):
+        lines, questions = parse_questions(path)
+        gates = [q for q in questions if q["kind"] == "G" and is_pending(q)]
+        if not gates:
+            return None
+        gate = gates[-1]
+        lines[gate["answer_at"]] = answer_line(choice, text, by, via)
+        write_questions(path, lines)
+        _, questions = parse_questions(path)
+    set_pending(root, state, questions, path)
+    return gate["id"]
+
+
+def refuse_approval(root, state, by):
+    gates = [q["id"] for q in parse_questions(questions_path(root, state, None))[1]
+             if q["kind"] == "G" and is_pending(q)]
+    die("APPROVAL_REFUSED — approval happens outside the agent. Run in your own terminal:\n"
+        "  python3 %s --root %s approve --by \"%s\"\n"
+        "or set [Answer]: A on %s in %s and tell the session to sync. An unattended run exports "
+        "AI_UNATTENDED=1 in the launcher's environment; the journal then records the approval as "
+        "unattended."
+        % (os.path.abspath(__file__), root, by, gates[-1] if gates else "G1",
+           os.path.relpath(questions_path(root, state, None), root)), 5)
+
+
 def cmd_approve(args, root):
+    """The one thing the agent cannot do. A pending Q blocks this at exit 4
+    before we get here; what is left is whether the approval comes from outside
+    the agent, and whether anyone asked for it (R11)."""
     state = load(root)
+    if state["human_approval"].get("granted"):
+        # One approval per gate, or the unattended signal in the journal is
+        # unreadable. A repeat prints the grant that exists.
+        print("already approved by %s at %s (via %s)"
+              % (state["human_approval"].get("granted_by"),
+                 state["human_approval"].get("granted_at"),
+                 state["human_approval"].get("via")))
+        return
+    if not gate_requested(root, state):
+        die("APPROVAL_REFUSED — no gate was requested: run 'state.py stage human_approval' "
+            "after presenting the plan.", 5)
+    unattended = bool(os.environ.get("AI_UNATTENDED"))
+    tty = os.isatty(0)
+    if not (tty or unattended):
+        refuse_approval(root, state, args.by)
+    via = "unattended" if unattended else "terminal"
+    close_gate(root, state, "A", args.note, args.by, via)
     state["human_approval"].update({
-        "required": True, "granted": True,
-        "granted_by": args.by, "granted_at": now(),
+        "required": True, "granted": True, "granted_by": args.by,
+        "granted_at": now(), "via": via, "unattended": unattended,
     })
-    # via/unattended/tty stay unset here: the routes that fill them, and the
-    # refusal that guards them, are step 3's.
-    emit(root, state, "gate_approved", "granted by %s" % args.by,
-         {"by": args.by, "via": None, "unattended": False, "tty": None},
-         legacy="human_approval")
+    emit(root, state, "gate_approved", "granted by %s via %s" % (args.by, via),
+         {"by": args.by, "via": via, "unattended": unattended, "tty": tty},
+         legacy="human_approval", actor="human")
     save(root, state)
-    print("approved by %s" % args.by)
+    print("approved by %s (via %s)%s" % (args.by, via, " — recorded as unattended" if unattended else ""))
+
+
+def cmd_reject(args, root):
+    """Rejection needs no terminal: it cannot let anything through. It is
+    recorded with the same honesty as an approval and leaves the stage alone."""
+    state = load(root)
+    if not gate_requested(root, state):
+        die("APPROVAL_REFUSED — no gate was requested: run 'state.py stage human_approval' "
+            "after presenting the plan.", 5)
+    close_gate(root, state, "B", args.why, args.by, "terminal" if os.isatty(0) else "prose")
+    state["human_approval"].update({
+        "required": True, "granted": False, "granted_by": None, "granted_at": None,
+        "via": None, "unattended": False,
+    })
+    state["next_action"] = "address the rejection: %s" % one_line(args.why)
+    emit(root, state, "gate_rejected", "%s: %s" % (args.by, args.why),
+         {"by": args.by, "why": args.why}, actor="human")
+    save(root, state)
+    print("rejected by %s; stage stays at %s" % (args.by, state["current_stage"]))
 
 
 def cmd_done(args, root):
@@ -1389,7 +1501,11 @@ def main():
     p.add_argument("--format", choices=["lines", "jsonl"], default="lines")
     p.set_defaults(func=cmd_events)
 
-    p = sub.add_parser("approve"); p.add_argument("--by", required=True); p.set_defaults(func=cmd_approve)
+    p = sub.add_parser("approve"); p.add_argument("--by", required=True)
+    p.add_argument("--note", default=""); p.set_defaults(func=cmd_approve)
+
+    p = sub.add_parser("reject"); p.add_argument("--by", required=True)
+    p.add_argument("--why", required=True); p.set_defaults(func=cmd_reject)
 
     p = sub.add_parser("done"); p.add_argument("--abandon", action="store_true")
     p.set_defaults(func=cmd_done)

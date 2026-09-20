@@ -153,7 +153,11 @@ S stage adversarial_review >/dev/null; S set review_status passed >/dev/null
 S stage security_review >/dev/null;  S set security_status passed >/dev/null
 S stage release_report >/dev/null
 S stage human_approval >/dev/null
-S approve --by "the human" >/dev/null
+out=$(S approve --by "the human" 2>&1); rc=$?
+[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "approval happens outside the agent" \
+  && pass "approval is refused to a session whose stdin is a pipe" || fail "approve should exit 5 under a pipe" "exit $rc: $out"
+# What a launcher does, and what the journal must then say it was.
+AI_UNATTENDED=1 python3 "$DIR/skills/ai-task/state.py" --root "$REPO" approve --by "the human" >/dev/null
 S done >/dev/null
 [ "$(S get --field current_stage)" = done ] && pass "the task reached done" || fail "task should be done"
 
@@ -176,6 +180,8 @@ ARCHIVED=$(S archive)
 [ -f "$ARCHIVED" ] && pass "the closed task is archived under .ai/reports/" || fail "archive failed"
 jq -e '.history | length >= 12' "$ARCHIVED" >/dev/null && pass "its history records every stage" || fail "history too short"
 jq -e '.human_approval.granted == true' "$ARCHIVED" >/dev/null && pass "and who approved it" || fail "approval not recorded"
+jq -e '.human_approval.unattended == true and .human_approval.via == "unattended"' "$ARCHIVED" >/dev/null \
+    && pass "and that no human was at a terminal for it" || fail "the unattended approval should be visible for ever"
 
 echo "== no application code was touched by any of this"
 changed=$(git -C "$REPO" status --porcelain -- src | wc -l)
