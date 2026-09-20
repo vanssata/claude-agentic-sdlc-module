@@ -71,6 +71,19 @@ This is a handful of `ls` and `grep -n` calls, not a delegation. Look for:
 `phpstan.neon*`, `psalm.xml`, `ecs.php`, `rector.php`, `.php-cs-fixer*`,
 `playwright.config.*`, `cypress.config.*`, `sonar-project.properties`.
 
+One command does the part of this that the sensors will need later — the lint
+and type-check lines `testing.md` asks for. It proposes and runs nothing:
+
+```bash
+python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/ai-task/sensors.py" --root . detect
+```
+
+Write what it proposes into the **Verification** block of
+`.ai/policies/testing.md`, or write `none` where the project genuinely has no
+such tool. A line left empty is read as "not written down yet" and keeps every
+review — which is the safe reading, but it is not the same as saying there is
+nothing to run.
+
 For a Symfony or Sylius project also check, when present: `config/bundles.php`,
 `config/packages/`, `src/Entity`, `src/Repository`, state machines and workflows,
 Messenger transports and handlers, a command bus, event subscribers and

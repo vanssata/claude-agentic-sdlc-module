@@ -30,6 +30,7 @@ Usage:
   state.py step-done <step_id> [--force]    measures the step's diff against the tier's budget
                                          and its allowed files; exit 6 asks for a split
   state.py step-split <step_id> --files a,b [--note TEXT]   move part of a step into its own
+  state.py review-gate                   # all sensors green at T2 -> review_status=skipped_green
   state.py test-run --scope step|suite|e2e [--files a,b] [--env-retry]
                                          runs the project's own command to the end, records it,
                                          and puts the output in a file instead of the context
@@ -145,14 +146,20 @@ RUNTIME = "unknown"
 # task from the other runtime, or writing a note about it, is not a handoff.
 MUTATING_COMMANDS = {
     "init", "stage", "risk", "triage", "quick", "plan", "remediate", "step", "step-done",
-    "step-split", "test-run", "set", "risks", "modules", "ask", "answer", "done", "close",
+    "step-split", "test-run", "review-gate", "set", "risks", "modules", "ask", "answer",
+    "done", "close",
 }
 MUTATING = False
+
+# `skipped_green` is missing on purpose: it is a verdict review-gate reaches from
+# measurements, never a value anybody may assert. A review nobody did and nobody
+# measured would otherwise be one `set` away.
+SETTABLE_REVIEW_STATUS = [v for v in REVIEW_STATUS if v != "skipped_green"]
 
 SETTABLE = {
     "test_status": TEST_STATUS,
     "e2e_status": E2E_STATUS,
-    "review_status": REVIEW_STATUS,
+    "review_status": SETTABLE_REVIEW_STATUS,
     "security_status": SECURITY_STATUS,
     "next_action": None,
     "context_summary_ref": None,
@@ -1013,6 +1020,51 @@ def cmd_test_run(args, root):
     sys.exit(1)
 
 
+def cmd_review_gate(args, root):
+    """The one place the sensor set can replace a model review.
+
+    It replaces it only at or below `skip_review_at_or_below`, only when every
+    required sensor measured something and that something was green, and only on
+    the tree as it is right now. Anything else — a red sensor, a tool nobody
+    wrote down, a result from an older tree, a diff that re-scores above the
+    ceiling — and the review runs exactly as it did before, with the sensor rows
+    attached so the reviewer does not re-derive what is already settled.
+    """
+    state = load(root)
+    if sensors is None:
+        die("sensors.py is not installed beside state.py — run the review the tier asks for")
+    policy = load_policy(root)
+    report = safe_sensor(sensors.check, root, state, policy, args.no_bite, None)
+    if report is None:
+        die("the sensors could not run — run the review the tier asks for")
+    safe_sensor(sensors.write_report, root, state, report, None)
+    state["sensors"] = {"file": os.path.relpath(sensors.sensors_file(root, state), root),
+                        "tree": report["tree"], "verdict": report["verdict"]["review"],
+                        "checked_at": report["checked_at"]}
+    sensors.print_report(report, root)
+
+    if not report["verdict"]["all_green"]:
+        state["next_action"] = "run the adversarial review the tier requires"
+        emit(root, state, "field_set", "sensors: review required",
+             {"field": "sensors", "value": report["verdict"]["review"],
+              "blocking": report["verdict"]["blocking"]})
+        write_handoff(root, state, "stage")
+        save(root, state)
+        print("the ledger has what the sensors settled: %s"
+              % os.path.relpath(sensors.ledger_file(root, state), root))
+        sys.exit(2)
+
+    previous = state.get("review_status")
+    state["review_status"] = "skipped_green"
+    state["next_action"] = "finish the task: the sensors stand in for the review at this tier"
+    emit(root, state, "field_set", "review_status = skipped_green (every sensor green on %s)"
+         % (report["tree"] or "?")[:9],
+         {"field": "review_status", "from": previous, "value": "skipped_green",
+          "tree": report["tree"], "tier": state.get("risk_tier")})
+    write_handoff(root, state, "stage")
+    save(root, state)
+
+
 def cmd_close(args, root):
     cmd_done(args, root)
     cmd_archive(args, root)
@@ -1022,6 +1074,9 @@ def cmd_set(args, root):
     if args.field not in SETTABLE:
         die("settable fields: %s" % ", ".join(sorted(SETTABLE)))
     allowed = SETTABLE[args.field]
+    if args.field == "review_status" and args.value == "skipped_green":
+        die("review_status 'skipped_green' is written only by review-gate, from the sensors. "
+            "Run: state.py review-gate")
     if allowed and args.value not in allowed:
         die("%s must be one of: %s" % (args.field, ", ".join(allowed)))
     state = load(root)
@@ -2256,6 +2311,10 @@ def main():
     p.add_argument("--force", action="store_true",
                    help="record the step although the diff gate refused it; say why in the plan")
     p.set_defaults(func=cmd_step_done)
+    p = sub.add_parser("review-gate")
+    p.add_argument("--no-bite", action="store_true", dest="no_bite",
+                   help="skip the slow sensor; it then blocks the skip as unavailable")
+    p.set_defaults(func=cmd_review_gate)
     p = sub.add_parser("test-run")
     p.add_argument("--scope", required=True, choices=["step", "suite", "e2e"])
     p.add_argument("--files", default="")

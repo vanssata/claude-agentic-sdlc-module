@@ -426,4 +426,56 @@ OUT=$(NB bite --restore 2>&1)
 [ ! -f "$BITE/.ai/state/bite.lock" ] \
     && pass "and clears the lock once the tree matches" || fail "the lock should be gone"
 
+echo "== section 10: the review gate"
+python3 - "$BITE" <<'PY2'
+import json, sys
+p = sys.argv[1] + "/.ai/state/current.json"
+state = json.load(open(p))
+step = state["approved_plan"]["steps"][0]
+step["kind"] = "implementation"
+step["required_tests"] = ["tests/fee_test.py"]
+json.dump(state, open(p, "w"), indent=2)
+PY2
+B test-run --scope suite >/dev/null
+OUT=$(B review-gate 2>&1); RC=$?
+[ $RC -eq 0 ] && printf '%s' "$OUT" | grep -q 'review: skipped' \
+    && pass "T2 with every sensor green replaces the review (decision 6)" \
+    || fail "should skip the review" "$OUT($RC)"
+[ "$(B get --field review_status)" = skipped_green ] \
+    && pass "and records why, as a verdict nobody asserted" || fail "review_status should be skipped_green"
+[ -f "$BITE/.ai/reports/$BTASK/sensors.json" ] \
+    && pass "the report a human can read is on disk" || fail "sensors.json should exist"
+
+OUT=$(B set review_status skipped_green 2>&1); RC=$?
+[ $RC -ne 0 ] && printf '%s' "$OUT" | grep -q 'review-gate' \
+    && pass "no one can assert a skipped review by hand" || fail "set should refuse" "$OUT($RC)"
+
+# One unavailable sensor is enough: a tool nobody wrote down is not a pass.
+python3 - "$BITE" <<'PY2'
+import sys
+p = sys.argv[1] + "/.ai/policies/testing.md"
+s = open(p).read().replace("lint_command:        none\n", "")
+open(p, "w").write(s)
+PY2
+OUT=$(B review-gate 2>&1); RC=$?
+[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'review: required' \
+    && pass "a missing linter keeps the review, it does not grant a skip" \
+    || fail "should require the review" "$OUT($RC)"
+python3 - "$BITE" <<'PY2'
+import sys
+p = sys.argv[1] + "/.ai/policies/testing.md"
+open(p, "a").write("lint_command:        none\n")
+PY2
+
+# From T3 the sensors never replace the review, however green they are.
+AI_UNATTENDED=1 B risk T3 --note "shared behaviour after all" >/dev/null
+B test-run --scope suite >/dev/null
+OUT=$(B review-gate 2>&1); RC=$?
+[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'above T2' \
+    && pass "at T3 the review always runs — the sensors only feed it" \
+    || fail "T3 should require the review" "$OUT($RC)"
+grep -q 'sensors.py' "$BITE/.ai/reports/$BTASK/review-ledger.md" \
+    && pass "and what they settled is waiting in the ledger for the reviewer" \
+    || fail "the ledger should carry the sensor rows"
+
 summary "sensors"
