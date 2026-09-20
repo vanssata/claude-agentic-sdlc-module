@@ -68,7 +68,7 @@ printf '%s' "$out" | grep -q 'plan            pro' && pass "the summary names th
 for f in agents/ai-expert.toml agents/ai-reviewer.toml agents/ai-risk-strong.toml \
          agents/ai-planner-strong.toml agents/architect.toml agents/Explore.toml \
          hooks/ai-git-guard.sh hooks/ai-path-guard.sh hooks/ai-scope-guard.sh \
-         hooks/codex-model-gate.py hooks/lib/ai-hook-common.sh hooks/ai-git-guard.json \
+         hooks/codex-model-gate.py hooks/context-guard.py hooks/lib/ai-hook-common.sh hooks/ai-git-guard.json \
          hooks/ai-path-guard-defaults.json hooks.json config.toml AGENTS.md \
          skills/ai-task/state.py skills/ai-init/scaffold-ai.sh skills/usage-report/usage-report.py; do
     [ -e "$DIR/$f" ] && pass "$f installed" || fail "$f missing"
@@ -94,6 +94,24 @@ jq -e '.hooks.PreToolUse[] | select(.matcher | test("apply_patch")) | .hooks[0].
     && pass "the scope guard watches apply_patch" || fail "the scope guard should match apply_patch"
 jq -e '.hooks.SubagentStop[0].hooks[0].command | test("codex-model-gate")' "$DIR/hooks.json" >/dev/null \
     && pass "the model gate listens on SubagentStop" || fail "SubagentStop hook missing"
+
+# Codex has both compaction events and SessionStart, so the context guard is
+# registered on the same three events it serves on the Claude side.
+for ev in UserPromptSubmit PreCompact SessionStart; do
+    n=$(jq --arg e "$ev" '[.hooks[$e][]?.hooks[]?.command | select(test("context-guard"))] | length' "$DIR/hooks.json")
+    [ "$n" = 1 ] && pass "the context guard is registered once under $ev" || fail "expected one $ev registration, got $n"
+done
+[ "$(jq -r '.hooks.SessionStart[] | select(.hooks[].command | test("context-guard")) | .matcher' "$DIR/hooks.json")" \
+    = "startup|resume|clear|compact" ] \
+    && pass "on every SessionStart source, as on the Claude side" || fail "the SessionStart matcher is wrong"
+[ "$(jq -r '.hooks.UserPromptSubmit[0].hooks[0].timeout' "$DIR/hooks.json")" = 5 ] \
+    && pass "with the prompt path on the shorter timeout" || fail "UserPromptSubmit should time out at 5"
+
+CODEX_DIR="$DIR" bash "$INSTALL" --target codex >/dev/null 2>&1
+n=$(jq '[.hooks | to_entries[] | .value[] | .hooks[] | .command | select(test("context-guard"))] | length' "$DIR/hooks.json")
+[ "$n" = 3 ] && pass "a second install does not duplicate any of the three" || fail "expected 3 registrations after a re-install, got $n"
+n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/hooks.json")
+[ "$n" = 4 ] && pass "and the PreToolUse count is still four" || fail "PreToolUse should stay 4, got $n"
 
 echo "== the managed AGENTS.md block"
 [ "$(grep -c 'claude-agentic:start' "$DIR/AGENTS.md")" = 1 ] && pass "exactly one managed block" || fail "expected one managed block"

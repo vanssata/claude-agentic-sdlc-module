@@ -100,8 +100,14 @@ CODEX_DIR="$CDIR" bash "$PLUGIN_ROOT/install.sh" >/dev/null 2>&1
 [ -f "$CDIR/hooks/ai-scope-guard.sh" ] && pass "installed into a scratch CODEX_DIR" || fail "codex install failed"
 [ -f "$CDIR/agents/ai-reviewer.toml" ] && pass "the Codex agent roster is rendered" || fail "codex agents missing"
 [ -e "$CDIR/hooks/cap-large-read.py" ] && fail "cap-large-read has no Codex counterpart" || pass "no Claude-only hook is installed into Codex"
-[ -e "$CDIR/hooks/context-guard.py" ] && fail "context-guard reads Claude Code transcripts; it has no Codex counterpart" || pass "context-guard is not installed into Codex"
-grep -q 'context-guard' "$CDIR/hooks.json" 2>/dev/null && fail "context-guard is registered in the Codex hooks" || pass "context-guard is not registered in the Codex hooks"
+# Codex has UserPromptSubmit, PreCompact and SessionStart, so the context guard
+# crosses: the handoff, the questions and session.json are the same on both
+# sides. What does not cross is the transcript-derived snapshot, which is built
+# from a Claude transcript — the script knows which runtime it is in from its
+# own location.
+[ -e "$CDIR/hooks/context-guard.py" ] && pass "the context guard is installed into Codex too" || fail "context-guard should be installed into Codex"
+[ "$(jq '[.hooks | to_entries[] | .value[] | .hooks[] | .command | select(test("context-guard"))] | length' "$CDIR/hooks.json")" = 3 ] \
+    && pass "and registered on its three events there" || fail "expected three Codex registrations" "$(jq -c '.hooks | keys' "$CDIR/hooks.json")"
 
 CODEX_SCOPE="$CDIR/hooks/ai-scope-guard.sh"
 CODEX_PATH="$CDIR/hooks/ai-path-guard.sh"

@@ -782,13 +782,18 @@ codex_dry_run() {
 
 # The guard scripts Codex can actually use. cap-large-read.py and fable-gate.py
 # are deliberately absent: Codex has no hookable Read tool, and Fable is a
-# Claude model.
+# Claude model. context-guard.py is here because Codex has both compaction
+# events and SessionStart, so the handoff, the questions and session.json cross
+# unchanged; what does not cross is the transcript-derived snapshot, which is
+# built from a Claude transcript and stays Claude-only. The same file serves
+# both: it reads its own location to know which runtime it is in.
 codex_hook_files() {
   printf '%s\n' \
     "$SRC/hooks/ai-git-guard.sh" \
     "$SRC/hooks/ai-path-guard.sh" \
     "$SRC/hooks/ai-scope-guard.sh" \
-    "$SRC/hooks/codex-model-gate.py"
+    "$SRC/hooks/codex-model-gate.py" \
+    "$SRC/hooks/context-guard.py"
 }
 
 codex_apply() {
