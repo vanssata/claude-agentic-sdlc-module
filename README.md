@@ -443,6 +443,7 @@ No suite reads or writes the developer's real `~/.claude` or `~/.codex`.
 | `docs/architecture.md` | how the pieces fit: `.ai/`, the pipeline, state, hooks, the two adapters |
 | `docs/agents.md` | the roster, contracts and when each agent runs |
 | `docs/hooks.md` | every rule the guards enforce, their configuration and limits |
+| `docs/hook-performance.md` | what the guards cost per tool call, the budget, and how a change is proved behaviour-preserving |
 | `docs/risk-tiers.md` | how classification works and how to tune it |
 | `docs/workflows.md` | the five workflows and how one is chosen |
 | `docs/faq.md` | why something was blocked, and how to change it |

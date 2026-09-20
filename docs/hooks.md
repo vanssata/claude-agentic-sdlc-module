@@ -122,7 +122,7 @@ to look for a `.ai/` directory above the working directory; without one it exits
 immediately, which is why it can be registered globally and still be invisible in
 repositories that never opted in.
 
-It refuses two kinds of path:
+It refuses four kinds of path:
 
 **Sensitive** — `.env` and its environment variants, `secrets/`, `credentials/`,
 `.ssh/`, private keys and certificates, cloud credential files, `.sql` dumps and
@@ -134,6 +134,27 @@ scripts and configuration under `~/.claude/hooks/ai-*` and `~/.codex/hooks/ai-*`
 (including `codex-model-gate.py`). Reading them is fine;
 writing them is not. State is written by `state.py`; policy is edited by a human,
 outside an agent run, where the change is reviewable.
+
+**Runtime configuration, while a task is in flight** — `.claude/settings*.json`,
+`.claude/agents/`, `skills/`, `commands/`, `hooks/`, `plugins/`, the `.codex/`
+equivalents and `config.toml`, and the pipeline's own `.ai/policies/`,
+`.ai/workflows/`, `.ai/templates/` and `.ai/AGENTS.md`, plus the other runtimes'
+instruction files (`.cursorrules`, `.cursor/rules/`, `.github/copilot-instructions.md`,
+`.junie/guidelines.md`). Reading is fine; writing is refused **only while an
+`/ai-task` run owns the project** — `.ai/state/current.json` exists and has not
+reached `done`. A run may not edit the rules it is being judged by; `state.py
+close` archives the task and the same files become ordinary files again. A state
+file that does not parse counts as in flight, because refusing to unlock the
+configuration on the strength of a corrupt file costs nothing.
+
+**Instruction files inside a dependency** — a `CLAUDE.md`, `AGENTS.md`,
+`GEMINI.md`, `.cursorrules`, `copilot-instructions.md` or the like under
+`vendor/`, `node_modules/`, `Pods/`, `site-packages/`, `third_party/` and
+friends. Both reading and writing are refused, always. Such a file is
+third-party text that arrived with a package: it is **data**, it carries no
+authority over the task, and the next install overwrites it anyway. Ordinary
+source inside a dependency is untouched — the rule is about instruction files,
+not about the directory.
 
 Both the literal path and its `realpath` are checked, so a symlink pointing at
 `.env` is caught. `ln -s .env public/x` is refused at creation time, because the
@@ -147,9 +168,11 @@ after a single `grep`, which keeps it at tens of milliseconds even on a
 200-argument command.
 
 Configuration: `hooks/ai-path-guard-defaults.json` (shipped, do not edit) unioned
-with `.ai/policies/path-guard.json` (per project). Allow wins over deny. When the
-guard refuses something it should not, **widen the allow list** — do not route
-around it.
+with `.ai/policies/path-guard.json` (per project), in five lists —
+`deny_patterns`, `allow_patterns`, `protected_config_patterns`,
+`task_protected_patterns` and `dependency_instruction_patterns`. Allow wins over
+every one of the others. When the guard refuses something it should not,
+**widen the allow list** — do not route around it.
 
 ## ai-scope-guard — during an implementation step
 
@@ -292,3 +315,9 @@ through the real script. `tests/fixtures/codex-hooks/` holds the Codex ones,
 including `apply_patch` payloads that touch several files at once. Adding a rule
 means adding a fixture — including one that proves the rule does **not** fire
 where it should not, which is the half that gets forgotten.
+
+`tests/test-guard-characterization.sh` is the other half: it pins the exact
+behaviour of all three guards — exit code and full deny text, byte for byte —
+against a golden file, so a change made purely for speed can be proved to change
+nothing. See `docs/hook-performance.md` for what the guards cost per tool call,
+the budget they are held to, and what is deliberately not optimised.

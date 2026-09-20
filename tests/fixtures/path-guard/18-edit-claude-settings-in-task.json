@@ -1,0 +1,1 @@
+{"case":"editing .claude/settings.json while a task is in flight is denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Edit","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/.claude/settings.local.json"}}}
