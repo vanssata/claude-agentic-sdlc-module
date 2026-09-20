@@ -137,7 +137,12 @@ bash tests/test-instruction-budget.sh && bash tests/test-dual-runtime-install.sh
 Files: `skills/project-update/migrations/0003_context_diet.py`,
 `skills/project-update/update.py` (the `MigrationContext` helpers of I9 and the
 original-copy rule), `tests/fixtures/project-update/schema-v2/`,
-`tests/test-project-update.sh`.
+`tests/test-project-update.sh`, and — amendment, 2026-09-20 —
+`skills/ai-init/templates/.ai/VERSION` (`2` -> `3`) with the `skills/project-update/history/`
+rebuild it needs: a migration that is not matched by the schema the templates ship leaves
+every freshly scaffolded project claiming the old schema, which `test-project-update.sh`
+catches ("a freshly scaffolded project is up to date"). WP2 bumped it in the same commit as
+0002.
 The section is matched **verbatim against a shipped history version** — never by a regex
 over the user's prose. An edited block produces a hint, never a write. The migration emits
 no `conflict` and no `delete?`, so it never holds `.ai/VERSION`. Proof:

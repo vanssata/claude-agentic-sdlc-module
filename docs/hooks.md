@@ -160,7 +160,11 @@ for a future session. All three are written by `state.py` alone — `ask`,
 equivalents and `config.toml`, and the pipeline's own `.ai/policies/`,
 `.ai/workflows/`, `.ai/templates/` and `.ai/AGENTS.md`, plus the other runtimes'
 instruction files (`.cursorrules`, `.cursor/rules/`, `.github/copilot-instructions.md`,
-`.junie/guidelines.md`). Reading is fine; writing is refused **only while an
+`.junie/guidelines.md`). The rule sources join them: `.ai/rules/` and the
+`.claude/rules/` copies rendered from it are instructions for a directory, and
+`docs/sdlc/constitution.md` is what the spec and the plan are judged against — a
+task that could rewrite either could widen its own scope or drop the principle
+it is failing. Reading is fine; writing is refused **only while an
 `/ai-task` run owns the project** — `.ai/state/current.json` exists and has not
 reached `done`. A run may not edit the rules it is being judged by; `state.py
 close` archives the task and the same files become ordinary files again. A state

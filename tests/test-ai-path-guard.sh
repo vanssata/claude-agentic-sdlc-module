@@ -8,7 +8,8 @@ TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 ROOT="$TMP/project"
 
 mkdir -p "$ROOT"/{.ai/state,.ai/policies,src,config,var,migrations} \
-         "$ROOT"/{.claude/agents,.codex,vendor/acme/pkg,node_modules/foo}
+         "$ROOT"/{.claude/agents,.claude/rules,.codex,vendor/acme/pkg,node_modules/foo} \
+         "$ROOT"/{.ai/rules,docs/sdlc}
 printf 'SECRET=1\n' > "$ROOT/.env"
 printf 'SECRET=\n'  > "$ROOT/.env.example"
 printf '{}\n'       > "$ROOT/.ai/state/current.json"
@@ -17,6 +18,9 @@ printf 'x\n'        > "$ROOT/src/Service.php"
 printf 'x\n'        > "$ROOT/var/dump-2026-09-01.sql"
 printf 'x\n'        > "$ROOT/migrations/Version20260101.sql"
 printf 'x\n'        > "$ROOT/.claude/agents/ai-reviewer.md"
+printf 'x\n'        > "$ROOT/.ai/rules/payment.md"
+printf 'x\n'        > "$ROOT/.claude/rules/payment.md"
+printf 'x\n'        > "$ROOT/docs/sdlc/constitution.md"
 printf 'x\n'        > "$ROOT/vendor/acme/pkg/AGENTS.md"
 printf 'x\n'        > "$ROOT/vendor/acme/pkg/.cursorrules"
 printf 'x\n'        > "$ROOT/node_modules/foo/CLAUDE.md"

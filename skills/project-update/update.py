@@ -27,7 +27,7 @@ version closest to it (git merge-file for text, per key for JSON), keeping every
 edit. A real conflict leaves the project file alone and puts the plugin's version
 in a git-ignored local directory for a human or /project-update to merge.
 """
-import argparse, copy, difflib, hashlib, json, os, re, subprocess, sys, tempfile
+import argparse, contextlib, copy, difflib, hashlib, io, json, os, re, subprocess, sys, tempfile
 from collections import OrderedDict
 from datetime import datetime, timezone
 
@@ -36,6 +36,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import migrations  # noqa: E402  # lives next to this script
 from migrations import SchemaError  # noqa: E402
+import render_instructions  # noqa: E402  # lives next to this script
 SKILLS = os.path.dirname(HERE)
 TEMPLATES = {
     "ai-init": os.environ.get("CLAUDE_AGENTIC_TEMPLATES", os.path.join(SKILLS, "ai-init", "templates")),
@@ -44,6 +45,11 @@ TEMPLATES = {
 HISTORY = os.environ.get("CLAUDE_AGENTIC_HISTORY", os.path.join(HERE, "history"))
 VERSION_FILE = ".ai/VERSION"
 STATE_FILE = ".ai/state/current.json"
+RULES_DIR = ".ai/rules"
+# Directories a stale rule block is never hunted in: a dependency's instruction
+# file is not ours (the path guard refuses it too), and .git is not text.
+RULES_SKIP = {".git", ".ai", "vendor", "node_modules", "bower_components",
+              "third_party", "Pods", "site-packages", ".venv", ".pnpm", ".yarn"}
 START, END = "<!-- claude-agentic:start -->", "<!-- claude-agentic:end -->"
 MISSING = object()
 HASH_RE = re.compile(rb"sha256:[0-9a-f]{64}")
@@ -54,17 +60,40 @@ PROJECT_INIT_MAP = [  # template -> target, kind
     ("spec.md", "docs/sdlc/specs/TEMPLATE.md", "update"),
     ("plan.md", "docs/sdlc/plans/TEMPLATE.md", "update"),
     ("adr.md", "docs/sdlc/adr/TEMPLATE.md", "update"),
+    # the project's own principles: created once, then it is the project's file
+    ("constitution.md", "docs/sdlc/constitution.md", "create"),
 ]
 RUNTIME_MAP = {  # the per-runtime layer of the project-init scaffold
     "claude": [("memory-README.md", ".claude/memory/README.md", "update"),
                ("project-settings.json", ".claude/settings.json", "create")],
     "codex":  [("memory-README.md", ".codex/memory/README.md", "update"),
                ("project-config.toml", ".codex/config.toml", "create")],
+    "gemini": [("memory-README.md", ".gemini/memory/README.md", "update")],
+    "junie":  [("memory-README.md", ".junie/memory/README.md", "update")],
 }
 INSTRUCTION_FILE = {  # runtime -> (file, block template, minimal template)
     "claude": ("CLAUDE.md", "CLAUDE.block.md", "CLAUDE.minimal.md"),
     "codex":  ("AGENTS.md", "AGENTS.block.md", "AGENTS.minimal.md"),
+    "gemini": ("GEMINI.md", "GEMINI.block.md", "GEMINI.minimal.md"),
+    "junie":  (".junie/guidelines.md", "junie-guidelines.block.md",
+               "junie-guidelines.minimal.md"),
 }
+SKELETON = {  # runtime -> the project-init template that scaffolds its instruction file
+    "claude": "CLAUDE.md",
+    "codex":  "AGENTS.md",
+    "gemini": "GEMINI.md",
+    "junie":  "junie-guidelines.md",
+}
+
+
+def instruction_history_keys():
+    """{instruction file: [history keys]} — a root instruction file is shipped
+    twice, as the project-init skeleton that scaffolds it and as the ai-init
+    minimal template, so a migration that matches shipped text must see both."""
+    out = {}
+    for runtime, (name, _, minimal_tpl) in INSTRUCTION_FILE.items():
+        out[name] = ["project-init/" + SKELETON[runtime], "ai-init/" + minimal_tpl]
+    return out
 
 
 def template_targets():
@@ -85,6 +114,10 @@ def project_runtimes(root):
         out.append("claude")
     if os.path.exists(os.path.join(root, "AGENTS.md")) or os.path.isdir(os.path.join(root, ".codex")):
         out.append("codex")
+    if os.path.exists(os.path.join(root, "GEMINI.md")) or os.path.isdir(os.path.join(root, ".gemini")):
+        out.append("gemini")
+    if os.path.isdir(os.path.join(root, ".junie")):
+        out.append("junie")
     if not out:
         out.append("codex" if "/.codex/" in HERE + "/" else "claude")
     return out
@@ -252,13 +285,60 @@ def detect_version(plan):
 class MigrationContext:
     """What a migration sees: the project as this run leaves it, not the disk."""
 
-    def __init__(self, plan, module, version_from, state):
+    def __init__(self, plan, module, version_from, state, history):
         self.plan = plan
         self.module = module
         self.version_from = version_from
         self.state = state
+        self.history = history
         self.root = plan.root
         self.runtimes = project_runtimes(plan.root)
+
+    # ---- what the plugin shipped, so a migration can recognise its own text
+    # instead of matching a regular expression against the project's prose.
+    def instruction_files(self):
+        """The root instruction files this project actually has, one per runtime
+        it declares."""
+        return [INSTRUCTION_FILE[rt][0] for rt in self.runtimes
+                if self.exists(INSTRUCTION_FILE[rt][0])]
+
+    def shipped(self, path):
+        """Every version of every template the plugin ever shipped at this
+        project path, oldest first. Renamed templates come with it: History
+        follows the MOVES chain and RETIRED."""
+        keys = list(instruction_history_keys().get(path, []))
+        key = migrations.template_key(path, template_targets())
+        if key and key not in keys:
+            keys.append(key)
+        out = []
+        for k in keys:
+            for version in self.history.versions(k):
+                if version not in out:
+                    out.append(version)
+        return out
+
+    def block_status(self, path):
+        """"none" when this file has no managed block, "shipped" when the block
+        is one the plugin installed, "edited" when a human changed it inside the
+        markers — the one case where the plugin never writes over it."""
+        text = self.read(path)
+        runtime = next((rt for rt, entry in INSTRUCTION_FILE.items() if entry[0] == path), None)
+        if text is None or runtime is None:
+            return "none"
+        start, end = text.find(START.encode()), text.find(END.encode())
+        if start < 0 or end < 0:
+            return "none"
+        ours = text[start:end + len(END)] + b"\n"
+        block_tpl = INSTRUCTION_FILE[runtime][1]
+        tpl = read(os.path.join(TEMPLATES["ai-init"], block_tpl))
+        if ours == tpl or ours in self.history.versions("ai-init/" + block_tpl):
+            return "shipped"
+        return "edited"
+
+    def hint(self, text):
+        """Say something to the human that is not an operation on a file."""
+        if text not in self.plan.hints:
+            self.plan.hints.append(text)
 
     def exists(self, path):
         return self.read(path) is not None
@@ -316,14 +396,14 @@ class MigrationContext:
         self._add("move", dst, content=data, src=src)
         self.plan.remove(src)
 
-    def edit_text(self, path, fn):
+    def edit_text(self, path, fn, note="migrated"):
         """Rewrite a text file the project has; fn returns its input to do nothing."""
         data = self.read(path)
         if data is None:
             return
         new = fn(data)
         if new != data:
-            self._add("update", path, "migrated", content=new)
+            self._add("update", path, note, content=new)
 
     def edit_json(self, path, fn):
         """Rewrite a JSON file the project has. A policy file's leaf changes are
@@ -379,7 +459,7 @@ class MigrationContext:
         self.plan.remove(path)
 
 
-def run_migrations(plan, version):
+def run_migrations(plan, version, history):
     """Plan every migration this project is missing, oldest first, before the
     three-way merge sees a single file. Returns the modules that ran."""
     mods = [m for m in migrations.load() if version < m.VERSION <= migrations.CURRENT]
@@ -404,7 +484,7 @@ def run_migrations(plan, version):
         planned = plan.final.get(STATE_FILE)
         if planned is not None:
             state = json.loads(planned, object_pairs_hook=OrderedDict)
-        mod.plan(MigrationContext(plan, mod, version, copy.deepcopy(state)))
+        mod.plan(MigrationContext(plan, mod, version, copy.deepcopy(state), history))
     if state is not None:
         plan.hints.append("%s: a task is in flight while the schema changes — check that the files "
                           "its current step may touch still exist afterwards" % STATE_FILE)
@@ -580,6 +660,94 @@ def block_update(plan, history, runtime):
     plan.add("update", name, note, content=text[:s] + new_block.rstrip(b"\n") + text[e:])
 
 
+def rendered_rules(plan):
+    """Every (file, slug) in the project that carries a rule block today, plus
+    every path-scoped copy under .claude/rules/. Walked rather than remembered:
+    a manifest would be one more file to keep true, and the markers already say
+    who wrote them."""
+    blocks, docs = [], []
+    names = set(render_instructions.RULE_FILE.values())
+    for dirpath, dirnames, filenames in os.walk(plan.root):
+        dirnames[:] = sorted(d for d in dirnames if d not in RULES_SKIP)
+        rel_dir = os.path.relpath(dirpath, plan.root)
+        for name in sorted(filenames):
+            rel = name if rel_dir == "." else os.path.join(rel_dir, name)
+            rel = rel.replace(os.sep, "/")
+            if name in names:
+                text = plan.read(rel)
+                if text is None:
+                    continue
+                for slug in render_instructions.rule_slugs_in(text.decode("utf-8", "replace")):
+                    blocks.append((rel, slug))
+            elif rel.startswith(render_instructions.CLAUDE_RULES_DIR + "/") and name.endswith(".md"):
+                text = plan.read(rel)
+                if text is not None and render_instructions.RULE_GENERATED % name[:-3] in \
+                        text.decode("utf-8", "replace"):
+                    docs.append(rel)
+    return blocks, docs
+
+
+def rules_update(plan, runtimes):
+    """Render `.ai/rules/<slug>.md` into the instruction file of every directory
+    it names, and take back what a rule no longer asks for. The text around a
+    block belongs to the project and is never read for meaning, only preserved."""
+    rules_path = os.path.join(plan.root, RULES_DIR)
+    if not os.path.isdir(rules_path):
+        return
+    try:
+        rules = render_instructions.load_rules(rules_path)
+    except render_instructions.RenderError as exc:
+        plan.hints.append("%s — that rule is not rendered; the rest are" % exc)
+        return
+    wanted = render_instructions.rule_targets(rules, runtimes)
+    managed = {(i["target"], i["slug"]) for i in wanted if i["kind"] == "block"}
+    kept_docs = {i["target"] for i in wanted if i["kind"] == "doc"}
+
+    for item in wanted:
+        source = "%s/%s.md" % (RULES_DIR, item["slug"])
+        target, content = item["target"], item["content"]
+        current = plan.read(target)
+        if item["kind"] == "doc":
+            new = content.encode()
+            if current is None:
+                plan.add("create", target, "rendered from " + source, content=new)
+            elif current != new:
+                plan.add("update", target, "rendered from " + source, content=new)
+            continue
+        text = "" if current is None else current.decode("utf-8")
+        new = render_instructions.splice_rule(text, item["slug"], content).encode()
+        if current is None:
+            plan.add("create", target, "rule block %s from %s" % (item["slug"], source),
+                     content=new)
+        elif current != new:
+            plan.add("update", target, "rule block %s from %s" % (item["slug"], source),
+                     content=new)
+
+    blocks, docs = rendered_rules(plan)
+    for target, slug in blocks:
+        if (target, slug) in managed:
+            continue
+        text = plan.read(target).decode("utf-8")
+        # The block is ours; the file is not. Take the block, leave the file.
+        plan.add("update", target, "rule block %s removed (%s/%s.md no longer renders here)"
+                 % (slug, RULES_DIR, slug),
+                 content=render_instructions.strip_rule(text, slug).encode())
+    for target in docs:
+        if target in kept_docs:
+            continue
+        # The whole file is a rendered copy, so taking it away is a deletion, and
+        # a deletion waits for a human exactly as a migration's does.
+        slug = os.path.basename(target)[:-3]
+        why = "[rules] %s" % ("%s/%s.md no longer sets paths:" % (RULES_DIR, slug)
+                              if slug in {r.slug for r in rules}
+                              else "source %s/%s.md is gone" % (RULES_DIR, slug))
+        if plan.confirm_delete:
+            plan.add("delete", target, why, reason=why)
+            plan.remove(target)
+        else:
+            plan.add("delete?", target, why, reason=why)
+
+
 def gitignore_update(plan, snippet_path):
     snippet = read(snippet_path).decode().splitlines()
     current = plan.read(".gitignore") or b""
@@ -594,6 +762,52 @@ def gitignore_update(plan, snippet_path):
     # Replace an earlier .gitignore item from this run instead of stacking two.
     plan.items = [i for i in plan.items if i["target"] != ".gitignore" or i["migration"] is not None]
     plan.add("update", ".gitignore", "entries appended: " + ", ".join(missing), content=new)
+
+
+def budget_hints(plan, runtimes):
+    """What the always-loaded block costs this project after this run.
+
+    Downstream the budget is advisory (R4): the plugin measures its own block
+    and says what it costs, but a project's own file is never refused. A block
+    that is over budget and still the one the plugin installed is the plugin's
+    to trim; an edited one is the project's."""
+    try:
+        cap = render_instructions.budgets(render_instructions.DEFAULT_SOURCE).get("project")
+    except render_instructions.RenderError:
+        return
+    if not cap:
+        return
+    for rt in runtimes:
+        name, block_tpl, _ = INSTRUCTION_FILE[rt]
+        text = plan.read(name)
+        if text is None:
+            continue
+        block = render_instructions.block_of(text.decode("utf-8", "replace"))
+        if block is None:
+            continue
+        size = len(block.encode("utf-8"))
+        if size <= cap:
+            continue
+        shipped = read(os.path.join(TEMPLATES["ai-init"], block_tpl)).rstrip(b"\n")
+        whose = ("the plugin ships it that size — report it"
+                 if block.encode("utf-8").rstrip() == shipped
+                 else "it was edited here, so the plugin will not rewrite it: trimming it is yours")
+        plan.hints.append("%s: the managed block is %d B, budget %d B — %s"
+                          % (name, size, cap, whose))
+
+
+def constitution_hint(plan):
+    """R10: the cap is hard for the shipped template and advisory for a project.
+    The rule lives in render_instructions; this only relays what it says."""
+    rel = "docs/sdlc/constitution.md"
+    path = os.path.join(plan.root, rel)
+    if not os.path.isfile(path):
+        return
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        render_instructions.constitution(path, out=io.StringIO())
+    for line in err.getvalue().splitlines():
+        plan.hints.append(line.replace(path, rel))
 
 
 def build_plan(root, confirm_delete=None):
@@ -616,7 +830,7 @@ def build_plan(root, confirm_delete=None):
             raise SchemaError("%s says schema %d, this plugin ships schema %d — update the plugin "
                               "(claude-agentic/install.sh)" % (VERSION_FILE, version, migrations.CURRENT))
         if version < migrations.CURRENT:
-            mods = run_migrations(plan, version)
+            mods = run_migrations(plan, version, history)
             plan.schema = (version, migrations.CURRENT, mods)
             # The schema only advances when its migrations are done. Writing
             # VERSION over an unresolved conflict, or over a deletion nobody has
@@ -673,6 +887,7 @@ def build_plan(root, confirm_delete=None):
             three_way(plan, history, "ai-init/" + rel, rel, content)
         for rt in runtimes:
             block_update(plan, history, rt)
+        rules_update(plan, runtimes)
         gitignore_update(plan, os.path.join(tpl, "gitignore.snippet"))
 
         testing = plan.read(".ai/policies/testing.md")
@@ -686,6 +901,10 @@ def build_plan(root, confirm_delete=None):
                     plan.hints.append(".ai/policies/testing.md: %s is empty — %s" % (field, why))
                 elif not re.search(rb"(?m)^" + field.encode() + rb":", testing):
                     plan.hints.append(".ai/policies/testing.md: %s is missing — %s" % (field, why))
+        budget_hints(plan, runtimes)
+
+    if has_sdlc:
+        constitution_hint(plan)
     return plan
 
 
@@ -837,6 +1056,13 @@ def apply_item(plan, item, written, recorded):
                          if action == "delete" else [])
     elif item["content"] is not None:
         check(plan, item, target, item["expect"], written)
+        # A migration rewriting a file outside .ai/ is rewriting a file the
+        # project owns. Keep what it had, exactly as a move or a deletion does,
+        # so a rewrite a human disagrees with can be read back and undone.
+        if item["migration"] is not None and not target.startswith(".ai/") \
+                and item["expect"] is not None and target not in written \
+                and not os.path.exists(os.path.join(plan.root, plan.report_dir, "original", target)):
+            keep_original(plan, target)
     if item["content"] is not None:
         write_file(plan.root, target, item["content"], mode=mode)
         written[target] = sha(item["content"])

@@ -117,6 +117,22 @@ in the git-ignored copy the line names.
 the project is healthy and what a green run ends with, and fill the Verification
 section of `.ai/policies/testing.md`. Every `/ai-task` depends on it.
 
+`the managed block is N B, budget 2048 B`: the always-loaded block costs more
+than a project block is meant to cost, and it is re-read on every turn of every
+task. The hint says whose it is to fix. *Edited here* means the plugin will not
+rewrite it — offer to move the project's own lines out of the markers, so the
+next run can replace the block with the plugin's stub. *The plugin ships it that
+size* is a plugin bug: report it, do not trim the project's file.
+
+`N principles, at most 15` / `N B, at most 4096` on
+`docs/sdlc/constitution.md`: advisory here, hard only for the plugin's own
+template. A constitution nobody can hold in their head is not one — offer to
+move the principles that are really policy into `.ai/policies/`.
+
+`that rule is not rendered; the rest are`: a file under `.ai/rules/` did not
+parse. Name it and what it needs (a `paths:` list and a body); the other rules
+were rendered.
+
 ## 7. Report
 
 ```bash
@@ -171,3 +187,27 @@ prefix, a one-line `TITLE`, a static `MOVES` list and `plan(ctx)`.
   conflict or an unconfirmed deletion holds it back. Every `fn` must therefore be
   idempotent: append a line only when it is not already there, or the next run
   appends it again.
+
+### What a migration can ask the plugin
+
+`ctx` carries what the plugin knows about itself, so a migration recognises its
+own text instead of matching a pattern against the human's prose:
+
+- `ctx.instruction_files()` — the root instruction files this project actually
+  has, one per runtime it declares (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`,
+  `.junie/guidelines.md`).
+- `ctx.shipped(path)` — every version of every template the plugin ever
+  installed at that path, oldest first, following renames. A migration that
+  removes shipped text matches it **verbatim against one of these**; a regular
+  expression over the project's prose is how a migration eats a paragraph
+  somebody wrote.
+- `ctx.block_status(path)` — `"none"`, `"shipped"` or `"edited"` for the managed
+  block. An edited block is never written over, by a migration or by anything
+  else.
+- `ctx.hint(text)` — say something to the human that is not an operation on a
+  file. The right answer whenever the text is no longer the plugin's.
+
+A migration that edits a file **outside `.ai/`** is editing the project's own
+file: `apply` copies the original to
+`.ai/reports/project-update-<date>/original/<path>` before the first write, so
+what was there is recoverable without git.

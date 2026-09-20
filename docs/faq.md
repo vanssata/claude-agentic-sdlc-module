@@ -188,6 +188,39 @@ decline a proposed deletion and carry on. `.ai/VERSION` is the schema of the `.a
 tree; the `"version"` inside `.ai/policies/risk-tiers.json` is that one file's
 content version, and the two are unrelated.
 
+## My `CLAUDE.md` block got much shorter. Where did the rules go?
+
+Nowhere — they moved off the always-loaded path. What stays in the managed block
+is what an agent is unsafe without: production behaviour as the source of truth,
+`/ai-task` and `.ai/AGENTS.md`, the scope rule and `SCOPE_CHANGE_REQUIRED`, no
+commit / push / merge / deploy, verify before reporting done, the context rules,
+and tiers rather than model names. Everything else is one hop away:
+
+- **the model ladder, the context-guard thresholds, the launcher, the guard
+  list** → `~/.claude/claude-agentic/routing.md` (`~/.codex/` under Codex),
+  installed beside the block and read when a routing question actually comes up;
+- **the pipeline's procedure** → `/ai-task` itself, and the project's
+  `.ai/AGENTS.md`, which is now a router: one row per job, pointing at the
+  policy under `.ai/policies/` that answers it;
+- **the project's own non-negotiables** → `docs/sdlc/constitution.md`, cited as
+  `C<n>` by `/sdlc-spec`, `/sdlc-plan` and `ai-planner`;
+- **a rule that only applies in one directory** → `.ai/rules/<slug>.md`, which
+  `/project-update` renders into that directory's instruction file.
+
+An always-loaded file is re-read on every turn of every task, so its size is a
+tax on every task, including the ones it has nothing to do with. The budget is
+2 048 B for a project block and 2 560 B for the global one; `install.sh` prints
+what yours costs after every install, and `/ai-status` prints it for a project.
+Both are advisory for a file the plugin does not own: it measures, it never
+trims your text.
+
+Existing projects are migrated by schema 3, which removes the `## SDLC workflow`
+section the plugin used to write into the root instruction file — only when it
+is still verbatim what the plugin shipped, and the original is kept under
+`.ai/reports/project-update-<date>/original/`. A block you edited inside the
+markers is never rewritten; you get a hint saying so instead, and a second one
+naming the byte count whenever the block is over budget.
+
 ## Do I have to run `/ai-init` before `/ai-task`?
 
 Yes. Without `.ai/` there are no policies, no tier table, no state directory and

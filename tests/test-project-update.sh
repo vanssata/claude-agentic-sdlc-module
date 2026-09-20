@@ -88,7 +88,7 @@ cmp -s "$P/.ai/workflows/bugfix.md" "$PLUGIN_ROOT/skills/ai-init/templates/.ai/w
     && pass "an untouched file is replaced" || fail "bugfix.md not updated"
 [ "$(cat "$P/.ai/project/overview.md")" = "the overview a human wrote" ] && pass ".ai/project/ is never updated" || fail "the knowledge base was touched"
 [ -f "$P/.ai/templates/review-report.md" ] && pass "a missing template is created" || fail "missing file not created"
-grep -q 'keep me' "$P/CLAUDE.md" && grep -q 'pipeline_profile' "$P/CLAUDE.md" \
+grep -q 'keep me' "$P/CLAUDE.md" && grep -q '.ai/state/handoff.md' "$P/CLAUDE.md" \
     && pass "the CLAUDE.md block is updated and the rest of the file kept" || fail "CLAUDE.md update wrong"
 [ "$(grep -c 'claude-agentic:start' "$P/CLAUDE.md")" = 1 ] && pass "one managed block remains" || fail "block duplicated"
 printf '%s' "$out" | grep -q 'verify_command is empty' && pass "an empty verify_command is flagged" || fail "hint missing" "$out"
@@ -131,8 +131,24 @@ echo "== a dual-runtime project keeps both instruction files in step"
 P5="$TMP/proj5"; mkdir -p "$P5"
 CLAUDE_AGENTIC_TEMPLATES="$OLD/ai-init/templates" bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$P5" --runtime both >/dev/null
 python3 "$UPDATE" "$P5" --apply >/dev/null 2>&1
-grep -q 'pipeline_profile' "$P5/CLAUDE.md" && grep -q 'claude-agentic:start' "$P5/AGENTS.md" \
+grep -q '.ai/state/handoff.md' "$P5/CLAUDE.md" && grep -q 'claude-agentic:start' "$P5/AGENTS.md" \
     && pass "both blocks are brought up to date over the one .ai/ tree" || fail "dual-runtime blocks not updated"
+
+echo "== a project that also declares Gemini and Junie gets their blocks too"
+P6="$TMP/proj6"; mkdir -p "$P6"
+bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$P6" --runtime claude,codex,gemini,junie >/dev/null
+for f in GEMINI.md .junie/guidelines.md; do
+    grep -q 'claude-agentic:start' "$P6/$f" && pass "$f carries the managed block" || fail "$f has no block"
+done
+grep -q '.ai/policies/safety.md' "$P6/GEMINI.md" \
+    && pass "the Gemini block routes to the policies like every other runtime" || fail "the Gemini block is wrong"
+python3 "$UPDATE" "$P6" --apply >/dev/null 2>&1
+python3 "$UPDATE" "$P6" | grep -q '^0 automatic, 0 conflict' \
+    && pass "a four-runtime project is idempotent" || fail "four-runtime project not idempotent" "$(python3 "$UPDATE" "$P6")"
+# an edited block is the user's, in a fourth runtime exactly as in the first
+printf '\n<!-- claude-agentic:start -->\nmy own text\n<!-- claude-agentic:end -->\n' > "$P6/GEMINI.md"
+python3 "$UPDATE" "$P6" | grep -q 'conflict  GEMINI.md' \
+    && pass "an edited Gemini block is a conflict, never overwritten" || fail "an edited Gemini block was not protected"
 
 echo "== an up-to-date project and a non-project"
 P3="$TMP/proj3"; mkdir -p "$P3"
@@ -232,6 +248,74 @@ python3 "$UPDATE" "$S7" --apply >/dev/null
 [ "$(md5sum "$J" | cut -d' ' -f1)" = "$before" ] && pass "and never appends to the journal twice" || fail "the backfill must be written once"
 env -u CLAUDECODE python3 "$STATE" --root "$S7" stage test >/dev/null \
     && pass "the migrated task carries on where it left off" || fail "the task should keep working"
+
+echo "== schema 3: the pipeline text leaves the instruction files, the human's text stays (R12/R13)"
+# A project at schema 2, both runtimes, from the oldest templates: its root
+# instruction files still carry the shipped `## SDLC workflow` section.
+v2_project() {
+    local d="$1"; mkdir -p "$d"
+    CLAUDE_ROUTING_TEMPLATES="$OLD/project-init/templates" bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$d" --runtime both >/dev/null
+    CLAUDE_AGENTIC_TEMPLATES="$OLD/ai-init/templates" bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$d" --runtime both >/dev/null
+    cp -r "$FIX/schema-v2/.ai" "$d/"
+}
+S8="$TMP/schema2"; v2_project "$S8"
+grep -q '^## SDLC workflow' "$S8/CLAUDE.md" && grep -q '^## SDLC workflow' "$S8/AGENTS.md" \
+    && pass "the schema-2 fixture carries the shipped section in both files" || fail "the fixture should start from the old skeletons"
+printf '\n# my notes\nkeep me\n' >> "$S8/CLAUDE.md"
+# A line rewritten inside the managed block, where the plugin also changed it.
+python3 - "$S8/AGENTS.md" <<'PY'
+import sys
+path = sys.argv[1]
+data = open(path, "rb").read()
+start = data.find(b"<!-- claude-agentic:start -->")
+line2 = data.find(b"\n", data.find(b"\n", start) + 1) + 1
+line3 = data.find(b"\n", line2) + 1
+open(path, "wb").write(data[:line2] + b"my own rule, right inside the block\n" + data[line3:])
+PY
+printf '# GEMINI\n\nmy own instructions\n' > "$S8/GEMINI.md"          # a third runtime, no block yet
+printf '\n## my routing note\nalways ask me first\n' >> "$S8/.ai/AGENTS.md"
+
+out=$(python3 "$UPDATE" "$S8")
+printf '%s' "$out" | grep -q '^  update    CLAUDE.md .*\[0003\] SDLC workflow section removed (now in the managed block)' \
+    && pass "the dry run names the section it will take out" || fail "no 0003 line for CLAUDE.md" "$out"
+printf '%s' "$out" | grep -q 'AGENTS.md: the managed block was edited here' \
+    && pass "and hints that an edited block cannot be replaced" || fail "no edited-block hint" "$out"
+before=$(cd "$S8" && find . -type f | sort | xargs md5sum | md5sum)
+[ "$before" = "$(cd "$S8" && find . -type f | sort | xargs md5sum | md5sum)" ] && pass "the dry run writes nothing" || fail "the dry run changed files"
+
+python3 "$UPDATE" "$S8" --apply >/dev/null
+grep -q 'SDLC workflow' "$S8/CLAUDE.md" && fail "the shipped section should be gone" || pass "the shipped section is removed"
+grep -q 'keep me' "$S8/CLAUDE.md" && [ "$(grep -c 'claude-agentic:start' "$S8/CLAUDE.md")" = 1 ] \
+    && pass "and the human's own lines and the one block are kept" || fail "CLAUDE.md lost the user's text"
+grep -q 'SDLC workflow' "$S8"/.ai/reports/project-update-*/original/CLAUDE.md \
+    && pass "the file the migration rewrote is kept under .ai/reports/" || fail "no original for a migration update outside .ai/"
+grep -q 'my own rule, right inside the block' "$S8/AGENTS.md" \
+    && pass "an edited managed block is never overwritten" || fail "the edited block was replaced"
+cmp -s "$S8/.ai/local/plugin-update/AGENTS.md" "$PLUGIN_ROOT/skills/ai-init/templates/AGENTS.block.md" \
+    && pass "and the plugin's stub waits in the local copy" || fail "no conflict copy for the edited block"
+grep -q 'SDLC workflow' "$S8/AGENTS.md" && fail "the section should leave an edited-block file too" \
+    || pass "the section leaves the file whose block was edited, which is a separate decision"
+grep -q 'claude-agentic:start' "$S8/GEMINI.md" && grep -q 'my own instructions' "$S8/GEMINI.md" \
+    && pass "a third runtime's file gains the block without losing its text" || fail "GEMINI.md update wrong"
+[ "$(cat "$S8/.ai/VERSION")" = "$CURRENT" ] && pass "the schema reaches $CURRENT: 0003 holds it for nothing" || fail "VERSION not written"
+
+out=$(python3 "$UPDATE" "$S8")
+printf '%s' "$out" | grep -q '^0 automatic, 2 conflict' \
+    && pass "a second run has only the two hand-merge choices left" || fail "second run not clean" "$out"
+python3 "$UPDATE" "$S8" --check >/dev/null && pass "--check exits 0 once only a hand-merge choice remains" || fail "--check should exit 0"
+
+echo "== an edited section is the human's, and is only ever hinted at"
+S9="$TMP/schema2edited"; v2_project "$S9"
+sed -i 's/^`\/ai-task <request>` is the default route for a change: it classifies the risk,$/`\/ai-task <request>` is the default route here, and we always open an ADR first,/' "$S9/CLAUDE.md"
+snap=$(md5sum "$S9/CLAUDE.md" | cut -d' ' -f1)
+out=$(python3 "$UPDATE" "$S9" --apply 2>&1)
+[ "$(md5sum "$S9/CLAUDE.md" | cut -d' ' -f1)" != "$snap" ] && grep -q 'we always open an ADR first' "$S9/CLAUDE.md" \
+    && pass "an edited section survives the migration" || fail "an edited section must not be rewritten" "$out"
+printf '%s' "$out" | grep -q 'CLAUDE.md: the SDLC workflow section was edited' \
+    && pass "and the human is told it is now theirs to keep" || fail "no hint for an edited section" "$out"
+printf '%s' "$out" | grep -q '^  update    CLAUDE.md .*\[0003\]' && fail "0003 must not touch an edited section" "$out" \
+    || pass "0003 plans no rewrite it cannot match verbatim"
+[ "$(cat "$S9/.ai/VERSION")" = "$CURRENT" ] && pass "and the schema still advances" || fail "a hint must not hold the schema"
 
 echo "== the migration says nothing about which runtime a project uses"
 grep -in 'claude\|codex' "$PLUGIN_ROOT/skills/project-update/migrations/0002_task_journal.py" \
@@ -373,6 +457,36 @@ done
 pass "Claude-only, Codex-only and dual-runtime projects all reach schema $CURRENT"
 grep -lE 'claude|codex' "$PLUGIN_ROOT/skills/project-update/migrations/"[0-9]*.py >/dev/null 2>&1 \
     && fail "a migration must not branch on the runtime" || pass "no migration branches on the runtime"
+
+echo "== a rendered rule whose source is gone waits for a human, like any deletion (R9)"
+RD="$TMP/rules-gate"; mkdir -p "$RD"
+bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$RD" --runtime claude >/dev/null
+bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$RD" --runtime claude >/dev/null
+cp -r "$PLUGIN_ROOT/tests/fixtures/instructions/rules-project/.ai" "$RD/"
+mkdir -p "$RD/src/Payment" "$RD/tests/Payment"
+python3 "$UPDATE" "$RD" --apply >/dev/null 2>&1 || fail "the rules could not be rendered"
+printf '\n# mine\nkeep me\n' >> "$RD/src/Payment/CLAUDE.md"
+rm "$RD/.ai/rules/payment.md"
+out=$(python3 "$UPDATE" "$RD" 2>&1)
+printf '%s' "$out" | grep -q "delete? *.claude/rules/payment.md" \
+    && pass "the path-scoped copy is proposed, not deleted" || fail "no delete? for the rendered copy" "$out"
+printf '%s' "$out" | grep -q 'needs --apply --confirm-delete NAME' \
+    && pass "and says how a human confirms it" || fail "the deletion does not name its gate"
+python3 "$UPDATE" "$RD" --apply >/dev/null 2>&1
+[ -f "$RD/.claude/rules/payment.md" ] \
+    && pass "an --apply without the confirmation leaves it alone" || fail "the copy was deleted unconfirmed"
+grep -q 'keep me' "$RD/src/Payment/CLAUDE.md" \
+    && pass "the human's text around a removed block survives" || fail "the human's text was lost"
+grep -q 'claude-agentic:rule:payment' "$RD/src/Payment/CLAUDE.md" \
+    && fail "the stale block should have been taken out" || pass "the stale block was taken out without a gate: it is ours"
+python3 "$UPDATE" "$RD" --apply --confirm-delete "Ivan" >/dev/null 2>&1
+[ -f "$RD/.claude/rules/payment.md" ] \
+    && fail "the confirmed deletion did not happen" || pass "the confirmed deletion is performed"
+[ -f "$RD/.ai/reports/project-update-$(date -u +%Y-%m-%d)/original/.claude/rules/payment.md" ] \
+    && pass "its original is kept" || fail "the deleted copy was not kept"
+out=$(python3 "$UPDATE" "$RD" 2>&1)
+printf '%s' "$out" | grep -q '^0 automatic, 0 conflict' \
+    && pass "and the project is then up to date" || fail "the rules run is not idempotent" "$out"
 
 echo "== every key in the template history is accounted for"
 python3 - "$PLUGIN_ROOT" <<'PY'

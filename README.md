@@ -115,7 +115,8 @@ duplicates a hook entry, and never overwrites your edits to `ai-git-guard.json`.
 |---|---|---|
 | `profiles/{pro,max}.json` + `settings.common.json` | deep-merged into `settings.json` | — |
 | `profiles/codex-{plus,pro}.json` | — | six managed keys in `config.toml` |
-| `CLAUDE.snippet.md` / `AGENTS.snippet.md` | a managed block in `~/.claude/CLAUDE.md` | a managed block in `~/.codex/AGENTS.md` |
+| `instructions/stub.md` | a managed block in `~/.claude/CLAUDE.md` | a managed block in `~/.codex/AGENTS.md` |
+| `instructions/routing.md` | `~/.claude/claude-agentic/routing.md`, read on demand | `~/.codex/claude-agentic/routing.md`, read on demand |
 | `agents/*.md` | `~/.claude/agents/` | rendered to `~/.codex/agents/*.toml` |
 | `agents/{ai-expert,architect}.md.tmpl` | the EXPERT-tier agents, model line and effort rendered per plan | `ai-expert.toml` pinned to Astra, `architect.toml` to Sol |
 | `hooks/*` | `~/.claude/hooks/` — six hooks, `fable-gate` on a Fable install, the shared library and the guards' default config | `~/.codex/hooks/` + `codex/hooks.json` |
@@ -139,6 +140,30 @@ file per ChatGPT plan — session model and effort, thread cap,
 `[agents]` defaults, the four tiers and every role's tier and sandbox mode. Both
 the agent renderer and the config merge read it, so there is one place to change
 a Codex routing decision.
+
+### What loads on every turn
+
+Context length is the running cost: an always-loaded instruction file is re-read
+on every turn of every task, whether it is relevant or not. So the plugin keeps
+exactly one always-loaded file per runtime, and it is short.
+
+| Where | What it is | Budget |
+|---|---|---|
+| `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` | the managed block: the rules an agent is unsafe without | 2 560 B |
+| a project's `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.junie/guidelines.md` | the same block, project scope | 2 048 B |
+| `~/.claude/claude-agentic/routing.md` | the model ladder, the context-guard thresholds, the guard list — read when a routing question comes up | — |
+| a project's `.ai/AGENTS.md` | a router: one row per job, pointing at the policy that answers it | advisory 4 096 B |
+| `docs/sdlc/constitution.md` | the 10–15 principles the project does not negotiate, cited as `C<n>` by `/sdlc-spec` and the planner | 15 lines, 4 096 B |
+| `.ai/rules/<slug>.md` | a rule scoped to the directories it names, rendered into their instruction files by `/project-update` | — |
+
+All of the block text comes from one source, `instructions/stub.md`, rendered per
+scope and runtime by `skills/project-update/render_instructions.py`; the committed
+templates are build artefacts and `render_instructions.py build --check` fails the
+suite on drift. `install.sh` prints what the block costs after every install
+(`managed block 1 903 B (budget 2 560), file 8 457 B — the rest is yours`) and
+never touches the rest of the file; `/ai-status` prints the same line for a
+project. Downstream the budget is advisory — the plugin measures, it does not
+refuse a file it does not own.
 
 ### Editing `config.toml` safely
 
@@ -215,7 +240,8 @@ The plugin ships every version of every template it has ever installed
 | proposed for deletion by a migration | listed as `delete?` and left alone until a human passes `--apply --confirm-delete NAME` |
 
 The tree also carries a schema version in `.ai/VERSION`; the current one is
-**2** (the journal, the questions file and the handoff), and a project
+**3** (the context diet: the `## SDLC workflow` section the plugin used to write
+into the root instruction file is removed, the original kept), and a project
 initialised before the version existed is schema 0. Migrations under
 `skills/project-update/migrations/` run in order before anything is merged —
 they move, add, edit and propose deletions, all inside the same dry run — and
@@ -242,8 +268,11 @@ For work that needs a written intent and specification before any code:
 ```
 
 `/project-init` scaffolds only the SDLC layout, for a repository that does not
-want the agentic pipeline. Both scaffolds take `--runtime auto|claude|codex|both`
-and default to what the project already declares.
+want the agentic pipeline. Both scaffolds take
+`--runtime auto|claude|codex|gemini|junie|both` — or a comma list — and default
+to what the project already declares: `CLAUDE.md`/`.claude/`, `AGENTS.md`/`.codex/`,
+`GEMINI.md`/`.gemini/`, `.junie/`. Gemini and Junie get the rendered project stub
+only; they are not full runtimes here.
 
 `/ai-init` reads the codebase and writes `.ai/`. It does not touch application
 code — not a rename, not a formatting fix. Problems it finds are documented in
