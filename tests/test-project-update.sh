@@ -527,4 +527,47 @@ sys.exit(1 if orphans or reused else 0)
 PY
 [ $? -eq 0 ] && pass "no history key is orphaned, and no moved-away path is shipped again" || fail "the history index and the migrations disagree"
 
+echo "== schema 4: a task in flight gains the gate keys and keeps working (R14)"
+S9="$TMP/schema3"; mkdir -p "$S9"
+FIXV3="$FIX/schema-v3"
+bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$S9" --runtime claude >/dev/null
+bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$S9" --runtime claude >/dev/null
+cp -r "$FIXV3/.ai" "$S9/"      # VERSION 3 and a task in flight, as the fixture ships them
+
+out=$(python3 "$UPDATE" "$S9")
+printf '%s' "$out" | grep -q '\[0004\]' \
+    && pass "the dry run names the state migration" || fail "no 0004 line" "$out"
+python3 - "$S9" <<'PY2'
+import json, os, sys
+state = json.load(open(os.path.join(sys.argv[1], ".ai", "state", "current.json")))
+raise SystemExit(0 if "diff" not in state else 1)
+PY2
+[ $? -eq 0 ] && pass "and the dry run writes nothing into the state" || fail "the dry run must not write"
+
+python3 "$UPDATE" "$S9" --apply >/dev/null
+python3 - "$S9" <<'PY2'
+import json, os, sys
+state = json.load(open(os.path.join(sys.argv[1], ".ai", "state", "current.json")))
+assert state["diff"]["base_tree"] is None, "a base tree must not be invented"
+assert state["diff"]["task"]["status"] == "not_measured"
+assert state["tests"] == {"runs": [], "suite_runs": 0}
+assert state["risk_tier_lowered"]["by"] is None
+assert state["sensors"]["file"].endswith("sensors.json")
+steps = state["approved_plan"]["steps"]
+assert [s["kind"] for s in steps] == ["implementation", "implementation"], steps
+assert all(s["tree_before"] is None and s["diff"] is None for s in steps)
+assert state["goal"] == "widen the export" and state["completed_steps"] == ["1"]
+PY2
+[ $? -eq 0 ] && pass "the keys are added with nulls, and nothing else is touched" || fail "0004 changed the task"
+[ "$(cat "$S9/.ai/VERSION")" = "$CURRENT" ] && pass "the schema reaches $CURRENT" || fail "VERSION not written"
+python3 "$UPDATE" "$S9" | grep -q '^0 automatic' && pass "a second run has nothing to do" || fail "0004 is not idempotent"
+
+out=$(env -u CLAUDECODE python3 "$STATE" --root "$S9" step-done 2 2>&1); rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -q 'unavailable' \
+    && pass "a task that started before schema 4 finishes its step, measuring nothing" \
+    || fail "step-done should carry on" "$out($rc)"
+
+grep -qiE 'claude|codex' "$PLUGIN_ROOT/skills/project-update/migrations/0004_deterministic_gates.py" \
+    && fail "a migration must not name a runtime" || pass "0004 names no runtime"
+
 summary "project-update"
