@@ -1251,24 +1251,26 @@ def cmd_answer(args, root):
 def sync_answers(root, state, path, lines, questions, args):
     """Pick up hand edits: a filled line with no trailer is a fresh answer, a
     line this command already wrote has one, so syncing twice changes nothing."""
-    changed = []
+    changed, gates = [], []
     for question in questions:
         if question["invalid"]:
             print("state.py: %s: invalid choice %r — it stays pending"
                   % (question["id"], question["invalid"]), file=sys.stderr)
             continue
         if question["kind"] == "G":
-            # The gate's file route is step 6's. Until then a filled gate answer
-            # is left exactly as the human wrote it: consuming it here would
-            # close the gate's question without granting anything, and the
-            # pipeline would move past human_approval ungated.
+            # A gate is not answered, it is granted or rejected: a filled answer
+            # on the open gate goes through the file route, and any other G block
+            # is left exactly as it is rather than consumed.
+            if (state is not None and question["id"] == open_gate(state)
+                    and question["choice"] and not question["answered_by"]):
+                gates.append(question)
             continue
         if question["choice"] is not None and not question["answered_by"]:
             lines[question["answer_at"]] = answer_line(
                 question["choice"], question["text"], args.by, "file")
             changed.append(question)
     if not changed:
-        return []
+        return gates
     if state is not None:
         # Recording answers changes the task, so it takes ownership as ask does.
         claim_runtime(root, state)
@@ -1282,22 +1284,33 @@ def sync_answers(root, state, path, lines, questions, args):
             emit(root, state, "question_answered", "%s = %s" % (current["id"], current["choice"]),
                  {"id": current["id"], "choice": current["choice"], "text": current["text"],
                   "via": "file", "by": args.by}, actor="human")
-    return changed
+    return changed + gates
 
 
 def cmd_questions(args, root):
     state = None if args.topic else load(root)
     path = questions_path(root, state, args.topic)
+    granted, touched = None, []
     with question_lock(path) if args.sync else contextlib.nullcontext():
         lines, questions = parse_questions(path)
-        if args.sync and sync_answers(root, state, path, lines, questions, args):
-            _, questions = parse_questions(path)
-    if state is not None:
-        cached = (state.get("questions") or {}).get("pending")
+        if args.sync:
+            touched = sync_answers(root, state, path, lines, questions, args)
+    # Outside the lock: the gate's own route writes through close_gate, which
+    # takes it again — and flock is per open file description, so a second
+    # acquisition in this same process waits for the first for ever.
+    for question in [q for q in touched if q["kind"] == "G"]:
+        granted = close_gate_from_file(root, state, question, args.by)
+    if touched:
+        _, questions = parse_questions(path)
+    if state is not None and touched:
+        # Only a sync that changed something writes the state. questions.pending
+        # is a cache and guard_pending re-parses the file anyway, so a read —
+        # which /ai-status and the session-start hook both perform — must never
+        # write current.json: it would race a command that is mid-write.
         set_pending(root, state, questions, path)
-        if state["questions"]["pending"] != cached:
-            # A read must not bump updated_at: /ai-status calls this every time.
-            save(root, state)
+        save(root, state)
+    if granted is not None:
+        print("gate %s by %s via the file" % ("approved" if granted else "rejected", args.by))
     shown = [q for q in questions if is_pending(q)] if args.pending else questions
     for line in render_questions(shown, args.format):
         print(line)
@@ -1544,6 +1557,70 @@ def close_gate(root, state, gate_id, choice, text, by, via):
         _, questions = parse_questions(path)
     set_pending(root, state, questions, path)
     return True
+
+
+def human_turn(root, state):
+    """Did a human take a turn in this project since the gate was requested?
+
+    The evidence is .ai/state/session.json, which only context-guard.py writes,
+    on UserPromptSubmit. It is what makes the file route different from the
+    agent filling in the answer itself: the agent cannot advance last_prompt_at
+    without the human sending a prompt. Weaker than a TTY, and documented as
+    such — but it is a turn the human took, at a moment they could see the plan.
+    """
+    session = read_session(root)
+    relative = os.path.relpath(session_path(root), root)
+    turn = session.get("last_prompt_at")
+    requested = (state.get("human_approval") or {}).get("requested_at")
+    if not isinstance(turn, str) or not turn:
+        return False, "there is no %s, so no human turn can be seen" % relative
+    if not requested or turn < requested:
+        return False, ("the last prompt in %s (%s) is older than the approval request (%s)"
+                       % (relative, turn, requested))
+    if session.get("last_prompt_session") != session.get("session_id"):
+        # One file per project, last writer wins: a prompt from a second window
+        # is a turn somebody took, but not in the session that is being asked to
+        # approve. This is the weakest of the three routes and says so.
+        return False, ("the last prompt in %s came from another session (%s, not %s)"
+                       % (relative, session.get("last_prompt_session"),
+                          session.get("session_id")))
+    return True, ""
+
+
+def close_gate_from_file(root, state, question, by):
+    """R13: an [Answer]: filled into the gate's own question grants or rejects,
+    but only behind a human turn — or AI_UNATTENDED, which says there is nobody
+    to take one."""
+    gate_id = question["id"]
+    unattended = bool(os.environ.get("AI_UNATTENDED"))
+    seen, why = (True, "") if unattended else human_turn(root, state)
+    if not seen:
+        die("APPROVAL_REFUSED — %s. Fill the answer, tell the session, and sync again, or run "
+            "in your own terminal:\n  python3 %s --root %s approve --by %s"
+            % (why, shlex.quote(os.path.abspath(__file__)), shlex.quote(root),
+               shlex.quote(by)), 5)
+    approved = question["choice"] == "A"
+    close_gate(root, state, gate_id, question["choice"], question["text"], by, "file")
+    state["human_approval"].update({
+        "required": True, "granted": approved,
+        "granted_by": by if approved else None,
+        "granted_at": now() if approved else None,
+        "requested_at": None, "gate_id": None,
+        "via": "file" if approved else None, "unattended": approved and unattended,
+    })
+    if approved:
+        record(state, "human_approval", "granted by %s via file" % by)
+    else:
+        state["next_action"] = "address the rejection: %s" % one_line(question["text"])
+        record(state, "gate_rejected", "%s: %s" % (by, question["text"] or "no reason given"))
+    write_handoff(root, state, "stage")
+    save(root, state)                     # durable first: the rest is derived
+    append_journal(root, state["task_id"], journal_line(
+        state["task_id"], "gate_approved" if approved else "gate_rejected", "human",
+        state.get("current_stage"), "%s by %s via file" % (gate_id, by),
+        {"by": by, "gate_id": gate_id, "via": "file", "unattended": unattended, "tty": False}
+        if approved else {"by": by, "gate_id": gate_id, "why": question["text"]}))
+    return approved
 
 
 def refuse_approval(root, state, gate_id, by):

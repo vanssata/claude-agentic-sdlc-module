@@ -285,16 +285,38 @@ def hook_runtime():
     override = os.environ.get("AI_HOOK_RUNTIME")
     if override in ("claude", "codex"):
         return override
-    return "codex" if f"{os.sep}.codex{os.sep}" in os.path.abspath(__file__) else "claude"
+    here = os.path.abspath(__file__)
+    codex = os.path.abspath(os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex"))
+    claude = os.path.abspath(config_dir())
+    for root, runtime in ((codex, "codex"), (claude, "claude")):
+        if here.startswith(root.rstrip(os.sep) + os.sep):
+            return runtime
+    # Neither root claims it (a checkout, or an install somewhere else): fall
+    # back to the conventional directory names before assuming Claude.
+    return "codex" if f"{os.sep}.codex{os.sep}" in here else "claude"
 
 
 def ai_root(cwd):
-    """The project the session is in, or None. cwd falls back to the process's
-    own, which is where the hook starts anyway."""
-    directory = os.path.abspath(cwd or os.getcwd())
+    """The project the session is in, or None.
+
+    The walk stops at the repository it starts in, and never leaves $HOME. An
+    unbounded walk would let one `/ai-init` in a home directory adopt every
+    session on the machine: a nested, unrelated checkout would have its prompts
+    recorded into the ancestor's session.json and be handed the ancestor's
+    handoff at startup. cwd falls back to the process's own, which is where the
+    hook starts anyway — and a deleted cwd is not a reason to break the prompt
+    measurement this script exists for.
+    """
+    try:
+        directory = os.path.abspath(cwd or os.getcwd())
+    except OSError:
+        return None
+    home = os.path.abspath(os.path.expanduser("~"))
     while True:
         if os.path.isdir(os.path.join(directory, ".ai")):
             return directory
+        if os.path.exists(os.path.join(directory, ".git")) or directory == home:
+            return None                   # the session's own project ends here
         parent = os.path.dirname(directory)
         if parent == directory:
             return None
@@ -302,7 +324,16 @@ def ai_root(cwd):
 
 
 def task_in_flight(root):
-    return bool(root) and os.path.exists(os.path.join(root, ".ai", "state", "current.json"))
+    """The same predicate the guards use: the file exists *and* the task is not
+    finished. A closed-but-unarchived task must not keep recording prompts or
+    shouting its handoff at every new session in the repository."""
+    if not root:
+        return False
+    try:
+        with open(os.path.join(root, ".ai", "state", "current.json"), encoding="utf-8") as fh:
+            return (json.load(fh) or {}).get("current_stage") != "done"
+    except (OSError, ValueError):
+        return False
 
 
 def stamp():
@@ -347,27 +378,31 @@ def handoff_block(root, reason):
 
 def task_frame(root, reason):
     """What a session that has just lost its context needs before anything else.
-    Capped, with the questions collapsed to one line when the budget is tight —
-    the Codex additionalContext limit is about 2 500 tokens."""
+
+    Returned in two pieces: the handoff, and the tail that goes after it. On the
+    compact path the snapshot already embeds the handoff verbatim, so the caller
+    drops this copy rather than injecting the same facts twice. Capped, with the
+    questions collapsed to their ids when the budget is tight — the Codex
+    additionalContext limit is about 2 500 tokens.
+    """
     handoff = handoff_block(root, reason)
     if not handoff:
-        return ""
-    parts = ["# Task in flight — read this before anything else "
-             "(written by state.py handoff, not by a model)", handoff]
+        return "", ""
+    head = ("# Task in flight — read this before anything else "
+            f"(written by state.py handoff, not by a model)\n{handoff}")
+    tail, ids = [], ""
     pending = [line for line in handoff.splitlines() if line.startswith("Pending questions: ")]
     if pending and not pending[0].endswith(": none"):
         ids = pending[0].split(": ", 1)[1].split(" — ")[0]
         count = len(ids.split(", "))
         prose = state_py(root, "questions", "--pending")
-        parts.append(f"## Pending questions ({count}) — answer with `state.py answer …` "
-                     "or fill the file")
-        parts.append(prose or ids)
-    parts.append("Resume with: /ai-task --resume")
-    text = "\n".join(parts)
-    if len(text) > HANDOFF_INJECT_MAX_CHARS and len(parts) > 3:
-        parts[-2:-1] = [ids]                  # the questions collapse to their ids
-        text = "\n".join(parts)
-    return text[:HANDOFF_INJECT_MAX_CHARS]
+        tail.append(f"## Pending questions ({count}) — answer with `state.py answer …` "
+                    "or fill the file")
+        tail.append(prose or ids)
+    tail.append("Resume with: /ai-task --resume")
+    if len("\n".join([head] + tail)) > HANDOFF_INJECT_MAX_CHARS and len(tail) > 1:
+        tail[1] = ids                     # the questions collapse to their ids
+    return head[:HANDOFF_INJECT_MAX_CHARS], "\n".join(tail)
 
 
 def build_snapshot(payload, handoff=""):
@@ -375,6 +410,9 @@ def build_snapshot(payload, handoff=""):
     files, prompts, todos = scan_session(transcript)
     parts = ["# Session state before compaction (written by context-guard, not by the summary)",
              "Trust this over the summary where they differ."]
+    if handoff:
+        # First, so the authoritative part is never what the size cap cuts off.
+        parts.append("\n" + handoff)
 
     if prompts:
         parts.append("\n## Latest user instructions, verbatim (oldest first)")
@@ -405,12 +443,6 @@ def build_snapshot(payload, handoff=""):
             if len(lines) > STATUS_LINES:
                 parts.append(f"… {len(lines) - STATUS_LINES} more")
 
-    if handoff:
-        # handoff.md, verbatim, in place of a JSON dump: one owner per fact, and
-        # this one is rendered by state.py from the state, the journal,
-        # questions.md and session.json.
-        parts.append("\n" + handoff)
-
     text = "\n".join(parts)
     if len(text) > SNAPSHOT_MAX_CHARS:
         text = text[:SNAPSHOT_MAX_CHARS] + "\n[…snapshot truncated]"
@@ -426,7 +458,8 @@ def on_prompt(payload):
     if task_in_flight(root):
         # The evidence that a human took a turn — what the gate's file route
         # (R13) reads back. Recorded before any early exit below.
-        update = {"runtime": hook_runtime(), "session_id": session, "last_prompt_at": stamp()}
+        update = {"runtime": hook_runtime(), "last_prompt_session": session,
+                  "last_prompt_at": stamp()}
         if not os.environ.get("AI_HANDOFF_NO_PROMPT"):
             update["last_prompt"] = (payload.get("prompt") or "")[:PROMPT_MAX_CHARS]
         write_session(root, update)
@@ -490,14 +523,22 @@ def on_precompact(payload):
     sys.exit(0)
 
 
-def take_snapshot(session):
-    """The transcript-derived supplement PreCompact left behind, if it is fresh.
+def take_snapshot(session, transcript):
+    """The transcript-derived supplement PreCompact left behind, if it is fresh
+    and a compaction actually happened.
 
-    Claude only — it is built from a Claude transcript — and consumed when it is
-    read, so it goes back into the session it belongs to and into no other. That
-    is what lets this hook run on every source without asking the payload which
-    one it is (R7): a startup or a /clear simply finds nothing to put back."""
-    if hook_runtime() != "claude":
+    Claude only — it is built from a Claude transcript. Whether to put it back is
+    decided by the transcript itself: current_context() returns None exactly when
+    the newest entry is a compact_boundary, which is what a session that has just
+    been compacted looks like. No payload key is consulted (R7), and a startup or
+    a /clear finds nothing to put back even when PreCompact ran and the
+    compaction was then abandoned."""
+    if hook_runtime() != "claude" or not transcript:
+        return ""
+    try:
+        if current_context(transcript) is not None:
+            return ""                     # no compaction boundary: not our session start
+    except OSError:
         return ""
     path = state_path(session, "md")
     try:
@@ -507,10 +548,6 @@ def take_snapshot(session):
             text = fh.read()
     except OSError:
         return ""
-    try:
-        os.remove(path)
-    except OSError:
-        pass
     return text
 
 
@@ -522,17 +559,31 @@ def on_session_start(payload):
             fh.write(model)
 
     root = ai_root(payload.get("cwd"))
-    frame = ""
+    head = tail = ""
     if root:
         write_session(root, {"runtime": hook_runtime(), "session_id": session,
                              "source": payload.get("source") or "unknown",
                              "started_at": stamp()})
-        frame = task_frame(root, "session-start") if task_in_flight(root) else ""
+        if task_in_flight(root):
+            head, tail = task_frame(root, "session-start")
 
-    text = "\n\n".join(part for part in (frame, take_snapshot(session)) if part)
+    snapshot = take_snapshot(session, payload.get("transcript_path"))
+    if snapshot:
+        head = snapshot          # it already carries handoff.md verbatim, at its head
+    text = "\n\n".join(part for part in (head, tail) if part)
     if not text:
         sys.exit(0)
-    emit({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}})
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "SessionStart", "additionalContext": text}}))
+    sys.stdout.flush()
+    if snapshot:
+        try:
+            # Consumed only once it has actually been delivered: a hook killed
+            # before this point leaves the snapshot for the next attempt.
+            os.remove(state_path(session, "md"))
+        except OSError:
+            pass
+    sys.exit(0)
 
 
 def main():

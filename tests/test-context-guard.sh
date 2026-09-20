@@ -261,7 +261,7 @@ contains "$snap" "[in_progress] write the test" "the latest todo list is kept"
 lacks    "$snap" "old list" "an earlier todo list is not"
 contains "$snap" "branch: feat/snapshot" "the git branch is recorded"
 contains "$snap" "?? src/" "and the git status"
-lacks "$snap" '.ai/state/current.json' "a project without .ai/ contributes no task section"
+lacks "$snap" '# Handoff —' "a project without .ai/ contributes no handoff to the snapshot"
 
 big=$(python3 -c 'print("x" * 5000)')
 long=$(python3 -c 'print("d" * 300)')
@@ -289,15 +289,26 @@ contains "$out" "word for word" "an unwritable state directory does not lose the
 # ------------------------------------------------------------ SessionStart
 { user "Keep the API stable"; tool Edit "{\"file_path\":\"$PROJECT/src/api.py\"}"; usage 10 101000 10; } > "$T"
 event PreCompact >/dev/null
+# What a compacted session's transcript looks like: the newest entry is the
+# boundary. That, and not the payload's source, is what decides whether the
+# snapshot goes back (R7).
+boundary >> "$T"
 out=$(event SessionStart compact)
 ctx=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null)
 [ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.hookEventName' 2>/dev/null)" = SessionStart ] \
     && pass "SessionStart:compact answers as a SessionStart hook" || fail "SessionStart:compact answers as a SessionStart hook" "$out"
 contains "$ctx" "Keep the API stable" "and puts the snapshot back into the context"
 contains "$ctx" "src/api.py" "with the edited files"
+# A snapshot PreCompact wrote, for a compaction that never happened: the
+# transcript has no boundary, so a startup or a /clear still starts clean.
+{ user "Keep the API stable"; usage 10 101000 10; } > "$T"
+event PreCompact >/dev/null
 for source in startup resume clear fork; do
-    expect_silent "$(event SessionStart $source)" "SessionStart:$source injects nothing"
+    expect_silent "$(event SessionStart $source)" "SessionStart:$source starts clean"
 done
+boundary >> "$T"
+ctx=$(event SessionStart startup | jq -r '.hookSpecificOutput.additionalContext // ""')
+contains "$ctx" "Keep the API stable" "but a compacted transcript puts it back whatever the source says"
 
 expect_silent "$(event SessionStart compact)" "the snapshot is consumed: it goes back once, into the session it belongs to"
 rm -f "$SNAP"
@@ -305,10 +316,12 @@ expect_silent "$(event SessionStart compact)" "with no snapshot there is nothing
 event PreCompact >/dev/null
 touch -d '2 hours ago' "$SNAP"
 expect_silent "$(event SessionStart compact)" "a stale snapshot is not reused"
+[ -f "$SNAP" ] || fail "a stale snapshot should not be deleted either"
 rm -f "$SNAP"
 event PreCompact >/dev/null
 expect_silent "$(AI_HOOK_RUNTIME=codex event SessionStart compact)" \
     "and the transcript-derived snapshot never crosses to Codex"
+[ -f "$SNAP" ] && pass "which leaves it for the Claude session it belongs to" || fail "Codex must not consume the snapshot"
 expect_silent "$(jq -nc '{hook_event_name:"SessionStart",source:"compact",session_id:"none"}' | "$GUARD")" \
     "no snapshot and no transcript: silent"
 
@@ -348,18 +361,34 @@ jq -e '.runtime=="claude" and .session_id=="ai1" and .source=="startup" and .sta
 AI_HOOK_RUNTIME=codex ai_event SessionStart resume >/dev/null
 jq -e '.runtime=="codex" and .source=="resume"' "$SESSION" >/dev/null \
     && pass "and the runtime is the one this copy of the script serves" || fail "AI_HOOK_RUNTIME should decide" "$(cat "$SESSION")"
-[ -z "$(find "$AIP/.ai/state" -name 'session.json.*.tmp')" ] && pass "and it is written atomically" || fail "a temp file was left behind"
+for i in 1 2 3 4 5 6 7 8; do
+    jq -nc --arg t "$T" --arg c "$AIP" --arg s "w$i" \
+        '{hook_event_name:"UserPromptSubmit",session_id:$s,transcript_path:$t,cwd:$c,prompt:"concurrent"}' \
+        | "$GUARD" >/dev/null &
+done
+wait
+jq -e 'type=="object" and has("last_prompt_at")' "$SESSION" >/dev/null \
+    && [ -z "$(find "$AIP/.ai/state" -name '*.tmp')" ] \
+    && pass "eight concurrent writers leave one whole file and no temp behind" || fail "the write is not atomic" "$(cat "$SESSION")"
 
 echo "== UserPromptSubmit records the human's turn"
 context_of 1000
+python3 - "$SESSION" <<'SEED'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+data["last_prompt_at"] = "2020-01-01T00:00:00Z"
+json.dump(data, open(sys.argv[1], "w", encoding="utf-8"))
+SEED
 before=$(jq -r .last_prompt_at "$SESSION")
 jq -nc --arg t "$T" --arg c "$AIP" \
     '{hook_event_name:"UserPromptSubmit",session_id:"ai1",transcript_path:$t,cwd:$c,prompt:"make the fee configurable"}' \
     | "$GUARD" >/dev/null
 jq -e '.last_prompt=="make the fee configurable" and .last_prompt_at != null' "$SESSION" >/dev/null \
     && pass "a prompt records its text and when it arrived" || fail "last_prompt is wrong" "$(cat "$SESSION")"
-[ "$(jq -r .last_prompt_at "$SESSION")" != "$before" ] || [ "$before" = null ] \
-    && pass "and last_prompt_at advances" || fail "last_prompt_at should advance"
+[ "$(jq -r .last_prompt_at "$SESSION")" != "$before" ] \
+    && pass "and last_prompt_at advances past the one that was there" || fail "last_prompt_at should advance" "$before"
+jq -e '.last_prompt_session=="ai1"' "$SESSION" >/dev/null \
+    && pass "and the turn is recorded against the session that took it" || fail "last_prompt_session is wrong"
 jq -nc --arg t "$T" --arg c "$AIP" \
     '{hook_event_name:"UserPromptSubmit",session_id:"ai1",transcript_path:$t,cwd:$c,prompt:"a secret"}' \
     | AI_HANDOFF_NO_PROMPT=1 "$GUARD" >/dev/null

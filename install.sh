@@ -548,7 +548,15 @@ jq -s '
   | reduce ($newhooks | to_entries[]) as $event
       ($merged;
         .hooks[$event.key] = (
-          (.hooks[$event.key] // [])
+          # An entry that already runs one of our commands is replaced by ours,
+          # not left alone: otherwise a matcher this version widens (or a
+          # timeout it raises) never reaches an install that has the old entry.
+          ( (.hooks[$event.key] // [])
+            | map( . as $old
+                   | ( $event.value
+                       | map(select(((.hooks // []) | map(.command))
+                                    == (($old.hooks // []) | map(.command)))) ) as $ours
+                   | if ($ours | length) > 0 then $ours[0] else $old end ) )
           + ( $event.value
               | map( . as $entry
                      | select( ($entry.hooks // []) | map(.command)

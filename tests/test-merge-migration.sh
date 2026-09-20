@@ -23,6 +23,21 @@ out=$(CLAUDE_DIR="$DIR2" bash "$INSTALL" --plan max --fable yes 2>&1)
 grep -q 'my own extra rule' "$DIR2/agents/reviewer.md" && pass "with the user's edit intact" || fail "edit lost"
 printf '%s' "$out" | grep -q 'you have edited it' && pass "and the conflict is reported" || fail "should report the conflict" "$out"
 
+echo "== an upgrade reaches a registration this version changed"
+DIRU="$TMP/upgrade"; mkdir -p "$DIRU"
+jq -n '{hooks:{SessionStart:[{matcher:"compact",hooks:[{type:"command",
+        command:"\"$HOME/.claude/hooks/context-guard.py\"",timeout:15}]}],
+        PreToolUse:[{matcher:"Bash",hooks:[{type:"command",command:"my-own-guard.sh"}]}]}}' \
+    > "$DIRU/settings.json"
+out=$(CLAUDE_DIR="$DIRU" bash "$INSTALL" --plan max --fable yes 2>&1)
+[ "$(jq -r '[.hooks.SessionStart[] | select(.hooks[].command | test("context-guard"))] | length' "$DIRU/settings.json")" = 1 ] \
+    && pass "the existing context-guard SessionStart entry is not duplicated" || fail "expected exactly one entry" "$out"
+[ "$(jq -r '.hooks.SessionStart[] | select(.hooks[].command | test("context-guard")) | .matcher' "$DIRU/settings.json")" \
+    = "startup|resume|clear|compact" ] \
+    && pass "and its matcher is the one this version registers" || fail "an upgrade must update the matcher" "$(jq -c .hooks.SessionStart "$DIRU/settings.json")"
+jq -e '[.hooks.PreToolUse[] | select(.hooks[].command == "my-own-guard.sh")] | length == 1' "$DIRU/settings.json" >/dev/null \
+    && pass "a hook the user registered themselves is untouched" || fail "the user's own hooks must survive"
+
 echo "== a pre-plugin unmarked routing section is migrated"
 DIR3="$TMP/c"; mkdir -p "$DIR3"
 printf '# Model allocation by task and scope\n\nold hand-written rules\n\n# Something else of mine\n\nkeep me\n' > "$DIR3/CLAUDE.md"
