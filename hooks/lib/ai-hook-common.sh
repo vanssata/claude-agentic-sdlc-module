@@ -15,6 +15,13 @@
 # Fail-open policy: a guard that cannot parse its input must allow. These hooks
 # are defence-in-depth against ordinary agent mistakes, not a security boundary;
 # a broken guard must never make the tool unusable.
+#
+# This file runs on nearly every tool call, so it is written for process count
+# rather than for readability: one jq per payload, ere_match instead of
+# `printf | grep -qE`, parameter expansion instead of dirname. Before changing
+# any of that, read docs/hook-performance.md — it carries the measurements, the
+# invariants a refactor must preserve, and how to prove with
+# tests/test-guard-characterization.sh that behaviour did not move.
 
 set -uo pipefail
 
