@@ -1,6 +1,6 @@
 ---
 name: ai-status
-description: Show where the current agentic task stands — id, stage, next action, risk tier, current step and its allowed files, test/e2e/review/security status, open risks — plus which model the EXPERT tier resolves to and whether the risk-tier mirror is stale. Read-only. Use for "/ai-status", "where are we", "what is the agent working on".
+description: Show where the current agentic task stands — which .ai/ root governs this directory, id, stage, next action, risk tier, current step and its allowed files, test/e2e/review/security status, open risks — plus which model the EXPERT tier resolves to and whether the risk-tier mirror is stale. Read-only. Use for "/ai-status", "where are we", "what is the agent working on", "why did a guard fire here".
 ---
 
 # /ai-status
@@ -18,8 +18,44 @@ done
 
 ## Steps
 
-1. **Find the project.** Walk up from `$PWD` for a `.ai/` directory. If there is
-   none, say so and point at `/ai-init` — nothing else in this skill applies.
+1. **Find the project, and name the root you found.** The guards resolve their
+   project the same way — nearest ancestor of the working directory holding a
+   `.ai/` directory — so this is what makes the opt-in boundary visible:
+
+   ```bash
+   AI_PROJECT=""; d=$PWD
+   while [ -n "$d" ] && [ "$d" != / ]; do
+     [ -d "$d/.ai" ] && { AI_PROJECT="$d"; break; }
+     d="${d%/*}"; [ -n "$d" ] || d=/
+   done
+   [ -n "$AI_PROJECT" ] || { [ -d /.ai ] && AI_PROJECT=/; }
+   GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+   ```
+
+   The walk is `find_ai_root` in `hooks/lib/ai-hook-common.sh`, down to the
+   `/.ai` case — it has to be, or the status can report "no project" in a
+   directory where the guards are armed, which is the blind spot this closes.
+   `tests/test-ai-status-root.sh` runs this block out of this file and compares
+   the two.
+
+   If `AI_PROJECT` is empty, say so and point at `/ai-init` — nothing else in
+   this skill applies.
+
+   Otherwise print the root. Say it plainly when it is the repository you are in
+   (`AI_PROJECT` equals `GIT_ROOT`, or there is no git repository and it equals
+   `$PWD`), and **warn** when it is not:
+
+   - `AI_PROJECT` is an ancestor of `GIT_ROOT` — this repository is governed by a
+     `.ai/` that belongs to a directory above it. Name both paths. The guards,
+     the scope enforcement and every path in this report come from that outer
+     project, not from this one. Either this repository wants its own
+     `/ai-init`, or the outer `.ai/` does not belong where it is.
+   - `AI_PROJECT` is `$HOME` — say so in as many words. A `.ai/` directory in the
+     home directory silently arms the path and scope guards for **every**
+     repository under it, including ones that never ran `/ai-init`, and it is
+     almost always a mistake rather than a decision.
+
+   This is a warning, not an error: report it and carry on with the rest.
 
 2. **The task in flight:**
 
@@ -119,7 +155,9 @@ done
 
 7. **Guards.** Say in one line each whether the three hooks are active here:
    `ai-git-guard` always is; `ai-path-guard` and `ai-scope-guard` are active
-   because `.ai/` exists; the scope guard is armed only while a step is current.
+   because of the `.ai/` at `AI_PROJECT` from step 1 — name it again here if it
+   was not this repository, because that is where a surprising deny comes from;
+   the scope guard is armed only while a step is current.
    The same three run in both runtimes. Under Codex they also see `apply_patch`,
    which can touch several files in one call — every path in the patch is checked
    separately, so one out-of-scope file rejects the whole patch. Codex has no
