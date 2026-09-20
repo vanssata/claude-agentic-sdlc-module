@@ -22,6 +22,9 @@ Usage:
   sensors.py diff     [--root DIR] [--from TREE] [--to TREE|--now] [--tier T2]
                       [--allowed "a,b"] [--scope step|task] [--format text|json]
   sensors.py rescore  [--root DIR] [--from TREE] [--to TREE|--now] [--declared T2]
+  sensors.py run      --scope step|suite|e2e|single [--files "a,b"] [--test NAME]
+                      [--at now|base] [--log FILE]
+  sensors.py bite     [--restore]
   sensors.py detect   [--root DIR]
 
 Exit codes: 0 green or not applicable · 1 usage or internal error ·
@@ -33,6 +36,7 @@ import fnmatch
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -494,6 +498,241 @@ def rescore(declared, measurement, policy):
     return out
 
 
+# ------------------------------------------------------------------- running
+
+TESTING_FIELDS = ("verify_command", "step_test_command", "e2e_command",
+                  "lint_command", "typecheck_command", "single_test")
+
+SCOPE_FIELD = {"suite": "verify_command", "step": "step_test_command",
+               "e2e": "e2e_command", "single": "single_test"}
+
+
+def testing_path(root):
+    return os.path.join(root, ".ai", "policies", "testing.md")
+
+
+def read_commands(root):
+    """The project's own commands, as a human wrote them into testing.md.
+
+    A line's value is everything after the colon, minus a trailing comment; the
+    template ships the fields with an explanatory comment and no value, and that
+    reads as "not written down yet", which is not the same as `none`.
+    """
+    commands = {}
+    try:
+        with open(testing_path(root), encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        return commands
+    for field in TESTING_FIELDS:
+        match = re.search(r"(?m)^%s:[ \t]*(.*)$" % re.escape(field), text)
+        if not match:
+            continue
+        value = match.group(1).strip()
+        if value.startswith("#"):
+            value = ""
+        commands[field] = value
+    return commands
+
+
+def command_for(root, scope):
+    return (read_commands(root).get(SCOPE_FIELD.get(scope, ""), "") or "").strip()
+
+
+def cap_log(path, limit):
+    """A log is for a human and for grep, not for a context window. Past the
+    limit the middle goes, because a failure shows itself at both ends."""
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return
+    if limit and size > limit:
+        half = limit // 2
+        with open(path, "rb") as fh:
+            head = fh.read(half)
+            fh.seek(size - half)
+            tail = fh.read(half)
+        with open(path, "wb") as fh:
+            fh.write(head)
+            fh.write(b"\n\n... %d bytes cut from the middle of this log ...\n\n" % (size - limit))
+            fh.write(tail)
+
+
+def run_command(root, command, log_path, timeout=1800, log_max_bytes=2097152):
+    """One command, to the end, with its output in a file.
+
+    No fail-fast flag is added and none is removed: the policy says the command
+    itself must not stop at the first failure, because the caller fixes every
+    failure as one batch. The session sees the exit code and a few lines; the
+    log is what an agent reads, and only when the run was red.
+    """
+    if not command:
+        return {"status": UNAVAILABLE, "detail": "no command", "exit": None,
+                "duration_s": 0, "log": None, "command": ""}
+    if command.strip() == "none":
+        return {"status": NOT_APPLICABLE, "detail": "written as none", "exit": None,
+                "duration_s": 0, "log": None, "command": command}
+    if log_path:
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    started = datetime.now(timezone.utc)
+    handle = open(log_path, "wb") if log_path else subprocess.DEVNULL
+    try:
+        done = subprocess.run(command, cwd=root, shell=True, timeout=timeout,
+                              stdout=handle if log_path else subprocess.DEVNULL,
+                              stderr=subprocess.STDOUT if log_path else subprocess.DEVNULL)
+        code = done.returncode
+        detail = ""
+    except subprocess.TimeoutExpired:
+        code, detail = None, "timed out after %ds" % timeout
+    except OSError as exc:
+        code, detail = None, "could not run: %s" % exc
+    finally:
+        if log_path:
+            handle.close()
+    if log_path:
+        cap_log(log_path, log_max_bytes)
+    duration = int((datetime.now(timezone.utc) - started).total_seconds())
+    return {"status": GREEN if code == 0 else (RED if code is not None else UNAVAILABLE),
+            "detail": detail, "exit": code, "duration_s": duration,
+            "log": log_path, "command": command}
+
+
+def expand_files(command, files):
+    """`{files}` where the runner takes paths; appended where it does not say."""
+    paths = " ".join(shlex.quote(f) for f in files or [])
+    if not paths:
+        return command
+    if "{files}" in command:
+        return command.replace("{files}", paths)
+    return "%s %s" % (command, paths)
+
+
+# ------------------------------------------------- running against the base tree
+
+def lock_path(root):
+    return os.path.join(root, ".ai", "state", "bite.lock")
+
+
+def changed_paths(root, from_tree, to_tree, source_only=True, scopes=None):
+    files = numstat(root, from_tree, to_tree) or []
+    paths = []
+    for item in files:
+        path = item["path"]
+        if source_only and scopes is not None:
+            name, _min_tier = scope_of(path, scopes)
+            if name in ("tests", "docs"):
+                continue
+        paths.append(path)
+    return paths
+
+
+def revert_to(root, tree, paths):
+    """Put these paths back as `tree` has them, without touching the index.
+
+    A file the tree does not have is one the change added, and reverting it
+    means removing it. Everything here is recoverable from `tree_after`, which
+    the caller wrote down before calling — see restore_from.
+    """
+    if not paths:
+        return True
+    if git(root, ["restore", "--source=%s" % tree, "--worktree", "--"] + paths)[0] == 0:
+        return True
+    # git < 2.23, or a path the tree does not carry: do it one at a time, and
+    # delete what the tree does not have rather than leaving a half-revert.
+    ok = True
+    for path in paths:
+        if git(root, ["cat-file", "-e", "%s:%s" % (tree, path)])[0] == 0:
+            if git(root, ["checkout", tree, "--", path])[0] != 0:
+                ok = False
+        else:
+            try:
+                os.remove(os.path.join(root, path))
+            except OSError:
+                pass
+    return ok
+
+
+def restore_from(root, tree, paths):
+    """The counterpart, and the reason a revert is safe: every path goes back to
+    the tree the caller snapshotted before it touched anything."""
+    return revert_to(root, tree, paths)
+
+
+def write_lock(root, data):
+    try:
+        os.makedirs(os.path.dirname(lock_path(root)), exist_ok=True)
+        with open(lock_path(root), "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+    except OSError:
+        pass
+
+
+def read_lock(root):
+    try:
+        with open(lock_path(root), encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+def clear_lock(root):
+    try:
+        os.remove(lock_path(root))
+    except OSError:
+        pass
+
+
+def run_at_base(root, command, base_tree, log_path, timeout=600, log_max_bytes=2097152,
+                scopes=None):
+    """Run a command against the code as it was before this task touched it.
+
+    The worktree is reverted in place, from immutable tree objects, and restored
+    from the tree that was snapshotted first. A lock file holds that tree and
+    the paths, so an interrupted run is recoverable rather than a mystery — and
+    the restore is asserted by tree hash, not assumed.
+    """
+    result = {"status": UNAVAILABLE, "detail": "", "exit": None, "duration_s": 0,
+              "log": log_path, "command": command, "restored": None, "reverted": []}
+    if not base_tree or not is_repo(root):
+        result["detail"] = "no base tree, or not a git repository"
+        return result
+    before = snapshot_tree(root)
+    if not before:
+        result["detail"] = "could not snapshot the worktree"
+        return result
+    paths = changed_paths(root, base_tree, before, scopes=scopes)
+    if not paths:
+        result["status"] = NOT_APPLICABLE
+        result["detail"] = "nothing changed outside tests and docs"
+        result["restored"] = before
+        return result
+    write_lock(root, {"tree_after": before, "paths": paths, "at": now(),
+                      "why": "running the tests against the base tree"})
+    print("recovery: if this is interrupted, run "
+          "`python3 sensors.py --root . bite --restore` to put the worktree back",
+          file=sys.stderr)
+    try:
+        result["reverted"] = paths
+        if not revert_to(root, base_tree, paths):
+            result["detail"] = "could not revert the worktree"
+            return result
+        run = run_command(root, command, log_path, timeout=timeout,
+                          log_max_bytes=log_max_bytes)
+        result.update({k: run[k] for k in ("exit", "duration_s", "log", "command")})
+        result["status"] = run["status"]
+        result["detail"] = run["detail"]
+    finally:
+        restore_from(root, before, paths)
+        result["restored"] = snapshot_tree(root)
+        if result["restored"] == before:
+            clear_lock(root)
+        else:
+            result["detail"] = ((result["detail"] + "; ") if result["detail"] else "") + \
+                "the worktree did not restore to %s — see %s" % (before[:9], lock_path(root))
+            result["status"] = UNAVAILABLE
+    return result
+
+
 # ------------------------------------------------------------------- detect
 
 def detect(root):
@@ -618,6 +857,70 @@ def cmd_rescore(args, root):
     return REDCODE
 
 
+def cmd_run(args, root):
+    policy = load_policy(root)
+    config = (policy.get("sensors") or {}).get("tests") or {}
+    command = command_for(root, args.scope)
+    if not command:
+        print("%-13s UNAVAIL  %s is not written down in .ai/policies/testing.md"
+              % (args.scope, SCOPE_FIELD.get(args.scope, args.scope)))
+        return UNKNOWNCODE
+    files = [f.strip() for f in (args.files or "").split(",") if f.strip()]
+    if args.test:
+        command = command.replace("{test}", args.test)
+        if "{test}" not in command_for(root, args.scope):
+            command = "%s %s" % (command, shlex.quote(args.test))
+    command = expand_files(command, files)
+    log = args.log or os.path.join(root, ".ai", "reports", "tests-%s.log" % args.scope)
+    if args.at == "base":
+        state_file = os.path.join(root, ".ai", "state", "current.json")
+        base = None
+        try:
+            with open(state_file, encoding="utf-8") as fh:
+                base = ((json.load(fh) or {}).get("diff") or {}).get("base_tree")
+        except (OSError, ValueError):
+            base = None
+        result = run_at_base(root, command, args.base or base, log,
+                             timeout=config.get("timeout_seconds", 1800),
+                             log_max_bytes=config.get("log_max_bytes", 2097152),
+                             scopes=policy["path_scopes"])
+    else:
+        result = run_command(root, command, log,
+                             timeout=config.get("timeout_seconds", 1800),
+                             log_max_bytes=config.get("log_max_bytes", 2097152))
+    label = {GREEN: "green", RED: "RED", NOT_APPLICABLE: "n/a"}.get(result["status"], "UNAVAIL")
+    print("%-13s %-8s exit %s in %ds%s"
+          % (args.scope, label, result["exit"], result["duration_s"],
+             " at the base tree" if args.at == "base" else ""))
+    if result["detail"]:
+        print("              %s" % result["detail"])
+    if result["log"]:
+        print("              log: %s" % os.path.relpath(result["log"], root))
+    return {GREEN: OK, NOT_APPLICABLE: OK, RED: REDCODE}.get(result["status"], UNKNOWNCODE)
+
+
+def cmd_bite(args, root):
+    """Step 4 ships the recovery half: --restore puts back a worktree an
+    interrupted base-tree run left reverted. The verdict itself is step 6."""
+    if not args.restore:
+        print("bite          UNAVAIL  the must-bite check lands with step 6 of the plan; "
+              "--restore already works")
+        return UNKNOWNCODE
+    lock = read_lock(root)
+    if not lock:
+        print("nothing to restore: no %s" % os.path.relpath(lock_path(root), root))
+        return OK
+    restore_from(root, lock["tree_after"], lock.get("paths") or [])
+    current = snapshot_tree(root)
+    if current == lock["tree_after"]:
+        clear_lock(root)
+        print("restored to %s" % current[:9])
+        return OK
+    print("could not restore to %s — the worktree is at %s; the lock is kept"
+          % (lock["tree_after"][:9], (current or "?")[:9]))
+    return REDCODE
+
+
 def cmd_detect(args, root):
     found = detect(root)
     for kind in ("lint", "typecheck"):
@@ -652,6 +955,16 @@ def build_parser():
     p.add_argument("--now", action="store_true")
     p.add_argument("--declared", default="T2")
     p.set_defaults(func=cmd_rescore)
+
+    p = sub.add_parser("run")
+    p.add_argument("--scope", required=True, choices=["step", "suite", "e2e", "single"])
+    p.add_argument("--files", default=""); p.add_argument("--test", default="")
+    p.add_argument("--at", default="now", choices=["now", "base"])
+    p.add_argument("--base", default=""); p.add_argument("--log", default="")
+    p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser("bite"); p.add_argument("--restore", action="store_true")
+    p.set_defaults(func=cmd_bite)
 
     p = sub.add_parser("detect"); p.set_defaults(func=cmd_detect)
     return parser

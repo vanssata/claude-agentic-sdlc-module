@@ -233,4 +233,41 @@ OUT=$(S remediate --files "tests/**" --note "third batch" 2>&1 </dev/null); RC=$
     && pass "a third remediation round needs the human (remediation_rule)" \
     || fail "should refuse round 3" "$OUT($RC)"
 
+echo "== section 7: running the tests is the state's job, not an agent's"
+cat > "$GATE/.ai/policies/testing.md" <<'MD'
+# Testing policy
+verify_command:      printf 'ok\n'; exit ${FAKE_EXIT:-0}
+step_test_command:   printf 'step %s\n' {files}
+e2e_command:         none
+single_test:         printf 'one %s\n'
+lint_command:        none
+typecheck_command:   none
+MD
+OUT=$(S test-run --scope suite 2>&1); RC=$?
+[ $RC -eq 0 ] && pass "a green run needs no agent at all" || fail "green run should exit 0" "$OUT($RC)"
+[ "$(printf '%s\n' "$OUT" | wc -l)" -le 6 ] \
+    && pass "the session sees at most six lines, never the log" || fail "too much output" "$OUT"
+[ "$(S get --field test_status)" = passing ] \
+    && pass "exit 0 records test_status deterministically" || fail "test_status should be passing"
+LOG=$(J tests.runs.0.log)
+[ -f "$GATE/$LOG" ] && pass "the output is in a file: $LOG" || fail "the log should exist" "$LOG"
+[ -n "$(J tests.runs.0.tree)" ] \
+    && pass "the run is bound to the tree it ran on" || fail "a run should record its tree"
+
+OUT=$(S test-run --scope suite --env-retry 2>&1); RC=$?
+[ $RC -ne 0 ] && printf '%s' "$OUT" | grep -q 'classified' \
+    && pass "--env-retry is refused until a failure was classified as one" \
+    || fail "should refuse an unclassified retry" "$OUT($RC)"
+
+FAKE_EXIT=1 S test-run --scope suite >/dev/null 2>&1
+[ "$(S get --field test_status)" != passing ] \
+    && pass "a red run does not report itself as passing" || fail "red run should not be passing"
+S test-run --scope suite >/dev/null 2>&1
+S test-run --scope suite >/dev/null 2>&1
+S test-run --scope suite >/dev/null 2>&1
+OUT=$(S test-run --scope suite 2>&1); RC=$?
+[ $RC -eq 6 ] && printf '%s' "$OUT" | grep -q 'run budget exhausted' \
+    && pass "the suite cannot be run forever: the cap is the human's cue" \
+    || fail "should exhaust the run budget" "$OUT($RC)"
+
 summary "sensors"

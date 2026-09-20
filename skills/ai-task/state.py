@@ -30,6 +30,9 @@ Usage:
   state.py step-done <step_id> [--force]    measures the step's diff against the tier's budget
                                          and its allowed files; exit 6 asks for a split
   state.py step-split <step_id> --files a,b [--note TEXT]   move part of a step into its own
+  state.py test-run --scope step|suite|e2e [--files a,b] [--env-retry]
+                                         runs the project's own command to the end, records it,
+                                         and puts the output in a file instead of the context
   state.py set    <field> <value>        # test_status, e2e_status, review_status, security_status, next_action
   state.py risks  --add TEXT | --clear
   state.py ask    "<question>" --option "A: text" [--option ...] [--recommend A] [--gate G] [--topic S]
@@ -127,8 +130,8 @@ OPTION_HEAD_RE = re.compile(r"^([A-Za-z0-9]{1,3})\s*[:.]\s")
 # records, reads or answers (R3). done --abandon is exempt: abandoning a task is
 # how an unanswerable question is closed.
 BLOCKING_COMMANDS = {
-    "stage", "triage", "plan", "step", "step-done", "step-split", "remediate", "approve",
-    "done", "close",
+    "stage", "triage", "plan", "step", "step-done", "step-split", "test-run", "remediate",
+    "approve", "done", "close",
 }
 RUNTIMES = ["claude", "codex"]
 
@@ -142,7 +145,7 @@ RUNTIME = "unknown"
 # task from the other runtime, or writing a note about it, is not a handoff.
 MUTATING_COMMANDS = {
     "init", "stage", "risk", "triage", "quick", "plan", "remediate", "step", "step-done",
-    "step-split", "set", "risks", "modules", "ask", "answer", "done", "close",
+    "step-split", "test-run", "set", "risks", "modules", "ask", "answer", "done", "close",
 }
 MUTATING = False
 
@@ -930,6 +933,77 @@ def cmd_remediate(args, root):
     write_handoff(root, state, "stage")
     save(root, state)
     print("step %s armed for %s" % (step_id, ", ".join(allowed)))
+
+
+def cmd_test_run(args, root):
+    """One run of one scope, recorded. Why this and not the agent running it:
+    a run's own exit code is the verdict when it is green, so a green run costs
+    no model at all; and the cap, the one environment retry and the log file
+    live where the record does, not in a prompt an agent may read loosely."""
+    state = load(root)
+    policy = load_policy(root)
+    config = (policy.get("sensors") or {}).get("tests") or {}
+    max_runs = config.get("max_suite_runs", 5)
+    tests = state["tests"]
+    if args.scope == "suite" and isinstance(max_runs, int) and tests["suite_runs"] >= max_runs:
+        die("run budget exhausted: %d suite runs, the policy allows %d. Running it again is not "
+            "the next move — the human decides what is." % (tests["suite_runs"], max_runs), 6)
+    if args.env_retry and state.get("test_status") != "env_failure":
+        die("--env-retry is for a run already classified as a TEST ENVIRONMENT FAILURE; "
+            "this task's test_status is '%s'. Classify the failure first." % state.get("test_status"))
+
+    command = safe_sensor(sensors.command_for, root, args.scope) or ""
+    if not command:
+        die("no command for scope '%s' in .ai/policies/testing.md — write it down first"
+            % args.scope)
+    files = _split_files(args.files)
+    if files:
+        command = safe_sensor(sensors.expand_files, command, files) or command
+    n = len([r for r in tests["runs"] if r.get("scope") == args.scope]) + 1
+    log = os.path.join(root, ".ai", "reports", state["task_id"],
+                       "tests-%s-%d.log" % (args.scope, n))
+    result = safe_sensor(sensors.run_command, root, command, log,
+                         config.get("timeout_seconds", 1800),
+                         config.get("log_max_bytes", 2097152))
+    if result is None:
+        die("sensors.py is not installed beside state.py — run the project's command yourself")
+
+    tests["runs"].append({"n": n, "scope": args.scope, "command": command,
+                          "tree": safe_sensor(sensors.snapshot_tree, root),
+                          "exit": result["exit"], "duration_s": result["duration_s"],
+                          "log": os.path.relpath(log, root), "at": now(),
+                          "env_retry": bool(args.env_retry)})
+    if args.scope == "suite":
+        tests["suite_runs"] += 1
+    field = "e2e_status" if args.scope == "e2e" else "test_status"
+    previous = state.get(field)
+    if result["exit"] == 0:
+        # Green needs no interpretation, and this is where the model step goes
+        # away: nothing is delegated, nothing is pasted, the exit code is it.
+        state[field] = "passing"
+    elif result["exit"] is None:
+        state[field] = "env_failure" if field == "test_status" else "not_run"
+    elif previous in (None, "not_run", "passing"):
+        state[field] = "unknown" if field == "test_status" else "failing"
+    emit(root, state, "field_set", "%s = %s (%s run %d, exit %s)"
+         % (field, state[field], args.scope, n, result["exit"]),
+         {"field": field, "from": previous, "value": state[field],
+          "scope": args.scope, "exit": result["exit"], "log": os.path.relpath(log, root)})
+    write_handoff(root, state, "stage")
+    save(root, state)
+
+    print("%s run %d: exit %s in %ds" % (args.scope, n, result["exit"], result["duration_s"]))
+    print("command: %s" % command)
+    print("log: %s" % os.path.relpath(log, root))
+    if result["detail"]:
+        print(result["detail"])
+    if result["exit"] == 0:
+        print("%s = passing" % field)
+        return
+    print("classify: hand ai-tester the log path above — it reads the file, it never re-runs")
+    if args.scope == "suite" and isinstance(max_runs, int):
+        print("suite runs used: %d of %d" % (tests["suite_runs"], max_runs))
+    sys.exit(1)
 
 
 def cmd_close(args, root):
@@ -2175,6 +2249,11 @@ def main():
     p.add_argument("--force", action="store_true",
                    help="record the step although the diff gate refused it; say why in the plan")
     p.set_defaults(func=cmd_step_done)
+    p = sub.add_parser("test-run")
+    p.add_argument("--scope", required=True, choices=["step", "suite", "e2e"])
+    p.add_argument("--files", default="")
+    p.add_argument("--env-retry", action="store_true", dest="env_retry")
+    p.set_defaults(func=cmd_test_run)
     p = sub.add_parser("step-split"); p.add_argument("step_id")
     p.add_argument("--files", required=True); p.add_argument("--note", default="")
     p.set_defaults(func=cmd_step_split)
