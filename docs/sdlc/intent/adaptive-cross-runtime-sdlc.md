@@ -60,10 +60,14 @@ cost findings, Stripe Minions, Shopify Roast, Airbnb test migration, METR, GitCl
   attempts with the error text, next step, the user's latest instruction verbatim) is
   rewritten at every stage change and before compaction, and is the first thing a new
   session reads, in either runtime.
-- An append-only `.ai/reports/<task-id>/events.jsonl` with about ten event types
-  (`stage_started`, `question_answered`, `scope_change`, `tier_raised`, `gate_approved`,
-  `runtime_handoff`, `model_fallback`, …), readable by `/ai-status` and `/usage-report`
-  at zero model cost.
+- An append-only `.ai/reports/<task-id>/events.jsonl` with one flat event type per command
+  that changes state (`stage_started`, `question_answered`, `scope_change`, `tier_raised`,
+  `gate_approved`, `runtime_handoff`, `model_fallback`, …; twenty in WP2, listed in its
+  spec), readable by `/ai-status` and `/usage-report` at zero model cost. Flat, because a
+  reader finds one with a single `grep` and no type exists without an emitter. A new type
+  is added only when it has its own consumer; anything else reuses `field_set` or `note`.
+  This is not AI-DLC's event taxonomy: there is no event that no command emits, and no
+  gate per stage.
 
 **Context diet**
 
@@ -206,8 +210,8 @@ Each package runs `/sdlc-spec` → `/sdlc-plan` → `/ai-task` on its own; specs
 
 | WP | Package | Main files | Tier | Depends on | Status |
 |---|---|---|---|---|---|
-| 1 | Schema version and structural migrations | `skills/project-update/update.py`, new `migrations/`, `history/`, `tools/build-template-history.py`, `tests/test-project-update.sh`, `tests/test-merge-migration.sh` | T3 | — | spec done (`…-wp1-schema-migrations.md`) |
-| 2 | Questions file, handoff, event journal, human-turn approval | `skills/ai-task/state.py` (`ask`, `answer`, `questions`, `handoff`, `events.jsonl`, `owner_runtime`, approve outside the agent), `hooks/context-guard.py`, a session-start hook, `skills/ai-task/SKILL.md`, `skills/sdlc-intent` | T3 | 1 | not started |
+| 1 | Schema version and structural migrations | `skills/project-update/update.py`, new `migrations/`, `history/`, `tools/build-template-history.py`, `tests/test-project-update.sh`, `tests/test-merge-migration.sh` | T3 | — | **done** (PR #15, #16, merged 2026-09-20) — schema version in `.ai/VERSION`, ordered idempotent migrations inside the dry run, template history following renames, the delete gate and `migration.json`; spec and plan under `…-wp1-schema-migrations.md` |
+| 2 | Questions file, handoff, event journal, human-turn approval | `skills/ai-task/state.py` (`ask`, `answer`, `questions`, `handoff`, `events.jsonl`, `owner_runtime`, approve outside the agent), `hooks/context-guard.py`, a session-start hook, `skills/ai-task/SKILL.md`, `skills/sdlc-intent` | **T4** (raised from T3, 2026-09-20: the deliverable is an authorization control) | 1 | spec done (`…-wp2-questions-handoff-journal.md`) — intent open questions 1 and 2 settled there; spec concerns 1, 2 and 8 answered by the user on 2026-09-20 |
 | 3 | Context diet | `CLAUDE.snippet.md`, `AGENTS.snippet.md`, `skills/ai-init/templates/*.block.md` and `*.minimal.md`, `.ai/AGENTS.md` as a router, `constitution.md` template, byte-budget test, a migration for existing projects | T2–T3 | 1, 2 | not started |
 | 4 | Deterministic gates | `risk-tiers.json` (diff budget, scopes), `state.py step-done` diff measurement, new `skills/ai-task/sensors.py`, tier re-scoring, retry rule in `ai-tester`, "test must bite" check | T3 | 1 (can run beside 3) | not started |
 | 5 | Runtimes and plans | new `profiles/max20.json`, preferred-runtime and budget tables in every profile, `install.sh` plan detection + confirmation, `fable-gate` / `codex-model-gate` → `runtime-gate`, `state.py handoff --to`, grep test that shared prompts name no model | T3 | 2 | not started |
