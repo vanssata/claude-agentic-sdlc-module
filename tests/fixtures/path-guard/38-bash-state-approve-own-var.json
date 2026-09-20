@@ -1,0 +1,1 @@
+{"case":"a variable of the agent's own naming is denied as $STATE is","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"S=/home/u/.claude/skills/ai-task/state.py; python3 $S approve --by ivan"}}}

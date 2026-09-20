@@ -1,0 +1,1 @@
+{"case":"an interpreter one-liner that writes session.json is denied: it mints the human turn the gate reads","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"python3 -c 'open(\".ai/state/session.json\",\"w\").write(1)'"}}}

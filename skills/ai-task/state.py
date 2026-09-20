@@ -79,6 +79,11 @@ EVENT_TYPES = [
     "question_answered", "gate_requested", "gate_approved", "gate_rejected", "note",
     "handoff_written", "runtime_handoff", "model_fallback", "schema_migrated", "task_closed",
 ]
+# The types `event` will not write: each is the record of an authorization or a
+# lifecycle decision, and is emitted by the transition that made it. `event` is
+# for a hook reporting something that happened outside the state machine.
+FORGEABLE_EVENTS = {"gate_requested", "gate_approved", "gate_rejected",
+                    "task_started", "task_closed"}
 NOTE_KINDS = ["decision", "rejected", "failed"]
 
 # The questions file is written by state.py and never by a model (R1). One regex
@@ -366,7 +371,7 @@ def cmd_init(args, root):
     if existing and existing.get("current_stage") != "done" and not args.force:
         die("task %s is still at stage '%s'. Finish it, archive it, or pass --force."
             % (existing.get("task_id"), existing.get("current_stage")))
-    task_id = args.task_id or next_task_id(root)
+    task_id = valid_task_id(args.task_id) if args.task_id else next_task_id(root)
     state = {
         "task_id": task_id,
         "goal": args.goal,
@@ -729,6 +734,14 @@ def cmd_event(args, root):
     current.json keeps its two writers; this command is not one of them."""
     if args.type not in EVENT_TYPES:
         die("unknown event type '%s' (have: %s)" % (args.type, ", ".join(EVENT_TYPES)))
+    if args.type in FORGEABLE_EVENTS:
+        # The journal is the compensating control for every route the gate
+        # cannot block, so the actor it audits may not author its lines. These
+        # types are emitted by the state transition that earns them, and by
+        # nothing else: an agent that took the unattended route could otherwise
+        # append a second, honest-looking gate_approved next to it.
+        die("'%s' is emitted by the state transition that earns it, not by 'event'. "
+            "A journal the agent can write is not an audit trail." % args.type, 5)
     data = {}
     if args.data:
         try:
@@ -799,6 +812,19 @@ def find_docs_root(start):
 
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def valid_task_id(task_id, flag="--task-id"):
+    """A task id is a directory name under .ai/reports/, and everything the
+    journal and the questions file are worth rests on it staying one. A '/' or
+    a '..' in it puts both outside the project — and outside the path guard's
+    `.ai/reports/<id>/` patterns, which is how a writable questions.md, and
+    with it a self-granted gate, would come back."""
+    if not isinstance(task_id, str) or not TASK_ID_RE.match(task_id) or ".." in task_id:
+        die("%s takes a directory name — letters, digits, '.', '_' and '-', "
+            "no path separators — not %r" % (flag, task_id))
+    return task_id
 
 
 def questions_path(root, state, topic):
@@ -1458,6 +1484,10 @@ def write_handoff(root, state, reason):
         tmp = "%s.%d.tmp" % (path, os.getpid())
         with open(tmp, "w", encoding="utf-8") as fh:
             fh.write("\n".join(lines) + "\n")
+        # It carries the user's verbatim instruction, so it is theirs to read.
+        # events.jsonl is committed with the task and stays 0644; this one is
+        # git-ignored and describes a session.
+        os.chmod(tmp, 0o600)
         os.replace(tmp, path)
     except Exception:  # pylint: disable=broad-exception-caught  # derived artefact: never fatal
         return None
@@ -1637,7 +1667,15 @@ def human_turn(root, state):
         return False, ("the last prompt in %s (%s) is older than the approval request (%s)"
                        % (relative, turn, requested))
     opened_in = (state.get("human_approval") or {}).get("requested_session")
-    if opened_in and session.get("last_prompt_session") != opened_in:
+    if not opened_in:
+        # The gate was opened without a session on record — the hook had never
+        # run in this project (Codex before /hooks, or a task older than the
+        # install). There is then nothing to bind the turn to, and any later
+        # session's prompt would do. The terminal route is unaffected; this
+        # route fails closed, because it is the weaker of the two.
+        return False, ("no session was recorded when the gate was requested, so a prompt in %s "
+                       "cannot be tied to it — approve from your own terminal instead" % relative)
+    if session.get("last_prompt_session") != opened_in:
         # One file per project, last writer wins, so session.json's own two
         # fields always agree after any real second session. The turn has to
         # come from the session the plan was presented in.

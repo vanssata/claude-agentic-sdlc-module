@@ -205,10 +205,19 @@ case "$AI_TOOL" in
         # Single quotes are accepted wherever double ones are, --opt=value is
         # argparse's own form, and a quote may close right after the verb: none
         # of those is the obfuscation the spec budgets as residual risk.
+        # The two global options are --root and --runtime, and argparse accepts
+        # any unambiguous prefix of either (allow_abbrev is on by default), so
+        # `--ro .` is an ordinary, non-obfuscated spelling that argparse honours
+        # — hence --r[a-z]* rather than the two full names. `--r` alone is
+        # ambiguous and argparse rejects it; denying it costs nothing.
+        # The second branch is any variable holding the path, not the literal
+        # $STATE the skill happens to use: `S=…/state.py; python3 $S approve`
+        # is one assignment away and was allowed before.
         Q='['\''"]?'
         END='([[:space:]]|['\''"]|$)'
-        ARGS='([[:space:]]+--(root|runtime)(=|[[:space:]]+)[^[:space:]]+)*'
-        APPROVE_RE='(^|[|;&[:space:]])(python3?[[:space:]]+)?'$Q'[^[:space:]'\''"]*state\.py'$Q$ARGS'[[:space:]]+approve'$END'|(^|[|;&[:space:]])'$Q'\$\{?STATE\}?'$Q'[[:space:]]+approve'$END
+        ARGS='([[:space:]]+--r[a-z]*(=|[[:space:]]+)[^[:space:]]+)*'
+        VAR='\$\{?[A-Za-z_][A-Za-z0-9_]*\}?'
+        APPROVE_RE='(^|[|;&[:space:]])(python3?[[:space:]]+)?'$Q'[^[:space:]'\''"]*state\.py'$Q$ARGS'[[:space:]]+approve'$END'|(^|[|;&[:space:]])(python3?[[:space:]]+)?'$Q$VAR$Q$ARGS'[[:space:]]+approve'$END
         if ere_match "$APPROVE_RE" "$cmd" \
            && [ -z "${AI_UNATTENDED:-}" ] && task_in_flight; then
             deny "Refusing 'state.py approve' from an agent session.$WHY_APPROVE"
@@ -329,6 +338,13 @@ case "$AI_TOOL" in
            || ere_match '(^|[|;&[:space:]])eval([[:space:]]|$)' "$cmd"; then
             if ere_match '\.env|secrets?/|credentials?|id_rsa|\.pem|\.aws' "$cmd"; then
                 deny "Refusing an interpreter one-liner that references a sensitive path.$WHY_SENSITIVE"
+            fi
+            # The same tripwire over the task's own control files: session.json
+            # is the evidence the approval gate's file route rests on, and an
+            # interpreter one-liner is the cheapest way to write it without
+            # going through a file tool the guard would have classified.
+            if ere_match '\.ai/state/|\.ai/reports/' "$cmd"; then
+                deny "Refusing an interpreter one-liner that writes the task's own control files.$WHY_APPROVE"
             fi
         fi
         ;;

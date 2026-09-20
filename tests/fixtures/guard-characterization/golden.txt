@@ -384,6 +384,27 @@ rc=0
 rc=0
 ### ai-scope-guard | fixture path-guard/36-bash-grep-src-allowed.json
 rc=0
+### ai-git-guard | fixture path-guard/37-bash-state-approve-abbrev.json
+rc=0
+### ai-path-guard | fixture path-guard/37-bash-state-approve-abbrev.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing 'state.py approve' from an agent session.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/37-bash-state-approve-abbrev.json
+rc=0
+### ai-git-guard | fixture path-guard/38-bash-state-approve-own-var.json
+rc=0
+### ai-path-guard | fixture path-guard/38-bash-state-approve-own-var.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing 'state.py approve' from an agent session.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/38-bash-state-approve-own-var.json
+rc=0
+### ai-git-guard | fixture path-guard/39-bash-python-writes-session-json.json
+rc=0
+### ai-path-guard | fixture path-guard/39-bash-python-writes-session-json.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing an interpreter one-liner that writes the task's own control files.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/39-bash-python-writes-session-json.json
+rc=0
 ### ai-git-guard | fixture scope-guard/01-in-scope.json
 rc=0
 ### ai-path-guard | fixture scope-guard/01-in-scope.json

@@ -1115,4 +1115,40 @@ K get --field human_approval | jq -e '.rejected_at==null' >/dev/null \
 env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTJ" approve --by launcher >/dev/null
 K done >/dev/null && pass "and an approval lets it close" || fail "an approved task should close"
 
+echo "== the security review's findings stay closed"
+SEC="$TMP/sec"; mkdir -p "$SEC/.ai/state" "$SEC/.ai/reports"
+X() { python3 "$STATE" --root "$SEC" "$@"; }
+
+out=$(X init --goal g --workflow feature --task-id "../../../outside/evil" 2>&1); rc=$?
+[ "$rc" = 1 ] && printf '%s' "$out" | grep -q -- "--task-id takes a directory name" \
+  && pass "a --task-id with a path separator is refused" || fail "--task-id must name a directory" "exit $rc: $out"
+[ ! -d "$SEC/../../../outside" ] && pass "and nothing was written outside the project" \
+  || fail "the journal escaped .ai/reports/"
+out=$(X init --goal g --workflow feature --task-id "T-1/../.." 2>&1); rc=$?
+[ "$rc" = 1 ] && pass "so is one that climbs out with .." || fail "'..' must be refused" "exit $rc: $out"
+X init --goal g --workflow feature --task-id "T-2026.09-a_b" >/dev/null \
+  && pass "an ordinary id with a dot, a dash and an underscore still works" || fail "a plain id must pass"
+
+out=$(X event gate_approved --detail "granted by the human via terminal" \
+      --data '{"by":"the human","via":"terminal","tty":true}' 2>&1); rc=$?
+[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "not by 'event'" \
+  && pass "event refuses to forge a gate_approved line" || fail "the journal must not be writable by the agent it audits" "exit $rc: $out"
+[ "$(X events --format jsonl 2>/dev/null | grep -c gate_approved)" = 0 ] \
+  && pass "and nothing was appended" || fail "a refused event must leave no line"
+for t in gate_requested gate_rejected task_started task_closed; do
+  out=$(X event "$t" --detail x 2>&1)
+  [ $? = 5 ] || fail "event $t should be refused" "$out"
+done
+pass "the other lifecycle types are refused the same way"
+X event model_fallback --detail "fable overloaded" --data '{"agent":"architect"}' >/dev/null \
+  && pass "but the type the hooks actually emit still works" || fail "model_fallback must stay available"
+
+X stage human_approval >/dev/null
+printf '%s' '{"runtime":"claude","last_prompt_session":"s9","last_prompt_at":"2099-01-01T00:00:00Z"}' \
+  > "$SEC/.ai/state/session.json"
+out=$(X questions --sync 2>&1)
+X get --field human_approval | jq -e '.granted==false' >/dev/null \
+  && pass "a gate opened with no session on record cannot be closed from the file" \
+  || fail "the file route must fail closed without a requested_session" "$out"
+
 summary "state.py"
