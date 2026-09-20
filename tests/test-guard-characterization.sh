@@ -241,6 +241,23 @@ jq '.approved_plan.steps[0].forbidden_files = [] | .approved_plan.steps[0].allow
 run "empty lists edit anything" "$(file_payload Edit file_path "$ROOT/README.md")" "$SCOPE_GUARD"
 cp "$TMP/state.json" "$ROOT/.ai/state/current.json"
 
+# Two steps sharing one step_id. A plan is not supposed to reissue an id, but
+# when it does every match must contribute — both lists are the union and the
+# reason is one line per match. Taking only the first match is what a single
+# jq call makes tempting, and with an unrestricted first duplicate it leaves
+# both lists empty, which allows everything the second one forbids.
+for first in '["src/Payment/*.php"]' '[]'; do
+    jq --argjson a "$first" '.approved_plan.steps = [
+        {step_id: "1", allowed_files: $a, forbidden_files: [], forbidden_reason: "first reason"},
+        {step_id: "1", allowed_files: ["tests/Payment/*.php"],
+         forbidden_files: ["src/Payment/LegacyGateway.php"], forbidden_reason: "second reason"}]' \
+        "$TMP/state.json" > "$ROOT/.ai/state/current.json"
+    for p in src/Payment/LegacyGateway.php src/Payment/Gateway.php tests/Payment/T.php README.md; do
+        run "duplicate step_id (first=$first): Edit $p" "$(file_payload Edit file_path "$ROOT/$p")" "$SCOPE_GUARD"
+    done
+done
+cp "$TMP/state.json" "$ROOT/.ai/state/current.json"
+
 # The runtime lock follows the task: at stage "done" and with no state file the
 # same edits are ordinary edits again, while a dependency's instruction files
 # stay refused either way and an unparsable state file keeps the lock on.

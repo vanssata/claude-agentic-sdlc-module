@@ -1629,6 +1629,27 @@ rc=0
 rc=0
 ### ai-scope-guard | empty lists edit anything
 rc=0
+### ai-scope-guard | duplicate step_id (first=["src/Payment/*.php"]): Edit src/Payment/LegacyGateway.php
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"src/Payment/LegacyGateway.php is explicitly forbidden for step 1 of task T-2026-09-09-001 (matched: src/Payment/LegacyGateway.php).\nReason recorded in the plan: first reason\nsecond reason\n\nDo not edit it. If the step genuinely cannot be completed without this file, stop\nand report SCOPE_CHANGE_REQUIRED so the plan is amended and re-approved."}}
+### ai-scope-guard | duplicate step_id (first=["src/Payment/*.php"]): Edit src/Payment/Gateway.php
+rc=0
+### ai-scope-guard | duplicate step_id (first=["src/Payment/*.php"]): Edit tests/Payment/T.php
+rc=0
+### ai-scope-guard | duplicate step_id (first=["src/Payment/*.php"]): Edit README.md
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — README.md is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
+### ai-scope-guard | duplicate step_id (first=[]): Edit src/Payment/LegacyGateway.php
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"src/Payment/LegacyGateway.php is explicitly forbidden for step 1 of task T-2026-09-09-001 (matched: src/Payment/LegacyGateway.php).\nReason recorded in the plan: first reason\nsecond reason\n\nDo not edit it. If the step genuinely cannot be completed without this file, stop\nand report SCOPE_CHANGE_REQUIRED so the plan is amended and re-approved."}}
+### ai-scope-guard | duplicate step_id (first=[]): Edit src/Payment/Gateway.php
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — src/Payment/Gateway.php is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - tests/Payment/*.php\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
+### ai-scope-guard | duplicate step_id (first=[]): Edit tests/Payment/T.php
+rc=0
+### ai-scope-guard | duplicate step_id (first=[]): Edit README.md
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — README.md is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - tests/Payment/*.php\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
 ### ai-path-guard | task done: Edit .claude/agents/ai-reviewer.md
 rc=0
 ### ai-path-guard | task done: bash echo > .claude/agents/ai-reviewer.md

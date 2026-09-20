@@ -174,6 +174,20 @@ with `.ai/policies/path-guard.json` (per project), in five lists —
 every one of the others. When the guard refuses something it should not,
 **widen the allow list** — do not route around it.
 
+A path is classified against those lists in a fixed order: allow, then
+protected, then dependency, then task, then deny. That matters when you add
+patterns of your own, because the first list to match decides — and `protected`,
+`task` and `dependency` each permit reads that `deny_patterns` would have
+refused. A `task_protected_patterns` regex loose enough to also cover an `.env`
+would therefore *weaken* an existing secret-read rule rather than add to it.
+Keep a new pattern narrow enough that it cannot reach a path another list
+already covers. The shipped lists do not overlap.
+
+The dependency rule recognises a dependency by directory name (`vendor/`,
+`node_modules/`, `third_party/`, `Pods/`, …), so a first-party directory using
+one of those names has its own instruction files refused too. Projects laid out
+that way should put the owned paths in `allow_patterns`.
+
 ## ai-scope-guard — during an implementation step
 
 Registered on `Edit`, `Write`, `NotebookEdit` and `apply_patch`. It does nothing unless

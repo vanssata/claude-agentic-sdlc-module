@@ -33,7 +33,16 @@ STATE="$AI_ROOT/.ai/state/current.json"
 # runs on every write, and each process costs milliseconds. Each list value is
 # tagged with its list and split on newlines, the way `jq -r '.allowed_files[]?'`
 # printed them; the reason comes last, as the remainder of the output, so a
-# multi-line reason survives. Nothing is printed unless the guard is armed —
+# multi-line reason survives.
+#
+# EVERY step matching current_step_id contributes, not just the first. A plan is
+# not supposed to reissue a step id, but when it does — an amendment that reuses
+# one, a bug in state.py — `jq -c '.steps[] | select(...)'` piped into the next
+# jq fed it every match, so the lists were the union and the reason was one line
+# per match. Keeping that is not a nicety: with the first duplicate carrying
+# empty lists, taking only `[0]` leaves both lists empty, and a guard with empty
+# lists allows everything, including a file the second duplicate explicitly
+# forbids. Nothing is printed unless the guard is armed —
 # wrong stage, no current step, a step that is not in the plan, and a state file
 # that does not parse all end here, allowing, as they did before.
 STEP_ID="" TASK_ID="" ALLOWED="" FORBIDDEN="" REASON="" IN_REASON=""
@@ -54,10 +63,10 @@ done < <(jq -r '
     | select($sid != "")
     | [ .approved_plan.steps[]? | select(.step_id == $sid) ] as $steps
     | select(($steps | length) > 0)
-    | $steps[0] as $step
     | "i\t\($sid)", "t\t\(.task_id // "?")",
-      tagged("a"; $step.allowed_files), tagged("f"; $step.forbidden_files),
-      "r", ($step.forbidden_reason // "not part of this step")
+      ($steps[] | tagged("a"; .allowed_files)),
+      ($steps[] | tagged("f"; .forbidden_files)),
+      "r", ($steps[] | (.forbidden_reason // "not part of this step"))
 ' "$STATE" 2>/dev/null)
 [ -n "$STEP_ID" ] || allow
 
