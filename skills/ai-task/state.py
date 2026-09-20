@@ -19,7 +19,7 @@ Usage:
   state.py init   --goal G --workflow W [--task-id ID] [--root DIR]
   state.py get    [--field current_stage] [--root DIR]
   state.py stage  <stage> [--note TEXT]
-  state.py risk   <T0..T5> [--note TEXT]
+  state.py risk   <T0..T5> [--note TEXT] [--by NAME]   # --by, outside the agent, to LOWER one
   state.py triage <T0..T5> [--note TEXT] [--context TEXT]   discovery+context+impact+risk in one call
   state.py quick  --goal G --workflow W --tier <T0..T2> --files a,b [--note TEXT] [--context TEXT]
                                          init+triage+one-step plan in one call: the direct path below T3
@@ -27,7 +27,9 @@ Usage:
   state.py remediate --files a,b [--note TEXT]   one extra step R<n> for the batch of test/review fixes;
                                          allowed = every finished step's files + the ones named
   state.py step   <step_id>
-  state.py step-done <step_id>
+  state.py step-done <step_id> [--force]    measures the step's diff against the tier's budget
+                                         and its allowed files; exit 6 asks for a split
+  state.py step-split <step_id> --files a,b [--note TEXT]   move part of a step into its own
   state.py set    <field> <value>        # test_status, e2e_status, review_status, security_status, next_action
   state.py risks  --add TEXT | --clear
   state.py ask    "<question>" --option "A: text" [--option ...] [--recommend A] [--gate G] [--topic S]
@@ -59,6 +61,12 @@ try:
 except ImportError:                       # not POSIX: the journal falls back to O_APPEND alone
     fcntl = None
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import sensors                        # measurement only; it never writes this file
+except ImportError:                       # an old install that shipped state.py alone
+    sensors = None
+
 STAGES = [
     "discovery", "context", "impact_analysis", "risk_classification",
     "plan", "plan_review", "implementation", "test", "adversarial_review",
@@ -68,7 +76,7 @@ TIERS = ["T0", "T1", "T2", "T3", "T4", "T5"]
 WORKFLOWS = ["feature", "bugfix", "refactoring", "hotfix", "investigation"]
 TEST_STATUS = ["not_run", "passing", "existing_failure", "new_regression", "env_failure", "unknown"]
 E2E_STATUS = ["not_run", "passing", "failing", "not_applicable"]
-REVIEW_STATUS = ["not_started", "in_progress", "blockers_open", "passed"]
+REVIEW_STATUS = ["not_started", "in_progress", "blockers_open", "passed", "skipped_green"]
 SECURITY_STATUS = ["not_applicable", "not_started", "in_progress", "passed", "failed"]
 
 # The journal vocabulary (I3): flat, append-only, one type per command that
@@ -119,7 +127,8 @@ OPTION_HEAD_RE = re.compile(r"^([A-Za-z0-9]{1,3})\s*[:.]\s")
 # records, reads or answers (R3). done --abandon is exempt: abandoning a task is
 # how an unanswerable question is closed.
 BLOCKING_COMMANDS = {
-    "stage", "triage", "plan", "step", "step-done", "remediate", "approve", "done", "close",
+    "stage", "triage", "plan", "step", "step-done", "step-split", "remediate", "approve",
+    "done", "close",
 }
 RUNTIMES = ["claude", "codex"]
 
@@ -133,7 +142,7 @@ RUNTIME = "unknown"
 # task from the other runtime, or writing a note about it, is not a handoff.
 MUTATING_COMMANDS = {
     "init", "stage", "risk", "triage", "quick", "plan", "remediate", "step", "step-done",
-    "set", "risks", "modules", "ask", "answer", "done", "close",
+    "step-split", "set", "risks", "modules", "ask", "answer", "done", "close",
 }
 MUTATING = False
 
@@ -170,7 +179,8 @@ def find_root(start):
 
 
 def die(message, code=1):
-    """1 validation · 2 argparse · 4 QUESTIONS_PENDING · 5 APPROVAL_REFUSED (I1)."""
+    """1 validation · 2 argparse · 4 QUESTIONS_PENDING · 5 APPROVAL_REFUSED ·
+    6 DIFF_BUDGET_EXCEEDED / SCOPE_CHANGE_REQUIRED (I1, WP4 I4)."""
     print("state.py: %s" % message, file=sys.stderr)
     sys.exit(code)
 
@@ -285,6 +295,33 @@ def apply_defaults(state):
     for key, default in (("requested_at", None), ("gate_id", None), ("requested_session", None),
                          ("rejected_at", None), ("via", None), ("unattended", False)):
         state["human_approval"].setdefault(key, default)
+    # Schema 4 (WP4 I2). A task that started before the gates existed answers
+    # every command; its diff simply reads `unavailable`, because the tree it
+    # started from was never recorded and cannot be invented afterwards.
+    if not isinstance(state.get("diff"), dict):
+        state["diff"] = {}
+    state["diff"].setdefault("base_commit", None)
+    state["diff"].setdefault("base_tree", None)
+    if not isinstance(state["diff"].get("task"), dict):
+        state["diff"]["task"] = {"files": 0, "added": 0, "deleted": 0, "lines": 0,
+                                 "excluded_lines": 0, "unbudgeted_lines": 0, "tree": None,
+                                 "measured_at": None, "status": "not_measured"}
+    state["diff"].setdefault("rescored_tier", None)
+    state["diff"].setdefault("rescore_reasons", [])
+    state["diff"].setdefault("over_budget", False)
+    if not isinstance(state.get("sensors"), dict):
+        state["sensors"] = {"file": ".ai/reports/%s/sensors.json" % task_id,
+                            "tree": None, "verdict": None, "checked_at": None}
+    if not isinstance(state.get("tests"), dict):
+        state["tests"] = {"runs": [], "suite_runs": 0}
+    if not isinstance(state.get("risk_tier_lowered"), dict):
+        state["risk_tier_lowered"] = {"by": None, "at": None, "from": None}
+    for step in ((state.get("approved_plan") or {}).get("steps") or []):
+        if isinstance(step, dict):
+            step.setdefault("kind", "remediation"
+                            if str(step.get("step_id", "")).startswith("R") else "implementation")
+            step.setdefault("tree_before", None)
+            step.setdefault("diff", None)
     return state
 
 
@@ -394,6 +431,7 @@ def cmd_init(args, root):
         "history": [],
     }
     apply_defaults(state)
+    record_base_tree(root, state)         # the tree every later measurement is against
     claim_runtime(root, state)
     os.makedirs(os.path.join(root, ".ai", "reports", task_id), exist_ok=True)
     emit(root, state, "task_started", "%s (%s)" % (args.goal, args.workflow),
@@ -470,11 +508,33 @@ def cmd_stage(args, root):
     print("%s -> %s" % (previous, args.stage))
 
 
+def guard_lowering(root, state, tier, by):
+    """downgrade_rule, as an exit code rather than a sentence: an agent may
+    propose a lower tier with evidence, it may not apply one. Re-scoring is what
+    makes this bite — a task raised to T4 by its own diff has an obvious motive
+    to call itself T2 again."""
+    previous = state.get("risk_tier")
+    if previous not in TIERS or TIERS.index(tier) >= TIERS.index(previous):
+        return
+    if not (by and human_present()):
+        refuse_approval_free(root, state, previous, tier)
+    state["risk_tier_lowered"] = {"by": by, "at": now(), "from": previous}
+    record(state, "risk_lowered", "%s -> %s by %s" % (previous, tier, by))
+
+
+def refuse_approval_free(root, state, previous, tier):
+    die("APPROVAL_REFUSED — only a human lowers a risk tier, in writing (downgrade_rule). "
+        "The task is %s and you asked for %s. Propose it with evidence and let the human run, "
+        "in their own terminal:\n  python3 %s --root %s risk %s --by \"<name>\" --note \"<why>\""
+        % (previous, tier, shlex.quote(os.path.abspath(__file__)), shlex.quote(root), tier), 5)
+
+
 def cmd_risk(args, root):
     if args.tier not in TIERS:
         die("risk tier must be one of: %s" % ", ".join(TIERS))
     state = load(root)
     previous = state.get("risk_tier")
+    guard_lowering(root, state, args.tier, args.by)
     state["risk_tier"] = args.tier
     emit_tier(root, state, previous, args.tier, args.note)
     write_handoff(root, state, "stage")
@@ -492,6 +552,7 @@ def cmd_triage(args, root):
     emit_inline_stages(root, state, previous)
     state["current_stage"] = "risk_classification"
     previous_tier = state.get("risk_tier")
+    guard_lowering(root, state, args.tier, args.by)
     state["risk_tier"] = args.tier
     if args.context:
         state["context_summary_ref"] = "inline: " + args.context
@@ -527,6 +588,115 @@ def cmd_plan(args, root):
     print("%d steps recorded" % len(steps))
 
 
+# --------------------------------------------------------------------- the gates
+# Everything below measures through sensors.py and decides; sensors.py itself
+# decides nothing. A sensor that cannot measure says so and the task carries on:
+# a measurement is evidence, and missing evidence is never a reason to refuse
+# work a human asked for. The one thing it does refuse is a step that grew past
+# its tier's budget or reached outside its own files — and both of those are
+# answered by splitting the step, not by abandoning it.
+
+def sensors_available():
+    return sensors is not None
+
+
+def safe_sensor(call, *args, **kwargs):
+    """A bug in a sensor must never be able to stop a task. Anything unexpected
+    reads as 'unavailable', which keeps every review the tier asked for."""
+    if sensors is None:
+        return None
+    try:
+        return call(*args, **kwargs)
+    except Exception:                     # pylint: disable=broad-except
+        return None
+
+
+def record_base_tree(root, state):
+    """The tree the task started from. Taken once, at init, because a base taken
+    later would quietly exclude everything already changed."""
+    state["diff"]["base_commit"] = safe_sensor(sensors.head_commit, root)
+    state["diff"]["base_tree"] = safe_sensor(sensors.snapshot_tree, root)
+
+
+def load_policy(root):
+    policy = safe_sensor(sensors.load_policy, root)
+    if policy is None:                    # no sensors module: budgets cannot bite
+        policy = {"diff_budget": {"per_step": {}, "per_task": {}, "exclude": [],
+                                  "unbudgeted_scopes": []},
+                  "path_scopes": [], "sensors": {}, "remediation_rounds": 2}
+    return policy
+
+
+def measure_diff(root, state, from_tree, to_tree, tier, allowed, scope, deferred_to=None,
+                 not_mine=None):
+    policy = load_policy(root)
+    measurement = safe_sensor(sensors.measure, root, from_tree, to_tree, policy,
+                              tier=tier, allowed=allowed or None, scope=scope,
+                              deferred_to=deferred_to or None, not_mine=not_mine or None)
+    if measurement is None:
+        measurement = {"status": "unavailable", "detail": "sensors.py unavailable",
+                       "files": 0, "added": 0, "deleted": 0, "lines": 0,
+                       "excluded_lines": 0, "unbudgeted_lines": 0, "unscoped": [],
+                       "deferred": [],
+                       "binary": [], "scopes": [], "over": [], "per_file": [],
+                       "budget": {"max_lines": None, "max_files": None},
+                       "measured_at": now(), "scope": scope, "tier": tier}
+    return policy, measurement
+
+
+def budget_line(prefix, measurement):
+    budget = measurement.get("budget") or {}
+    return ("%s: %d files, +%d/-%d = %d lines (%s budget %s/%s)"
+            % (prefix, measurement["files"], measurement["added"], measurement["deleted"],
+               measurement["lines"], measurement.get("tier"),
+               budget.get("max_files"), budget.get("max_lines")))
+
+
+def rescore_task(root, state, to_tree):
+    """What the change turned out to be, against what it was called at the start.
+    Only ever upwards: downgrade_rule says a human lowers a tier, in writing."""
+    declared = state.get("risk_tier") or "T0"
+    policy, measurement = measure_diff(root, state, state["diff"].get("base_tree"), to_tree,
+                                       declared, None, "task")
+    task = state["diff"]["task"]
+    task.update({"files": measurement["files"], "added": measurement["added"],
+                 "deleted": measurement["deleted"], "lines": measurement["lines"],
+                 "excluded_lines": measurement["excluded_lines"],
+                 "unbudgeted_lines": measurement["unbudgeted_lines"],
+                 "tree": to_tree, "measured_at": now(),
+                 "status": measurement["status"]})
+    state["diff"]["over_budget"] = bool(measurement.get("over"))
+    scored = safe_sensor(sensors.rescore, declared, measurement, policy)
+    if not scored or scored.get("status") == "unavailable":
+        state["diff"]["rescored_tier"] = None
+        state["diff"]["rescore_reasons"] = []
+        return measurement, None
+    state["diff"]["rescored_tier"] = scored["tier"]
+    state["diff"]["rescore_reasons"] = scored["reasons"]
+    if scored["tier"] != declared and TIERS.index(scored["tier"]) > TIERS.index(declared):
+        previous = state.get("risk_tier")
+        state["risk_tier"] = scored["tier"]
+        note = "rescored from the real diff: %s" % ("; ".join(scored["reasons"][:3])
+                                                    or "over the task budget")
+        emit_tier(root, state, previous, scored["tier"], note)
+        if state.get("current_stage") in ("implementation", "test", "adversarial_review"):
+            # The plan review cannot happen retroactively; every other gate of
+            # the higher tier still applies, and the record says which one did not.
+            record(state, "plan_review", "superseded by the review of the real diff")
+    return measurement, scored
+
+
+def human_present():
+    """The same condition WP2's approval uses: a terminal, or a launcher that
+    declared the run unattended. An agent has neither."""
+    return os.isatty(0) or bool(os.environ.get("AI_UNATTENDED"))
+
+
+def refuse_without_human(what, how):
+    die("APPROVAL_REFUSED — %s happens outside the agent. Run it in your own terminal:\n  %s"
+        % (what, how), 5)
+
+
 def cmd_step(args, root):
     state = load(root)
     steps = state.get("approved_plan", {}).get("steps", [])
@@ -537,6 +707,10 @@ def cmd_step(args, root):
     for s in steps:
         if s["step_id"] == args.step_id:
             s["status"] = "in_progress"
+            # Taken once: a step resumed after a crash keeps the tree it began
+            # with, and a step split off a bigger one inherits its sibling's.
+            if not s.get("tree_before"):
+                s["tree_before"] = safe_sensor(sensors.snapshot_tree, root)
     state["approved_plan"]["current_step_id"] = args.step_id
     emit(root, state, "step_started", "%s: %s" % (args.step_id, match[0]["description"]),
          {"step_id": args.step_id, "kind": "step"})
@@ -555,8 +729,37 @@ def cmd_step(args, root):
 def cmd_step_done(args, root):
     state = load(root)
     steps = state.get("approved_plan", {}).get("steps", [])
-    if not any(s["step_id"] == args.step_id for s in steps):
+    match = [s for s in steps if s["step_id"] == args.step_id]
+    if not match:
         die("no step '%s' in the approved plan" % args.step_id)
+    step = match[0]
+
+    # The gate. Measured before anything is marked done, so a refusal leaves the
+    # step exactly where it was: in progress, with a way out that keeps the work.
+    tier = state.get("risk_tier") or "T2"
+    after = safe_sensor(sensors.snapshot_tree, root)
+    before = step.get("tree_before") or state["diff"].get("base_tree")
+    elsewhere = [f for other in steps if other is not step
+                 for f in (other.get("allowed_files") or [])]
+    _policy, measured = measure_diff(root, state, before, after, tier,
+                                     step.get("allowed_files"), "step",
+                                     deferred_to=elsewhere,
+                                     not_mine=step.get("forbidden_files"))
+    if measured["status"] == "red" and measured["unscoped"] and not args.force:
+        die("SCOPE_CHANGE_REQUIRED step %s changed %s outside its files — amend the plan, or "
+            "move them with:\n  state.py step-split %s --files %s"
+            % (args.step_id, ", ".join(measured["unscoped"][:5]), args.step_id,
+               shlex.quote(",".join(measured["unscoped"][:5]))), 6)
+    if measured["status"] == "red" and measured["over"] and not args.force:
+        die("DIFF_BUDGET_EXCEEDED step %s: %s. A step this size is reviewed as one thing and "
+            "should not be — split it:\n  state.py step-split %s --files \"<the part that is "
+            "its own step>\""
+            % (args.step_id, "; ".join(measured["over"]), args.step_id), 6)
+    step["diff"] = {"tree_after": after, "files": measured["files"],
+                    "added": measured["added"], "deleted": measured["deleted"],
+                    "lines": measured["lines"], "unscoped": measured["unscoped"],
+                    "binary": measured["binary"], "status": measured["status"]}
+
     for s in steps:
         if s["step_id"] == args.step_id:
             s["status"] = "done"
@@ -566,9 +769,22 @@ def cmd_step_done(args, root):
         state["approved_plan"]["current_step_id"] = None
     emit(root, state, "step_done", args.step_id, {"step_id": args.step_id},
          legacy="step_completed")
+    task_measured, scored = rescore_task(root, state, after)
     set_resume_point(state)
     write_handoff(root, state, "stage")
     save(root, state)
+    if measured["status"] == "unavailable":
+        print("step %s diff: unavailable (%s)"
+              % (args.step_id, measured.get("detail") or "not measured"))
+    else:
+        print(budget_line("step %s diff" % args.step_id, measured)
+              + (" — over: %s" % "; ".join(measured["over"]) if measured["over"] else " — ok"))
+    if task_measured["status"] != "unavailable":
+        print(budget_line("task diff", task_measured)
+              + ("; rescored %s" % scored["tier"] if scored else ""))
+    if scored and scored["tier"] != tier:
+        print("tier raised %s -> %s: %s"
+              % (tier, scored["tier"], "; ".join(scored["reasons"][:3])))
     remaining = [s["step_id"] for s in steps if s["status"] != "done"]
     print("step %s done; remaining: %s" % (args.step_id, ", ".join(remaining) or "none"))
     if not remaining:
@@ -577,6 +793,54 @@ def cmd_step_done(args, root):
 
 def _split_files(text):
     return [f.strip() for f in (text or "").split(",") if f.strip()]
+
+
+def cmd_step_split(args, root):
+    """The way out of a refused step-done: the part that has grown into its own
+    step becomes one. Nothing is undone and nothing is lost — the files move,
+    the sibling inherits the tree the original started from, and both halves are
+    then measured against their own budget."""
+    state = load(root)
+    steps = state.get("approved_plan", {}).get("steps", [])
+    match = [s for s in steps if s["step_id"] == args.step_id]
+    if not match:
+        die("no step '%s' in the approved plan" % args.step_id)
+    step = match[0]
+    files = _split_files(args.files)
+    if not files:
+        die("--files must name at least one file or glob to move into the new step")
+    existing = {s["step_id"] for s in steps}
+    n = 2
+    while "%s.%d" % (args.step_id, n) in existing:
+        n += 1
+    new_id = "%s.%d" % (args.step_id, n)
+    sibling = {
+        "step_id": new_id,
+        "description": args.note or ("split off %s" % args.step_id),
+        "allowed_files": files,
+        "forbidden_files": list(step.get("forbidden_files") or []),
+        "forbidden_reason": step.get("forbidden_reason") or "not part of this step",
+        "required_tests": [], "status": "pending",
+        "kind": step.get("kind", "implementation"),
+        "tree_before": step.get("tree_before"), "diff": None,
+    }
+    step["allowed_files"] = [f for f in (step.get("allowed_files") or []) if f not in files]
+    # A step's own glob usually still matches what it gave away (`src/**` covers
+    # `src/Payment/*.php`), so the split says so explicitly. This is also what
+    # the scope guard reads, so the original step can no longer write them.
+    forbidden = step.setdefault("forbidden_files", [])
+    for pattern in files:
+        if pattern not in forbidden:
+            forbidden.append(pattern)
+    step["forbidden_reason"] = "moved to step %s" % new_id
+    steps.insert(steps.index(step) + 1, sibling)
+    emit(root, state, "scope_change", "%s -> %s: %s" % (args.step_id, new_id, ", ".join(files)),
+         {"kind": "split", "from": args.step_id, "step_id": new_id, "files": files})
+    set_resume_point(state)
+    write_handoff(root, state, "stage")
+    save(root, state)
+    print("step %s split: %s now covers %s" % (args.step_id, new_id, ", ".join(files)))
+    print("finish %s, then run: state.py step %s" % (args.step_id, new_id))
 
 
 def cmd_quick(args, root):
@@ -636,6 +900,15 @@ def cmd_remediate(args, root):
         if f not in allowed:
             allowed.append(f)
     n = 1 + sum(1 for s in steps if str(s["step_id"]).startswith("R"))
+    rounds = load_policy(root).get("remediation_rounds", 2)
+    if isinstance(rounds, int) and n > rounds and not (args.by and human_present()):
+        # remediation_rule: at most two rounds before the human decides. A third
+        # round is where a fix starts causing the next regression (review-economy §5).
+        die("APPROVAL_REFUSED — this is remediation round %d and the policy allows %d. "
+            "Name the invariant behind the repeated failure, show it to the human, and let "
+            "them run:\n  python3 %s --root %s remediate --files %s --by \"<name>\""
+            % (n, rounds, shlex.quote(os.path.abspath(__file__)), shlex.quote(root),
+               shlex.quote(args.files or "")), 5)
     step_id = "R%d" % n
     step = {
         "step_id": step_id,
@@ -1877,9 +2150,11 @@ def main():
     p.set_defaults(func=cmd_stage)
 
     p = sub.add_parser("risk"); p.add_argument("tier"); p.add_argument("--note", default="")
+    p.add_argument("--by", default="", help="required, with a terminal, to LOWER a tier")
     p.set_defaults(func=cmd_risk)
 
     p = sub.add_parser("triage"); p.add_argument("tier"); p.add_argument("--note", default="")
+    p.add_argument("--by", default="", help="required, with a terminal, to LOWER a tier")
     p.add_argument("--context", default=""); p.set_defaults(func=cmd_triage)
 
     p = sub.add_parser("quick"); p.add_argument("--goal", required=True)
@@ -1892,10 +2167,17 @@ def main():
     p.add_argument("--steps", required=True); p.set_defaults(func=cmd_plan)
 
     p = sub.add_parser("remediate"); p.add_argument("--files", default="")
+    p.add_argument("--by", default="", help="required, with a terminal, past remediation_rounds")
     p.add_argument("--note", default=""); p.set_defaults(func=cmd_remediate)
 
     p = sub.add_parser("step"); p.add_argument("step_id"); p.set_defaults(func=cmd_step)
-    p = sub.add_parser("step-done"); p.add_argument("step_id"); p.set_defaults(func=cmd_step_done)
+    p = sub.add_parser("step-done"); p.add_argument("step_id")
+    p.add_argument("--force", action="store_true",
+                   help="record the step although the diff gate refused it; say why in the plan")
+    p.set_defaults(func=cmd_step_done)
+    p = sub.add_parser("step-split"); p.add_argument("step_id")
+    p.add_argument("--files", required=True); p.add_argument("--note", default="")
+    p.set_defaults(func=cmd_step_split)
 
     p = sub.add_parser("set"); p.add_argument("field"); p.add_argument("value")
     p.set_defaults(func=cmd_set)

@@ -132,4 +132,105 @@ printf '%s' "$OUT" | grep -q 'typecheck_command: none' \
     && pass "nothing detected proposes an explicit none, never a silent green" || fail "should ask for none" "$OUT"
 [ ! -e "$ROOT/node_modules" ] && pass "detect runs nothing it detected" || fail "detect must not run a tool"
 
+echo "== section 4: the step-done gate"
+GATE="$TMP/with space/gate"
+mkdir -p "$GATE/.ai/state" "$GATE/.ai/reports" "$GATE/.ai/policies" "$GATE/src/Payment" "$GATE/tests"
+STATE_PY="$PLUGIN_ROOT/skills/ai-task/state.py"
+S() { python3 "$STATE_PY" --root "$GATE" "$@"; }
+J() { python3 -c 'import json,sys
+d = json.load(open(sys.argv[1]))
+for part in sys.argv[2].split("."):
+    d = d[int(part)] if isinstance(d, list) else (d or {}).get(part)
+print(json.dumps(d) if isinstance(d, (list, dict)) else ("" if d is None else d))' "$GATE/.ai/state/current.json" "$1"; }
+git init -q "$GATE"; git -C "$GATE" config user.email t@example.com
+git -C "$GATE" config user.name Test
+printf 'one\n' > "$GATE/src/app.php"; git -C "$GATE" add -A
+git -C "$GATE" commit -qm base
+cat > "$GATE/.ai/policies/risk-tiers.json" <<'JSON'
+{"version": 3,
+ "diff_budget": {"per_step": {"T2": {"max_lines": 5, "max_files": 5}},
+                 "per_task": {"T2": {"max_lines": 400, "max_files": 15},
+                              "T4": {"max_lines": 400, "max_files": 15}},
+                 "exclude": [], "unbudgeted_scopes": ["docs"]},
+ "path_scopes": [{"scope": "tests", "min_tier": "T1", "paths": ["tests/**"]},
+                 {"scope": "payments", "min_tier": "T4", "paths": ["**/Payment/**"]}],
+ "remediation_rounds": 2}
+JSON
+
+TASK=$(S init --goal "widen the fee" --workflow feature)
+BASE_TREE=$(S get --field diff.base_tree)
+[ -n "$BASE_TREE" ] && [ "$BASE_TREE" != "None" ] \
+    && pass "init records the tree the task starts from" || fail "init should record a base tree"
+S risk T2 --note "isolated" >/dev/null
+cat > "$TMP/steps.json" <<'JSON'
+[{ "step_id": "1", "description": "widen the fee", "allowed_files": ["src/*.php", "tests/**"],
+   "required_tests": ["tests/FeeTest.php"] }]
+JSON
+S plan --ref ".ai/reports/$TASK/plan.md" --steps "$TMP/steps.json" >/dev/null
+S step 1 >/dev/null
+[ -n "$(J approved_plan.steps.0.tree_before)" ] \
+    && pass "starting a step records the tree it began with" || fail "step should record tree_before"
+
+printf 'one\ntwo\nthree\nfour\nfive\nsix\nseven\n' > "$GATE/src/app.php"
+OUT=$(S step-done 1 2>&1); RC=$?
+[ $RC -eq 6 ] && printf '%s' "$OUT" | grep -q DIFF_BUDGET_EXCEEDED \
+    && pass "a step over its tier's budget exits 6" || fail "should exit 6" "$OUT($RC)"
+printf '%s' "$OUT" | grep -q 'step-split' \
+    && pass "the refusal names the way out" || fail "should suggest step-split" "$OUT"
+[ "$(S get --field approved_plan.current_step_id)" = 1 ] \
+    && pass "a refused step stays in progress — no work is lost" || fail "step should stay current"
+
+printf 'one\ntwo\n' > "$GATE/src/app.php"
+mkdir -p "$GATE/lib"; printf 'stray\n' > "$GATE/lib/Other.php"
+OUT=$(S step-done 1 2>&1); RC=$?
+[ $RC -eq 6 ] && printf '%s' "$OUT" | grep -q 'SCOPE_CHANGE_REQUIRED' \
+    && pass "a file outside the step's files exits 6 and is named" || fail "should exit 6" "$OUT($RC)"
+rm -f "$GATE/lib/Other.php"
+
+# The step grew a second concern: the payment file is its own step now. The
+# original step's own glob still matches it, so the split must say otherwise.
+printf 'fee\ntwo\nthree\nfour\nfive\nsix\n' > "$GATE/src/Payment/Fee.php"
+OUT=$(S step-done 1 2>&1); RC=$?
+[ $RC -eq 6 ] && pass "the step that grew a second concern is refused" || fail "should refuse" "$OUT($RC)"
+OUT=$(S step-split 1 --files "src/Payment/*.php" --note "the payment part" 2>&1)
+printf '%s' "$OUT" | grep -q '1.2' && pass "step-split makes a sibling step" || fail "should split" "$OUT"
+OUT=$(S step-done 1 2>&1); RC=$?
+[ $RC -eq 0 ] && pass "after the split the step measures only its own files" \
+               || fail "step 1 should pass now" "$OUT($RC)"
+printf '%s' "$OUT" | grep -q 'step 1 diff' \
+    && pass "step-done reports what it measured" || fail "should print the step diff" "$OUT"
+
+echo "== section 5: re-scoring at the gate"
+[ "$(S get --field risk_tier)" = T4 ] \
+    && pass "the payment file re-scores the task from T2 to T4" || fail "should raise to T4"
+S events --last 20 --format jsonl 2>/dev/null | grep -q '"event": "tier_raised"' \
+    && pass "the raise is in the journal" || fail "tier_raised should be journalled"
+J diff.rescore_reasons | grep -q payments \
+    && pass "the reason names the scope and the file" || fail "reasons should name payments"
+
+echo "== section 6: only a human lowers a tier"
+OUT=$(S risk T2 --note "it is small really" 2>&1 </dev/null); RC=$?
+[ $RC -eq 5 ] && printf '%s' "$OUT" | grep -q 'APPROVAL_REFUSED' \
+    && pass "an agent cannot lower a tier (downgrade_rule)" || fail "should exit 5" "$OUT($RC)"
+[ "$(S get --field risk_tier)" = T4 ] && pass "the tier is unchanged by the refusal" || fail "tier moved"
+OUT=$(AI_UNATTENDED=1 S risk T2 --by "Ivan" --note "reviewed by hand" 2>&1 </dev/null); RC=$?
+[ $RC -eq 0 ] && [ "$(S get --field risk_tier)" = T2 ] \
+    && pass "a human with --by lowers it" || fail "should lower with --by" "$OUT($RC)"
+[ "$(S get --field risk_tier_lowered.by)" = "Ivan" ] \
+    && pass "who lowered it, and from what, is recorded" || fail "should record the lowering"
+OUT=$(S risk T5 --note "actually a migration" 2>&1 </dev/null); RC=$?
+[ $RC -eq 0 ] && pass "raising a tier needs nobody's permission" || fail "raising should work" "$OUT"
+
+# --force is the escape hatch a human uses when a refusal is wrong; here it is
+# only bookkeeping, to reach the third remediation round.
+S step 1.2 >/dev/null; S step-done 1.2 --force >/dev/null
+S remediate --files "tests/**" --note "first batch" >/dev/null
+S step-done R1 --force >/dev/null
+S remediate --files "tests/**" --note "second batch" >/dev/null
+S step-done R2 --force >/dev/null
+OUT=$(S remediate --files "tests/**" --note "third batch" 2>&1 </dev/null); RC=$?
+[ $RC -eq 5 ] && printf '%s' "$OUT" | grep -q 'round 3' \
+    && pass "a third remediation round needs the human (remediation_rule)" \
+    || fail "should refuse round 3" "$OUT($RC)"
+
 summary "sensors"

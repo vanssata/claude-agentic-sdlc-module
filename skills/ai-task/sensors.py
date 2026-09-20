@@ -393,12 +393,24 @@ def scope_of(path, path_scopes):
 
 # ----------------------------------------------------------------- measuring
 
-def measure(root, from_tree, to_tree, policy, tier="T2", allowed=None, scope="step"):
-    """Everything step-done needs, in one pass over the file list."""
+def measure(root, from_tree, to_tree, policy, tier="T2", allowed=None, scope="step",
+            deferred_to=None, not_mine=None):
+    """Everything step-done needs, in one pass over the file list.
+
+    `allowed` is the step's own files, read the way the scope guard reads them.
+    `deferred_to` is every other step's files and `not_mine` this step's own
+    forbidden files: a change there is planned work that belongs to a different
+    step, so it is neither counted against this step's budget nor called a
+    scope violation. That is what makes a split after a refusal mean something
+    — the files move to the sibling step, this step is told they are not its
+    business, and it is then measured over what is left. `not_mine` is checked
+    first, because a split narrows a step whose own glob still matches the
+    files it gave away.
+    """
     result = {"status": UNAVAILABLE, "from": from_tree, "to": to_tree,
               "scope": scope, "tier": tier, "files": 0, "added": 0, "deleted": 0,
               "lines": 0, "excluded_lines": 0, "unbudgeted_lines": 0,
-              "unscoped": [], "binary": [], "scopes": [], "over": [],
+              "unscoped": [], "deferred": [], "binary": [], "scopes": [], "over": [],
               "budget": budget_for(policy, scope, tier), "measured_at": now(),
               "detail": ""}
     if not from_tree or not to_tree:
@@ -432,7 +444,13 @@ def measure(root, from_tree, to_tree, policy, tier="T2", allowed=None, scope="st
         if name in unbudgeted:
             result["unbudgeted_lines"] += lines
             continue
+        if not_mine and scope_any(path, not_mine):
+            result["deferred"].append(path)
+            continue
         if allowed is not None and not scope_any(path, allowed):
+            if deferred_to and scope_any(path, deferred_to):
+                result["deferred"].append(path)
+                continue
             result["unscoped"].append(path)
         result["files"] += 1
         result["added"] += item["added"]
@@ -532,6 +550,8 @@ def print_diff(result, policy):
                   % (result["excluded_lines"], result["unbudgeted_lines"])))
     if result["scopes"]:
         print("              scopes: %s" % ", ".join(result["scopes"]))
+    if result["deferred"]:
+        print("              deferred to another step: %d file(s)" % len(result["deferred"]))
     for line in result["over"]:
         print("              over: %s" % line)
     for path in result["unscoped"][:10]:
@@ -569,8 +589,10 @@ def cmd_diff(args, root):
     policy = load_policy(root)
     from_tree, to_tree = resolve_trees(root, args)
     allowed = [f.strip() for f in (args.allowed or "").split(",") if f.strip()]
+    deferred = [f.strip() for f in (args.deferred or "").split(",") if f.strip()]
     result = measure(root, from_tree, to_tree, policy, tier=args.tier,
-                     allowed=allowed or None, scope=args.scope)
+                     allowed=allowed or None, scope=args.scope,
+                     deferred_to=deferred or None)
     if args.format == "json":
         result.pop("per_file", None)
         print(json.dumps(result, indent=2, sort_keys=True))
@@ -620,6 +642,7 @@ def build_parser():
     p.add_argument("--from", dest="from_tree"); p.add_argument("--to", dest="to_tree")
     p.add_argument("--now", action="store_true")
     p.add_argument("--tier", default="T2"); p.add_argument("--allowed", default="")
+    p.add_argument("--deferred", default="", help="other steps' files: planned elsewhere")
     p.add_argument("--scope", default="step", choices=["step", "task"])
     p.add_argument("--format", default="text", choices=["text", "json"])
     p.set_defaults(func=cmd_diff)
