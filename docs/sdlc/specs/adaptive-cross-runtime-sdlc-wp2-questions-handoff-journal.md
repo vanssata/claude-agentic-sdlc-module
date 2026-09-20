@@ -1,7 +1,8 @@
 # Spec: WP2 — Questions file, handoff, event journal, human-turn approval
 
 Intent: `docs/sdlc/intent/adaptive-cross-runtime-sdlc.md` (work package 2)
-Risk tier: T3 · Depends on: WP1 (done, PR #15/#16) · Schema: `.ai/VERSION` 1 → 2
+Risk tier: **T4** (raised from the intent's T3 by the user on 2026-09-20 — the deliverable *is* an
+authorization control) · Depends on: WP1 (done, PR #15/#16) · Schema: `.ai/VERSION` 1 → 2
 
 <!-- Stage 2. Requirements and design derived from the intent, checked against project conventions. -->
 
@@ -23,17 +24,18 @@ Tags name the intent outcome each requirement satisfies: **Q&C** = "Questions an
 | R4 | Pending questions are re-injected at session start in both runtimes (I7) and listed by `/ai-status` through `state.py questions --pending` — never by `cat`/`tail` on the file, which the path guard denies. | Q&C | `test-ai-path-guard.sh` fixture 23/24; `ai-status` grep |
 | R5 | A subagent never asks: every agent contract carries the `QUESTIONS_NEEDED` block (I9) and the main session converts it with `ask --batch`. Under `AI_UNATTENDED=1`, `ask` ends the turn with the literal line `WAITING_FOR_ANSWERS <file> <ids>`. | Q&C | last stdout line of `ask` under the flag |
 | R6 | `.ai/state/handoff.md` is rendered only by `state.py handoff`, is ≤ 30 lines, carries the six named parts (I4), and is rewritten on every stage-moving command and on PreCompact. | Q&C, P1 | `wc -l` ≤ 30 after a task with 10 notes and 8 prompts |
-| R7 | At `SessionStart` with source `startup\|resume\|clear\|compact`, `context-guard.py` injects the block of I7.3 when the cwd's `.ai/state/current.json` exists, and injects nothing otherwise — same script, same behaviour in Claude Code and Codex. | Q&C, parity | `test-context-guard.sh` per source, with and without a task |
+| R7 | At `SessionStart`, `context-guard.py` injects the block of I7.3 when the cwd's `.ai/state/current.json` exists, and injects nothing otherwise — same script, same behaviour in Claude Code and Codex. **No decision depends on a payload key**: `source` is recorded and never branched on, `cwd` falls back to `os.getcwd()`, and the transcript snapshot is added when a fresh snapshot file exists. | Q&C, parity | `test-context-guard.sh` with a payload carrying `source`/`cwd`, and with one carrying neither |
 | R8 | `.ai/reports/<task-id>/events.jsonl` receives one line per state change (schema I3), append-only; two concurrent appenders lose and interleave nothing. | Q&C | 2×200 appends from two processes → 400 parseable lines |
 | R9 | `history[]` keeps its shape and keeps being written; migration 0002 backfills the journal from it; `state.py events` and `/ai-status` read the journal; `/usage-report` documents it. | Q&C | existing state tests green; backfill line count = history length |
 | R10 | The state carries `owner_runtime` and `resume_point` (I6). A mutating command run under a different runtime emits `runtime_handoff{via:resume}` and takes ownership. `handoff` has no `--to` (that is WP5) and nothing WP5 must undo. | RT, P6 | new test: `--runtime codex` after a claude-owned task |
 | R11 | `approve` succeeds only when (a) stdin is a TTY **or** `AI_UNATTENDED` is set in its own environment, (b) a `gate_requested` event exists for this task, and (c) no non-gate question is pending. Otherwise exit 5 with the message of I1. Under the flag, the event and the state carry `unattended:true`. | GATE, D8, P5 | `approve` under a pipe exits 5; under `pty.spawn` exits 0 |
-| R12 | The invocation `state.py approve` / `$STATE approve` from an agent Bash call is denied by `ai-path-guard` in both runtimes unless `AI_UNATTENDED` is set in the hook's own environment. Cost: one in-process regex, zero extra processes. | GATE, D8 | fixtures 25–27 + `codex-hooks/40` |
+| R12 | The invocation `state.py approve` / `$STATE approve` from an agent Bash call is denied by `ai-path-guard` in both runtimes while a task is in flight, unless `AI_UNATTENDED` is set in the hook's own environment. The check runs **before** the Bash fast path; `task_in_flight()` is consulted only after the regex matches. Cost: one in-process regex per Bash call, zero extra processes; one `jq` on a match. | GATE, D8 | fixtures 25–27 + `codex-hooks/40`, plus a no-task-in-flight fixture that allows |
 | R13 | Filling `[Answer]: A` on gate question `G1` and running `questions --sync` grants approval with `via:file` — but only when `session.json.last_prompt_at ≥ human_approval.requested_at` (a human turn after the plan was presented), or `AI_UNATTENDED` is set. Without a `session.json`, the file route is refused and the terminal route is the only one. | GATE, D8 | new test: sync before/after a recorded prompt |
 | R14 | `.ai/VERSION` becomes `2`; `migrations/0002_task_journal.py` adds every new key with defaults through `patch_state` and creates the backfilled journal. A v1 project with a task at `implementation` works before **and** after `update.py --apply`. | Constraints | fixture `schema-v1` in `test-project-update.sh` |
 | R15 | `install.sh` installs `context-guard.py` into `~/.codex/hooks/`, and `codex/hooks.json` registers it on `UserPromptSubmit`, `PreCompact` and `SessionStart`. | parity | `test-codex-install.sh` |
 | R16 | `tests/test-guard-characterization.sh` after `--record` differs from the committed golden **only by added records**; `ai-git-guard.sh` is byte-identical; every existing `WHY_*` text is unchanged. | Constraint 4 | `git diff` of the golden has no `-` lines |
-| R17 | `/sdlc-intent` records its brainstorm through `ask --topic <slug>` / `answer --topic <slug>` when `.ai/` exists, and writes a `## Decisions taken` section from `questions --topic <slug> --format md`. Without `.ai/` it behaves as today and says so in one line. | D3, P1 | skill test / grep |
+| R17 | `/sdlc-intent` records its brainstorm through `ask --topic <slug>` / `answer --topic <slug>` into `docs/sdlc/intent/<slug>.questions.md` — with or without `.ai/` — and writes a `## Decisions taken` section from `questions --topic <slug> --format md`. Topic questions emit no journal events and never block a stage. | D3, P1 | new test: a fixture with `docs/sdlc/` and no `.ai/` completes ask → answer → render |
+| R19 | The plan carries a **Rollback** section (schema 2 → 1, the hook registrations, the golden file), a **Monitoring** section (what `/ai-status` and `/usage-report` show about gates, pending questions and runtime ownership) and an explicit **Idempotency and retry** statement for the migration, the journal append and `questions --sync`. Security review is mandatory, not conditional. | T4 `extra_requirements` | `ai-release` checks the sections exist |
 | R18 | Nothing in WP2 spawns a model. Every new command is stdlib Python; existing suites stay green with the extensions of D10. | Constraint 2 | full suite |
 
 ## Design
@@ -254,13 +256,20 @@ count on stderr.
  "data":{"from":"context","to":"plan"}}
 ```
 
+A journal line is written once and never rewritten, so a value not captured here is lost for every
+task that ran before the day someone wants it. `field_set` and `tier_set` therefore record the
+**previous** value in `from` beside the new one — the one thing in this schema that cannot be
+backfilled. Token accounting is deliberately *not* here: `/usage-report` reads tokens from the
+transcripts and correlates them by `task` and the `task_started`/`task_closed` window, so WP4 needs
+no field reserved in advance, and no type exists without an emitter.
+
 `actor` ∈ `agent|human|hook|migration|unknown` — `human` only for `gate_approved{via:terminal}`,
 `question_answered{via:file}` and `gate_rejected`. `runtime` ∈ `claude|codex|unknown`.
 
 Event types: `task_started{goal,workflow}` · `stage_started{from,to,note}` ·
-`tier_set{tier,note,direction}` · `tier_raised{from,to,note}` · `plan_registered{ref,steps}` ·
+`tier_set{tier,from,note,direction}` · `tier_raised{from,to,note}` · `plan_registered{ref,steps}` ·
 `scope_change{step_id,added_files[],removed_files[]}` · `step_started{step_id,kind}` ·
-`step_done{step_id}` · `field_set{field,value}` · `question_asked{id,options,recommended,gate?}` ·
+`step_done{step_id}` · `field_set{field,from,value}` · `question_asked{id,options,recommended,gate?}` ·
 `question_answered{id,choice,text?,via,by}` · `gate_requested{gate,requested_at}` ·
 `gate_approved{by,via,unattended,tty}` · `gate_rejected{by,why}` ·
 `note{kind,text,why?,error?}` · `handoff_written{reason,lines}` ·
@@ -356,21 +365,36 @@ Resume with: /ai-task --resume
 `ai-path-guard-defaults.json` → `protected_config_patterns` gains
 `(^|/)\.ai/reports/[^/]+/questions\.md$`, `(^|/)\.ai/reports/[^/]+/events\.jsonl$` and
 `(^|/)\.ai/state/handoff\.md$` — write denied, the Read tool allowed, shell readers denied, all
-with the existing `WHY_PROTECTED` text. The Bash branch gains, after the existing fast path:
+with the existing `WHY_PROTECTED` text. The Bash branch gains, **before** the existing fast path:
 
 ```bash
 APPROVE_RE='(^|[|;&[:space:]])(python3?[[:space:]]+)?"?[^[:space:]"]*state\.py"?([[:space:]]+--(root|runtime)[[:space:]]+[^[:space:]]+)*[[:space:]]+approve([[:space:]]|$)|(^|[|;&[:space:]])"?\$\{?STATE\}?"?[[:space:]]+approve([[:space:]]|$)'
-if [ -z "${AI_UNATTENDED:-}" ] && ere_match "$APPROVE_RE" "$cmd"; then
+if ere_match "$APPROVE_RE" "$cmd" \
+   && [ -z "${AI_UNATTENDED:-}" ] && task_in_flight; then
     deny "Refusing 'state.py approve' from an agent session.$WHY_APPROVE"
 fi
 ```
+
+**Placement matters and the first draft of this spec had it wrong.** The rule goes *before* the
+Bash fast path (`ai-path-guard.sh:201`), not after it. `state.py` lives in the plugin, not under
+`.ai/`, so a command like `python3 …/skills/ai-task/state.py --root . approve --by ivan` matches no
+`LOOSE_PATTERNS` entry and the fast path would `allow` and return before any later rule ran. The
+cost of that placement is one `ere_match` on every Bash call in an `.ai/` project; `task_in_flight()`
+(WP7's lazy `jq` read, `ai-path-guard.sh:109-121`) is consulted only *after* the regex matches, so
+the common case pays one regex and nothing else.
+
+Gating on `task_in_flight()` is what makes this an extension of WP7's task-scoped protection rather
+than a new standing rule: outside a task the guard is silent, and `state.py approve` without a task
+in flight dies in `state.py` anyway (`load(root)` → "no task in flight"). The deny therefore fires
+only where it can protect something.
 
 `WHY_APPROVE` is a new string used only by this rule; it names the terminal command, the
 `[Answer]:` route, the `AI_UNATTENDED` launcher variable and `.ai/policies/safety.md`. New
 fixtures: `22-edit-questions-md` (deny), `23-read-questions-md` (allow),
 `24-bash-redirect-into-questions` (deny), `25-bash-state-approve` (deny),
 `26-bash-state-get-approved-plan` (allow — `approved_plan` has no word boundary),
-`27-bash-state-note-approve-word` (allow), `codex-hooks/40-bash-state-approve` (deny).
+`27-bash-state-note-approve-word` (allow), `28-bash-state-approve-no-task` (allow — no task in
+flight), `codex-hooks/40-bash-state-approve` (deny).
 Golden: about 27 added records, no changed record — no existing payload names these paths or
 `state.py approve`, the three new patterns cannot become the *named* pattern for an existing path,
 `WHY_PROTECTED/TASK/SENSITIVE/VENDOR` are untouched and `ai-git-guard.sh` is not edited.
@@ -409,11 +433,17 @@ Runtime precedence in `state.py`: `--runtime` > `AI_RUNTIME` > `session.json.run
 
 ### I11 `/sdlc-intent`
 
-With `.ai/` present, each brainstorm question becomes `ask --topic <slug>` / `answer --topic
-<slug>`, and the intent gains a `## Decisions taken` section rendered from
-`questions --topic <slug> --format md`. `project-init/templates/intent.md` gains that heading with
-a comment naming its source. Without `.ai/`, one line: questions live only in this conversation,
-run `/ai-init` to keep them.
+Each brainstorm question becomes `ask --topic <slug>` / `answer --topic <slug>`, and the intent
+gains a `## Decisions taken` section rendered from `questions --topic <slug> --format md`.
+`project-init/templates/intent.md` gains that heading with a comment naming its source.
+
+**Topic questions live in `docs/sdlc/intent/<slug>.questions.md`, always — with or without `.ai/`.**
+An intent's questions belong to the document they serve, not to a task; `.ai/reports/<task-id>/`
+holds task questions only. This keeps the boundary sharp rather than loose, removes the `sdlc-*`
+skills' dependency on `.ai/` entirely, and needs no branch in the code: `--topic` resolves its root
+from `docs/sdlc/`, every other mode from `find_root`. Topic questions never emit journal events —
+without `.ai/` there is no journal, and one rule beats two — and never block a stage. The record is
+the file: the `[Answer]:` trailer carries who answered, how and when.
 
 ## Policy conformance
 
@@ -423,7 +453,7 @@ run `/ai-init` to keep them.
 | Works on all five subscriptions; nothing token-costly by default | WP2 adds no agent, no fan-out and no model call. The handoff injected at session start (≤ 8 000 chars) replaces re-reading the state by hand and is smaller than what it saves. |
 | Both runtimes stay at parity | The session-start hook, the journal, the questions file, the handoff and the state shape are identical. Two asymmetries remain and are flagged below: the native picker (Claude only) and the transcript snapshot (Claude only). |
 | Git guard rules stay as they are; characterization is byte-exact | `ai-git-guard.sh` is not edited. The approve rule lives in the path guard, which WP7 already extended, and R16 requires an additive-only golden diff. |
-| Guard hot-path budget (`docs/hook-performance.md`, WP8's 6 processes / 62 ms) | Added: one in-process regex plus three prefilter patterns on Bash calls, zero extra processes, < 1 ms. `context-guard` gains one `os.path.exists` and a 1 KB atomic write per *prompt* (not per tool call), and one `state.py` subprocess on the rare PreCompact / SessionStart events. To be measured with the strace recipe and recorded in one line. |
+| Guard hot-path budget (`docs/hook-performance.md`, WP8's 6 processes / 62 ms) | Added: one in-process regex **before the Bash fast path** plus three prefilter patterns, zero extra processes, < 1 ms; `task_in_flight()`'s `jq` runs only when that regex matches, which is never in normal work. `context-guard` gains one `os.path.exists` and a 1 KB atomic write per *prompt* (not per tool call), and one `state.py` subprocess on the rare PreCompact / SessionStart events. To be measured with the strace recipe and recorded in one line. |
 | Hooks stay Python/bash; the payload JSON is not parsed in bash; ~20 ms interpreter startup accepted | No new language, no new hook script, no bash JSON parsing. |
 | `project-update` guarantees; a task in flight survives a migration | Migration 0002 uses WP1's `patch_state` / `create`, is idempotent, and `load()` supplies the same defaults in memory so a v1 state works *before* the migration too. |
 | Plugin-owned files change only through the skills | Everything ships as plugin files; a project receives them through `/project-update`. `state.py`, `update.py` and (for `session.json` only) `context-guard.py` are the sole writers of `.ai/state/`. |
@@ -438,16 +468,19 @@ descriptions match this work (`ai-task`, `ai-status`) are amended by I9 rather t
 
 ## Flagged concerns
 
-1. **"About ten event types" versus twenty.** The intent's outcome says roughly ten; this design
-   defines twenty, each one-to-one with a command that already changes state. The "out of scope"
-   line rejects AI-DLC's 99-event taxonomy, not twenty, and a type with no emitter would be worse
-   than one with a command behind it — but this is a deliberate departure from the intent's number
-   and the human should confirm it, or name the ten that must be collapsed.
-2. **The approve rule is a new guard rule.** The intent freezes *git-guard* rules and says
-   performance work may change only how a rule is evaluated. This design adds a rule to the
-   **path** guard, which WP7 already extended by design. A reviewer may still read "guard rules
-   stay as they are" more broadly. Mitigation is R16's additive-only golden proof, but the reading
-   is worth settling before implementation.
+1. ~~**"About ten event types" versus twenty.**~~ **Settled 2026-09-20 by the user: twenty flat
+   types.** A reader finds one with a single `grep` and no reader has to look at two fields; every
+   type has a command behind it. The intent's wording was amended to match, with the rule that a
+   new type is added only when it has its own consumer — anything else reuses `field_set` or
+   `note`. Accepted cost: the vocabulary is append-only and will reach roughly 25 by WP5; every
+   reader must carry a `default` branch for a type it does not know.
+2. ~~**The approve rule is a new guard rule.**~~ **Settled 2026-09-20 by the user: it stays in the
+   path guard, gated on `task_in_flight()`.** The intent's sentence freezes *git-guard* rules and
+   speaks of *performance* work; WP2 is neither. Arming the rule only while a task is in flight
+   makes it an extension of WP7's task-scoped protection rather than a new standing rule, and it is
+   silent in a repository with no task. Accepted cost: one regex on every Bash call in an `.ai/`
+   project (the rule must precede the fast path — see I8) and about 27 additive golden records,
+   proved additive by R16.
 3. **Enforcement is asymmetric between the runtimes, and parity is a stated constraint.** On Codex
    the deny rule only exists after the user trusts hooks via `/hooks`; until then the TTY leg and
    the contract are all there is, and the file route degrades to "terminal only" because no
@@ -465,14 +498,21 @@ descriptions match this work (`ai-task`, `ai-status`) are amended by I9 rather t
    copy would silently roll it back on the next `install.sh`. Step 0 of the plan is to sync it in
    and add a test for the model recording; if that step is skipped, WP2 regresses WP-unrelated
    behaviour.
-7. **Codex payload shape is assumed, not observed.** `cwd` and `source` on `SessionStart` /
-   `UserPromptSubmit`, and the exact behaviour of `additionalContextLimit` (truncate or reject),
-   come from documentation. The hook falls back to `os.getcwd()`, caps at 8 000 chars and fails
-   open — but a real Codex session must be observed and recorded as a fixture before the Codex
-   parity step is called done.
-8. **Tier.** The intent sets WP2 at T3. It changes an authorization control (who may approve) and
-   a schema; a reviewer could argue T4. The tier decides who reviews and whether security review is
-   mandatory. Worth a human's confirmation rather than an agent's assumption.
+7. ~~**Codex payload shape is assumed, not observed.**~~ **Settled 2026-09-20 by the user: no
+   behaviour depends on the payload.** `source` is read only to be written into `session.json`
+   (absent → `"unknown"`); whether the transcript snapshot is added is decided, as today, by the
+   presence of a fresh snapshot file (`SNAPSHOT_FRESH_SECONDS`); `cwd` falls back to `os.getcwd()`,
+   which is where the hook process starts anyway. The fixture recorded at the Codex parity step
+   becomes a confirmation, not a precondition. Accepted cost: the hook cannot behave differently on
+   `clear` than on `resume` — nothing in this spec asks it to.
+8. ~~**Tier.**~~ **Settled 2026-09-20 by the user: T4**, raised from the intent's T3. The line that
+   decides it — and that WP4 and WP5 inherit — is the one the intent already draws for the guards:
+   a change to *how* a control is evaluated stays low (WP8 was T2, WP7 was T2), a change to *what
+   the control decides* does not. WP2 changes who may pass the approval gate. Practical delta: the
+   model tier and the stage list do not move (both STRONG), the security review was already going
+   to fire under T3's own condition ("authentication, authorization or personal data"), and
+   characterization tests were already required by R16 — what T4 adds is R19's mandatory rollback,
+   monitoring and idempotency sections. The intent's WP2 row was amended to T4.
 9. **`last_prompt` puts user text into the project tree.** Gitignored, capped at 800 characters and
    path-guarded, but a prompt may contain a secret. `AI_HANDOFF_NO_PROMPT=1` opts out; the default
    is to record it, because "the user's latest instruction verbatim" is the single most valuable
@@ -481,20 +521,30 @@ descriptions match this work (`ai-task`, `ai-status`) are amended by I9 rather t
     the design relies on `O_APPEND` ordering and tolerant readers, and is untested on network
     filesystems. This is acceptable for an audit trail, not for anything that must never lose a
     line — and nothing in WP2 is allowed to depend on it being lossless.
-11. **A pending question blocks stages but not edits.** The scope guard is disarmed between steps
+11. ~~**`--topic` questions need `.ai/`.**~~ **Settled 2026-09-20 by the user: they live in
+    `docs/sdlc/intent/<slug>.questions.md`, always.** `find_root` stops being the boundary for the
+    `sdlc-*` skills; the boundary becomes what the questions are *about*. Accepted cost: an intent
+    brainstorm leaves no `events.jsonl` trail, by design — its audit is the file itself.
+12. **A pending question blocks stages but not edits.** The scope guard is disarmed between steps
     today, so an agent can still edit while a question is open. Widening the scope guard was
     rejected here (alternative 3) and belongs to WP4's diff-budget work; until then the block is a
     stage-level guarantee only.
 
 ## Open questions
 
-| # | Question | Owner |
-|---|---|---|
-| 1 | Twenty event types or ten? (concern 1) — if ten, which ones survive and what happens to the rest | human, before `/sdlc-plan` |
-| 2 | Is the approve rule in the **path** guard acceptable under "guard rules stay as they are"? (concern 2) | human, before `/sdlc-plan` |
-| 3 | Stay at T3, or raise to T4 because an authorization control changes? (concern 8) | human; an agent may raise, only a human lowers |
-| 4 | Does a real Codex session send `cwd` and `source` on `SessionStart` / `UserPromptSubmit`, and does `additionalContextLimit` truncate or reject? (concern 7) | implementation, recorded as a fixture before the Codex step closes |
-| 5 | Should `--topic` questions work in a project that has `docs/sdlc/` but no `.ai/`? Today `find_root` is the single opt-in boundary; WP3's router may revisit it | deferred to WP3 |
-| 6 | Per-task token budget from the journal | deferred to WP4 (explicitly not built here) |
+None blocking. Every question this spec raised was answered by the user on 2026-09-20:
 
-*Intent open questions 1 and 2 are settled above and need no further owner.*
+| Question | Answer |
+|---|---|
+| Twenty event types or ten? | Twenty flat — one per command that changes state; a new type needs its own consumer. The intent was amended. |
+| Is the approve rule a new guard rule? | It stays in the path guard, armed by `task_in_flight()`, placed before the Bash fast path. |
+| T3 or T4? | **T4** — the deliverable *is* an authorization control. R19 adds the mandatory rollback, monitoring and idempotency sections. |
+| Verify the Codex payload first? | Not needed: no behaviour depends on it. The fixture at the Codex step confirms rather than gates. |
+| `--topic` without `.ai/`? | Topic questions live in `docs/sdlc/intent/<slug>.questions.md`, always; no journal events. |
+| Per-task token budget | Stays in WP4. The journal captures `from` on `field_set` and `tier_set` — the only value that cannot be backfilled — and reserves nothing else. |
+
+Carried forward, owned by later packages rather than by this one: the per-task token budget and the
+scope guard's disarmed window between steps (both WP4, concerns 11 and 12), and the `.ai/AGENTS.md`
+router that may revisit where instructions live (WP3).
+
+*Intent open questions 1 and 2 are settled in the Design section and need no further owner.*
