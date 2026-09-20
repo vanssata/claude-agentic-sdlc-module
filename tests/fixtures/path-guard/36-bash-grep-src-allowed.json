@@ -1,0 +1,1 @@
+{"case":"ordinary work in src/ is untouched by any of it","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"tee __ROOT__/src/Service.php < /dev/null"}}}

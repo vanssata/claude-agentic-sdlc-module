@@ -1,0 +1,1 @@
+{"case":"running the context guard by hand is denied: it writes the evidence the gate trusts","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"echo '{\"hook_event_name\":\"UserPromptSubmit\"}' | python3 /home/u/.claude/hooks/context-guard.py"}}}

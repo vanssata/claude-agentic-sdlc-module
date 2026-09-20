@@ -357,6 +357,33 @@ rc=0
 rc=0
 ### ai-scope-guard | fixture path-guard/32-bash-state-note-approve-word.json
 rc=0
+### ai-git-guard | fixture path-guard/33-bash-tee-session-json.json
+rc=0
+### ai-path-guard | fixture path-guard/33-bash-tee-session-json.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a claude-agentic control file: __TMP__/project/.ai/state/session.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/33-bash-tee-session-json.json
+rc=0
+### ai-git-guard | fixture path-guard/34-bash-sed-i-current-json.json
+rc=0
+### ai-path-guard | fixture path-guard/34-bash-sed-i-current-json.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a claude-agentic control file: __TMP__/project/.ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/34-bash-sed-i-current-json.json
+rc=0
+### ai-git-guard | fixture path-guard/35-bash-run-context-guard.json
+rc=0
+### ai-path-guard | fixture path-guard/35-bash-run-context-guard.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to run a claude-agentic hook from an agent session: the runtime invokes these, and running one by hand writes the state they are trusted to report.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/35-bash-run-context-guard.json
+rc=0
+### ai-git-guard | fixture path-guard/36-bash-grep-src-allowed.json
+rc=0
+### ai-path-guard | fixture path-guard/36-bash-grep-src-allowed.json
+rc=0
+### ai-scope-guard | fixture path-guard/36-bash-grep-src-allowed.json
+rc=0
 ### ai-git-guard | fixture scope-guard/01-in-scope.json
 rc=0
 ### ai-path-guard | fixture scope-guard/01-in-scope.json

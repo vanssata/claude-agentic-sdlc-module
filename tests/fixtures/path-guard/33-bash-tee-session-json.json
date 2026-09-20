@@ -1,0 +1,1 @@
+{"case":"tee into the session sidecar is denied: it is the gate's evidence","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"echo '{\"last_prompt_at\":\"2099-01-01T00:00:00Z\"}' | tee __ROOT__/.ai/state/session.json"}}}

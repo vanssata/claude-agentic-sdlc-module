@@ -1091,4 +1091,28 @@ RACE
 [ "$(Z events --type gate_approved --format jsonl | wc -l)" = 0 ] && pass "and no approval is journalled" || fail "the journal should hold no approval"
 Z events --type gate_rejected --format jsonl | jq -e '.data.by=="ivan"' >/dev/null && pass "only the human's rejection is" || fail "the rejection should be recorded"
 
+echo "== a rejection is a wall, not a cleared flag"
+ROOTJ="$TMP/rejection-wall"; mkdir -p "$ROOTJ/.ai/state" "$ROOTJ/.ai/reports"
+K() { env -u CLAUDECODE -u AI_RUNTIME -u AI_UNATTENDED python3 "$STATE" --root "$ROOTJ" "$@"; }
+K init --goal "refused" --workflow feature >/dev/null
+K stage human_approval >/dev/null
+K reject --by ivan --why "the migration has no rollback" >/dev/null
+K stage implementation >/dev/null && pass "the work can go back to implementation" || fail "a rejection must not freeze the task"
+out=$(K done 2>&1); rc=$?
+[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "was rejected at .* and has not been approved since" \
+  && pass "but done is refused" || fail "a rejected task must not be finished" "exit $rc: $out"
+out=$(K close 2>&1); [ $? = 5 ] && pass "and so is close" || fail "close should be refused too" "$out"
+out=$(K stage done 2>&1); [ $? = 5 ] && pass "and so is moving the stage to done" || fail "stage done should be refused" "$out"
+K done --abandon >/dev/null && pass "abandoning it is still allowed" || fail "abandon should always be available"
+
+K init --goal "asked again" --workflow feature --force >/dev/null
+K stage human_approval >/dev/null
+K reject --by ivan --why "not yet" >/dev/null
+out=$(K done 2>&1); [ $? = 5 ] && pass "a second task is walled the same way" || fail "should be refused"
+K stage human_approval >/dev/null
+K get --field human_approval | jq -e '.rejected_at==null' >/dev/null \
+  && pass "asking again clears the wall" || fail "a new request should clear the rejection"
+env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTJ" approve --by launcher >/dev/null
+K done >/dev/null && pass "and an approval lets it close" || fail "an approved task should close"
+
 summary "state.py"

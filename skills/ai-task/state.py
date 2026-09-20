@@ -278,7 +278,7 @@ def apply_defaults(state):
         state["human_approval"] = {"required": True, "granted": False,
                                    "granted_by": None, "granted_at": None}
     for key, default in (("requested_at", None), ("gate_id", None), ("requested_session", None),
-                         ("via", None), ("unattended", False)):
+                         ("rejected_at", None), ("via", None), ("unattended", False)):
         state["human_approval"].setdefault(key, default)
     return state
 
@@ -1483,6 +1483,31 @@ def cmd_handoff(args, root):
         print(os.path.relpath(handoff_path(root), root))
 
 
+CLOSING_COMMANDS = {"done", "close"}
+
+
+def guard_rejected(root, args):
+    """A rejection is a wall, not a cleared flag.
+
+    reject consumes the request, so without this the very next command could
+    finish the task the human just refused. It stops only the commands that
+    would close it — going back to implementation to address the rejection is
+    the whole point — and a new `stage human_approval` clears it, because asking
+    again is how a rejection is answered.
+    """
+    if args.command not in CLOSING_COMMANDS and args.stage_argument != "done":
+        return
+    if getattr(args, "abandon", False):
+        return                            # abandoning a refused task is allowed
+    state = load(root, required=False, claim=False)
+    if not state or not (state.get("human_approval") or {}).get("rejected_at"):
+        return
+    die("APPROVAL_REFUSED — this task was rejected at %s and has not been approved since. "
+        "Address the rejection and run 'state.py stage human_approval' to ask again, or close "
+        "it with 'state.py done --abandon'."
+        % state["human_approval"]["rejected_at"], 5)
+
+
 def guard_pending(root, command):
     """The file is re-parsed on every stage-moving command — questions.pending is
     only a cache — and nothing is written, so exit 4 leaves the state byte-identical."""
@@ -1543,7 +1568,8 @@ def request_gate(root, state, gate):
         _, questions = parse_questions(path)
     state["human_approval"].update({
         "required": True, "granted": False, "granted_by": None, "granted_at": None,
-        "requested_at": now(), "gate_id": gate_id, "via": None, "unattended": False,
+        "requested_at": now(), "gate_id": gate_id, "rejected_at": None,
+        "via": None, "unattended": False,
         # The session the plan was presented in. The file route requires the
         # human's turn to come from *this* session — comparing session.json's two
         # own fields proves nothing, because whichever session ran last wrote
@@ -1654,9 +1680,12 @@ def close_gate_from_file(root, state, question, by):
             "via": "file" if approved else None, "unattended": approved and unattended,
         })
         if approved:
+            state["human_approval"]["rejected_at"] = None
+        if approved:
             record(state, "human_approval", "granted by %s via file" % by)
         else:
             state["next_action"] = "address the rejection: %s" % one_line(question["text"])
+            state["human_approval"]["rejected_at"] = now()
             record(state, "gate_rejected", "%s: %s" % (by, question["text"] or "no reason given"))
         write_handoff(root, state, "stage")
         save(root, state)                 # durable first: the answer line is derived
@@ -1715,7 +1744,8 @@ def cmd_approve(args, root):
     claim_runtime(root, state)
     state["human_approval"].update({
         "required": True, "granted": True, "granted_by": args.by, "granted_at": now(),
-        "requested_at": None, "gate_id": None, "via": via, "unattended": via == "unattended",
+        "requested_at": None, "gate_id": None, "requested_session": None,
+        "rejected_at": None, "via": via, "unattended": via == "unattended",
     })
     record(state, "human_approval", "granted by %s via %s" % (args.by, via))
     write_handoff(root, state, "stage")
@@ -1747,6 +1777,7 @@ def cmd_reject(args, root):
         "required": True, "granted": False, "granted_by": None, "granted_at": None,
         "requested_at": None, "gate_id": None, "via": None, "unattended": False,
     })
+    state["human_approval"]["rejected_at"] = now()
     state["next_action"] = "address the rejection: %s" % one_line(args.why)
     record(state, "gate_rejected", "%s: %s" % (args.by, args.why))
     write_handoff(root, state, "stage")
@@ -1893,8 +1924,10 @@ def main():
     root = find_root(args.root)
     RUNTIME = detect_runtime(args.runtime, root)
     MUTATING = args.command in MUTATING_COMMANDS
+    args.stage_argument = getattr(args, "stage", None)
     if args.command in BLOCKING_COMMANDS and not getattr(args, "abandon", False):
         guard_pending(root, args.command)
+    guard_rejected(root, args)
     args.func(args, root)
 
 

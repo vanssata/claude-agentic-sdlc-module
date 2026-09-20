@@ -208,6 +208,15 @@ case "$AI_TOOL" in
             deny "Refusing 'state.py approve' from an agent session.$WHY_APPROVE"
         fi
 
+        # The hooks are invoked by the runtime, never by the work. Running
+        # context-guard.py by hand writes .ai/state/session.json, which is the
+        # evidence the gate's file route rests on: an agent that can mint a
+        # human turn can approve its own plan.
+        HOOKRUN_RE='(^|[|;&[:space:]])(python3?[[:space:]]+)?"?[^[:space:]"]*(context-guard|ai-path-guard|ai-scope-guard|ai-git-guard|fable-gate|codex-model-gate)\.(py|sh)"?([[:space:]]|$)'
+        if ere_match "$HOOKRUN_RE" "$cmd" && [ -z "${AI_UNATTENDED:-}" ] && task_in_flight; then
+            deny "Refusing to run a claude-agentic hook from an agent session: the runtime invokes these, and running one by hand writes the state they are trusted to report.$WHY_APPROVE"
+        fi
+
         # Fast path: if nothing in the whole command line looks interesting, stop
         # here. This keeps the common case to a single match instead of one pass
         # per argument, which matters because the hook runs on every Bash call.
@@ -219,6 +228,11 @@ case "$AI_TOOL" in
         # inside a heredoc body or a commit message is not a command argument.
         readers='(^|[|;&[:space:]])(cat|bat|less|more|head|tail|strings|xxd|od|hexdump|base64|nl|tac|rev)([[:space:]]+-[^[:space:]]+)*[[:space:]]+'
         copiers='(^|[|;&[:space:]])(cp|mv|rsync|scp|install|tar|zip|curl|wget)([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+'
+        # A redirect is not the only way a shell writes a file. These are the
+        # ones that take the path as an argument, which the `>` rule below
+        # cannot see — the file route's evidence is only as good as this list.
+        writers='(^|[|;&[:space:]])(tee|dd|truncate|shred|touch|chmod|chown|ln)([[:space:]]+-?-?[^;&|[:space:]]+)*[[:space:]]+'
+        inplace='(^|[|;&[:space:]])(sed|perl|ruby)([[:space:]]+-[^[:space:]]*i[^[:space:]]*)([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+'
 
         # Every argument-looking token in the command, minus flags.
         while IFS= read -r token; do
@@ -249,7 +263,9 @@ case "$AI_TOOL" in
             # Writing through the shell: into a protected control file, into an
             # instruction file that belongs to a dependency, or into the
             # runtime's own configuration while a task is in flight.
-            if ere_match ">>?[[:space:]]*[\"']?${esc}" "$cmd"; then
+            if ere_match ">>?[[:space:]]*[\"']?${esc}" "$cmd" \
+               || ere_match "${writers}[\"']?${esc}" "$cmd" \
+               || ere_match "${inplace}[\"']?${esc}" "$cmd"; then
                 case "$kind" in
                     protected)
                         deny "Refusing a shell redirect into a claude-agentic control file: $token$WHY_PROTECTED" ;;
