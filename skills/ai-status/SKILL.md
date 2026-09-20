@@ -73,12 +73,35 @@ done
    - completed steps out of total;
    - test, e2e, review and security status;
    - open risks;
-   - human approval: required, and whether granted and by whom;
-   - how long since `updated_at`. Flag a stage of `implementation` that has not
-     moved in a long time: it may have stopped mid-step.
+   - human approval: required, and whether granted and by whom. When
+     `human_approval.via` is `unattended`, or a `gate_approved` event carries
+     `data.unattended`, **say so on its own line**: the gate was opened by a
+     launcher variable rather than by a person at a terminal. That is legitimate
+     in CI and misleading everywhere else, so it is reported, never hidden.
+     When `requested_at` is set and `granted` is not, the gate is open and
+     waiting — name the command the human has to run;
+   - **pending questions.** `state.py questions --pending --format prose`. While
+     any non-gate question is pending, nine commands exit 4 — that is usually the
+     answer to "why is nothing happening";
+   - `owner_runtime`, and whether it is the runtime this session is in. When they
+     differ, say it plainly: the task was last touched from the other runtime, so
+     the next mutating command records a `runtime_handoff`;
+   - `resume_point` — the one line saying where the work was interrupted;
+   - the age of `.ai/state/handoff.md`. When it is much older than `updated_at`
+     the handoff was not rewritten by the last command; say so, and point at
+     `state.py handoff` to refresh it.
 
-3. **The audit trail.** The last few `history` entries, one line each, so the
-   reader can see how the task got here.
+3. **The audit trail.**
+
+   ```bash
+   python3 "$AI_HOME/skills/ai-task/state.py" events --last 8
+   ```
+
+   The journal, newest last, one line each. It is the fuller record: it carries
+   the runtime, the actor and the typed `data` that `history[]` does not. If the
+   journal is missing — a task created before schema 2, or a project that has not
+   run `/project-update` — fall back to the last few `history` entries and say
+   which of the two you are showing.
 
 4. **Model routing.** Report the ladder of the runtime you are actually running
    in. Read whichever configuration exists:
@@ -163,6 +186,16 @@ done
    separately, so one out-of-scope file rejects the whole patch. Codex has no
    hookable read tool, so `cap-large-read` is Claude-only there; note that if the
    session is running under Codex.
+
+   **Under Codex, say this out loud as well.** The rule that denies
+   `state.py approve` exists only once the user has trusted hooks through
+   `/hooks`; until then nothing stops an agent from running it, and the agent
+   contract and the TTY check are the whole defence. The file route degrades too:
+   it needs a `session.json` prompt recorded after the gate was requested, and
+   only the hook writes that file. So on an untrusted Codex install the honest
+   report is that approval is terminal-only and unenforced. This is a permanent
+   difference in what the system can *prove* about an approval, not a
+   misconfiguration to fix — report it and carry on.
 
 ## Rules
 

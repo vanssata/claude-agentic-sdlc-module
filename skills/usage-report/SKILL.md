@@ -45,6 +45,27 @@ falls back to Claude, which is what a bare `--root` meant before.
 
 Local transcripts only; sessions from other machines are not visible.
 
+### The task journal, when the question is "what did *this task* cost"
+
+The transcripts carry tokens but no notion of a task; the journal
+(`.ai/reports/<task-id>/events.jsonl`, schema 2 and up) carries the task but no
+tokens. Between them they bracket the work: `task_started` and `task_closed` are
+the first and last lines of a task's journal, and their timestamps are UTC ISO-8601
+— the same clock the transcripts use.
+
+```bash
+python3 "$AI_HOME/skills/ai-task/state.py" events --format jsonl \
+  | jq -r 'select(.event=="task_started" or .event=="task_closed") | "\(.ts) \(.event)"'
+```
+
+So a per-task figure can be *approximated* today by reporting usage over that
+window. Two things make it an approximation, and both must be said when it is
+quoted: the window includes anything else the session did in the same minutes,
+and a task spanning two runtimes has one journal but two transcript trees. A
+real per-task budget — tokens attributed to a task rather than to a clock
+window — is WP4, not this skill. The report does not compute it; it can only
+tell you the window to look at.
+
 ## Reading the numbers
 
 - The DAY column is the transcript timestamp's UTC date; `--today` filters by UTC

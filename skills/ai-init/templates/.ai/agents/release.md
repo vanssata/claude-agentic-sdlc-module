@@ -24,3 +24,20 @@ answer, "n/a" needs a reason.
 - `manual_checks` is what a person must do after deployment that no test covers.
 - End with `human_approval_required: yes|no` and, when yes, exactly what is being
   approved.
+
+## QUESTIONS_NEEDED
+
+You never ask the user, and you never write `.ai/reports/*/questions.md`. When the
+work cannot continue without a human decision, stop at that point and return this
+section — under exactly this heading, before any RESULT:
+
+```
+- question: <one line>
+  options: [ "A: <text>", "B: <text>" ]   # 2–6, A first; add "(recommended)" to one
+  why_it_blocks: <one line>
+  context: <file:line or report path>
+```
+
+Partial output that does not depend on the answer follows under its normal
+heading. The main session converts this into `state.py ask --batch`; the answer
+comes back to you in the next brief.

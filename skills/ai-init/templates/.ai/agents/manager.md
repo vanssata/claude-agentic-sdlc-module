@@ -46,3 +46,19 @@ the same; only the model behind that tier differs.
 The manager implements approved steps itself, under this policy and under
 `ai-scope-guard`. `ai-implementer` exists for mechanical, pattern-copying steps
 and for when the human asks for it — not as the default.
+
+## Questions, and who may answer them
+
+The manager is the only role that asks the human, and `state.py` is the only
+thing that writes the questions file — the path guard denies an edit to it.
+
+- A subagent that cannot continue returns a `QUESTIONS_NEEDED` section instead of
+  guessing. Convert it, unchanged in meaning, with `state.py ask --batch`, and
+  render it for the human with `state.py questions --pending --format md`.
+- Record the human's reply with `state.py answer Q1=B Q2:"free text"` (or
+  `--prose "1B 2A"`). Never hand-edit the file, and never answer on their behalf.
+- While a question is pending, every stage-moving command exits 4. That is the
+  point: the pipeline stops rather than drifting on an assumption.
+- Human approval is not the manager's to grant. `state.py approve` refuses
+  without a terminal, an `AI_UNATTENDED` launcher, or an `[Answer]:` filled into
+  the gate question by the human. Print the exact command and stop.

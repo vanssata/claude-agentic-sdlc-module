@@ -34,6 +34,19 @@ started in one runtime resumes in the other.
 $STATE get --quiet
 ```
 
+If that says `no task in flight`, skip to **Nothing in flight** below. Otherwise
+read the handoff **before** anything else:
+
+```bash
+$STATE handoff --print
+```
+
+It is the cheapest way back into an interrupted task: stage, current step and its
+allowed files, the last decisions, the pending questions, the resume point and
+the last prompt of the session that was interrupted, in at most thirty lines.
+Read it instead of re-reading the repository, and trust it over a compaction
+summary where the two disagree — it is rendered from the state, not remembered.
+
 - **A task is in flight** (stage is not `done`): print its id, goal, stage,
   next action and open risks. If `updated_at` is old and the stage is
   `implementation`, warn that it may have stopped mid-step and say which step.
@@ -194,14 +207,32 @@ Codex), in plan mode. **T5:** `ai-expert`. Save to `.ai/reports/<task-id>/implem
 `.ai/templates/implementation-plan.md`, register the steps as above.
 
 `allowed_files` is enforced by a hook from T2 up, so it must be accurate. A
-plan with a **(blocking)** open question is not approved: put the question to
-the human.
+plan with a **(blocking)** open question is not approved. Turn every one of them
+into an `ask` call **before** `$STATE plan` registers the steps — once a question
+is pending, `plan` exits 4 anyway, so asking first is the shorter road:
+
+```bash
+$STATE ask --batch /tmp/questions.json     # several at once — see Questions below
+$STATE questions --pending --format md     # render for the human, then stop
+```
+
+A plan registered with its blocking questions still open is a plan that was
+approved on an assumption. See **Questions** below.
 
 ### PLAN REVIEW (T3 and above)
 
 `ai-reviewer` on the plan itself, before any code exists. Then show the human the
-plan and the review, and ask for approval to implement. For T3+ this approval is
-required, not optional.
+plan and the review — both, in the conversation — and only **after** they have
+been shown:
+
+```bash
+$STATE stage human_approval
+```
+
+That command is what opens the gate: it appends gate question `G1`, stamps
+`requested_at` and emits `gate_requested`. Running it before the human has seen
+what they are approving asks them to sign a blank page, and the journal records
+that it happened in that order. For T3+ this approval is required, not optional.
 
 ### IMPLEMENTATION
 
@@ -330,17 +361,105 @@ mode, step 6.) **T4, T5, and `team` from T2 up:**
 ### HUMAN APPROVAL
 
 Print the summary, the open findings, the rollback, and the exact commands that
-*would* run next — then **stop**. Do not commit, merge, push or deploy. When the
-human approves:
+*would* run next — then **stop**. Do not commit, merge, push or deploy.
+
+**You cannot grant this approval, and running `approve` yourself will not work.**
+The command refuses with exit 5 unless it sees a terminal on stdin, or
+`AI_UNATTENDED` in its own environment — neither of which a tool call from this
+session has. The path guard denies it too. Print the command and hand it over:
 
 ```bash
-$STATE approve --by "<name>"
+python3 "$AI_HOME/skills/ai-task/state.py" --root "<project root>" approve --by "<name>"
+```
+
+Print it with `$AI_HOME` and the project root expanded to real absolute paths,
+quoted — the human pastes it into their own shell, where those variables are not
+set. There are two other routes, and naming them is part of the hand-over:
+
+- the human edits `[Answer]: A` into gate question `G1` in
+  `.ai/reports/<task-id>/questions.md`, then tells you to run
+  `$STATE questions --sync`. That route needs a prompt recorded *after* the gate
+  was requested, so it works in a live session and not in a replay.
+- an unattended runner exports `AI_UNATTENDED=1` in the launcher's environment.
+  The approval is then recorded as `unattended: true` in the state and the
+  journal — it is an audit mark, not a way to make the gate quieter.
+
+A rejection is `$STATE reject --by "<name>" --why "<reason>"`; the stage stays
+where it is and the reason is journalled.
+
+Only **after** the human has approved out of band:
+
+```bash
 $STATE done
 $STATE archive
 ```
 
 Suggest the commit command; let the human run it, or run it only when they ask
 in this turn.
+
+## Questions
+
+A subagent never asks the user. When it cannot continue without a human decision
+it returns a `QUESTIONS_NEEDED` section and stops there, with whatever partial
+output did not depend on the answer. Converting that into a real question is
+yours, and `state.py` is the only thing that may write the questions file — the
+path guard denies an edit to `.ai/reports/*/questions.md`, including a shell
+redirect into it. **Never hand-edit it, and never answer on the human's behalf.**
+
+**Convert.** One question:
+
+```bash
+$STATE ask "<one line>" --option "A: <text>" --option "B: <text>" \
+  --recommend A --context "src/Foo.php:120"
+```
+
+Several at once — a JSON array of `{question, options:[{key,text}], recommend,
+context}`, which is the direct shape of a `QUESTIONS_NEEDED` block:
+
+```bash
+$STATE ask --batch /tmp/questions.json
+```
+
+Option keys are single letters `A`–`W`, at least two, A first. Do not put
+`(recommended)` in an option's text; that is what `--recommend` is for.
+
+**Render.** Show the human the questions, not the file:
+
+```bash
+$STATE questions --pending --format md
+```
+
+**Then stop.** While any non-gate question is pending, nine commands exit 4 and
+change nothing: `stage`, `triage`, `plan`, `step`, `step-done`, `remediate`,
+`approve`, `done`, `close`. Reading, recording and answering still work — `get`,
+`events`, `handoff`, `note`, `risks`, `set`, `ask`, `answer`, `questions` — and
+`done --abandon` is exempt, because abandoning the task is how a question that
+cannot be answered gets closed. That is the point: the pipeline halts rather
+than drifting on an assumption you invented. Under `AI_UNATTENDED=1`, `ask`
+ends the turn with the literal line `WAITING_FOR_ANSWERS <file> <ids>` and the
+runner takes over.
+
+**Record the answer** in the form the human gave it:
+
+```bash
+$STATE answer Q1=B Q2:"free text"          # letters and free text mix
+$STATE answer --prose "1B 2A 3: keep the old column"
+$STATE questions --sync                    # they filled [Answer]: into the file
+```
+
+`--sync` re-reads the file, so a human who answered by editing `[Answer]:` lines
+is recorded as the author. Re-syncing an already-answered question is a no-op;
+the trailer is parsed back and ignored.
+
+**Outside a task** — the brainstorm in `/sdlc-intent` — questions are per topic
+and live in `docs/sdlc/intent/<slug>.questions.md`:
+
+```bash
+$STATE ask --topic <slug> "<one line>" --option "A: …" --option "B: …"
+```
+
+Topic questions block nothing and emit no journal event. They work in a
+repository with no `.ai/` at all.
 
 ## Keeping context small
 
