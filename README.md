@@ -192,10 +192,22 @@ The plugin ships every version of every template it has ever installed
 | edited, JSON policy | merged key by key; the project's value wins wherever both changed |
 | edited where the plugin changed the same lines | left alone; the plugin's version goes to `.ai/local/plugin-update/` for a merge |
 | `.ai/project/**`, `CLAUDE.md` outside the block, `.claude/settings.json` | never touched |
+| moved by a migration | moved, with your edits merged at the new path; the original kept under `.ai/reports/project-update-<date>/` |
+| proposed for deletion by a migration | listed as `delete?` and left alone until a human passes `--apply --confirm-delete NAME` |
+
+The tree also carries a schema version in `.ai/VERSION`; a project initialised
+before it existed is schema 0. Migrations under
+`skills/project-update/migrations/` run in order before anything is merged —
+they move, add, edit and propose deletions, all inside the same dry run — and
+the version is written last, only once they are finished.
 
 Changes to `.ai/policies/*.json` are listed per key and need a confirmation
 before they are applied. A risk-tier mirror that was in sync stays in sync; one
-that was already stale stays flagged.
+that was already stale stays flagged. Nothing is deleted, and no version is
+advanced, without the migration that asked for it finishing: a conflict *from a
+migration*, or a deletion it proposed and nobody confirmed, holds `.ai/VERSION`
+where it is, and `/ai-status` keeps reporting the project as behind. An ordinary
+merge conflict does not.
 
 Changed a template? Run `tools/build-template-history.py` and commit the result;
 the test suite fails until you do.

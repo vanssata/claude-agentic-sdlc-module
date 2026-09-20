@@ -43,6 +43,17 @@ $UPDATE
 Show its output as is; it is already short. If it says up to date and prints no
 hint, say so and stop.
 
+A `schema 0 -> 1` line means the project was initialised before the current tree
+layout and a migration will run before anything is merged. `[0001]` marks the
+lines a migration owns. A `move` line moves a file the project may have edited —
+the edit is carried to the new path — and keeps a copy of the original under
+`.ai/reports/project-update-<date>/`. A `delete?` line is a proposal, not a
+deletion: see step 4.
+
+`.ai/VERSION` is the schema of the project's `.ai/` tree. It is not the
+`"version"` inside `.ai/policies/risk-tiers.json`, which versions that file's
+content.
+
 ## 3. Confirm policy changes
 
 Lines marked `policy` change `.ai/policies/*.json`: which stages a tier requires,
@@ -58,6 +69,30 @@ contains `--apply`: then the human has already decided.
 ```bash
 $UPDATE --apply
 ```
+
+Exit 3 means the apply stopped: a file changed between the dry run and the
+write, a target is not a regular file (a symlink is refused, never followed), or
+a write failed. Nothing after that item was written, every operation is
+idempotent, and the message names the file. Run the dry run again and show it.
+
+**A `delete?` line is for the human, not for you.** Never pass
+`--confirm-delete` yourself, not even when `$ARGUMENTS` contains `--apply`.
+Show the proposed deletion and its reason, and give them the command to run in
+their own terminal:
+
+```bash
+python3 "$AI_HOME/skills/project-update/update.py" "$PWD" --apply --confirm-delete "<your name>"
+```
+
+Give it with `$AI_HOME` and `$PWD` already substituted — they are variables of
+your session, not of their shell.
+
+The name they type goes into `.ai/reports/project-update-<date>/migration.json`,
+next to a copy of the file. Say that the schema version stays where it is until
+the deletion is settled — the update is not finished while it is pending, and
+`--check` keeps saying so. There are two ways to settle it: run that command, or
+delete the file by hand. There is no way to decline a proposal and move on; say
+so plainly rather than leaving them waiting for a third option.
 
 ## 5. Merge the conflicts
 
@@ -105,3 +140,34 @@ directories and instruction files the project has (`.claude CLAUDE.md`,
   script only creates them when missing, and so do you.
 - A conflict is resolved by merging, never by taking the plugin's version
   wholesale.
+- `--confirm-delete` is typed by a human. So is any edit to `.ai/policies/*.json`.
+- The schema version advances only when its migrations are finished. A conflict
+  or an unconfirmed deletion from a migration holds it back on purpose: writing
+  it would make the next run see a current project and plan nothing.
+
+## Writing a migration
+
+One module per version in `skills/project-update/migrations/`, named
+`NNNN_slug.py`, numbered contiguously from `0001`, with `VERSION` equal to the
+prefix, a one-line `TITLE`, a static `MOVES` list and `plan(ctx)`.
+
+- Every rename a migration performs belongs in `MOVES`, so the template history
+  follows the file and the project's edits merge at the new path. `ctx.move`
+  refuses a pair that is not there.
+- A template renamed under `skills/project-init/templates/` changes its history
+  key without moving any project path; record it in `RETIRED` as
+  `{"project-init/old-name.md": "project-init/new-name.md"}`. `RETIRED` also
+  takes `None` for a template that is simply gone. The test suite fails on a
+  history key that is neither current, nor a `MOVES` source, nor listed there.
+- A migration that deletes must retire the template in the same release,
+  otherwise the next run re-creates the file.
+- `ctx.patch_state` is the only way to change a task in flight, and the only
+  writer of `.ai/state/current.json` other than `state.py`. A migration that
+  moves a path a task's step may touch must patch it, or the scope guard will
+  stop that task on a file that no longer exists.
+- Operations are planned, never written: the dry run must list everything.
+  Paths are project-relative and normalised, and content is `bytes`.
+- `plan(ctx)` runs again on every run until the schema version advances, and a
+  conflict or an unconfirmed deletion holds it back. Every `fn` must therefore be
+  idempotent: append a line only when it is not already there, or the next run
+  appends it again.

@@ -24,8 +24,9 @@ once, to the end, after step 9.
 | `skills/project-update/history/index.json`, `history/blobs/*` | rebuilt | by `tools/build-template-history.py`, after the three template edits above are committed | 7 |
 | `hooks/ai-path-guard.sh` | edit | `WHY_PROTECTED` text (`:49`) names `update.py` as well as `state.py`; message only, no logic change | 7 |
 | `tests/test-project-update.sh` | edit | old-template build skips `ai-init/.ai/VERSION` (step 7); new sections for R1–R15 (step 8) | 7, 8 |
-| `tests/fixtures/project-update/schema-v0/` | new | overlay on the oldest-templates build: removes `.ai/VERSION`, adds an in-flight `current.json` (R10, R15) | 8 |
-| `tests/fixtures/project-update/migrations-synthetic/` | new | `0001` (copy), `0002` move of an edited file, `0003` delete, `0004` policy edit + `patch_state`, plus a history overlay with the old key's blobs | 8 |
+| `tests/fixtures/project-update/schema-v0/` | new | overlay on the oldest-templates build: the files a pre-schema project carries. The in-flight task is created by `state.py` in the test — `ai-path-guard` refuses any other writer of `.ai/state/*.json`, fixtures included (R10, R15) | 8 |
+| `tests/fixtures/project-update/migrations-synthetic/` | new | `0001` create, `0002` move of an edited file whose template moves with it, `0003` policy edit + text edit + `patch_state` + proposed delete. The "next" templates are built in the test from the current ones, so the fixture satisfies R12 | 8 |
+| `tests/fixtures/project-update/migrations-{invalid,badmoves,undeclared,escape,bad-content}/` | new | one registry per rejection: VERSION mismatch, a MOVES pair leaving the project, an undeclared move, an operation outside the project, content that is not bytes | 8 |
 | `tests/fixtures/project-update/migrations-broken/` | new | a gap (`0001`, `0003`) and a `VERSION` mismatch, for R2 exit 2 | 8 |
 | `tests/test-install-dry-run.sh` | edit | `:88-97` list gains `skills/project-update/migrations/__init__.py` and `0001_schema_version.py` | 8 |
 | `tests/test-scaffold-idempotency.sh` | edit | a second `scaffold-ai.sh` run over a v0 tree does not create `.ai/VERSION` | 8 |
@@ -157,6 +158,19 @@ first; kept planning-only so the write side in step 6 is reviewed separately).
 | 9 | Hint in step 4; rule for migration authors in `SKILL.md` |
 | 10 | Resolved in steps 7 and 9 |
 | new | Risks 1 — `scaffold-ai.sh` guard, not in the spec |
+
+## What changed while building it
+
+- Step 3 absorbed three of step 7's items (`templates/.ai/VERSION`, the `scaffold-ai.sh`
+  guard, the test's oldest-templates skip) plus the history rebuild: without them the
+  "a fresh project is up to date" assertion fails between steps 3 and 7.
+- Step 4 added a rule the spec did not have: `.ai/VERSION` is held while a migration item is
+  unsettled (a conflict, or an unconfirmed `delete?`). Spec R5a.
+- Step 5 turned `RETIRED` from a list into `{old key: successor | None}`, because a
+  `project-init` template renamed on disk changes its history key with no project path to
+  move, and a plain list would sanction the lost merge base instead of repairing it.
+- Step 6 made every write atomic, mode-preserving and symlink-refusing after a review found
+  that the first atomic-write attempt could be redirected through a planted `<target>.tmp`.
 
 ## Proof (tests)
 

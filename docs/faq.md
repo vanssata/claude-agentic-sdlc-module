@@ -157,6 +157,26 @@ and a real conflict is never overwritten: the plugin's version lands in
 `.ai/local/plugin-update/` and the skill merges it with you. Policy JSON changes
 are shown key by key and applied only after you confirm.
 
+If the tree layout itself changed since your project was initialised, the dry
+run opens with a `schema 0 -> N` line: migrations run first, in order, moving or
+adding files before anything is merged. A file that moves takes your edits with
+it, and the original is kept under `.ai/reports/project-update-<date>/`. A
+migration can *propose* a deletion; it never performs one. Confirming it is
+yours to type, in your own terminal, because an agent is not allowed to:
+
+```bash
+python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/project-update/update.py" . --apply --confirm-delete "<your name>"
+```
+
+(under Codex, `${CODEX_HOME:-$HOME/.codex}` instead — the skill prints the path
+it resolved.)
+
+Until you run that — or delete the file yourself — the schema version stays
+where it is and the project keeps reporting as behind. There is no way to
+decline a proposed deletion and carry on. `.ai/VERSION` is the schema of the `.ai/`
+tree; the `"version"` inside `.ai/policies/risk-tiers.json` is that one file's
+content version, and the two are unrelated.
+
 ## Do I have to run `/ai-init` before `/ai-task`?
 
 Yes. Without `.ai/` there are no policies, no tier table, no state directory and

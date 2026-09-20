@@ -19,9 +19,10 @@ ACTUAL=$(find "$ROOT/.ai" -type f | wc -l)
 [ "$EXPECTED" = "$ACTUAL" ] && pass "every template file was copied ($ACTUAL)" || fail "file count mismatch" "expected $EXPECTED, got $ACTUAL"
 
 for f in AGENTS.md policies/risk-tiers.json policies/safety.md project/overview.md \
-         agents/manager.md workflows/feature.md templates/release-report.md state/README.md; do
+         agents/manager.md workflows/feature.md templates/release-report.md state/README.md VERSION; do
     [ -f "$ROOT/.ai/$f" ] && pass ".ai/$f exists" || fail ".ai/$f missing"
 done
+grep -qE '^[0-9]+$' "$ROOT/.ai/VERSION" && pass "a fresh scaffold starts at the shipped schema" || fail ".ai/VERSION should hold a number"
 
 grep -q '.ai/state/\*.json' "$ROOT/.gitignore" && pass ".gitignore excludes the state file" || fail ".gitignore should exclude state"
 grep -q 'claude-agentic:start' "$ROOT/CLAUDE.md" && pass "CLAUDE.md carries the managed block" || fail "CLAUDE.md should carry the block"
@@ -29,6 +30,14 @@ grep -q 'claude-agentic:start' "$ROOT/CLAUDE.md" && pass "CLAUDE.md carries the 
 echo "== second run"
 out=$(bash "$SCAFFOLD" "$ROOT" 2>&1)
 printf '%s' "$out" | grep -q 'nothing to do' && pass "second run reports nothing to do" || fail "second run should be a no-op" "$out"
+
+# A project scaffolded before .ai/VERSION existed is schema 0, and must stay
+# schema 0 until /project-update migrates it: the scaffold must not declare it
+# current just because the file is missing.
+rm "$ROOT/.ai/VERSION"
+out=$(bash "$SCAFFOLD" "$ROOT" 2>&1)
+[ ! -e "$ROOT/.ai/VERSION" ] && pass "a rerun over an existing .ai/ does not invent a schema version" \
+    || fail "scaffolding an old project must not write .ai/VERSION" "$out"
 
 gi_lines=$(grep -c 'claude-agentic' "$ROOT/.gitignore")
 [ "$gi_lines" = 1 ] && pass ".gitignore snippet is not duplicated" || fail ".gitignore duplicated" "$gi_lines copies"
