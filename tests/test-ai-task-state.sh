@@ -590,7 +590,7 @@ out=$(G approve --by ivan 2>&1); rc=$?
 [ "$rc" = 5 ] && pass "approve under a pipe exits 5" || fail "approve should refuse a piped stdin" "exit $rc: $out"
 printf '%s' "$out" | grep -q "^state.py: APPROVAL_REFUSED — approval happens outside the agent. Run in your own terminal:$" \
   && pass "and the first line is the I1 text" || fail "the refusal text is wrong" "$out"
-printf '%s' "$out" | grep -q "^  python3 .*/skills/ai-task/state.py. --root $ROOTG approve --by ivan$" \
+printf '%s' "$out" | grep -qE "^  python3 '?.*/skills/ai-task/state\.py'? --root '?$ROOTG'? approve --by ivan$" \
   && pass "and the second line is a command a shell can actually run" || fail "the terminal command is wrong" "$out"
 mkdir -p "$TMP/with space/.ai/state" "$TMP/with space/.ai/reports"
 python3 "$STATE" --root "$TMP/with space" init --goal "spaces" --workflow feature >/dev/null
