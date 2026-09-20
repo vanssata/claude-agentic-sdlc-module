@@ -59,7 +59,7 @@ FILES_KEPT = 40
 STATUS_LINES = 40
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
-DEFAULT_WINDOW = 133000            # profiles/max.json
+DEFAULT_WINDOW = 800000            # profiles/max.json; capped per model below
 MODEL_WINDOW, MODEL_WINDOW_1M = 200000, 1000000
 COMPACT_RESERVE = 33000            # auto-compaction fires this far under the window
 WARN_PCT, BLOCK_PCT = 80, 120      # of the point where auto-compaction fires

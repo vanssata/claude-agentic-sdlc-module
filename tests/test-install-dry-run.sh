@@ -129,7 +129,7 @@ DIRN="$TMP/claude-nofable"; mkdir -p "$DIRN"
 CLAUDE_DIR="$DIRN" bash "$INSTALL" --plan max --fable no >/dev/null 2>&1
 grep -q '^model:' "$DIRN/agents/architect.md" && fail "with --fable no, architect must inherit the session" || pass "with --fable no, architect inherits the Opus session"
 jq -e '.availableModels | index("fable[1m]")' "$DIRN/settings.json" >/dev/null && fail "fable should be removed with --fable no" || pass "with --fable no, fable is not offered"
-[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "133000" ] && pass "the compaction window is 133k on max, so compaction fires near 100k" || fail "compaction not set"
+[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "800000" ] && pass "the compaction window is 800k on max; capped at the model's own, so a 200k session fires near 167k" || fail "compaction not set"
 [ -x "$DIR/hooks/context-guard.py" ] && pass "context-guard is executable" || fail "context-guard should be executable"
 for ev in UserPromptSubmit PreCompact SessionStart; do
     [ "$(jq -r --arg e "$ev" '[.hooks[$e][]?.hooks[]?.command | select(test("context-guard"))] | length' "$DIR/settings.json")" = 1 ] \
@@ -138,8 +138,8 @@ done
 CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 [ "$(jq -r '[.hooks.UserPromptSubmit[]?.hooks[]?.command | select(test("context-guard"))] | length' "$DIR/settings.json")" = 1 ] \
     && pass "a second install does not register context-guard twice" || fail "context-guard registered twice"
-grep -q 'Compaction near 100 000 tokens' "$DIR/CLAUDE.md" && pass "the block names the point where compaction fires" || fail "the block should say compaction fires near 100 000"
-grep -q 'warning from 80k tokens, and from 120k' "$DIR/CLAUDE.md" && pass "the block names the guard's thresholds" || fail "the guard thresholds are not rendered"
+grep -q 'Compaction near 167 000 tokens' "$DIR/CLAUDE.md" && pass "the block names the point where compaction fires, capped at the model's window" || fail "the block should say compaction fires near 167 000"
+grep -q 'warning from 133k tokens, and from 200k' "$DIR/CLAUDE.md" && pass "the block names the guard's thresholds" || fail "the guard thresholds are not rendered"
 grep -q '^# Summary instructions' "$DIR/CLAUDE.md" && pass "the block carries the summary instructions" || fail "summary instructions missing"
 grep -q '{{' "$DIR/CLAUDE.md" && fail "an unrendered placeholder is left in CLAUDE.md" || pass "every placeholder is rendered"
 [ -x "$DIR/bin/claude-1m" ] && pass "max installs the opus[1m] launcher" || fail "bin/claude-1m missing or not executable"
@@ -154,7 +154,7 @@ out1m=$(CLAUDE_BIN="$TMP/fake-claude" "$DIR/bin/claude-1m" opus)
 [ "$out1m" = "window=800000 args=--model opus[1m]" ] && pass "claude-1m opus is the default spelled out" || fail "claude-1m opus launched the wrong session" "$out1m"
 grep -q 'claude-1m fable' "$DIR/CLAUDE.md" && pass "the block offers Fable 5.1 [1m] as a session through claude-1m fable" || fail "block does not mention claude-1m fable"
 CLAUDE_1M_COMPACT_WINDOW=lots CLAUDE_BIN="$TMP/fake-claude" "$DIR/bin/claude-1m" >/dev/null 2>&1 && fail "a non-numeric window must be refused" || pass "a non-numeric window is refused"
-[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "133000" ] && pass "the launcher leaves the settings window for every other model alone" || fail "settings window changed"
+[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "800000" ] && pass "the launcher leaves the settings window for every other model alone" || fail "settings window changed"
 grep -q 'claude-1m' "$DIR/CLAUDE.md" && pass "the CLAUDE.md block says opus[1m] starts with claude-1m" || fail "block does not mention claude-1m"
 [ "$(jq -r '.modelSettings["claude-opus-5"].effortLevel' "$DIR/settings.json")" = "medium" ] && pass "Opus runs at medium" || fail "opus effort not medium"
 [ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL // "unset"' "$DIR/settings.json")" = "unset" ] && pass "CLAUDE_CODE_SUBAGENT_MODEL is not set, so each agent's own model: applies" || fail "CLAUDE_CODE_SUBAGENT_MODEL would override every agent tier"

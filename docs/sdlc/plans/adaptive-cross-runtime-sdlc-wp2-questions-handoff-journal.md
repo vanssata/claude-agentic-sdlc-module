@@ -43,7 +43,7 @@ All seven open flagged concerns were accepted as the spec states them (user, 202
 | `skills/ai-init/templates/.ai/state/README.md` | edit | the v2 key list; `context-guard.py` named as a third writer, of `session.json` only; `handoff.md` and where the journal lives | 8 |
 | `tests/test-project-update.sh` | edit | fixture `schema-v1`: a v1 project with a task at `implementation` works before and after `--apply` | 8 |
 | `tests/fixtures/project-update/schema-v1/` | new | overlay on the v1 templates build; the in-flight task is created by `state.py` inside the test, never written by the fixture | 8 |
-| `install.sh` | edit | `codex_hook_files` gains `hooks/context-guard.py`; the "Codex has no compaction events" comment is replaced by the fact that it has both, and that the transcript snapshot stays Claude-only | 9 |
+| `install.sh` | edit | **0b (not in the original list):** `COMPACT_AT` must cap `autoCompactWindow` at the model's 200k window, or the rendered `CLAUDE.md` block tells every Opus session it compacts near 767 000; `ONE_M_RULE` and the two summary lines rewritten, because the large window now comes from the per-model cap, not from the launcher. **9:** `codex_hook_files` gains `hooks/context-guard.py`; the "Codex has no compaction events" comment is replaced by the fact that it has both, and that the transcript snapshot stays Claude-only | 0b, 9 |
 | `codex/hooks.json` | edit | `UserPromptSubmit` (5), `PreCompact` (15), `SessionStart` (15, same matcher), all `"$HOME/.codex/hooks/context-guard.py"` | 9 |
 | `tests/test-codex-install.sh` | edit | `:72` installed-file list gains `hooks/context-guard.py`; the three new registrations are asserted once each | 9 |
 | `tests/test-install-dry-run.sh` | edit | `:132`, `:157` window assertions (0b); the Codex list (9) | 0b, 9 |
@@ -87,6 +87,13 @@ names. Branch: `feat/wp2-questions-handoff-journal`.
    placed first so it can be reverted alone, and `DEFAULT_WINDOW` moves with the profile so the
    invariant that test pins stays meaningful. On a 200k model `min(800000, 200000)` means
    compaction near 167k, a warning from 133k and a hold-back from 200k.
+   **Wider than the file list above said, and necessarily so:** `install.sh` derives
+   `COMPACT_AT` as `COMPACT - 33000` and feeds it into the `CLAUDE.md` block it writes into every
+   user's home, so without the same cap that block would state 767 000 for an ordinary Opus
+   session. Raising the number without fixing the arithmetic would ship a false statement, so the
+   cap, `ONE_M_RULE` and the two summary lines are part of this step. The `claude-1m` narrative
+   changes with it: the launcher pins the model at launch, and `/model opus[1m]` now reaches the
+   large window too, because the single setting is simply uncapped on a 1M model.
    *Proof:* `bash tests/test-context-guard.sh`, `bash tests/test-install-dry-run.sh`.
 
 1. **Journal core in `state.py`.** `runtime()` with the I10 precedence (`--runtime` > `AI_RUNTIME`

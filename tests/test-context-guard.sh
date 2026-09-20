@@ -87,12 +87,15 @@ reset_state; context_of 200000; expect_silent "$(prompt hi)" "window 300000 on a
 reset_state; context_of 214000; expect_warn "$(prompt hi)" "window 300000 on a [1m] model: 214k warns"
 reset_state; context_of 321000; expect_block "$(prompt hi)" "window 300000 on a [1m] model: 321k holds the prompt back"
 
+# The default is the Max profile's 800 000, which on a 200k model is capped to
+# 200 000: compaction near 167k, so the warning starts at 133.6k, not at 80k.
 rm -f "$CLAUDE_CONFIG_DIR/settings.json"
-reset_state; context_of 80000; expect_warn "$(prompt hi)" "no settings.json: the Max default applies"
+reset_state; context_of 133000; expect_silent "$(prompt hi)" "no settings.json: the Max default applies, capped"
+reset_state; context_of 134000; expect_warn "$(prompt hi)" "no settings.json: the Max default applies"
 set_window 1000
-reset_state; context_of 80000; expect_warn "$(prompt hi)" "a window under the reserve falls back to the default"
+reset_state; context_of 134000; expect_warn "$(prompt hi)" "a window under the reserve falls back to the default"
 echo '{broken' > "$CLAUDE_CONFIG_DIR/settings.json"
-reset_state; context_of 80000; expect_warn "$(prompt hi)" "an unreadable settings.json falls back to the default"
+reset_state; context_of 134000; expect_warn "$(prompt hi)" "an unreadable settings.json falls back to the default"
 
 set_window 133000 'opus[1m]'
 reset_state; context_of 200000
