@@ -59,6 +59,22 @@ A repository can carry both instruction files over one `.ai/` tree. The task
 state is `.ai/state/current.json` either way, so a task started in one runtime
 resumes in the other.
 
+Five files make that resume real, and every one of them is provider-neutral:
+
+| File | Written by | Holds |
+|---|---|---|
+| `.ai/state/current.json` | `state.py`, `update.py` | the task: stage, step, risk tier, approval |
+| `.ai/reports/<task-id>/events.jsonl` | `state.py` | the journal — one append-only line per event, with the runtime that emitted it |
+| `.ai/reports/<task-id>/questions.md` | `state.py` | the open questions, each with an `[Answer]:` line a human fills in |
+| `.ai/state/handoff.md` | `state.py`, rendered | thirty lines a session reads first: where the task is, what it may touch, what is pending |
+| `.ai/state/session.json` | `context-guard.py` | which runtime is driving and when the human last took a turn |
+
+A subagent that needs a decision **returns** `QUESTIONS_NEEDED` instead of
+asking; the manager writes the question into `questions.md`, a human answers it
+there or in the session, and `state.py questions --sync` puts the answer back
+into the state. The journal is what `/ai-status` and `/usage-report` read, at
+zero model cost — no model is involved in writing or reading any of these files.
+
 ## Install
 
 ```bash
@@ -109,11 +125,14 @@ The skills are `/ai-init`, `/ai-audit`, `/ai-task`, `/ai-status`, `/project-init
 `/project-update`, `/sdlc-intent`, `/sdlc-spec`, `/sdlc-plan` and
 `/usage-report`, identical in both runtimes.
 
-The Codex install is a strict subset in two places: `cap-large-read.py` is not
-installed there, because Codex's read tool is not on the hook path, and neither
-is `context-guard.py`, which reads Claude Code's transcript and compaction
-events. The read rule is still written into `AGENTS.md`; it is just not
-mechanical there.
+The Codex install is a strict subset in one place: `cap-large-read.py` is not
+installed there, because Codex's read tool is not on the hook path. The read
+rule is still written into `AGENTS.md`; it is just not mechanical there.
+`context-guard.py` **is** installed on both — Codex has `UserPromptSubmit`,
+`PreCompact` and `SessionStart` too, so the handoff, the pending questions and
+`session.json` cross unchanged. What does not cross is the transcript-derived
+snapshot: it is built from a Claude transcript and stays Claude-only. One file
+serves both; it reads its own location to know which runtime it is in.
 
 `profiles/codex-{plus,pro}.json` is the machine-readable routing contract, one
 file per ChatGPT plan — session model and effort, thread cap,
@@ -145,7 +164,7 @@ it should not be the most expensive model by default.
 | `cap-large-read.py` (Claude) | refuses an unbounded `Read` over 4 000 lines or 250 KB | no limit |
 | `autoCompactWindow` (Claude) | 800 000 on Max and Team Max, 300 000 on Pro and Team Pro. Claude Code caps it at the model's own window, so one setting means compaction near 167k on a 200k model and near 767k on a `[1m]` one; on Pro the cap decides, at 167k | the model window |
 | `claude-1m [opus\|fable]` (Claude, Max and Team Max) | pins one session to `opus[1m]`, or to `fable[1m]` (Fable 5.1), at launch. The large window comes from the per-model cap, not from the launcher, so `/model opus[1m]` reaches it too; `CLAUDE_1M_COMPACT_WINDOW` exports `CLAUDE_CODE_AUTO_COMPACT_WINDOW` for that process alone to compact *earlier* than 767k | `/model` only, and the same cap applies |
-| `context-guard.py` (Claude) | warns from 80% of the point where compaction fires and holds a prompt back once from 120% — 133k and 200k on a 200k Max session, 613k and 920k on a `[1m]` one; `AI_CONTEXT_WARN_TOKENS` / `AI_CONTEXT_BLOCK_TOKENS` set them in tokens, `0` turns one off | no guard |
+| `context-guard.py` (both runtimes) | warns from 80% of the point where compaction fires and holds a prompt back once from 120% — 133k and 200k on a 200k Max session, 613k and 920k on a `[1m]` one; `AI_CONTEXT_WARN_TOKENS` / `AI_CONTEXT_BLOCK_TOKENS` set them in tokens, `0` turns one off | no guard |
 | `model` (Claude) | `opusplan` on Pro and Team Pro: Opus in plan mode, Sonnet when executing; `opus` (200k window) on Max and Team Max, `opus[1m]` per task, started with `claude-1m` | Sonnet 5 on Pro |
 | `effortLevel` (Claude) | `medium` on both plans; agents raise it per task | — |
 | `model` (Codex) | `gpt-5.6-sol` at `high` on Pro, `medium` on Plus; subagents `gpt-5.6-terra` at `medium` | — |
@@ -195,8 +214,9 @@ The plugin ships every version of every template it has ever installed
 | moved by a migration | moved, with your edits merged at the new path; the original kept under `.ai/reports/project-update-<date>/` |
 | proposed for deletion by a migration | listed as `delete?` and left alone until a human passes `--apply --confirm-delete NAME` |
 
-The tree also carries a schema version in `.ai/VERSION`; a project initialised
-before it existed is schema 0. Migrations under
+The tree also carries a schema version in `.ai/VERSION`; the current one is
+**2** (the journal, the questions file and the handoff), and a project
+initialised before the version existed is schema 0. Migrations under
 `skills/project-update/migrations/` run in order before anything is merged —
 they move, add, edit and propose deletions, all inside the same dry run — and
 the version is written last, only once they are finished.
@@ -361,11 +381,11 @@ model, and nothing in the design depends on a local model existing.
 | Hook | Runtimes | Where | Does |
 |---|---|---|---|
 | `ai-git-guard` | both | **every repository** | refuses force push, remote branch delete, history rewrite, push or merge to a protected branch, `gh pr merge`, `--no-verify`, staging a secret, production deploy commands |
-| `ai-path-guard` | both | only where `.ai/` exists | refuses reading or writing `.env`, `secrets/`, keys, dumps, production logs; and edits to the guards' own config or the task state |
+| `ai-path-guard` | both | only where `.ai/` exists | refuses reading or writing `.env`, `secrets/`, keys, dumps, production logs; edits to the guards' own config, the task state, the journal, the questions file or the handoff; and `state.py approve` from an agent session — approval is a human's to give |
 | `ai-scope-guard` | both | only during an implementation step | refuses editing a file the approved step does not name, with the `SCOPE_CHANGE_REQUIRED` signal |
 | `cap-large-read.py` | Claude only | every session | refuses an unbounded `Read` of a large file; an explicit `limit` passes |
 | `project-scaffold.sh` | Claude only | `Setup:init` | creates the `docs/sdlc/` and runtime layout on `/init` |
-| `context-guard.py` | Claude only | `UserPromptSubmit` / `PreCompact` / `SessionStart:compact` | reads the context size from the transcript: warns once per 10k from 80% of the compaction point, holds a prompt back once from 120% (the same prompt again passes). Before a compaction it writes a snapshot — edited files, latest instructions verbatim, todo list, git state, `.ai/` task state — and tells the summary what to keep; after it, the snapshot goes back into the context. Fails open |
+| `context-guard.py` | both | `UserPromptSubmit` / `PreCompact` / `SessionStart:startup\|resume\|clear\|compact` | reads the context size from the transcript: warns once per 10k from 80% of the compaction point, holds a prompt back once from 120% (the same prompt again passes). Before a compaction it writes a snapshot — edited files, latest instructions verbatim, todo list, git state, `.ai/` task state — and tells the summary what to keep; after it, the snapshot goes back into the context. On every session start it writes `.ai/state/session.json` and, with a task in flight, injects `handoff.md` and the pending questions. The snapshot is Claude-only; everything else crosses to Codex. Fails open |
 | `fable-gate.py` | Claude, Max with Fable only | `StopFailure` / `PreToolUse:Agent` / the statusline | records a Fable rate limit, model-not-found or a nearly used weekly limit, and rewrites `model: fable` (the `architect` agent) to `opus` until the reset |
 | `codex-model-gate.py` | Codex only | `PreToolUse`/`PostToolUse:Agent`, `SubagentStop` | the same idea for Astra: records a rate limit or unavailability and rewrites an Astra launch to Sol at `high` until it expires |
 

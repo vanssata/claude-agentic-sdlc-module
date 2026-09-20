@@ -7,10 +7,11 @@
 | `ai-scope-guard` | yes | yes |
 | `cap-large-read.py` | yes | **no** — no hookable read tool |
 | `project-scaffold.sh` | yes (`Setup:init`) | **no** — no equivalent event |
+| `context-guard.py` | yes | yes — everything but the transcript snapshot |
 | `fable-gate.py` | on a Fable install | — |
 | `codex-model-gate.py` | — | yes |
 
-Two of the Claude-side ones come from the routing half and are not guards:
+Three of them come from the routing half and are not guards:
 
 - **`cap-large-read.py`** (`PreToolUse:Read`) refuses an unbounded `Read` of a
   file over 4 000 lines or 250 KB. It does not cap what can be read — it insists
@@ -25,6 +26,13 @@ Two of the Claude-side ones come from the routing half and are not guards:
 - **`project-scaffold.sh`** (`Setup:init`) creates the `docs/sdlc/` and runtime
   layout when `/init` runs. It never overwrites. Under Codex, run it by hand:
   `~/.codex/hooks/project-scaffold.sh "$PWD"`.
+- **`context-guard.py`** (`UserPromptSubmit`, `PreCompact`, `SessionStart`)
+  watches the context size, snapshots what a compaction must not lose, and —
+  the part that matters here — writes `.ai/state/session.json` and injects the
+  handoff. It is **not** a guard and refuses nothing, but the approval gate
+  reads what it writes, which is why `ai-path-guard` refuses to let an agent run
+  it by hand (below). Installed on both runtimes; only the transcript-derived
+  snapshot stays Claude-only.
 
 The three guards share `hooks/lib/ai-hook-common.sh` and one contract: read the
 payload from stdin, exit 0 silently to allow, or print
@@ -129,11 +137,23 @@ It refuses four kinds of path:
 customer exports, production logs. Allowed back in: `.env.example` and friends,
 migrations, fixtures, test SQL.
 
-**Control files** — `.ai/state/*.json`, `.ai/policies/*.json`, and the guards' own
-scripts and configuration under `~/.claude/hooks/ai-*` and `~/.codex/hooks/ai-*`
-(including `codex-model-gate.py`). Reading them is fine;
-writing them is not. State is written by `state.py`; policy is edited by a human,
-outside an agent run, where the change is reviewable.
+**Control files** — `.ai/state/*.json`, `.ai/state/handoff.md`,
+`.ai/reports/<task-id>/questions.md`, `.ai/reports/<task-id>/events.jsonl`,
+`.ai/policies/*.json`, and the guards' own scripts and configuration under
+`~/.claude/hooks/ai-*` and `~/.codex/hooks/ai-*` (including
+`codex-model-gate.py`). Reading them is fine; writing them is not. State is
+written by `state.py`; policy is edited by a human, outside an agent run, where
+the change is reviewable.
+
+The three added with schema 2 are protected for the same reason the state file
+is — each is an input to a decision, not a document. `questions.md` carries the
+`[Answer]:` line that can *grant the approval gate*, so an agent that could edit
+it could approve its own plan. `events.jsonl` is the audit trail: an append-only
+journal that can be rewritten is not one. `handoff.md` is what the next session
+reads before anything else, so a writable handoff is a way to plant instructions
+for a future session. All three are written by `state.py` alone — `ask`,
+`answer`, `questions --sync`, `emit` and `handoff` — and all three stay
+**readable**, because reading them is how the work gets done.
 
 **Runtime configuration, while a task is in flight** — `.claude/settings*.json`,
 `.claude/agents/`, `skills/`, `commands/`, `hooks/`, `plugins/`, the `.codex/`
@@ -166,6 +186,65 @@ command — a path mentioned inside a message or a heredoc is left alone. There 
 a fast path: if nothing on the command line looks interesting, the guard exits
 after a single `grep`, which keeps it at tens of milliseconds even on a
 200-argument command.
+
+### Two rules that run before the fast path
+
+Everything above is about paths. Two rules are about a **command**, and they are
+evaluated before the fast path rather than after it — deliberately, and at a
+measured cost of two in-process regex matches per `Bash` call and no extra
+process (`docs/hook-performance.md`). The reason is that `state.py` and
+`context-guard.py` live in the *plugin*, not under `.ai/`, so
+`python3 …/skills/ai-task/state.py --root . approve` matches nothing in the
+guard's pattern lists: the fast path would have allowed it and returned before
+any later rule ran.
+
+**`state.py approve` from an agent session is refused.** The approval of a plan
+at T3+ is the one decision the pipeline may not make for itself, and a gate an
+agent can close is not a gate. The deny names the two ways a human closes it:
+
+```bash
+python3 <plugin>/skills/ai-task/state.py --root . approve --by "<name>"
+```
+
+run in **their own terminal** (the command checks for a TTY, so the same line
+run through the agent's shell — a pipe — exits 5 and changes nothing), or the
+`[Answer]: A` line on the gate's question in `.ai/reports/<task-id>/questions.md`,
+after which the session runs `state.py questions --sync`. The file route is the
+weaker of the two and knows it: it is accepted only behind a human turn —
+`last_prompt_at` in `.ai/state/session.json`, from the same session the plan was
+presented in, after the gate was requested.
+
+**Running `hooks/context-guard.py` by hand is refused too**, and only that one
+hook, because only that one writes state: `session.json` is the evidence the
+file route rests on, so an agent that could run the hook could mint the human
+turn it needs and then answer its own gate. Reading, diffing, linting and
+testing the file are untouched — the rule fires only in command position. Both
+rules are inert unless a task is in flight.
+
+There is a third, cheaper route to the same place, and it is closed by the
+interpreter tripwire further down: `python3 -c 'open(".ai/state/session.json",
+"w")…'` writes the human turn without going through a file tool at all. Any
+interpreter one-liner or `eval` that mentions `.ai/state/` or `.ai/reports/` is
+refused for that reason. Like the rest of the tripwire it is a tripwire, not a
+wall.
+
+**`AI_UNATTENDED=1` turns both off**, because an unattended run has no human to
+take a turn. It is for a launcher — CI, a cron job, a scripted batch — that
+exports it in the *environment it starts the run in*. Do not export it in an
+interactive shell: it disables the gate for every session that inherits it, for
+as long as the shell lives, and nothing will remind you. What it does not do is
+hide: an approval taken this way is recorded in the state and in the journal as
+`via: "unattended"`, `unattended: true`, permanently, and `/ai-status` calls out
+any such approval by name. That is the trade — the gate can be turned off, but
+not quietly.
+
+**Under Codex, both rules exist only once you trust the hooks.** A non-managed
+hook is listed but not run until it is reviewed and approved through `/hooks`.
+Until then `state.py approve` from a Codex agent session is refused by nothing,
+and the gate is policy rather than enforcement. This asymmetry is accepted, not
+fixed: nothing in the plugin can approve a hook on the user's behalf, and a
+runtime that made it possible would have a worse problem than this one. Trust
+the hooks after installing, and `/ai-status` says so under Codex.
 
 Configuration: `hooks/ai-path-guard-defaults.json` (shipped, do not edit) unioned
 with `.ai/policies/path-guard.json` (per project), in five lists —

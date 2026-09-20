@@ -65,6 +65,8 @@ judging a change.
 | `ai-scope-guard`, Edit inside the step | 6 | 62 |
 | `ai-scope-guard`, Edit outside the step — denied | 7 | 68 |
 | `ai-scope-guard`, Edit with no `.ai/` | 4 | 44 |
+| `ai-path-guard`, `state.py approve` — denied (WP2) | 8 | 75 |
+| `context-guard.py`, UserPromptSubmit, task in flight (WP2) | 1 | 25 |
 
 Two rounds of work got there.
 
@@ -101,6 +103,24 @@ call that reads the task's stage is made lazily: only after a path has already
 matched a `task_protected` pattern, which a write to `.claude/` or `.codex/`
 does and ordinary work never does. That is the shape WP8 was meant to leave
 behind: a new rule costs regex, not processes.
+
+**WP2 on top of it, for one process on one rare call.** The approval gate added two
+rules to the Bash path, and they had to run **before** the fast path: `state.py`
+lives in the plugin, not under `.ai/`, so
+`python3 …/skills/ai-task/state.py --root . approve` matches no `LOOSE_PATTERNS`
+entry and the fast path would have allowed it and returned. Every Bash call
+therefore pays two extra in-process `ere_match` runs and no extra process — the
+`git status` line above is unchanged at 6 and measured again at 88 ms on a loaded
+box. `task_in_flight()`'s `jq` is consulted only after one of the two regexes has
+matched, which is what the 8-process line costs: it is a call that is about to be
+denied, so the process is paid once, by the wrong command.
+
+The per-prompt `.ai/state/session.json` write costs nothing measurable. The same
+UserPromptSubmit payload, with and without a task in flight, is 1 process and
+25 ms either way: the write is a `stat`, a `json.dump` into a tmp file and an
+`os.replace`, inside a process the runtime was starting anyway. (Measured with no
+`transcript_path`, which isolates the write — the transcript scan dominates the
+real payload and WP2 did not touch it.)
 
 ## How to measure
 
