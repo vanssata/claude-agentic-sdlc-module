@@ -24,6 +24,8 @@ Usage:
   sensors.py rescore  [--root DIR] [--from TREE] [--to TREE|--now] [--declared T2]
   sensors.py run      --scope step|suite|e2e|single [--files "a,b"] [--test NAME]
                       [--at now|base] [--log FILE]
+  sensors.py check    [--only lint,typecheck,…] [--no-bite] [--json FILE]
+  sensors.py report   [--json FILE]
   sensors.py bite     [--restore]
   sensors.py detect   [--root DIR]
 
@@ -96,6 +98,22 @@ DEFAULT_PATH_SCOPES = [
      "paths": ["composer.json", "package.json", "pyproject.toml",
                "requirements*.txt", "go.mod"]},
 ]
+
+# The sensor set a project gets when its risk-tiers.json predates WP4. It is the
+# template's, and it is deliberately the strict reading: a project with no policy
+# at all must not turn out to be the one project where every sensor is optional
+# and therefore every review is skippable.
+DEFAULT_SENSORS = {
+    "skip_review_at_or_below": "T2",
+    "required_for_skip": ["tests", "lint", "typecheck", "diff", "rescore",
+                          "traceability", "duplicates", "bite"],
+    "tests": {"timeout_seconds": 1800, "env_retries": 1, "max_suite_runs": 5,
+              "log_max_bytes": 2097152},
+    "lint": {"timeout_seconds": 600},
+    "typecheck": {"timeout_seconds": 600},
+    "bite": {"timeout_seconds": 600, "required_from": "T2"},
+    "duplicates": {"min_lines": 8, "ignore_scopes": ["tests", "docs"]},
+}
 
 # marker file (glob, relative to the root) -> the testing.md line to propose.
 # detect never runs any of these: a tool that downloads packages or warms a
@@ -362,8 +380,12 @@ def load_policy(root):
     scopes = data.get("path_scopes")
     if not isinstance(scopes, list) or not scopes:
         scopes = DEFAULT_PATH_SCOPES
+    sensor_config = dict(DEFAULT_SENSORS)
+    if isinstance(data.get("sensors"), dict):
+        sensor_config.update({k: v for k, v in data["sensors"].items()
+                              if not k.startswith("_")})
     return {"diff_budget": merged_budget, "path_scopes": scopes,
-            "sensors": data.get("sensors") if isinstance(data.get("sensors"), dict) else {},
+            "sensors": sensor_config,
             "remediation_rounds": data.get("remediation_rounds", 2),
             "source": policy_path(root) if data else "defaults"}
 
@@ -773,6 +795,359 @@ def detect(root):
     return found
 
 
+# ----------------------------------------------------------- static sensors
+# Each returns {"status": …, "detail": …} and knows nothing about the others.
+# The rule they share: a sensor is green only when it measured something. Not
+# finding a tool is `unavailable`, which keeps the review the tier asked for —
+# the one thing it must never do is look like a pass.
+
+def read_state(root):
+    """Read-only. sensors.py never writes the task state; state.py owns it."""
+    try:
+        with open(os.path.join(root, ".ai", "state", "current.json"), encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def sensor_tests(root, state, tree):
+    runs = [r for r in ((state.get("tests") or {}).get("runs") or [])
+            if r.get("scope") == "suite"]
+    if not runs:
+        if not command_for(root, "suite"):
+            return {"status": UNAVAILABLE, "detail": "verify_command is not in testing.md"}
+        return {"status": UNAVAILABLE,
+                "detail": "no suite run yet — state.py test-run --scope suite"}
+    last = runs[-1]
+    if last.get("exit") != 0:
+        return {"status": RED, "detail": "suite run %d exited %s, log %s"
+                % (last.get("n"), last.get("exit"), last.get("log")),
+                "log": last.get("log")}
+    if tree and last.get("tree") and last["tree"] != tree:
+        return {"status": STALE,
+                "detail": "the last green run was on %s, the worktree is at %s"
+                          % (last["tree"][:9], tree[:9]), "log": last.get("log")}
+    return {"status": GREEN, "detail": "verify_command exit 0 in %ds, run %s, log %s"
+            % (last.get("duration_s", 0), last.get("n"), last.get("log")),
+            "log": last.get("log")}
+
+
+def sensor_command(root, kind, policy, task_id):
+    """lint and typecheck: the same shape, and the same refusal to guess."""
+    field = "%s_command" % kind
+    value = (read_commands(root).get(field) or "").strip()
+    if value == "none":
+        return {"status": NOT_APPLICABLE, "detail": "%s: none (testing.md)" % field}
+    if not value:
+        proposals = detect(root).get("lint" if kind == "lint" else "typecheck") or []
+        if proposals:
+            marker, line = proposals[0]
+            return {"status": UNAVAILABLE,
+                    "detail": "%s missing — detected %s" % (field, marker),
+                    "proposal": line}
+        return {"status": UNAVAILABLE,
+                "detail": '%s missing — write it, or `%s: none`, in .ai/policies/testing.md'
+                          % (field, field)}
+    config = (policy.get("sensors") or {}).get(kind) or {}
+    log = os.path.join(root, ".ai", "reports", task_id or "", "%s.log" % kind)
+    run = run_command(root, value, log, timeout=config.get("timeout_seconds", 600))
+    if run["exit"] == 0:
+        return {"status": GREEN, "detail": "%s exit 0 in %ds" % (value, run["duration_s"]),
+                "log": os.path.relpath(log, root)}
+    if run["exit"] is None:
+        return {"status": UNAVAILABLE, "detail": run["detail"] or "could not run %s" % value}
+    if run["exit"] == 127:
+        return {"status": UNAVAILABLE, "detail": "%s: command not found" % value}
+    return {"status": RED, "detail": "%s exited %s, log %s"
+            % (value, run["exit"], os.path.relpath(log, root)),
+            "log": os.path.relpath(log, root)}
+
+
+def test_exists(root, name):
+    """A named test resolves when the path is there, or the glob finds a file,
+    or a file of that basename exists somewhere. A filter name nobody can
+    resolve is not proof that a test was written."""
+    if not name:
+        return False
+    if os.path.exists(os.path.join(root, name)):
+        return True
+    import glob as _glob
+    if _glob.glob(os.path.join(root, name)):
+        return True
+    base = os.path.basename(name)
+    if base != name:
+        return False
+    for current, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs
+                   if d not in (".git", "vendor", "node_modules", ".venv", ".ai")]
+        if base in files:
+            return True
+    return False
+
+
+def sensor_traceability(root, state, measurement, policy):
+    """A step that changed source and named no test is a step whose evidence is
+    somebody else's. Cheap to check, and review-economy §6 says checks like this
+    never go to a thinking model."""
+    plan = (state.get("approved_plan") or {}).get("steps") or []
+    if not plan:
+        return {"status": UNAVAILABLE, "detail": "no approved plan"}
+    touched_source = False
+    untraced, missing = [], []
+    scopes = policy["path_scopes"]
+    for step in plan:
+        if step.get("kind") == "remediation" or step.get("status") != "done":
+            continue
+        diff = step.get("diff") or {}
+        source = False
+        for path in (diff.get("paths") or []) or []:
+            name, _tier = scope_of(path, scopes)
+            source = source or name not in ("tests", "docs")
+        if not diff.get("paths"):
+            source = bool(diff.get("files"))
+        if not source:
+            continue
+        touched_source = True
+        tests = step.get("required_tests") or []
+        if not tests:
+            untraced.append(step["step_id"])
+            continue
+        for name in tests:
+            if not test_exists(root, name):
+                missing.append("%s: %s" % (step["step_id"], name))
+    if not touched_source:
+        return {"status": NOT_APPLICABLE, "detail": "no finished step changed source"}
+    if untraced:
+        return {"status": RED, "detail": "steps with no test named: %s" % ", ".join(untraced),
+                "untraced": untraced}
+    if missing:
+        return {"status": RED, "detail": "named tests that do not resolve: %s"
+                % "; ".join(missing[:5]), "untraced": missing}
+    done = [s["step_id"] for s in plan if s.get("status") == "done"]
+    return {"status": GREEN, "detail": "%d/%d finished steps name tests that exist"
+            % (len(done), len(done))}
+
+
+def normalise(line):
+    return re.sub(r"\s+", " ", line.strip())
+
+
+def sensor_duplicates(root, from_tree, to_tree, policy):
+    """The same block written twice in this change. Not a style opinion: it is
+    the cheapest half of what a reviewer would have to read the diff to find."""
+    config = (policy.get("sensors") or {}).get("duplicates") or {}
+    window = config.get("min_lines", 8)
+    ignore = config.get("ignore_scopes") or ["tests", "docs"]
+    if not from_tree or not to_tree:
+        return {"status": UNAVAILABLE, "detail": "diff unavailable"}
+    files = numstat(root, from_tree, to_tree)
+    if files is None:
+        return {"status": UNAVAILABLE, "detail": "diff unavailable"}
+    blocks, added_any = {}, False
+    for item in files:
+        path = item["path"]
+        if item["binary"]:
+            continue
+        name, _tier = scope_of(path, policy["path_scopes"])
+        if name in ignore:
+            continue
+        if item["added"]:
+            added_any = True
+        try:
+            with open(os.path.join(root, path), encoding="utf-8", errors="replace") as fh:
+                lines = [normalise(l) for l in fh.read().split("\n")]
+        except OSError:
+            continue
+        lines = [(i + 1, l) for i, l in enumerate(lines) if len(l) > 3]
+        for i in range(0, max(0, len(lines) - window + 1)):
+            chunk = lines[i:i + window]
+            key = "\n".join(l for _n, l in chunk)
+            blocks.setdefault(key, []).append("%s:%d" % (path, chunk[0][0]))
+    if not added_any:
+        return {"status": NOT_APPLICABLE, "detail": "nothing added outside tests and docs"}
+    found = [places for places in blocks.values() if len(places) > 1]
+    if found:
+        first = found[0]
+        return {"status": RED,
+                "detail": "%d block(s) of >= %d lines appear twice: %s"
+                          % (len(found), window, " ~ ".join(first[:2])),
+                "blocks": [places[:2] for places in found[:5]]}
+    return {"status": GREEN, "detail": "0 blocks >= %d lines repeat" % window}
+
+
+def sensor_bite(root, state, policy, tests_result, tree):
+    """Step 6 of the plan fills this in; until then it measures nothing, which
+    reads as `unavailable` and keeps the review — never as a pass."""
+    return {"status": UNAVAILABLE, "detail": "the must-bite check is not wired up yet"}
+
+
+PLAN_HEADINGS = ["## Files that change", "## Order of work", "## Risks", "## Proof", "## Rollback"]
+
+
+def sensor_plan_sections(root, state):
+    ref = ((state.get("approved_plan") or {}).get("ref") or "").strip()
+    if not ref or ref.startswith("inline"):
+        return {"status": NOT_APPLICABLE, "detail": "inline plan"}
+    path = ref if os.path.isabs(ref) else os.path.join(root, ref)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        return {"status": UNAVAILABLE, "detail": "cannot read %s" % ref}
+    missing = [h for h in PLAN_HEADINGS if h not in text]
+    if missing:
+        return {"status": RED, "detail": "%s is missing: %s" % (ref, ", ".join(missing))}
+    return {"status": GREEN, "detail": "%s carries every section" % ref}
+
+
+# --------------------------------------------------------- the whole report
+
+SENSOR_ORDER = ["tests", "lint", "typecheck", "diff", "rescore", "traceability",
+                "duplicates", "plan_sections", "bite"]
+
+LABEL = {GREEN: "green", RED: "RED", UNAVAILABLE: "UNAVAIL",
+         NOT_APPLICABLE: "n/a", STALE: "STALE"}
+
+
+def sensors_file(root, state):
+    return os.path.join(root, ".ai", "reports", state.get("task_id") or "", "sensors.json")
+
+
+def ledger_file(root, state):
+    return os.path.join(root, ".ai", "reports", state.get("task_id") or "", "review-ledger.md")
+
+
+def append_ledger(root, state, rows):
+    """review-economy §2: a fact verified once is never verified again by a
+    thinking model. The reviewer reads these rows before it plans its own work."""
+    path = ledger_file(root, state)
+    if not rows:
+        return
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        new = not os.path.exists(path)
+        with open(path, "a", encoding="utf-8") as fh:
+            if new:
+                fh.write("# Review ledger — %s\n\n"
+                         "<!-- Append-only. Every review agent reads this before it plans its\n"
+                         "     own work; a CONFIRMED row is out of budget for later passes. -->\n\n"
+                         "| claim | verified by | outcome | pass |\n|---|---|---|---|\n"
+                         % (state.get("task_id") or "?"))
+            for row in rows:
+                fh.write("%s\n" % row)
+    except OSError:
+        pass
+
+
+def check(root, state, policy, skip_bite=False, only=None):
+    """Every sensor, on the tree as it is now. The results a gate reads."""
+    tree = snapshot_tree(root)
+    declared = state.get("risk_tier") or "T0"
+    task_id = state.get("task_id") or ""
+    base = (state.get("diff") or {}).get("base_tree")
+    measurement = measure(root, base, tree, policy, tier=declared, scope="task")
+    scored = rescore(declared, measurement, policy)
+
+    results = {}
+    wanted = only or SENSOR_ORDER
+    if "tests" in wanted:
+        results["tests"] = sensor_tests(root, state, tree)
+    if "lint" in wanted:
+        results["lint"] = sensor_command(root, "lint", policy, task_id)
+    if "typecheck" in wanted:
+        results["typecheck"] = sensor_command(root, "typecheck", policy, task_id)
+    if "diff" in wanted:
+        results["diff"] = {
+            "status": measurement["status"],
+            "detail": measurement.get("detail") or
+                      ("%d files / %d lines (%s task budget %s / %s)"
+                       % (measurement["files"], measurement["lines"], declared,
+                          (measurement["budget"] or {}).get("max_files"),
+                          (measurement["budget"] or {}).get("max_lines"))),
+            "files": measurement["files"], "lines": measurement["lines"],
+            "unscoped": measurement["unscoped"]}
+    if "rescore" in wanted:
+        results["rescore"] = {
+            "status": scored["status"],
+            "detail": ("%s — scopes: %s" % (scored["tier"], ", ".join(measurement["scopes"]) or "none")
+                       if scored["status"] != UNAVAILABLE else scored.get("detail", "")),
+            "tier": scored["tier"], "reasons": scored["reasons"]}
+    if "traceability" in wanted:
+        results["traceability"] = sensor_traceability(root, state, measurement, policy)
+    if "duplicates" in wanted:
+        results["duplicates"] = sensor_duplicates(root, base, tree, policy)
+    if "plan_sections" in wanted:
+        results["plan_sections"] = sensor_plan_sections(root, state)
+    if "bite" in wanted and not skip_bite:
+        results["bite"] = sensor_bite(root, state, policy, results.get("tests", {}), tree)
+    for result in results.values():
+        result.setdefault("tree", tree)
+
+    config = policy.get("sensors") or {}
+    required = config.get("required_for_skip") or []
+    ceiling = config.get("skip_review_at_or_below", "T2")
+    blocking = []
+    if not task_id:
+        blocking.append("no task in flight: there is nothing to skip a review of")
+    for name in required:
+        status = (results.get(name) or {}).get("status", UNAVAILABLE)
+        if status not in (GREEN, NOT_APPLICABLE):
+            blocking.append("%s: %s" % (name, status))
+    if tier_index(declared) > tier_index(ceiling):
+        blocking.append("tier %s is above %s" % (declared, ceiling))
+    if scored["status"] != UNAVAILABLE and tier_index(scored["tier"]) > tier_index(ceiling):
+        blocking.append("the diff re-scores to %s" % scored["tier"])
+    report = {"schema": 1, "task": task_id, "tree": tree, "declared_tier": declared,
+              "rescored_tier": scored.get("tier"), "checked_at": now(),
+              "sensors": results,
+              "verdict": {"all_green": not blocking, "blocking": blocking,
+                          "review": "skipped" if not blocking else "required"}}
+    return report
+
+
+def write_report(root, state, report, path=None):
+    path = path or sensors_file(root, state)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(report, fh, indent=2, sort_keys=True)
+    except OSError:
+        return None
+    rows = []
+    for name in SENSOR_ORDER:
+        result = report["sensors"].get(name)
+        if not result or result["status"] not in (GREEN, RED):
+            continue
+        rows.append("| %s on %s: %s | sensors.py %s | %s | sensor |"
+                    % (name, (report["tree"] or "?")[:9],
+                       one_line(result.get("detail", "")), name,
+                       "CONFIRMED" if result["status"] == GREEN else "DEFECT, open"))
+    append_ledger(root, state, rows)
+    return path
+
+
+def one_line(text):
+    return re.sub(r"\s+", " ", (text or "")).strip()[:160]
+
+
+def print_report(report, root):
+    print("sensors @ %s (declared %s, rescored %s)"
+          % ((report["tree"] or "?")[:9], report["declared_tier"], report["rescored_tier"]))
+    for name in SENSOR_ORDER:
+        result = report["sensors"].get(name)
+        if not result:
+            continue
+        print("  %-13s %-8s %s" % (name, LABEL.get(result["status"], result["status"]),
+                                   one_line(result.get("detail", ""))))
+        if result.get("proposal"):
+            print("  %-13s %-8s add to .ai/policies/testing.md: %s"
+                  % ("", "", result["proposal"]))
+    print("review: %s%s" % (report["verdict"]["review"],
+                            "" if report["verdict"]["all_green"]
+                            else " — " + "; ".join(report["verdict"]["blocking"][:4])))
+
+
 # ---------------------------------------------------------------------- CLI
 
 def print_diff(result, policy):
@@ -855,6 +1230,46 @@ def cmd_rescore(args, root):
     print("rescore       RED      %s -> %s: %s"
           % (args.declared, result["tier"], "; ".join(result["reasons"][:3])))
     return REDCODE
+
+
+def cmd_check(args, root):
+    state = read_state(root)
+    policy = load_policy(root)
+    only = [x.strip() for x in (args.only or "").split(",") if x.strip()] or None
+    report = check(root, state, policy, skip_bite=args.no_bite, only=only)
+    write_report(root, state, report, args.json or None)
+    print_report(report, root)
+    statuses = [r["status"] for r in report["sensors"].values()]
+    if RED in statuses:
+        return REDCODE
+    if UNAVAILABLE in statuses or STALE in statuses:
+        return UNKNOWNCODE
+    return OK
+
+
+def cmd_report(args, root):
+    state = read_state(root)
+    path = args.json or sensors_file(root, state)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            report = json.load(fh)
+    except (OSError, ValueError):
+        print("no sensor report yet — run: sensors.py check")
+        return UNKNOWNCODE
+    tree = snapshot_tree(root)
+    if tree and report.get("tree") and tree != report["tree"]:
+        # Nothing is re-measured here: a result taken on another tree is not a
+        # result about this one, and saying so is the whole job of this command.
+        for result in report["sensors"].values():
+            if result.get("status") in (GREEN, RED):
+                result["status"] = STALE
+                result["detail"] = "measured on %s, the worktree is at %s" % (
+                    (report["tree"] or "?")[:9], tree[:9])
+        report["verdict"] = {"all_green": False,
+                             "blocking": ["the worktree moved since the check"],
+                             "review": "required"}
+    print_report(report, root)
+    return OK if report["verdict"]["all_green"] else UNKNOWNCODE
 
 
 def cmd_run(args, root):
@@ -962,6 +1377,14 @@ def build_parser():
     p.add_argument("--at", default="now", choices=["now", "base"])
     p.add_argument("--base", default=""); p.add_argument("--log", default="")
     p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser("check")
+    p.add_argument("--only", default=""); p.add_argument("--no-bite", action="store_true",
+                                                         dest="no_bite")
+    p.add_argument("--json", default=""); p.set_defaults(func=cmd_check)
+
+    p = sub.add_parser("report"); p.add_argument("--json", default="")
+    p.set_defaults(func=cmd_report)
 
     p = sub.add_parser("bite"); p.add_argument("--restore", action="store_true")
     p.set_defaults(func=cmd_bite)

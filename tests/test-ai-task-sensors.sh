@@ -270,4 +270,55 @@ OUT=$(S test-run --scope suite 2>&1); RC=$?
     && pass "the suite cannot be run forever: the cap is the human's cue" \
     || fail "should exhaust the run budget" "$OUT($RC)"
 
+echo "== section 8: the static sensors"
+NG() { python3 "$SENSORS" --root "$GATE" "$@"; }
+OUT=$(NG check --no-bite 2>&1)
+printf '%s' "$OUT" | grep -q 'lint          n/a' \
+    && pass "lint_command: none is not applicable, and does not block" || fail "none should be n/a" "$OUT"
+printf '%s' "$OUT" | grep -q 'traceability  RED' \
+    && pass "a finished step whose named test does not exist is red" || fail "traceability should be red" "$OUT"
+
+# A missing line is unavailable — never green — and says what to write.
+python3 - "$GATE" <<'PY2'
+import sys, re
+p = sys.argv[1] + "/.ai/policies/testing.md"
+s = open(p).read().replace("typecheck_command:   none\n", "")
+open(p, "w").write(s)
+PY2
+printf '{}\n' > "$GATE/tsconfig.json"
+OUT=$(NG check --no-bite 2>&1)
+printf '%s' "$OUT" | grep -q 'typecheck     UNAVAIL' \
+    && pass "a missing typecheck_command is unavailable, not green" || fail "should be unavailable" "$OUT"
+printf '%s' "$OUT" | grep -q 'npx tsc --noEmit' \
+    && pass "and it proposes the line it found" || fail "should propose tsc" "$OUT"
+printf '%s' "$OUT" | grep -q 'review: required' \
+    && pass "one unavailable sensor is enough to keep the review" || fail "review should be required" "$OUT"
+rm -f "$GATE/tsconfig.json"
+
+# The same eight lines in two files is the cheapest half of what a reviewer
+# would have to read the whole diff to find.
+for f in dup1 dup2; do
+  printf 'function a() {\n  one();\n  two();\n  three();\n  four();\n  five();\n  six();\n  seven();\n}\n' \
+      > "$GATE/src/$f.php"
+done
+OUT=$(NG check --only duplicates 2>&1)
+printf '%s' "$OUT" | grep -q 'duplicates    RED' \
+    && pass "a block repeated in two files is red" || fail "duplicates should be red" "$OUT"
+rm -f "$GATE/src/dup1.php" "$GATE/src/dup2.php"
+
+echo "== section 8b: a result belongs to the tree it was taken on"
+NG check --no-bite >/dev/null 2>&1
+printf 'moved on\n' >> "$GATE/src/app.php"
+OUT=$(NG report 2>&1)
+printf '%s' "$OUT" | grep -q 'STALE' \
+    && pass "a report from an older tree reads as stale, not as a pass" || fail "should be stale" "$OUT"
+printf '%s' "$OUT" | grep -q 'review: required' \
+    && pass "and stale keeps the review" || fail "stale should keep the review" "$OUT"
+
+LEDGER="$GATE/.ai/reports/$TASK/review-ledger.md"
+[ -f "$LEDGER" ] && grep -q 'sensors.py' "$LEDGER" \
+    && pass "what a sensor settled is written into the review ledger" || fail "ledger should have rows"
+grep -q 'CONFIRMED\|DEFECT' "$LEDGER" \
+    && pass "each row says whether it confirmed or found something" || fail "rows need an outcome"
+
 summary "sensors"

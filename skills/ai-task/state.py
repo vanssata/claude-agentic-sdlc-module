@@ -758,7 +758,9 @@ def cmd_step_done(args, root):
             "should not be — split it:\n  state.py step-split %s --files \"<the part that is "
             "its own step>\""
             % (args.step_id, "; ".join(measured["over"]), args.step_id), 6)
-    step["diff"] = {"tree_after": after, "files": measured["files"],
+    step["diff"] = {"tree_after": after,
+                    "paths": [path for path, _l, _n, _t in measured.get("per_file", [])],
+                    "files": measured["files"],
                     "added": measured["added"], "deleted": measured["deleted"],
                     "lines": measured["lines"], "unscoped": measured["unscoped"],
                     "binary": measured["binary"], "status": measured["status"]}
