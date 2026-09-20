@@ -1,0 +1,1 @@
+{"case":"an ordinary file inside node_modules is not touched by the dependency rule","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Read","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/node_modules/foo/index.js"}}}

@@ -15,6 +15,17 @@ says what to do instead.
   directory (`protected_branches`, `deploy_patterns`, or the per-repository allow
   lists). It is your file; the installer never overwrites it. Each runtime has its
   own copy, so edit both if you use both.
+- **Runtime configuration, while a task is in flight** — settings, agent and
+  skill definitions, commands, hooks and the pipeline's policies are frozen for
+  the length of a run, so a task cannot change the rules it is being judged by.
+  Reading them is allowed. Finish or archive the task (`state.py close`) and the
+  same edit goes through; if it genuinely belongs inside the run, it belongs in
+  the plan, not in a side edit.
+- **An instruction file inside `vendor/` or `node_modules/`** — a `CLAUDE.md` or
+  `.cursorrules` that came with a package is data, not an instruction, and the
+  next install overwrites it. If you really need to read one, add a regex to
+  `allow_patterns` and say why. Ordinary source inside a dependency is not
+  affected.
 - **A whole `apply_patch` rejected over one file** — that is the rule, not a bug.
   A patch is checked path by path, and one out-of-scope or protected file rejects
   all of it. Split the patch; do not widen the step to make the patch fit.

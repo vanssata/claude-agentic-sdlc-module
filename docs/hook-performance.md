@@ -46,7 +46,10 @@ Per guard, per tool call, on a project that has opted in (`.ai/` present):
 Processes are the number that must not regress: it is deterministic and portable.
 Wall clock is machine-dependent and is a sanity bound, not a contract — the
 figures below were taken on a 32-core Linux 7.0 box with bash 5.3, where a bare
-`bash -c 'exit 0'` costs 3 ms, `jq -n 1` 4 ms and `python3 -c pass` 15 ms.
+`bash -c 'exit 0'` costs 3 ms, `jq -n 1` 4 ms and `python3 -c pass` 15 ms. On a
+loaded machine the same call measures anywhere from 30 ms to 150 ms over 40 runs,
+so read the milliseconds as an order of magnitude and compare **processes** when
+judging a change.
 
 ## Measured, 2026-09-20
 
@@ -89,6 +92,15 @@ negates). `dirname` is gone from the `HOOK_DIR` line, as it already was in the
 path guard.
 15 → 6 processes per Edit, 158 → 62 ms; a denied edit 16 → 7 and 162 → 68 ms.
 `tests/test-guard-characterization.sh` passed unchanged across the whole change.
+
+**WP7 on top of it, at no cost.** The two rule lists added afterwards — the
+runtime configuration frozen while a task is in flight, and instruction files
+inside dependencies — add no process to any of the calls above. The extra
+patterns are matched in-process by the same joined pre-filter, and the one `jq`
+call that reads the task's stage is made lazily: only after a path has already
+matched a `task_protected` pattern, which a write to `.claude/` or `.codex/`
+does and ordinary work never does. That is the shape WP8 was meant to leave
+behind: a new rule costs regex, not processes.
 
 ## How to measure
 

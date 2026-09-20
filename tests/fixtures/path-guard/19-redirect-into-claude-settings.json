@@ -1,0 +1,1 @@
+{"case":"a shell redirect into .claude/settings.json during a task is denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"echo '{}' > .claude/settings.json"}}}

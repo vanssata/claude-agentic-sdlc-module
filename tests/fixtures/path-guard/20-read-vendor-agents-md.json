@@ -1,0 +1,1 @@
+{"case":"an AGENTS.md that came with a composer package is data, not context","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Read","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/vendor/acme/pkg/AGENTS.md"}}}
