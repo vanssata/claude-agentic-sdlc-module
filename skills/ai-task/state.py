@@ -393,6 +393,10 @@ def cmd_init(args, root):
     os.makedirs(os.path.join(root, ".ai", "reports", task_id), exist_ok=True)
     emit(root, state, "task_started", "%s (%s)" % (args.goal, args.workflow),
          {"goal": args.goal, "workflow": args.workflow})
+    set_resume_point(state)
+    # Otherwise the previous task's goal, step and file scope are what a session
+    # start injects until the first stage-moving command runs.
+    write_handoff(root, state, "stage")
     save(root, state)
     print(task_id)
 
@@ -468,6 +472,7 @@ def cmd_risk(args, root):
     previous = state.get("risk_tier")
     state["risk_tier"] = args.tier
     emit_tier(root, state, previous, args.tier, args.note)
+    write_handoff(root, state, "stage")
     save(root, state)
     print(args.tier)
 
@@ -509,6 +514,7 @@ def cmd_plan(args, root):
         step.setdefault("required_tests", [])
         step.setdefault("status", "pending")
     state["approved_plan"] = {"ref": args.ref, "current_step_id": None, "steps": steps}
+    set_resume_point(state)               # the old one may name a step this plan does not have
     emit(root, state, "plan_registered", "%d steps, %s" % (len(steps), args.ref),
          {"ref": args.ref, "steps": len(steps)}, legacy="plan_approved")
     write_handoff(root, state, "stage")
@@ -664,6 +670,7 @@ def cmd_set(args, root):
     state[args.field] = args.value
     emit(root, state, "field_set", "%s = %s" % (args.field, args.value),
          {"field": args.field, "from": previous, "value": args.value}, legacy="set")
+    write_handoff(root, state, "stage")
     save(root, state)
     print("%s = %s" % (args.field, args.value))
 
@@ -919,11 +926,20 @@ def write_questions(path, lines):
     os.replace(tmp, path)
 
 
-def one_line(text):
-    """Everything a caller writes into the file is collapsed to one line: a
-    newline in an answer would otherwise produce a second [Answer]: line, and the
-    file a human reads would disagree with the record every command acts on."""
-    return " ".join((text or "").split())
+def one_line(text, limit=None):
+    """Everything a caller writes into a file is collapsed to one line: a newline
+    in an answer would otherwise produce a second [Answer]: line, and the file a
+    human reads would disagree with the record every command acts on.
+
+    Total on purpose. session.json is written by a hook and the journal takes
+    typed data from one, so a value that is not a string is normal input here,
+    never a reason to fail the command that was reading it."""
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+    text = " ".join(text.split())
+    return text[:limit] if limit else text
 
 
 def answer_line(choice, text, by, via):
@@ -1170,6 +1186,7 @@ def cmd_ask(args, root):
                  {"id": item["id"], "options": [letter for letter, _ in item["options"]],
                   "recommended": item["recommend"], "gate": args.gate})
         set_pending(root, state, questions, path)
+        write_handoff(root, state, "stage")
         save(root, state)
     print("%s asked → %s" % (" ".join(new_ids), relative))
     for line in render_prose([q for q in questions if is_pending(q)]):
@@ -1224,6 +1241,7 @@ def cmd_answer(args, root):
                  {"id": qid, "choice": question["choice"], "text": question["text"],
                   "via": args.via, "by": args.by}, actor="agent")
         set_pending(root, state, questions, path)
+        write_handoff(root, state, "stage")
         save(root, state)
     pending = [q["id"] for q in questions if is_pending(q)]
     print("%s answered; %s" % (", ".join(qid for qid, _, _ in assignments),
@@ -1301,11 +1319,25 @@ def set_resume_point(state):
     }
 
 
-def notes_by_kind(root, task_id, kind, limit=3):
-    events, _ = read_journal(root, task_id)
-    notes = [e for e in events
-             if e.get("event") == "note" and (e.get("data") or {}).get("kind") == kind]
-    return list(reversed(notes))[:limit]
+def recent_notes(root, state, limit=3):
+    """One pass for all three kinds — the journal is read on every stage-moving
+    command — and only this task's own notes: a report directory can be deleted,
+    and then next_task_id hands the same id to a different task."""
+    events, _ = read_journal(root, state.get("task_id"))
+    found = {"decision": [], "rejected": [], "failed": []}
+    for event in reversed(events):
+        # A report directory can be deleted, and next_task_id then hands the same
+        # id to a different task. The scan stops at this task's own task_started
+        # rather than at a timestamp: two tasks can share a second, but not a
+        # position in an append-only file.
+        if event.get("event") == "task_started":
+            break
+        if event.get("event") != "note":
+            continue
+        kind = (event.get("data") or {}).get("kind")
+        if kind in found and len(found[kind]) < limit:
+            found[kind].append(event)
+    return found
 
 
 def handoff_lines(root, state, reason):
@@ -1315,7 +1347,9 @@ def handoff_lines(root, state, reason):
     state, the journal, questions.md and session.json — never a transcript."""
     plan = state.get("approved_plan") or {}
     steps = plan.get("steps") or []
-    step = " · step %s/%d" % (plan.get("current_step_id") or "-", len(steps)) if steps else ""
+    # step ids and file scopes come from a model-authored plan file, so they are
+    # collapsed like every other free text before they reach the frame.
+    step = " · step %s/%d" % (one_line(plan.get("current_step_id"), 40) or "-", len(steps)) if steps else ""
     out = ["# Handoff — %s (%s, %s) · stage %s%s · owner %s · written %s (%s)"
            % (state.get("task_id"), state.get("workflow"), state.get("risk_tier") or "untiered",
               state.get("current_stage"), step, state.get("owner_runtime") or "unknown",
@@ -1325,31 +1359,34 @@ def handoff_lines(root, state, reason):
     resume = state.get("resume_point") or {}
     allowed = [s for s in steps if s.get("step_id") == resume.get("step_id")]
     where = ""
-    if resume.get("step_id"):
+    if resume.get("step_id") and allowed:
+        # A step the plan no longer has is not a resume point: saying nothing
+        # beats pointing a context-less session at a deleted scope.
         where = "   ← resume point (step %s: %s)" % (
-            resume["step_id"],
-            ", ".join((allowed[0].get("allowed_files") or [])[:2]) if allowed else "scope in the plan")
-    out.append("Next: %s%s" % (one_line(state.get("next_action")) or "none recorded", where))
+            one_line(resume["step_id"], 40),
+            one_line(", ".join(str(f) for f in (allowed[0].get("allowed_files") or [])[:2]), 120))
+    out.append("Next: %s%s" % (one_line(state.get("next_action"), 200) or "none recorded", where))
 
     path = questions_path(root, state, None)
     pending = [q["id"] for q in parse_questions(path)[1] if is_pending(q)]
     out.append("Pending questions: %s" % (
         "%s — %s" % (", ".join(pending), os.path.relpath(path, root)) if pending else "none"))
 
+    notes = recent_notes(root, state)
     for kind, heading in (("decision", "Decisions"), ("rejected", "Rejected"),
                           ("failed", "Failed attempts")):
         out.append("## %s (latest 3)" % heading)
-        notes = notes_by_kind(root, state.get("task_id"), kind)
-        if not notes:
+        if not notes[kind]:
             out.append("- none")
             continue
-        for note in notes:
+        for note in notes[kind]:
             data = note.get("data") or {}
-            text = one_line(data.get("text"))
+            text = one_line(data.get("text"), 200)
             if kind == "failed":
-                out.append("- %s — error: %s" % (text, one_line(data.get("error"))[:160] or "none given"))
+                out.append("- %s — error: %s" % (text, one_line(data.get("error"), 160) or "none given"))
             else:
-                out.append("- %s%s" % (text, " — because %s" % one_line(data.get("why")) if data.get("why") else ""))
+                why = one_line(data.get("why"), 200)
+                out.append("- %s%s" % (text, " — because %s" % why if why else ""))
 
     session = read_session(root)
     out.append("## Latest user instruction (verbatim, %s, %s)"
@@ -1358,25 +1395,31 @@ def handoff_lines(root, state, reason):
         # The prompt may carry a secret; recording it is the default, not a duty.
         out.append("> omitted (AI_HANDOFF_NO_PROMPT=1)")
     else:
-        out.append("> %s" % (one_line(session.get("last_prompt"))[:300] or "none recorded"))
+        out.append("> %s" % (one_line(session.get("last_prompt"), 300) or "none recorded"))
     return out
 
 
 def write_handoff(root, state, reason):
     """A pure function of the state, the journal, questions.md and session.json,
     written atomically — rendering it twice gives the same file but its
-    timestamp. Best effort like the journal: a handoff that cannot be written
-    must never fail the command that moved the stage."""
-    lines = handoff_lines(root, state, reason)
+    timestamp. Best effort end to end, rendering included: a handoff that cannot
+    be built or written must never fail the command that moved the stage, and
+    its inputs include a hook-written sidecar and an append-only journal that
+    nothing validates.
+
+    It mutates `state` in memory only. The caller that is already changing the
+    task persists it; `handoff` on its own never writes current.json, because
+    the hook calls it while another command may be mid-write."""
     path = handoff_path(root)
     try:
+        lines = handoff_lines(root, state, reason)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         tmp = "%s.%d.tmp" % (path, os.getpid())
         with open(tmp, "w", encoding="utf-8") as fh:
             fh.write("\n".join(lines) + "\n")
         os.replace(tmp, path)
-    except OSError:
-        return lines
+    except Exception:  # pylint: disable=broad-exception-caught  # derived artefact: never fatal
+        return None
     state["handoff"] = {"file": os.path.relpath(path, root), "written_at": now(), "reason": reason}
     # Journal-only, like note: the handoff is derived, and history[] records
     # what changed the task, not what was rendered from it.
@@ -1389,7 +1432,11 @@ def write_handoff(root, state, reason):
 def cmd_handoff(args, root):
     state = load(root)
     lines = write_handoff(root, state, args.reason)
-    save(root, state)
+    if lines is None:
+        print("state.py: could not write %s" % os.path.relpath(handoff_path(root), root),
+              file=sys.stderr)
+        # --print still answers from the render the caller asked for.
+        lines = handoff_lines(root, state, args.reason)
     if args.print_it:
         for line in lines:
             print(line)
@@ -1602,9 +1649,11 @@ def cmd_archive(_args, root):
     with open(target, "w", encoding="utf-8") as fh:
         json.dump(state, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
+    try:
+        os.remove(handoff_path(root))     # before the point of no return, and never fatal
+    except OSError:
+        pass
     os.remove(state_path(root))
-    if os.path.exists(handoff_path(root)):
-        os.remove(handoff_path(root))
     print(target)
 
 
