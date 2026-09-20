@@ -896,6 +896,8 @@ def build_plan(root, confirm_delete=None):
                 ("verify_command", "the feedback loop needs it"),
                 ("step_test_command", "a step runs only its own tests"),
                 ("e2e_command", "e2e runs once at the end of a task; write 'none' if there is no suite"),
+                ("lint_command", "a sensor reads it; run `sensors.py detect`, and write 'none' if there is none"),
+                ("typecheck_command", "a sensor reads it; run `sensors.py detect`, and write 'none' if there is none"),
             ):
                 if re.search(rb"(?m)^" + field.encode() + rb":[ \t]*(#.*)?$", testing):
                     plan.hints.append(".ai/policies/testing.md: %s is empty — %s" % (field, why))
