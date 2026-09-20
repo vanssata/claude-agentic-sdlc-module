@@ -13,10 +13,12 @@ UserPromptSubmit
 
     Both thresholds follow the one knob the profile already sets. Auto-compaction
     fires about 33k tokens under `autoCompactWindow` (measured over 133 automatic
-    compactions: a 150 000 window compacts at 115–125k, 117k most often). The
-    guard warns at 80% of that point and blocks at 120% of it, which is only
-    reached when auto-compaction is off or did not run. A 133 000 window therefore means
-    compaction near 100k, a warning from 80k and a block from 120k.
+    compactions: a 150 000 window compacts at 115–125k, 117k most often), and
+    Claude Code caps that window at the model's own: 200k, or 1M for a [1m] model.
+    The guard warns at 80% of that point and blocks at 120% of it, which is only
+    reached when auto-compaction is off or did not run. An 800 000 window therefore
+    means, on a 200k model, compaction near 167k and a warning from 133k; on a [1m]
+    model, compaction near 767k, a warning from 613k and a block from 920k.
 
 PreCompact
     Writes a deterministic snapshot of the session — files edited, the latest
@@ -26,9 +28,10 @@ PreCompact
     summary must keep; Claude Code appends a PreCompact hook's stdout to the
     compaction instructions.
 
-SessionStart (source "compact")
-    Puts that snapshot back into the context right after the summary. On
-    startup, resume and /clear it does nothing: those are meant to start clean.
+SessionStart
+    Records the session's model, which UserPromptSubmit does not carry. On source
+    "compact" it also puts that snapshot back into the context right after the summary;
+    on startup, resume and /clear it injects nothing: those are meant to start clean.
 
 Claude only; Codex has no compaction events. Fails open: an unreadable payload
 or transcript never blocks a prompt and never breaks a compaction.
@@ -57,6 +60,7 @@ STATUS_LINES = 40
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
 DEFAULT_WINDOW = 133000            # profiles/max.json
+MODEL_WINDOW, MODEL_WINDOW_1M = 200000, 1000000
 COMPACT_RESERVE = 33000            # auto-compaction fires this far under the window
 WARN_PCT, BLOCK_PCT = 80, 120      # of the point where auto-compaction fires
 
@@ -79,20 +83,46 @@ def positive_int(value):
         return 0
 
 
-def compact_window():
-    """The window Claude Code compacts against: the env var wins over settings.json."""
+def user_settings():
+    try:
+        with open(os.path.join(config_dir(), "settings.json"), encoding="utf-8") as fh:
+            settings = json.load(fh)
+        return settings if isinstance(settings, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def session_model(session_id):
+    """UserPromptSubmit carries no model, SessionStart may: on_session_start records it.
+    Headless `claude -p` sends SessionStart without one (seen on 2.1.276), and a session
+    that predates the record has none either; both fall back to the settings default."""
+    try:
+        with open(state_path(session_id, "model"), encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return str(user_settings().get("model") or "")
+
+
+def model_window(session_id, ctx):
+    """Only the [1m] variants take more than 200k; a context already past 200k proves one."""
+    if "[1m]" in session_model(session_id).lower() or (ctx or 0) > MODEL_WINDOW:
+        return MODEL_WINDOW_1M
+    return MODEL_WINDOW
+
+
+def compact_window(session_id, ctx):
+    """The window Claude Code compacts against: the env var wins over settings.json, and
+    Claude Code caps either at the model's window (\"capped to … by model\" in /autocompact),
+    so one 800k setting compacts a 1M session near 767k and a 200k session near 167k."""
     window = positive_int(os.environ.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW"))
     if not window:
-        try:
-            with open(os.path.join(config_dir(), "settings.json"), encoding="utf-8") as fh:
-                window = positive_int(json.load(fh).get("autoCompactWindow"))
-        except (OSError, ValueError, AttributeError):
-            window = 0
-    return window if window > COMPACT_RESERVE else DEFAULT_WINDOW
+        window = positive_int(user_settings().get("autoCompactWindow"))
+    window = window if window > COMPACT_RESERVE else DEFAULT_WINDOW
+    return min(window, model_window(session_id, ctx))
 
 
-def thresholds():
-    fires_at = compact_window() - COMPACT_RESERVE
+def thresholds(session_id, ctx):
+    fires_at = compact_window(session_id, ctx) - COMPACT_RESERVE
 
     def one(name, pct):
         raw = os.environ.get(name, "").strip()
@@ -300,7 +330,7 @@ def on_prompt(payload):
         with open(marker, "w", encoding="utf-8") as fh:
             json.dump(state, fh)
 
-    warn, block = thresholds()
+    warn, block = thresholds(session, ctx)
     if ctx is None or (not warn or ctx < warn) and (not block or ctx < block):
         if state:
             os.remove(marker)       # back under the threshold, e.g. after a compaction
@@ -347,6 +377,10 @@ def on_precompact(payload):
 
 
 def on_session_start(payload):
+    model = payload.get("model")
+    if isinstance(model, str) and model:
+        with open(state_path(payload.get("session_id") or "unknown", "model"), "w", encoding="utf-8") as fh:
+            fh.write(model)
     if payload.get("source") != "compact":
         sys.exit(0)
     snapshot_file = state_path(payload.get("session_id") or "unknown", "md")

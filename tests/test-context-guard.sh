@@ -17,7 +17,11 @@ mkdir -p "$CLAUDE_CONFIG_DIR" "$TMP/project/src"
 PROJECT="$TMP/project"
 T="$TMP/transcript.jsonl"
 
-set_window() { jq -n --argjson w "$1" '{autoCompactWindow:$w}' > "$CLAUDE_CONFIG_DIR/settings.json"; }
+set_window() {   # set_window <tokens> [model] — the model decides the cap below
+    jq -n --argjson w "$1" --arg m "${2:-}" \
+        '{autoCompactWindow:$w} + (if $m == "" then {} else {model:$m} end)' \
+        > "$CLAUDE_CONFIG_DIR/settings.json"
+}
 reset_state() { rm -rf "$AI_CONTEXT_GUARD_STATE"; }
 
 # Transcript lines, in the compact form Claude Code writes (no spaces after ':').
@@ -72,10 +76,16 @@ reset_state; context_of 119000; expect_warn "$(prompt hi)" "window 133000: 119k 
 reset_state; context_of 120000; out=$(prompt hi); expect_block "$out" "window 133000: 120k holds the prompt back"
 contains "$out" "/compact" "the block reason says what to run"
 
-set_window 300000        # compaction near 267k: warn from 213.6k, block from 320.4k
-reset_state; context_of 200000; expect_silent "$(prompt hi)" "window 300000: 200k is silent"
-reset_state; context_of 214000; expect_warn "$(prompt hi)" "window 300000: 214k warns"
-reset_state; context_of 321000; expect_block "$(prompt hi)" "window 300000: 321k holds the prompt back"
+# Claude Code caps the window at the model's own ("capped to ... by model" in
+# /autocompact), so the same 300 000 setting means two different things.
+set_window 300000        # on a 200k model: capped to 200k, compaction near 167k, warn from 133.6k
+reset_state; context_of 133000; expect_silent "$(prompt hi)" "window 300000 on a 200k model: 133k is silent"
+reset_state; context_of 134000; expect_warn "$(prompt hi)" "window 300000 on a 200k model: capped, so 134k already warns"
+
+set_window 300000 'opus[1m]'   # not capped: compaction near 267k, warn from 213.6k, block from 320.4k
+reset_state; context_of 200000; expect_silent "$(prompt hi)" "window 300000 on a [1m] model: 200k is silent"
+reset_state; context_of 214000; expect_warn "$(prompt hi)" "window 300000 on a [1m] model: 214k warns"
+reset_state; context_of 321000; expect_block "$(prompt hi)" "window 300000 on a [1m] model: 321k holds the prompt back"
 
 rm -f "$CLAUDE_CONFIG_DIR/settings.json"
 reset_state; context_of 80000; expect_warn "$(prompt hi)" "no settings.json: the Max default applies"
@@ -84,9 +94,10 @@ reset_state; context_of 80000; expect_warn "$(prompt hi)" "a window under the re
 echo '{broken' > "$CLAUDE_CONFIG_DIR/settings.json"
 reset_state; context_of 80000; expect_warn "$(prompt hi)" "an unreadable settings.json falls back to the default"
 
-set_window 133000
+set_window 133000 'opus[1m]'
 reset_state; context_of 200000
 expect_silent "$(CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 prompt hi)" "CLAUDE_CODE_AUTO_COMPACT_WINDOW wins over settings.json"
+set_window 133000
 reset_state; context_of 50000
 expect_warn "$(AI_CONTEXT_WARN_TOKENS=40000 prompt hi)" "AI_CONTEXT_WARN_TOKENS sets the warn threshold in tokens"
 expect_block "$(AI_CONTEXT_BLOCK_TOKENS=45000 prompt hi)" "AI_CONTEXT_BLOCK_TOKENS sets the block threshold in tokens"
@@ -98,6 +109,33 @@ reset_state; context_of 130000
 expect_block "$(AI_CONTEXT_WARN_TOKENS=0 prompt hi)" "with warnings off the block still applies"
 reset_state; context_of 90000
 expect_warn "$(AI_CONTEXT_WARN_TOKENS=abc prompt hi)" "a non-numeric override is ignored"
+
+# ------------------------------------------------------------ the session's model
+# UserPromptSubmit carries no model; SessionStart may. The record it leaves is
+# what tells a 1M session from a 200k one below 200k of context, where the size
+# itself proves nothing.
+session_start_model() {   # session_start_model <model> -> writes the record
+    jq -nc --arg m "$1" --arg t "$T" --arg c "$PROJECT" \
+        '{hook_event_name:"SessionStart",session_id:"s1",transcript_path:$t,cwd:$c,
+          source:"startup",model:$m}' | "$GUARD" >/dev/null
+}
+
+reset_state; set_window 800000
+context_of 200000; expect_warn "$(prompt hi)" "no model record: 800k is capped to the 200k model window"
+session_start_model 'opus[1m]'
+[ "$(cat "$AI_CONTEXT_GUARD_STATE/s1.model" 2>/dev/null)" = 'opus[1m]' ] \
+    && pass "SessionStart records the session's model" || fail "SessionStart did not record the model"
+context_of 200000; expect_silent "$(prompt hi)" "with the record, the same 200k context is silent on [1m]"
+context_of 614000; expect_warn "$(prompt hi)" "and warns from 613k, as an 800k window should"
+
+reset_state; set_window 800000
+context_of 250000; expect_silent "$(prompt hi)" "without a record, a context already past 200k proves a [1m] model"
+
+reset_state
+session_start_model ''
+[ ! -e "$AI_CONTEXT_GUARD_STATE/s1.model" ] \
+    && pass "a SessionStart without a model records nothing" || fail "an empty model was recorded"
+set_window 133000
 
 # ------------------------------------------------------------ once per band, once per prompt
 reset_state; context_of 81000
