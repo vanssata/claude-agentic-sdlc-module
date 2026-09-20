@@ -254,6 +254,12 @@ Almost certainly because they have not been trusted yet. Codex does not run a
 non-managed hook until you review and approve it in `/hooks`. Until then they are
 installed and inert.
 
+This matters most for one rule: the deny that stops an agent session from
+running `state.py approve`. Under Claude Code it is enforced; under an untrusted
+Codex install the approval gate is policy, not enforcement. Nothing in the
+plugin can approve a hook for you — that is the point of the review — so trust
+them right after installing. `/ai-status` says whether you have.
+
 ## Why does Codex have `ai-risk-strong` and `ai-planner-strong`?
 
 Because Codex resolves a value in an agent's own file *ahead* of the value passed
@@ -321,7 +327,72 @@ first line when you get a moment.
 
 ## Can an agent edit these policies?
 
-No. `.ai/policies/*.json`, `.ai/state/*.json` and the guards' own files are
-refused by the path guard. A human edits them, outside an agent run, where the
-change shows up in review. An agent that can rewrite its own constraints does not
-have constraints.
+No. `.ai/policies/*.json`, `.ai/state/*.json`, `.ai/state/handoff.md`, the task's
+`questions.md` and `events.jsonl`, and the guards' own files are refused by the
+path guard. A human edits them, outside an agent run, where the change shows up
+in review. An agent that can rewrite its own constraints does not have
+constraints.
+
+## Where do the questions, the journal and the handoff live?
+
+With the task, and each has one writer:
+
+| File | Written by | For |
+|---|---|---|
+| `.ai/reports/<task-id>/questions.md` | `state.py ask` / `answer` / `questions --sync` | decisions a human has to make |
+| `.ai/reports/<task-id>/events.jsonl` | `state.py emit` | the append-only journal `/ai-status` and `/usage-report` read |
+| `.ai/state/handoff.md` | `state.py handoff` | the thirty lines a session reads first after a `/clear` or a compaction |
+| `.ai/state/session.json` | `hooks/context-guard.py` | which runtime is driving, and when you last took a turn |
+
+`questions.md` and `events.jsonl` are archived with the task; `handoff.md` and
+`session.json` are git-ignored, because they describe a session and not the
+repository. You edit the `[Answer]:` lines in `questions.md` by hand — that is
+what it is for — and then tell the session to run `state.py questions --sync`.
+Nothing else in there is yours to edit, and the guard enforces it.
+
+## A subagent asked me a question and then stopped. Why?
+
+Because a subagent has no user to ask. It returns `QUESTIONS_NEEDED` with the
+question instead of guessing, the manager writes it into `questions.md`, and the
+stage commands exit 4 while a question is pending. The alternative — a subagent
+that invents the answer it needed — is how a plan quietly ends up built on an
+assumption nobody made.
+
+## Why can the agent not approve its own plan?
+
+Because then it is not an approval. At T3+ the pipeline stops at a gate, and the
+gate has exactly two doors. Run, in **your own terminal**:
+
+```bash
+python3 <plugin>/skills/ai-task/state.py --root . approve --by "<your name>"
+```
+
+`approve` checks for a TTY, so the same line run through the agent's shell exits
+5 and changes nothing. Or set `[Answer]: A` on the gate's question in
+`.ai/reports/<task-id>/questions.md` and tell the session to run `state.py
+questions --sync`; that door opens only behind a turn you actually took —
+`context-guard.py` records it in `.ai/state/session.json`, and the path guard
+refuses to let an agent run that hook by hand. And `state.py approve` from an
+agent session is refused outright.
+
+## How do I approve in CI, where there is no human?
+
+Export `AI_UNATTENDED=1` in the environment your launcher starts the run in. It
+turns off both deny rules and lets `approve` succeed without a terminal.
+
+Two things to know. **Do not export it in an interactive shell** — every session
+that inherits it runs without the gate, for as long as the shell lives, and
+nothing will remind you. And it does not hide: the approval is recorded as
+`via: "unattended"`, `unattended: true` in the state and in the journal,
+permanently, and `/ai-status` calls out any such approval. The gate can be
+turned off; it cannot be turned off quietly.
+
+## What is schema 2?
+
+`.ai/VERSION`. Schema 2 adds the journal, the questions file, the handoff and
+the keys that go with them (`owner_runtime`, `resume_point`, `questions`,
+`handoff`, and the gate's fields under `human_approval`). `/project-update`
+migrates an existing project: the keys are added only where absent, and the
+journal is backfilled from `history[]` with every backfilled line marked as
+such. A task in flight keeps working before and after. Running it twice changes
+nothing the second time.

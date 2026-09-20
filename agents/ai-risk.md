@@ -38,3 +38,20 @@ confidence: high | uncertain
   transitions and customer data are T4 by default. Argue upward from there.
 - A change that is small in lines but lands in a critical path is not a small
   change. Size does not lower a tier.
+
+## QUESTIONS_NEEDED
+
+You never ask the user, and you never write `.ai/reports/*/questions.md`. When the
+work cannot continue without a human decision, stop at that point and return this
+section — under exactly this heading, before any RESULT:
+
+```
+- question: <one line>
+  options: [ "A: <text>", "B: <text>" ]   # 2–6, A first; add "(recommended)" to one
+  why_it_blocks: <one line>
+  context: <file:line or report path>
+```
+
+Partial output that does not depend on the answer follows under its normal
+heading. The main session converts this into `state.py ask --batch`; the answer
+comes back to you in the next brief.

@@ -171,6 +171,72 @@ python3 "$UPDATE" "$S0" --apply >/dev/null
 python3 "$UPDATE" "$S0" | grep -q '^0 automatic' && pass "a second run has nothing left to migrate" || fail "not idempotent" "$(python3 "$UPDATE" "$S0")"
 python3 "$UPDATE" "$S0" --check >/dev/null && pass "--check exits 0 once the schema is current" || fail "--check should exit 0"
 
+echo "== a task in flight survives the journey to schema 2 (R14)"
+S7="$TMP/schema1"; mkdir -p "$S7"
+CLAUDE_AGENTIC_TEMPLATES="$OLD/ai-init/templates" bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$S7" >/dev/null
+cp -r "$FIX/schema-v1/.ai" "$S7/"
+# The task is made by the tool, not by the fixture: a hand-written state would
+# have to be kept in step with a shape this migration exists to change.
+T7=$(env -u CLAUDECODE -u AI_RUNTIME python3 "$STATE" --root "$S7" quick \
+       --goal "add the per-line fee" --workflow feature --tier T2 --files "src/Fee.php" | head -1)
+python3 - "$S7/.ai/state/current.json" <<'TOV1'
+import json, sys
+# Back to what schema 1 actually held: state.py applies the v2 keys in memory,
+# so the file it wrote already has them.
+path = sys.argv[1]
+state = json.load(open(path, encoding="utf-8"))
+for key in ("owner_runtime", "resume_point", "questions", "handoff"):
+    state.pop(key, None)
+state["human_approval"] = {k: v for k, v in state["human_approval"].items()
+                           if k in ("required", "granted", "granted_by", "granted_at")}
+json.dump(state, open(path, "w", encoding="utf-8"), indent=2)
+TOV1
+rm -rf "$S7/.ai/reports/$T7/events.jsonl" "$S7/.ai/state/handoff.md"
+printf '1\n' > "$S7/.ai/VERSION"
+
+[ "$(env -u CLAUDECODE python3 "$STATE" --root "$S7" get --field current_stage)" = implementation ] \
+    && pass "the v1 task answers state.py before the migration" || fail "a v1 state should work as it is"
+HIST=$(env -u CLAUDECODE python3 "$STATE" --root "$S7" get --field history | jq 'length')
+python3 "$UPDATE" "$S7" | grep -q "^  schema    1 -> $CURRENT" && pass "the dry run names the schema step" || fail "no schema line" "$(python3 "$UPDATE" "$S7")"
+[ ! -e "$S7/.ai/reports/$T7/events.jsonl" ] && pass "and writes no journal yet" || fail "the dry run must write nothing"
+python3 "$UPDATE" "$S7" --apply >/dev/null
+[ "$(cat "$S7/.ai/VERSION")" = "$CURRENT" ] && pass "the apply reaches the current schema" || fail "VERSION not written"
+[ "$(env -u CLAUDECODE python3 "$STATE" --root "$S7" get --field current_stage)" = implementation ] \
+    && pass "and the task still answers afterwards" || fail "a task in flight must survive the migration"
+env -u CLAUDECODE python3 "$STATE" --root "$S7" get --field questions.file | grep -q "$T7" \
+    && pass "with the schema-2 keys now on disk" || fail "the defaults should be persisted" \
+    "$(env -u CLAUDECODE python3 "$STATE" --root "$S7" get --field questions)"
+env -u CLAUDECODE python3 "$STATE" --root "$S7" get --field human_approval \
+    | jq -e 'has("requested_at") and has("gate_id") and has("unattended")' >/dev/null \
+    && pass "including the gate's own" || fail "human_approval should gain its v2 keys"
+
+J="$S7/.ai/reports/$T7/events.jsonl"
+[ -f "$J" ] && pass "the journal is backfilled" || fail "events.jsonl should exist"
+# The migration adds one schema_migrated entry to history as it patches the state.
+[ "$(wc -l < "$J")" = "$(( HIST + 1 ))" ] && pass "one line per history entry ($(wc -l < "$J"))" \
+    || fail "the backfill should match history" "history $((HIST + 1)), journal $(wc -l < "$J")"
+jq -se 'all(.data.backfilled == true) and all(.data.legacy_event != null)' "$J" >/dev/null \
+    && pass "every line says it was reconstructed, and from what" || fail "backfilled lines must be marked"
+jq -se 'all(.actor == "migration" and .runtime == "unknown")' "$J" >/dev/null \
+    && pass "and that a migration wrote it, from no runtime" || fail "actor/runtime wrong"
+jq -se '[.[] | select(.event=="stage_started")][0] | .data.to=="discovery"' "$J" >/dev/null \
+    && pass "a stage line keeps both ends of the move" || fail "stage_started data wrong" "$(head -2 "$J")"
+jq -se '[.[] | select(.event=="tier_set")][0] | .data.tier=="T2" and .data.from==null' "$J" >/dev/null \
+    && pass "a tier line records what it can, and leaves what it cannot as null" || fail "tier_set wrong"
+env -u CLAUDECODE python3 "$STATE" --root "$S7" events --last 3 | grep -q . \
+    && pass "and state.py events reads it back" || fail "the backfilled journal should be readable"
+
+python3 "$UPDATE" "$S7" | grep -q '^0 automatic' && pass "a second run has nothing to do" || fail "not idempotent" "$(python3 "$UPDATE" "$S7")"
+before=$(md5sum "$J" | cut -d' ' -f1)
+python3 "$UPDATE" "$S7" --apply >/dev/null
+[ "$(md5sum "$J" | cut -d' ' -f1)" = "$before" ] && pass "and never appends to the journal twice" || fail "the backfill must be written once"
+env -u CLAUDECODE python3 "$STATE" --root "$S7" stage test >/dev/null \
+    && pass "the migrated task carries on where it left off" || fail "the task should keep working"
+
+echo "== the migration says nothing about which runtime a project uses"
+grep -in 'claude\|codex' "$PLUGIN_ROOT/skills/project-update/migrations/0002_task_journal.py" \
+    && fail "0002 must not name a runtime" || pass "0002 names no runtime"
+
 echo "== a docs/sdlc-only project has no schema and runs no migration"
 S6="$TMP/sdlconly"; mkdir -p "$S6"
 CLAUDE_ROUTING_TEMPLATES="$OLD/project-init/templates" bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$S6" >/dev/null

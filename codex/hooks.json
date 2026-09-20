@@ -71,6 +71,43 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.codex/hooks/context-guard.py\"",
+            "timeout": 5,
+            "statusMessage": "Measuring the session context"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.codex/hooks/context-guard.py\"",
+            "timeout": 15,
+            "statusMessage": "Writing the handoff before compaction"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.codex/hooks/context-guard.py\"",
+            "timeout": 15,
+            "statusMessage": "Reading the task in flight"
+          }
+        ]
+      }
     ]
   }
 }

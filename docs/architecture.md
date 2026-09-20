@@ -140,7 +140,14 @@ task_id · goal · workflow · risk_tier · current_stage · affected_modules
 context_summary_ref · approved_plan { ref, current_step_id, steps[] }
 completed_steps · test_status · e2e_status · review_status · security_status · open_risks
 next_action · human_approval · created_at · updated_at · history[]
+owner_runtime · resume_point · questions { file, pending[] } · handoff { file, written_at, reason }
+human_approval { …, requested_at, gate_id, requested_session, rejected_at, via, unattended }
 ```
+
+The last two lines are schema 2 (`.ai/VERSION`). Migration
+`skills/project-update/migrations/0002_task_journal.py` adds those keys to an
+existing project and backfills a journal from `history[]`, marking every
+backfilled line so nobody mistakes reconstruction for observation.
 
 It does three jobs at once:
 
@@ -152,6 +159,55 @@ It does three jobs at once:
   where it is committed alongside the change it describes.
 
 It is git-ignored on purpose: it describes a session, not the repository.
+
+### Four files around it
+
+The state file answers "where is the task". Schema 2 adds four files that answer
+questions a single JSON document was the wrong shape for, and each has exactly
+one writer:
+
+| File | Written by | Answers |
+|---|---|---|
+| `.ai/reports/<task-id>/events.jsonl` | `state.py emit` | what happened, in order, and **which runtime** did it |
+| `.ai/reports/<task-id>/questions.md` | `state.py ask` / `answer` / `questions --sync` | what the pipeline needs a human to decide |
+| `.ai/state/handoff.md` | `state.py handoff` | what a session that has just lost its context needs first |
+| `.ai/state/session.json` | `hooks/context-guard.py` | which runtime is driving, and when the human last took a turn |
+
+**The journal** is append-only: one complete line per `os.write`, under
+`flock`, never rewritten — and not writable by the actor it audits: `state.py
+event`, the command a hook uses to add a line, refuses the gate and lifecycle
+types, because those are emitted by the transition that earns them. A journal an
+agent can author is not an audit trail. It is deliberately **best-effort** — a journal append
+that fails never fails the command that emitted it, because the state write is
+the contract and the journal is the record of it. Readers skip an unparseable
+line and say how many they skipped. Nothing treats the journal as complete, and
+no alert depends on it; what it buys is `/ai-status` and `/usage-report` reading
+a task's history at zero model cost.
+
+**The questions file** is how a subagent asks without being able to ask. A
+subagent has no user; the eight agent contracts therefore tell it to **return**
+`QUESTIONS_NEEDED` with the question rather than guess, and the manager writes
+it into `questions.md`, where a human fills in an `[Answer]:` line. `state.py
+questions --sync` parses the file, writes the answers back into the state, and
+leaves the question text byte-identical. A pending question blocks the stage
+commands with exit 4: the pipeline stops on an unanswered question instead of
+picking an answer for itself.
+
+**The handoff** is derived — a pure function of the state, the journal and
+`session.json`, thirty lines, rewritten on every stage change and injected by
+`context-guard.py` at a session start or after a compaction. Because it is
+derived, nothing about it may fail a task: a handoff that cannot be rendered is
+a missing convenience, not a broken run.
+
+**Approval is the one thing none of this can grant.** At T3+ the pipeline stops
+at a gate that only a human closes — from their own terminal, where `approve`
+checks for a TTY, or by answering the gate's question in `questions.md`, which
+is accepted only behind a human turn recorded in `session.json` by a hook the
+agent is forbidden to run. `ai-path-guard` refuses `state.py approve` from an
+agent session outright. An unattended launcher can set `AI_UNATTENDED=1` and
+skip all of it — and the approval is then stamped `unattended` in the state and
+in the journal, for ever, where `/ai-status` reads it out. See
+[hooks.md](hooks.md) for the rules themselves.
 
 ## The hooks
 
@@ -167,6 +223,7 @@ Registered once per runtime — in `~/.claude/settings.json`, in
 | `project-scaffold.sh` | `Setup:init` | a new project | `/init` | Claude |
 | `fable-gate.py` | `StopFailure`, `PreToolUse:Agent` | the EXPERT tier | a Fable install | Claude |
 | `codex-model-gate.py` | `PreToolUse`/`PostToolUse:Agent`, `SubagentStop` | the EXPERT tier | always | Codex |
+| `context-guard.py` | `UserPromptSubmit`, `PreCompact`, `SessionStart` | the session's context, and `session.json` | always | both — snapshot Claude-only |
 
 The path and scope guards check for their arming condition in their first few
 lines and exit silently otherwise, which is why they can be registered globally
@@ -186,7 +243,11 @@ an `apply_patch` body are extracted from its `*** Add/Update/Delete File:` and
 written once and see the same shapes in both runtimes.
 
 Two Codex facts shape the rest. Its hooks must be reviewed and trusted through
-`/hooks` before they run at all — until you do, nothing is enforced. And its read
+`/hooks` before they run at all — until you do, nothing is enforced, including
+the rule that keeps an agent from running `state.py approve`. The plugin cannot
+close that gap for you: approving a hook is the user's act by design, and a
+runtime where a plugin could do it would have the larger problem. `/ai-status`
+says so under Codex, and the installer ends with the same reminder. And its read
 tool is not on the hook path, which is why `cap-large-read.py` has no Codex
 counterpart; the rule is written into `AGENTS.md` instead of being mechanical.
 

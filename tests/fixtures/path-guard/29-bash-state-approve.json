@@ -1,0 +1,1 @@
+{"case":"state.py approve from an agent shell is denied while a task is in flight","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"python3 /home/u/.claude/skills/ai-task/state.py --root . approve --by ivan"}}}

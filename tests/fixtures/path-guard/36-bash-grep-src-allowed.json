@@ -1,0 +1,1 @@
+{"case":"an ordinary command that merely names a protected path is not a write","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"git log --grep touch -- __ROOT__/.ai/state/current.json"}}}

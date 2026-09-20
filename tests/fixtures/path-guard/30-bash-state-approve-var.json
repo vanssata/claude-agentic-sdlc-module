@@ -1,0 +1,1 @@
+{"case":"the same call through $STATE is denied too","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"$STATE approve --by \"the human\""}}}

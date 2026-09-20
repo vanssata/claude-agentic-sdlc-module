@@ -1,0 +1,1 @@
+{"case":"editing the questions file is denied: state.py writes it, never a model","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Edit","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/.ai/reports/T-1/questions.md"}}}

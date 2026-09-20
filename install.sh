@@ -200,15 +200,20 @@ COMPACT=$(jq -r .autoCompactWindow "$TMP/settings.snippet.json")
 # Auto-compaction fires about 33k under the window (measured: a 150000 window
 # compacts near 117k), so that is the number a person should read.
 # context-guard.py derives its warn and block thresholds from the same point.
-COMPACT_AT=$((COMPACT - 33000))
-# `autoCompactWindow` is one value for every model and `modelSettings` takes only
-# effort, so opus[1m] gets its window from the environment: bin/claude-1m exports
-# CLAUDE_CODE_AUTO_COMPACT_WINDOW for that one process and leaves settings.json alone.
+#
+# `autoCompactWindow` is one value for every model, but Claude Code caps it at the
+# model's own window, so the single setting means two different things: an ordinary
+# 200k session compacts near MODEL_WINDOW - 33000, a [1m] session near COMPACT - 33000.
+# Print the number that matches the session this install configures.
+MODEL_WINDOW=200000
+COMPACT_EFFECTIVE=$COMPACT
+[ "$COMPACT" -gt "$MODEL_WINDOW" ] && COMPACT_EFFECTIVE=$MODEL_WINDOW
+COMPACT_AT=$((COMPACT_EFFECTIVE - 33000))
 ONE_M_WINDOW=$(sed -n 's/^WINDOW="${CLAUDE_1M_COMPACT_WINDOW:-\([0-9]*\)}"$/\1/p' "$SRC/bin/claude-1m")
 ONE_M_AT=$((ONE_M_WINDOW - 33000))
 ONE_M_FABLE=""
 [ "$FABLE" = yes ] && ONE_M_FABLE=" and \`claude-1m fable\` for Fable 5.1 [1m]"
-ONE_M_RULE="A large context is a separate session, started with \`claude-1m\` (\`~/.claude/bin/claude-1m\`) for \`opus[1m]\`${ONE_M_FABLE}, not with \`/model\`: the launcher sets \`CLAUDE_CODE_AUTO_COMPACT_WINDOW=${ONE_M_WINDOW}\` for that one process, so it compacts near ${ONE_M_AT} while every other session keeps ${COMPACT}. Switched to with \`/model\`, a \`[1m]\` model still compacts near ${COMPACT_AT} and the large window is never used; the same holds for a \`[1m]\` subagent of an ordinary session, which gets the session's window. When a task inside an ordinary session needs one large-context read, say so and, once the user agrees, run \`claude-1m -p '<brief>'\` from Bash — its own process, its own window, only the answer comes back."
+ONE_M_RULE="One \`autoCompactWindow\` of ${COMPACT} serves every model: Claude Code caps it at the model's own window, so this session compacts near ${COMPACT_AT} and a \`[1m]\` one near ${ONE_M_AT}, whether it was started with \`claude-1m\` (\`~/.claude/bin/claude-1m\`) for \`opus[1m]\`${ONE_M_FABLE} or switched to with \`/model\`. \`claude-1m\` pins the model at launch and \`CLAUDE_1M_COMPACT_WINDOW\` lowers the window for that one process; it is no longer what grants the large window. When a task inside an ordinary session needs one large-context read, say so and, once the user agrees, run \`claude-1m -p '<brief>'\` from Bash — its own process, only the answer comes back."
 READ_LINES=$(jq -r '.env.CLAUDE_READ_MAX_LINES' "$TMP/settings.snippet.json")
 READ_BYTES=$(jq -r '.env.CLAUDE_READ_MAX_BYTES' "$TMP/settings.snippet.json")
 
@@ -368,7 +373,7 @@ claude_dry_run() {
   echo "== would install:"
   echo "   agents:  $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd,)"
   echo "   hooks:   $(ls "$SRC/hooks" | paste -sd,)"
-  [ "$TIER" = max ] && echo "   bin:     claude-1m (opus[1m]$( [ "$FABLE" = yes ] && echo " / fable[1m]" ), compaction window $ONE_M_WINDOW for that session only)"
+  [ "$TIER" = max ] && echo "   bin:     claude-1m (opus[1m]$( [ "$FABLE" = yes ] && echo " / fable[1m]" ), pins the model at launch; compacts near $ONE_M_AT)"
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
   echo "   config:  ai-git-guard.json (only if absent)"
   echo "== would migrate: the claude-routing managed block, if present, into this one"
@@ -543,7 +548,15 @@ jq -s '
   | reduce ($newhooks | to_entries[]) as $event
       ($merged;
         .hooks[$event.key] = (
-          (.hooks[$event.key] // [])
+          # An entry that already runs one of our commands is replaced by ours,
+          # not left alone: otherwise a matcher this version widens (or a
+          # timeout it raises) never reaches an install that has the old entry.
+          ( (.hooks[$event.key] // [])
+            | map( . as $old
+                   | ( $event.value
+                       | map(select(((.hooks // []) | map(.command))
+                                    == (($old.hooks // []) | map(.command)))) ) as $ours
+                   | if ($ours | length) > 0 then $ours[0] else $old end ) )
           + ( $event.value
               | map( . as $entry
                      | select( ($entry.hooks // []) | map(.command)
@@ -628,10 +641,11 @@ Done (Claude Code).
   fallback        $FALLBACK
   EXPERT tier     ai-expert on opus, pinned, at effort $EXPERT_EFFORT;
                   architect on $( [ "$TIER" = pro ] && echo "opus, pinned" || { [ "$FABLE" = yes ] && echo "fable[1m], pinned" || echo "the session model"; } ) at effort $ARCHITECT_EFFORT
-  compaction      near $COMPACT_AT tokens (autoCompactWindow $COMPACT); context-guard warns from
+  compaction      near $COMPACT_AT tokens on this 200k session (autoCompactWindow $COMPACT,
+                  capped at the model's window); context-guard warns from
                   $((COMPACT_AT * 80 / 100)) and holds a prompt back once from $((COMPACT_AT * 120 / 100))
 $( [ "$TIER" = max ] && echo "  large context   claude-1m$( [ "$FABLE" = yes ] && echo " [opus|fable]" ) starts one session on opus[1m]$( [ "$FABLE" = yes ] && echo " or fable[1m] (Fable 5.1)" ) that compacts near $ONE_M_AT
-                  (CLAUDE_CODE_AUTO_COMPACT_WINDOW=$ONE_M_WINDOW, that process only)" )
+                  (the same autoCompactWindow, uncapped on a 1M model)" )
   read guard      an unbounded Read is refused above $READ_LINES lines / $READ_BYTES bytes
   agents          $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd' ')
   hooks           cap-large-read, project-scaffold (Setup:init), ai-git-guard (global),
@@ -768,13 +782,18 @@ codex_dry_run() {
 
 # The guard scripts Codex can actually use. cap-large-read.py and fable-gate.py
 # are deliberately absent: Codex has no hookable Read tool, and Fable is a
-# Claude model.
+# Claude model. context-guard.py is here because Codex has both compaction
+# events and SessionStart, so the handoff, the questions and session.json cross
+# unchanged; what does not cross is the transcript-derived snapshot, which is
+# built from a Claude transcript and stays Claude-only. The same file serves
+# both: it reads its own location to know which runtime it is in.
 codex_hook_files() {
   printf '%s\n' \
     "$SRC/hooks/ai-git-guard.sh" \
     "$SRC/hooks/ai-path-guard.sh" \
     "$SRC/hooks/ai-scope-guard.sh" \
-    "$SRC/hooks/codex-model-gate.py"
+    "$SRC/hooks/codex-model-gate.py" \
+    "$SRC/hooks/context-guard.py"
 }
 
 codex_apply() {

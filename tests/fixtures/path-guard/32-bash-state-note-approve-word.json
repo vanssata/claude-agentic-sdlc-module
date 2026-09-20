@@ -1,0 +1,1 @@
+{"case":"a note that merely mentions the word approve is allowed","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"python3 /home/u/.claude/skills/ai-task/state.py note decision \"approve the invoice flow later\""}}}
