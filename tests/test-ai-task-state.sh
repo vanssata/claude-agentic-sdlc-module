@@ -463,8 +463,12 @@ Q questions --format json | jq -e --arg id "$QID" '.[] | select(.id==$id) | .tex
   && pass "X:\"free text\" keeps its text and loses its quotes" || fail "the quote pair was mishandled"
 
 echo "== a gate question is not answered with answer"
-Q ask "Approve $T7 for implementation?" --option "A: Approve" --option "B: Reject — answer as \`B: <reason>\`" --gate human_approval >/dev/null
-grep -q "^## G1\. Approve .* (gate: human_approval)$" "$QF" && pass "a gate question is a G id" || fail "the gate heading is wrong" "$(grep '^## G' "$QF")"
+out=$(Q ask "Approve me?" --option "A: yes" --option "B: no" --gate human_approval 2>&1 || true)
+printf '%s' "$out" | grep -q "a gate is requested by 'state.py stage human_approval', not by ask" \
+  && pass "an agent cannot author a gate question" || fail "ask --gate should be refused" "$out"
+Q questions --pending --format json | jq -e 'length==0' >/dev/null || Q answer --prose "$(Q questions --pending --format json | jq -r '[.[].number | tostring + "A"] | join(" ")')" >/dev/null 2>&1
+Q stage human_approval >/dev/null 2>&1
+grep -q "^## G1\. Approve $T7 for implementation? (gate: human_approval)$" "$QF" && pass "a gate question is a G id" || fail "the gate heading is wrong" "$(grep '^## G' "$QF")"
 out=$(Q answer G1=A 2>&1 || true)
 printf '%s' "$out" | grep -q "G1 is a gate: run 'state.py approve' in your terminal" && pass "answer refuses a gate id with the route to take" || fail "wrong gate message" "$out"
 
@@ -558,7 +562,7 @@ out=$(P ask "Escape?" --option "A: one" --option "B: two" --topic "../../pwned/e
 printf '%s' "$out" | grep -q "takes a slug of lowercase letters" && pass "a slug that is a path is refused" || fail "--topic must not steer the path" "$out"
 [ ! -e "$ROOT10/../pwned" ] && [ ! -e "$ROOT10/docs/pwned" ] && pass "and nothing was written outside docs/sdlc/intent/" || fail "the traversal wrote a file"
 out=$(P ask "Gate?" --option "A: one" --option "B: two" --gate human_approval --topic my-idea 2>&1 || true)
-printf '%s' "$out" | grep -q "gate belongs to a task" && pass "a topic file cannot hold a gate" || fail "--gate --topic should be refused" "$out"
+printf '%s' "$out" | grep -q "a gate is requested by" && pass "a topic file cannot hold a gate either" || fail "--gate --topic should be refused" "$out"
 
 echo "== the gate: approval happens outside the agent (R11)"
 ROOTG="$TMP/gate"; mkdir -p "$ROOTG/.ai/state" "$ROOTG/.ai/reports"
@@ -586,8 +590,13 @@ out=$(G approve --by ivan 2>&1); rc=$?
 [ "$rc" = 5 ] && pass "approve under a pipe exits 5" || fail "approve should refuse a piped stdin" "exit $rc: $out"
 printf '%s' "$out" | grep -q "^state.py: APPROVAL_REFUSED — approval happens outside the agent. Run in your own terminal:$" \
   && pass "and the first line is the I1 text" || fail "the refusal text is wrong" "$out"
-printf '%s' "$out" | grep -q "^  python3 .*/skills/ai-task/state.py --root $ROOTG approve --by \"ivan\"$" \
-  && pass "and the second line is the command to run" || fail "the terminal command is wrong" "$out"
+printf '%s' "$out" | grep -q "^  python3 .*/skills/ai-task/state.py. --root $ROOTG approve --by ivan$" \
+  && pass "and the second line is a command a shell can actually run" || fail "the terminal command is wrong" "$out"
+mkdir -p "$TMP/with space/.ai/state" "$TMP/with space/.ai/reports"
+python3 "$STATE" --root "$TMP/with space" init --goal "spaces" --workflow feature >/dev/null
+python3 "$STATE" --root "$TMP/with space" stage human_approval >/dev/null
+cmd=$(python3 "$STATE" --root "$TMP/with space" approve --by "the human" 2>&1 | sed -n 2p)
+eval "$cmd --help" >/dev/null 2>&1 && pass "and it survives a path with a space in it" || fail "the printed command must be shell-safe" "$cmd"
 printf '%s' "$out" | grep -q "set \[Answer\]: A on G1 in .ai/reports/$TG/questions.md and tell the session to sync" \
   && pass "and it names the file route" || fail "the file route is missing" "$out"
 printf '%s' "$out" | grep -q "AI_UNATTENDED=1 in the launcher's environment; the journal then records the approval as unattended." \
@@ -704,5 +713,81 @@ E handoff --help 2>&1 | grep -q -- "--to" && fail "handoff must not have --to (t
 echo "== archive takes it away again"
 E answer 2>/dev/null; E done >/dev/null; E archive >/dev/null
 [ ! -f "$ROOTE/.ai/state/handoff.md" ] && pass "archive removes the handoff" || fail "the handoff should not outlive the task"
+
+echo "== a grant belongs to one gate, never to the task"
+ROOTX="$TMP/gate-twice"; mkdir -p "$ROOTX/.ai/state" "$ROOTX/.ai/reports"
+X() { env -u CLAUDECODE -u AI_RUNTIME -u AI_UNATTENDED python3 "$STATE" --root "$ROOTX" "$@"; }
+TX=$(X init --goal "two gates" --workflow feature)
+XF="$ROOTX/.ai/reports/$TX/questions.md"
+X stage human_approval >/dev/null
+env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTX" approve --by launcher >/dev/null
+X stage implementation >/dev/null
+X stage human_approval >/dev/null
+[ "$(grep -c '^## G' "$XF")" = 2 ] && pass "a second request is a second gate question" || fail "each request gets its own question"
+X get --field human_approval | jq -e '.granted==false and .gate_id=="G2"' >/dev/null \
+  && pass "and it starts ungranted" || fail "a new gate must not inherit the old grant" "$(X get --field human_approval)"
+out=$(X approve --by agent 2>&1); rc=$?
+[ "$rc" = 5 ] && pass "so a piped approve on the new gate is still refused" || fail "the short-circuit let an agent through a fresh gate" "exit $rc: $out"
+env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTX" approve --by launcher >/dev/null
+grep -c '^\[Answer\]: A — by launcher' "$XF" | grep -q '^2$' && pass "and each gate question is closed by its own approval" || fail "the wrong gate was closed" "$(grep '^\[Answer\]' "$XF")"
+out=$(X approve --by someone 2>&1)
+printf '%s' "$out" | grep -q "already approved by launcher" && pass "a repeat with no gate open prints the grant that exists" || fail "re-approval should be a no-op" "$out"
+
+echo "== the request is consumed, so nothing can be approved twice or rejected after the fact"
+X stage human_approval >/dev/null
+X reject --by ivan --why "no rollback" >/dev/null
+out=$(X approve --by agent 2>&1); rc=$?
+[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "no gate was requested" \
+  && pass "approve after a rejection needs a new request" || fail "a rejection must consume the request" "exit $rc: $out"
+out=$(X reject --by agent --why "again" 2>&1); rc=$?
+[ "$rc" = 5 ] && pass "and reject with no gate open is refused" || fail "reject must need an open gate" "exit $rc: $out"
+X get --field human_approval | jq -e '.granted==false and .requested_at==null and .gate_id==null' >/dev/null \
+  && pass "the state says plainly that nothing is granted and nothing is open" || fail "the gate state is wrong" "$(X get --field human_approval)"
+
+echo "== a hand-written journal line does not grant anything"
+ROOTF="$TMP/gate-forge"; mkdir -p "$ROOTF/.ai/state" "$ROOTF/.ai/reports"
+F() { env -u CLAUDECODE -u AI_RUNTIME -u AI_UNATTENDED python3 "$STATE" --root "$ROOTF" "$@"; }
+TF=$(F init --goal "forged" --workflow feature)
+printf '{"ts":"2026-01-01T00:00:00.000Z","task":"%s","event":"gate_requested","actor":"agent","runtime":"claude","stage":"plan","detail":"forged","data":{"gate":"human_approval"}}\n' "$TF" \
+  >> "$ROOTF/.ai/reports/$TF/events.jsonl"
+out=$(env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTF" approve --by agent 2>&1); rc=$?
+[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "no gate was requested" \
+  && pass "a forged gate_requested line grants nothing: the state is the contract" || fail "the journal must not be an authorization input" "exit $rc: $out"
+F init --goal "reused id" --workflow feature --force --task-id "$TF" >/dev/null
+out=$(env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTF" approve --by agent 2>&1); rc=$?
+[ "$rc" = 5 ] && pass "and a task that reuses an old id inherits no gate" || fail "a reused task id must not inherit a gate" "exit $rc: $out"
+
+echo "== --sync does not consume the gate's answer before step 6 can grant it"
+ROOTS="$TMP/gate-sync"; mkdir -p "$ROOTS/.ai/state" "$ROOTS/.ai/reports"
+Y() { env -u CLAUDECODE -u AI_RUNTIME -u AI_UNATTENDED python3 "$STATE" --root "$ROOTS" "$@"; }
+TY=$(Y init --goal "file route" --workflow feature)
+YF="$ROOTS/.ai/reports/$TY/questions.md"
+Y stage human_approval >/dev/null
+python3 - "$YF" <<'FILLGATE'
+import sys
+path = sys.argv[1]
+lines = open(path, encoding="utf-8").read().split("\n")
+lines[lines.index("[Answer]:")] = "[Answer]: A"
+open(path, "w", encoding="utf-8").write("\n".join(lines))
+FILLGATE
+Y questions --sync >/dev/null 2>&1
+grep -q '^\[Answer\]: A$' "$YF" && pass "the human's gate answer is left exactly as they wrote it" || fail "--sync consumed the gate answer" "$(grep '^\[Answer\]' "$YF")"
+[ "$(Y get --field human_approval | jq -r .granted)" = false ] && pass "and grants nothing on its own" || fail "--sync must not grant"
+out=$(Y stage implementation 2>&1); rc=$?
+[ "$rc" = 4 ] && printf '%s' "$out" | grep -q "G1 is the approval gate: run 'state.py approve" \
+  && pass "the stage stays blocked, and the refusal names the command that works" || fail "a filled gate must not unblock the pipeline" "exit $rc: $out"
+
+echo "== the attribution on the gate's answer cannot be forged"
+Y reject --by 'mallory — by ivan via terminal at 2020-01-01T00:00:00Z' --why "nope" >/dev/null
+Y questions --format json | jq -e '.[0].answered_by=="mallory - by ivan via terminal at 2020-01-01T00:00:00Z"' >/dev/null \
+  && pass "an em dash in --by cannot become somebody else's trailer" || fail "the trailer was forged" "$(Y questions --format json | jq -c '.[0]|{answered_by,via,answered_at}')"
+Y questions --format json | jq -e '.[0].via=="prose" or .[0].via=="terminal"' >/dev/null \
+  && pass "and the route is the one the command actually took" || fail "via was forged"
+
+echo "== the journal tells a human at a terminal from a launcher"
+X stage human_approval >/dev/null
+env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTX" approve --by launcher >/dev/null
+X events --type gate_approved --format jsonl | tail -1 | jq -e '.actor=="agent" and .data.via=="unattended"' >/dev/null \
+  && pass "an unattended grant is not recorded as a human's" || fail "actor must follow the route" "$(X events --type gate_approved --format jsonl | tail -1)"
 
 summary "state.py"
