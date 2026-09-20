@@ -35,6 +35,7 @@ Usage:
   state.py answer Q1=B [Q2=X:"text"] [--by NAME] [--via picker|prose|file] | --prose "1B 2A 3: text"
   state.py questions [--pending] [--sync] [--format md|prose|json] [--topic SLUG]
   state.py note   decision|rejected|failed "<text>" [--why TEXT] [--error TEXT]
+  state.py handoff [--print] [--reason stage|precompact|manual|session-start]
   state.py events [--last N] [--type t1,t2] [--task ID] [--format lines|jsonl]
   state.py event  <type> [--detail TEXT] [--data JSON]   # for hooks; type must be in EVENT_TYPES
   state.py approve --by NAME [--note TEXT]   # outside the agent: a TTY, or AI_UNATTENDED
@@ -449,6 +450,8 @@ def cmd_stage(args, root):
     emit(root, state, "stage_started",
          "%s -> %s%s" % (previous, args.stage, ": " + args.note if args.note else ""),
          {"from": previous, "to": args.stage, "note": args.note}, legacy="stage")
+    set_resume_point(state)
+    write_handoff(root, state, "stage")
     save(root, state)
     print("%s -> %s" % (previous, args.stage))
 
@@ -478,6 +481,7 @@ def cmd_triage(args, root):
     if args.context:
         state["context_summary_ref"] = "inline: " + args.context
     emit_tier(root, state, previous_tier, args.tier, args.note)
+    write_handoff(root, state, "stage")
     save(root, state)
     print("%s, triaged inline through risk_classification" % args.tier)
 
@@ -502,6 +506,7 @@ def cmd_plan(args, root):
     state["approved_plan"] = {"ref": args.ref, "current_step_id": None, "steps": steps}
     emit(root, state, "plan_registered", "%d steps, %s" % (len(steps), args.ref),
          {"ref": args.ref, "steps": len(steps)}, legacy="plan_approved")
+    write_handoff(root, state, "stage")
     save(root, state)
     print("%d steps recorded" % len(steps))
 
@@ -519,6 +524,8 @@ def cmd_step(args, root):
     state["approved_plan"]["current_step_id"] = args.step_id
     emit(root, state, "step_started", "%s: %s" % (args.step_id, match[0]["description"]),
          {"step_id": args.step_id, "kind": "step"})
+    set_resume_point(state)
+    write_handoff(root, state, "stage")
     save(root, state)
     print("step %s: %s" % (args.step_id, match[0]["description"]))
     print("allowed: %s" % ", ".join(match[0]["allowed_files"]))
@@ -543,6 +550,8 @@ def cmd_step_done(args, root):
         state["approved_plan"]["current_step_id"] = None
     emit(root, state, "step_done", args.step_id, {"step_id": args.step_id},
          legacy="step_completed")
+    set_resume_point(state)
+    write_handoff(root, state, "stage")
     save(root, state)
     remaining = [s["step_id"] for s in steps if s["status"] != "done"]
     print("step %s done; remaining: %s" % (args.step_id, ", ".join(remaining) or "none"))
@@ -586,6 +595,8 @@ def cmd_quick(args, root):
          {"from": "risk_classification", "to": "implementation", "note": "quick"}, legacy="stage")
     emit(root, state, "step_started", "1: %s" % args.goal, {"step_id": "1", "kind": "step"})
     state["next_action"] = "implement (step tests only), then the verification command once, then e2e once"
+    set_resume_point(state)
+    write_handoff(root, state, "stage")
     save(root, state)
     print("%s %s: step 1 armed for %s" % (state["task_id"], args.tier, ", ".join(files)))
 
@@ -626,6 +637,8 @@ def cmd_remediate(args, root):
          {"step_id": step_id, "kind": "remediation"}, legacy="remediation")
     emit(root, state, "step_started", "%s: %s" % (step_id, step["description"]),
          {"step_id": step_id, "kind": "step"})
+    set_resume_point(state)
+    write_handoff(root, state, "stage")
     save(root, state)
     print("step %s armed for %s" % (step_id, ", ".join(allowed)))
 
@@ -1254,6 +1267,118 @@ def cmd_questions(args, root):
         print(line)
 
 
+def handoff_path(root):
+    return os.path.join(root, ".ai", "state", "handoff.md")
+
+
+def set_resume_point(state):
+    """Where a session that lost its context picks the work up again."""
+    plan = state.get("approved_plan") or {}
+    state["resume_point"] = {
+        "stage": state.get("current_stage"),
+        "step_id": plan.get("current_step_id"),
+        "next_action": state.get("next_action"),
+        "at": now(),
+        "runtime": RUNTIME if RUNTIME in RUNTIMES else state.get("owner_runtime"),
+    }
+
+
+def notes_by_kind(root, task_id, kind, limit=3):
+    events, _ = read_journal(root, task_id)
+    notes = [e for e in events
+             if e.get("event") == "note" and (e.get("data") or {}).get("kind") == kind]
+    return list(reversed(notes))[:limit]
+
+
+def handoff_lines(root, state, reason):
+    """The six parts of I4, ≤ 30 lines by construction: a header, the three
+    facts a session needs first, three sections of three notes, and the user's
+    own last words. Everything here is a fact the runtime cannot lose — the
+    state, the journal, questions.md and session.json — never a transcript."""
+    plan = state.get("approved_plan") or {}
+    steps = plan.get("steps") or []
+    step = " · step %s/%d" % (plan.get("current_step_id") or "-", len(steps)) if steps else ""
+    out = ["# Handoff — %s (%s, %s) · stage %s%s · owner %s · written %s (%s)"
+           % (state.get("task_id"), state.get("workflow"), state.get("risk_tier") or "untiered",
+              state.get("current_stage"), step, state.get("owner_runtime") or "unknown",
+              now(), reason),
+           "Goal: %s" % one_line(state.get("goal"))[:160]]
+
+    resume = state.get("resume_point") or {}
+    allowed = [s for s in steps if s.get("step_id") == resume.get("step_id")]
+    where = ""
+    if resume.get("step_id"):
+        where = "   ← resume point (step %s: %s)" % (
+            resume["step_id"],
+            ", ".join((allowed[0].get("allowed_files") or [])[:2]) if allowed else "scope in the plan")
+    out.append("Next: %s%s" % (one_line(state.get("next_action")) or "none recorded", where))
+
+    path = questions_path(root, state, None)
+    pending = [q["id"] for q in parse_questions(path)[1] if is_pending(q)]
+    out.append("Pending questions: %s" % (
+        "%s — %s" % (", ".join(pending), os.path.relpath(path, root)) if pending else "none"))
+
+    for kind, heading in (("decision", "Decisions"), ("rejected", "Rejected"),
+                          ("failed", "Failed attempts")):
+        out.append("## %s (latest 3)" % heading)
+        notes = notes_by_kind(root, state.get("task_id"), kind)
+        if not notes:
+            out.append("- none")
+            continue
+        for note in notes:
+            data = note.get("data") or {}
+            text = one_line(data.get("text"))
+            if kind == "failed":
+                out.append("- %s — error: %s" % (text, one_line(data.get("error"))[:160] or "none given"))
+            else:
+                out.append("- %s%s" % (text, " — because %s" % one_line(data.get("why")) if data.get("why") else ""))
+
+    session = read_session(root)
+    out.append("## Latest user instruction (verbatim, %s, %s)"
+               % (session.get("last_prompt_at") or "never", session.get("runtime") or "unknown"))
+    if os.environ.get("AI_HANDOFF_NO_PROMPT"):
+        # The prompt may carry a secret; recording it is the default, not a duty.
+        out.append("> omitted (AI_HANDOFF_NO_PROMPT=1)")
+    else:
+        out.append("> %s" % (one_line(session.get("last_prompt"))[:300] or "none recorded"))
+    return out
+
+
+def write_handoff(root, state, reason):
+    """A pure function of the state, the journal, questions.md and session.json,
+    written atomically — rendering it twice gives the same file but its
+    timestamp. Best effort like the journal: a handoff that cannot be written
+    must never fail the command that moved the stage."""
+    lines = handoff_lines(root, state, reason)
+    path = handoff_path(root)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = "%s.%d.tmp" % (path, os.getpid())
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+        os.replace(tmp, path)
+    except OSError:
+        return lines
+    state["handoff"] = {"file": os.path.relpath(path, root), "written_at": now(), "reason": reason}
+    # Journal-only, like note: the handoff is derived, and history[] records
+    # what changed the task, not what was rendered from it.
+    append_journal(root, state.get("task_id"), journal_line(
+        state.get("task_id"), "handoff_written", "agent", state.get("current_stage"),
+        reason, {"reason": reason, "lines": len(lines)}))
+    return lines
+
+
+def cmd_handoff(args, root):
+    state = load(root)
+    lines = write_handoff(root, state, args.reason)
+    save(root, state)
+    if args.print_it:
+        for line in lines:
+            print(line)
+    else:
+        print(os.path.relpath(handoff_path(root), root))
+
+
 def guard_pending(root, command):
     """The file is re-parsed on every stage-moving command — questions.pending is
     only a cache — and nothing is written, so exit 4 leaves the state byte-identical."""
@@ -1376,6 +1501,7 @@ def cmd_approve(args, root):
     emit(root, state, "gate_approved", "granted by %s via %s" % (args.by, via),
          {"by": args.by, "via": via, "unattended": unattended, "tty": tty},
          legacy="human_approval", actor="human")
+    write_handoff(root, state, "stage")
     save(root, state)
     print("approved by %s (via %s)%s" % (args.by, via, " — recorded as unattended" if unattended else ""))
 
@@ -1395,6 +1521,7 @@ def cmd_reject(args, root):
     state["next_action"] = "address the rejection: %s" % one_line(args.why)
     emit(root, state, "gate_rejected", "%s: %s" % (args.by, args.why),
          {"by": args.by, "why": args.why}, actor="human")
+    write_handoff(root, state, "stage")
     save(root, state)
     print("rejected by %s; stage stays at %s" % (args.by, state["current_stage"]))
 
@@ -1406,6 +1533,8 @@ def cmd_done(args, root):
     state["next_action"] = "none — task abandoned" if abandoned else "none — task closed"
     emit(root, state, "task_closed", "abandoned" if abandoned else "",
          {"abandoned": abandoned})
+    set_resume_point(state)
+    write_handoff(root, state, "stage")
     save(root, state)
     print("%s %s" % (state["task_id"], "abandoned" if abandoned else "closed"))
 
@@ -1419,6 +1548,8 @@ def cmd_archive(_args, root):
         json.dump(state, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
     os.remove(state_path(root))
+    if os.path.exists(handoff_path(root)):
+        os.remove(handoff_path(root))
     print(target)
 
 
@@ -1487,6 +1618,12 @@ def main():
     p.add_argument("--by", default=who)
     p.add_argument("--format", choices=["md", "prose", "json"], default="prose")
     p.set_defaults(func=cmd_questions)
+
+    p = sub.add_parser("handoff")
+    p.add_argument("--print", dest="print_it", action="store_true")
+    p.add_argument("--reason", choices=["stage", "precompact", "manual", "session-start"],
+                   default="manual")
+    p.set_defaults(func=cmd_handoff)
 
     p = sub.add_parser("note"); p.add_argument("kind"); p.add_argument("text")
     p.add_argument("--why", default=""); p.add_argument("--error", default="")

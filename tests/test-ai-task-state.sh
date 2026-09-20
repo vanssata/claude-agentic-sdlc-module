@@ -171,7 +171,10 @@ J modules billing >/dev/null
 J approve --by "the human" >/dev/null
 J done >/dev/null
 
-h=$(J get --field history | jq 'length'); e=$(wc -l < "$JOURNAL")
+# note and handoff_written are journal-only by design: history[] records what
+# changed the task, not what was written down about it.
+mapped() { jq -se '[.[] | select(.event=="note" or .event=="handoff_written" | not)] | length' "$1"; }
+h=$(J get --field history | jq 'length'); e=$(mapped "$JOURNAL")
 [ "$h" = "$e" ] && pass "the journal has one line per history entry ($h)" || fail "journal/history mismatch" "history $h, journal $e"
 J get --field history | jq -e '.[] | select(.event=="risk_classified")' >/dev/null \
   && pass "history keeps its legacy event names" || fail "history should still say risk_classified"
@@ -195,7 +198,7 @@ M --runtime claude step-done 1 >/dev/null
 M --runtime codex remediate --files "tests/ATest.php" >/dev/null
 M --runtime codex step-done R1 >/dev/null
 M --runtime codex done >/dev/null
-h=$(M get --field history | jq 'length'); e=$(wc -l < "$JOURNAL5")
+h=$(M get --field history | jq 'length'); e=$(mapped "$JOURNAL5")
 [ "$h" = "$e" ] && pass "quick, remediate and a runtime handoff keep the journal one-to-one with history ($h)" \
   || fail "journal/history mismatch on the multi-emit paths" "history $h, journal $e"
 jq -se '[.[] | select(.event=="stage_started")] | map(.stage) == map(.data.to)' "$JOURNAL5" >/dev/null \
@@ -207,7 +210,7 @@ jq -se '(to_entries | map(select(.value.event=="runtime_handoff"))[0].key)
         < (to_entries | map(select(.value.event=="step_started" and .value.data.kind=="remediation"))[0].key)' "$JOURNAL5" >/dev/null \
   && pass "the handoff is recorded before the work it covers" || fail "handoff should precede the step"
 M archive >/dev/null
-M events --last 1 --format jsonl | jq -e '.event=="task_closed"' >/dev/null \
+M events --type task_closed --format jsonl | jq -e '.data.abandoned==false' >/dev/null \
   && pass "the journal is still readable after the task is archived" || fail "events should outlive current.json"
 
 echo "== a journal that cannot be written never fails the command (Risks 1)"
@@ -642,5 +645,64 @@ grep -q '^\[Answer\]: B: the migration has no rollback — by ivan via ' "$ROOTG
   && pass "reject answers the gate question too" || fail "the gate question should be closed" "$(grep '^\[Answer\]' "$ROOTG/.ai/reports/$TP/questions.md")"
 G stage implementation >/dev/null && pass "and the pipeline can move again" || fail "a closed gate must unblock the stages"
 G get --field next_action | grep -q "address the rejection" && pass "and next_action says what to do" || fail "next_action should name the rejection"
+
+echo "== handoff.md: what a session needs first, in thirty lines (R6)"
+ROOTH="$TMP/handoff"; mkdir -p "$ROOTH/.ai/state" "$ROOTH/.ai/reports"
+H() { env -u CLAUDECODE -u AI_RUNTIME -u AI_HANDOFF_NO_PROMPT python3 "$STATE" --root "$ROOTH" "$@"; }
+TH=$(H --runtime claude quick --goal "add the per-line fee to the checkout total" --workflow feature \
+       --tier T2 --files "src/Checkout/*.php,src/Payment/Fee.php" | head -1)
+HF="$ROOTH/.ai/state/handoff.md"
+for i in 1 2 3 4 5 6 7 8 9 10; do H note decision "decision $i" --why "reason $i" >/dev/null; done
+for i in 1 2 3; do H note rejected "option $i" --why "too slow" >/dev/null; done
+for i in 1 2 3; do H note failed "attempt $i" --error "$(printf 'boom %s\nwith a second line' "$i")" >/dev/null; done
+printf '{"runtime":"claude","session_id":"s","last_prompt_at":"2026-09-20T10:11:50Z","last_prompt":"%s"}' \
+  "$(python3 -c 'print("make the fee configurable " * 40, end="")')" > "$ROOTH/.ai/state/session.json"
+H ask "Rounding?" --option "A: up" --option "B: even" >/dev/null
+
+n=$(H handoff --print | wc -l)
+[ "$n" -le 30 ] && pass "a task with 10 notes and a long prompt renders $n lines" || fail "the handoff must stay under 30 lines" "got $n"
+out=$(H handoff --print)
+missing=""
+for heading in "# Handoff — $TH (feature, T2)" "Goal: add the per-line fee" "Next: " "Pending questions: Q1 — .ai/reports/$TH/questions.md" \
+               "## Decisions (latest 3)" "## Rejected (latest 3)" "## Failed attempts (latest 3)" "## Latest user instruction (verbatim,"; do
+  printf '%s' "$out" | grep -qF "$heading" || missing="$missing[$heading]"
+done
+[ -z "$missing" ] && pass "and carries every part of I4" || fail "a part of the handoff is missing" "$missing"
+[ "$(printf '%s' "$out" | grep -c '^- decision')" = 3 ] && pass "three decisions, not ten" || fail "the latest three only"
+printf '%s' "$out" | grep -q '^- decision 10 — because reason 10$' && pass "newest first" || fail "the newest decision should come first"
+printf '%s' "$out" | grep -q '^- attempt 3 — error: boom 3 with a second line$' && pass "a failed attempt keeps its error on one line" || fail "the error should be collapsed"
+[ "$(printf '%s' "$out" | grep '^> ' | wc -c)" -le 305 ] && pass "the user's last words are capped at 300 characters" || fail "the prompt should be capped"
+printf '%s' "$out" | grep -q '← resume point (step 1: src/Checkout/\*.php, src/Payment/Fee.php)' \
+  && pass "Next names the resume point and its scope" || fail "the resume point is missing" "$out"
+H get --field resume_point | jq -e '.step_id=="1" and .stage=="implementation" and .runtime=="claude"' >/dev/null \
+  && pass "and the state carries it for a reader that is not a human" || fail "resume_point is wrong" "$(H get --field resume_point)"
+
+echo "== it is a file, rewritten by the commands that move the task"
+[ -f "$HF" ] && pass "quick left a handoff behind" || fail "handoff.md should exist"
+H answer Q1=A >/dev/null; H step-done 1 >/dev/null
+grep -q 'Pending questions: none' "$HF" && pass "step-done rewrote it" || fail "a stage-moving command should rewrite the handoff"
+head -1 "$HF" | grep -q ' (stage)$' && pass "and says why it was written" || fail "the reason should be in the header" "$(head -1 "$HF")"
+H handoff >/dev/null; head -1 "$HF" | grep -q ' (manual)$' && pass "handoff on its own is a manual write" || fail "the default reason should be manual"
+H handoff --reason precompact >/dev/null; head -1 "$HF" | grep -q ' (precompact)$' && pass "and --reason says so" || fail "--reason should be recorded"
+H events --type handoff_written --format jsonl | tail -1 | jq -e '.data.reason=="precompact" and .data.lines > 10' >/dev/null \
+  && pass "the journal records each write and its size" || fail "handoff_written is wrong"
+H get --field handoff | jq -e '.file==".ai/state/handoff.md" and .written_at != null and .reason=="precompact"' >/dev/null \
+  && pass "and the state points at it" || fail "state.handoff is wrong"
+diff <(H handoff --print | tail -n +2) <(H handoff --print | tail -n +2) >/dev/null \
+  && pass "rendering it twice gives the same file but its timestamp" || fail "the handoff should be a pure function"
+
+echo "== what it says when there is nothing to say"
+ROOTE="$TMP/handoff-empty"; mkdir -p "$ROOTE/.ai/state" "$ROOTE/.ai/reports"
+E() { env -u CLAUDECODE -u AI_RUNTIME -u AI_HANDOFF_NO_PROMPT python3 "$STATE" --root "$ROOTE" "$@"; }
+E init --goal "nothing recorded yet" --workflow investigation >/dev/null
+[ "$(E handoff --print | grep -c '^- none$')" = 3 ] && pass "an empty section prints '- none'" || fail "empty sections should say none"
+E handoff --print | tail -1 | grep -q '^> none recorded$' && pass "and a task with no session.json says so" || fail "should print 'none recorded'"
+AI_HANDOFF_NO_PROMPT=1 python3 "$STATE" --root "$ROOTE" handoff --print | tail -1 | grep -q 'omitted (AI_HANDOFF_NO_PROMPT=1)' \
+  && pass "AI_HANDOFF_NO_PROMPT keeps the prompt out of the project tree" || fail "the opt-out should work"
+E handoff --help 2>&1 | grep -q -- "--to" && fail "handoff must not have --to (that is WP5)" || pass "handoff has no --to: moving a task is WP5's"
+
+echo "== archive takes it away again"
+E answer 2>/dev/null; E done >/dev/null; E archive >/dev/null
+[ ! -f "$ROOTE/.ai/state/handoff.md" ] && pass "archive removes the handoff" || fail "the handoff should not outlive the task"
 
 summary "state.py"
