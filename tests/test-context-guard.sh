@@ -203,7 +203,6 @@ expect_warn "$out" "a hostile session id still works"
 reset_state
 git -C "$PROJECT" init -q -b feat/snapshot 2>/dev/null
 echo x > "$PROJECT/src/new.py"
-mkdir -p "$PROJECT/.ai/state"; echo '{"task":"T-42","step":3}' > "$PROJECT/.ai/state/current.json"
 {
     user "<system-reminder>
 injected rules
@@ -262,7 +261,7 @@ contains "$snap" "[in_progress] write the test" "the latest todo list is kept"
 lacks    "$snap" "old list" "an earlier todo list is not"
 contains "$snap" "branch: feat/snapshot" "the git branch is recorded"
 contains "$snap" "?? src/" "and the git status"
-contains "$snap" '"task": "T-42"' "the .ai task state is included"
+lacks "$snap" '.ai/state/current.json' "a project without .ai/ contributes no task section"
 
 big=$(python3 -c 'print("x" * 5000)')
 long=$(python3 -c 'print("d" * 300)')
@@ -300,16 +299,101 @@ for source in startup resume clear fork; do
     expect_silent "$(event SessionStart $source)" "SessionStart:$source injects nothing"
 done
 
+expect_silent "$(event SessionStart compact)" "the snapshot is consumed: it goes back once, into the session it belongs to"
 rm -f "$SNAP"
-ctx=$(event SessionStart compact | jq -r '.hookSpecificOutput.additionalContext // ""')
-contains "$ctx" "Keep the API stable" "without a snapshot it is rebuilt from the transcript"
+expect_silent "$(event SessionStart compact)" "with no snapshot there is nothing to put back"
 event PreCompact >/dev/null
-{ user "A newer instruction"; usage 10 20000 10; } > "$T"
 touch -d '2 hours ago' "$SNAP"
-ctx=$(event SessionStart compact | jq -r '.hookSpecificOutput.additionalContext // ""')
-contains "$ctx" "A newer instruction" "a stale snapshot is not reused"
+expect_silent "$(event SessionStart compact)" "a stale snapshot is not reused"
+rm -f "$SNAP"
+event PreCompact >/dev/null
+expect_silent "$(AI_HOOK_RUNTIME=codex event SessionStart compact)" \
+    "and the transcript-derived snapshot never crosses to Codex"
 expect_silent "$(jq -nc '{hook_event_name:"SessionStart",source:"compact",session_id:"none"}' | "$GUARD")" \
     "no snapshot and no transcript: silent"
+
+# ------------------------------------------------------- the .ai/ project (WP2)
+# A second project, with a task in flight. $PROJECT deliberately has no .ai/, so
+# the cases above keep proving that a plain repository is left alone.
+AIP="$TMP/ai-project"; mkdir -p "$AIP/.ai/state" "$AIP/.ai/reports"
+STATE_PY="$PLUGIN_ROOT/skills/ai-task/state.py"
+TASK=$(python3 "$STATE_PY" --root "$AIP" quick --goal "add the per-line fee" --workflow feature \
+         --tier T2 --files "src/Checkout/*.php" | head -1)
+python3 "$STATE_PY" --root "$AIP" note decision "keep the legacy gateway" --why "two callers" >/dev/null
+ai_event() {    # ai_event <event> [source] [extra-jq-object] -> hook stdout
+    jq -nc --arg e "$1" --arg src "${2:-}" --arg t "$T" --arg c "$AIP" \
+        '{hook_event_name:$e,session_id:"ai1",transcript_path:$t,cwd:$c,source:$src}' | "$GUARD"
+}
+ctx_of() { printf '%s' "$1" | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null; }
+
+reset_state
+for source in startup resume clear compact; do
+    ctx=$(ctx_of "$(ai_event SessionStart $source)")
+    contains "$ctx" "# Task in flight — read this before anything else" "SessionStart:$source injects the task frame"
+done
+ctx=$(ctx_of "$(ai_event SessionStart startup)")
+contains "$ctx" "# Handoff — $TASK" "the frame is handoff.md, rendered by state.py"
+contains "$ctx" "keep the legacy gateway" "with the decisions the journal holds"
+contains "$ctx" "Resume with: /ai-task --resume" "and it says how to resume"
+
+# R7: no decision depends on a payload key.
+bare=$(jq -nc '{hook_event_name:"SessionStart",session_id:"ai1"}' | (cd "$AIP" && "$GUARD"))
+contains "$(ctx_of "$bare")" "# Task in flight" "a payload with neither source nor cwd behaves identically"
+
+echo "== session.json: the sidecar the hook owns"
+SESSION="$AIP/.ai/state/session.json"
+ai_event SessionStart startup >/dev/null
+jq -e '.runtime=="claude" and .session_id=="ai1" and .source=="startup" and .started_at != null' "$SESSION" >/dev/null \
+    && pass "SessionStart records the runtime, the session and the source" || fail "session.json is wrong" "$(cat "$SESSION")"
+AI_HOOK_RUNTIME=codex ai_event SessionStart resume >/dev/null
+jq -e '.runtime=="codex" and .source=="resume"' "$SESSION" >/dev/null \
+    && pass "and the runtime is the one this copy of the script serves" || fail "AI_HOOK_RUNTIME should decide" "$(cat "$SESSION")"
+[ -z "$(find "$AIP/.ai/state" -name 'session.json.*.tmp')" ] && pass "and it is written atomically" || fail "a temp file was left behind"
+
+echo "== UserPromptSubmit records the human's turn"
+context_of 1000
+before=$(jq -r .last_prompt_at "$SESSION")
+jq -nc --arg t "$T" --arg c "$AIP" \
+    '{hook_event_name:"UserPromptSubmit",session_id:"ai1",transcript_path:$t,cwd:$c,prompt:"make the fee configurable"}' \
+    | "$GUARD" >/dev/null
+jq -e '.last_prompt=="make the fee configurable" and .last_prompt_at != null' "$SESSION" >/dev/null \
+    && pass "a prompt records its text and when it arrived" || fail "last_prompt is wrong" "$(cat "$SESSION")"
+[ "$(jq -r .last_prompt_at "$SESSION")" != "$before" ] || [ "$before" = null ] \
+    && pass "and last_prompt_at advances" || fail "last_prompt_at should advance"
+jq -nc --arg t "$T" --arg c "$AIP" \
+    '{hook_event_name:"UserPromptSubmit",session_id:"ai1",transcript_path:$t,cwd:$c,prompt:"a secret"}' \
+    | AI_HANDOFF_NO_PROMPT=1 "$GUARD" >/dev/null
+jq -e '.last_prompt=="make the fee configurable"' "$SESSION" >/dev/null \
+    && pass "AI_HANDOFF_NO_PROMPT keeps the text out, and the turn is still recorded" || fail "the opt-out should hold the text back"
+jq -nc --arg t "$T" --arg c "$PROJECT" \
+    '{hook_event_name:"UserPromptSubmit",session_id:"p1",transcript_path:$t,cwd:$c,prompt:"x"}' | "$GUARD" >/dev/null
+[ ! -e "$PROJECT/.ai" ] && pass "a project without .ai/ gets no session.json" || fail "the hook should write nothing there"
+
+echo "== PreCompact hands the compaction the handoff, not a JSON dump"
+{ user "Keep the fee rounding"; tool Edit "{\"file_path\":\"$AIP/src/fee.php\"}"; usage 10 101000 10; } > "$T"
+ai_event PreCompact >/dev/null
+snap=$(cat "$AI_CONTEXT_GUARD_STATE/ai1.md")
+contains "$snap" "# Handoff — $TASK" "the snapshot embeds handoff.md verbatim"
+lacks    "$snap" '"approved_plan"' "and no longer dumps current.json"
+contains "$snap" "Keep the fee rounding" "beside the transcript facts state.py cannot know"
+grep -q '(precompact)$' <(head -1 "$AIP/.ai/state/handoff.md") \
+    && pass "and the handoff was re-rendered for the compaction" || fail "PreCompact should render the handoff first" "$(head -1 "$AIP/.ai/state/handoff.md")"
+
+echo "== it fails open when state.py cannot answer"
+FAKE="$TMP/fake-plugin"; mkdir -p "$FAKE/hooks" "$FAKE/skills/ai-task"
+cp "$GUARD" "$FAKE/hooks/context-guard.py"
+reset_state
+expect_silent "$(jq -nc --arg c "$AIP" '{hook_event_name:"SessionStart",session_id:"f1",cwd:$c,source:"startup"}' | "$FAKE/hooks/context-guard.py")" \
+    "no state.py beside the hook: nothing is injected"
+printf '#!/usr/bin/env python3\nimport time\ntime.sleep(30)\n' > "$FAKE/skills/ai-task/state.py"
+chmod +x "$FAKE/skills/ai-task/state.py"
+start=$(date +%s)
+expect_silent "$(jq -nc --arg c "$AIP" '{hook_event_name:"SessionStart",session_id:"f1",cwd:$c,source:"startup"}' | "$FAKE/hooks/context-guard.py")" \
+    "a state.py that hangs injects nothing"
+[ $(( $(date +%s) - start )) -le 10 ] && pass "and gives up inside the hook's own timeout" || fail "the 3s timeout should hold"
+python3 "$STATE_PY" --root "$AIP" done >/dev/null; python3 "$STATE_PY" --root "$AIP" archive >/dev/null
+reset_state
+expect_silent "$(ai_event SessionStart startup)" "with the task archived there is nothing to inject"
 
 # ------------------------------------------------------------ the installer registers it
 SNIPPET=$(jq -s '.[0] * .[1]' "$PLUGIN_ROOT/settings.common.json" "$PLUGIN_ROOT/profiles/max.json")
@@ -317,8 +401,8 @@ for ev in UserPromptSubmit PreCompact SessionStart; do
     [ "$(printf '%s' "$SNIPPET" | jq -r --arg e "$ev" '[.hooks[$e][]?.hooks[]?.command | select(test("context-guard"))] | length')" = 1 ] \
         && pass "settings: context-guard is registered once under $ev" || fail "settings: context-guard is registered once under $ev"
 done
-[ "$(printf '%s' "$SNIPPET" | jq -r '.hooks.SessionStart[] | select(.hooks[].command | test("context-guard")) | .matcher')" = compact ] \
-    && pass "settings: SessionStart runs it for source=compact only" || fail "settings: SessionStart runs it for source=compact only"
+[ "$(printf '%s' "$SNIPPET" | jq -r '.hooks.SessionStart[] | select(.hooks[].command | test("context-guard")) | .matcher')" = "startup|resume|clear|compact" ] \
+    && pass "settings: SessionStart runs it on every source" || fail "settings: SessionStart runs it on every source"
 [ -x "$GUARD" ] && pass "the hook is executable" || fail "the hook is executable"
 [ "$(python3 - "$GUARD" "$PLUGIN_ROOT/profiles/max.json" <<'PY'
 import json, re, sys
