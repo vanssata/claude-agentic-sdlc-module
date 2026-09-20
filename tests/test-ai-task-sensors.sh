@@ -321,4 +321,109 @@ LEDGER="$GATE/.ai/reports/$TASK/review-ledger.md"
 grep -q 'CONFIRMED\|DEFECT' "$LEDGER" \
     && pass "each row says whether it confirmed or found something" || fail "rows need an outcome"
 
+echo "== section 9: the test must bite"
+BITE="$TMP/with space/bite"
+mkdir -p "$BITE/.ai/state" "$BITE/.ai/reports" "$BITE/.ai/policies" "$BITE/src" "$BITE/tests"
+B() { python3 "$STATE_PY" --root "$BITE" "$@"; }
+NB() { python3 "$SENSORS" --root "$BITE" "$@"; }
+git init -q "$BITE"; git -C "$BITE" config user.email t@example.com
+git -C "$BITE" config user.name Test
+printf 'def fee(x):\n    return x\n' > "$BITE/src/fee.py"
+# The test the plan names: it exercises the NEW behaviour, so it fails without it.
+printf 'import sys; sys.path.insert(0, "src")\nfrom fee import fee\nassert fee(2) == 4\nprint("ok")\n' \
+    > "$BITE/tests/fee_test.py"
+# And one that never reaches the change, however green it looks.
+printf 'print("ok")\n' > "$BITE/tests/blind_test.py"
+git -C "$BITE" add -A; git -C "$BITE" commit -qm base
+cat > "$BITE/.ai/policies/testing.md" <<'MD'
+# Testing policy
+verify_command:      python3 tests/fee_test.py
+step_test_command:   python3 {files}
+e2e_command:         none
+lint_command:        none
+typecheck_command:   none
+MD
+python3 - "$BITE" <<'PY2'
+import json, sys
+policy = {
+    "version": 3,
+    "diff_budget": {"per_step": {"T2": {"max_lines": 50, "max_files": 10}},
+                    "per_task": {"T2": {"max_lines": 50, "max_files": 10}},
+                    "exclude": [], "unbudgeted_scopes": ["docs"]},
+    "path_scopes": [{"scope": "tests", "min_tier": "T1", "paths": ["tests/**"]}],
+    "sensors": {"skip_review_at_or_below": "T2",
+                "required_for_skip": ["tests", "lint", "typecheck", "diff", "rescore",
+                                      "traceability", "duplicates", "bite"],
+                "bite": {"timeout_seconds": 60, "required_from": "T2"},
+                "tests": {"max_suite_runs": 5, "timeout_seconds": 60},
+                "duplicates": {"min_lines": 8, "ignore_scopes": ["tests", "docs"]}},
+    "remediation_rounds": 2}
+json.dump(policy, open(sys.argv[1] + "/.ai/policies/risk-tiers.json", "w"), indent=2)
+PY2
+BTASK=$(B init --goal "double the fee" --workflow feature)
+B risk T2 >/dev/null
+cat > "$TMP/bsteps.json" <<'JSON'
+[{ "step_id": "1", "description": "double it", "allowed_files": ["src/**"],
+   "required_tests": ["tests/fee_test.py"] }]
+JSON
+B plan --ref ".ai/reports/$BTASK/plan.md" --steps "$TMP/bsteps.json" >/dev/null
+B step 1 >/dev/null
+printf 'def fee(x):\n    return x * 2\n' > "$BITE/src/fee.py"
+B step-done 1 >/dev/null
+B test-run --scope suite >/dev/null
+
+TREE_BEFORE_BITE=$(NB snapshot)
+OUT=$(NB bite 2>&1); RC=$?
+[ $RC -eq 0 ] && printf '%s' "$OUT" | grep -q 'bite          green' \
+    && pass "a test that fails without the change bites" || fail "bite should be green" "$OUT($RC)"
+[ "$(NB snapshot)" = "$TREE_BEFORE_BITE" ] \
+    && pass "the worktree is byte-identical afterwards" || fail "bite must restore the worktree"
+[ ! -f "$BITE/.ai/state/bite.lock" ] \
+    && pass "the recovery lock is cleared on a clean run" || fail "the lock should be cleared"
+
+# The same green suite, a test that never reaches the change: not evidence.
+python3 - "$BITE" <<'PY2'
+import json, sys
+p = sys.argv[1] + "/.ai/state/current.json"
+state = json.load(open(p))
+state["approved_plan"]["steps"][0]["required_tests"] = ["tests/blind_test.py"]
+json.dump(state, open(p, "w"), indent=2)
+PY2
+OUT=$(NB bite 2>&1); RC=$?
+[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'do not reach it' \
+    && pass "a test that passes without the change is red, however green the suite is" \
+    || fail "bite should be red" "$OUT($RC)"
+[ "$(NB snapshot)" = "$TREE_BEFORE_BITE" ] \
+    && pass "and the worktree is restored after a red run too" || fail "must restore after red"
+
+# A characterization step promises the opposite: it describes what is already there.
+python3 - "$BITE" <<'PY2'
+import json, sys
+p = sys.argv[1] + "/.ai/state/current.json"
+state = json.load(open(p))
+step = state["approved_plan"]["steps"][0]
+step["kind"] = "characterization"
+step["required_tests"] = ["tests/blind_test.py"]
+json.dump(state, open(p, "w"), indent=2)
+PY2
+OUT=$(NB bite 2>&1); RC=$?
+[ $RC -eq 0 ] && pass "a characterization test must pass at the base, and does" \
+               || fail "characterization bite should be green" "$OUT($RC)"
+
+echo "== section 9b: an interrupted revert is recoverable"
+python3 - "$BITE" "$TREE_BEFORE_BITE" <<'PY2'
+import json, sys
+root, tree = sys.argv[1], sys.argv[2]
+# What an interruption leaves behind: the lock, and a reverted worktree.
+json.dump({"tree_after": tree, "paths": ["src/fee.py"], "at": "now", "why": "test"},
+          open(root + "/.ai/state/bite.lock", "w"))
+open(root + "/src/fee.py", "w").write("def fee(x):\n    return x\n")
+PY2
+[ "$(NB snapshot)" != "$TREE_BEFORE_BITE" ] || fail "the fixture should leave a reverted worktree"
+OUT=$(NB bite --restore 2>&1)
+[ "$(NB snapshot)" = "$TREE_BEFORE_BITE" ] \
+    && pass "bite --restore puts back what an interrupted run left" || fail "--restore failed" "$OUT"
+[ ! -f "$BITE/.ai/state/bite.lock" ] \
+    && pass "and clears the lock once the tree matches" || fail "the lock should be gone"
+
 summary "sensors"

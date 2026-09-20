@@ -582,6 +582,11 @@ def cmd_plan(args, root):
         step.setdefault("forbidden_reason", "not part of this step")
         step.setdefault("required_tests", [])
         step.setdefault("status", "pending")
+        # `characterization` is not decoration: it inverts what the must-bite
+        # check expects of the step's tests at the base tree.
+        step.setdefault("kind", "implementation")
+        step.setdefault("tree_before", None)
+        step.setdefault("diff", None)
     state["approved_plan"] = {"ref": args.ref, "current_step_id": None, "steps": steps}
     set_resume_point(state)               # the old one may name a step this plan does not have
     emit(root, state, "plan_registered", "%d steps, %s" % (len(steps), args.ref),

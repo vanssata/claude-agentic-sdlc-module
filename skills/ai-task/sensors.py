@@ -976,10 +976,133 @@ def sensor_duplicates(root, from_tree, to_tree, policy):
     return {"status": GREEN, "detail": "0 blocks >= %d lines repeat" % window}
 
 
+MUST_FAIL_WORKFLOWS = ("feature", "bugfix", "hotfix")
+
+
+def required_tests_of(state):
+    """What the plan said would prove each step, split by what it must do
+    against the code as it was: a characterization test describes behaviour
+    that already exists, so it must PASS at the base; a feature or bugfix test
+    describes behaviour that does not exist yet, so it must FAIL there."""
+    must_fail, must_pass = [], []
+    workflow = state.get("workflow") or "feature"
+    for step in ((state.get("approved_plan") or {}).get("steps") or []):
+        if step.get("status") != "done" or step.get("kind") == "remediation":
+            continue
+        target = must_pass if (step.get("kind") == "characterization"
+                               or workflow == "refactoring") else must_fail
+        for name in step.get("required_tests") or []:
+            if name not in target:
+                target.append(name)
+    return must_fail, must_pass
+
+
+def bite(root, state, policy, tree=None):
+    """Run the tests the plan named against the code before this task touched it.
+
+    A suite that passes proves the code is healthy. It does not prove the tests
+    reach the change — a test that never touches the new code passes just as
+    green before the change as after it, and a review skipped on that evidence
+    was skipped on nothing. So: revert, run, restore, and check each test did
+    what its kind promises.
+
+    The worktree is reverted in place from tree objects and restored from the
+    tree snapshotted first; the lock file and `bite --restore` are the recovery
+    path, and the restored tree hash is asserted, not assumed.
+    """
+    result = {"status": UNAVAILABLE, "detail": "", "must_fail": None, "must_pass": None,
+              "restored": None}
+    workflow = state.get("workflow")
+    if workflow == "investigation":
+        return {"status": NOT_APPLICABLE, "detail": "an investigation changes nothing to prove"}
+    command = command_for(root, "step")
+    if not command:
+        result["detail"] = "step_test_command is not in testing.md"
+        return result
+    base = (state.get("diff") or {}).get("base_tree")
+    if not base or not is_repo(root):
+        result["detail"] = "no base tree recorded for this task"
+        return result
+    must_fail, must_pass = required_tests_of(state)
+    if not must_fail and not must_pass:
+        result["detail"] = "no finished step named a test — traceability says the same"
+        return result
+    config = (policy.get("sensors") or {}).get("bite") or {}
+    timeout = config.get("timeout_seconds", 600)
+    task_id = state.get("task_id") or ""
+
+    before = snapshot_tree(root)
+    if not before:
+        result["detail"] = "could not snapshot the worktree"
+        return result
+    paths = changed_paths(root, base, before, scopes=policy["path_scopes"])
+    if not paths:
+        return {"status": NOT_APPLICABLE, "detail": "no source changed outside tests and docs",
+                "restored": before}
+    write_lock(root, {"tree_after": before, "paths": paths, "at": now(),
+                      "why": "the must-bite check is running"})
+    print("recovery: if this is interrupted, run `sensors.py --root . bite --restore`",
+          file=sys.stderr)
+    runs = {}
+    try:
+        if not revert_to(root, base, paths):
+            result["detail"] = "could not revert the worktree"
+            return result
+        for label, names in (("must_fail", must_fail), ("must_pass", must_pass)):
+            if not names:
+                continue
+            log = os.path.join(root, ".ai", "reports", task_id, "bite-%s.log" % label)
+            runs[label] = run_command(root, expand_files(command, names), log,
+                                      timeout=timeout)
+    finally:
+        restore_from(root, before, paths)
+        result["restored"] = snapshot_tree(root)
+    if result["restored"] != before:
+        result["status"] = UNAVAILABLE
+        result["detail"] = ("the worktree did not restore to %s — it is at %s; the lock is kept "
+                            "at %s" % (before[:9], (result["restored"] or "?")[:9],
+                                       os.path.relpath(lock_path(root), root)))
+        return result
+    clear_lock(root)
+
+    problems, notes = [], []
+    for label, names in (("must_fail", must_fail), ("must_pass", must_pass)):
+        run = runs.get(label)
+        if not names:
+            continue
+        result[label] = {"tests": len(names), "exit": run["exit"] if run else None}
+        if run is None or run["exit"] is None:
+            result["status"] = UNAVAILABLE
+            result["detail"] = (run or {}).get("detail") or "the test run at the base tree failed"
+            return result
+        if label == "must_fail" and run["exit"] == 0:
+            problems.append("%d test(s) pass without the change: they do not reach it (%s)"
+                            % (len(names), ", ".join(names[:3])))
+        elif label == "must_pass" and run["exit"] != 0:
+            problems.append("%d characterization test(s) fail against the code they describe (%s)"
+                            % (len(names), ", ".join(names[:3])))
+        else:
+            notes.append("%s: %d test(s), exit %s at base" % (label, len(names), run["exit"]))
+    if problems:
+        return dict(result, status=RED, detail="; ".join(problems))
+    return dict(result, status=GREEN,
+                detail="%s; tree restored %s" % ("; ".join(notes), before[:9]))
+
+
 def sensor_bite(root, state, policy, tests_result, tree):
-    """Step 6 of the plan fills this in; until then it measures nothing, which
-    reads as `unavailable` and keeps the review — never as a pass."""
-    return {"status": UNAVAILABLE, "detail": "the must-bite check is not wired up yet"}
+    """Only ever run after the suite is green on this tree: the check asks
+    whether the tests reach the change, and that question means nothing while
+    they are failing for some other reason."""
+    config = (policy.get("sensors") or {}).get("bite") or {}
+    required_from = config.get("required_from", "T2")
+    declared = state.get("risk_tier") or "T0"
+    if tier_index(declared) < tier_index(required_from):
+        return {"status": NOT_APPLICABLE,
+                "detail": "not required below %s (sensors.bite.required_from)" % required_from}
+    if (tests_result or {}).get("status") != GREEN:
+        return {"status": UNAVAILABLE,
+                "detail": "the suite is not green on this tree — nothing to ask yet"}
+    return bite(root, state, policy, tree)
 
 
 PLAN_HEADINGS = ["## Files that change", "## Order of work", "## Risks", "## Proof", "## Rollback"]
@@ -1315,12 +1438,13 @@ def cmd_run(args, root):
 
 
 def cmd_bite(args, root):
-    """Step 4 ships the recovery half: --restore puts back a worktree an
-    interrupted base-tree run left reverted. The verdict itself is step 6."""
     if not args.restore:
-        print("bite          UNAVAIL  the must-bite check lands with step 6 of the plan; "
-              "--restore already works")
-        return UNKNOWNCODE
+        state = read_state(root)
+        policy = load_policy(root)
+        result = bite(root, state, policy)
+        print("bite          %-8s %s" % (LABEL.get(result["status"], result["status"]),
+                                         one_line(result.get("detail", ""))))
+        return {GREEN: OK, NOT_APPLICABLE: OK, RED: REDCODE}.get(result["status"], UNKNOWNCODE)
     lock = read_lock(root)
     if not lock:
         print("nothing to restore: no %s" % os.path.relpath(lock_path(root), root))
