@@ -30,6 +30,10 @@ Usage:
   state.py step-done <step_id>
   state.py set    <field> <value>        # test_status, e2e_status, review_status, security_status, next_action
   state.py risks  --add TEXT | --clear
+  state.py ask    "<question>" --option "A: text" [--option ...] [--recommend A] [--gate G] [--topic S]
+  state.py ask    --batch FILE.json [--topic SLUG]
+  state.py answer Q1=B [Q2=X:"text"] [--by NAME] [--via picker|prose|file] | --prose "1B 2A 3: text"
+  state.py questions [--pending] [--sync] [--format md|prose|json] [--topic SLUG]
   state.py note   decision|rejected|failed "<text>" [--why TEXT] [--error TEXT]
   state.py events [--last N] [--type t1,t2] [--task ID] [--format lines|jsonl]
   state.py event  <type> [--detail TEXT] [--data JSON]   # for hooks; type must be in EVENT_TYPES
@@ -40,8 +44,10 @@ Usage:
 """
 
 import argparse
+import contextlib
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -71,6 +77,42 @@ EVENT_TYPES = [
     "handoff_written", "runtime_handoff", "model_fallback", "schema_migrated", "task_closed",
 ]
 NOTE_KINDS = ["decision", "rejected", "failed"]
+
+# The questions file is written by state.py and never by a model (R1). One regex
+# per line (I2), so a hand edit that keeps the shape round-trips exactly.
+QUESTIONS_HEADER = """# Questions — %s
+<!-- Written by state.py. Answer with `state.py answer Q1=B`, or fill the [Answer]: lines and run
+     `state.py questions --sync`. Do not edit the questions themselves. -->
+"""
+OTHER_OPTION = "X. Other — answer as `X: <text>`"
+HEADING_RE = re.compile(r"^## (Q|G)(\d+)\. (.+)$")
+OPTION_RE = re.compile(r"^([A-W])\. (.+?)( \(recommended\))?$")
+OTHER_RE = re.compile(r"^X\. Other")
+ANSWER_RE = re.compile(r"^\[Answer\]:\s*(.*)$")
+META_RE = re.compile(r"^asked: (\S+) · stage: (\S+)(?: · by: (.+))?$")
+CONTEXT_RE = re.compile(r"^context: (.+)$")
+# The trailer must be a suffix free text cannot produce: a closed `via`
+# vocabulary, an exact timestamp, and a name that cannot span another em dash —
+# otherwise `X: we chose Adyen — by the way it is cheaper` eats its own answer.
+VIA_VALUES = "picker|prose|file|terminal|unattended"
+TRAILER_RE = re.compile(
+    r"\s+—\s+by ([^—]+?) via (%s) at (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)\s*$" % VIA_VALUES)
+CHOICE_RE = re.compile(r"^[A-W]$")
+CHOICE_TEXT_RE = re.compile(r"^([A-W])\s*[—:-]\s*(.+)$")
+OTHER_TEXT_RE = re.compile(r"^X\s*:\s*(.+)$")
+LETTER_RE = re.compile(r"^[A-Z]$")
+PROSE_CHOICE_RE = re.compile(r"\b(\d+)\s*([A-W])\b")
+PROSE_TEXT_RE = re.compile(r"\b(\d+)\s*:")
+OPTION_INPUT_RE = re.compile(r"^([A-W])\s*[:.]\s*(.+)$")
+OPTION_KEY_RE = re.compile(r"^[A-W]$")
+OPTION_HEAD_RE = re.compile(r"^([A-Za-z0-9]{1,3})\s*[:.]\s")
+
+# A pending question stops a stage from moving; it never stops a command that
+# records, reads or answers (R3). done --abandon is exempt: abandoning a task is
+# how an unanswerable question is closed.
+BLOCKING_COMMANDS = {
+    "stage", "triage", "plan", "step", "step-done", "remediate", "approve", "done", "close",
+}
 RUNTIMES = ["claude", "codex"]
 
 JOURNAL_MAX_BYTES = 4096
@@ -82,8 +124,8 @@ RUNTIME = "unknown"
 # The commands that change the task. Only these take ownership of it: reading a
 # task from the other runtime, or writing a note about it, is not a handoff.
 MUTATING_COMMANDS = {
-    "init", "stage", "risk", "triage", "quick", "plan", "remediate",
-    "step", "step-done", "set", "risks", "modules", "approve", "done", "close",
+    "init", "stage", "risk", "triage", "quick", "plan", "remediate", "step", "step-done",
+    "set", "risks", "modules", "ask", "answer", "approve", "done", "close",
 }
 MUTATING = False
 
@@ -119,9 +161,10 @@ def find_root(start):
         d = parent
 
 
-def die(message):
+def die(message, code=1):
+    """1 validation · 2 argparse · 4 QUESTIONS_PENDING · 5 APPROVAL_REFUSED (I1)."""
     print("state.py: %s" % message, file=sys.stderr)
-    sys.exit(1)
+    sys.exit(code)
 
 
 def state_path(root):
@@ -711,6 +754,524 @@ def cmd_events(args, root):
               % (skipped, journal_path(root, task_id)), file=sys.stderr)
 
 
+def find_docs_root(start):
+    """--topic resolves its root from docs/sdlc/, never from .ai/: an intent's
+    questions belong to the document they serve, and the sdlc-* skills must work
+    in a repository that has no .ai/ at all (I11)."""
+    d = os.path.abspath(start)
+    while True:
+        if os.path.isdir(os.path.join(d, "docs", "sdlc")):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            die("no docs/sdlc/ directory found above %s — run /sdlc-intent first" % start)
+        d = parent
+
+
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+def questions_path(root, state, topic):
+    if topic:
+        # Topic mode is the one writer that runs without .ai/ and therefore
+        # without the path guard, so the slug is validated here rather than
+        # trusted: it names a file, it never steers one.
+        if not SLUG_RE.match(topic):
+            die("--topic takes a slug of lowercase letters, digits and hyphens, not %r" % topic)
+        return os.path.join(root, "docs", "sdlc", "intent", "%s.questions.md" % topic)
+    return os.path.join(root, ".ai", "reports", state["task_id"], "questions.md")
+
+
+def parse_answer_body(question, body):
+    """`LETTER`, `LETTER: text`, `X: text` or bare text, with the trailer this
+    command writes parsed back off the end and ignored (I2)."""
+    question["choice"] = question["text"] = None
+    question["invalid"] = None
+    trailer = TRAILER_RE.search(body)
+    if trailer:
+        question["answered_by"], question["via"], question["answered_at"] = trailer.groups()
+        body = body[:trailer.start()]
+    body = body.strip()
+    if not body:
+        return
+    letters = [letter for letter, _ in question["options"]]
+    if question["other"]:
+        letters.append("X")
+    other = OTHER_TEXT_RE.match(body)
+    pair = CHOICE_TEXT_RE.match(body)
+    if other:
+        choice, text = "X", other.group(1).strip()
+    elif pair:
+        choice, text = pair.group(1), pair.group(2).strip()
+    elif CHOICE_RE.match(body) or LETTER_RE.match(body):
+        choice, text = body, None
+    else:
+        choice, text = ("X" if question["other"] else None), body
+    if choice is not None and choice not in letters:
+        question["invalid"] = choice
+        return
+    question["choice"], question["text"] = choice, text
+
+
+def parse_questions(path):
+    """One regex per line (I2). Returns the file's lines beside the questions, so
+    a writer can replace an [Answer]: line and leave every other byte alone."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.read().split("\n")
+    except OSError:
+        return [], []
+    questions, current = [], None
+    for index, line in enumerate(lines):
+        heading = HEADING_RE.match(line)
+        if heading:
+            current = {
+                "id": heading.group(1) + heading.group(2), "kind": heading.group(1),
+                "number": int(heading.group(2)), "question": heading.group(3),
+                "asked": None, "stage": None, "by": None, "context": None,
+                "options": [], "recommend": None, "other": False,
+                "answer_at": None, "choice": None, "text": None, "invalid": None,
+                "answered_by": None, "via": None, "answered_at": None,
+            }
+            questions.append(current)
+            continue
+        if current is None:
+            continue
+        meta = META_RE.match(line)
+        if meta:
+            current["asked"], current["stage"], current["by"] = meta.groups()
+            continue
+        context = CONTEXT_RE.match(line)
+        if context:
+            current["context"] = context.group(1)
+            continue
+        answer = ANSWER_RE.match(line)
+        if answer:
+            current["answer_at"] = index
+            parse_answer_body(current, answer.group(1))
+            current = None                # the block ends at its answer line
+            continue
+        if OTHER_RE.match(line):
+            current["other"] = True
+            continue
+        option = OPTION_RE.match(line)
+        if option:
+            current["options"].append((option.group(1), option.group(2)))
+            if option.group(3):
+                current["recommend"] = option.group(1)
+    return lines, questions
+
+
+def is_pending(question):
+    return question["choice"] is None
+
+
+@contextlib.contextmanager
+def question_lock(path):
+    """questions.md is read, modified and written back. Without a lock across
+    that window two `ask` calls lose a block — and the journal would then name a
+    question the file does not hold, which nothing would ever block on."""
+    directory = os.path.dirname(path)
+    os.makedirs(directory, exist_ok=True)
+    if fcntl is None:
+        yield
+        return
+    # The lock is taken on the directory itself, so the audit trail gains no
+    # lock file and the lock survives the os.replace that swaps the inode.
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        yield
+        return
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
+def write_questions(path, lines):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines).rstrip("\n") + "\n")
+    os.replace(tmp, path)
+
+
+def one_line(text):
+    """Everything a caller writes into the file is collapsed to one line: a
+    newline in an answer would otherwise produce a second [Answer]: line, and the
+    file a human reads would disagree with the record every command acts on."""
+    return " ".join((text or "").split())
+
+
+def answer_line(choice, text, by, via):
+    text = one_line(text)
+    if choice and text:
+        body = "%s: %s" % (choice, text)
+    elif choice:
+        body = choice
+    else:
+        body = text
+    return "[Answer]: %s — by %s via %s at %s" % (body, one_line(by) or "unknown", via, now())
+
+
+def question_block(question, stage, by):
+    by = one_line(by)
+    block = ["", "## %s. %s" % (question["id"], one_line(question["question"])),
+             "asked: %s · stage: %s%s" % (now(), stage, " · by: " + by if by else "")]
+    if question.get("context"):
+        block.append("context: %s" % one_line(question["context"]))
+    for letter, text in question["options"]:
+        block.append("%s. %s%s" % (letter, one_line(text),
+                                   " (recommended)" if letter == question.get("recommend") else ""))
+    block.append(OTHER_OPTION)
+    block.append("[Answer]:")
+    return block
+
+
+def render_prose(questions):
+    """The rendering every runtime can show. The number is the question's own id
+    number, so the same reply means the same thing whenever it is given."""
+    out = []
+    for question in questions:
+        answered = "" if is_pending(question) else "  — answered: %s" % question["choice"]
+        out.append("%s. %s  [%s]%s"
+                   % (question["number"], question["question"], question["id"], answered))
+        if question["context"]:
+            out.append("   context: %s" % question["context"])
+        for letter, text in question["options"]:
+            out.append("   %s. %s%s" % (letter, text,
+                                        " (recommended)" if letter == question["recommend"] else ""))
+        if question["other"]:
+            out.append("   X. Other — answer as `X: <text>`")
+    pending = [q for q in questions if is_pending(q)]
+    if pending:
+        out.append("Reply `%s`, a free-text answer last, or run: state.py answer %s"
+                   % (" ".join("%s<letter>" % q["number"] for q in pending),
+                      " ".join("%s=<letter>" % q["id"] for q in pending)))
+    return out
+
+
+def render_md(questions):
+    out = []
+    for question in questions:
+        if is_pending(question):
+            out.append("- **%s** — _unanswered_ (%s)" % (question["question"], question["id"]))
+            continue
+        chosen = dict(question["options"]).get(question["choice"], question["text"] or "Other")
+        detail = "%s — %s" % (chosen, question["text"]) if question["text"] and question["choice"] != "X" else chosen
+        out.append("- **%s** — %s *(%s, %s)*" % (
+            question["question"], detail, question["id"],
+            "by %s via %s at %s" % (question["answered_by"], question["via"], question["answered_at"])
+            if question["answered_by"] else "answered"))
+    return out
+
+
+def render_questions(questions, fmt):
+    if fmt == "json":
+        shown = []
+        for question in questions:
+            item = {k: v for k, v in question.items() if k != "answer_at"}
+            item["options"] = [{"key": k, "text": t} for k, t in question["options"]]
+            item["pending"] = is_pending(question)
+            shown.append(item)
+        return [json.dumps(shown, ensure_ascii=False, indent=2)]
+    if fmt == "md":
+        return render_md(questions)
+    return render_prose(questions)
+
+
+def parse_prose(text, by_id):
+    """`3B` is a choice for Q3, `3: …` is free text for Q3.
+
+    The number is the question's own id number, not its position in a rendering
+    — a rendering the human saw yesterday must not answer a different question
+    today. Free text runs to the end of the reply, because a sentence may
+    legitimately contain `2B` or `step 2:` and half an answer is worse than a
+    refusal; so a free-text answer comes last.
+    """
+    assignments = []
+    start = PROSE_TEXT_RE.search(text)
+    head = text[:start.start()] if start else text
+    for token in PROSE_CHOICE_RE.finditer(head):
+        assignments.append((prose_id(int(token.group(1)), by_id), token.group(2), None))
+    if start:
+        assignments.append((prose_id(int(start.group(1)), by_id), "X",
+                            text[start.end():].strip()))
+    if not assignments:
+        die("no answers found in %r — reply like `1B 2A 3: free text`" % text)
+    return assignments
+
+
+def prose_id(number, by_id):
+    qid = "Q%d" % number
+    if qid not in by_id:
+        die("prose answer %d has no question (have: %s)"
+            % (number, ", ".join(i for i in by_id if i.startswith("Q")) or "none"))
+    return qid
+
+
+def unquote(text):
+    """I1 writes the free-text form as X:"free text"; the quotes belong to the
+    body and are stripped only as a matching pair."""
+    text = text.strip()
+    if len(text) > 1 and text[0] == text[-1] and text[0] in "\"'":
+        return text[1:-1]
+    return text
+
+
+def parse_assignment(token):
+    """Q1=B, Q2=X:free text, Q3=B: because."""
+    if "=" not in token:
+        die("answer takes Q1=B, not %r" % token)
+    qid, value = token.split("=", 1)
+    value = value.strip()
+    other = OTHER_TEXT_RE.match(value)
+    if other:
+        return (qid.strip(), "X", unquote(other.group(1)))
+    pair = CHOICE_TEXT_RE.match(value)
+    if pair:
+        return (qid.strip(), pair.group(1), unquote(pair.group(2)))
+    # A bare letter is a choice even when it is not one of the options, so a
+    # typo is refused rather than silently recorded as free text.
+    if LETTER_RE.match(value):
+        return (qid.strip(), value, None)
+    return (qid.strip(), None, unquote(value))
+
+
+def set_pending(root, state, questions, path):
+    """questions.pending is a cache; the file is the truth (spec alternative 4)."""
+    state["questions"] = {
+        "file": os.path.relpath(path, root),
+        "pending": [q["id"] for q in questions if is_pending(q)],
+    }
+
+
+def cmd_ask(args, root):
+    if args.topic and args.gate:
+        die("--gate belongs to a task, not to a topic: a topic file has ## Q blocks only")
+    state = None if args.topic else load(root)
+    path = questions_path(root, state, args.topic)
+    stage = "intent" if args.topic else state["current_stage"]
+    asked = []
+    if args.batch:
+        try:
+            with open(args.batch, encoding="utf-8") as fh:
+                batch = json.load(fh)
+        except (OSError, ValueError) as exc:
+            die("cannot read batch file %s (%s)" % (args.batch, exc))
+        if not isinstance(batch, list) or not batch:
+            die("the batch file must contain a non-empty JSON array")
+        for item in batch:
+            if not isinstance(item, dict):
+                die("every batch item must be an object with question and options")
+            options = item.get("options") or []
+            if not all(isinstance(o, dict) and "key" in o and "text" in o for o in options):
+                die("every option needs a key and a text (%r)" % item.get("question"))
+            asked.append({"question": item.get("question"),
+                          "options": [(o["key"], o["text"]) for o in options],
+                          "recommend": item.get("recommend"), "context": item.get("context")})
+    else:
+        if not args.question:
+            die("ask takes a question, or --batch FILE.json")
+        options, letters = [], "ABCDEFGHIJKLMNOPQRSTUVW"
+        for option in args.option:
+            # Collapsed first: a key is only recognisable once the value is one
+            # line, and one line is what the file will hold either way.
+            option = one_line(option)
+            if len(options) >= len(letters):
+                die("a question takes at most %d options" % len(letters))
+            head = OPTION_INPUT_RE.match(option)
+            if head:
+                options.append((head.group(1), head.group(2).strip()))
+                continue
+            labelled = OPTION_HEAD_RE.match(option)
+            if labelled:
+                # "1: one" or "aa: one" is a key the I2 grammar cannot parse, not
+                # an option whose text happens to start that way.
+                die("an option key is one letter A–W, not %r" % labelled.group(1))
+            options.append((letters[len(options)], option))
+        asked.append({"question": args.question, "options": options,
+                      "recommend": args.recommend, "context": args.context})
+    for item in asked:
+        if not item["question"]:
+            die("every question needs a question line")
+        if len(item["options"]) < 2:
+            die("a question needs at least two options (%r has %d)"
+                % (item["question"], len(item["options"])))
+        keys = [key for key, _ in item["options"]]
+        # An option the I2 grammar cannot parse would round-trip as no option at
+        # all, and the answer to it would be recorded as free text (R1).
+        for key in keys:
+            if not OPTION_KEY_RE.match(key):
+                die("an option key is one letter A–W, not %r" % key)
+        if len(set(keys)) != len(keys):
+            die("option keys must be distinct (%s)" % ", ".join(keys))
+        for _, text in item["options"]:
+            if text.endswith(" (recommended)"):
+                die("an option text cannot end with ' (recommended)' — use --recommend")
+        if item["recommend"] and item["recommend"] not in keys:
+            die("--recommend %s is not one of the options (%s)"
+                % (item["recommend"], ", ".join(keys)))
+
+    new_ids = []
+    with question_lock(path):
+        lines, existing = parse_questions(path)
+        while lines and not lines[-1].strip():
+            lines.pop()
+        if not any(line.startswith("# Questions") for line in lines):
+            # An existing but empty (or header-less) file still gets the notice
+            # that tells a human not to edit the questions.
+            lines = (QUESTIONS_HEADER % (args.topic or state["task_id"])).rstrip("\n").split("\n") + lines
+        kind = "G" if args.gate else "Q"
+        number = max([q["number"] for q in existing if q["kind"] == kind] or [0])
+        for item in asked:
+            number += 1
+            item["id"] = "%s%d" % (kind, number)
+            if args.gate:
+                item["question"] = "%s (gate: %s)" % (item["question"], args.gate)
+            new_ids.append(item["id"])
+            lines.extend(question_block(item, stage, args.by))
+        write_questions(path, lines)
+        lines, questions = parse_questions(path)
+    relative = os.path.relpath(path, root)
+    if state is not None:
+        for item in asked:
+            emit(root, state, "question_asked", "%s: %s" % (item["id"], item["question"]),
+                 {"id": item["id"], "options": [letter for letter, _ in item["options"]],
+                  "recommended": item["recommend"], "gate": args.gate})
+        set_pending(root, state, questions, path)
+        save(root, state)
+    print("%s asked → %s" % (" ".join(new_ids), relative))
+    for line in render_prose([q for q in questions if is_pending(q)]):
+        print(line)
+    if os.environ.get("AI_UNATTENDED"):
+        # The literal line an unattended launcher greps for (R5).
+        print("WAITING_FOR_ANSWERS %s %s" % (relative, " ".join(new_ids)))
+
+
+def apply_answers(lines, by_id, assignments, args, relative):
+    for qid, choice, text in assignments:
+        question = by_id.get(qid)
+        if question is None:
+            die("no question %s in %s (have: %s)" % (qid, relative, ", ".join(by_id) or "none"))
+        if question["kind"] == "G":
+            die("%s is a gate: run 'state.py approve' in your terminal or fill its [Answer]: line" % qid)
+        letters = [letter for letter, _ in question["options"]]
+        if question["other"]:
+            letters.append("X")
+        if choice is None:
+            choice = "X" if question["other"] else None
+        if choice not in letters:
+            die("%s: invalid choice %r (options: %s)" % (qid, choice, ", ".join(letters)))
+        lines[question["answer_at"]] = answer_line(choice, text, args.by, args.via)
+
+
+def cmd_answer(args, root):
+    state = None if args.topic else load(root)
+    path = questions_path(root, state, args.topic)
+    with question_lock(path):
+        lines, questions = parse_questions(path)
+        if not questions:
+            die("no questions in %s" % os.path.relpath(path, root))
+        by_id = {q["id"]: q for q in questions}
+        assignments = []
+        if args.prose:
+            assignments = parse_prose(args.prose, by_id)
+        for token in args.assignment:
+            assignments.append(parse_assignment(token))
+        if not assignments:
+            die("answer takes Q1=B …, or --prose \"1B 2A 3: text\"")
+        apply_answers(lines, by_id, assignments, args, os.path.relpath(path, root))
+        write_questions(path, lines)
+        lines, questions = parse_questions(path)
+        by_id = {q["id"]: q for q in questions}
+    if state is not None:
+        for qid, _, _ in assignments:
+            question = by_id[qid]
+            # actor is derived from the route, never asserted by the caller:
+            # `human` is reserved for the file route and the gate (I3).
+            emit(root, state, "question_answered", "%s = %s" % (qid, question["choice"]),
+                 {"id": qid, "choice": question["choice"], "text": question["text"],
+                  "via": args.via, "by": args.by}, actor="agent")
+        set_pending(root, state, questions, path)
+        save(root, state)
+    pending = [q["id"] for q in questions if is_pending(q)]
+    print("%s answered; %s" % (", ".join(qid for qid, _, _ in assignments),
+                               ("still pending: " + ", ".join(pending)) if pending else "none pending"))
+
+
+def sync_answers(root, state, path, lines, questions, args):
+    """Pick up hand edits: a filled line with no trailer is a fresh answer, a
+    line this command already wrote has one, so syncing twice changes nothing."""
+    changed = []
+    for question in questions:
+        if question["invalid"]:
+            print("state.py: %s: invalid choice %r — it stays pending"
+                  % (question["id"], question["invalid"]), file=sys.stderr)
+            continue
+        if question["choice"] is not None and not question["answered_by"]:
+            lines[question["answer_at"]] = answer_line(
+                question["choice"], question["text"], args.by, "file")
+            changed.append(question)
+    if not changed:
+        return []
+    if state is not None:
+        # Recording answers changes the task, so it takes ownership as ask does.
+        claim_runtime(root, state)
+    write_questions(path, lines)
+    if state is not None:
+        by_id = {q["id"]: q for q in parse_questions(path)[1]}
+        for question in changed:
+            if question["kind"] == "G":
+                continue                          # the gate's file route is step 6's
+            current = by_id[question["id"]]
+            emit(root, state, "question_answered", "%s = %s" % (current["id"], current["choice"]),
+                 {"id": current["id"], "choice": current["choice"], "text": current["text"],
+                  "via": "file", "by": args.by}, actor="human")
+    return changed
+
+
+def cmd_questions(args, root):
+    state = None if args.topic else load(root)
+    path = questions_path(root, state, args.topic)
+    with question_lock(path) if args.sync else contextlib.nullcontext():
+        lines, questions = parse_questions(path)
+        if args.sync and sync_answers(root, state, path, lines, questions, args):
+            _, questions = parse_questions(path)
+    if state is not None:
+        cached = (state.get("questions") or {}).get("pending")
+        set_pending(root, state, questions, path)
+        if state["questions"]["pending"] != cached:
+            # A read must not bump updated_at: /ai-status calls this every time.
+            save(root, state)
+    shown = [q for q in questions if is_pending(q)] if args.pending else questions
+    for line in render_questions(shown, args.format):
+        print(line)
+
+
+def guard_pending(root, command):
+    """The file is re-parsed on every stage-moving command — questions.pending is
+    only a cache — and nothing is written, so exit 4 leaves the state byte-identical."""
+    state = load(root, required=False, claim=False)
+    if state is None:
+        return
+    path = questions_path(root, state, None)
+    _, questions = parse_questions(path)
+    blocking = [q for q in questions if is_pending(q)]
+    if command == "approve":
+        # The gate's own question is answered by approve/reject themselves.
+        blocking = [q for q in blocking if q["kind"] != "G"]
+    if not blocking:
+        return
+    ids = [q["id"] for q in blocking]
+    die("QUESTIONS_PENDING — %d unanswered in %s: %s. Answer with 'state.py answer %s' or fill "
+        "the [Answer]: lines and run 'state.py questions --sync'. Stage stays at %s."
+        % (len(blocking), os.path.relpath(path, root), ", ".join(ids),
+           " ".join("%s=<letter>" % i for i in ids), state.get("current_stage")), 4)
+
+
 def cmd_approve(args, root):
     state = load(root)
     state["human_approval"].update({
@@ -795,6 +1356,26 @@ def main():
 
     p = sub.add_parser("modules"); p.add_argument("module", nargs="+"); p.set_defaults(func=cmd_modules)
 
+    who = os.environ.get("USER") or "unknown"
+    p = sub.add_parser("ask"); p.add_argument("question", nargs="?")
+    p.add_argument("--option", action="append", default=[]); p.add_argument("--recommend")
+    p.add_argument("--context", default=""); p.add_argument("--gate")
+    p.add_argument("--batch"); p.add_argument("--topic"); p.add_argument("--by", default="")
+    p.set_defaults(func=cmd_ask)
+
+    p = sub.add_parser("answer"); p.add_argument("assignment", nargs="*")
+    p.add_argument("--prose"); p.add_argument("--by", default=who)
+    # `file` is not offered: it is what --sync writes, and it is the one route
+    # that is recorded as a human's.
+    p.add_argument("--via", choices=["picker", "prose"], default="prose")
+    p.add_argument("--topic"); p.set_defaults(func=cmd_answer)
+
+    p = sub.add_parser("questions"); p.add_argument("--pending", action="store_true")
+    p.add_argument("--sync", action="store_true"); p.add_argument("--topic")
+    p.add_argument("--by", default=who)
+    p.add_argument("--format", choices=["md", "prose", "json"], default="prose")
+    p.set_defaults(func=cmd_questions)
+
     p = sub.add_parser("note"); p.add_argument("kind"); p.add_argument("text")
     p.add_argument("--why", default=""); p.add_argument("--error", default="")
     p.set_defaults(func=cmd_note)
@@ -817,9 +1398,15 @@ def main():
 
     global RUNTIME, MUTATING              # pylint: disable=global-statement
     args = parser.parse_args()
+    if getattr(args, "topic", None):
+        # Topic mode never touches .ai/: it must work where there is none (I11).
+        args.func(args, find_docs_root(args.root))
+        return
     root = find_root(args.root)
     RUNTIME = detect_runtime(args.runtime, root)
     MUTATING = args.command in MUTATING_COMMANDS
+    if args.command in BLOCKING_COMMANDS and not getattr(args, "abandon", False):
+        guard_pending(root, args.command)
     args.func(args, root)
 
 

@@ -342,4 +342,214 @@ assert json.loads(huge)["data"] == {"truncated": True}, json.loads(huge)["data"]
   && pass "detail and error are cut, and a line that still will not fit keeps only its shape" \
   || fail "the 4 KB cap is not enforced"
 
+echo "== questions: ask writes the file, never the model (R1)"
+ROOT7="$TMP/questions"; mkdir -p "$ROOT7/.ai/state" "$ROOT7/.ai/reports"
+Q() { env -u CLAUDECODE -u AI_RUNTIME -u AI_UNATTENDED python3 "$STATE" --root "$ROOT7" "$@"; }
+T7=$(Q init --goal "fee rounding" --workflow feature)
+QF="$ROOT7/.ai/reports/$T7/questions.md"
+Q stage plan >/dev/null
+Q ask "Which rounding rule applies to the per-line fee?" \
+  --option "A: Round half up per line" --option "B: Round half even per order total" \
+  --recommend A --context "src/Payment/FeeCalculator.php:42" --by "ai-planner via main session" >/dev/null
+[ -f "$QF" ] && pass "ask creates .ai/reports/<id>/questions.md" || fail "the questions file should exist" "$QF"
+Q questions --format json | jq -e '.[0] | .id=="Q1" and .question=="Which rounding rule applies to the per-line fee?"
+  and (.options|map(.key))==["A","B"] and .recommend=="A" and .stage=="plan"
+  and (.context|test("FeeCalculator.php:42")) and .pending==true' >/dev/null \
+  && pass "the question round-trips through questions --format json" || fail "R1 round trip broken" "$(Q questions --format json)"
+grep -q '^X\. Other — answer as' "$QF" && pass "every question offers the free-text option" || fail "the X line is missing"
+Q get --field questions.pending | grep -q '"Q1"' && pass "the state caches the pending id" || fail "questions.pending should cache Q1"
+Q events --type question_asked --format jsonl | jq -e '.data.id=="Q1" and .data.recommended=="A"' >/dev/null \
+  && pass "asking is a journal event" || fail "question_asked missing"
+
+echo "== a hand-edited answer round-trips without touching the question (R2)"
+grep -v '^\[Answer\]' "$QF" > "$TMP/q-before.txt"
+python3 - "$QF" <<'HANDEDIT'
+import sys
+path = sys.argv[1]
+lines = open(path, encoding="utf-8").read().split("\n")
+lines[lines.index("[Answer]:")] = "[Answer]: B"
+open(path, "w", encoding="utf-8").write("\n".join(lines))
+HANDEDIT
+Q questions --sync --by ivan >/dev/null
+grep -v '^\[Answer\]' "$QF" > "$TMP/q-after.txt"
+cmp -s "$TMP/q-before.txt" "$TMP/q-after.txt" && pass "--sync leaves the question block byte-identical" || fail "the question text changed" "$(diff "$TMP/q-before.txt" "$TMP/q-after.txt")"
+grep -q '^\[Answer\]: B — by ivan via file at ' "$QF" && pass "--sync writes the trailer onto the answer" || fail "the trailer is missing" "$(grep '^\[Answer\]' "$QF")"
+Q events --type question_answered --format jsonl | jq -e '.data.via=="file" and .data.choice=="B" and .actor=="human"' >/dev/null \
+  && pass "a hand edit is recorded as answered via the file, by a human" || fail "question_answered{via:file} missing"
+grep -c '^\[Answer\]: B — by ivan via file at ' "$QF" | grep -q '^1$' \
+  && pass "and the answer landed on the question that was edited" || fail "--sync wrote the answer somewhere else"
+cp "$QF" "$TMP/q-synced.md"
+Q questions --sync >/dev/null
+cmp -s "$TMP/q-synced.md" "$QF" && pass "syncing an already-synced file changes nothing" || fail "--sync is not idempotent"
+[ "$(Q events --type question_answered --format jsonl | wc -l)" = 1 ] && pass "and emits nothing the second time" || fail "a second sync should emit nothing"
+
+echo "== an answer that is not an option stays pending"
+sed -i 's/^\[Answer\]: B — by ivan.*/[Answer]: F/' "$QF"
+err=$(Q questions --sync 2>&1 >/dev/null)
+printf '%s' "$err" | grep -q "Q1: invalid choice 'F'" && pass "--sync reports the invalid choice" || fail "should report the invalid choice" "$err"
+Q questions --format json | jq -e '.[0].pending==true' >/dev/null && pass "and the question stays pending" || fail "an invalid choice must not answer the question"
+Q answer Q1=B --by ivan --via picker >/dev/null
+Q questions --format json | jq -e '.[0].pending==false and .[0].choice=="B"' >/dev/null && pass "answer sets the choice" || fail "answer should set the choice"
+Q events --type question_answered --format jsonl | tail -1 | jq -e '.actor=="agent" and .data.via=="picker"' >/dev/null \
+  && pass "an answer the agent relays is recorded as the agent's, not a human's" || fail "actor must follow the route"
+Q answer --help 2>&1 | grep -q -- "--via {picker,prose}" && pass "--via file cannot be claimed by a caller" || fail "--via should not offer file"
+
+echo "== free text and the prose reply"
+Q ask --batch /dev/stdin <<'BATCH' >/dev/null
+[{"question":"Which gateway?","options":[{"key":"A","text":"Stripe"},{"key":"B","text":"Adyen"}],"recommend":"B"},
+ {"question":"Migration window?","options":[{"key":"A","text":"tonight"},{"key":"B","text":"next release"}]}]
+BATCH
+Q questions --format json | jq -e 'length==3 and .[1].id=="Q2" and .[2].id=="Q3"' >/dev/null \
+  && pass "--batch appends with ids taken from the highest in the file" || fail "batch ids wrong"
+Q answer --prose "2B 3: after the audit" --by ivan >/dev/null
+Q questions --format json | jq -e '.[1].choice=="B" and .[2].choice=="X" and .[2].text=="after the audit"' >/dev/null \
+  && pass "a prose reply answers by id number, with free text" || fail "prose parsing wrong" "$(Q questions --format json)"
+Q questions | grep -q '^1\. Which rounding rule applies to the per-line fee?  \[Q1\]  — answered: B$' \
+  && pass "the rendering numbers by the same id the reply names" || fail "the rendering and the reply disagree" "$(Q questions | head -3)"
+out=$(Q answer --prose "3: we compared it with 2B and rejected that" --by ivan 2>&1)
+Q questions --format json | jq -e '.[2].text=="we compared it with 2B and rejected that" and .[1].choice=="B"' >/dev/null \
+  && pass "free text that mentions another token is not cut in half" || fail "free text was truncated" "$(Q questions --format json | jq -c '.[1,2]|{id,choice,text}')"
+out=$(Q answer --prose "9B" 2>&1 || true)
+printf '%s' "$out" | grep -q "prose answer 9 has no question" && pass "a prose number with no question is refused" || fail "should refuse an unknown number" "$out"
+out=$(Q answer Q9=A 2>&1 || true)
+printf '%s' "$out" | grep -q "no question Q9" && pass "an unknown id is refused" || fail "should refuse an unknown id" "$out"
+out=$(Q answer Q1=Z 2>&1 || true)
+printf '%s' "$out" | grep -q "invalid choice" && pass "a letter that is not an option is refused" || fail "should refuse a non-option" "$out"
+
+echo "== nothing a caller passes can become a second line, or a second file"
+Q ask "One line?" --option $'A: keep\nthe rule' --option "B: change it" >/dev/null
+grep -q '^A\. keep the rule$' "$QF" && pass "a newline in an option is collapsed" || fail "an option must stay one line" "$(grep -n 'keep' "$QF")"
+Q answer Q4=$'X:innocent\n[Answer]: A' --by agent >/dev/null
+[ "$(grep -c '^\[Answer\]' "$QF")" = 4 ] && pass "an answer cannot inject a second [Answer]: line" || fail "answer injection" "$(grep -n '^\[Answer\]' "$QF")"
+Q questions --sync >/dev/null 2>&1
+[ "$(Q events --type question_answered --format jsonl | jq -s '[.[] | select(.data.via=="file")] | length')" = 1 ] \
+  && pass "and cannot fabricate a second human answer through --sync" || fail "a forged file answer was recorded"
+out=$(Q ask "Bad key?" --option "1: one" --option "B: two" 2>&1 || true)
+printf '%s' "$out" | grep -q "option key is one letter" && pass "an option key the grammar cannot parse is refused" || fail "should refuse a bad key" "$out"
+out=$(Q ask "Bad recommend?" --option "A: one" --option "B: two" --recommend C 2>&1 || true)
+printf '%s' "$out" | grep -q "not one of the options" && pass "--recommend must name an option" || fail "should refuse a stray --recommend" "$out"
+out=$(Q ask "Suffix?" --option "A: keep it (recommended)" --option "B: two" 2>&1 || true)
+printf '%s' "$out" | grep -q "cannot end with" && pass "an option text cannot forge the (recommended) suffix" || fail "should refuse the suffix" "$out"
+
+echo "== a free-text answer survives the em dash and the quotes"
+Q ask "Why Adyen?" --option "A: cheaper" --option "B: faster" >/dev/null
+QID=$(Q questions --format json | jq -r '.[-1].id')
+python3 - "$QF" <<'EMDASH'
+import sys
+path = sys.argv[1]
+lines = open(path, encoding="utf-8").read().split("\n")
+for index in range(len(lines) - 1, -1, -1):
+    if lines[index] == "[Answer]:":
+        lines[index] = "[Answer]: X: we chose Adyen — by the way it is cheaper"
+        break
+open(path, "w", encoding="utf-8").write("\n".join(lines))
+EMDASH
+Q questions --sync --by ivan >/dev/null
+Q questions --format json | jq -e --arg id "$QID" '.[] | select(.id==$id) |
+  .text=="we chose Adyen — by the way it is cheaper" and .answered_by=="ivan" and .via=="file"' >/dev/null \
+  && pass "an em dash in free text does not become the trailer" || fail "the trailer ate the answer" "$(Q questions --format json | jq -c --arg id "$QID" '.[]|select(.id==$id)|{text,answered_by}')"
+Q ask "Quoted?" --option "A: one" --option "B: two" >/dev/null
+QID=$(Q questions --format json | jq -r '.[-1].id')
+Q answer "$QID=X:\"free text\"" --by ivan >/dev/null
+Q questions --format json | jq -e --arg id "$QID" '.[] | select(.id==$id) | .text=="free text"' >/dev/null \
+  && pass "X:\"free text\" keeps its text and loses its quotes" || fail "the quote pair was mishandled"
+
+echo "== a gate question is not answered with answer"
+Q ask "Approve $T7 for implementation?" --option "A: Approve" --option "B: Reject — answer as \`B: <reason>\`" --gate human_approval >/dev/null
+grep -q "^## G1\. Approve .* (gate: human_approval)$" "$QF" && pass "a gate question is a G id" || fail "the gate heading is wrong" "$(grep '^## G' "$QF")"
+out=$(Q answer G1=A 2>&1 || true)
+printf '%s' "$out" | grep -q "G1 is a gate: run 'state.py approve' in your terminal" && pass "answer refuses a gate id with the route to take" || fail "wrong gate message" "$out"
+
+echo "== a pending question blocks a stage, and nothing else (R3)"
+TB=$(Q init --goal "one open question" --workflow feature --force)
+Q stage plan >/dev/null
+Q ask "Which rule?" --option "A: one" --option "B: two" >/dev/null
+cp "$ROOT7/.ai/state/current.json" "$TMP/state-before.json"
+cp "$ROOT7/.ai/reports/$TB/questions.md" "$TMP/questions-before.md"
+blocked_ok=yes
+for c in "stage implementation" "triage T2" "plan --ref x --steps /dev/null" "step 1" "step-done 1" \
+         "remediate --files a" "approve --by me" "done" "close"; do
+  out=$(Q $c 2>&1); rc=$?
+  [ "$rc" = 4 ] || { blocked_ok="'$c' exited $rc, not 4: $out"; break; }
+  printf '%s' "$out" | grep -q "QUESTIONS_PENDING — 1 unanswered in .ai/reports/$TB/questions.md: Q1\. Answer with 'state.py answer Q1=<letter>'" \
+    || { blocked_ok="'$c' printed: $out"; break; }
+  cmp -s "$TMP/state-before.json" "$ROOT7/.ai/state/current.json" \
+    || { blocked_ok="'$c' changed the state while refusing"; break; }
+  cmp -s "$TMP/questions-before.md" "$ROOT7/.ai/reports/$TB/questions.md" \
+    || { blocked_ok="'$c' changed the questions file while refusing"; break; }
+done
+[ "$blocked_ok" = yes ] && pass "each of the nine stage-moving commands exits 4 and leaves the state byte-identical" \
+  || fail "R3's blocked list is wrong" "$blocked_ok"
+printf '%s' "$(Q stage implementation 2>&1)" | grep -q "Stage stays at plan\." && pass "the refusal names the stage it stays at" || fail "the exit-4 text is wrong"
+open_ok=yes
+for c in "get" "set next_action x" "risks --add r" "modules billing" "note decision d" \
+         "ask q --option A:one --option B:two" "questions" "events"; do
+  Q $c >/dev/null 2>&1 || { open_ok="'$c' was blocked"; break; }
+done
+[ "$open_ok" = yes ] && pass "recording, reading and asking are never blocked" || fail "R3's open list is wrong" "$open_ok"
+Q answer Q1=A >/dev/null 2>&1 && pass "answer itself is not blocked" || fail "answer must not be blocked"
+Q answer Q2=A >/dev/null 2>&1
+Q archive >/dev/null 2>&1 && pass "archive is not blocked either" || fail "archive must not be blocked"
+
+echo "== twelve asks at once all land in the file"
+ROOT9="$TMP/concurrent-questions"; mkdir -p "$ROOT9/.ai/state" "$ROOT9/.ai/reports"
+C() { env -u CLAUDECODE -u AI_RUNTIME python3 "$STATE" --root "$ROOT9" "$@"; }
+TC=$(C init --goal "many askers" --workflow feature)
+for i in $(seq 1 12); do
+  C ask "Question $i?" --option "A: one" --option "B: two" >/dev/null 2>&1 &
+done
+wait
+n=$(C questions --format json | jq 'length')
+[ "$n" = 12 ] && pass "twelve concurrent asks give twelve questions" || fail "a question was lost" "got $n"
+[ "$(C events --type question_asked --format jsonl | wc -l)" = "$n" ] \
+  && pass "and the journal names exactly the questions the file holds" || fail "the journal and the file disagree"
+
+echo "== ask and answer take ownership of the task (R10)"
+ROOTR="$TMP/questions-runtime"; mkdir -p "$ROOTR/.ai/state" "$ROOTR/.ai/reports"
+A() { env -u CLAUDECODE -u AI_RUNTIME python3 "$STATE" --root "$ROOTR" "$@"; }
+TR=$(A --runtime claude init --goal "owned" --workflow feature)
+A --runtime codex ask "Whose task?" --option "A: claude" --option "B: codex" >/dev/null
+[ "$(A get --field owner_runtime)" = codex ] && pass "ask hands the task over like any other change" || fail "ask should claim the runtime"
+A events --type runtime_handoff --format jsonl | jq -e '.data.to=="codex"' >/dev/null \
+  && pass "and says so in the journal" || fail "runtime_handoff missing for ask"
+
+echo "== reading the questions does not change the task"
+before=$(A get --field updated_at)
+A questions >/dev/null; A questions --pending >/dev/null
+[ "$(A get --field updated_at)" = "$before" ] && pass "questions is a read: updated_at does not move" || fail "a read must not write the state"
+
+echo "== done --abandon is the way out of an unanswerable question"
+T8=$(Q init --goal "abandon me" --workflow investigation --force)
+Q ask "Is this reproducible?" --option "A: yes" --option "B: no" >/dev/null
+out=$(Q done 2>&1); [ $? = 4 ] && pass "done is blocked" || fail "done should be blocked" "$out"
+Q done --abandon >/dev/null && pass "done --abandon is not" || fail "done --abandon should be exempt"
+
+echo "== ask ends an unattended turn with the line a launcher greps for (R5)"
+T9=$(Q init --goal "unattended" --workflow feature --force)
+last=$(env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOT7" \
+        ask "Ship it?" --option "A: yes" --option "B: no" | tail -1)
+case "$last" in
+  "WAITING_FOR_ANSWERS .ai/reports/$T9/questions.md Q1") pass "the last line is WAITING_FOR_ANSWERS <file> <ids>";;
+  *) fail "R5's literal line is wrong" "$last";;
+esac
+Q ask "Second?" --option "A: yes" --option "B: no" | tail -1 | grep -q WAITING_FOR_ANSWERS \
+  && fail "the line must only appear under AI_UNATTENDED" || pass "and it is absent without the flag"
+
+echo "== topic questions live with the document and need no .ai/ (R17)"
+ROOT10="$TMP/topic"; mkdir -p "$ROOT10/docs/sdlc/intent"
+P() { env -u CLAUDECODE -u AI_RUNTIME python3 "$STATE" --root "$ROOT10" "$@"; }
+P ask "What problem are we solving?" --option "A: decisions are lost" --option "B: cost" --topic my-idea >/dev/null
+[ -f "$ROOT10/docs/sdlc/intent/my-idea.questions.md" ] && pass "a topic question lands beside its intent" || fail "topic file missing"
+P answer Q1=A --topic my-idea --by ivan >/dev/null
+P questions --topic my-idea --format md | grep -q '^- \*\*What problem are we solving?\*\* — decisions are lost' \
+  && pass "--format md renders the Decisions taken line" || fail "md rendering wrong" "$(P questions --topic my-idea --format md)"
+[ ! -d "$ROOT10/.ai" ] && pass "and no .ai/ was created" || fail "topic mode must not need .ai/"
+[ -z "$(find "$ROOT10" -name 'events.jsonl' -o -name '.ai' 2>/dev/null)" ] \
+  && pass "a topic question writes no journal anywhere in the tree" || fail "topic mode wrote a journal"
+out=$(P ask "Escape?" --option "A: one" --option "B: two" --topic "../../pwned/evil" 2>&1 || true)
+printf '%s' "$out" | grep -q "takes a slug of lowercase letters" && pass "a slug that is a path is refused" || fail "--topic must not steer the path" "$out"
+[ ! -e "$ROOT10/../pwned" ] && [ ! -e "$ROOT10/docs/pwned" ] && pass "and nothing was written outside docs/sdlc/intent/" || fail "the traversal wrote a file"
+out=$(P ask "Gate?" --option "A: one" --option "B: two" --gate human_approval --topic my-idea 2>&1 || true)
+printf '%s' "$out" | grep -q "gate belongs to a task" && pass "a topic file cannot hold a gate" || fail "--gate --topic should be refused" "$out"
+
 summary "state.py"
