@@ -527,12 +527,12 @@ def guard_lowering(root, state, tier, by):
     if previous not in TIERS or TIERS.index(tier) >= TIERS.index(previous):
         return
     if not (by and human_present()):
-        refuse_approval_free(root, state, previous, tier)
+        refuse_approval_free(root, previous, tier)
     state["risk_tier_lowered"] = {"by": by, "at": now(), "from": previous}
     record(state, "risk_lowered", "%s -> %s by %s" % (previous, tier, by))
 
 
-def refuse_approval_free(root, state, previous, tier):
+def refuse_approval_free(root, previous, tier):
     die("APPROVAL_REFUSED — only a human lowers a risk tier, in writing (downgrade_rule). "
         "The task is %s and you asked for %s. Propose it with evidence and let the human run, "
         "in their own terminal:\n  python3 %s --root %s risk %s --by \"<name>\" --note \"<why>\""
@@ -642,7 +642,7 @@ def load_policy(root):
     return policy
 
 
-def measure_diff(root, state, from_tree, to_tree, tier, allowed, scope, deferred_to=None,
+def measure_diff(root, from_tree, to_tree, tier, allowed, scope, deferred_to=None,
                  not_mine=None):
     policy = load_policy(root)
     measurement = safe_sensor(sensors.measure, root, from_tree, to_tree, policy,
@@ -671,8 +671,8 @@ def rescore_task(root, state, to_tree):
     """What the change turned out to be, against what it was called at the start.
     Only ever upwards: downgrade_rule says a human lowers a tier, in writing."""
     declared = state.get("risk_tier") or "T0"
-    policy, measurement = measure_diff(root, state, state["diff"].get("base_tree"), to_tree,
-                                       declared, None, "task")
+    _policy, measurement = measure_diff(root, state["diff"].get("base_tree"), to_tree,
+                                        declared, None, "task")
     task = state["diff"]["task"]
     task.update({"files": measurement["files"], "added": measurement["added"],
                  "deleted": measurement["deleted"], "lines": measurement["lines"],
@@ -681,7 +681,7 @@ def rescore_task(root, state, to_tree):
                  "tree": to_tree, "measured_at": now(),
                  "status": measurement["status"]})
     state["diff"]["over_budget"] = bool(measurement.get("over"))
-    scored = safe_sensor(sensors.rescore, declared, measurement, policy)
+    scored = safe_sensor(sensors.rescore, declared, measurement)
     if not scored or scored.get("status") == "unavailable":
         state["diff"]["rescored_tier"] = None
         state["diff"]["rescore_reasons"] = []
@@ -756,7 +756,7 @@ def cmd_step_done(args, root):
     before = step.get("tree_before") or state["diff"].get("base_tree")
     elsewhere = [f for other in steps if other is not step
                  for f in (other.get("allowed_files") or [])]
-    _policy, measured = measure_diff(root, state, before, after, tier,
+    _policy, measured = measure_diff(root, before, after, tier,
                                      step.get("allowed_files"), "step",
                                      deferred_to=elsewhere,
                                      not_mine=step.get("forbidden_files"))
@@ -1041,7 +1041,7 @@ def cmd_review_gate(args, root):
     state["sensors"] = {"file": os.path.relpath(sensors.sensors_file(root, state), root),
                         "tree": report["tree"], "verdict": report["verdict"]["review"],
                         "checked_at": report["checked_at"]}
-    sensors.print_report(report, root)
+    sensors.print_report(report)
 
     if not report["verdict"]["all_green"]:
         state["next_action"] = "run the adversarial review the tier requires"

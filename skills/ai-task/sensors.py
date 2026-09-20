@@ -34,6 +34,7 @@ Exit codes: 0 green or not applicable · 1 usage or internal error ·
 """
 
 import argparse
+import contextlib
 import fnmatch
 import json
 import os
@@ -188,7 +189,9 @@ def git(root, args, env=None, timeout=120):
     if env:
         merged.update(env)
     try:
-        done = subprocess.run(command, cwd=root, env=merged, timeout=timeout,
+        # check=False on purpose: a non-zero git exit is an answer here
+        # ("unavailable"), never an exception to climb out of.
+        done = subprocess.run(command, cwd=root, env=merged, timeout=timeout, check=False,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except (OSError, subprocess.SubprocessError):
         return 127, ""
@@ -495,7 +498,7 @@ def measure(root, from_tree, to_tree, policy, tier="T2", allowed=None, scope="st
     return result
 
 
-def rescore(declared, measurement, policy):
+def rescore(declared, measurement):
     """max(declared, the tier every touched scope demands, declared+1 when the
     task is over its budget). It never returns anything lower than `declared`:
     downgrade_rule says only a human lowers a tier, in writing."""
@@ -597,20 +600,19 @@ def run_command(root, command, log_path, timeout=1800, log_max_bytes=2097152):
     if log_path:
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
     started = datetime.now(timezone.utc)
-    handle = open(log_path, "wb") if log_path else subprocess.DEVNULL
-    try:
-        done = subprocess.run(command, cwd=root, shell=True, timeout=timeout,
-                              stdout=handle if log_path else subprocess.DEVNULL,
-                              stderr=subprocess.STDOUT if log_path else subprocess.DEVNULL)
-        code = done.returncode
-        detail = ""
-    except subprocess.TimeoutExpired:
-        code, detail = None, "timed out after %ds" % timeout
-    except OSError as exc:
-        code, detail = None, "could not run: %s" % exc
-    finally:
-        if log_path:
-            handle.close()
+    with contextlib.ExitStack() as stack:
+        sink = stack.enter_context(open(log_path, "wb")) if log_path else subprocess.DEVNULL
+        try:
+            # check=False: the exit code is the verdict the caller records.
+            done = subprocess.run(command, cwd=root, shell=True, timeout=timeout, check=False,
+                                  stdout=sink,
+                                  stderr=subprocess.STDOUT if log_path else subprocess.DEVNULL)
+            code = done.returncode
+            detail = ""
+        except subprocess.TimeoutExpired:
+            code, detail = None, "timed out after %ds" % timeout
+        except OSError as exc:
+            code, detail = None, "could not run: %s" % exc
     if log_path:
         cap_log(log_path, log_max_bytes)
     duration = int((datetime.now(timezone.utc) - started).total_seconds())
@@ -878,7 +880,7 @@ def test_exists(root, name):
     base = os.path.basename(name)
     if base != name:
         return False
-    for current, dirs, files in os.walk(root):
+    for _current, dirs, files in os.walk(root):
         dirs[:] = [d for d in dirs
                    if d not in (".git", "vendor", "node_modules", ".venv", ".ai")]
         if base in files:
@@ -886,7 +888,7 @@ def test_exists(root, name):
     return False
 
 
-def sensor_traceability(root, state, measurement, policy):
+def sensor_traceability(root, state, policy):
     """A step that changed source and named no test is a step whose evidence is
     somebody else's. Cheap to check, and review-economy §6 says checks like this
     never go to a thinking model."""
@@ -997,7 +999,7 @@ def required_tests_of(state):
     return must_fail, must_pass
 
 
-def bite(root, state, policy, tree=None):
+def bite(root, state, policy):
     """Run the tests the plan named against the code before this task touched it.
 
     A suite that passes proves the code is healthy. It does not prove the tests
@@ -1089,7 +1091,7 @@ def bite(root, state, policy, tree=None):
                 detail="%s; tree restored %s" % ("; ".join(notes), before[:9]))
 
 
-def sensor_bite(root, state, policy, tests_result, tree):
+def sensor_bite(root, state, policy, tests_result):
     """Only ever run after the suite is green on this tree: the check asks
     whether the tests reach the change, and that question means nothing while
     they are failing for some other reason."""
@@ -1102,7 +1104,7 @@ def sensor_bite(root, state, policy, tests_result, tree):
     if (tests_result or {}).get("status") != GREEN:
         return {"status": UNAVAILABLE,
                 "detail": "the suite is not green on this tree — nothing to ask yet"}
-    return bite(root, state, policy, tree)
+    return bite(root, state, policy)
 
 
 PLAN_HEADINGS = ["## Files that change", "## Order of work", "## Risks", "## Proof", "## Rollback"]
@@ -1170,7 +1172,7 @@ def check(root, state, policy, skip_bite=False, only=None):
     task_id = state.get("task_id") or ""
     base = (state.get("diff") or {}).get("base_tree")
     measurement = measure(root, base, tree, policy, tier=declared, scope="task")
-    scored = rescore(declared, measurement, policy)
+    scored = rescore(declared, measurement)
 
     results = {}
     wanted = only or SENSOR_ORDER
@@ -1197,13 +1199,13 @@ def check(root, state, policy, skip_bite=False, only=None):
                        if scored["status"] != UNAVAILABLE else scored.get("detail", "")),
             "tier": scored["tier"], "reasons": scored["reasons"]}
     if "traceability" in wanted:
-        results["traceability"] = sensor_traceability(root, state, measurement, policy)
+        results["traceability"] = sensor_traceability(root, state, policy)
     if "duplicates" in wanted:
         results["duplicates"] = sensor_duplicates(root, base, tree, policy)
     if "plan_sections" in wanted:
         results["plan_sections"] = sensor_plan_sections(root, state)
     if "bite" in wanted and not skip_bite:
-        results["bite"] = sensor_bite(root, state, policy, results.get("tests", {}), tree)
+        results["bite"] = sensor_bite(root, state, policy, results.get("tests", {}))
     for result in results.values():
         result.setdefault("tree", tree)
 
@@ -1254,7 +1256,7 @@ def one_line(text):
     return re.sub(r"\s+", " ", (text or "")).strip()[:160]
 
 
-def print_report(report, root):
+def print_report(report):
     print("sensors @ %s (declared %s, rescored %s)"
           % ((report["tree"] or "?")[:9], report["declared_tier"], report["rescored_tier"]))
     for name in SENSOR_ORDER:
@@ -1273,7 +1275,7 @@ def print_report(report, root):
 
 # ---------------------------------------------------------------------- CLI
 
-def print_diff(result, policy):
+def print_diff(result):
     if result["status"] == UNAVAILABLE:
         print("diff          UNAVAIL  %s" % (result["detail"] or "unavailable"))
         return UNKNOWNCODE
@@ -1313,7 +1315,7 @@ def resolve_trees(root, args):
     return from_tree, to_tree
 
 
-def cmd_snapshot(args, root):
+def cmd_snapshot(_args, root):
     tree = snapshot_tree(root)
     if not tree:
         print("unavailable: not a git repository, or git could not write a tree")
@@ -1334,7 +1336,7 @@ def cmd_diff(args, root):
         result.pop("per_file", None)
         print(json.dumps(result, indent=2, sort_keys=True))
         return {GREEN: OK, RED: REDCODE}.get(result["status"], UNKNOWNCODE)
-    return print_diff(result, policy)
+    return print_diff(result)
 
 
 def cmd_rescore(args, root):
@@ -1342,7 +1344,7 @@ def cmd_rescore(args, root):
     from_tree, to_tree = resolve_trees(root, args)
     measurement = measure(root, from_tree, to_tree, policy, tier=args.declared,
                           scope="task")
-    result = rescore(args.declared, measurement, policy)
+    result = rescore(args.declared, measurement)
     if result["status"] == UNAVAILABLE:
         print("rescore       UNAVAIL  %s" % result.get("detail", "diff unavailable"))
         return UNKNOWNCODE
@@ -1361,7 +1363,7 @@ def cmd_check(args, root):
     only = [x.strip() for x in (args.only or "").split(",") if x.strip()] or None
     report = check(root, state, policy, skip_bite=args.no_bite, only=only)
     write_report(root, state, report, args.json or None)
-    print_report(report, root)
+    print_report(report)
     statuses = [r["status"] for r in report["sensors"].values()]
     if RED in statuses:
         return REDCODE
@@ -1391,7 +1393,7 @@ def cmd_report(args, root):
         report["verdict"] = {"all_green": False,
                              "blocking": ["the worktree moved since the check"],
                              "review": "required"}
-    print_report(report, root)
+    print_report(report)
     return OK if report["verdict"]["all_green"] else UNKNOWNCODE
 
 
@@ -1460,7 +1462,7 @@ def cmd_bite(args, root):
     return REDCODE
 
 
-def cmd_detect(args, root):
+def cmd_detect(_args, root):
     found = detect(root)
     for kind in ("lint", "typecheck"):
         if found[kind]:
