@@ -766,7 +766,7 @@ F init --goal "reused id" --workflow feature --force --task-id "$TF" >/dev/null
 out=$(env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTF" approve --by agent 2>&1); rc=$?
 [ "$rc" = 5 ] && pass "and a task that reuses an old id inherits no gate" || fail "a reused task id must not inherit a gate" "exit $rc: $out"
 
-echo "== --sync does not consume the gate's answer before step 6 can grant it"
+echo "== the file route: an [Answer]: on the gate needs a human turn (R13)"
 ROOTS="$TMP/gate-sync"; mkdir -p "$ROOTS/.ai/state" "$ROOTS/.ai/reports"
 Y() { env -u CLAUDECODE -u AI_RUNTIME -u AI_UNATTENDED python3 "$STATE" --root "$ROOTS" "$@"; }
 TY=$(Y init --goal "file route" --workflow feature)
@@ -779,18 +779,108 @@ lines = open(path, encoding="utf-8").read().split("\n")
 lines[lines.index("[Answer]:")] = "[Answer]: A"
 open(path, "w", encoding="utf-8").write("\n".join(lines))
 FILLGATE
-Y questions --sync >/dev/null 2>&1
+out=$(Y questions --sync 2>&1); rc=$?
+[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "there is no .ai/state/session.json, so no human turn can be seen" \
+  && pass "with no session.json the file route is refused" || fail "the file route needs a human turn" "exit $rc: $out"
+printf '%s' "$out" | grep -q "or run in your own terminal:" && pass "and the refusal names the terminal route" || fail "the terminal route should be named" "$out"
 grep -q '^\[Answer\]: A$' "$YF" && pass "the human's gate answer is left exactly as they wrote it" || fail "--sync consumed the gate answer" "$(grep '^\[Answer\]' "$YF")"
-[ "$(Y get --field human_approval | jq -r .granted)" = false ] && pass "and grants nothing on its own" || fail "--sync must not grant"
+[ "$(Y get --field human_approval | jq -r .granted)" = false ] && pass "and grants nothing" || fail "--sync must not grant"
 out=$(Y stage implementation 2>&1); rc=$?
 [ "$rc" = 4 ] && printf '%s' "$out" | grep -q "G1 is the approval gate: run 'state.py approve" \
   && pass "the stage stays blocked, and the refusal names the command that works" || fail "a filled gate must not unblock the pipeline" "exit $rc: $out"
 
+REQUESTED=$(Y get --field human_approval | jq -r .requested_at)
+printf '{"runtime":"claude","session_id":"s1","last_prompt_session":"s1","last_prompt_at":"2020-01-01T00:00:00Z","last_prompt":"older"}' \
+  > "$ROOTS/.ai/state/session.json"
+out=$(Y questions --sync 2>&1); rc=$?
+[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "is older than the approval request ($REQUESTED)" \
+  && pass "a prompt older than the request is not a turn taken on the plan" || fail "the turn must follow the request" "exit $rc: $out"
+[ "$(Y get --field human_approval | jq -r .granted)" = false ] && pass "and still nothing is granted" || fail "an old turn must not grant"
+
+python3 - "$ROOTS/.ai/state/session.json" "$REQUESTED" <<'TURN'
+import json, sys
+path, requested = sys.argv[1], sys.argv[2]
+data = json.load(open(path, encoding="utf-8"))
+data["last_prompt_at"] = requested           # the same second is a turn on the plan
+data["last_prompt"] = "yes, approve it"
+data["last_prompt_session"] = data["session_id"]
+json.dump(data, open(path, "w", encoding="utf-8"))
+TURN
+python3 - "$ROOTS/.ai/state/session.json" <<'OTHERWINDOW'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+data["last_prompt_session"] = "another-window"
+json.dump(data, open(sys.argv[1], "w", encoding="utf-8"))
+OTHERWINDOW
+out=$(Y questions --sync 2>&1); rc=$?
+[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "came from another session (another-window, not s1)" \
+  && pass "a turn taken in another window is not this session's turn" || fail "the turn must be this session's" "exit $rc: $out"
+python3 - "$ROOTS/.ai/state/session.json" <<'SAMEWINDOW'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+data["last_prompt_session"] = data["session_id"]
+json.dump(data, open(sys.argv[1], "w", encoding="utf-8"))
+SAMEWINDOW
+out=$(Y questions --sync 2>&1)
+printf '%s' "$out" | grep -q "gate approved by .* via the file" && pass "after the human takes a turn, the file route grants" || fail "the file route should grant" "$out"
+
+Y get --field human_approval | jq -e '.granted==true and .via=="file" and .unattended==false' >/dev/null \
+  && pass "and the state records which route it came in by" || fail "human_approval is wrong" "$(Y get --field human_approval)"
+Y events --type gate_approved --format jsonl | jq -e '.actor=="human" and .data.via=="file" and .data.tty==false' >/dev/null \
+  && pass "and the journal records a human answering the file" || fail "gate_approved{via:file} is wrong"
+grep -q '^\[Answer\]: A — by .* via file at ' "$YF" && pass "and the gate question is closed with its trailer" || fail "the gate answer should carry a trailer" "$(grep '^\[Answer\]' "$YF")"
+Y stage implementation >/dev/null && pass "so the pipeline moves again" || fail "a granted gate should unblock"
+out=$(Y questions --sync 2>&1); printf '%s' "$out" | grep -q "gate approved" && fail "syncing twice must not grant twice" "$out" || pass "syncing an already-granted gate does nothing"
+[ "$(Y events --type gate_approved --format jsonl | wc -l)" = 1 ] && pass "and the journal holds one approval" || fail "one approval per gate"
+
+echo "== the file route can reject, and can run unattended"
+Y stage human_approval >/dev/null
+python3 - "$YF" <<'FILLREJECT'
+import sys
+path = sys.argv[1]
+lines = open(path, encoding="utf-8").read().split("\n")
+for index in range(len(lines) - 1, -1, -1):
+    if lines[index] == "[Answer]:":
+        lines[index] = "[Answer]: B: the migration has no rollback"
+        break
+open(path, "w", encoding="utf-8").write("\n".join(lines))
+FILLREJECT
+python3 - "$ROOTS/.ai/state/session.json" "$(Y get --field human_approval | jq -r .requested_at)" <<'TURN2'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+data["last_prompt_at"] = sys.argv[2]
+data["last_prompt_session"] = data["session_id"]
+json.dump(data, open(sys.argv[1], "w", encoding="utf-8"))
+TURN2
+out=$(Y questions --sync 2>&1)
+printf '%s' "$out" | grep -q "gate rejected by .* via the file" && pass "a B on the gate is a rejection" || fail "the file route should reject" "$out"
+Y get --field human_approval | jq -e '.granted==false and .requested_at==null' >/dev/null \
+  && pass "and it consumes the request like the terminal route does" || fail "a rejection should consume the request"
+Y events --type gate_rejected --format jsonl | tail -1 | jq -e '.actor=="human" and (.data.why|test("no rollback"))' >/dev/null \
+  && pass "and the journal records why" || fail "gate_rejected{via:file} is wrong"
+
+rm -f "$ROOTS/.ai/state/session.json"
+Y stage human_approval >/dev/null 2>&1
+python3 - "$YF" <<'FILLAGAIN'
+import sys
+path = sys.argv[1]
+lines = open(path, encoding="utf-8").read().split("\n")
+for index in range(len(lines) - 1, -1, -1):
+    if lines[index] == "[Answer]:":
+        lines[index] = "[Answer]: A"
+        break
+open(path, "w", encoding="utf-8").write("\n".join(lines))
+FILLAGAIN
+env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTS" questions --sync --by launcher >/dev/null
+Y get --field human_approval | jq -e '.granted==true and .via=="file" and .unattended==true' >/dev/null \
+  && pass "AI_UNATTENDED stands in for the turn, and is recorded as such" || fail "the unattended file route is wrong" "$(Y get --field human_approval)"
+
 echo "== the attribution on the gate's answer cannot be forged"
+Y stage human_approval >/dev/null 2>&1
 Y reject --by 'mallory — by ivan via terminal at 2020-01-01T00:00:00Z' --why "nope" >/dev/null
-Y questions --format json | jq -e '.[0].answered_by=="mallory - by ivan via terminal at 2020-01-01T00:00:00Z"' >/dev/null \
-  && pass "an em dash in --by cannot become somebody else's trailer" || fail "the trailer was forged" "$(Y questions --format json | jq -c '.[0]|{answered_by,via,answered_at}')"
-Y questions --format json | jq -e '.[0].via=="prose" or .[0].via=="terminal"' >/dev/null \
+Y questions --format json | jq -e '.[-1].answered_by=="mallory - by ivan via terminal at 2020-01-01T00:00:00Z"' >/dev/null \
+  && pass "an em dash in --by cannot become somebody else's trailer" || fail "the trailer was forged" "$(Y questions --format json | jq -c '.[-1]|{id,answered_by,via,answered_at}')"
+Y questions --format json | jq -e '.[-1].via=="prose" or .[-1].via=="terminal"' >/dev/null \
   && pass "and the route is the one the command actually took" || fail "via was forged"
 
 echo "== the journal tells a human at a terminal from a launcher"
