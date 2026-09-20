@@ -764,7 +764,9 @@ def cmd_events(args, root):
         die("no task in flight and no journal under .ai/reports/")
     if args.type:
         for wanted in _split_files(args.type):
-            if wanted not in EVENT_TYPES:
+            # "legacy" is not emitted by anything: it is what migration 0002
+            # calls a history entry whose event name this vocabulary never had.
+            if wanted not in EVENT_TYPES and wanted != "legacy":
                 die("unknown event type '%s' (have: %s)" % (wanted, ", ".join(EVENT_TYPES)))
     events, skipped = read_journal(root, task_id)
     if args.type:
