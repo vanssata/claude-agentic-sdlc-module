@@ -38,18 +38,19 @@ tree at `ff558e8`.
 
 | # | Requirement (testable) | Intent outcome |
 |---|---|---|
-| R1 | `detect_version(root)` returns `None` when `.ai/` is absent, `0` when `.ai/` exists without `.ai/VERSION`, else the integer in the file. A docs/sdlc-only project behaves as today and runs no migrations. | Existing projects: "a project carries a schema version"; decision 7 |
+| R1 | `detect_version(plan)` returns `None` when `.ai/` is absent, `0` when `.ai/` exists without `.ai/VERSION`, else the integer in the file. A docs/sdlc-only project behaves as today and runs no migrations. | Existing projects: "a project carries a schema version"; decision 7 |
 | R2 | Migrations are discovered from `skills/project-update/migrations/NNNN_slug.py`, numbered contiguously from `0001`, with `module.VERSION == NNNN`. A gap, duplicate or mismatch fails a test and makes `update.py` exit 2. | "ordered" migrations |
 | R3 | The dry run lists every migration operation as a plan line and writes nothing; the existing checksum assertion stays green. | "all inside the existing dry run" |
 | R4 | Plan and apply order: migration operations → `.ai/VERSION` → three-way merge → managed block → `.gitignore`. | "before the three-way merge" |
 | R5 | A second `--apply` prints `0 automatic` and changes no file. A run interrupted after any operation completes cleanly on the next run. | "idempotent"; constraint "keeps its guarantees" |
+| R5a | `.ai/VERSION` is written only when the run's migrations are finished: a migration that produced a conflict, or a `delete?` nobody confirmed, holds the version at its old value, and `--check` says so and exits 1. | added during implementation; see "The version is held" |
 | R6 | A file edited at an old path and moved by a migration is merged at the new path with the edit kept, because the history lookup for the new key includes the old key's blobs. | "template history follows renames" |
-| R7 | `move` keeps a copy of the source under `.ai/reports/project-update-<YYYY-MM-DD>/original/<path>`. `delete` is only listed (`delete?`) unless `--apply --confirm-delete NAME` is given; who and when are then recorded in `migration.json`. | "nothing deleted without approval"; base for adopt's gated cleanup |
+| R7 | `move` keeps a copy of the source under `.ai/reports/project-update-<YYYY-MM-DD>/original/<path>`. `delete` is only listed (`delete?`) unless `--apply --confirm-delete NAME` is given; who and when are then recorded in `migration.json`, written before the file goes. A pending proposal holds the schema version (R5a): the human can confirm it or remove the file, but cannot decline it. | "nothing deleted without approval"; base for adopt's gated cleanup |
 | R8 | A `.ai/VERSION` newer than the plugin's `CURRENT`, or unreadable, exits 2 having written nothing; `--check` says why. | keeps `project-update`'s guarantees |
 | R9 | A migration's change to `.ai/policies/*.json` produces `policy` lines (via `leaf_changes`) and counts in "policy change(s) to confirm"; the VERSION write does not. | policy files stay human-confirmed |
 | R10 | With a task in flight, migrations see the parsed `current.json` and may change it only through `ctx.patch_state(fn)`, which writes atomically and records `schema_migrated`. A v0 fixture with an in-flight task updates and `state.py get` still parses. | "a task in flight survives a schema migration with defaults" |
 | R11 | `templates/.ai/VERSION` equals `CURRENT`; a freshly scaffolded project reports `0 automatic`. | fresh and old projects converge |
-| R12 | Every key in `history/index.json` is a current template, the source of some migration's `MOVES`, or listed in `RETIRED`; otherwise the test fails. | closes the silent-orphan gap |
+| R12 | Every key in `history/index.json` is a current template, the source of some migration's `MOVES`, or listed in `RETIRED`; and no current template sits at a path a migration moved away. Otherwise the test fails. | closes the silent-orphan gap |
 | R13 | `--check` exits 1 for a pending migration and names it (`schema 0 -> 1`); `/ai-status` needs no change. | existing projects can see they are behind |
 | R14 | Claude-only, Codex-only and dual-runtime fixtures receive `.ai/VERSION` identically; migrations contain no runtime branch. | both runtimes at parity |
 | R15 | `tests/fixtures/project-update/schema-v<N>/` is an overlay on the "oldest templates" build; `schema-v0` ships with WP1. | "every migration gets a fixture" |
@@ -60,14 +61,14 @@ tree at `ff558e8`.
 
 | Component | Responsibility | Interface |
 |---|---|---|
-| `migrations/__init__.py` (registry) | Discover, validate, order modules; derive the rename map | `load()`, `CURRENT`, `renames()`, `template_key(target)`, `RETIRED` |
+| `migrations/__init__.py` (registry) | Discover, validate, order modules; derive the rename map | `load()`, `CURRENT`, `renames(mapped)`, `template_key(target, mapped)`, `path_error(path)`, `RETIRED` |
 | `migrations/0001_schema_version.py` | Proving migration: no operations; the framework's VERSION write is its whole effect | `VERSION=1`, `TITLE`, `MOVES=[]`, `plan(ctx)` |
-| `update.py: detect_version` | R1, R8 | `detect_version(root) -> None \| int`, raises `SchemaError` |
+| `update.py: detect_version` | R1, R8 | `detect_version(plan) -> None \| int`, raises `SchemaError` |
 | `update.py: MigrationContext` | Overlay-aware reads and operation recording for one migration | see Interfaces |
-| `update.py: run_migrations` | Run `v < m.VERSION <= CURRENT`, append the VERSION item, tag every item with its migration | `run_migrations(plan, root, state)` |
+| `update.py: run_migrations` | Run `v < m.VERSION <= CURRENT`; `build_plan` appends the VERSION item and `MigrationContext` tags each item | `run_migrations(plan, version)` |
 | `update.py: Plan` (extended) | The virtual tree: content overlay plus removals; every reader goes through it | `exists`, `read`, `remove`, `final`, `removed`, `report_dir` |
-| `update.py: History` (extended) | Version lookup that follows the rename chain | `History(root, renames)`, `versions(key)` |
-| `update.py: apply` (extended) | Preconditions, originals, delete gate, abort | `apply(plan, confirm_delete=None)`, exit 3 on abort |
+| `update.py: History` (extended) | Version lookup that follows the rename chain | `History(root, renames)`, `chain(key)`, `versions(key)` |
+| `update.py: apply` (extended) | Preconditions, originals, delete gate, abort | `apply(plan)` (`confirm_delete` is carried on the `Plan`), exit 3 on abort |
 | `templates/.ai/VERSION` | Fresh scaffolds start current | `1\n` |
 
 A migration module is shaped like a Doctrine migration — numbered, it records operations
@@ -77,7 +78,7 @@ are the way back.
 ### Data flow
 
 ```
-main ─► detect_version(root) ─► None → today's branch (docs/sdlc only, or exit 2)
+main ─► detect_version(plan) ─► None → today's branch (docs/sdlc only, or exit 2)
                                 int  → registry.load(); v > CURRENT → exit 2
 build_plan:
   1. state = parsed .ai/state/current.json or None (read only)
@@ -127,6 +128,23 @@ originals first, and on a violation prints
 and exits 3. There is no rollback: originals plus idempotent operations make a re-run the
 recovery.
 
+**The version is held (R5a).** The VERSION write is the last migration item, and it is not
+planned at all while a migration item is unsettled — a `conflict` (a move onto a file that is
+already there, or a JSON the migration could not parse) or a `delete?` without
+`--confirm-delete`. Writing it would advance the schema over work that did not happen: the
+next run would see a current project and plan nothing, so the move, or the deletion, would be
+lost silently. Held means `--check` exits 1 and names the reason, the dry run prints a hint,
+and `migration.json` records the version actually reached, not the one intended. The cost is
+that a human who does not want a proposed deletion has no way to say so: they confirm it, or
+they delete the file themselves. A `--decline-delete` that records the refusal is left to WP2,
+with the rest of the approval question (intent OQ2).
+
+**Writes.** Every write is atomic and keeps the target's mode: a temp file from `mkstemp` in
+the target's own directory, `chmod`, `os.replace`. A symlinked target is refused (exit 3)
+rather than followed, so a planted link cannot redirect a write; a symlinked *directory* on
+the way to the target is still followed, as it always has been. `apply` turns any `OSError`
+into the same abort, so a failed write is exit 3 and never a traceback.
+
 ### Alternatives rejected
 
 - **A rename table in `history/index.json` or `history/renames.json`, written by
@@ -169,15 +187,25 @@ def plan(ctx: "MigrationContext") -> None: ...
   `edit_text(path, fn: bytes -> bytes)`, `edit_json(path, fn: obj -> obj)`,
   `patch_state(fn: dict -> dict)`, `delete(path, reason: str)`.
 
-Registry: `load() -> list[module]` (raises `SchemaError` on gap, duplicate or mismatch),
-`CURRENT: int` (0 when empty), `renames() -> dict[str, list[str]]`, `RETIRED: list[str]`,
-directory `os.environ.get("CLAUDE_AGENTIC_MIGRATIONS", <skill>/migrations)` so tests can
+Registry: `load() -> list[module]` (raises `SchemaError` on gap, duplicate, mismatch, an
+unusable `MOVES` path, a path moved twice or a destination reused), `CURRENT: int` (0 when
+empty), `renames(mapped=None) -> dict[str, list[str]]` (raises on a cycle between history
+keys), `template_key(target, mapped=None)`,
+`RETIRED: dict[str, str | None]` — an old history key to the key that replaces it, or `None`.
+A `project-init` key is the template's *file name*, so renaming that file changes the key
+without moving any project path and `MOVES` cannot express it; the successor in `RETIRED`
+joins the rename chain so an edited file still merges. The same holds for the block, minimal
+and `gitignore.snippet` templates, which have no project path at all.
+Directory
+`os.environ.get("CLAUDE_AGENTIC_MIGRATIONS", <skill>/migrations)` so tests can
 supply synthetic migrations.
 
 ### Plan items
 
-`action ∈ {create, update, merge, conflict, move, delete?}`; new fields
-`migration: int | None`, `src: str | None` (move), `reason: str | None` (delete).
+`action ∈ {create, update, merge, conflict, move, delete?, delete}`; `delete?` is a
+proposal and `delete` a confirmed one. New fields `migration: int | None`, `src: str | None`
+(move), `reason: str | None` (delete), `expect` / `src_expect` (the sha `apply` requires to
+still be there).
 `Plan.report_dir = ".ai/reports/project-update-<YYYY-MM-DD>"`, created only when an original
 is written.
 
@@ -191,13 +219,16 @@ Dry run (same `%-9s %-*s  %s` layout as today):
 
 ```
 project-update: /path (dry run, nothing written; --apply to write)
-  schema    0 -> 1  (1 migration: 0001 record the schema version in .ai/VERSION)
-  create    .ai/VERSION                schema 1 [0001]
-  move      .ai/old.md -> .ai/new.md   [0002] original kept under .ai/reports/project-update-2026-09-20/original/
+  schema    0 -> 1                     (1 migration: 0001 record the schema version in .ai/VERSION)
+  create    .ai/VERSION                [0001] schema 1
+  move      .ai/old.md -> .ai/new.md   [0002]
   delete?   .ai/foo.md                 [0003] <reason>; needs --apply --confirm-delete NAME
   ...existing lines...
 3 automatic, 0 conflict(s), 2 policy change(s) to confirm, 1 deletion(s) awaiting --confirm-delete
 ```
+
+The migration tag leads the note. A held schema adds a `hint` line naming what holds it, and
+`--check` says `the schema stays at N until they are settled`.
 
 Suffixes appear only when non-zero, so the existing summary assertions hold. `--check`:
 `project is behind the installed plugin: schema 0 -> 1, 3 file(s) to update — run /project-update`.
@@ -206,9 +237,15 @@ Suffixes appear only when non-zero, so the existing summary assertions hold. `--
 
 ```json
 {"from": 0, "to": 3, "applied_at": "<UTC>",
- "ops": [{"action": "move", "src": "...", "dst": "...", "migration": 2}],
+ "ops": [{"action": "move", "migration": 2, "src": "...", "dst": "..."}],
  "deletions": [{"path": "...", "confirmed_by": "NAME", "at": "<UTC>"}]}
 ```
+
+`to` is the version the project actually reached, read from disk — the record is written
+before each file is taken away, so an aborted run does not claim the migration finished.
+When it differs from the target, `target` names the version the run was heading for and
+`held_at` the version being held (R5a). A second run on the same day merges into this file
+rather than replacing it, and never records the same operation twice.
 
 ### `history/index.json`
 
@@ -299,6 +336,17 @@ refactor and lands green before any feature.
    paths; WP1 prints a hint when a task is in flight and a migration is pending.
 10. **Documentation is stale after WP1:** README `183-201`, `docs/faq.md:150-158` and the
     `.ai/AGENTS.md` template table (`25-33`) describe the update without a schema.
+
+## Settled during implementation
+
+| Concern | How it stands now |
+|---|---|
+| 3 (a second state writer) | Done: `templates/.ai/state/README.md` and `hooks/ai-path-guard.sh`'s message both name `update.py`'s `patch_state` |
+| 7 (fixture construction) | The test's oldest-templates build skips `ai-init/.ai/VERSION`, and `tests/fixtures/project-update/schema-v0/` overlays what a v0 project carries |
+| 9 (a move under `allowed_files`) | The dry run hints when a task is in flight; a migration that moves such a path must `patch_state` (rule in `SKILL.md`) |
+| 10 (stale documentation) | Done: `SKILL.md`, `README.md`, `docs/faq.md`, the `.ai/AGENTS.md` table row |
+| new: `/ai-init` rerun | `scaffold-ai.sh` withholds `.ai/VERSION` from a tree that already has `.ai/`, so re-running `/ai-init` cannot mark an unmigrated project current |
+| new: `project-init` key renames | `RETIRED` maps an old key to its successor (see Interfaces) |
 
 ## Open questions
 

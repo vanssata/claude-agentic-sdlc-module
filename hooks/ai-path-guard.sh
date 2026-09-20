@@ -11,7 +11,8 @@
 # Two jobs:
 #   1. Keep production secrets and data dumps out of the model context.
 #   2. Stop the agent from editing the guards' own configuration or the task
-#      state file (those are written by state.py or by a human, never by an edit).
+#      state file (those are written by state.py, by a schema migration in
+#      update.py, or by a human — never by an agent's edit).
 #
 # This is defence-in-depth against ordinary agent behaviour, NOT a security
 # boundary: a determined process can still read a file through an interpreter.
@@ -79,7 +80,7 @@ LOOSE_PATTERNS=$(chomp_all "$LOOSE_PATTERNS")
 # path the precise per-argument pass would have caught.
 
 WHY_SENSITIVE=$'\n\nProduction secrets and data dumps must not enter the model context.\nIf this path is genuinely safe (a .dist/.example file, a fixture), add a regex to\n"allow_patterns" in .ai/policies/path-guard.json. See .ai/policies/security.md.'
-WHY_PROTECTED=$'\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py; policy files are edited by a human outside an agent run,\nso a change to them is reviewable. See .ai/policies/safety.md.'
+WHY_PROTECTED=$'\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md.'
 
 # classify <abs-path> -> prints "sensitive:<pattern>", "protected:<pattern>" or
 # nothing. One joined match decides whether the path is interesting at all; only

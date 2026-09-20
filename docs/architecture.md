@@ -130,7 +130,9 @@ you ask for it explicitly.
 
 ## The state file
 
-`.ai/state/current.json` is written only by `skills/ai-task/state.py`, atomically.
+`.ai/state/current.json` is written by `skills/ai-task/state.py`, atomically —
+and, during a schema migration, by `skills/project-update/update.py` the same
+way.
 It holds facts, never transcripts:
 
 ```

@@ -93,6 +93,7 @@ for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Ex
          skills/sdlc-intent/SKILL.md skills/sdlc-spec/SKILL.md skills/sdlc-plan/SKILL.md \
          skills/ai-init/templates/.ai/AGENTS.md skills/project-init/templates/intent.md \
          skills/project-update/SKILL.md skills/project-update/update.py skills/project-update/history/index.json \
+         skills/project-update/migrations/__init__.py skills/project-update/migrations/0001_schema_version.py \
          skills/usage-report/SKILL.md skills/usage-report/usage-report.py hooks/fable-gate.py \
          hooks/context-guard.py; do
     [ -e "$DIR/$f" ] && pass "$f installed" || fail "$f missing"

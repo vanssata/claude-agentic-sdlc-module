@@ -107,7 +107,15 @@ done
    ```
 
    When it exits 1, the project's rules are older than the installed plugin:
-   say so and point at `/project-update`.
+   say so and point at `/project-update`. The line names a schema step
+   (`schema 0 -> 1`) when the project's `.ai/` tree predates the installed
+   layout, and says the schema is held when a migration is waiting on a human.
+
+   Exit 2 is not "behind": the script refused to run and the line says why —
+   usually an `.ai/VERSION` newer than the installed plugin (the project was
+   updated by a newer plugin than this one) or an unreadable one. Show that line
+   and say that `/project-update` cannot run until it is resolved; a newer
+   version means this machine's plugin needs updating, not the project.
 
 7. **Guards.** Say in one line each whether the three hooks are active here:
    `ai-git-guard` always is; `ai-path-guard` and `ai-scope-guard` are active
