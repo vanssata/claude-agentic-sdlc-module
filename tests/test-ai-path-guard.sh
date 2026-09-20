@@ -63,6 +63,25 @@ printf 'not json\n' > "$ROOT/.ai/state/current.json"
 decide "a state file that does not parse counts as in flight" deny "$edit_agent"
 printf '{}\n' > "$ROOT/.ai/state/current.json"
 
+echo "== ai-path-guard (approval cannot be granted from an agent shell)"
+# Not a fixture: the shared root always has a state file, and the point of this
+# rule is that it is armed by the task rather than standing permanently.
+approve_cmd=$(jq -nc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
+    tool_input:{command:"python3 /home/u/.claude/skills/ai-task/state.py --root . approve --by ivan"}}')
+rm -f "$ROOT/.ai/state/current.json"
+decide "no task in flight: state.py approve is none of the guard's business" allow "$approve_cmd"
+printf '{"current_stage":"human_approval","task_id":"T-1"}\n' > "$ROOT/.ai/state/current.json"
+decide "with a task in flight the same call is denied" deny "$approve_cmd"
+out=$(printf '%s' "$approve_cmd" | AI_UNATTENDED=1 "$GUARD" 2>&1)
+[ -z "$out" ] && pass "AI_UNATTENDED in the hook's own environment lets a launcher through" \
+    || fail "the unattended launcher should be allowed" "$out"
+out=$(printf '%s' "$approve_cmd" | "$GUARD" 2>&1)
+printf '%s' "$out" | grep -q "Approval happens outside the agent" \
+    && pass "and the deny text teaches the human what to do" || fail "WHY_APPROVE is missing" "$out"
+printf '%s' "$out" | grep -q "AI_UNATTENDED=1 in the launcher" \
+    && pass "including the unattended route and what it costs" || fail "the unattended route should be named"
+printf '{}\n' > "$ROOT/.ai/state/current.json"
+
 echo "== ai-path-guard (project WITHOUT .ai/ — every guard must be inert)"
 BARE="$TMP/bare"; mkdir -p "$BARE"; printf 'SECRET=1\n' > "$BARE/.env"
 out=$(jq -nc --arg r "$BARE" '{hook_event_name:"PreToolUse",tool_name:"Read",cwd:$r,tool_input:{file_path:($r+"/.env")}}' | "$GUARD")

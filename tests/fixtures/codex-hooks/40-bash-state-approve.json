@@ -1,0 +1,14 @@
+{
+  "case": "codex shell: state.py approve is denied there too, once hooks are trusted",
+  "guard": "path",
+  "expect": "deny",
+  "payload": {
+    "session_id": "thr_1",
+    "turn_id": "turn_1",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_use_id": "call_40",
+    "cwd": "__ROOT__",
+    "tool_input": {"command": "python3 $HOME/.codex/skills/ai-task/state.py --root . approve --by ivan"}
+  }
+}

@@ -1,0 +1,1 @@
+{"case":"writing the handoff is denied: state.py renders it","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/.ai/state/handoff.md"}}}

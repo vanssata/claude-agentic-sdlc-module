@@ -1,0 +1,1 @@
+{"case":"cat of the event journal is denied: state.py events reads it","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"cat __ROOT__/.ai/reports/T-1/events.jsonl"}}}

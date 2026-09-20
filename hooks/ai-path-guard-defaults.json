@@ -25,6 +25,9 @@
   ],
   "protected_config_patterns": [
     "(^|/)\\.ai/state/[^/]*\\.json$",
+    "(^|/)\\.ai/state/handoff\\.md$",
+    "(^|/)\\.ai/reports/[^/]+/questions\\.md$",
+    "(^|/)\\.ai/reports/[^/]+/events\\.jsonl$",
     "(^|/)\\.ai/policies/[^/]*\\.json$",
     "(^|/)\\.claude/hooks/ai-[^/]*$",
     "/\\.claude/hooks/ai-[^/]*$",

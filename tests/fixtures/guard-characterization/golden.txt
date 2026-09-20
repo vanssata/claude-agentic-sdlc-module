@@ -295,6 +295,68 @@ rc=0
 rc=0
 ### ai-scope-guard | fixture path-guard/23-read-node-modules-source.json
 rc=0
+### ai-git-guard | fixture path-guard/24-edit-questions-md.json
+rc=0
+### ai-path-guard | fixture path-guard/24-edit-questions-md.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/reports/T-1/questions.md (matched: (^|/)\\.ai/reports/[^/]+/questions\\.md$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/24-edit-questions-md.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/reports/T-1/questions.md is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
+### ai-git-guard | fixture path-guard/25-read-questions-md.json
+rc=0
+### ai-path-guard | fixture path-guard/25-read-questions-md.json
+rc=0
+### ai-scope-guard | fixture path-guard/25-read-questions-md.json
+rc=0
+### ai-git-guard | fixture path-guard/26-redirect-into-questions.json
+rc=0
+### ai-path-guard | fixture path-guard/26-redirect-into-questions.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a claude-agentic control file: __TMP__/project/.ai/reports/T-1/questions.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/26-redirect-into-questions.json
+rc=0
+### ai-git-guard | fixture path-guard/27-cat-events-jsonl.json
+rc=0
+### ai-path-guard | fixture path-guard/27-cat-events-jsonl.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that reads a claude-agentic control file: __TMP__/project/.ai/reports/T-1/events.jsonl (matched: (^|/)\\.ai/reports/[^/]+/events\\.jsonl$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/27-cat-events-jsonl.json
+rc=0
+### ai-git-guard | fixture path-guard/28-write-handoff-md.json
+rc=0
+### ai-path-guard | fixture path-guard/28-write-handoff-md.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/state/handoff.md (matched: (^|/)\\.ai/state/handoff\\.md$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/28-write-handoff-md.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/state/handoff.md is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
+### ai-git-guard | fixture path-guard/29-bash-state-approve.json
+rc=0
+### ai-path-guard | fixture path-guard/29-bash-state-approve.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing 'state.py approve' from an agent session.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/29-bash-state-approve.json
+rc=0
+### ai-git-guard | fixture path-guard/30-bash-state-approve-var.json
+rc=0
+### ai-path-guard | fixture path-guard/30-bash-state-approve-var.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing 'state.py approve' from an agent session.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/30-bash-state-approve-var.json
+rc=0
+### ai-git-guard | fixture path-guard/31-bash-state-get-approved-plan.json
+rc=0
+### ai-path-guard | fixture path-guard/31-bash-state-get-approved-plan.json
+rc=0
+### ai-scope-guard | fixture path-guard/31-bash-state-get-approved-plan.json
+rc=0
+### ai-git-guard | fixture path-guard/32-bash-state-note-approve-word.json
+rc=0
+### ai-path-guard | fixture path-guard/32-bash-state-note-approve-word.json
+rc=0
+### ai-scope-guard | fixture path-guard/32-bash-state-note-approve-word.json
+rc=0
 ### ai-git-guard | fixture scope-guard/01-in-scope.json
 rc=0
 ### ai-path-guard | fixture scope-guard/01-in-scope.json
@@ -469,6 +531,13 @@ rc=0
 ### ai-path-guard | fixture codex-hooks/34-subagent-stop-balanced-rate-limit.json
 rc=0
 ### ai-scope-guard | fixture codex-hooks/34-subagent-stop-balanced-rate-limit.json
+rc=0
+### ai-git-guard | fixture codex-hooks/40-bash-state-approve.json
+rc=0
+### ai-path-guard | fixture codex-hooks/40-bash-state-approve.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing 'state.py approve' from an agent session.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture codex-hooks/40-bash-state-approve.json
 rc=0
 ### ai-git-guard | main bash: git status
 rc=0

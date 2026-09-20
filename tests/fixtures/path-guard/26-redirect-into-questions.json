@@ -1,0 +1,1 @@
+{"case":"redirecting into the questions file from the shell is denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"printf '[Answer]: A' > __ROOT__/.ai/reports/T-1/questions.md"}}}

@@ -1,0 +1,1 @@
+{"case":"reading the approved_plan field is allowed: approve has a word boundary","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"python3 /home/u/.claude/skills/ai-task/state.py --root . get --field approved_plan"}}}
