@@ -771,7 +771,12 @@ ROOTS="$TMP/gate-sync"; mkdir -p "$ROOTS/.ai/state" "$ROOTS/.ai/reports"
 Y() { env -u CLAUDECODE -u AI_RUNTIME -u AI_UNATTENDED python3 "$STATE" --root "$ROOTS" "$@"; }
 TY=$(Y init --goal "file route" --workflow feature)
 YF="$ROOTS/.ai/reports/$TY/questions.md"
+YS="$ROOTS/.ai/state/session.json"
+printf '{"runtime":"claude","session_id":"s1","started_at":"2026-09-20T00:00:00Z"}' > "$YS"
 Y stage human_approval >/dev/null
+Y get --field human_approval | jq -e '.requested_session=="s1"' >/dev/null \
+  && pass "the request records the session the plan was presented in" || fail "requested_session should be recorded" "$(Y get --field human_approval)"
+mv "$YS" "$TMP/session-away.json"
 python3 - "$YF" <<'FILLGATE'
 import sys
 path = sys.argv[1]
@@ -791,13 +796,13 @@ out=$(Y stage implementation 2>&1); rc=$?
 
 REQUESTED=$(Y get --field human_approval | jq -r .requested_at)
 printf '{"runtime":"claude","session_id":"s1","last_prompt_session":"s1","last_prompt_at":"2020-01-01T00:00:00Z","last_prompt":"older"}' \
-  > "$ROOTS/.ai/state/session.json"
+  > "$YS"
 out=$(Y questions --sync 2>&1); rc=$?
 [ "$rc" = 5 ] && printf '%s' "$out" | grep -q "is older than the approval request ($REQUESTED)" \
   && pass "a prompt older than the request is not a turn taken on the plan" || fail "the turn must follow the request" "exit $rc: $out"
 [ "$(Y get --field human_approval | jq -r .granted)" = false ] && pass "and still nothing is granted" || fail "an old turn must not grant"
 
-python3 - "$ROOTS/.ai/state/session.json" "$REQUESTED" <<'TURN'
+python3 - "$YS" "$REQUESTED" <<'TURN'
 import json, sys
 path, requested = sys.argv[1], sys.argv[2]
 data = json.load(open(path, encoding="utf-8"))
@@ -806,19 +811,22 @@ data["last_prompt"] = "yes, approve it"
 data["last_prompt_session"] = data["session_id"]
 json.dump(data, open(path, "w", encoding="utf-8"))
 TURN
-python3 - "$ROOTS/.ai/state/session.json" <<'OTHERWINDOW'
+python3 - "$YS" "$REQUESTED" <<'OTHERWINDOW'
 import json, sys
 data = json.load(open(sys.argv[1], encoding="utf-8"))
-data["last_prompt_session"] = "another-window"
+# What a real second window leaves behind: it rewrote both of session.json's own
+# id fields, so only the session recorded in the request tells them apart.
+data.update({"session_id": "window-2", "last_prompt_session": "window-2",
+             "last_prompt_at": sys.argv[2], "last_prompt": "whats the weather"})
 json.dump(data, open(sys.argv[1], "w", encoding="utf-8"))
 OTHERWINDOW
 out=$(Y questions --sync 2>&1); rc=$?
-[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "came from another session (another-window, not s1)" \
+[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "came from another session (window-2, not s1, which is where the gate was requested)" \
   && pass "a turn taken in another window is not this session's turn" || fail "the turn must be this session's" "exit $rc: $out"
-python3 - "$ROOTS/.ai/state/session.json" <<'SAMEWINDOW'
+python3 - "$YS" <<'SAMEWINDOW'
 import json, sys
 data = json.load(open(sys.argv[1], encoding="utf-8"))
-data["last_prompt_session"] = data["session_id"]
+data.update({"session_id": "s1", "last_prompt_session": "s1"})
 json.dump(data, open(sys.argv[1], "w", encoding="utf-8"))
 SAMEWINDOW
 out=$(Y questions --sync 2>&1)
@@ -845,7 +853,7 @@ for index in range(len(lines) - 1, -1, -1):
         break
 open(path, "w", encoding="utf-8").write("\n".join(lines))
 FILLREJECT
-python3 - "$ROOTS/.ai/state/session.json" "$(Y get --field human_approval | jq -r .requested_at)" <<'TURN2'
+python3 - "$YS" "$(Y get --field human_approval | jq -r .requested_at)" <<'TURN2'
 import json, sys
 data = json.load(open(sys.argv[1], encoding="utf-8"))
 data["last_prompt_at"] = sys.argv[2]
@@ -859,7 +867,7 @@ Y get --field human_approval | jq -e '.granted==false and .requested_at==null' >
 Y events --type gate_rejected --format jsonl | tail -1 | jq -e '.actor=="human" and (.data.why|test("no rollback"))' >/dev/null \
   && pass "and the journal records why" || fail "gate_rejected{via:file} is wrong"
 
-rm -f "$ROOTS/.ai/state/session.json"
+rm -f "$YS"
 Y stage human_approval >/dev/null 2>&1
 python3 - "$YF" <<'FILLAGAIN'
 import sys
@@ -959,5 +967,128 @@ grep -q '^Pending questions: none$' "$ROOTP/.ai/state/handoff.md" && pass "and a
 W set next_action "$(python3 -c 'print("x" * 3000)')" >/dev/null
 [ "$(awk 'NR==3' "$ROOTP/.ai/state/handoff.md" | wc -c)" -le 300 ] && pass "a very long next_action is capped" \
   || fail "Next: should be capped" "$(awk 'NR==3' "$ROOTP/.ai/state/handoff.md" | wc -c) chars"
+
+echo "== the file route: what it refuses, and what it leaves behind"
+ROOTV="$TMP/gate-file-2"; mkdir -p "$ROOTV/.ai/state" "$ROOTV/.ai/reports"
+V() { env -u CLAUDECODE -u AI_RUNTIME -u AI_UNATTENDED python3 "$STATE" --root "$ROOTV" "$@"; }
+TV=$(V init --goal "route details" --workflow feature)
+VF="$ROOTV/.ai/reports/$TV/questions.md"; VS="$ROOTV/.ai/state/session.json"
+printf '{"runtime":"claude","session_id":"s1"}' > "$VS"
+V ask "Which rule?" --option "A: one" --option "B: two" >/dev/null
+V answer Q1=A >/dev/null
+V stage human_approval >/dev/null
+fill() {        # fill <question-id> <answer text> — the block, by its id
+  python3 - "$VF" "$1" "$2" <<'FILL'
+import sys
+path, qid, answer = sys.argv[1], sys.argv[2], sys.argv[3]
+lines = open(path, encoding="utf-8").read().split("\n")
+start = next(i for i, l in enumerate(lines) if l.startswith("## %s." % qid))
+end = next(i for i in range(start, len(lines)) if lines[i].startswith("[Answer]:"))
+lines[end] = ("[Answer]: " + answer).rstrip()
+open(path, "w", encoding="utf-8").write("\n".join(lines))
+FILL
+}
+turn() {        # turn <session> <at>
+  python3 - "$VS" "$1" "$2" <<'TURNW'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+data.update({"session_id": sys.argv[2], "last_prompt_session": sys.argv[2],
+             "last_prompt_at": sys.argv[3], "last_prompt": "go ahead"})
+json.dump(data, open(sys.argv[1], "w", encoding="utf-8"))
+TURNW
+}
+turn s1 "$(V get --field human_approval | jq -r .requested_at)"
+
+fill G1 "yes, go ahead — but check the rollback"
+err=$(V questions --sync 2>&1 >/dev/null)
+printf '%s' "$err" | grep -q "is the approval gate: answer it A or B" \
+  && pass "free text on the gate is not read as a rejection" || fail "a gate takes A or B" "$err"
+[ "$(V get --field human_approval | jq -r .requested_at)" != null ] \
+  && pass "and the gate stays open" || fail "free text must not consume the gate"
+
+echo "== a sync that is refused still records the work it already did"
+V ask "Second?" --option "A: one" --option "B: two" >/dev/null
+fill G1 "A"
+fill Q2 "B"
+turn "another" "$(V get --field human_approval | jq -r .requested_at)"
+out=$(V questions --sync 2>&1); rc=$?
+[ "$rc" = 5 ] && pass "the gate is refused" || fail "should refuse" "exit $rc: $out"
+V get --field questions.pending | jq -e 'index("Q2")==null' >/dev/null \
+  && pass "but the ordinary answer it wrote is recorded in the state too" || fail "the Q work must be persisted before the gate is judged" "$(V get --field questions.pending)"
+h=$(V get --field history | jq 'length'); e=$(V events --last 0 --format jsonl | jq -s '[.[] | select(.event=="note" or .event=="handoff_written" | not)] | length')
+[ "$h" = "$e" ] && pass "and the journal and history stay one to one ($h)" || fail "a refusal must not split the two records" "history $h, journal $e"
+
+echo "== an unattended file approval is not recorded as a human's"
+turn s1 "$(V get --field human_approval | jq -r .requested_at)"
+env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTV" questions --sync --by launcher >/dev/null
+V events --type gate_approved --format jsonl | tail -1 | jq -e '.actor=="agent" and .data.unattended==true' >/dev/null \
+  && pass "AI_UNATTENDED grants, as the agent it is" || fail "actor must follow the evidence" "$(V events --type gate_approved --format jsonl | tail -1)"
+V events --type gate_approved --format jsonl | tail -1 | jq -e '.data.evidence.session != null or .data.evidence.unattended==true' >/dev/null \
+  && pass "and the evidence it rested on is in the record" || fail "the evidence should be journalled"
+
+echo "== the file route takes ownership of the task like any other change"
+ROOTW="$TMP/gate-file-runtime"; mkdir -p "$ROOTW/.ai/state" "$ROOTW/.ai/reports"
+W2() { env -u CLAUDECODE -u AI_RUNTIME -u AI_UNATTENDED python3 "$STATE" --root "$ROOTW" "$@"; }
+TW=$(W2 --runtime claude init --goal "owned" --workflow feature)
+printf '{"runtime":"claude","session_id":"s1"}' > "$ROOTW/.ai/state/session.json"
+W2 --runtime claude stage human_approval >/dev/null
+python3 - "$ROOTW/.ai/reports/$TW/questions.md" <<'FILLW'
+import sys
+path = sys.argv[1]
+lines = open(path, encoding="utf-8").read().split("\n")
+lines[[i for i, l in enumerate(lines) if l == "[Answer]:"][-1]] = "[Answer]: A"
+open(path, "w", encoding="utf-8").write("\n".join(lines))
+FILLW
+python3 - "$ROOTW/.ai/state/session.json" "$(W2 get --field human_approval | jq -r .requested_at)" <<'TURNW2'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+data.update({"last_prompt_session": "s1", "last_prompt_at": sys.argv[2]})
+json.dump(data, open(sys.argv[1], "w", encoding="utf-8"))
+TURNW2
+W2 --runtime codex questions --sync --by ivan >/dev/null
+[ "$(W2 get --field owner_runtime)" = codex ] && pass "granting from another runtime hands the task over" || fail "the gate branch should claim the runtime"
+W2 events --type runtime_handoff --format jsonl | jq -e '.data.to=="codex"' >/dev/null \
+  && pass "and says so in the journal" || fail "runtime_handoff missing"
+
+echo "== a human rejecting in their terminal beats a sync that is already under way"
+ROOTZ="$TMP/gate-race"; mkdir -p "$ROOTZ/.ai/state" "$ROOTZ/.ai/reports"
+Z() { env -u CLAUDECODE -u AI_RUNTIME -u AI_UNATTENDED python3 "$STATE" --root "$ROOTZ" "$@"; }
+TZ=$(Z init --goal "raced" --workflow feature)
+printf '{"runtime":"claude","session_id":"s1"}' > "$ROOTZ/.ai/state/session.json"
+Z stage human_approval >/dev/null
+python3 - "$STATE" "$ROOTZ" "$TZ" <<'RACE'
+import importlib.util, json, os, subprocess, sys
+spec = importlib.util.spec_from_file_location("raced_state", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+root, task = sys.argv[2], sys.argv[3]
+path = os.path.join(root, ".ai", "reports", task, "questions.md")
+session = os.path.join(root, ".ai", "state", "session.json")
+
+state = m.load(root, claim=False)
+data = json.load(open(session, encoding="utf-8"))
+data.update({"last_prompt_session": "s1", "last_prompt_at": state["human_approval"]["requested_at"]})
+json.dump(data, open(session, "w", encoding="utf-8"))
+lines = open(path, encoding="utf-8").read().split("\n")
+lines[[i for i, l in enumerate(lines) if l == "[Answer]:"][-1]] = "[Answer]: A"
+open(path, "w", encoding="utf-8").write("\n".join(lines))
+
+# The sync parses the file and decides there is a gate to close...
+class Args:                               # what cmd_questions would pass
+    by, sync, pending, topic, format = "the agent", True, False, None, "prose"
+lines, questions = m.parse_questions(path)
+touched = m.sync_answers(root, state, path, lines, questions, Args)
+gates = [q for q in touched if q["kind"] == "G"]
+assert gates, "the fixture should offer the gate to the sync"
+
+# ...and in those seconds the human rejects it in their own terminal.
+subprocess.run([sys.executable, sys.argv[1], "--root", root, "reject",
+                "--by", "ivan", "--why", "no rollback plan"], check=True,
+               stdout=subprocess.DEVNULL)
+
+print("granted:", m.close_gate_from_file(root, state, gates[0], "the agent"))
+RACE
+[ "$(Z get --field human_approval | jq -r .granted)" = false ] && pass "the rejection stands" || fail "a completed rejection must not be overwritten" "$(Z get --field human_approval)"
+[ "$(Z events --type gate_approved --format jsonl | wc -l)" = 0 ] && pass "and no approval is journalled" || fail "the journal should hold no approval"
+Z events --type gate_rejected --format jsonl | jq -e '.data.by=="ivan"' >/dev/null && pass "only the human's rejection is" || fail "the rejection should be recorded"
 
 summary "state.py"

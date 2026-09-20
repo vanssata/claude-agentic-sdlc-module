@@ -277,7 +277,7 @@ def apply_defaults(state):
     if not isinstance(state.get("human_approval"), dict):
         state["human_approval"] = {"required": True, "granted": False,
                                    "granted_by": None, "granted_at": None}
-    for key, default in (("requested_at", None), ("gate_id", None),
+    for key, default in (("requested_at", None), ("gate_id", None), ("requested_session", None),
                          ("via", None), ("unattended", False)):
         state["human_approval"].setdefault(key, default)
     return state
@@ -894,15 +894,27 @@ def is_pending(question):
     return question["choice"] is None
 
 
+LOCK_DEPTH = 0
+
+
 @contextlib.contextmanager
 def question_lock(path):
     """questions.md is read, modified and written back. Without a lock across
     that window two `ask` calls lose a block — and the journal would then name a
-    question the file does not hold, which nothing would ever block on."""
+    question the file does not hold, which nothing would ever block on.
+
+    Re-entrant within the process: flock is per open file description, so a
+    nested acquisition on a second fd would wait for the first for ever. That is
+    what lets the gate decide and apply inside one critical section."""
+    global LOCK_DEPTH                     # pylint: disable=global-statement
     directory = os.path.dirname(path)
     os.makedirs(directory, exist_ok=True)
-    if fcntl is None:
-        yield
+    if fcntl is None or LOCK_DEPTH:
+        LOCK_DEPTH += 1
+        try:
+            yield
+        finally:
+            LOCK_DEPTH -= 1
         return
     # The lock is taken on the directory itself, so the audit trail gains no
     # lock file and the lock survives the os.replace that swaps the inode.
@@ -911,10 +923,12 @@ def question_lock(path):
     except OSError:
         yield
         return
+    LOCK_DEPTH += 1
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
         yield
     finally:
+        LOCK_DEPTH -= 1
         os.close(fd)
 
 
@@ -1262,7 +1276,15 @@ def sync_answers(root, state, path, lines, questions, args):
             # on the open gate goes through the file route, and any other G block
             # is left exactly as it is rather than consumed.
             if (state is not None and question["id"] == open_gate(state)
-                    and question["choice"] and not question["answered_by"]):
+                    and question["choice"] and not question["answered_by"] and not gates):
+                if question["choice"] not in ("A", "B"):
+                    # A gate has two answers. Free text — the likeliest thing a
+                    # human writes into a question file — must not be read as a
+                    # rejection with their own approving sentence as the reason.
+                    print("state.py: %s is the approval gate: answer it A or B, not %r"
+                          % (question["id"], question["text"] or question["choice"]),
+                          file=sys.stderr)
+                    continue
                 gates.append(question)
             continue
         if question["choice"] is not None and not question["answered_by"]:
@@ -1295,20 +1317,24 @@ def cmd_questions(args, root):
         lines, questions = parse_questions(path)
         if args.sync:
             touched = sync_answers(root, state, path, lines, questions, args)
-    # Outside the lock: the gate's own route writes through close_gate, which
-    # takes it again — and flock is per open file description, so a second
-    # acquisition in this same process waits for the first for ever.
-    for question in [q for q in touched if q["kind"] == "G"]:
-        granted = close_gate_from_file(root, state, question, args.by)
-    if touched:
-        _, questions = parse_questions(path)
-    if state is not None and touched:
-        # Only a sync that changed something writes the state. questions.pending
-        # is a cache and guard_pending re-parses the file anyway, so a read —
-        # which /ai-status and the session-start hook both perform — must never
-        # write current.json: it would race a command that is mid-write.
-        set_pending(root, state, questions, path)
-        save(root, state)
+        if state is not None and touched:
+            # Persisted before the gate is evaluated, because a refusal there
+            # exits 5 and never returns: the answers this sync already wrote
+            # into the file must be in the state and the history too.
+            # Only a sync that changed something writes at all — questions.pending
+            # is a cache, and guard_pending re-parses the file anyway, so a read
+            # (which /ai-status and the session-start hook both perform) never
+            # races a command that is mid-write.
+            _, questions = parse_questions(path)
+            set_pending(root, state, questions, path)
+            save(root, state)
+        for question in [q for q in touched if q["kind"] == "G"]:
+            granted = close_gate_from_file(root, state, question, args.by)
+        if touched:
+            _, questions = parse_questions(path)
+            if state is not None:
+                set_pending(root, state, questions, path)
+                save(root, state)
     if granted is not None:
         print("gate %s by %s via the file" % ("approved" if granted else "rejected", args.by))
     shown = [q for q in questions if is_pending(q)] if args.pending else questions
@@ -1518,6 +1544,11 @@ def request_gate(root, state, gate):
     state["human_approval"].update({
         "required": True, "granted": False, "granted_by": None, "granted_at": None,
         "requested_at": now(), "gate_id": gate_id, "via": None, "unattended": False,
+        # The session the plan was presented in. The file route requires the
+        # human's turn to come from *this* session — comparing session.json's two
+        # own fields proves nothing, because whichever session ran last wrote
+        # both of them.
+        "requested_session": read_session(root).get("session_id"),
     })
     set_pending(root, state, questions, path)
     emit(root, state, "gate_requested", "%s: %s" % (gate_id, gate),
@@ -1577,49 +1608,72 @@ def human_turn(root, state):
     if not requested or turn < requested:
         return False, ("the last prompt in %s (%s) is older than the approval request (%s)"
                        % (relative, turn, requested))
-    if session.get("last_prompt_session") != session.get("session_id"):
-        # One file per project, last writer wins: a prompt from a second window
-        # is a turn somebody took, but not in the session that is being asked to
-        # approve. This is the weakest of the three routes and says so.
-        return False, ("the last prompt in %s came from another session (%s, not %s)"
-                       % (relative, session.get("last_prompt_session"),
-                          session.get("session_id")))
+    opened_in = (state.get("human_approval") or {}).get("requested_session")
+    if opened_in and session.get("last_prompt_session") != opened_in:
+        # One file per project, last writer wins, so session.json's own two
+        # fields always agree after any real second session. The turn has to
+        # come from the session the plan was presented in.
+        return False, ("the last prompt in %s came from another session (%s, not %s, "
+                       "which is where the gate was requested)"
+                       % (relative, session.get("last_prompt_session"), opened_in))
     return True, ""
 
 
 def close_gate_from_file(root, state, question, by):
     """R13: an [Answer]: filled into the gate's own question grants or rejects,
-    but only behind a human turn — or AI_UNATTENDED, which says there is nobody
-    to take one."""
+    but only behind a human turn in the session the plan was presented in — or
+    AI_UNATTENDED, which says there is nobody to take one.
+
+    The whole decision happens inside the questions lock and on a state re-read,
+    because the human may be typing `reject` in their terminal in exactly these
+    seconds: deciding before the lock and applying after it would overwrite them.
+    """
     gate_id = question["id"]
     unattended = bool(os.environ.get("AI_UNATTENDED"))
-    seen, why = (True, "") if unattended else human_turn(root, state)
-    if not seen:
-        die("APPROVAL_REFUSED — %s. Fill the answer, tell the session, and sync again, or run "
-            "in your own terminal:\n  python3 %s --root %s approve --by %s"
-            % (why, shlex.quote(os.path.abspath(__file__)), shlex.quote(root),
-               shlex.quote(by)), 5)
-    approved = question["choice"] == "A"
-    close_gate(root, state, gate_id, question["choice"], question["text"], by, "file")
-    state["human_approval"].update({
-        "required": True, "granted": approved,
-        "granted_by": by if approved else None,
-        "granted_at": now() if approved else None,
-        "requested_at": None, "gate_id": None,
-        "via": "file" if approved else None, "unattended": approved and unattended,
-    })
-    if approved:
-        record(state, "human_approval", "granted by %s via file" % by)
-    else:
-        state["next_action"] = "address the rejection: %s" % one_line(question["text"])
-        record(state, "gate_rejected", "%s: %s" % (by, question["text"] or "no reason given"))
-    write_handoff(root, state, "stage")
-    save(root, state)                     # durable first: the rest is derived
-    append_journal(root, state["task_id"], journal_line(
-        state["task_id"], "gate_approved" if approved else "gate_rejected", "human",
-        state.get("current_stage"), "%s by %s via file" % (gate_id, by),
-        {"by": by, "gate_id": gate_id, "via": "file", "unattended": unattended, "tty": False}
-        if approved else {"by": by, "gate_id": gate_id, "why": question["text"]}))
+    with question_lock(questions_path(root, state, None)):
+        fresh = load(root, claim=False)
+        if open_gate(fresh) != gate_id:
+            # Somebody closed it between the parse and here: their outcome wins.
+            return None
+        state.clear()
+        state.update(fresh)
+        seen, why = (True, "") if unattended else human_turn(root, state)
+        if not seen:
+            die("APPROVAL_REFUSED — %s. Fill the answer, tell the session, and sync again, or run "
+                "in your own terminal:\n  python3 %s --root %s approve --by %s"
+                % (why, shlex.quote(os.path.abspath(__file__)), shlex.quote(root),
+                   shlex.quote(by)), 5)
+        approved = question["choice"] == "A"
+        session = read_session(root)
+        claim_runtime(root, state)
+        state["human_approval"].update({
+            "required": True, "granted": approved,
+            "granted_by": by if approved else None,
+            "granted_at": now() if approved else None,
+            "requested_at": None, "gate_id": None, "requested_session": None,
+            "via": "file" if approved else None, "unattended": approved and unattended,
+        })
+        if approved:
+            record(state, "human_approval", "granted by %s via file" % by)
+        else:
+            state["next_action"] = "address the rejection: %s" % one_line(question["text"])
+            record(state, "gate_rejected", "%s: %s" % (by, question["text"] or "no reason given"))
+        write_handoff(root, state, "stage")
+        save(root, state)                 # durable first: the answer line is derived
+        # The evidence, recorded beside the outcome: this is the weakest of the
+        # three routes, and an audit has to be able to see what it rested on.
+        evidence = {"session": session.get("last_prompt_session"),
+                    "at": session.get("last_prompt_at"), "unattended": unattended}
+        append_journal(root, state["task_id"], journal_line(
+            state["task_id"], "gate_approved" if approved else "gate_rejected",
+            "human" if not unattended else "agent",
+            state.get("current_stage"), "%s by %s via file" % (gate_id, by),
+            {"by": by, "gate_id": gate_id, "via": "file", "unattended": unattended,
+             "tty": False, "evidence": evidence}
+            if approved else {"by": by, "gate_id": gate_id, "why": question["text"],
+                              "via": "file", "evidence": evidence}))
+        close_gate(root, state, gate_id, question["choice"], question["text"], by, "file")
+        save(root, state)
     return approved
 
 
