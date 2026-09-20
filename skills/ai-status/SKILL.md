@@ -148,7 +148,21 @@ done
    jq -r '.pipeline_profile // "team"' .ai/policies/risk-tiers.json
    ```
 
-5. **Risk-tier mirror staleness.** `.ai/policies/risk-tiers.md` carries the
+5. **The sensors.** One line, from the report `state.py review-gate` wrote —
+   this is what decides whether a T2 review runs at all, so a reader must see
+   it without asking:
+
+   ```bash
+   python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/ai-task/sensors.py" --root . report 2>/dev/null \
+       | tail -n +2 || echo "sensors: not checked yet"
+   ```
+
+   Say which sensors are green, which are red, and which are `unavailable` —
+   and for an unavailable one, print the line it proposes for
+   `.ai/policies/testing.md`. An unavailable sensor is not a problem with the
+   task; it is a review that will run.
+
+6. **Risk-tier mirror staleness.** `.ai/policies/risk-tiers.md` carries the
    sha256 of the JSON it was generated from:
 
    ```bash
@@ -159,7 +173,7 @@ done
    If they differ, warn in one line that the JSON changed and the markdown mirror
    did not. The JSON is the source of truth; the warning is not an error.
 
-6. **Plugin version.** One line from:
+7. **Plugin version.** One line from:
 
    ```bash
    python3 "$AI_HOME/skills/project-update/update.py" "$PWD" --check
@@ -176,7 +190,7 @@ done
    and say that `/project-update` cannot run until it is resolved; a newer
    version means this machine's plugin needs updating, not the project.
 
-7. **Instruction budget.** What this project loads on every turn, before any
+8. **Instruction budget.** What this project loads on every turn, before any
    skill or policy is read. Advisory: the plugin measures its own block and
    never refuses the project's file.
 
@@ -202,7 +216,7 @@ done
    The global stub is not measured here — `install.sh` prints its size line on
    every install, and `~/.claude/CLAUDE.md` is the user's file, not a project's.
 
-8. **Guards.** Say in one line each whether the three hooks are active here:
+9. **Guards.** Say in one line each whether the three hooks are active here:
    `ai-git-guard` always is; `ai-path-guard` and `ai-scope-guard` are active
    because of the `.ai/` at `AI_PROJECT` from step 1 — name it again here if it
    was not this repository, because that is where a surprising deny comes from;

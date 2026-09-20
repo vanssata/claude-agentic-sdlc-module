@@ -1,0 +1,71 @@
+{
+  "checked_at": "2026-09-20T19:59:31Z",
+  "declared_tier": "T0",
+  "rescored_tier": "T0",
+  "schema": 1,
+  "sensors": {
+    "diff": {
+      "detail": "no base tree recorded",
+      "files": 0,
+      "lines": 0,
+      "status": "unavailable",
+      "tree": "67e0861b3ee1d7fb69b23414ae9ef6c063d10136",
+      "unscoped": []
+    },
+    "duplicates": {
+      "detail": "diff unavailable",
+      "status": "unavailable",
+      "tree": "67e0861b3ee1d7fb69b23414ae9ef6c063d10136"
+    },
+    "lint": {
+      "detail": "lint_command missing \u2014 detected .pylintrc",
+      "proposal": "lint_command: python3 -m pylint $(git ls-files '*.py')",
+      "status": "unavailable",
+      "tree": "67e0861b3ee1d7fb69b23414ae9ef6c063d10136"
+    },
+    "plan_sections": {
+      "detail": "inline plan",
+      "status": "not_applicable",
+      "tree": "67e0861b3ee1d7fb69b23414ae9ef6c063d10136"
+    },
+    "rescore": {
+      "detail": "no base tree recorded",
+      "reasons": [],
+      "status": "unavailable",
+      "tier": "T0",
+      "tree": "67e0861b3ee1d7fb69b23414ae9ef6c063d10136"
+    },
+    "tests": {
+      "detail": "verify_command is not in testing.md",
+      "status": "unavailable",
+      "tree": "67e0861b3ee1d7fb69b23414ae9ef6c063d10136"
+    },
+    "traceability": {
+      "detail": "no approved plan",
+      "status": "unavailable",
+      "tree": "67e0861b3ee1d7fb69b23414ae9ef6c063d10136"
+    },
+    "typecheck": {
+      "detail": "typecheck_command missing \u2014 write it, or `typecheck_command: none`, in .ai/policies/testing.md",
+      "status": "unavailable",
+      "tree": "67e0861b3ee1d7fb69b23414ae9ef6c063d10136"
+    }
+  },
+  "task": "",
+  "tree": "67e0861b3ee1d7fb69b23414ae9ef6c063d10136",
+  "verdict": {
+    "all_green": false,
+    "blocking": [
+      "no task in flight: there is nothing to skip a review of",
+      "tests: unavailable",
+      "lint: unavailable",
+      "typecheck: unavailable",
+      "diff: unavailable",
+      "rescore: unavailable",
+      "traceability: unavailable",
+      "duplicates: unavailable",
+      "bite: unavailable"
+    ],
+    "review": "required"
+  }
+}

@@ -290,23 +290,49 @@ runs.
 $STATE step-done <step_id>
 ```
 
+`step-done` measures what the step actually changed, between the tree it began
+with and the tree now, and refuses two things with **exit 6**:
+`DIFF_BUDGET_EXCEEDED` when the step outgrew its tier's budget, and
+`SCOPE_CHANGE_REQUIRED` when it touched a file outside its own. Neither is a
+refusal to do the work — the step stays in progress and the way out is printed:
+
+```bash
+$STATE step-split <step_id> --files "<the part that is its own step>" --note "<why>"
+```
+
+The moved files leave the original step and become a sibling that inherits the
+tree it started from. After every step the task's diff is re-scored from
+`path_scopes`: a change that reached `**/Payment/**` is T4 from then on,
+whatever it was called at the start. A re-score only ever raises — lowering a
+tier needs a human, in their own terminal, with `--by`.
+
 ### TEST — the step's tests inside the step, the suite once, e2e once
 
 After the **last** step, not after each one. Run the verification command from
 the **Verification** section of `.ai/policies/testing.md`; if that section is
 empty, take it from the project `CLAUDE.md` or the CI config and write it into
-`testing.md` as part of this task, so the next task has it. Run it **to the
-end** — no fail-fast flag, no stopping at the first red test. Pipe the output
-through `tail -40`; when more than that matters, hand the full output to
-`log-reader` (haiku) and take back the list of failures; use `ai-tester`
-(haiku) in the `team` profile or when the test setup is unfamiliar.
+`testing.md` as part of this task, so the next task has it. Run it through `test-run`, which runs
+it **to the end** — no fail-fast flag, no stopping at the first red test —
+writes every line to `.ai/reports/<task-id>/tests-suite-<n>.log`, records the
+run against the tree it ran on, and prints six lines:
+
+```bash
+$STATE test-run --scope suite        # and, at the end of the task, --scope e2e
+```
+
+A **green** run needs no agent at all: exit 0 is the verdict and `test_status`
+is set from it. A **red** run is where `ai-tester` (haiku) earns its keep —
+hand it the log path, not the output; it classifies and never re-runs anything.
+An environment failure it calls transient gets exactly one
+`--env-retry`. The suite is capped at `sensors.max_suite_runs`: running it a
+sixth time is not the next move, and the cap says so.
 
 Only the step's own scoped tests run during a step — never the full suite and
 never e2e. For a bugfix the failing test is written and **shown failing**
 before the fix — that one test, not the suite.
 
 ```bash
-$STATE set test_status <passing|existing_failure|new_regression|env_failure|unknown>
+$STATE set test_status <existing_failure|new_regression|env_failure|unknown>
 ```
 
 **Fix as one batch.** Classify every failure first. Then open **one**
@@ -338,12 +364,36 @@ $STATE set e2e_status <passing|failing|not_applicable>
 
 ### ADVERSARIAL REVIEW (T2 and above)
 
-One `ai-reviewer` on the diff — a fresh context that did not write the code —
+First ask whether it has to be a model at all:
+
+```bash
+$STATE review-gate
+```
+
+It runs every sensor on the tree as it is now — the recorded suite result, the
+linter and type checker the project wrote down, the diff against the budget,
+the tier re-scored from the real diff, step-to-test traceability, repeated
+blocks, and whether the named tests **fail without the change** — writes
+`.ai/reports/<task-id>/sensors.json` and one ledger row per settled sensor, and
+answers one of two things. At T2 and below, all green records
+`review_status: skipped_green` and the review is done: the sensors are the
+review (decision 6, `review-economy.md` §8). Anything else — a red sensor, a
+tool nobody wrote down, a result from an older tree, a tier above T2 — prints
+`review: required` with the reason, and you delegate exactly as before. From
+T3 it always says required.
+
+Nothing here weakens a review: `unavailable` is not green, and
+`set review_status skipped_green` is refused — only the gate writes it, from
+measurements.
+
+Then, when it is required: one `ai-reviewer` on the diff — a fresh context that did not write the code —
 with the model from `pipeline_profiles.<profile>.review_model[<tier>]`: `sonnet`
 at T2 in solo, `opus` above. Save findings to
 `.ai/reports/<task-id>/review-report.md`.
 
-Before you delegate, probe the change yourself for a minute: the handful of
+The sensor rows are already in the ledger, so the reviewer inherits them
+instead of re-deriving them. Before you delegate, probe the change yourself for
+a minute: the handful of
 inputs its own threat model makes interesting, run through the real code in the
 scratchpad, outcomes noted in `.ai/reports/<task-id>/review-ledger.md`. The
 reviewer starts where you stopped. A re-review after a remediation is scoped —

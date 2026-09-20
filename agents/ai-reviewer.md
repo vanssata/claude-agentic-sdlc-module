@@ -26,6 +26,14 @@ do not re-derive it, and say in EXAMINED AND CLEAN that you inherited it. Re-ope
 a row only when the code under it changed, and say which change re-opened it.
 Spend what you save on the parts nobody has probed yet.
 
+Rows written by `sensors.py` are measurements, not opinions, and each names the
+tree it was taken on: the suite's result, the linter and type checker, the diff
+against the tier's budget, the tier re-scored from the real diff, whether every
+step named a test that exists, whether the named tests fail without the change,
+and repeated blocks. Inherit all of them. `.ai/reports/<task-id>/sensors.json`
+has the same in full, including a `red` row, which is a finding somebody has
+already localised for you — start there rather than looking for it again.
+
 If the request names a dimension — semantics and types, resources and failure
 modes, the record — review **only** that dimension and say so in the verdict.
 Another agent has the rest, in parallel.
