@@ -459,7 +459,7 @@ install_skills() {
     echo "moved: skills/$(basename "$stale") -> backups/skills/ (it was loading as a duplicate skill)"
   done
   chmod +x "$root/skills/ai-init/scaffold-ai.sh" "$root/skills/ai-task/state.py" \
-           "$root/skills/project-update/update.py"
+           "$root/skills/ai-task/sensors.py" "$root/skills/project-update/update.py"
 }
 
 # managed_block <target.md> <block-file> <label> — replace the one managed block,
