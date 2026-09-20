@@ -361,21 +361,21 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/33-bash-tee-session-json.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a claude-agentic control file: __TMP__/project/.ai/state/session.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: __TMP__/project/.ai/state/session.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/33-bash-tee-session-json.json
 rc=0
 ### ai-git-guard | fixture path-guard/34-bash-sed-i-current-json.json
 rc=0
 ### ai-path-guard | fixture path-guard/34-bash-sed-i-current-json.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a claude-agentic control file: __TMP__/project/.ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell in-place edit of a claude-agentic control file: __TMP__/project/.ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/34-bash-sed-i-current-json.json
 rc=0
 ### ai-git-guard | fixture path-guard/35-bash-run-context-guard.json
 rc=0
 ### ai-path-guard | fixture path-guard/35-bash-run-context-guard.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to run a claude-agentic hook from an agent session: the runtime invokes these, and running one by hand writes the state they are trusted to report.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to run hooks/context-guard.py from an agent session: the runtime invokes it, and running it by hand writes .ai/state/session.json — the evidence the approval gate's file route rests on.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/35-bash-run-context-guard.json
 rc=0
 ### ai-git-guard | fixture path-guard/36-bash-grep-src-allowed.json
@@ -1034,6 +1034,125 @@ rc=0
 ### ai-path-guard | main bash: cat ~/.aws/credentials
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that would expose a sensitive path: ~/.aws/credentials (matched: (^|/)\\.aws/credentials$)\n\nProduction secrets and data dumps must not enter the model context.\nIf this path is genuinely safe (a .dist/.example file, a fixture), add a regex to\n\"allow_patterns\" in .ai/policies/path-guard.json. See .ai/policies/security.md."}}
+### ai-git-guard | main bash: cat .ai/reports/T-1/questions.md
+rc=0
+### ai-path-guard | main bash: cat .ai/reports/T-1/questions.md
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that reads a claude-agentic control file: .ai/reports/T-1/questions.md (matched: (^|/)\\.ai/reports/[^/]+/questions\\.md$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: cat .ai/reports/T-1/events.jsonl
+rc=0
+### ai-path-guard | main bash: cat .ai/reports/T-1/events.jsonl
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that reads a claude-agentic control file: .ai/reports/T-1/events.jsonl (matched: (^|/)\\.ai/reports/[^/]+/events\\.jsonl$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: cat .ai/state/handoff.md
+rc=0
+### ai-path-guard | main bash: cat .ai/state/handoff.md
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that reads a claude-agentic control file: .ai/state/handoff.md (matched: (^|/)\\.ai/state/handoff\\.md$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: echo x > .ai/reports/T-1/questions.md
+rc=0
+### ai-path-guard | main bash: echo x > .ai/reports/T-1/questions.md
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a claude-agentic control file: .ai/reports/T-1/questions.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: touch .ai/reports/T-1/questions.md
+rc=0
+### ai-path-guard | main bash: touch .ai/reports/T-1/questions.md
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: .ai/reports/T-1/questions.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: chmod 644 .ai/state/current.json
+rc=0
+### ai-path-guard | main bash: chmod 644 .ai/state/current.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: chown me .ai/state/handoff.md
+rc=0
+### ai-path-guard | main bash: chown me .ai/state/handoff.md
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: .ai/state/handoff.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: tee .ai/state/session.json
+rc=0
+### ai-path-guard | main bash: tee .ai/state/session.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: .ai/state/session.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: truncate -s 0 .ai/reports/T-1/events.jsonl
+rc=0
+### ai-path-guard | main bash: truncate -s 0 .ai/reports/T-1/events.jsonl
+rc=0
+### ai-git-guard | main bash: dd if=/tmp/x of=.ai/state/session.json
+rc=0
+### ai-path-guard | main bash: dd if=/tmp/x of=.ai/state/session.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: of=.ai/state/session.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: sed -i 's/a/b/' .ai/state/current.json
+rc=0
+### ai-path-guard | main bash: sed -i 's/a/b/' .ai/state/current.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell in-place edit of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: touch src/Service.php
+rc=0
+### ai-path-guard | main bash: touch src/Service.php
+rc=0
+### ai-git-guard | main bash: chmod +x src/Service.php
+rc=0
+### ai-path-guard | main bash: chmod +x src/Service.php
+rc=0
+### ai-git-guard | main bash: grep -rn touch .ai/policies/path-guard.json
+rc=0
+### ai-path-guard | main bash: grep -rn touch .ai/policies/path-guard.json
+rc=0
+### ai-git-guard | main bash: echo touch .ai/state/current.json
+rc=0
+### ai-path-guard | main bash: echo touch .ai/state/current.json
+rc=0
+### ai-git-guard | main bash: git log --grep touch -- .ai/state/current.json
+rc=0
+### ai-path-guard | main bash: git log --grep touch -- .ai/state/current.json
+rc=0
+### ai-git-guard | main bash: python3 hooks/context-guard.py
+rc=0
+### ai-path-guard | main bash: python3 hooks/context-guard.py
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to run hooks/context-guard.py from an agent session: the runtime invokes it, and running it by hand writes .ai/state/session.json — the evidence the approval gate's file route rests on.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: python3 .claude/hooks/context-guard.py
+rc=0
+### ai-path-guard | main bash: python3 .claude/hooks/context-guard.py
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to run hooks/context-guard.py from an agent session: the runtime invokes it, and running it by hand writes .ai/state/session.json — the evidence the approval gate's file route rests on.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: grep -n foo hooks/context-guard.py
+rc=0
+### ai-path-guard | main bash: grep -n foo hooks/context-guard.py
+rc=0
+### ai-git-guard | main bash: wc -l hooks/context-guard.py
+rc=0
+### ai-path-guard | main bash: wc -l hooks/context-guard.py
+rc=0
+### ai-git-guard | main bash: pylint hooks/context-guard.py
+rc=0
+### ai-path-guard | main bash: pylint hooks/context-guard.py
+rc=0
+### ai-git-guard | main bash: python3 /p/skills/ai-task/state.py --root . approve --by ivan
+rc=0
+### ai-path-guard | main bash: python3 /p/skills/ai-task/state.py --root . approve --by ivan
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing 'state.py approve' from an agent session.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: python3 /p/skills/ai-task/state.py --root=. approve --by ivan
+rc=0
+### ai-path-guard | main bash: python3 /p/skills/ai-task/state.py --root=. approve --by ivan
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing 'state.py approve' from an agent session.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: python3 /p/skills/ai-task/state.py --root . get --field approved_plan
+rc=0
+### ai-path-guard | main bash: python3 /p/skills/ai-task/state.py --root . get --field approved_plan
+rc=0
+### ai-git-guard | main bash: $STATE approve --by ivan
+rc=0
+### ai-path-guard | main bash: $STATE approve --by ivan
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing 'state.py approve' from an agent session.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/questions.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: $STATE note decision "approve it later"
+rc=0
+### ai-path-guard | main bash: $STATE note decision "approve it later"
+rc=0
 ### ai-git-guard | main bash: cat /home/someone/.ssh/id_rsa
 rc=0
 ### ai-path-guard | main bash: cat /home/someone/.ssh/id_rsa
@@ -2036,6 +2155,58 @@ rc=0
 ### ai-git-guard | feature bash: mysqldump db > backups/dump_2.sql
 rc=0
 ### ai-git-guard | feature bash: cat ~/.aws/credentials
+rc=0
+### ai-git-guard | feature bash: cat .ai/reports/T-1/questions.md
+rc=0
+### ai-git-guard | feature bash: cat .ai/reports/T-1/events.jsonl
+rc=0
+### ai-git-guard | feature bash: cat .ai/state/handoff.md
+rc=0
+### ai-git-guard | feature bash: echo x > .ai/reports/T-1/questions.md
+rc=0
+### ai-git-guard | feature bash: touch .ai/reports/T-1/questions.md
+rc=0
+### ai-git-guard | feature bash: chmod 644 .ai/state/current.json
+rc=0
+### ai-git-guard | feature bash: chown me .ai/state/handoff.md
+rc=0
+### ai-git-guard | feature bash: tee .ai/state/session.json
+rc=0
+### ai-git-guard | feature bash: truncate -s 0 .ai/reports/T-1/events.jsonl
+rc=0
+### ai-git-guard | feature bash: dd if=/tmp/x of=.ai/state/session.json
+rc=0
+### ai-git-guard | feature bash: sed -i 's/a/b/' .ai/state/current.json
+rc=0
+### ai-git-guard | feature bash: touch src/Service.php
+rc=0
+### ai-git-guard | feature bash: chmod +x src/Service.php
+rc=0
+### ai-git-guard | feature bash: grep -rn touch .ai/policies/path-guard.json
+rc=0
+### ai-git-guard | feature bash: echo touch .ai/state/current.json
+rc=0
+### ai-git-guard | feature bash: git log --grep touch -- .ai/state/current.json
+rc=0
+### ai-git-guard | feature bash: python3 hooks/context-guard.py
+rc=0
+### ai-git-guard | feature bash: python3 .claude/hooks/context-guard.py
+rc=0
+### ai-git-guard | feature bash: grep -n foo hooks/context-guard.py
+rc=0
+### ai-git-guard | feature bash: wc -l hooks/context-guard.py
+rc=0
+### ai-git-guard | feature bash: pylint hooks/context-guard.py
+rc=0
+### ai-git-guard | feature bash: python3 /p/skills/ai-task/state.py --root . approve --by ivan
+rc=0
+### ai-git-guard | feature bash: python3 /p/skills/ai-task/state.py --root=. approve --by ivan
+rc=0
+### ai-git-guard | feature bash: python3 /p/skills/ai-task/state.py --root . get --field approved_plan
+rc=0
+### ai-git-guard | feature bash: $STATE approve --by ivan
+rc=0
+### ai-git-guard | feature bash: $STATE note decision "approve it later"
 rc=0
 ### ai-git-guard | feature bash: cat /home/someone/.ssh/id_rsa
 rc=0

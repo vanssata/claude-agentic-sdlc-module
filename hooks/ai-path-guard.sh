@@ -202,19 +202,28 @@ case "$AI_TOOL" in
         # any later rule ran. The cost is one in-process regex per Bash call;
         # task_in_flight()'s jq is consulted only after it matches, which in
         # normal work is never.
-        APPROVE_RE='(^|[|;&[:space:]])(python3?[[:space:]]+)?"?[^[:space:]"]*state\.py"?([[:space:]]+--(root|runtime)[[:space:]]+[^[:space:]]+)*[[:space:]]+approve([[:space:]]|$)|(^|[|;&[:space:]])"?\$\{?STATE\}?"?[[:space:]]+approve([[:space:]]|$)'
+        # Single quotes are accepted wherever double ones are, --opt=value is
+        # argparse's own form, and a quote may close right after the verb: none
+        # of those is the obfuscation the spec budgets as residual risk.
+        Q='['\''"]?'
+        END='([[:space:]]|['\''"]|$)'
+        ARGS='([[:space:]]+--(root|runtime)(=|[[:space:]]+)[^[:space:]]+)*'
+        APPROVE_RE='(^|[|;&[:space:]])(python3?[[:space:]]+)?'$Q'[^[:space:]'\''"]*state\.py'$Q$ARGS'[[:space:]]+approve'$END'|(^|[|;&[:space:]])'$Q'\$\{?STATE\}?'$Q'[[:space:]]+approve'$END
         if ere_match "$APPROVE_RE" "$cmd" \
            && [ -z "${AI_UNATTENDED:-}" ] && task_in_flight; then
             deny "Refusing 'state.py approve' from an agent session.$WHY_APPROVE"
         fi
 
-        # The hooks are invoked by the runtime, never by the work. Running
-        # context-guard.py by hand writes .ai/state/session.json, which is the
-        # evidence the gate's file route rests on: an agent that can mint a
-        # human turn can approve its own plan.
-        HOOKRUN_RE='(^|[|;&[:space:]])(python3?[[:space:]]+)?"?[^[:space:]"]*(context-guard|ai-path-guard|ai-scope-guard|ai-git-guard|fable-gate|codex-model-gate)\.(py|sh)"?([[:space:]]|$)'
+        # context-guard.py is invoked by the runtime, never by the work:
+        # running it by hand writes .ai/state/session.json, which is the evidence
+        # the gate's file route rests on, so an agent that can mint a human turn
+        # can approve its own plan. Only this one hook, because only this one
+        # writes state — and only in command position, because reading, diffing,
+        # linting and testing these files is the ordinary work of the repository
+        # they live in.
+        HOOKRUN_RE='(^|[|;&]|&&|\|\|)[[:space:]]*((env[[:space:]]+[^|;&]*)?(python3?|bash|sh)[[:space:]]+)?'$Q'[^[:space:]'\''"]*context-guard\.py'$Q$END
         if ere_match "$HOOKRUN_RE" "$cmd" && [ -z "${AI_UNATTENDED:-}" ] && task_in_flight; then
-            deny "Refusing to run a claude-agentic hook from an agent session: the runtime invokes these, and running one by hand writes the state they are trusted to report.$WHY_APPROVE"
+            deny "Refusing to run hooks/context-guard.py from an agent session: the runtime invokes it, and running it by hand writes .ai/state/session.json — the evidence the approval gate's file route rests on.$WHY_APPROVE"
         fi
 
         # Fast path: if nothing in the whole command line looks interesting, stop
@@ -228,11 +237,19 @@ case "$AI_TOOL" in
         # inside a heredoc body or a commit message is not a command argument.
         readers='(^|[|;&[:space:]])(cat|bat|less|more|head|tail|strings|xxd|od|hexdump|base64|nl|tac|rev)([[:space:]]+-[^[:space:]]+)*[[:space:]]+'
         copiers='(^|[|;&[:space:]])(cp|mv|rsync|scp|install|tar|zip|curl|wget)([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+'
-        # A redirect is not the only way a shell writes a file. These are the
-        # ones that take the path as an argument, which the `>` rule below
-        # cannot see — the file route's evidence is only as good as this list.
-        writers='(^|[|;&[:space:]])(tee|dd|truncate|shred|touch|chmod|chown|ln)([[:space:]]+-?-?[^;&|[:space:]]+)*[[:space:]]+'
-        inplace='(^|[|;&[:space:]])(sed|perl|ruby)([[:space:]]+-[^[:space:]]*i[^[:space:]]*)([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+'
+        # A redirect is not the only way a shell writes a file. These take the
+        # path as an argument, which the `>` rule below cannot see. Anchored at
+        # the start of a command, not at any token boundary: `touch`, `chmod` and
+        # `ln` are ordinary English, and `grep -rn touch .ai/policies/...` is
+        # somebody reading a policy file, not writing one.
+        segment='(^|[|;&]|&&|\|\|)[[:space:]]*'
+        writers="${segment}"'(tee|truncate|shred|touch|ln)([[:space:]]+-[^[:space:]]+)*[[:space:]]+'
+        # chmod and chown take one more argument before the path: the mode or
+        # the owner. dd takes its destination inside a token, as of=PATH, which
+        # is why the token loop also classifies what follows an '='.
+        modes="${segment}"'(chmod|chown)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^-][^[:space:]]*[[:space:]]+'
+        ddwrite="${segment}"'dd([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+'
+        inplace="${segment}"'(sed|perl|ruby)([[:space:]]+-[^[:space:]]*i[^[:space:]]*)([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+'
 
         # Every argument-looking token in the command, minus flags.
         while IFS= read -r token; do
@@ -240,6 +257,10 @@ case "$AI_TOOL" in
             case "$token" in -*) continue ;; esac
             verdict=$(classify "$(abs_path "$token")")
             [ -n "$verdict" ] || verdict=$(classify "$(real_path "$token")")
+            # `dd of=PATH` and friends put the path inside the token.
+            case "$token" in
+                *=*) [ -n "$verdict" ] || verdict=$(classify "$(abs_path "${token#*=}")") ;;
+            esac
             [ -n "$verdict" ] || continue
             kind="${verdict%%:*}"; pattern="${verdict#*:}"
 
@@ -263,16 +284,20 @@ case "$AI_TOOL" in
             # Writing through the shell: into a protected control file, into an
             # instruction file that belongs to a dependency, or into the
             # runtime's own configuration while a task is in flight.
-            if ere_match ">>?[[:space:]]*[\"']?${esc}" "$cmd" \
-               || ere_match "${writers}[\"']?${esc}" "$cmd" \
-               || ere_match "${inplace}[\"']?${esc}" "$cmd"; then
+            how=""
+            ere_match ">>?[[:space:]]*[\"']?${esc}" "$cmd" && how="redirect into"
+            [ -n "$how" ] || ere_match "${writers}[\"']?${esc}" "$cmd" && how="${how:-command that writes}"
+            [ -n "$how" ] || ere_match "${modes}[\"']?${esc}" "$cmd" && how="${how:-command that writes}"
+            [ -n "$how" ] || ere_match "${ddwrite}[\"']?${esc}" "$cmd" && how="${how:-command that writes}"
+            [ -n "$how" ] || ere_match "${inplace}[\"']?${esc}" "$cmd" && how="${how:-in-place edit of}"
+            if [ -n "$how" ]; then
                 case "$kind" in
                     protected)
-                        deny "Refusing a shell redirect into a claude-agentic control file: $token$WHY_PROTECTED" ;;
+                        deny "Refusing a shell $how a claude-agentic control file: $token$WHY_PROTECTED" ;;
                     vendor)
-                        deny "Refusing a shell redirect into an instruction file inside a dependency: $token$WHY_VENDOR" ;;
+                        deny "Refusing a shell $how an instruction file inside a dependency: $token$WHY_VENDOR" ;;
                     task)
-                        task_in_flight && deny "Refusing a shell redirect into runtime configuration while task $AI_TASK_ID is in flight: $token$WHY_TASK" ;;
+                        task_in_flight && deny "Refusing a shell $how runtime configuration while task $AI_TASK_ID is in flight: $token$WHY_TASK" ;;
                 esac
             fi
         done < <(words=()

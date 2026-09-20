@@ -80,6 +80,37 @@ printf '%s' "$out" | grep -q "Approval happens outside the agent" \
     && pass "and the deny text teaches the human what to do" || fail "WHY_APPROVE is missing" "$out"
 printf '%s' "$out" | grep -q "AI_UNATTENDED=1 in the launcher" \
     && pass "including the unattended route and what it costs" || fail "the unattended route should be named"
+
+echo "== ai-path-guard (the context guard is the runtime's to run, not the work's)"
+hookrun=$(jq -nc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
+    tool_input:{command:"python3 /home/u/.claude/hooks/context-guard.py"}}')
+decide "with a task in flight, running it by hand is denied" deny "$hookrun"
+out=$(printf '%s' "$hookrun" | AI_UNATTENDED=1 "$GUARD" 2>&1)
+[ -z "$out" ] && pass "and AI_UNATTENDED lets a launcher through" || fail "the launcher should be allowed" "$out"
+rm -f "$ROOT/.ai/state/current.json"
+decide "with no task it is none of the guard's business" allow "$hookrun"
+printf '{"current_stage":"implementation","task_id":"T-1"}\n' > "$ROOT/.ai/state/current.json"
+# Reading, diffing, linting and testing these files is the ordinary work of the
+# repository they live in, and none of it may be refused.
+for c in "grep -n APPROVE_RE /home/u/.claude/hooks/context-guard.py" \
+         "wc -l /home/u/.claude/hooks/context-guard.py" \
+         "pylint /home/u/.claude/hooks/context-guard.py" \
+         "git diff hooks/context-guard.py" \
+         "bash tests/test-ai-path-guard.sh" \
+         "diff hooks/context-guard.py /home/u/.claude/hooks/context-guard.py"; do
+    out=$(jq -nc --arg r "$ROOT" --arg c "$c" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
+        tool_input:{command:$c}}' | "$GUARD" 2>&1)
+    [ -z "$out" ] || fail "'$c' must not be refused" "$(printf '%s' "$out" | head -c 160)"
+done
+pass "reading, diffing, linting and testing the hook files stays allowed"
+for c in "grep -rn touch $ROOT/.ai/policies/path-guard.json" \
+         "echo touch $ROOT/.ai/state/current.json" \
+         "git log --grep chmod -- $ROOT/.ai/state/current.json"; do
+    out=$(jq -nc --arg r "$ROOT" --arg c "$c" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
+        tool_input:{command:$c}}' | "$GUARD" 2>&1)
+    [ -z "$out" ] || fail "'$c' names a writer word, it does not run one" "$(printf '%s' "$out" | head -c 160)"
+done
+pass "and a writer's name in prose or a flag is not a write"
 printf '{}\n' > "$ROOT/.ai/state/current.json"
 
 echo "== ai-path-guard (project WITHOUT .ai/ — every guard must be inert)"
