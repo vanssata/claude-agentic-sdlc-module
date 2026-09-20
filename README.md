@@ -67,6 +67,8 @@ Five files make that resume real, and every one of them is provider-neutral:
 | `.ai/reports/<task-id>/events.jsonl` | `state.py` | the journal — one append-only line per event, with the runtime that emitted it |
 | `.ai/reports/<task-id>/questions.md` | `state.py` | the open questions, each with an `[Answer]:` line a human fills in |
 | `.ai/state/handoff.md` | `state.py`, rendered | thirty lines a session reads first: where the task is, what it may touch, what is pending |
+| `.ai/reports/<task-id>/sensors.json` | `state.py review-gate` | what each deterministic sensor measured, and on which tree |
+| `.ai/reports/<task-id>/tests-<scope>-<n>.log` | `state.py test-run` | the full test output, so it never reaches a context window |
 | `.ai/state/session.json` | `context-guard.py` | which runtime is driving and when the human last took a turn |
 
 A subagent that needs a decision **returns** `QUESTIONS_NEEDED` instead of
@@ -325,6 +327,22 @@ for T0–T2 — no pipeline ceremony, no report files, cheap readers only, one
 | T3 | plan, plan review, adversarial review — on `opus` | everything except implementation |
 | T4 | plus security review and the release report | everything except implementation |
 | T5 | plus discovery and impact; the plan goes to `ai-expert` | everything except implementation |
+
+Before any of those reviews, the deterministic gates measure the change itself.
+`state.py step-done` counts what a step actually changed, between the tree the
+step began with and the tree now: over the tier's diff budget or outside the
+step's own files it exits 6 and asks for `state.py step-split`, never for the
+work to be abandoned. The tier is then re-scored from the real diff — a change
+that reached `**/Payment/**` is T4 from then on, and only a human, in their own
+terminal, ever lowers a tier. `state.py test-run` owns the test runs, keeps
+their output in a file and caps how many there may be. `state.py review-gate`
+runs the sensor set — the recorded suite result, the project's own linter and
+type checker, the diff, the re-score, step-to-test traceability, repeated
+blocks, and whether the named tests **fail without the change** — and at T2,
+with every one of them green, records `review_status: skipped_green`: the
+sensors are the review. A tool nobody wrote down is `unavailable`, not green,
+and keeps the review. From T3 the review always runs, with the sensor rows
+already in the ledger so the reviewer does not re-derive them.
 
 In `solo`, discovery, context, impact and risk come from the request plus
 `grep -n`; below T3 they are a few lines in the conversation, from T3 they are

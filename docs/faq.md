@@ -45,6 +45,60 @@ script and both write the project's `.ai/state/current.json`.
 
 One step is amended, not the whole task replanned.
 
+## `step-done` refused my step. Now what?
+
+It printed which of the two it was and the command that answers it.
+
+`DIFF_BUDGET_EXCEEDED` means the step changed more than its tier's budget
+allows — not that the work is wrong, but that it has become two steps and would
+be reviewed as one. `SCOPE_CHANGE_REQUIRED` means it touched a file the plan did
+not give it. Both leave the step in progress, so nothing is lost:
+
+```bash
+python3 "$AI_HOME/skills/ai-task/state.py" step-split <step_id> --files "<the other concern>"
+```
+
+The moved files become a sibling step that inherits the tree the original
+started from, and the original is told they are no longer its business — which
+the scope guard reads too. Then finish the original and run `step <new_id>`.
+
+The budgets live in `.ai/policies/risk-tiers.json` under `diff_budget`, and
+they are a project's to adjust, like the triggers. `--force` exists for when a
+refusal is genuinely wrong; it records the step anyway, and the record shows
+that it was forced.
+
+## Why did my task's risk tier go up by itself?
+
+Because the diff reached something the tier did not predict. After every step
+the task's changed files are matched against `path_scopes` — `**/Payment/**`,
+`**/Security/**`, `**/migrations/**`, `config/**` and so on — and the highest
+`min_tier` among them wins, as does one tier more when the task is over its
+budget. A tier is a guess made before the work; this is the correction after it.
+
+It only ever goes up. `downgrade_rule` has always said that only a human lowers
+a tier, in writing; now `state.py risk T2` from an agent exits 5 and prints the
+command for a human to run in their own terminal, with `--by`.
+
+If a raise is wrong for your project, the scope patterns are yours to narrow.
+
+## Why was there no adversarial review on my T2 change?
+
+Because every deterministic sensor was green and the tier allowed it — the
+intent's decision 6, and `review-economy.md` §8. `state.py review-gate` records
+that as `review_status: skipped_green`, and `.ai/reports/<task-id>/sensors.json`
+says exactly what was measured and on which tree.
+
+"All green" is narrow on purpose: the suite passed **on this tree**, the
+project's linter and type checker passed (or say `none` in `testing.md`), the
+diff is inside its budget, the re-scored tier is still T2 or lower, every
+finished step named a test that exists, no block of eight lines is repeated,
+and the named tests **fail when the change is reverted**. That last one is the
+point: a suite that never reaches the change passes just as green before it as
+after, and a review skipped on that would have been skipped on nothing.
+
+Anything missing is `unavailable`, which keeps the review. Nobody can assert
+the skip either — `state.py set review_status skipped_green` is refused.
+
 ## How do I turn a guard off for one repository?
 
 The path and scope guards are already off in any repository without `.ai/`. The
@@ -99,6 +153,16 @@ is slower still, so it runs once, at the end, when there is a finished change
 for it to exercise. What a step does need is its own tests, immediately: a
 regression in the code you just wrote is cheapest to fix while you are still
 in it.
+
+## Why can't I run the suite a sixth time?
+
+Because `sensors.max_suite_runs` says five, and a sixth run is not the next
+move — the human deciding what is happening is. `state.py test-run` counts the
+runs, writes each one's full output to `.ai/reports/<task-id>/tests-suite-<n>.log`
+and prints six lines. A green run needs no agent at all: exit 0 is the verdict.
+A red one goes to `ai-tester`, which reads the log file and never re-runs
+anything; one `--env-retry` is allowed, and only after a failure was classified
+as an environment failure.
 
 ## What if the project has no e2e suite?
 

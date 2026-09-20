@@ -217,7 +217,7 @@ Each package runs `/sdlc-spec` → `/sdlc-plan` → `/ai-task` on its own; specs
 | 1 | Schema version and structural migrations | `skills/project-update/update.py`, new `migrations/`, `history/`, `tools/build-template-history.py`, `tests/test-project-update.sh`, `tests/test-merge-migration.sh` | T3 | — | **done** (PR #15, #16, merged 2026-09-20) — schema version in `.ai/VERSION`, ordered idempotent migrations inside the dry run, template history following renames, the delete gate and `migration.json`; spec and plan under `…-wp1-schema-migrations.md` |
 | 2 | Questions file, handoff, event journal, human-turn approval | `skills/ai-task/state.py` (`ask`, `answer`, `questions`, `handoff`, `events.jsonl`, `owner_runtime`, approve outside the agent), `hooks/context-guard.py`, a session-start hook, `skills/ai-task/SKILL.md`, `skills/sdlc-intent` | **T4** (raised from T3, 2026-09-20: the deliverable is an authorization control) | 1 | spec done (`…-wp2-questions-handoff-journal.md`) — intent open questions 1 and 2 settled there; spec concerns 1, 2 and 8 answered by the user on 2026-09-20 |
 | 3 | Context diet | `CLAUDE.snippet.md`, `AGENTS.snippet.md`, `skills/ai-init/templates/*.block.md` and `*.minimal.md`, `.ai/AGENTS.md` as a router, `constitution.md` template, byte-budget test, a migration for existing projects | T2–T3 (spec recommends **T3**) | 1, 2 | **done** (`spec/wp3-context-diet`, 2026-09-20) — one source `instructions/stub.md` rendered by `render_instructions.py`, `routing.md` installed beside the block and read on demand, `.ai/AGENTS.md` as a router, `docs/sdlc/constitution.md`, `.ai/rules/`, four runtimes, migration 0003 (schema 3) and `tests/test-instruction-budget.sh`; spec and plan under `…-wp3-context-diet.md`, all ten concerns and six open questions settled with the user |
-| 4 | Deterministic gates | `risk-tiers.json` (diff budget, scopes), `state.py step-done` diff measurement, new `skills/ai-task/sensors.py`, tier re-scoring, retry rule in `ai-tester`, "test must bite" check | T3 | 1 (can run beside 3) | not started |
+| 4 | Deterministic gates | `risk-tiers.json` (diff budget, path scopes, sensors), `state.py` (`step-done` measurement and gate, `step-split`, `test-run`, `review-gate`, the human condition on lowering a tier), new `skills/ai-task/sensors.py`, tier re-scoring, retry rule in `ai-tester`, "test must bite", migration 0004 (schema 4) | T3 | 1 (can run beside 3) | **done** (`spec/wp4-deterministic-gates`, 2026-09-20) — per-tier diff budgets and ordered path scopes, measurement between tree objects, `step-split` as the answer to a refusal, re-scoring that only ever raises, `test-run` owning the runs and their cap, the sensor set and `review-gate` (decision 6, `review-economy.md` §8), the must-bite check with its lock and `--restore`; spec and plan under `…-wp4-deterministic-gates.md`, all eight open questions settled with the user |
 | 5 | Runtimes and plans | new `profiles/max20.json`, preferred-runtime and budget tables in every profile, `install.sh` plan detection + confirmation, `fable-gate` / `codex-model-gate` → `runtime-gate`, `state.py handoff --to`, grep test that shared prompts name no model | T3 | 2 | not started |
 | 6 | `project-update --adopt` | `update.py --adopt`: detection, mapping table, `migrate` (default) / `coexist`, no-line-lost and no-dangling-reference checks, report, `--cleanup` behind approval; fixtures for Spec Kit, Kiro, Cursor, a large `CLAUDE.md` | T3 (deletion treated as T5 → approval) | 1, 3 | not started |
 | 7 | Path guard hardening | `ai-path-guard`: `.claude/`, `.codex/`, hooks and agent files protected during a task; instruction files in `vendor/`, `node_modules/` are data | T2 | — (any time) | **done** (`feat/wp8-wp7-guard-hardening`) — `task_protected_patterns`, armed only while `.ai/state/current.json` is short of `done`, and `dependency_instruction_patterns`, read and write, always on; 9 fixtures, the task-lifecycle cases and 153 new characterization records |
@@ -225,6 +225,19 @@ Each package runs `/sdlc-spec` → `/sdlc-plan` → `/ai-task` on its own; specs
 
 Before WP4, measure a baseline with `/usage-report` on 5–10 real tasks: tokens per task,
 review findings per 100 changed lines, share of tasks with a second `remediate`.
+Measured 2026-09-20, before WP4 landed: ~$5–15 per ordinary task session and $25–52 for a
+work-package-sized one, 24% of the spend in subagents, and cache read — that is context
+length, not model choice — the largest single item. The thresholds in `diff_budget` and
+`sensors` are the conservative defaults of decision 2; recalibrate them against a second
+`/usage-report` once WP4 has run over a handful of real tasks, counting `skipped_green`
+verdicts and `step_started{kind: remediation}` lines in `events.jsonl`.
+
+**"Scopes" means two different things** and WP4 settled which is which (Q1, 2026-09-20): the
+*path* scopes of `risk-tiers.json` — which part of the tree a change touched, and the lowest
+tier that part demands — are WP4's, and they are what re-scores a tier. The *kind* axis
+(bugfix, refactor, feature, spike) stays where it already lives, in the task's `workflow`
+field, and the only deterministic thing that reads it is the must-bite check, which expects
+a feature's tests to fail against the base and a refactoring's to pass.
 
 ## Decisions taken (2026-09-20, answered by the user)
 
