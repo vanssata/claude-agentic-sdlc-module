@@ -32,7 +32,7 @@ done
 
 2. **Fill the instruction file** — only if the script just created it (otherwise leave the user's file alone and skip to step 3). When both were created, fill both with the same content; they differ only in the runtime-specific notes the templates already carry. Apply the built-in `/init` reasoning to replace the placeholder comments in **Commands / Conventions / Architecture**:
    - Detect the stack from what exists at the repo root: `composer.json` (PHP/Symfony/Sylius — read `scripts`, `require`), `package.json` (`scripts`), `Makefile` (targets), `pyproject.toml`, `go.mod`, `Chart.yaml` / `charts/` / `argocd/` (Helm/ArgoCD), `docker-compose*.yml`, `.github/workflows` / `.gitlab-ci.yml`.
-   - Use `grep -n` and bounded reads; do not pull large files into context. Delegate a wide survey to `Explore` (Sonnet, low effort) if the repo is big.
+   - Use `grep -n` and bounded reads; do not pull large files into context. Delegate a wide survey to `Explore` (FAST, low effort) if the repo is big.
    - Commands: build, test, lint/QA, run — one line each, copied from the manifests, not invented.
    - Conventions: what the linters/config already enforce (ECS/PHPStan level, ESLint config, commit hooks) plus visible naming/layout patterns.
    - Architecture: five sentences max — entry points, main modules, where state lives, request flow.

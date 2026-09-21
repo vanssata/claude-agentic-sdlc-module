@@ -39,8 +39,8 @@ policies contradict each other or the intent, do **not** pick silently — put i
 1. **Prerequisites** — the intent file exists and `docs/sdlc/specs/TEMPLATE.md` exists
    (else `/project-init`). Read the intent fully; it is small by design. Carry its open questions.
 2. **Collect policies** as above.
-3. **Design** — delegate to the `architect` subagent (it runs at the STRONG tier — Opus under
-   Claude Code, Sol under Codex; escalate to the EXPERT agent only when an EXPERT trigger in the
+3. **Design** — delegate to the `architect` subagent (it runs at the STRONG tier — the model
+   `state.py profile --tier STRONG` prints for the runtime you are in; escalate to the EXPERT agent only when an EXPERT trigger in the
    routing rules fires, e.g. an irreversible data-model or API
    decision). Give it: the intent text, the policy list, and the request to
    return Requirements (numbered, testable), Design (components, data flow, ≥2 alternatives
