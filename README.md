@@ -71,6 +71,13 @@ Five files make that resume real, and every one of them is provider-neutral:
 | `.ai/reports/<task-id>/tests-<scope>-<n>.log` | `state.py test-run` | the full test output, so it never reaches a context window |
 | `.ai/state/session.json` | `context-guard.py` | which runtime is driving and when the human last took a turn |
 
+A task also moves on purpose: `state.py handoff --to codex` (or `--to claude`)
+hands it over, prints the command to resume it there and runs nothing; until the
+other runtime resumes it, a change from anywhere else exits 7. `--for review`
+asks the other vendor for a T4+ review. `init`, `quick` and `risk` print a
+`preferred runtime:` line when the plan's table (refactoring → Codex on Claude
+plans) or the quota rule points at the other runtime — advice only.
+
 A subagent that needs a decision **returns** `QUESTIONS_NEEDED` instead of
 asking; the manager writes the question into `questions.md`, a human answers it
 there or in the session, and `state.py questions --sync` puts the answer back
@@ -84,11 +91,13 @@ zero model cost — no model is involved in writing or reading any of these file
 ./install.sh --target codex        # auto | claude | codex | both
 ./install.sh --dry-run             # print what would be written, write nothing
 
-# Claude-side options (the plan is auto-detected from ~/.claude.json):
+# Claude-side options. The plan is detected from ~/.claude.json (organizationRateLimitTier
+# tells Max 5x from 20x) and, on a terminal, proposed for you to confirm with Enter:
 ./install.sh --plan pro            # Pro: opusplan session, opus pinned for EXPERT
 ./install.sh --plan team-pro       # Team, Standard seat: the pro profile with the Team label
 ./install.sh --plan team-max       # Team, Premium seat: the max profile, Fable on architect
-./install.sh --plan max            # Max 5x and 20x: Opus 5 session (200k window), Fable only on architect
+./install.sh --plan max            # Max 5x: Opus 5 session (200k window), Fable only on architect
+./install.sh --plan max20          # Max 20x: max's settings, larger budgets (6 agents, EXPERT without asking)
 ./install.sh --plan max --fable no # no Fable anywhere; architect inherits the Opus session
 
 # Codex-side options (the ChatGPT plan is auto-detected from ~/.codex/auth.json):
@@ -119,9 +128,9 @@ duplicates a hook entry, and never overwrites your edits to `ai-git-guard.json`.
 | `profiles/codex-{plus,pro}.json` | — | six managed keys in `config.toml` |
 | `instructions/stub.md` | a managed block in `~/.claude/CLAUDE.md` | a managed block in `~/.codex/AGENTS.md` |
 | `instructions/routing.md` | `~/.claude/claude-agentic/routing.md`, read on demand | `~/.codex/claude-agentic/routing.md`, read on demand |
-| `agents/*.md` | `~/.claude/agents/` | rendered to `~/.codex/agents/*.toml` |
-| `agents/{ai-expert,architect}.md.tmpl` | the EXPERT-tier agents, model line and effort rendered per plan | `ai-expert.toml` pinned to Astra, `architect.toml` to Sol |
-| `hooks/*` | `~/.claude/hooks/` — six hooks, `fable-gate` on a Fable install, the shared library and the guards' default config | `~/.codex/hooks/` + `codex/hooks.json` |
+| `agents/*.md.tmpl` | rendered to `~/.claude/agents/*.md`, each tier's model and effort from the plan (`ai-expert` and `architect` have their own model line) | rendered to `~/.codex/agents/*.toml`, the model pinned per role |
+| `profiles/*.json` | the plan's settings, and its tier and budget tables (`claude_agentic`), resolved by `scripts/resolve-profile.py` into `~/.claude/claude-agentic/profile.json` | the same, into `~/.codex/claude-agentic/profile.json` |
+| `hooks/*` | `~/.claude/hooks/` — six hooks, `runtime-gate` (the old `fable-gate`/`codex-model-gate` names are shims), the shared library and the guards' default config | `~/.codex/hooks/` + `codex/hooks.json` |
 | `skills/*/` | `~/.claude/skills/` | `~/.codex/skills/` |
 
 The skills are `/ai-init`, `/ai-audit`, `/ai-task`, `/ai-status`, `/project-init`,
@@ -361,6 +370,18 @@ key. No stage is ever skipped; the profile only changes who does it.
 
 ## Model tiers
 
+Each plan is one file in `profiles/`: the runtime's own settings plus a
+`claude_agentic` object with the tier table (which model and effort each of FAST,
+BALANCED, STRONG and EXPERT is on that plan), the budgets (how many agents may run
+at once and how many of them on STRONG, how far direct mode reaches, whether EXPERT
+runs without asking, and a token figure per tier) and the preferred runtime per
+workflow. `max20.json` is `max.json` with larger budgets. The installer writes the
+resolved object to `<home>/claude-agentic/profile.json`; `runtime-gate` enforces the
+fan-out and EXPERT budgets by asking, `state.py profile --tier <TIER>` prints a
+tier's model, and `/usage-report --task <id>` compares a task's tokens with its
+plan's figure — reported, never enforced. The prompts themselves name tiers only;
+`tests/test-shared-prompts-model-free.sh` keeps it that way.
+
 | Tier | Claude Code | Codex | Does |
 |---|---|---|---|
 | FAST | `haiku`, low | Terra, low | reading and running: file search, inventories, logs, test output (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
@@ -381,7 +402,7 @@ because the same setting is no longer capped there, whether it was started with
 `claude-1m` or picked with `/model` — and escalates from there: `ai-expert` pins `opus` at `xhigh`, so a session switched to
 Sonnet (the JetBrains agent's Model setting, or `/model`) cannot weaken the last-resort tier. Fable 5.1 [1m] is pinned on `architect` alone, at
 `xhigh`, for design questions outside a task; nothing else ever runs on it, and
-`fable-gate` sends it to Opus while Fable is rate-limited or its weekly limit is
+`runtime-gate` sends it to Opus while Fable is rate-limited or its weekly limit is
 nearly used. `--fable no` leaves `architect` on the Opus session as well.
 
 Team accounts map by seat: a Standard seat installs as `team-pro` and gets the
@@ -433,15 +454,14 @@ model, and nothing in the design depends on a local model existing.
 | `cap-large-read.py` | Claude only | every session | refuses an unbounded `Read` of a large file; an explicit `limit` passes |
 | `project-scaffold.sh` | Claude only | `Setup:init` | creates the `docs/sdlc/` and runtime layout on `/init` |
 | `context-guard.py` | both | `UserPromptSubmit` / `PreCompact` / `SessionStart:startup\|resume\|clear\|compact` | reads the context size from the transcript: warns once per 10k from 80% of the compaction point, holds a prompt back once from 120% (the same prompt again passes). Before a compaction it writes a snapshot — edited files, latest instructions verbatim, todo list, git state, `.ai/` task state — and tells the summary what to keep; after it, the snapshot goes back into the context. On every session start it writes `.ai/state/session.json` and, with a task in flight, injects `handoff.md` and the pending questions. The snapshot is Claude-only; everything else crosses to Codex. Fails open |
-| `fable-gate.py` | Claude, Max with Fable only | `StopFailure` / `PreToolUse:Agent` / the statusline | records a Fable rate limit, model-not-found or a nearly used weekly limit, and rewrites `model: fable` (the `architect` agent) to `opus` until the reset |
-| `codex-model-gate.py` | Codex only | `PreToolUse`/`PostToolUse:Agent`, `SubagentStop` | the same idea for Astra: records a rate limit or unavailability and rewrites an Astra launch to Sol at `high` until it expires |
+| `runtime-gate.py` | both, every plan | `PreToolUse`/`PostToolUse:Agent`, `SubagentStart`/`SubagentStop`, `StopFailure` (Fable installs), the statusline | sends the top model's launches one tier down while it is rate-limited or unreachable (Fable → Opus, the EXPERT model → STRONG); asks before an EXPERT launch or a launch past the plan's fan-out (explains instead on Codex); records the quota; journals `model_fallback`. `fable-gate.py` and `codex-model-gate.py` are shims that exec it |
 
 The three shared guards see Codex's `apply_patch` as well. One `apply_patch` can
 touch many files, so every `*** Add/Update/Delete File:` and `*** Move to:` path
 in the patch is checked separately — a single out-of-scope or protected file
 rejects the whole patch. Split the patch rather than widening the step.
 
-Codex has no `StopFailure` event, so `codex-model-gate` attributes a failure at
+Codex has no `StopFailure` event, so on Codex `runtime-gate` attributes a failure at
 `SubagentStop` instead, and only when the evidence points at an EXPERT agent:
 the agent's name in the text, an explicit expert `model`, an agent file pinned to
 the expert model, or an expert launch inside the last five minutes.
