@@ -73,8 +73,10 @@ Five files make that resume real, and every one of them is provider-neutral:
 
 A task also moves on purpose: `state.py handoff --to codex` (or `--to claude`)
 hands it over, prints the command to resume it there and runs nothing; until the
-other runtime resumes it, a change from anywhere else exits 7. `--for review`
-asks the other vendor for a T4+ review. `init`, `quick` and `risk` print a
+other runtime resumes it, a state change (and `init --force`) from anywhere else
+exits 7. `--for review` asks the other vendor for a T4+ review; its verdict never
+clears the owner's own `blockers_open`, and moving the task again cancels an
+open request. `init`, `quick` and `risk` print a
 `preferred runtime:` line when the plan's table (refactoring → Codex on Claude
 plans) or the quota rule points at the other runtime — advice only.
 

@@ -1217,6 +1217,43 @@ out=$(S5 --runtime claude handoff --to codex --for review 2>&1); rc=$?
 [ $rc = 0 ] && printf '%s' "$out" | grep -q 'below cross_vendor_review_from T4' && [ "$(field5 cross_vendor_review)" = null ] \
     && pass "T2 --for review is allowed and noted, not recorded as a cross-vendor review" || fail "T2 review handoff" "rc=$rc $out"
 
+echo "== WP5 review fixes: blockers win, a stale request is cancelled, the process names the runtime"
+fresh5 review-block
+S5 --runtime claude init --goal "pay" --workflow feature >/dev/null 2>&1
+S5 --runtime claude risk T4 >/dev/null 2>&1
+S5 --runtime claude set review_status blockers_open >/dev/null 2>&1
+S5 --runtime claude handoff --to codex --for review >/dev/null 2>&1
+S5 --runtime codex set review_status passed >/dev/null 2>&1
+[ "$(field5 review_status)" = '"blockers_open"' ] && field5 cross_vendor_review | jq -e '.status == "done" and .result == "passed"' >/dev/null \
+    && pass "the other vendor's passed does not clear the owner's blockers" || fail "blockers cleared" "$(field5 review_status) $(field5 cross_vendor_review)"
+fresh5 review-back
+S5 --runtime claude init --goal "pay" --workflow feature >/dev/null 2>&1
+S5 --runtime claude risk T4 >/dev/null 2>&1
+S5 --runtime claude handoff --to codex --for review >/dev/null 2>&1
+S5 --runtime claude handoff --to claude --why "not now" >/dev/null 2>&1
+field5 cross_vendor_review | jq -e '.status == "cancelled"' >/dev/null && pass "taking the task back cancels the review request" || fail "request left open" "$(field5 cross_vendor_review)"
+S5 --runtime claude set next_action x >/dev/null 2>&1
+S5 --runtime claude handoff --to codex >/dev/null 2>&1
+grep -q 'for the cross-vendor review' "$R5/.ai/state/handoff.md" && fail "a plain handoff inherited the old review" || pass "a later plain handoff is not a review"
+out=$(S5 --runtime claude init --goal "other" --workflow feature --force 2>&1); rc=$?
+[ $rc = 7 ] && printf '%s' "$out" | grep -q 'would discard it' && pass "init --force cannot drop a task handed to the other runtime (exit 7)" || fail "init --force" "rc=$rc $out"
+out=$(env -u CLAUDECODE CLAUDE_CONFIG_DIR="$CLH" CODEX_HOME="$CXH" AI_RUNTIME= python3 "$STATE" --root "$R5" set next_action y 2>&1); rc=$?
+[ $rc = 7 ] && printf '%s' "$out" | grep -q -- '--runtime claude handoff --to claude' && pass "a plain shell is told a command it can run" || fail "shell message" "rc=$rc $out"
+fresh5 detect
+S5 --runtime claude init --goal g --workflow feature >/dev/null 2>&1
+printf '{"runtime":"codex","session_id":"s1"}' > "$R5/.ai/state/session.json"
+CLAUDECODE=1 CLAUDE_CONFIG_DIR="$CLH" CODEX_HOME="$CXH" AI_RUNTIME= python3 "$STATE" --root "$R5" set next_action "from claude" >/dev/null 2>&1
+[ "$(field5 owner_runtime)" = '"claude"' ] && pass "CLAUDECODE outranks a session.json written by codex" || fail "session.json won over the process" "$(field5 owner_runtime)"
+CXR="$W5/codex-real"; mkdir -p "$CXR/skills/ai-task"; cp "$STATE" "$CXR/skills/ai-task/state.py"
+printf '{"runtime":"claude","session_id":"s2"}' > "$R5/.ai/state/session.json"
+env -u CLAUDECODE CLAUDE_CONFIG_DIR="$CLH" CODEX_HOME="$CXR" AI_RUNTIME= python3 "$CXR/skills/ai-task/state.py" --root "$R5" set next_action "from codex home" >/dev/null 2>&1
+[ "$(field5 owner_runtime)" = '"codex"' ] && pass "the copy under CODEX_HOME is codex whatever session.json says" || fail "install location ignored" "$(field5 owner_runtime)"
+fresh5 selfhand
+S5 --runtime claude init --goal g --workflow feature >/dev/null 2>&1
+jq '.owner_runtime = null' "$R5/.ai/state/current.json" > "$R5/c.tmp" && mv "$R5/c.tmp" "$R5/.ai/state/current.json"
+out=$(S5 --runtime claude handoff --to claude 2>&1); rc=$?
+[ $rc = 2 ] && [ "$(field5 handoff.pending_to)" = null ] && pass "a self-handoff on an unowned task is refused (exit 2)" || fail "self-handoff" "rc=$rc $out"
+
 echo "== WP5: the advisory line (R12)"
 fresh5 advice
 err=$(S5 --runtime claude init --goal "rename everything" --workflow refactoring 2>&1 >/dev/null)

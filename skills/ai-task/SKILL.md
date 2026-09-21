@@ -58,7 +58,8 @@ summary where the two disagree — it is rendered from the state, not remembered
   is `requested` with `to` = this runtime, go straight to **ADVERSARIAL
   REVIEW** with this runtime's own reviewer on the STRONG tier, record it with
   `$STATE set review_status <passed|blockers_open>` (that marks the review
-  `done`), then hand it back: `$STATE handoff --to <from>`.
+  `done` and stores your verdict as its `result`; an owner's `blockers_open`
+  stays), then hand it back: `$STATE handoff --to <from>`.
 - **It says `Handed to <the other runtime>`**: do not work on it here. Every
   state change exits 7 `RUNTIME_HANDOFF_PENDING` until that runtime resumes it.
   Tell the user where to resume; take it back with `$STATE handoff --to <this

@@ -241,6 +241,30 @@ python3 "$CL/hooks/runtime-gate.py" wibble >/dev/null 2>&1; rc=$?
 [ $rc -eq 2 ] && pass "an unknown command exits 2" || fail "expected exit 2, got $rc"
 grep -q '"deny"' "$SRC_GATE" && fail "runtime-gate.py must never emit deny" || pass "the gate has no deny path"
 
+echo "== parallel hooks do not lose each other's writes (WP5 review)"
+LS="$TMP/lock-state.json"; rm -f "$LS"
+ev() { jq -nc --arg e "$1" --arg id "$2" '{hook_event_name:$e,session_id:"par",agent_id:$id,agent_type:"Explore",cwd:"/nonexistent"}' \
+       | AI_RUNTIME_GATE_STATE="$LS" python3 "$CL/hooks/runtime-gate.py" >/dev/null; }
+for i in $(seq 1 20); do ev SubagentStart "a$i" & done; wait
+n=$(jq '.running_agents.par | length' "$LS")
+[ "$n" = 20 ] && pass "20 parallel SubagentStart record 20 agents" || fail "parallel starts recorded $n of 20"
+for i in $(seq 1 20); do ev SubagentStop "a$i" & done
+AI_RUNTIME_GATE_STATE="$LS" python3 "$CL/hooks/runtime-gate.py" set 600 rate_limit >/dev/null & wait
+[ "$(jq '.running_agents.par // [] | length' "$LS")" = 0 ] && pass "20 parallel SubagentStop leave none running" || fail "stops left $(jq -c '.running_agents' "$LS")"
+jq -e '.unavailable.until' "$LS" >/dev/null && pass "an outage recorded during the stops survives" || fail "outage record lost in the race"
+
+echo "== settings that do not parse or do not fit keep the default"
+out=$(AI_RUNTIME_GATE_AGENT_TTL=30m AI_RUNTIME_GATE_STATE="$LS" python3 "$CL/hooks/runtime-gate.py" status 2>&1); rc=$?
+[ $rc -eq 0 ] && pass "AGENT_TTL=30m does not crash the gate" || fail "bad number crashed (rc $rc)" "$out"
+python3 "$CL/hooks/runtime-gate.py" set 600 test >/dev/null
+out=$(AI_RUNTIME_GATE_FALLBACK=gpt-5.6-sol claude_call python3 "$CL/hooks/runtime-gate.py")
+[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model')" = opus ] \
+    && pass "a Codex model in the shared FALLBACK is ignored by Claude" || fail "Claude took a Codex fallback" "$out"
+out=$(AI_RUNTIME_GATE_CLAUDE_FALLBACK=sonnet AI_RUNTIME_GATE_FALLBACK=haiku claude_call python3 "$CL/hooks/runtime-gate.py")
+[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model')" = sonnet ] \
+    && pass "AI_RUNTIME_GATE_CLAUDE_FALLBACK wins over the shared name" || fail "per-runtime name ignored" "$out"
+python3 "$CL/hooks/runtime-gate.py" clear >/dev/null
+
 echo "== the shims stay shims"
 for s in fable-gate codex-model-gate; do
     n=$(wc -l < "$PLUGIN_ROOT/hooks/$s.py")

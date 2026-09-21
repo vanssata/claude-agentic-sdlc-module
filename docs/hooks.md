@@ -392,7 +392,9 @@ budget check is a no-op.
   session; a launch at `fan_out.max_parallel_agents`, or a STRONG/EXPERT launch
   at `max_parallel_on_strong`, asks. An entry older than
   `AI_RUNTIME_GATE_AGENT_TTL` (30 min) stops counting, so a lost `SubagentStop`
-  costs at most an extra question; `clear` empties the count.
+  costs at most an extra question; `clear` empties the count. Every write to
+  the state file holds `<state>.lock` (`flock`), so a fan-out's parallel
+  starts, stops and outage records do not overwrite one another.
 
 A launch's tier is its explicit `model` first, then its name in the plan's tier
 lists, then the model its definition pins — `ai-reviewer` with `model: sonnet` is
@@ -437,7 +439,10 @@ lists the renamed command as a new hook: review it once in `/hooks`.
 Tuning: `AI_RUNTIME_GATE=off` disables every check (the wrapped statusline
 still runs); `AI_RUNTIME_GATE_STATE`, `_TTL`, `_NOT_FOUND_TTL`, `_OVERLOAD_TTL`,
 `_LAUNCH_WINDOW`, `_WEEKLY_PCT`, `_FALLBACK`, `_EXPERT`, `_FALLBACK_EFFORT`,
-`_MODE` and `_AGENT_TTL` override the defaults. The old names —
+`_MODE` and `_AGENT_TTL` override the defaults; `AI_RUNTIME_GATE_CLAUDE_<name>`
+or `AI_RUNTIME_GATE_CODEX_<name>` sets one runtime only and comes first. The
+shared `_FALLBACK`/`_EXPERT` are ignored by the runtime whose model they are not,
+and a number that does not parse keeps its default. The old names —
 `CLAUDE_FABLE_GATE*` on Claude Code, `CODEX_MODEL_GATE*` on Codex — still work;
 the new name wins where both are set.
 

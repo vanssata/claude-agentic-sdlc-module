@@ -650,17 +650,18 @@ if [ -f "$SETTINGS" ]; then cp "$SETTINGS" "$SETTINGS.bak"; else echo '{}' > "$S
 # Every gate entry already in settings.json — fable-gate from before WP5, or
 # runtime-gate from an earlier run — is removed first and the snippet's own are
 # merged below, so an upgrade never leaves two gates on one event (the shim
-# would run the gate twice and count every agent twice). An event list that
-# held nothing else is dropped with it; the user's own hooks stay.
+# would run the gate twice and count every agent twice). Only the gate's own
+# commands go (matched by their /hooks/<name>.py path, not a substring); a group
+# or event list left empty by that is dropped, the user's own hooks stay.
 before_gate=$(jq -c '[.hooks // {} | .[]?[]? | select((.hooks // []) | map(.command // "") | any(test("fable-gate")))] | length' "$SETTINGS" 2>/dev/null || echo 0)
 had_stopfailure=$(jq -c '[.hooks.StopFailure // [] | .[] | select((.hooks // []) | map(.command // "") | any(test("fable-gate|runtime-gate")))] | length' "$SETTINGS" 2>/dev/null || echo 0)
 jq 'if (.hooks | type) == "object" then
-      .hooks |= with_entries(
-        . as $e
-        | ($e.value | map(select(((.hooks // []) | map(.command // "") | any(test("fable-gate|runtime-gate"))) | not))) as $kept
-        | if ($kept | length) == ($e.value | length) then $e
-          elif ($kept | length) == 0 then empty
-          else $e | .value = $kept end)
+      .hooks |= (with_entries(.value |= [ .[]
+          | if (.hooks | type) == "array" and (.hooks | length) > 0 then
+              .hooks |= map(select((.command // "") | test("/hooks/(fable-gate|runtime-gate)\\.py") | not))
+              | select(.hooks | length > 0)
+            else . end ])
+        | with_entries(select(.value | length > 0)))
     else . end' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 [ "$before_gate" != 0 ] && echo "replaced: fable-gate hooks with runtime-gate" || true
 [ "$GATE" = off ] && [ "$had_stopfailure" != 0 ] && echo "removed: runtime-gate StopFailure (no Fable on this install)" || true
@@ -985,13 +986,13 @@ codex_apply() {
     echo "replaced: codex-model-gate hooks with runtime-gate (review it once in /hooks)"
   fi
   jq 'if (.hooks | type) == "object" then
-        .hooks |= with_entries(
-          . as $e
-          | ($e.value | map(select(((.hooks // []) | map(.command // "") | any(test("codex-model-gate|runtime-gate"))) | not))) as $kept
-          | if ($kept | length) == ($e.value | length) then $e
-            elif ($kept | length) == 0 then empty
-            else $e | .value = $kept end)
-      else . end' "$HOOKS" > "$HOOKS.tmp" && mv "$HOOKS.tmp" "$HOOKS"
+      .hooks |= (with_entries(.value |= [ .[]
+          | if (.hooks | type) == "array" and (.hooks | length) > 0 then
+              .hooks |= map(select((.command // "") | test("/hooks/(codex-model-gate|runtime-gate)\\.py") | not))
+              | select(.hooks | length > 0)
+            else . end ])
+        | with_entries(select(.value | length > 0)))
+    else . end' "$HOOKS" > "$HOOKS.tmp" && mv "$HOOKS.tmp" "$HOOKS"
   jq -s '
     .[0] as $cur
     | (.[1].hooks // {}) as $new

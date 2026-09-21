@@ -52,6 +52,7 @@ AI_RUNTIME_GATE=off (CLAUDE_FABLE_GATE, CODEX_MODEL_GATE) disables every check;
 AI_RUNTIME_GATE_STATE, _TTL, _NOT_FOUND_TTL, _OVERLOAD_TTL, _LAUNCH_WINDOW,
 _WEEKLY_PCT, _FALLBACK, _EXPERT, _FALLBACK_EFFORT, _MODE, _AGENT_TTL tune it.
 """
+import contextlib
 import datetime as dt
 import json
 import math
@@ -61,6 +62,11 @@ import shutil
 import subprocess
 import sys
 import time
+
+try:
+    import fcntl
+except ImportError:                             # not POSIX: no lock, as before
+    fcntl = None
 
 LEGACY = {"claude": ("fable-gate", "CLAUDE_FABLE_GATE"), "codex": ("codex-model-gate", "CODEX_MODEL_GATE")}
 
@@ -76,14 +82,41 @@ RESPONSE = {}
 TTL_BY_ERROR = {}
 
 
-def setting(name, default, runtime=None):
-    """AI_RUNTIME_GATE_<name>, then the runtime's old name, then the default."""
-    old = LEGACY[runtime or RUNTIME][1]
-    for key in (f"AI_RUNTIME_GATE_{name}", f"{old}_{name}"):
+def setting(name, default, runtime=None, fits=None):
+    """AI_RUNTIME_GATE_<RUNTIME>_<name>, AI_RUNTIME_GATE_<name>, then the
+    runtime's old name, then the default. The shared name is read by both
+    runtimes, so `fits` drops a value that belongs to the other one (a Codex
+    model exported for Codex must not become a Claude Agent model)."""
+    runtime = runtime or RUNTIME
+    old = LEGACY[runtime][1]
+    for key in (f"AI_RUNTIME_GATE_{runtime.upper()}_{name}", f"AI_RUNTIME_GATE_{name}", f"{old}_{name}"):
         value = os.environ.get(key)
-        if value not in (None, ""):
-            return value
+        if value in (None, ""):
+            continue
+        if fits and key == f"AI_RUNTIME_GATE_{name}" and not fits(value):
+            continue
+        return value
     return default
+
+
+def number_setting(name, default, kind=int):
+    """A numeric setting; a value that does not parse keeps the default, so a
+    typo such as AGENT_TTL=30m cannot crash the gate (or the statusline it wraps)."""
+    try:
+        return kind(setting(name, str(default)))
+    except ValueError:
+        return kind(default)
+
+
+CLAUDE_MODEL = re.compile(r"^(fable|opus|sonnet|haiku|claude-)", re.I)
+
+
+def claude_model(value):
+    return bool(CLAUDE_MODEL.match(value))
+
+
+def codex_model(value):
+    return not claude_model(value)
 
 
 def profile_tier(home, tier, field, default):
@@ -121,22 +154,23 @@ def configure(runtime):
     # old variable only ever held the outage record, so the ledger does not
     # move into it: it stays at the default path beside it.
     QUOTA_STATE = STATE if os.environ.get("AI_RUNTIME_GATE_STATE") or \
+        os.environ.get(f"AI_RUNTIME_GATE_{runtime.upper()}_STATE") or \
         not os.environ.get(f"{LEGACY[runtime][1]}_STATE") else os.path.join(HOME, "state", "runtime-gate.json")
     LEGACY_STATE = os.path.join(HOME, "state", LEGACY[runtime][0] + ".json")
-    LIMIT_TTL = int(setting("TTL", "3600"))
-    NOT_FOUND_TTL = int(setting("NOT_FOUND_TTL", "21600"))
-    OVERLOAD_TTL = int(setting("OVERLOAD_TTL", "900"))
-    LAUNCH_WINDOW = int(setting("LAUNCH_WINDOW", "300"))
-    WEEKLY_PCT = float(setting("WEEKLY_PCT", "90"))
+    LIMIT_TTL = number_setting("TTL", 3600)
+    NOT_FOUND_TTL = number_setting("NOT_FOUND_TTL", 21600)
+    OVERLOAD_TTL = number_setting("OVERLOAD_TTL", 900)
+    LAUNCH_WINDOW = number_setting("LAUNCH_WINDOW", 300)
+    WEEKLY_PCT = number_setting("WEEKLY_PCT", 90, float)
     MODE = setting("MODE", "rewrite")
-    AGENT_TTL = int(setting("AGENT_TTL", "1800"))
+    AGENT_TTL = number_setting("AGENT_TTL", 1800)
     if runtime == "codex":
-        EXPERT = setting("EXPERT", profile_tier(HOME, "EXPERT", "model", "gpt-6-astra"))
-        FALLBACK = setting("FALLBACK", profile_tier(HOME, "STRONG", "model", "gpt-5.6-sol"))
+        EXPERT = setting("EXPERT", profile_tier(HOME, "EXPERT", "model", "gpt-6-astra"), fits=codex_model)
+        FALLBACK = setting("FALLBACK", profile_tier(HOME, "STRONG", "model", "gpt-5.6-sol"), fits=codex_model)
         FALLBACK_EFFORT = setting("FALLBACK_EFFORT", profile_tier(HOME, "STRONG", "effort", "high"))
     else:
-        EXPERT = setting("EXPERT", "fable")
-        FALLBACK = setting("FALLBACK", "opus")
+        EXPERT = setting("EXPERT", "fable", fits=claude_model)
+        FALLBACK = setting("FALLBACK", "opus", fits=claude_model)
         FALLBACK_EFFORT = setting("FALLBACK_EFFORT", "")
     # StopFailure categories that mean "Fable cannot serve this account right now".
     # Authentication, billing and account errors are account-wide: Opus would fail too.
@@ -193,6 +227,28 @@ def save(data, path=None):
     os.replace(tmp, path)
 
 
+@contextlib.contextmanager
+def locked(path=None):
+    """Hold an exclusive lock on <state>.lock for one load -> change -> save.
+    save() alone is atomic, but parallel hooks (a fan-out's SubagentStart and
+    SubagentStop next to a StopFailure) each loaded the old file and the last
+    save won, dropping the others' writes. Not re-entrant: never nest it.
+    Fails open: without a lock file the write goes ahead unlocked."""
+    path = path or STATE
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fh = open(f"{path}.lock", "a", encoding="utf-8")  # pylint: disable=consider-using-with
+    except OSError:
+        yield
+        return
+    try:
+        if fcntl:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+        yield
+    finally:
+        fh.close()                              # closing releases the lock
+
+
 def active(now=None):
     """The live unavailability record, or None."""
     rec = load().get("unavailable")
@@ -204,19 +260,21 @@ def active(now=None):
 
 def mark(until, reason, source):
     until = math.ceil(until)                     # round up: truncating would end the record up to a second early
-    data = load()
-    rec = data.get("unavailable")
-    if isinstance(rec, dict) and float(rec.get("until", 0)) >= until:
-        return                                  # a longer record already stands
-    data["unavailable"] = {"until": until, "reason": reason, "source": source,
-                           "set_at": int(time.time())}
-    save(data)
+    with locked():
+        data = load()
+        rec = data.get("unavailable")
+        if isinstance(rec, dict) and float(rec.get("until", 0)) >= until:
+            return                              # a longer record already stands
+        data["unavailable"] = {"until": until, "reason": reason, "source": source,
+                               "set_at": int(time.time())}
+        save(data)
 
 
 def note_launch():
-    data = load()                               # remembered for failure attribution
-    data["last_expert_launch"] = int(time.time())
-    save(data)
+    with locked():
+        data = load()                           # remembered for failure attribution
+        data["last_expert_launch"] = int(time.time())
+        save(data)
 
 
 def last_launch():
@@ -447,15 +505,17 @@ def record_quota(weekly, five_hour, resets_at, source, seen_at=None):
     if weekly is None and five_hour is None:
         return
     now = time.time()
-    data = load(QUOTA_STATE)
-    old = data.get("quota") if isinstance(data.get("quota"), dict) else {}
     new = {"weekly_pct": weekly, "five_hour_pct": five_hour, "resets_at": int(resets_at or 0),
            "seen_at": int(seen_at or now), "source": source}
+    old = load(QUOTA_STATE).get("quota")
+    old = old if isinstance(old, dict) else {}
     same = all(old.get(k) == new[k] for k in ("weekly_pct", "five_hour_pct", "resets_at", "source"))
     if same and now - float(old.get("seen_at") or 0) < ROLLOUT_EVERY:
-        return
-    data["quota"] = new
-    save(data, QUOTA_STATE)
+        return                                  # checked unlocked: a redraw that changes nothing takes no lock
+    with locked(QUOTA_STATE):
+        data = load(QUOTA_STATE)
+        data["quota"] = new
+        save(data, QUOTA_STATE)
 
 
 def newest_rollout():
@@ -514,11 +574,12 @@ def rollout_limits(path):
 
 def refresh_codex_quota():
     """Read the newest rollout, at most once a minute."""
-    data = load(QUOTA_STATE)
-    if time.time() - float(data.get("quota_checked_at") or 0) < ROLLOUT_EVERY:
-        return
-    data["quota_checked_at"] = int(time.time())
-    save(data, QUOTA_STATE)
+    with locked(QUOTA_STATE):
+        data = load(QUOTA_STATE)
+        if time.time() - float(data.get("quota_checked_at") or 0) < ROLLOUT_EVERY:
+            return
+        data["quota_checked_at"] = int(time.time())
+        save(data, QUOTA_STATE)
     path = newest_rollout()
     found = rollout_limits(path) if path else None
     if found:
@@ -823,30 +884,32 @@ def subagent_start(payload):
     tier = launch_tier({"subagent_type": name, "agent_type": name}, payload, tiers) if name else None
     now = time.time()
     session = str(payload.get("session_id") or "unknown")
-    data = load()
-    table = data.get("running_agents") if isinstance(data.get("running_agents"), dict) else {}
-    live = running(data, session, now)
-    live.append({"agent_id": str(payload.get("agent_id") or ""), "tier": tier, "started_at": int(now)})
-    table[session] = live
-    data["running_agents"] = {k: v for k, v in table.items() if v}
-    save(data)
+    with locked():
+        data = load()
+        table = data.get("running_agents") if isinstance(data.get("running_agents"), dict) else {}
+        live = running(data, session, now)
+        live.append({"agent_id": str(payload.get("agent_id") or ""), "tier": tier, "started_at": int(now)})
+        table[session] = live
+        data["running_agents"] = {k: v for k, v in table.items() if v}
+        save(data)
 
 
 def subagent_stop(payload):
     session = str(payload.get("session_id") or "unknown")
     agent_id = str(payload.get("agent_id") or "")
-    data = load()
-    table = data.get("running_agents")
-    if not isinstance(table, dict) or session not in table:
-        return
-    live = running(data, session, time.time())
-    for i, entry in enumerate(live):
-        if not agent_id or entry.get("agent_id") == agent_id:
-            del live[i]                         # one stop removes one entry
-            break
-    table[session] = live
-    data["running_agents"] = {k: v for k, v in table.items() if v}
-    save(data)
+    with locked():
+        data = load()
+        table = data.get("running_agents")
+        if not isinstance(table, dict) or session not in table:
+            return
+        live = running(data, session, time.time())
+        for i, entry in enumerate(live):
+            if not agent_id or entry.get("agent_id") == agent_id:
+                del live[i]                     # one stop removes one entry
+                break
+        table[session] = live
+        data["running_agents"] = {k: v for k, v in table.items() if v}
+        save(data)
 
 
 def ask_or_explain(reason):
@@ -877,18 +940,19 @@ def budget_pre_tool_use(payload):
     if tier == "EXPERT":
         expert = budgets.get("expert") or {}
         _root, task = project_task(payload.get("cwd"))
-        data = load()
-        counts = data.get("expert_launches") if isinstance(data.get("expert_launches"), dict) else {}
-        used = int(counts.get(task, 0)) if task else 0
+        with locked():
+            data = load()
+            counts = data.get("expert_launches") if isinstance(data.get("expert_launches"), dict) else {}
+            used = int(counts.get(task, 0)) if task else 0
+            if task:
+                counts[task] = used + 1
+                data["expert_launches"] = counts
+                save(data)
         limit = int(expert.get("max_per_task") or 0)
         if not expert.get("without_asking"):
             reasons.append(f"EXPERT agents run only when asked on {plan}")
         elif task and limit and used >= limit:
             reasons.append(f"task {task} already launched {used} EXPERT agent(s), the {plan} budget is {limit}")
-        if task:
-            counts[task] = used + 1
-            data["expert_launches"] = counts
-            save(data)
 
     fan = budgets.get("fan_out") or {}
     live = running(load(), str(payload.get("session_id") or "unknown"), time.time())
@@ -959,9 +1023,10 @@ def cli(argv):
             print(f"quota ({RUNTIME}): unknown — no statusline or rollout seen yet")
         return 0
     if cmd == "clear":
-        data = load()
-        data.pop("unavailable", None)
-        save(data)
+        with locked():
+            data = load()
+            data.pop("unavailable", None)
+            save(data)
         print("cleared")
         return 0
     if cmd == "set" and len(argv) >= 2 and argv[1].isdigit():

@@ -219,12 +219,29 @@ def read_session(root):
     return data if isinstance(data, dict) else {}
 
 
+def installed_runtime():
+    """The runtime whose home this copy is installed in, or None for a checkout.
+    Both skills call state.py from their own home ($AI_HOME), so this answers
+    for every call a runtime makes."""
+    here = os.path.abspath(__file__)
+    for runtime in ("codex", "claude"):
+        home = os.path.abspath(runtime_home(runtime)).rstrip(os.sep) + os.sep
+        if here.startswith(home):
+            return runtime
+    return None
+
+
 def detect_runtime(explicit, root):
-    """--runtime > AI_RUNTIME > session.json > CLAUDECODE > unknown (I10)."""
-    for candidate in (explicit, os.environ.get("AI_RUNTIME"), read_session(root).get("runtime")):
+    """--runtime > AI_RUNTIME > CLAUDECODE > install location > session.json >
+    unknown (I10). session.json names whichever runtime was prompted last, so it
+    comes after everything the process itself can tell: read first, it let one
+    runtime's change pass as the other's while both were working."""
+    for candidate in (explicit, os.environ.get("AI_RUNTIME"),
+                      "claude" if os.environ.get("CLAUDECODE") else None,
+                      installed_runtime(), read_session(root).get("runtime")):
         if candidate in RUNTIMES:
             return candidate
-    return "claude" if os.environ.get("CLAUDECODE") else "unknown"
+    return "unknown"
 
 
 def journal_path(root, task_id):
@@ -372,10 +389,12 @@ def claim_runtime(root, state):
     pending = (state.get("handoff") or {}).get("pending_to")
     if pending in RUNTIMES:
         if RUNTIME != pending:
+            back = ("state.py handoff --to %s" % RUNTIME if RUNTIME in RUNTIMES else
+                    "state.py --runtime %s handoff --to %s (this shell is neither runtime; "
+                    "name the one taking it)" % ((other_runtime(pending),) * 2))
             die("RUNTIME_HANDOFF_PENDING: task %s was handed to %s at %s. Resume it there "
-                "(/ai-task), or take it back here with: state.py handoff --to %s"
-                % (state.get("task_id"), pending, state["handoff"].get("pending_since"),
-                   RUNTIME if RUNTIME in RUNTIMES else "<runtime>"), 7)
+                "(/ai-task), or take it back here with: %s"
+                % (state.get("task_id"), pending, state["handoff"].get("pending_since"), back), 7)
         # The receiving runtime's first change: the handoff is complete. The
         # move itself was journaled when it was made, so there is no second event.
         state["handoff"]["pending_to"] = None
@@ -560,6 +579,11 @@ def cmd_init(args, root):
     if existing and existing.get("current_stage") != "done" and not args.force:
         die("task %s is still at stage '%s'. Finish it, archive it, or pass --force."
             % (existing.get("task_id"), existing.get("current_stage")))
+    pending = ((existing or {}).get("handoff") or {}).get("pending_to") if existing else None
+    if pending in RUNTIMES and pending != RUNTIME and existing.get("current_stage") != "done":
+        die("RUNTIME_HANDOFF_PENDING: task %s was handed to %s; --force here would discard it. "
+            "Take it back first: state.py handoff --to %s" % (existing.get("task_id"), pending,
+                                                                RUNTIME if RUNTIME in RUNTIMES else "<claude|codex>"), 7)
     task_id = valid_task_id(args.task_id) if args.task_id else next_task_id(root)
     state = {
         "task_id": task_id,
@@ -1232,8 +1256,17 @@ def cmd_set(args, root):
     state[args.field] = args.value
     review = state.get("cross_vendor_review")
     if args.field == "review_status" and isinstance(review, dict) and review.get("status") == "requested" \
-            and RUNTIME == review.get("to") and args.value not in ("not_started", "in_progress"):
-        review.update({"status": "done", "by_runtime": RUNTIME, "done_at": now(), "result": args.value})
+            and RUNTIME == review.get("to"):
+        # A second review adds to the first; it never clears it. The other
+        # vendor's verdict lives in cross_vendor_review.result, and review_status
+        # — the field the gates read — keeps the owner's blockers until the
+        # owner's own review clears them.
+        if previous == "blockers_open":
+            state[args.field] = previous
+            print("note: review_status stays blockers_open (the task's own review); "
+                  "this verdict is recorded as the cross-vendor result")
+        if args.value not in ("not_started", "in_progress"):
+            review.update({"status": "done", "by_runtime": RUNTIME, "done_at": now(), "result": args.value})
     emit(root, state, "field_set", "%s = %s" % (args.field, args.value),
          {"field": args.field, "from": previous, "value": args.value}, legacy="set")
     write_handoff(root, state, "stage")
@@ -2084,6 +2117,8 @@ def handoff_to(args, root):
     block it: they travel with the task."""
     state = load(root, claim=False)
     source = state.get("owner_runtime") or (RUNTIME if RUNTIME in RUNTIMES else None)
+    if not state.get("owner_runtime") and args.to == source:
+        die("task %s is already with %s; nothing to hand over" % (state.get("task_id"), args.to), 2)
     if args.to == state.get("owner_runtime"):
         die("task %s is already owned by %s%s" % (
             state.get("task_id"), args.to,
@@ -2095,6 +2130,12 @@ def handoff_to(args, root):
             % (args.to, runtime_home(args.to), args.to), 2)
     tier = state.get("risk_tier")
     via = "review" if args.for_ == "review" else "manual"
+    review = state.get("cross_vendor_review")
+    if isinstance(review, dict) and review.get("status") == "requested":
+        # Any move of the task ends an open request: taken back, it was not done;
+        # handed on again, a new --for review opens a fresh one. Left open, it
+        # sent a later plain handoff straight into an unasked-for review.
+        review.update({"status": "cancelled", "cancelled_at": now(), "by_runtime": RUNTIME})
     data = {"from": source, "to": args.to, "via": via, "reason": args.why or "", "tier": tier,
             "tty": bool(os.isatty(0) and os.isatty(1))}
     if via == "review":

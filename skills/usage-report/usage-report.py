@@ -323,10 +323,13 @@ def print_budgets() -> int:
 
 
 def parse_ts(value: str):
+    """An aware datetime; a stamp without an offset (Codex writes some) is UTC,
+    so comparing it with the journal's window cannot raise TypeError."""
     try:
-        return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        ts = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError:
         return None
+    return ts if ts.tzinfo else ts.replace(tzinfo=dt.timezone.utc)
 
 
 def find_project(start: str) -> str | None:
@@ -397,6 +400,7 @@ def task_report(args) -> int:
 
     print(f"task {args.task} tier {tier} window {start.isoformat(timespec='seconds')}"
           f"..{end.isoformat(timespec='seconds')}")
+    print("  (by time window: any other session in this project inside it is counted too)")
     for rt in involved or sorted(used):
         inp, cache, out = used.get(rt, [0, 0, 0])
         total = inp + cache + out
