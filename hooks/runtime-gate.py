@@ -21,6 +21,17 @@ Codex (EXPERT model -> STRONG model):
   PreToolUse:Agent   while a record is live, rewrites an EXPERT launch to STRONG
                      (MODE=context: explains the outage without rewriting)
 
+Budgets (from <home>/claude-agentic/profile.json; no profile, no budget):
+  PreToolUse:Agent   an EXPERT launch without `expert.without_asking`, or past
+                     `expert.max_per_task` for the task in flight, and a launch past
+                     `fan_out.max_parallel_agents` (or past `max_parallel_on_strong`
+                     for a STRONG/EXPERT agent) asks on Claude Code; Codex cannot
+                     ask, so there — and under AI_UNATTENDED=1 — it allows and explains
+  SubagentStart / SubagentStop   keep the per-session count of running agents;
+                     an entry older than AGENT_TTL (1800 s) no longer counts
+A rewrite made while a task is in flight is journaled as `model_fallback`
+through that project's state.py.
+
 A record expires on its own. The gate never denies, always exits 0, and any
 error inside it fails open: the call goes through unchanged.
 
@@ -39,7 +50,7 @@ else -> Claude Code); the shims name theirs. State lives in
 Environment, new name before the old one of that runtime before the default:
 AI_RUNTIME_GATE=off (CLAUDE_FABLE_GATE, CODEX_MODEL_GATE) disables every check;
 AI_RUNTIME_GATE_STATE, _TTL, _NOT_FOUND_TTL, _OVERLOAD_TTL, _LAUNCH_WINDOW,
-_WEEKLY_PCT, _FALLBACK, _EXPERT, _FALLBACK_EFFORT, _MODE tune it.
+_WEEKLY_PCT, _FALLBACK, _EXPERT, _FALLBACK_EFFORT, _MODE, _AGENT_TTL tune it.
 """
 import datetime as dt
 import json
@@ -60,6 +71,8 @@ HOME = STATE = LEGACY_STATE = QUOTA_STATE = ""
 LIMIT_TTL = NOT_FOUND_TTL = OVERLOAD_TTL = LAUNCH_WINDOW = 0
 WEEKLY_PCT = 0.0
 EXPERT = FALLBACK = FALLBACK_EFFORT = MODE = ""
+AGENT_TTL = 1800
+RESPONSE = {}
 TTL_BY_ERROR = {}
 
 
@@ -97,7 +110,7 @@ def configure(runtime):
     """Bind every setting for one runtime."""
     # pylint: disable=global-statement
     global RUNTIME, HOME, STATE, LEGACY_STATE, QUOTA_STATE, LIMIT_TTL, NOT_FOUND_TTL, OVERLOAD_TTL
-    global LAUNCH_WINDOW, WEEKLY_PCT, EXPERT, FALLBACK, FALLBACK_EFFORT, MODE, TTL_BY_ERROR
+    global LAUNCH_WINDOW, WEEKLY_PCT, EXPERT, FALLBACK, FALLBACK_EFFORT, MODE, TTL_BY_ERROR, AGENT_TTL
     RUNTIME = runtime
     if runtime == "codex":
         HOME = os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")
@@ -116,6 +129,7 @@ def configure(runtime):
     LAUNCH_WINDOW = int(setting("LAUNCH_WINDOW", "300"))
     WEEKLY_PCT = float(setting("WEEKLY_PCT", "90"))
     MODE = setting("MODE", "rewrite")
+    AGENT_TTL = int(setting("AGENT_TTL", "1800"))
     if runtime == "codex":
         EXPERT = setting("EXPERT", profile_tier(HOME, "EXPERT", "model", "gpt-6-astra"))
         FALLBACK = setting("FALLBACK", profile_tier(HOME, "STRONG", "model", "gpt-5.6-sol"))
@@ -326,7 +340,8 @@ def claude_pre_tool_use(payload):
 
     name = tool_input.get("subagent_type") or "general-purpose"
     why = f"Fable is unavailable ({rec.get('reason', 'unknown')}) until {hhmm(float(rec['until']))}"
-    print(json.dumps({
+    journal_fallback(payload, name, agent_model(tool_input, payload), FALLBACK, rec)
+    respond({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "allow",
@@ -338,7 +353,7 @@ def claude_pre_tool_use(payload):
                 "`~/.claude/hooks/runtime-gate.py clear` re-enables Fable early."
             ),
         }
-    }))
+    })
 
 
 def claude_post_tool_use(payload):
@@ -649,12 +664,13 @@ def codex_pre_tool_use(payload):
     )
     out = {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
     if MODE == "rewrite":
+        journal_fallback(payload, name, launch_model(tool_input), FALLBACK, rec)
         out["hookSpecificOutput"]["permissionDecision"] = "allow"
         out["hookSpecificOutput"]["updatedInput"] = {
             **tool_input, "model": FALLBACK, "model_reasoning_effort": FALLBACK_EFFORT,
         }
     out["hookSpecificOutput"]["additionalContext"] = context
-    print(json.dumps(out))
+    respond(out)
 
 
 def codex_post_tool_use(payload):
@@ -687,12 +703,231 @@ def codex_subagent_stop(payload):
         mark(time.time() + hit[1], hit[0], "SubagentStop")
 
 
+# ================================================================== budgets
+TIERS = ("EXPERT", "STRONG", "BALANCED", "FAST")
+
+
+def respond(out):
+    """Merge one handler's hookSpecificOutput into the single answer main()
+    prints: `ask` outranks `allow`, reasons and context accumulate."""
+    new = out.get("hookSpecificOutput") or {}
+    cur = RESPONSE.setdefault("hookSpecificOutput", {"hookEventName": new.get("hookEventName", "PreToolUse")})
+    decision = new.get("permissionDecision")
+    if decision and (cur.get("permissionDecision") != "ask"):
+        cur["permissionDecision"] = decision
+    for key, sep in (("permissionDecisionReason", "; "), ("additionalContext", " ")):
+        if new.get(key):
+            cur[key] = f"{cur[key]}{sep}{new[key]}" if cur.get(key) else new[key]
+    if "updatedInput" in new:
+        cur["updatedInput"] = new["updatedInput"]
+
+
+def profile():
+    try:
+        with open(os.path.join(HOME, "claude-agentic", "profile.json"), encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def model_tier(model, tiers):
+    """The tier a model belongs to on this runtime, or None."""
+    if not isinstance(model, str) or not model:
+        return None
+    if RUNTIME == "claude":
+        low = model.lower()
+        for word, tier in (("fable", "EXPERT"), ("opus", "STRONG"), ("sonnet", "BALANCED"), ("haiku", "FAST")):
+            if word in low:
+                return tier
+        return None
+    for tier in TIERS:
+        if (tiers.get(tier) or {}).get("model") == model:
+            return tier
+    return None
+
+
+def launch_tier(tool_input, payload, tiers):
+    """An explicit model on the call wins; then the agent's name in the tier
+    lists; then the model its definition pins."""
+    own = tool_input.get("model")
+    if own:
+        return model_tier(own, tiers)
+    name = (tool_input.get("subagent_type") if RUNTIME == "claude" else agent_name(tool_input)) or ""
+    for tier in TIERS:
+        if name in ((tiers.get(tier) or {}).get("agents") or []):
+            return tier
+    pinned = agent_model(tool_input, payload) if RUNTIME == "claude" else launch_model(tool_input)
+    return model_tier(pinned, tiers)
+
+
+def project_task(cwd):
+    """(project root, task id) of the task in flight at or above cwd, or (None, None)."""
+    here = os.path.abspath(cwd) if isinstance(cwd, str) and cwd else None
+    while here:
+        path = os.path.join(here, ".ai", "state", "current.json")
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    task = json.load(fh).get("task_id")
+            except (OSError, ValueError, AttributeError):
+                return None, None
+            return (here, task) if task else (None, None)
+        parent = os.path.dirname(here)
+        here = None if parent == here else parent
+    return None, None
+
+
+def state_script():
+    for path in (os.path.join(HOME, "skills", "ai-task", "state.py"),
+                 os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              "skills", "ai-task", "state.py")):
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+FALLBACK_REASONS = (("weekly", "weekly_limit"), ("fell back", "overloaded"), ("overload", "overloaded"),
+                    ("not_found", "model_not_found"), ("unavailable", "model_not_found"),
+                    ("rate", "rate_limit"))
+
+
+def journal_fallback(payload, agent, from_model, to_model, rec):
+    """One model_fallback line in the task's journal (WP2 vocabulary, actor
+    hook). No task, no line; any failure is swallowed."""
+    try:
+        root, _task = project_task(payload.get("cwd"))
+        script = state_script()
+        if not root or not script:
+            return
+        raw = str(rec.get("reason") or "")
+        reason = next((r for key, r in FALLBACK_REASONS if key in raw.lower()), raw or "rate_limit")
+        data = {"agent": agent, "from": from_model or EXPERT, "to": to_model, "reason": reason}
+        subprocess.run([sys.executable, script, "--root", root, "event", "model_fallback",
+                        "--data", json.dumps(data)],
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=3, check=False)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        pass
+
+
+def running(data, session, now):
+    """Live entries of one session, expired ones dropped."""
+    agents = (data.get("running_agents") or {}).get(session) or []
+    return [a for a in agents if isinstance(a, dict) and now - float(a.get("started_at") or 0) < AGENT_TTL]
+
+
+def subagent_start(payload):
+    tiers = profile().get("tiers") or {}
+    name = payload.get("agent_type") or payload.get("subagent_type") or ""
+    tier = launch_tier({"subagent_type": name, "agent_type": name}, payload, tiers) if name else None
+    now = time.time()
+    session = str(payload.get("session_id") or "unknown")
+    data = load()
+    table = data.get("running_agents") if isinstance(data.get("running_agents"), dict) else {}
+    live = running(data, session, now)
+    live.append({"agent_id": str(payload.get("agent_id") or ""), "tier": tier, "started_at": int(now)})
+    table[session] = live
+    data["running_agents"] = {k: v for k, v in table.items() if v}
+    save(data)
+
+
+def subagent_stop(payload):
+    session = str(payload.get("session_id") or "unknown")
+    agent_id = str(payload.get("agent_id") or "")
+    data = load()
+    table = data.get("running_agents")
+    if not isinstance(table, dict) or session not in table:
+        return
+    live = running(data, session, time.time())
+    for i, entry in enumerate(live):
+        if not agent_id or entry.get("agent_id") == agent_id:
+            del live[i]                         # one stop removes one entry
+            break
+    table[session] = live
+    data["running_agents"] = {k: v for k, v in table.items() if v}
+    save(data)
+
+
+def ask_or_explain(reason):
+    """Ask on Claude Code; Codex cannot ask and an unattended run has nobody
+    to answer, so there the launch goes through with the reason in context."""
+    if RUNTIME == "claude" and os.environ.get("AI_UNATTENDED") != "1":
+        respond({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask",
+                                        "permissionDecisionReason": f"runtime-gate: {reason}"}})
+    else:
+        respond({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext":
+                 f"runtime-gate: {reason}. It runs anyway ({'unattended' if RUNTIME == 'claude' else 'Codex cannot ask'}); "
+                 "say so when you report it."}})
+
+
+def budget_pre_tool_use(payload):
+    tool_input = payload.get("tool_input")
+    agent_call = payload.get("tool_name") == "Agent" if RUNTIME == "claude" else is_agent_event(payload)
+    if not agent_call or not isinstance(tool_input, dict) or tool_input.get("subagent_type") == "fork":
+        return
+    prof = profile()
+    budgets = prof.get("budgets")
+    if not isinstance(budgets, dict):
+        return                                  # no plan tables: no budget
+    tier = launch_tier(tool_input, payload, prof.get("tiers") or {})
+    plan = prof.get("label") or prof.get("plan") or "this plan"
+    reasons = []
+
+    if tier == "EXPERT":
+        expert = budgets.get("expert") or {}
+        _root, task = project_task(payload.get("cwd"))
+        data = load()
+        counts = data.get("expert_launches") if isinstance(data.get("expert_launches"), dict) else {}
+        used = int(counts.get(task, 0)) if task else 0
+        limit = int(expert.get("max_per_task") or 0)
+        if not expert.get("without_asking"):
+            reasons.append(f"EXPERT agents run only when asked on {plan}")
+        elif task and limit and used >= limit:
+            reasons.append(f"task {task} already launched {used} EXPERT agent(s), the {plan} budget is {limit}")
+        if task:
+            counts[task] = used + 1
+            data["expert_launches"] = counts
+            save(data)
+
+    fan = budgets.get("fan_out") or {}
+    live = running(load(), str(payload.get("session_id") or "unknown"), time.time())
+    most = int(fan.get("max_parallel_agents") or 0)
+    if most and len(live) >= most:
+        reasons.append(f"{len(live)} agent(s) already running, the {plan} fan-out is {most}"
+                       + (" and serial" if fan.get("serial") else ""))
+    strong = [a for a in live if a.get("tier") in ("STRONG", "EXPERT")]
+    most_strong = int(fan.get("max_parallel_on_strong") or 0)
+    if tier in ("STRONG", "EXPERT") and most_strong and len(strong) >= most_strong:
+        reasons.append(f"{len(strong)} STRONG/EXPERT agent(s) already running, the {plan} limit is {most_strong}")
+    if reasons:
+        ask_or_explain("; ".join(reasons))
+
+
+def pre_tool_use(payload):
+    """The reroute first, then the budgets; each fails open on its own."""
+    for step in (claude_pre_tool_use if RUNTIME == "claude" else codex_pre_tool_use, budget_pre_tool_use):
+        try:
+            step(payload)
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+
+
+def codex_stop(payload):
+    for step in (codex_subagent_stop, subagent_stop):
+        try:
+            step(payload)
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+
+
 # ------------------------------------------------------------------ entry points
 HANDLERS = {
-    "claude": {"PreToolUse": claude_pre_tool_use, "PostToolUse": claude_post_tool_use,
-               "StopFailure": claude_stop_failure},
-    "codex": {"PreToolUse": codex_pre_tool_use, "PostToolUse": codex_post_tool_use,
-              "SubagentStop": codex_subagent_stop},
+    "claude": {"PreToolUse": pre_tool_use, "PostToolUse": claude_post_tool_use,
+               "StopFailure": claude_stop_failure,
+               "SubagentStart": subagent_start, "SubagentStop": subagent_stop},
+    "codex": {"PreToolUse": pre_tool_use, "PostToolUse": codex_post_tool_use,
+              "SubagentStart": subagent_start, "SubagentStop": codex_stop},
 }
 
 
@@ -784,6 +1019,8 @@ def main(argv=None):
         handler = HANDLERS[RUNTIME].get(payload.get("hook_event_name"))
         if handler:
             handler(payload)
+        if RESPONSE:
+            print(json.dumps(RESPONSE))
     except Exception:  # pylint: disable=broad-exception-caught
         pass                                    # fail open: never break an Agent call
     return 0

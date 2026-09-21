@@ -139,6 +139,96 @@ rm -rf "$CX/sessions" "$CX/state"
 python3 "$CX/hooks/runtime-gate.py" quota --json | jq -e '.stale == true and .source == null' >/dev/null \
     && pass "no rollout: unknown and stale" || fail "codex quota without rollouts"
 
+echo "== budgets: EXPERT asks (R8)"
+rm -rf "$CL/state" "$CX/state"
+RESOLVE="$PLUGIN_ROOT/scripts/resolve-profile.py"
+python3 "$RESOLVE" max --fable yes --print agentic > "$CL/claude-agentic/profile.json"
+python3 "$RESOLVE" codex-plus --fable no --print agentic > "$CX/claude-agentic/profile.json" 2>/dev/null \
+    || { mkdir -p "$CX/claude-agentic"; python3 "$RESOLVE" codex-plus --fable no --print agentic > "$CX/claude-agentic/profile.json"; }
+PROJ="$TMP/proj"; mkdir -p "$PROJ/.ai"
+python3 "$PLUGIN_ROOT/skills/ai-task/state.py" --root "$PROJ" init --goal g --workflow feature >/dev/null 2>&1
+TASK=$(jq -r .task_id "$PROJ/.ai/state/current.json")
+launch() {  # launch <home-hook> <subagent_type> [session] [model] -> stdout
+    jq -nc --arg a "$2" --arg s "${3:-s1}" --arg m "${4:-}" --arg c "$PROJ" \
+        '{hook_event_name:"PreToolUse",tool_name:"Agent",session_id:$s,cwd:$c,
+          tool_input:({subagent_type:$a,prompt:"p"} + (if $m == "" then {} else {model:$m} end))}' | python3 "$1"
+}
+decision() { jq -r '.hookSpecificOutput.permissionDecision // "none"' 2>/dev/null <<<"${1:-{\}}"; }
+out=$(launch "$CL/hooks/runtime-gate.py" ai-expert)
+[ "$(decision "$out")" = ask ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("EXPERT agents run only when asked on Max")' >/dev/null \
+    && pass "max: an EXPERT launch asks, with the reason" || fail "max EXPERT should ask" "$out"
+out=$(launch "$CL/hooks/runtime-gate.py" ai-reviewer)
+[ -z "$out" ] && pass "max: a STRONG launch within the fan-out goes through silently" || fail "STRONG launch should be silent" "$out"
+out=$(AI_UNATTENDED=1 launch "$CL/hooks/runtime-gate.py" architect)
+[ "$(decision "$out")" = none ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | test("unattended")' >/dev/null \
+    && pass "AI_UNATTENDED=1: allowed and explained, never asked" || fail "unattended EXPERT" "$out"
+python3 "$RESOLVE" max20 --fable yes --print agentic > "$CL/claude-agentic/profile.json"
+rm -rf "$CL/state"
+o1=$(launch "$CL/hooks/runtime-gate.py" ai-expert); o2=$(launch "$CL/hooks/runtime-gate.py" ai-expert); o3=$(launch "$CL/hooks/runtime-gate.py" ai-expert)
+[ -z "$o1$o2" ] && pass "max20: two EXPERT launches in a task need no question" || fail "max20 first two should be silent" "$o1$o2"
+[ "$(decision "$o3")" = ask ] && printf '%s' "$o3" | jq -e --arg t "$TASK" '.hookSpecificOutput.permissionDecisionReason | test($t)' >/dev/null \
+    && pass "max20: the third asks, naming the task" || fail "max20 third EXPERT should ask" "$o3"
+jq -e --arg t "$TASK" '.expert_launches[$t] == 3' "$CL/state/runtime-gate.json" >/dev/null && pass "the count is keyed by the task id" || fail "expert_launches not keyed by task"
+out=$(jq -r '.payload' "$FIX/30-agent-expert-launch.json" | sed "s|__ROOT__|$TMP|g" | python3 "$CX/hooks/runtime-gate.py")
+[ "$(decision "$out")" != ask ] && [ "$(decision "$out")" != deny ] \
+    && printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | test("Codex cannot ask")' >/dev/null \
+    && pass "codex-plus: an EXPERT spawn is allowed and explained, never asked" || fail "codex EXPERT budget" "$out"
+
+echo "== budgets: running agents and the fan-out (R19)"
+python3 "$RESOLVE" max --fable yes --print agentic > "$CL/claude-agentic/profile.json"
+rm -rf "$CL/state"
+sub() {  # sub <hook> <Start|Stop> <agent_type> <agent_id> [session]
+    jq -nc --arg e "Subagent$2" --arg a "$3" --arg i "$4" --arg s "${5:-s1}" \
+        '{hook_event_name:$e,session_id:$s,agent_type:$a,agent_id:$i}' | python3 "$1"
+}
+G="$CL/hooks/runtime-gate.py"
+sub "$G" Start Explore a1; sub "$G" Start log-reader a2; sub "$G" Start ai-tester a3
+out=$(launch "$G" ai-indexer)
+[ "$(decision "$out")" = ask ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("3 agent\\(s\\) already running, the Max fan-out is 3")' >/dev/null \
+    && pass "max: a fourth parallel launch asks" || fail "fan-out ask" "$out"
+out=$(launch "$G" ai-indexer s2)
+[ -z "$out" ] && pass "running agents are counted per session" || fail "another session should not count" "$out"
+sub "$G" Stop Explore a1
+out=$(launch "$G" ai-indexer)
+[ -z "$out" ] && pass "a SubagentStop frees a slot" || fail "stop did not free a slot" "$out"
+sub "$G" Stop log-reader a2; sub "$G" Stop ai-tester a3
+sub "$G" Start ai-reviewer r1; sub "$G" Start ai-security r2
+out=$(launch "$G" ai-reviewer)
+[ "$(decision "$out")" = ask ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("STRONG/EXPERT")' >/dev/null \
+    && pass "max: a third STRONG agent asks (max_parallel_on_strong 2)" || fail "on-strong ask" "$out"
+out=$(launch "$G" ai-reviewer s1 sonnet)
+[ -z "$out" ] && pass "the same agent with model: sonnet counts as BALANCED and goes through" || fail "explicit model should decide the tier" "$out"
+jq '.running_agents.s1 |= map(.started_at = 1000)' "$CL/state/runtime-gate.json" > "$TMP/s.json" && mv "$TMP/s.json" "$CL/state/runtime-gate.json"
+out=$(launch "$G" ai-reviewer)
+[ -z "$out" ] && pass "an entry older than the agent TTL (a lost SubagentStop) no longer counts" || fail "stale entries still counted" "$out"
+rm -rf "$CX/state"
+sub "$CX/hooks/runtime-gate.py" Start ai-indexer c1 cs
+out=$(launch "$CX/hooks/runtime-gate.py" Explore cs)
+[ "$(decision "$out")" = none ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | test("fan-out is 1 and serial")' >/dev/null \
+    && pass "codex-plus: a second parallel launch is allowed and explained" || fail "codex fan-out" "$out"
+sub "$CX/hooks/runtime-gate.py" Stop ai-indexer c1 cs
+jq -e '.running_agents | has("cs") | not' "$CX/state/runtime-gate.json" >/dev/null && pass "codex SubagentStop removes the entry too" || fail "codex stop"
+
+echo "== model_fallback is journaled on a rewrite (R9)"
+ln -sfn "$PLUGIN_ROOT/skills" "$CL/skills"          # where install.sh puts state.py
+python3 "$RESOLVE" max --fable yes --print agentic > "$CL/claude-agentic/profile.json"
+rm -rf "$CL/state"; python3 "$G" set 600 rate_limit >/dev/null
+EV="$PROJ/.ai/reports/$TASK/events.jsonl"
+before=$(grep -c '"model_fallback"' "$EV" 2>/dev/null || true)
+out=$(AI_UNATTENDED=1 launch "$G" architect)
+[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model')" = opus ] && pass "architect rerouted to opus" || fail "reroute missing" "$out"
+after=$(grep -c '"model_fallback"' "$EV")
+[ $((after - before)) = 1 ] && pass "exactly one model_fallback line" || fail "expected one model_fallback line, got $((after - before))"
+tail -1 "$EV" | jq -e '.actor == "hook" and .data.agent == "architect" and .data.from == "fable[1m]" and .data.to == "opus" and .data.reason == "rate_limit"' >/dev/null \
+    && pass "actor hook, {agent, from, to, reason}" || fail "model_fallback line" "$(tail -1 "$EV")"
+out=$(jq -nc '{hook_event_name:"PreToolUse",tool_name:"Agent",session_id:"s9",cwd:"/nonexistent",tool_input:{subagent_type:"architect",prompt:"p"}}' | AI_UNATTENDED=1 python3 "$G")
+[ "$(grep -c '"model_fallback"' "$EV")" = "$after" ] && pass "no task at cwd, no line" || fail "a line was written for another cwd"
+mkdir -p "$TMP/broken/skills/ai-task"; printf 'import sys\nsys.exit(3)\n' > "$TMP/broken/skills/ai-task/state.py"
+out=$(CLAUDE_CONFIG_DIR="$TMP/broken" AI_RUNTIME_GATE_STATE="$CL/state/runtime-gate.json" AI_UNATTENDED=1 launch "$G" architect s1 'fable[1m]'); rc=$?
+[ $rc = 0 ] && [ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model')" = opus ] \
+    && pass "a broken state.py: the launch is still rerouted, exit 0" || fail "broken state.py broke the gate" "rc=$rc $out"
+python3 "$G" clear >/dev/null
+
 echo "== fails open, never denies"
 for input in '' 'not json' '[]' '{"hook_event_name":"PreToolUse","tool_name":"Agent","tool_input":"x"}'; do
     for g in "$CL/hooks/runtime-gate.py" "$CX/hooks/runtime-gate.py"; do
