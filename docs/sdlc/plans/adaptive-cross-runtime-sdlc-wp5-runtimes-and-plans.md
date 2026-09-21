@@ -18,6 +18,14 @@ accepted the same day. The answers that shape the work, repeated so no reviewer 
 `runtime_handoff`** (OQ5), **`by_workflow: {"refactoring": "codex"}` on Claude profiles, `{}` on
 Codex** (OQ6), and **Codex's own `max_concurrent_threads_per_session` stays** (concern 1).
 
+**Amendment, 2026-09-21 (user): R18 wins over R16 where they collide.** Today `ai-discovery` is
+`sonnet` on Claude but FAST on Codex, and the BALANCED agents differ in effort (`ai-context`,
+`ai-discovery`, `ai-implementer`, `ai-release` at `low`; `ai-planner`, `ai-risk` at `medium`). Step 3
+therefore moves `ai-discovery` to BALANCED in both Codex profiles (Terra either way) and keeps a
+literal `effort:` line in any template whose effort differs from its tier's; the tier placeholder
+is used for the model always and for the effort only where it matches. No installed model or
+effort changes.
+
 Twelve steps, twelve commits. Each step names the only files it may touch; anything else is
 `SCOPE_CHANGE_REQUIRED` and an amendment to this plan. Step tests run the suites the step names;
 `bash tests/run-all.sh` runs **once**, at step 12. There is no e2e suite (`e2e_command: none`) — the
