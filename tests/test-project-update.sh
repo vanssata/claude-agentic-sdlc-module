@@ -570,4 +570,44 @@ out=$(env -u CLAUDECODE python3 "$STATE" --root "$S9" step-done 2 2>&1); rc=$?
 grep -qiE 'claude|codex' "$PLUGIN_ROOT/skills/project-update/migrations/0004_deterministic_gates.py" \
     && fail "a migration must not name a runtime" || pass "0004 names no runtime"
 
+echo "== schema 5: a task in flight gains the handoff keys and keeps working (R17)"
+S10="$TMP/schema4"; mkdir -p "$S10"
+bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$S10" --runtime claude >/dev/null
+bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$S10" --runtime claude >/dev/null
+cp -r "$FIX/schema-v4/.ai" "$S10/"     # VERSION 4 and a task in flight
+[ "$CURRENT" = 5 ] && pass "the migrations reach schema 5" || fail "CURRENT is $CURRENT, expected 5"
+env -u CLAUDECODE python3 "$STATE" --root "$S10" set next_action "before 0005" >/dev/null 2>&1 \
+    && pass "a mutating command works at schema 4, defaults filled in memory" || fail "state.py failed on a schema-4 task"
+python3 - "$S10" <<'PY2'
+import json, os, sys
+state = json.load(open(os.path.join(sys.argv[1], ".ai", "state", "current.json")))
+assert state["handoff"]["pending_to"] is None and state["cross_vendor_review"] is None
+PY2
+[ $? -eq 0 ] && pass "and state.py saved the schema-5 defaults with it" || fail "schema-5 defaults not saved by state.py"
+cp -r "$FIX/schema-v4/.ai" "$S10/"     # back to the bare schema-4 task
+python3 "$UPDATE" "$S10" --check >/dev/null; [ $? -eq 1 ] && pass "--check exits 1 at schema 4" || fail "--check should exit 1 at schema 4"
+out=$(python3 "$UPDATE" "$S10")
+printf '%s' "$out" | grep -q '\[0005\]' && pass "the dry run names migration 0005" || fail "no 0005 line" "$out"
+python3 "$UPDATE" "$S10" --apply >/dev/null
+python3 - "$S10" <<'PY2'
+import json, os, sys
+state = json.load(open(os.path.join(sys.argv[1], ".ai", "state", "current.json")))
+assert state["handoff"]["pending_to"] is None and state["handoff"]["pending_since"] is None
+assert state["handoff"]["file"] == ".ai/state/handoff.md"
+assert state["cross_vendor_review"] is None
+assert state["diff"]["task"]["status"] == "not_measured"     # schema 4 untouched
+assert state["goal"] == "widen the export" and state["completed_steps"] == ["1"]
+PY2
+[ $? -eq 0 ] && pass "the keys are added with nulls, and nothing else is touched" || fail "0005 changed the task"
+[ "$(cat "$S10/.ai/VERSION")" = 5 ] && pass "the schema reaches 5" || fail "VERSION not written"
+python3 "$UPDATE" "$S10" | grep -q '^0 automatic' && pass "a second run has nothing to do" || fail "0005 is not idempotent"
+python3 "$UPDATE" "$S10" --check >/dev/null && pass "--check exits 0 once migrated" || fail "--check should exit 0 after 0005"
+env -u CLAUDECODE python3 "$STATE" --root "$S10" get --field history 2>/dev/null \
+    | grep -q '"detail": "0005 ' && pass "schema_migrated 0005 is recorded in the task's history" \
+    || fail "no schema_migrated entry for 0005"
+env -u CLAUDECODE python3 "$STATE" --root "$S10" set next_action "after 0005" >/dev/null 2>&1 \
+    && pass "and a mutating command still works at schema 5" || fail "state.py failed after 0005"
+grep -qiE 'claude|codex' "$PLUGIN_ROOT/skills/project-update/migrations/0005_runtimes_and_plans.py" \
+    && fail "a migration must not name a runtime" || pass "0005 names no runtime"
+
 summary "project-update"
