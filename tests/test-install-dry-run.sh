@@ -21,7 +21,7 @@ for combo in "max yes:xhigh:fable[1m]" "max no:high:Opus 5 with the 200k window"
     printf '%s' "$out" | grep -q 'nothing written' && pass "--plan $1 --fable $2 writes nothing" || fail "dry run should write nothing"
 done
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable no --dry-run 2>&1)
-printf '%s' "$out" | grep -q '"fable' && fail "--fable no must drop fable from the settings" "$out" || pass "--fable no drops fable from the settings"
+printf '%s' "$out" | sed -n '/^== settings snippet/,/^== agents/p' | grep -q '"fable' && fail "--fable no must drop fable from the settings" "$out" || pass "--fable no drops fable from the settings"
 
 echo "== pro: opusplan session, EXPERT tier pinned to opus"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan pro --dry-run 2>&1)
@@ -69,6 +69,70 @@ printf '{"oauthAccount":{"organizationType":"claude_max"}}' > "$HOME_T/.claude.j
 out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
 printf '%s' "$out" | grep -q 'plan=max (Max' && pass "claude_max is still detected as max" || fail "max org should map to max" "$out"
 
+echo "== max20: Max 20x, detected from organizationRateLimitTier (R3)"
+snippet() { sed -n '/^== settings snippet/,/^== agents/p'; }
+out20=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan max20 --dry-run 2>&1)
+outmax=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan max --dry-run 2>&1)
+printf '%s' "$out20" | grep -q 'plan=max20 (Max 20x, max profile) fable=yes' && pass "--plan max20 is Max 20x on the max profile" || fail "--plan max20 header" "$(printf '%s' "$out20" | grep '^== claude: plan')"
+[ "$(printf '%s' "$out20" | snippet)" = "$(printf '%s' "$outmax" | snippet)" ] \
+    && pass "max20's settings snippet equals max's" || fail "max20 snippet differs from max"
+for plan in pro team-pro team-max max max20; do
+    o=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan "$plan" --dry-run 2>&1)
+    printf '%s' "$o" | snippet | sed '1d;$d' | jq -e 'has("claude_agentic") | not' >/dev/null \
+        && pass "$plan: claude_agentic never reaches settings.json" || fail "$plan: claude_agentic leaked into the snippet"
+    printf '%s' "$o" | grep -q "^== profile.json (plan tables): $TMP/none/claude-agentic/profile.json" \
+        && pass "$plan: --dry-run lists profile.json" || fail "$plan: profile.json not listed"
+done
+printf '%s' "$out20" | sed -n '/^== profile.json/,/^== would install/p' | sed '1d;$d' \
+    | jq -e '.plan == "max20" and .label == "Max 20x" and .runtime == "claude" and .fable == true
+             and .budgets.fan_out.max_parallel_agents == 6 and (.plugin_version | length > 0) and (.written_at | length > 0)' >/dev/null \
+    && pass "max20 profile.json carries plan, runtime, fable and the max20 budgets" || fail "max20 profile.json content"
+printf '{"oauthAccount":{"organizationType":"claude_max","organizationRateLimitTier":"default_claude_max_20x"}}' > "$HOME_T/.claude.json"
+out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
+printf '%s' "$out" | grep -q 'plan=max20 (Max 20x' && pass "default_claude_max_20x is detected as max20" || fail "max_20x should map to max20" "$out"
+err=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 >/dev/null </dev/null)
+printf '%s' "$err" | grep -q 'detected plan: max20 (organizationRateLimitTier default_claude_max_20x)' \
+    && pass "without a terminal the detection is printed on stderr" || fail "detection should be on stderr" "$err"
+printf '{"oauthAccount":{"organizationType":"claude_max","organizationRateLimitTier":"default_claude_max_5x"}}' > "$HOME_T/.claude.json"
+out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
+printf '%s' "$out" | grep -q 'plan=max (Max' && pass "default_claude_max_5x stays max" || fail "max_5x should map to max" "$out"
+PREV="$TMP/prev"; mkdir -p "$PREV/claude-agentic"; printf '{"plan":"max20"}' > "$PREV/claude-agentic/profile.json"
+printf '{}' > "$HOME_T/.claude.json"
+out=$(HOME="$HOME_T" CLAUDE_DIR="$PREV" bash "$INSTALL" --dry-run 2>&1 </dev/null)
+printf '%s' "$out" | grep -q 'plan=max20' && pass "an undetectable account falls back to the plan the last install recorded" || fail "previous profile.json plan not used" "$out"
+
+echo "== R16/R18: every installed agent's model and effort, per plan"
+# Captured from the installer before the agent sources became templates (WP5
+# step 3). The twelve tier agents are the same on every plan; only the EXPERT
+# pair differs. A change here is a model or effort change, which R18 forbids.
+COMMON="ai-context sonnet low;ai-discovery sonnet low;ai-implementer sonnet low;ai-indexer haiku low;ai-planner sonnet medium;ai-release sonnet low;ai-reviewer opus high;ai-risk sonnet medium;ai-security opus high;ai-tester haiku low;Explore haiku low;log-reader haiku low"
+for combo in "pro no|ai-expert opus high;architect opus high" \
+             "team-pro no|ai-expert opus high;architect opus high" \
+             "max yes|ai-expert opus xhigh;architect fable[1m] xhigh" \
+             "max no|ai-expert opus xhigh;architect - high" \
+             "team-max yes|ai-expert opus xhigh;architect fable[1m] xhigh" \
+             "team-max no|ai-expert opus xhigh;architect - high" \
+             "max20 yes|ai-expert opus xhigh;architect fable[1m] xhigh"; do
+    args="${combo%%|*}"; set -- $args
+    D="$TMP/fm-$1-$2"; mkdir -p "$D"
+    CLAUDE_DIR="$D" bash "$INSTALL" --target claude --plan "$1" --fable "$2" >/dev/null 2>&1 </dev/null
+    got=$(for f in "$D"/agents/*.md; do
+              awk -v n="$(basename "$f" .md)" 'NR>1 && /^---$/{exit} /^model:/{m=$2} /^effort:/{e=$2} END{print n, (m==""?"-":m), e}' "$f"
+          done | sort | paste -sd';')
+    want=$(printf '%s' "$COMMON;${combo#*|}" | tr ';' '\n' | sort | paste -sd';')
+    [ "$got" = "$want" ] && pass "--plan $1 --fable $2: all 14 agents keep their model and effort" \
+        || fail "--plan $1 --fable $2: agent frontmatter changed" "$(diff <(tr ';' '\n' <<<"$want") <(tr ';' '\n' <<<"$got") | head -6)"
+    bad=""
+    for t in "$PLUGIN_ROOT"/agents/*.md.tmpl; do
+        tier=$(sed -n 's/^model: {{\([A-Z]*\)_MODEL}}$/\1/p' "$t"); [ -n "$tier" ] || continue
+        n=$(basename "$t" .md.tmpl)
+        want_m=$(jq -r --arg t "$tier" '.tiers[$t].model' "$D/claude-agentic/profile.json")
+        grep -qx "model: $want_m" "$D/agents/$n.md" || bad="$bad $n"
+    done
+    [ -z "$bad" ] && pass "--plan $1: each installed model is the profile's tiers[<tier>].model" || fail "--plan $1: model differs from its tier:$bad"
+    grep -rl '{{' "$D/agents" >/dev/null && fail "--plan $1: an installed agent has an unrendered placeholder" || pass "--plan $1: no placeholder left in any agent"
+done
+
 echo "== dry run writes nothing at all"
 PROBE="$TMP/probe"; mkdir -p "$PROBE"
 CLAUDE_DIR="$PROBE" bash "$INSTALL" --plan max --dry-run >/dev/null 2>&1
@@ -84,6 +148,10 @@ echo "== real install into a scratch CLAUDE_DIR"
 DIR="$TMP/claude"; mkdir -p "$DIR"
 out=$(CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes 2>&1)
 [ $? -eq 0 ] && pass "install exits 0" || fail "install should exit 0" "$out"
+jq -e '.plan == "max" and .runtime == "claude" and .fable == true' "$DIR/claude-agentic/profile.json" >/dev/null \
+    && pass "profile.json written for the Claude install (R4)" || fail "profile.json missing or wrong"
+[ "$(stat -c %a "$DIR/claude-agentic/profile.json" 2>/dev/null)" = 644 ] && pass "profile.json is mode 0644" || fail "profile.json mode"
+jq -e 'has("claude_agentic") | not' "$DIR/settings.json" >/dev/null && pass "settings.json has no claude_agentic" || fail "claude_agentic leaked into settings.json"
 
 for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Explore.md \
          agents/log-reader.md hooks/ai-git-guard.sh hooks/lib/ai-hook-common.sh \
@@ -120,7 +188,7 @@ grep -q '^model: opus$' "$DIR/agents/architect.md" && fail "max: architect must 
 
 echo "== settings.json"
 n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/settings.json")
-[ "$n" = 5 ] && pass "five PreToolUse hooks registered (four guards + fable-gate on a Fable install)" || fail "expected 5 PreToolUse commands, got $n"
+[ "$n" = 5 ] && pass "five PreToolUse hooks registered (four guards + runtime-gate)" || fail "expected 5 PreToolUse commands, got $n"
 jq -e '.hooks.Setup[0].hooks[0].command | test("project-scaffold")' "$DIR/settings.json" >/dev/null \
     && pass "the Setup:init scaffold hook is registered" || fail "Setup hook missing"
 [ "$(jq -r .model "$DIR/settings.json")" = "opus" ] && pass "the max session model is Opus 5 with the 200k window, not opus[1m] and not Fable" || fail "model not set"

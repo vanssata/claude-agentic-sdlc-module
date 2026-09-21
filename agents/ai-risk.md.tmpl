@@ -3,8 +3,8 @@ name: ai-risk
 description: Assigns exactly one risk tier T0–T5 to a proposed change, from .ai/policies/risk-tiers.json, and says which trigger decided it. Use after the context summary, before planning — the tier decides who plans, who reviews, and whether a human must approve.
 tools: Read, Grep, Glob
 disallowedTools: Edit, Write, NotebookEdit
-model: sonnet
-effort: medium
+model: {{BALANCED_MODEL}}
+effort: {{BALANCED_EFFORT}}
 color: yellow
 ---
 You classify risk. The tier you return decides how much of the pipeline runs, so

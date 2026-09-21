@@ -8,8 +8,8 @@
 | `cap-large-read.py` | yes | **no** — no hookable read tool |
 | `project-scaffold.sh` | yes (`Setup:init`) | **no** — no equivalent event |
 | `context-guard.py` | yes | yes — everything but the transcript snapshot |
-| `fable-gate.py` | on a Fable install | — |
-| `codex-model-gate.py` | — | yes |
+| `runtime-gate.py` | yes — every plan; `StopFailure` on a Fable install | yes |
+| `fable-gate.py`, `codex-model-gate.py` | shims that exec `runtime-gate.py` | shim |
 
 Three of them come from the routing half and are not guards:
 
@@ -141,7 +141,7 @@ migrations, fixtures, test SQL.
 `.ai/reports/<task-id>/questions.md`, `.ai/reports/<task-id>/events.jsonl`,
 `.ai/policies/*.json`, and the guards' own scripts and configuration under
 `~/.claude/hooks/ai-*` and `~/.codex/hooks/ai-*` (including
-`codex-model-gate.py`). Reading them is fine; writing them is not. State is
+`codex-model-gate.py`, the shim that keeps the protected name). Reading them is fine; writing them is not. State is
 written by `state.py`; policy is edited by a human, outside an agent run, where
 the change is reviewable.
 
@@ -290,14 +290,65 @@ This is the hook that makes the plan real. Without it, "the step may touch these
 files" is a sentence in a document; with it, the sentence is enforced by the
 harness, and widening scope requires amending the plan.
 
-## fable-gate — Max and Team Max with Fable only
+## runtime-gate — both runtimes, every plan
 
-On Max or Team Max with `--fable yes`, `architect` is pinned to `model: fable[1m]` — the one
-agent that runs on Fable; the session and every other agent stay on Opus.
-`fallbackModel` moves such an agent to Opus when Fable is **overloaded** — but a
-rate limit, a used-up usage limit, or a model the account cannot reach
-(`model_not_found`) never triggers that switch: the agent just fails, and so does
-the next one. `fable-gate.py` closes the gap at run time.
+`runtime-gate.py` is one hook for both runtimes. It does three jobs on every
+Agent launch — send the top model's launches one tier down while that model
+cannot serve the account, hold launches to the plan's budgets, and keep the
+account's quota — and it never denies, always exits 0, and falls open on any
+error. The runtime is the home it runs from: `~/.codex/hooks/` is Codex,
+anything else is Claude Code.
+
+`fable-gate.py` and `codex-model-gate.py` still exist, as sixteen-line shims
+that exec `runtime-gate.py` with their argv and stdin, so an old registration, an
+old statusline wrapper, or a habit (`fable-gate.py status`) keeps working. On
+Codex an upgrade keeps registering `codex-model-gate.py`. Codex runs only hooks
+the user has reviewed, and `config.toml` keeps each approval as a hash of the
+whole entry at its position (`[hooks.state."<file>:<event>:<group>:<index>"]`),
+so an unchanged entry keeps its approval and a changed one — the WP5 matchers
+now include `spawn_agent`, and `SubagentStart` is new — needs one look in
+`/hooks`; until then Codex skips it.
+
+**Codex 0.155 limit (checked live, 2026-09-22).** Codex launches agents through
+the `spawn_agent` tool and fires **no** `PreToolUse`/`PostToolUse` for it — a
+traced session with both matchers trusted delivered only `SubagentStart` and
+`SubagentStop`. So on Codex the reroute below and the budget explanations never
+run (the reroute did not run before WP5 either); outages are still recorded
+from `SubagentStop`, the running-agent count is kept, and parallelism is capped
+by Codex itself through `agents.max_threads` in `config.toml`. The matchers
+list `Agent|spawn_agent` so the gate works unchanged if Codex starts firing
+them.
+
+| Event | Claude Code | Codex |
+|---|---|---|
+| `PreToolUse:Agent` | Fable reroute; budgets | EXPERT reroute; budgets; refreshes the quota |
+| `PostToolUse:Agent` | a Fable agent that fell back (overload) | an expert launch that returned an availability error |
+| `SubagentStart` / `SubagentStop` | the running-agent count | the running-agent count; `SubagentStop` also records an EXPERT failure |
+| `StopFailure` (`rate_limit\|model_not_found`) | on a Fable install only | — (Codex has no such event) |
+| `statusline --then <cmd>` | the quota, and the Fable weekly limit | — |
+
+State lives in `<home>/state/runtime-gate.json` — the outage record, the quota,
+the per-task EXPERT counts and the running agents. On the first run after an
+upgrade, a live record in the old `fable-gate.json` or `codex-model-gate.json` is
+imported once.
+
+```bash
+~/.claude/hooks/runtime-gate.py status          # active until …, or inactive
+~/.claude/hooks/runtime-gate.py quota [--json]  # weekly and 5-hour use, when seen, stale?
+~/.claude/hooks/runtime-gate.py clear           # try the top model again now
+~/.claude/hooks/runtime-gate.py set 3600 reason # route one tier down for an hour
+```
+
+(`~/.codex/hooks/runtime-gate.py` answers the same commands for Codex.)
+
+### The reroute — Claude Code (Fable)
+
+On Max, Max 20x or Team Max with `--fable yes`, `architect` is pinned to
+`model: fable[1m]` — the one agent that runs on Fable; the session and every
+other agent stay on Opus. `fallbackModel` moves such an agent to Opus when Fable
+is **overloaded** — but a rate limit, a used-up usage limit, or a model the
+account cannot reach (`model_not_found`) never triggers that switch: the agent
+just fails, and so does the next one. The gate closes that gap.
 
 | Event | Does |
 |---|---|
@@ -308,65 +359,29 @@ the next one. `fable-gate.py` closes the gap at run time.
 A failure is Fable's when its message names Fable, the failing agent's definition
 pins Fable, the transcript was last served by Fable, or a Fable agent launched in
 the last five minutes. Authentication, billing and account errors are ignored:
-they are account-wide, and Opus would fail the same way.
+they are account-wide, and Opus would fail the same way. When an agent was
+already running on Fable and failed, the managed `CLAUDE.md` block has the main
+session re-run that brief once on Opus.
 
-The record lives in `~/.claude/state/fable-gate.json` and expires on its own, so
-Fable is tried again after the reset. The gate never blocks an agent and fails
-open on any error. When an agent was already running on Fable and failed, the
-managed `CLAUDE.md` block has the main session re-run that brief once on Opus.
+### The reroute — Codex (EXPERT → STRONG)
 
-```bash
-~/.claude/hooks/fable-gate.py status          # active until …, or inactive
-~/.claude/hooks/fable-gate.py clear           # try Fable again now
-~/.claude/hooks/fable-gate.py set 3600 reason # route to Opus for an hour
-```
+Inactive on Codex 0.155: it needs a `PreToolUse` for the launch, which Codex
+does not fire for `spawn_agent` (see above).
 
-**The weekly limit — on by default.** Claude Code gives the statusline, not
-hooks, the account's `rate_limits`, so the installer wires the check through the
-statusline. On a Fable install your `statusLine` command becomes
-
-```
-"$HOME/.claude/hooks/fable-gate.py" statusline --then '<your original command>'
-```
-
-The gate reads the input, then runs your command on the same input and passes
-its output and exit code through — what you see does not change. With no
-statusline configured, the installer adds the bare check, which prints nothing.
-At `CLAUDE_FABLE_GATE_WEEKLY_PCT` (90) percent of `rate_limits.seven_day` used,
-Fable agents go to Opus until `resets_at`. The limit is account-wide, not
-Fable's own, so this is a spend guard rather than an availability check.
-
-Re-installing never wraps twice; `--fable no` or a Pro or Team Pro install puts your
-original command back byte for byte, or removes the statusline it added. If
-`/statusline` later rewrites the command, re-run the installer to wire the
-check again. To keep the statusline but skip every check, set
-`CLAUDE_FABLE_GATE=off`.
-
-Tuning: `CLAUDE_FABLE_GATE=off` disables it; `CLAUDE_FABLE_GATE_TTL`,
-`_NOT_FOUND_TTL`, `_OVERLOAD_TTL`, `_LAUNCH_WINDOW`, `_WEEKLY_PCT`, `_FALLBACK` and
-`_STATE` override the defaults.
-
-An install with `--fable no`, or on Pro or Team Pro, does not register the gate, and removes
-the entries a previous Fable install left — your own hooks on the same events
-stay, and the statusline is unwrapped.
-
-## codex-model-gate — Codex only
-
-The same problem as `fable-gate`, one tier up the Codex ladder. `ai-expert` is
-pinned to `gpt-6-astra`; when Astra is rate-limited or the account cannot reach
-it, the agent fails, and so does the next one. The gate records that and sends
-EXPERT launches to Sol at `high` until it expires. On Plus `ai-expert` is
-already at `high` rather than `xhigh`; the fallback model is the same.
+`ai-expert` is pinned to the plan's EXPERT model; when it is rate-limited or the
+account cannot reach it, the agent fails, and so does the next one. The gate
+records that and sends EXPERT launches to the STRONG model at the STRONG effort
+(both read from `profile.json`) until it expires.
 
 | Event | Does |
 |---|---|
-| `SubagentStop` | when the failure text names a rate limit, an unavailable model or an overload **and** the failure is attributable to an EXPERT agent, records Astra as unavailable — 1 h for a rate limit or overload, 6 h for model-not-found |
-| `PostToolUse:Agent` | marks a completed expert launch, so an immediately following failure can be attributed |
-| `PreToolUse:Agent` | while a record is live, returns `permissionDecision: "allow"` with `updatedInput` carrying `model: gpt-5.6-sol` and `model_reasoning_effort: high`, and says in `additionalContext` that the answer is Sol's, not Astra's |
+| `SubagentStop` | when the failure text names a rate limit, an unavailable model or an overload **and** the failure is attributable to an EXPERT agent, records the EXPERT model as unavailable — 1 h for a rate limit or overload, 6 h for model-not-found |
+| `PostToolUse:Agent` | the same signals in an expert launch's result |
+| `PreToolUse:Agent` | while a record is live, returns `permissionDecision: "allow"` with `updatedInput` carrying the STRONG `model` and `model_reasoning_effort`, and says in `additionalContext` whose answer it is |
 
 **Why `SubagentStop`.** Codex has no `StopFailure` event, so there is no signal
 that says "this agent failed for this reason". The gate therefore only marks the
-record when the evidence actually points at an EXPERT agent: the expert agent's
+record when the evidence actually points at an EXPERT agent: the expert model's
 name in the text, an explicit expert `model` in the payload, an agent file pinned
 to the expert model, or an expert launch within the last five minutes. The
 matching is deliberately narrow — rate limit, quota, 429, model-not-found,
@@ -377,23 +392,83 @@ downgraded for an hour over an unrelated bug.
 To resolve which model a launch would use, it checks the explicit `model` first,
 then the agent's own file (project `.codex/agents/` before `~/.codex/agents/`),
 then `default_subagent_model` in `config.toml` — the same precedence Codex itself
-applies.
+applies. `AI_RUNTIME_GATE_MODE=context` makes it annotate instead of rewriting.
 
-The record lives in `$CODEX_HOME/state/codex-model-gate.json` and expires on its
-own. The gate never blocks an agent and fails open on any error.
+Every rewrite made while a task is in flight is journaled once, as
+`model_fallback {agent, from, to, reason}` (actor `hook`), through the
+project's `state.py event`; with no task, nothing is written.
 
-```bash
-~/.codex/hooks/codex-model-gate.py status          # active until …, or inactive
-~/.codex/hooks/codex-model-gate.py clear           # try Astra again now
-~/.codex/hooks/codex-model-gate.py set 3600 reason # route to Sol for an hour
+### Budgets
+
+Budgets come from `<home>/claude-agentic/profile.json`, which `install.sh`
+writes per plan (`usage-report --budgets` prints them). Without that file every
+budget check is a no-op.
+
+- **EXPERT.** A launch of an EXPERT-tier agent asks first unless the plan has
+  `expert.without_asking` (Max 20x, ChatGPT Pro), and asks again once the task
+  in flight has used `expert.max_per_task`.
+- **Fan-out.** `SubagentStart`/`SubagentStop` count the agents running in each
+  session; a launch at `fan_out.max_parallel_agents`, or a STRONG/EXPERT launch
+  at `max_parallel_on_strong`, asks. An entry older than
+  `AI_RUNTIME_GATE_AGENT_TTL` (30 min) stops counting, so a lost `SubagentStop`
+  costs at most an extra question; `clear` empties the count. A launch that
+  goes ahead counts from its `PreToolUse` until its `SubagentStart` claims it
+  (60 s at most), so one message that launches several agents meets the limit
+  too; a launch that asks is counted only once it starts. `claude -p` sets
+  `CLAUDE_CODE_SESSION_ATTENDED=0`, and the gate treats that like
+  `AI_UNATTENDED=1`: nobody can answer, so it explains instead of asking. Every write to
+  the state file holds `<state>.lock` (`flock`), so a fan-out's parallel
+  starts, stops and outage records do not overwrite one another.
+
+A launch's tier is its explicit `model` first, then its name in the plan's tier
+lists, then the model its definition pins — `ai-reviewer` with `model: sonnet` is
+a BALANCED launch. Claude Code gets `permissionDecision: "ask"` with the reason.
+Codex parses `ask` but does not support it, so there — and under
+`AI_UNATTENDED=1`, where nobody would answer — the launch goes through and the
+reason goes into `additionalContext`.
+
+### Quota
+
+Advice only; the quota never refuses anything. Claude Code gives the
+statusline, not hooks, the account's `rate_limits`, so the installer wraps the
+statusline on **every** Claude plan:
+
+```
+"$HOME/.claude/hooks/runtime-gate.py" statusline --then '<your original command>'
 ```
 
-Tuning: `CODEX_MODEL_GATE=off` disables it. `CODEX_MODEL_GATE_MODE=context`
-makes it annotate instead of rewriting, for when you would rather see the failure
-than have the model quietly changed under you.
+The gate records `rate_limits.seven_day` and `five_hour`, then runs your command
+on the same input and passes its output and exit code through — what you see does
+not change. With no statusline configured, the installer adds the bare check,
+which prints nothing. On a Fable install, at `AI_RUNTIME_GATE_WEEKLY_PCT` (90)
+percent of the week used, Fable agents also go to Opus until `resets_at`.
 
-There is no weekly-limit equivalent: Codex does not expose the account's usage
-window to a hook the way Claude Code's statusline does.
+Codex exposes no quota to a hook; the gate reads the last `token_count` event of
+the newest rollout (`~/.codex/sessions/…/rollout-*.jsonl`, the last 64 KB, at most
+once a minute). `quota --json` prints `{runtime, weekly_pct, five_hour_pct,
+resets_at, seen_at, source, stale}`; a reading older than 24 h, or past its
+reset, is `stale`. `state.py` uses the quota for its `preferred runtime:` advice.
+
+### Registration and upgrades
+
+Every Claude install merges `settings.gate.json`: `PreToolUse:Agent`,
+`PostToolUse:Agent`, `SubagentStart`, `SubagentStop`, plus `StopFailure` on a
+Fable install. `codex/hooks.json` registers the same four on Codex. Before
+merging, the installer removes every `fable-gate`, `codex-model-gate` or
+`runtime-gate` entry already there — your own hooks on the same events stay — so
+an upgrade ends with exactly one gate per event, and an old
+`fable-gate.py statusline` wrapper is re-pointed with your command kept. Codex
+lists the renamed command as a new hook: review it once in `/hooks`.
+
+Tuning: `AI_RUNTIME_GATE=off` disables every check (the wrapped statusline
+still runs); `AI_RUNTIME_GATE_STATE`, `_TTL`, `_NOT_FOUND_TTL`, `_OVERLOAD_TTL`,
+`_LAUNCH_WINDOW`, `_WEEKLY_PCT`, `_FALLBACK`, `_EXPERT`, `_FALLBACK_EFFORT`,
+`_MODE` and `_AGENT_TTL` override the defaults; `AI_RUNTIME_GATE_CLAUDE_<name>`
+or `AI_RUNTIME_GATE_CODEX_<name>` sets one runtime only and comes first. The
+shared `_FALLBACK`/`_EXPERT` are ignored by the runtime whose model they are not,
+and a number that does not parse keeps its default. The old names —
+`CLAUDE_FABLE_GATE*` on Claude Code, `CODEX_MODEL_GATE*` on Codex — still work;
+the new name wins where both are set.
 
 ## Testing them
 
@@ -401,11 +476,15 @@ window to a hook the way Claude Code's statusline does.
 bash tests/run-all.sh
 ```
 
-`tests/test-fable-gate.sh` and `tests/test-codex-model-gate.sh` drive each gate
-through every event with synthetic payloads — including malformed input, an
-unwritable state directory, expiry and explicit-model precedence — and install
-each plan and `--fable` option into scratch directories, including switching
-Fable off and on again.
+`tests/test-fable-gate.sh` and `tests/test-codex-model-gate.sh` drive the gate
+through the old names, every event, with synthetic payloads — including
+malformed input, an unwritable state directory, expiry and explicit-model
+precedence — and install each plan and `--fable` option into scratch directories,
+including switching Fable off and on and upgrading an install from before the
+rename. `tests/test-runtime-gate.sh` covers what is new: the runtime read from the
+home, new names over old, the one-time import, the quota from a statusline
+payload and a rollout, the EXPERT and fan-out budgets on both runtimes, and the
+`model_fallback` journal line.
 
 Each guard has a fixture suite: a JSON payload plus the expected decision, run
 through the real script. `tests/fixtures/codex-hooks/` holds the Codex ones,

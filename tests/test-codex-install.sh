@@ -92,8 +92,20 @@ n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/hooks.json")
 [ "$n" = 4 ] && pass "four PreToolUse guards registered" || fail "expected 4 PreToolUse commands, got $n"
 jq -e '.hooks.PreToolUse[] | select(.matcher | test("apply_patch")) | .hooks[0].command | test("ai-scope-guard")' "$DIR/hooks.json" >/dev/null \
     && pass "the scope guard watches apply_patch" || fail "the scope guard should match apply_patch"
-jq -e '.hooks.SubagentStop[0].hooks[0].command | test("codex-model-gate")' "$DIR/hooks.json" >/dev/null \
-    && pass "the model gate listens on SubagentStop" || fail "SubagentStop hook missing"
+jq -e '.hooks.SubagentStop[0].hooks[0].command | test("runtime-gate")' "$DIR/hooks.json" >/dev/null \
+    && pass "the runtime gate listens on SubagentStop" || fail "SubagentStop hook missing"
+jq -e '.hooks.SubagentStart[0].hooks[0].command | test("runtime-gate")' "$DIR/hooks.json" >/dev/null \
+    && pass "and on SubagentStart, to count running agents" || fail "SubagentStart hook missing"
+for ev in PreToolUse PostToolUse; do
+    # Codex 0.155 launches agents through spawn_agent (seen in a live rollout); a
+    # matcher of only "Agent" never lets the gate see a launch.
+    jq -e --arg e "$ev" '[.hooks[$e][] | select(.hooks[].command | test("runtime-gate")) | .matcher]
+        | length == 1 and (.[0] | split("|") | index("spawn_agent") != null)' "$DIR/hooks.json" >/dev/null \
+        || fail "$ev gate matcher misses spawn_agent"
+done
+pass "the gate's PreToolUse/PostToolUse matchers include spawn_agent"
+[ "$(jq '[.hooks[]?[]?.hooks[]? | select(.command | test("codex-model-gate"))] | length' "$DIR/hooks.json")" = 0 ] \
+    && pass "no codex-model-gate command is registered" || fail "codex-model-gate still registered"
 
 # Codex has both compaction events and SessionStart, so the context guard is
 # registered on the same three events it serves on the Claude side.
@@ -113,12 +125,43 @@ n=$(jq '[.hooks | to_entries[] | .value[] | .hooks[] | .command | select(test("c
 n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/hooks.json")
 [ "$n" = 4 ] && pass "and the PreToolUse count is still four" || fail "PreToolUse should stay 4, got $n"
 
+echo "== an install from before WP5 is upgraded, not doubled"
+UP="$TMP/codex-upgrade"; mkdir -p "$UP"
+OLD='"$HOME/.codex/hooks/codex-model-gate.py"'
+jq -n --arg c "$OLD" '{hooks:{PreToolUse:[{matcher:"Agent",hooks:[{type:"command",command:$c,timeout:5}]}],
+    PostToolUse:[{matcher:"Agent",hooks:[{type:"command",command:$c,timeout:5}]}],
+    SubagentStop:[{hooks:[{type:"command",command:$c,timeout:5}]},{hooks:[{type:"command",command:"my-stop.sh"}]}]}}' > "$UP/hooks.json"
+out=$(CODEX_DIR="$UP" bash "$INSTALL" --target codex --codex-plan pro 2>&1)
+[ "$(jq '[.hooks[]?[]?.hooks[]? | select(.command | test("runtime-gate"))] | length' "$UP/hooks.json")" = 0 ] \
+    && pass "an upgrade keeps the trusted codex-model-gate command" || fail "the upgrade registered a new, unreviewed command"
+for ev in PreToolUse PostToolUse SubagentStart SubagentStop; do
+    n=$(jq --arg e "$ev" '[.hooks[$e][]?.hooks[]? | select(.command | test("codex-model-gate"))] | length' "$UP/hooks.json")
+    [ "$n" = 1 ] || fail "$ev has $n gate commands after the upgrade"
+done
+pass "exactly one gate command per event after the upgrade"
+CODEX_DIR="$UP" bash "$INSTALL" --target codex --codex-plan pro >/dev/null 2>&1
+[ "$(jq '[.hooks[]?[]?.hooks[]? | select(.command | test("-gate\\.py"))] | length' "$UP/hooks.json")" = 4 ] \
+    && pass "a second install changes nothing" || fail "reinstall doubled or renamed the gate"
+jq -e '[.hooks.SubagentStop[].hooks[].command] | index("my-stop.sh")' "$UP/hooks.json" >/dev/null \
+    && pass "the user's own SubagentStop hook survives" || fail "user hook lost"
+printf '%s' "$out" | grep -q 'kept: codex-model-gate.py as the gate command' && pass "the kept command is reported, with the /hooks reminder" || fail "kept command not reported" "$out"
+
 echo "== the managed AGENTS.md block"
 [ "$(grep -c 'claude-agentic:start' "$DIR/AGENTS.md")" = 1 ] && pass "exactly one managed block" || fail "expected one managed block"
 grep -q 'gpt-5.6-terra' "$DIR/claude-agentic/routing.md" && pass "routing.md names the BALANCED model" || fail "routing.md should name Terra"
 grep -q 'gpt-6-astra' "$DIR/claude-agentic/routing.md" && pass "routing.md names the EXPERT model" || fail "routing.md should name Astra"
 grep -q 'Models are tiers, not names' "$DIR/AGENTS.md" && pass "the block carries tiers, not model names" || fail "the block should carry tiers, not names"
 grep -q 'ai-task' "$DIR/AGENTS.md" && pass "the block carries the pipeline contract" || fail "the pipeline contract is missing"
+
+echo "== profile.json (R4)"
+jq -e '.runtime == "codex" and (.plan == "plus" or .plan == "pro") and .fable == false and (.tiers.STRONG.model | length > 0)' \
+    "$DIR/claude-agentic/profile.json" >/dev/null \
+    && pass "profile.json written for the Codex install, tiers read from the Codex profile" || fail "codex profile.json missing or wrong"
+grep -q 'claude_agentic' "$DIR/config.toml" && fail "claude_agentic leaked into config.toml" || pass "config.toml has no claude_agentic"
+out=$(CODEX_DIR="$TMP/probe-profile" bash "$INSTALL" --target codex --codex-plan plus --dry-run 2>&1)
+printf '%s' "$out" | grep -q "^== profile.json (plan tables): $TMP/probe-profile/claude-agentic/profile.json" \
+    && pass "--dry-run lists the Codex profile.json" || fail "codex dry run should list profile.json"
+[ ! -e "$TMP/probe-profile/claude-agentic/profile.json" ] && pass "and does not write it" || fail "dry run wrote profile.json"
 
 echo "== re-install is idempotent"
 before=$(cd "$DIR" && find . -type f ! -name '*.bak' -print0 | sort -z | xargs -0 sha256sum)

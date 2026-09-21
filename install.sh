@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
 # claude-agentic installer (Claude Code and/or Codex).
-#   ./install.sh [--target auto|claude|codex|both] [--plan pro|team-pro|team-max|max]
+#   ./install.sh [--target auto|claude|codex|both] [--plan pro|team-pro|team-max|max|max20]
 #                [--fable auto|yes|no] [--codex-plan plus|pro] [--dry-run]
 # --target defaults to auto: each runtime is installed only if it is present.
-# --plan   Claude only: pro, team-pro (Team Standard seat), team-max (Team Premium seat) or max.
-#          Defaults to auto-detect from ~/.claude.json (organizationType, then the seat and
-#          rate-limit tiers for a Team org); prompts if unknown.
-# --fable  Claude only. auto = yes on max and team-max, no on pro and team-pro. On max the
+# --plan   Claude only: pro, team-pro (Team Standard seat), team-max (Team Premium seat), max
+#          or max20 (Max 20x: max's settings, larger budgets). Defaults to auto-detect from
+#          ~/.claude.json (organizationType, organizationRateLimitTier, the seat tiers for a
+#          Team org). On a terminal the detected plan is proposed and Enter confirms it (a plan
+#          recorded by an earlier install is the proposal); without one the detection is used
+#          and printed on stderr. --plan skips the question.
+# --fable  Claude only. auto = yes on max, max20 and team-max, no on pro and team-pro. On max the
 #          session runs Opus 5 (200k window) either way; yes pins Fable 5.1 [1m] on architect alone.
 # --codex-plan  Codex only: plus or pro. Defaults to auto-detect from the ChatGPT login in
-#          ~/.codex/auth.json (chatgpt_plan_type); prompts if unknown, and assumes pro when it cannot.
+#          ~/.codex/auth.json (chatgpt_plan_type); confirmed on a terminal like --plan, and
+#          assumes pro when it cannot detect or ask.
+# Both runtimes get <home>/claude-agentic/profile.json: the resolved plan tables
+# (scripts/resolve-profile.py) that the gate, state.py and the reports read.
 # --dry-run prints everything that would be written, per runtime, and writes nothing.
 #
 # Claude Code (~/.claude): model, effort and context settings for the detected
 # plan (each agent pins its own tier); the ai-* pipeline agents plus architect,
-# Explore and log-reader; six hooks, plus fable-gate on a Fable install; the
+# Explore and log-reader; six hooks plus runtime-gate (Fable branch on a Fable install); the
 # skills; and one managed block in ~/.claude/CLAUDE.md.
 #
 # Codex (~/.codex): the same pipeline on the Terra -> Sol -> Astra ladder, sized
@@ -159,6 +165,28 @@ codex_doc_advisory() {
   fi
 }
 
+# agentic_profile <runtime> <profile> <plan> <label> <fable> — the resolved
+# claude_agentic tables plus who wrote them (I2), for <home>/claude-agentic/profile.json.
+PLUGIN_VERSION=$(jq -r '.version // "unknown"' "$SRC/.codex-plugin/plugin.json" 2>/dev/null || echo unknown)
+agentic_profile() {
+  python3 "$SRC/scripts/resolve-profile.py" "$2" --src "$SRC" --plan "$3" --label "$4" --fable "$5" --print agentic \
+    | jq --arg rt "$1" --arg v "$PLUGIN_VERSION" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+         '.runtime = $rt | .plugin_version = $v | .written_at = $at'
+}
+
+# write_profile <home> <rendered> — profile.json is plugin state, replaced
+# rather than backed up, and only when something other than written_at changed,
+# so a second install leaves it alone.
+write_profile() {
+  local dst="$1/claude-agentic/profile.json"
+  if [ -f "$dst" ] && [ "$(jq -S 'del(.written_at)' "$dst" 2>/dev/null)" = "$(jq -S 'del(.written_at)' "$2")" ]; then
+    return 0
+  fi
+  mkdir -p "$1/claude-agentic"
+  cp "$2" "$dst"
+  chmod 0644 "$dst"
+}
+
 # ================================================================= Claude Code
 # The Claude branch is unchanged from the single-runtime installer. It lives in
 # functions so the Codex branch can be skipped or run independently; the bodies
@@ -170,32 +198,51 @@ claude_render() {
 # profile; max and team-max (a Team Premium seat) share the max profile. A Team
 # org says nothing about the seat in organizationType, so the seat and rate-limit
 # tier fields decide, and an undetectable Team seat is asked for on a tty.
+PREV_PLAN=$(jq -r '.plan // empty' "$CLAUDE_DIR/claude-agentic/profile.json" 2>/dev/null || true)
 if [ -z "$PLAN" ]; then
   org=$(jq -r '.oauthAccount.organizationType // .organizationType // empty' "$HOME/.claude.json" 2>/dev/null || true)
+  ratelimit=$(jq -r '.oauthAccount.organizationRateLimitTier // empty' "$HOME/.claude.json" 2>/dev/null || true)
+  DETECTED="" DETECTED_FROM=""
   case "$org" in
-    claude_max*|*max*) PLAN=max; echo "detected plan: max ($org)";;
-    claude_pro*|*pro*) PLAN=pro; echo "detected plan: pro ($org)";;
+    claude_max*|*max*)
+      case "$ratelimit" in
+        *max_20x*) DETECTED=max20; DETECTED_FROM="organizationRateLimitTier $ratelimit";;
+        *)         DETECTED=max;   DETECTED_FROM="organizationType $org${ratelimit:+, $ratelimit}";;
+      esac;;
+    claude_pro*|*pro*) DETECTED=pro; DETECTED_FROM="organizationType $org";;
     claude_team*|*team*|claude_enterprise*|*enterprise*)
       seat=$(jq -r '.oauthAccount | [.seatTier, .userRateLimitTier, .organizationRateLimitTier] | map(select(. != null and . != "")) | join(" ")' \
              "$HOME/.claude.json" 2>/dev/null || true)
       case "$seat" in
-        *premium*|*max*) PLAN=team-max; echo "detected plan: team-max ($org, seat '$seat')";;
-        *standard*|*pro*) PLAN=team-pro; echo "detected plan: team-pro ($org, seat '$seat')";;
-        *)
-          if [ -t 0 ]; then
-            read -r -p "Team org detected ($org) but not the seat. Enter plan [team-pro/team-max]: " PLAN
-          else
-            PLAN=team-pro
-            echo "detected plan: team ($org) — seat unknown, using team-pro (Pro's models and limits); pass --plan team-max for a Premium seat" >&2
-          fi;;
+        *premium*|*max*) DETECTED=team-max; DETECTED_FROM="$org, seat '$seat'";;
+        *standard*|*pro*) DETECTED=team-pro; DETECTED_FROM="$org, seat '$seat'";;
+        *) DETECTED_FROM="team";;
       esac;;
-    *)
-      if [ -t 0 ]; then
-        read -r -p "Could not detect plan (organizationType='$org'). Enter plan [pro/team-pro/team-max/max]: " PLAN
-      else
-        echo "Could not detect plan; pass --plan pro|team-pro|team-max|max" >&2; exit 1
-      fi;;
   esac
+  if [ -t 0 ]; then
+    # Propose, then confirm: a plan an earlier install recorded wins over the
+    # detection, because the person already chose it once.
+    PROPOSED="${PREV_PLAN:-$DETECTED}"
+    if [ -n "$PROPOSED" ]; then
+      why="detected from $DETECTED_FROM"
+      [ -n "$PREV_PLAN" ] && why="recorded by the previous install"
+      read -r -p "plan: $PROPOSED ($why) — Enter to confirm, or type pro/team-pro/team-max/max/max20: " PLAN
+      PLAN="${PLAN:-$PROPOSED}"
+    elif [ "$DETECTED_FROM" = team ]; then
+      read -r -p "Team org detected ($org) but not the seat. Enter plan [team-pro/team-max]: " PLAN
+    else
+      read -r -p "Could not detect plan (organizationType='$org'). Enter plan [pro/team-pro/team-max/max/max20]: " PLAN
+    fi
+  elif [ -n "$DETECTED" ]; then
+    PLAN=$DETECTED; echo "detected plan: $PLAN ($DETECTED_FROM)" >&2
+  elif [ "$DETECTED_FROM" = team ]; then
+    PLAN=team-pro
+    echo "detected plan: team ($org) — seat unknown, using team-pro (Pro's models and limits); pass --plan team-max for a Premium seat" >&2
+  elif [ -n "$PREV_PLAN" ]; then
+    PLAN=$PREV_PLAN; echo "plan: $PLAN (recorded by the previous install; organizationType='$org')" >&2
+  else
+    echo "Could not detect plan; pass --plan pro|team-pro|team-max|max|max20" >&2; exit 1
+  fi
 fi
 case "$PLAN" in
   team-standard|team_standard|team) PLAN=team-pro;;
@@ -204,11 +251,12 @@ case "$PLAN" in
   team_max) PLAN=team-max;;
 esac
 case "$PLAN" in
-  pro)      TIER=pro; PLAN_LABEL="Pro";;
-  team-pro) TIER=pro; PLAN_LABEL="Team Pro";;
-  team-max) TIER=max; PLAN_LABEL="Team Max";;
-  max)      TIER=max; PLAN_LABEL="Max";;
-  *) echo "--plan must be pro, team-pro, team-max or max (got '$PLAN')" >&2; exit 2;;
+  pro)      TIER=pro; PROFILE_NAME=pro;   PLAN_LABEL="Pro";;
+  team-pro) TIER=pro; PROFILE_NAME=pro;   PLAN_LABEL="Team Pro";;
+  team-max) TIER=max; PROFILE_NAME=max;   PLAN_LABEL="Team Max";;
+  max)      TIER=max; PROFILE_NAME=max;   PLAN_LABEL="Max";;
+  max20|max-20x|max_20x) PLAN=max20; TIER=max; PROFILE_NAME=max20; PLAN_LABEL="Max 20x";;
+  *) echo "--plan must be pro, team-pro, team-max, max or max20 (got '$PLAN')" >&2; exit 2;;
 esac
 case "$FABLE" in
   auto) [ "$TIER" = max ] && FABLE=yes || FABLE=no;;
@@ -220,13 +268,17 @@ if [ "$TIER" = pro ] && [ "$FABLE" = yes ]; then
 fi
 
 # ---------------------------------------------------------------- render settings
-PROFILE="$SRC/profiles/$TIER.json"
+# The profile's claude_agentic tables are the plugin's, not Claude Code's: the
+# resolver prints the settings half alone, so they never reach settings.json.
+python3 "$SRC/scripts/resolve-profile.py" "$PROFILE_NAME" --src "$SRC" --print settings > "$TMP/profile.settings.json"
 if [ "$TIER" = max ] && [ "$FABLE" = no ]; then
   jq '.availableModels = (.availableModels | map(select(startswith("fable") | not)))
-      | del(.modelSettings["claude-fable-5-1"])' "$PROFILE" > "$TMP/profile.json"
+      | del(.modelSettings["claude-fable-5-1"])' "$TMP/profile.settings.json" > "$TMP/profile.json"
 else
-  cp "$PROFILE" "$TMP/profile.json"
+  cp "$TMP/profile.settings.json" "$TMP/profile.json"
 fi
+agentic_profile claude "$PROFILE_NAME" "$PLAN" "$PLAN_LABEL" "$FABLE" > "$TMP/claude-profile.json"
+tier_field() { jq -r --arg t "$1" --arg f "$2" '.tiers[$t][$f]' "$TMP/claude-profile.json"; }
 jq -s '.[0] * .[1]' "$SRC/settings.common.json" "$TMP/profile.json" > "$TMP/settings.snippet.json"
 
 SESSION_MODEL=$(jq -r .model "$TMP/settings.snippet.json")
@@ -288,7 +340,7 @@ else
     ARCHITECT_EFFORT="xhigh"
     EXPERT_ROW="\`opus\` / \`xhigh\`, pinned so a Sonnet session cannot weaken it; \`architect\` alone pins \`fable[1m]\` / \`xhigh\`"
     PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice for a change that genuinely needs a huge context, never the default — above 200k every turn re-reads a context that costs more than the thinking. ${ONE_M_RULE} \`ai-expert\` pins \`opus\` at \`xhigh\` rather than inheriting the session: a session may run on Sonnet (the IDE agent's Model setting), and the last-resort tier must not drop below the \`opus\` reviewer it escalates from. Fable 5.1 [1m] is pinned on \`architect\` (\`model: fable[1m]\`, \`xhigh\`) and is the session only when the user starts one with \`claude-1m fable\` — never pick it for a reader, a reviewer or \`ai-expert\`. \`max\` stays off.
-- \`fable-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/fable-gate.py status\` shows the gate; \`clear\` re-enables Fable early."
+- \`runtime-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/runtime-gate.py status\` shows the gate (\`fable-gate.py status\` still works); \`clear\` re-enables Fable early."
   else
     ARCHITECT_MODEL_LINE="# model: intentionally omitted — inherits the session model (Opus 5, Fable disabled in this install)"
     ARCHITECT_EFFORT="high"
@@ -298,18 +350,21 @@ else
   EFFORT_RULE="Raise to \`high\` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; readers stay at \`low\`."
 fi
 
-# The Fable gate exists only where Fable does — on Max with --fable yes, where
-# architect is pinned to fable[1m]. Its hooks are merged into the snippet on
-# such an install, and stripped from settings.json on any other.
+# runtime-gate runs on every plan (budgets, the running-agent count, quota).
+# Its Fable branch — StopFailure, and the Fable reroute it feeds — exists only
+# where Fable does: on Max with --fable yes, where architect is pinned to
+# fable[1m]. Elsewhere the StopFailure entry is left out of the snippet.
 if [ "$TIER" = max ] && [ "$FABLE" = yes ]; then
   GATE=on
-  jq -s '.[0] as $base | reduce (.[1].hooks | to_entries[]) as $e
-           ($base; .hooks[$e.key] = ((.hooks[$e.key] // []) + $e.value))' \
-     "$TMP/settings.snippet.json" "$SRC/settings.fable.json" > "$TMP/snippet.gate.json"
-  mv "$TMP/snippet.gate.json" "$TMP/settings.snippet.json"
+  jq '.' "$SRC/settings.gate.json" > "$TMP/gate.json"
 else
   GATE=off
+  jq 'del(.hooks.StopFailure)' "$SRC/settings.gate.json" > "$TMP/gate.json"
 fi
+jq -s '.[0] as $base | reduce (.[1].hooks | to_entries[]) as $e
+         ($base; .hooks[$e.key] = ((.hooks[$e.key] // []) + $e.value))' \
+   "$TMP/settings.snippet.json" "$TMP/gate.json" > "$TMP/snippet.gate.json"
+mv "$TMP/snippet.gate.json" "$TMP/settings.snippet.json"
 
 RENDER_PLAN="$PLAN_LABEL" \
 RENDER_PLAN_LABEL="$PLAN_LABEL" \
@@ -327,12 +382,22 @@ RENDER_EXPERT_MODEL_LINE="$EXPERT_MODEL_LINE" \
 RENDER_EXPERT_ROW="$EXPERT_ROW" \
 RENDER_ARCHITECT_MODEL_LINE="$ARCHITECT_MODEL_LINE" \
 RENDER_ARCHITECT_EFFORT="$ARCHITECT_EFFORT" \
+RENDER_FAST_MODEL="$(tier_field FAST model)" \
+RENDER_FAST_EFFORT="$(tier_field FAST effort)" \
+RENDER_BALANCED_MODEL="$(tier_field BALANCED model)" \
+RENDER_BALANCED_EFFORT="$(tier_field BALANCED effort)" \
+RENDER_STRONG_MODEL="$(tier_field STRONG model)" \
+RENDER_STRONG_EFFORT="$(tier_field STRONG effort)" \
   render_claude_files
 }
 
 render_claude_files() {
-  render "$SRC/agents/ai-expert.md.tmpl" "$TMP/ai-expert.md"
-  render "$SRC/agents/architect.md.tmpl" "$TMP/architect.md"
+  # Every agent source is a template: the tier placeholders come from the
+  # resolved profile's tiers, the EXPERT lines from the plan logic above.
+  mkdir -p "$TMP/agents"
+  for f in "$SRC"/agents/*.md.tmpl; do
+    render "$f" "$TMP/agents/$(basename "$f" .tmpl)"
+  done
   render_stub global claude "$TMP/CLAUDE.block.md"
   render_stub global claude "$TMP/routing.md" routing
 }
@@ -348,14 +413,15 @@ pretty() {  # model id -> human name
 
 # Only the statusline receives the account's rate_limits, so the gate's weekly
 # check rides on it: on a Fable install the statusline command is wrapped as
-#   "$HOME/.claude/hooks/fable-gate.py" statusline --then '<your command>'
+#   "$HOME/.claude/hooks/runtime-gate.py" statusline --then '<your command>'
 # (or set to the bare check when there was none), and unwrapped to exactly the
 # original command on any other install.
 statusline_gate() {  # statusline_gate <settings.json> <on|off> <apply|dry>
   python3 - "$@" <<'PY'
 import json, os, shlex, sys
 path, gate, mode = sys.argv[1:4]
-PREFIX = '"$HOME/.claude/hooks/fable-gate.py" statusline'
+PREFIX = '"$HOME/.claude/hooks/runtime-gate.py" statusline'
+OLD_PREFIX = '"$HOME/.claude/hooks/fable-gate.py" statusline'
 try:
     settings = json.load(open(path)) if os.path.exists(path) else {}
 except ValueError:
@@ -363,16 +429,22 @@ except ValueError:
 line = settings.get("statusLine")
 cmd = line.get("command", "") if isinstance(line, dict) else ""
 ours = isinstance(cmd, str) and cmd.startswith(PREFIX)
+if isinstance(cmd, str) and cmd.startswith(OLD_PREFIX):
+    # A wrapper an earlier install wrote: re-point it, keeping the user's command.
+    line["command"] = PREFIX + cmd[len(OLD_PREFIX):]
+    ours, gate = True, "moved"
 action = None
-if gate == "on":
+if gate == "moved":
+    action = "moved the fable-gate statusline wrapper to runtime-gate (your command is unchanged)"
+elif gate == "on":
     if ours:
-        print("statusline: already checks the Fable weekly limit"); sys.exit(0)
+        print("statusline: already records the quota"); sys.exit(0)
     if line is None:
         settings["statusLine"] = {"type": "command", "command": PREFIX}
-        action = "added a silent statusline that checks the Fable weekly limit"
+        action = "added a silent statusline that records the quota (and the Fable weekly limit)"
     elif isinstance(line, dict) and line.get("type") == "command" and cmd.strip():
         line["command"] = f"{PREFIX} --then {shlex.quote(cmd)}"
-        action = "wrapped your statusline command with the Fable weekly-limit check (its output is unchanged)"
+        action = "wrapped your statusline command with the quota check (its output is unchanged)"
     else:
         print("statusline: not a command statusline; the weekly-limit check is not wired"); sys.exit(0)
 else:
@@ -382,10 +454,10 @@ else:
     if rest.startswith("--then"):
         parts = shlex.split(rest)
         line["command"] = parts[1] if len(parts) > 1 else ""
-        action = "restored your original statusline command (no Fable on this install)"
+        action = "restored your original statusline command (runtime-gate off)"
     else:
         del settings["statusLine"]
-        action = "removed the Fable weekly-limit statusline (no Fable on this install)"
+        action = "removed the quota statusline (runtime-gate off)"
 if mode == "dry":
     print("statusline: would have " + action); sys.exit(0)
 tmp = path + ".tmp"
@@ -397,19 +469,21 @@ PY
 }
 
 claude_dry_run() {
-  echo "== claude: plan=$PLAN ($PLAN_LABEL, $TIER profile) fable=$FABLE fable-gate=$GATE (dry run, nothing written)"
+  echo "== claude: plan=$PLAN ($PLAN_LABEL, $TIER profile) fable=$FABLE fable-gate=$GATE runtime-gate=on (dry run, nothing written)"
   echo "== claude: target directory $CLAUDE_DIR"
-  statusline_gate "$CLAUDE_DIR/settings.json" "$GATE" dry | sed 's/^/== /'
+  statusline_gate "$CLAUDE_DIR/settings.json" on dry | sed 's/^/== /'
   echo "== settings snippet (merged into $CLAUDE_DIR/settings.json):"
   jq . "$TMP/settings.snippet.json"
   echo "== agents/ai-expert.md (rendered head):"
-  sed -n '1,10p' "$TMP/ai-expert.md"
+  sed -n '1,10p' "$TMP/agents/ai-expert.md"
   echo "== agents/architect.md (rendered head):"
-  sed -n '1,8p' "$TMP/architect.md"
+  sed -n '1,8p' "$TMP/agents/architect.md"
   echo "== CLAUDE.md managed block:"
   cat "$TMP/CLAUDE.block.md"
   echo "== routing.md (on demand): $CLAUDE_DIR/claude-agentic/routing.md"
   cat "$TMP/routing.md"
+  echo "== profile.json (plan tables): $CLAUDE_DIR/claude-agentic/profile.json"
+  jq . "$TMP/claude-profile.json"
   echo "== would install:"
   echo "   agents:  $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd,)"
   echo "   hooks:   $(ls "$SRC/hooks" | paste -sd,)"
@@ -417,6 +491,7 @@ claude_dry_run() {
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
   echo "   config:  ai-git-guard.json (only if absent)"
   echo "   routing: claude-agentic/routing.md"
+  echo "   profile: claude-agentic/profile.json"
   echo "== would migrate: the claude-routing managed block, if present, into this one"
 }
 
@@ -509,12 +584,9 @@ claude_apply() {
 mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/hooks/lib" "$CLAUDE_DIR/skills"
 
 # ---------------------------------------------------------------- 1. agents
-for f in "$SRC"/agents/*.md; do
-  [ -e "$f" ] || continue
+for f in "$TMP"/agents/*.md; do
   install_file "$f" "$CLAUDE_DIR/agents/$(basename "$f")"
 done
-install_file "$TMP/ai-expert.md" "$CLAUDE_DIR/agents/ai-expert.md"
-install_file "$TMP/architect.md" "$CLAUDE_DIR/agents/architect.md"
 
 # `reviewer` is superseded by `ai-reviewer`, which is adversarial, tier-aware and
 # reads the project's policies. Retire it only when it is byte-identical to the
@@ -575,6 +647,25 @@ install_skills "$CLAUDE_DIR"
 # ---------------------------------------------------------------- 4. settings.json
 SETTINGS="$CLAUDE_DIR/settings.json"
 if [ -f "$SETTINGS" ]; then cp "$SETTINGS" "$SETTINGS.bak"; else echo '{}' > "$SETTINGS"; fi
+# Every gate entry already in settings.json — fable-gate from before WP5, or
+# runtime-gate from an earlier run — is removed first and the snippet's own are
+# merged below, so an upgrade never leaves two gates on one event (the shim
+# would run the gate twice and count every agent twice). Only the gate's own
+# commands go (matched by their /hooks/<name>.py path, not a substring); a group
+# or event list left empty by that is dropped, the user's own hooks stay.
+before_gate=$(jq -c '[.hooks // {} | .[]?[]? | select((.hooks // []) | map(.command // "") | any(test("fable-gate")))] | length' "$SETTINGS" 2>/dev/null || echo 0)
+had_stopfailure=$(jq -c '[.hooks.StopFailure // [] | .[] | select((.hooks // []) | map(.command // "") | any(test("fable-gate|runtime-gate")))] | length' "$SETTINGS" 2>/dev/null || echo 0)
+jq 'if (.hooks | type) == "object" then
+      .hooks |= (with_entries(.value |= [ .[]
+          | if (.hooks | type) == "array" and (.hooks | length) > 0 then
+              .hooks |= map(select((.command // "") | test("/hooks/(fable-gate|runtime-gate)\\.py") | not))
+              | select(.hooks | length > 0)
+            else . end ])
+        | with_entries(select(.value | length > 0)))
+    else . end' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+[ "$before_gate" != 0 ] && echo "replaced: fable-gate hooks with runtime-gate" || true
+[ "$GATE" = off ] && [ "$had_stopfailure" != 0 ] && echo "removed: runtime-gate StopFailure (no Fable on this install)" || true
+
 # jq's * replaces arrays wholesale (wanted for availableModels/fallbackModel), so
 # merge everything but .hooks first, then append our hook entries only when no
 # existing entry under the same event already runs the same command.
@@ -609,27 +700,14 @@ jq -s '
 ' "$SETTINGS" "$TMP/settings.snippet.json" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 echo "merged: settings.json (backup in settings.json.bak)"
 
-# No Fable on this install: drop the gate's entries a previous Fable install left,
-# and an event list only when the gate was all it held. Other hooks stay.
-if [ "$GATE" = off ]; then
-  before=$(jq -c '.hooks // {}' "$SETTINGS")
-  jq 'if (.hooks | type) == "object" then
-        .hooks |= with_entries(
-          . as $e
-          | ($e.value | map(select(((.hooks // []) | map(.command // "") | any(test("fable-gate"))) | not))) as $kept
-          | if ($kept | length) == ($e.value | length) then $e
-            elif ($kept | length) == 0 then empty
-            else $e | .value = $kept end)
-      else . end' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-  [ "$before" != "$(jq -c '.hooks // {}' "$SETTINGS")" ] && echo "removed: fable-gate hooks (no Fable on this install)" || true
-fi
-statusline_gate "$SETTINGS" "$GATE" apply
+statusline_gate "$SETTINGS" on apply
 
 # ---------------------------------------------------------------- 5. CLAUDE.md block
 GLOBAL_MD="$CLAUDE_DIR/CLAUDE.md"
 managed_block "$GLOBAL_MD" "$TMP/CLAUDE.block.md" "CLAUDE.md"
 mkdir -p "$CLAUDE_DIR/claude-agentic"
 install_file "$TMP/routing.md" "$CLAUDE_DIR/claude-agentic/routing.md"
+write_profile "$CLAUDE_DIR" "$TMP/claude-profile.json"
 block_size "$GLOBAL_MD" 2560
 
 # ---------------------------------------------------------------- 6. audits
@@ -680,7 +758,8 @@ cat <<SUM
 
 Done (Claude Code).
   target          $CLAUDE_DIR
-  plan            $PLAN  ($PLAN_LABEL, $TIER profile, fable=$FABLE)
+  plan            $PLAN  ($PLAN_LABEL, $PROFILE_NAME profile, fable=$FABLE)
+  plan tables     $CLAUDE_DIR/claude-agentic/profile.json
   session model   $SESSION_MODEL ($SESSION_HUMAN), effort $EFFORT
   fallback        $FALLBACK
   EXPERT tier     ai-expert on opus, pinned, at effort $EXPERT_EFFORT;
@@ -695,13 +774,14 @@ $( [ "$TIER" = max ] && echo "  large context   claude-1m$( [ "$FABLE" = yes ] &
   hooks           cap-large-read, project-scaffold (Setup:init), ai-git-guard (global),
                   ai-path-guard + ai-scope-guard (active where .ai/ exists),
                   context-guard (UserPromptSubmit, PreCompact, SessionStart:compact)
-  fable gate      $GATE $( [ "$GATE" = on ] && echo "(Fable agents go to Opus while Fable is rate-limited, unreachable,
+  runtime gate    on — budgets from claude-agentic/profile.json, running agents, quota through the statusline
+  fable branch    $GATE $( [ "$GATE" = on ] && echo "(Fable agents go to Opus while Fable is rate-limited, unreachable,
                   or the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% used — checked through the statusline)" || echo "(no Fable on this install)" )
   skills          $(ls "$SRC/skills" | paste -sd' ')
 
 Restart Claude Code, then:
   /config        model and effort match the profile
-  /hooks         lists the six hooks$( [ "$GATE" = on ] && echo ", plus fable-gate on PreToolUse, PostToolUse and StopFailure" )
+  /hooks         lists the six hooks, plus runtime-gate on PreToolUse, PostToolUse, SubagentStart, SubagentStop$( [ "$GATE" = on ] && echo " and StopFailure" )
   /skills        lists ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*, usage-report
   /ai-init       in a project, to survey it and build .ai/
   /project-update in a project that already has .ai/ or docs/sdlc/, to pull in these rules
@@ -740,21 +820,34 @@ PY
 }
 
 codex_render() {
+  CODEX_PREV_PLAN=$(jq -r '.plan // empty' "$CODEX_DIR/claude-agentic/profile.json" 2>/dev/null || true)
   if [ -z "$CODEX_PLAN" ]; then
     detected=$(codex_detect_plan 2>/dev/null || true)
+    CODEX_DETECTED="" CODEX_WHY=""
     case "$detected" in
-      plus)   CODEX_PLAN=plus; echo "detected codex plan: plus (chatgpt_plan_type)";;
-      pro)    CODEX_PLAN=pro;  echo "detected codex plan: pro (chatgpt_plan_type)";;
+      plus)   CODEX_DETECTED=plus; CODEX_WHY="chatgpt_plan_type";;
+      pro)    CODEX_DETECTED=pro;  CODEX_WHY="chatgpt_plan_type";;
       team*|business*|enterprise*|edu*)
-              CODEX_PLAN=pro;  echo "detected codex plan: $detected (chatgpt_plan_type) — uses the pro profile";;
-      *)
-        if [ -t 0 ]; then
-          read -r -p "Could not detect the ChatGPT plan (chatgpt_plan_type='$detected'). Enter plan [plus/pro]: " CODEX_PLAN
-        else
-          CODEX_PLAN=pro
-          echo "could not detect the ChatGPT plan; using the pro profile — pass --codex-plan plus on Plus" >&2
-        fi;;
+              CODEX_DETECTED=pro;  CODEX_WHY="chatgpt_plan_type $detected, uses the pro profile";;
     esac
+    if [ -t 0 ]; then
+      proposed="${CODEX_PREV_PLAN:-$CODEX_DETECTED}"
+      if [ -n "$proposed" ]; then
+        why="detected from $CODEX_WHY"
+        [ -n "$CODEX_PREV_PLAN" ] && why="recorded by the previous install"
+        read -r -p "codex plan: $proposed ($why) — Enter to confirm, or type plus/pro: " CODEX_PLAN
+        CODEX_PLAN="${CODEX_PLAN:-$proposed}"
+      else
+        read -r -p "Could not detect the ChatGPT plan (chatgpt_plan_type='$detected'). Enter plan [plus/pro]: " CODEX_PLAN
+      fi
+    elif [ -n "$CODEX_DETECTED" ]; then
+      CODEX_PLAN=$CODEX_DETECTED; echo "detected codex plan: $CODEX_PLAN ($CODEX_WHY)" >&2
+    elif [ -n "$CODEX_PREV_PLAN" ]; then
+      CODEX_PLAN=$CODEX_PREV_PLAN; echo "codex plan: $CODEX_PLAN (recorded by the previous install)" >&2
+    else
+      CODEX_PLAN=pro
+      echo "could not detect the ChatGPT plan; using the pro profile — pass --codex-plan plus on Plus" >&2
+    fi
   fi
   case "$CODEX_PLAN" in
     plus) CODEX_PLAN_LABEL="Plus";;
@@ -762,6 +855,7 @@ codex_render() {
     *) echo "--codex-plan must be plus or pro (got '$CODEX_PLAN')" >&2; exit 2;;
   esac
   CODEX_PROFILE="$SRC/profiles/codex-$CODEX_PLAN.json"
+  agentic_profile codex "codex-$CODEX_PLAN" "$CODEX_PLAN" "$CODEX_PLAN_LABEL" no > "$TMP/codex-profile.json"
 
   CODEX_SESSION_MODEL=$(jq -r .session.model "$CODEX_PROFILE")
   CODEX_SESSION_EFFORT=$(jq -r .session.model_reasoning_effort "$CODEX_PROFILE")
@@ -822,12 +916,15 @@ codex_dry_run() {
   cat "$TMP/AGENTS.block.md"
   echo "== routing.md (on demand): $CODEX_DIR/claude-agentic/routing.md"
   cat "$TMP/routing.md"
+  echo "== profile.json (plan tables): $CODEX_DIR/claude-agentic/profile.json"
+  jq . "$TMP/codex-profile.json"
   echo "== would install:"
   echo "   agents:  $(ls "$TMP/codex-agents" | sed 's/\.toml$//' | paste -sd,)"
   echo "   hooks:   $(codex_hook_files | xargs -n1 basename | paste -sd,)"
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
   echo "   config:  ai-git-guard.json (only if absent)"
   echo "   routing: claude-agentic/routing.md"
+  echo "   profile: claude-agentic/profile.json"
   echo "== hooks.json entries (merged into $CODEX_DIR/hooks.json):"
   jq . "$SRC/codex/hooks.json"
   echo "== reminder: Codex lists a non-managed hook until you review it in /hooks"
@@ -846,6 +943,7 @@ codex_hook_files() {
     "$SRC/hooks/ai-path-guard.sh" \
     "$SRC/hooks/ai-scope-guard.sh" \
     "$SRC/hooks/codex-model-gate.py" \
+    "$SRC/hooks/runtime-gate.py" \
     "$SRC/hooks/context-guard.py"
 }
 
@@ -881,6 +979,28 @@ codex_apply() {
   local HOOKS="$CODEX_DIR/hooks.json"
   [ -f "$HOOKS" ] || echo '{}' > "$HOOKS"
   cp "$HOOKS" "$HOOKS.bak"
+  # codex-model-gate entries from before WP5 and runtime-gate ones from an
+  # earlier run are removed first, so the merge below adds exactly one gate per
+  # event. Codex runs only hooks the user has reviewed; config.toml keeps each
+  # approval as [hooks.state."<file>:<event>:<group>:<index>"] trusted_hash, a
+  # hash of the whole entry. An install that already registers
+  # codex-model-gate.py keeps that command (the shim execs runtime-gate.py), so
+  # an entry that is otherwise unchanged keeps its approval; a changed one
+  # (a new matcher, a new event) needs one review in /hooks.
+  local GATE_HOOKS="$SRC/codex/hooks.json"
+  if jq -e '[.hooks // {} | .[]?[]? | .hooks[]?.command // "" | select(test("/hooks/codex-model-gate\\.py"))] | length > 0' "$HOOKS" >/dev/null 2>&1; then
+    GATE_HOOKS="$TMP/codex-hooks.json"
+    sed 's|/hooks/runtime-gate\.py|/hooks/codex-model-gate.py|g' "$SRC/codex/hooks.json" > "$GATE_HOOKS"
+    echo "kept: codex-model-gate.py as the gate command (it runs runtime-gate.py); review the changed gate entries once in /hooks, or Codex skips them"
+  fi
+  jq 'if (.hooks | type) == "object" then
+      .hooks |= (with_entries(.value |= [ .[]
+          | if (.hooks | type) == "array" and (.hooks | length) > 0 then
+              .hooks |= map(select((.command // "") | test("/hooks/(codex-model-gate|runtime-gate)\\.py") | not))
+              | select(.hooks | length > 0)
+            else . end ])
+        | with_entries(select(.value | length > 0)))
+    else . end' "$HOOKS" > "$HOOKS.tmp" && mv "$HOOKS.tmp" "$HOOKS"
   jq -s '
     .[0] as $cur
     | (.[1].hooks // {}) as $new
@@ -896,7 +1016,7 @@ codex_apply() {
                                         | index($c) ) | not ) ) )
           )
         )
-  ' "$HOOKS" "$SRC/codex/hooks.json" > "$HOOKS.tmp" && mv "$HOOKS.tmp" "$HOOKS"
+  ' "$HOOKS" "$GATE_HOOKS" > "$HOOKS.tmp" && mv "$HOOKS.tmp" "$HOOKS"
   echo "merged: hooks.json (backup in hooks.json.bak)"
 
   # -------------------------------------------------------------- 5. config.toml
@@ -906,6 +1026,7 @@ codex_apply() {
   managed_block "$CODEX_DIR/AGENTS.md" "$TMP/AGENTS.block.md" "AGENTS.md"
   mkdir -p "$CODEX_DIR/claude-agentic"
   install_file "$TMP/routing.md" "$CODEX_DIR/claude-agentic/routing.md" "$CODEX_DIR"
+  write_profile "$CODEX_DIR" "$TMP/codex-profile.json"
   block_size "$CODEX_DIR/AGENTS.md" 2560
   codex_doc_advisory "$CODEX_DIR/AGENTS.md"
 }
@@ -918,15 +1039,17 @@ Done (Codex).
   plan            $CODEX_PLAN  ($CODEX_PLAN_LABEL)
   session model   $CODEX_SESSION_MODEL at effort $CODEX_SESSION_EFFORT
   subagent default $CODEX_SUBAGENT_MODEL at $CODEX_SUBAGENT_EFFORT, at most $CODEX_MAX_THREADS threads at once
-  FAST tier       $CODEX_FAST at $CODEX_FAST_EFFORT (ai-indexer, Explore, ai-discovery, log-reader, ai-tester)
-  BALANCED tier   $CODEX_BALANCED at $CODEX_BALANCED_EFFORT (ai-context, ai-risk, ai-planner, ai-release, ai-implementer)
+  FAST tier       $CODEX_FAST at $CODEX_FAST_EFFORT (ai-indexer, Explore, log-reader, ai-tester)
+  BALANCED tier   $CODEX_BALANCED at $CODEX_BALANCED_EFFORT (ai-discovery at low, ai-context, ai-risk, ai-planner, ai-release, ai-implementer,
+                  ai-reviewer-balanced for the T2 review)
   STRONG tier     $CODEX_STRONG at $CODEX_STRONG_EFFORT (ai-reviewer, ai-security, architect, ai-risk-strong, ai-planner-strong)
   EXPERT tier     $CODEX_EXPERT at $CODEX_EXPERT_EFFORT (ai-expert)
-  expert gate     codex-model-gate sends EXPERT work to $CODEX_STRONG while $CODEX_EXPERT is
-                  rate-limited or unavailable; 'codex-model-gate.py status' shows it
+  runtime gate    sends EXPERT work to $CODEX_STRONG while $CODEX_EXPERT is rate-limited or
+                  unavailable, explains launches past the plan's budgets, reads the quota
+                  from the session rollouts; 'runtime-gate.py status' / 'quota' show it
   agents          $(ls "$TMP/codex-agents" | sed 's/\.toml$//' | paste -sd' ')
   hooks           ai-git-guard (global), ai-path-guard + ai-scope-guard (active where .ai/ exists),
-                  codex-model-gate. No cap-large-read: Codex has no hookable Read tool.
+                  runtime-gate. No cap-large-read: Codex has no hookable Read tool.
   skills          $(ls "$SRC/skills" | paste -sd' ')
 
 Restart Codex, then:

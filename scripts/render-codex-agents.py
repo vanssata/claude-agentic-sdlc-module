@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render the shared agent prompts into Codex custom-agent TOML files.
 
-The prompt bodies in ``agents/*.md`` are provider-neutral and stay the single
+The prompt bodies in ``agents/*.md.tmpl`` are provider-neutral and stay the single
 source of truth for both runtimes. Claude Code reads them directly (Markdown
 with YAML frontmatter); Codex needs one standalone TOML file per agent under
 ``~/.codex/agents/``, so this script converts them instead of duplicating them.
@@ -79,7 +79,9 @@ def render(name, spec, profile, src):
     if tier not in profile["tiers"]:
         die(f"role {name} has unknown tier {tier!r}")
     model = profile["tiers"][tier]["model"]
-    effort = profile["tiers"][tier]["effort"]
+    # A role may keep its own effort where it differs from its tier's (ai-discovery:
+    # BALANCED model, low effort), so moving a role between tiers changes nothing.
+    effort = spec.get("effort") or profile["tiers"][tier]["effort"]
 
     source = spec.get("source")
     if not source:

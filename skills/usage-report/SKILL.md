@@ -20,6 +20,8 @@ $R --today                # current UTC day only
 $R --session <prefix>     # one session (Claude) or thread (Codex) id prefix
 $R --provider codex       # one runtime only: auto | claude | codex | both
 $R --provider claude --root <dir>
+$R --task <task-id> [--project DIR]   # one /ai-task task against its plan budget
+$R --budgets              # the installed plans' budget tables
 ```
 
 It prints per-model token counts (input / output / cache write / cache read),
@@ -58,13 +60,24 @@ python3 "$AI_HOME/skills/ai-task/state.py" events --format jsonl \
   | jq -r 'select(.event=="task_started" or .event=="task_closed") | "\(.ts) \(.event)"'
 ```
 
-So a per-task figure can be *approximated* today by reporting usage over that
-window. Two things make it an approximation, and both must be said when it is
-quoted: the window includes anything else the session did in the same minutes,
-and a task spanning two runtimes has one journal but two transcript trees. A
-real per-task budget — tokens attributed to a task rather than to a clock
-window — is WP4, not this skill. The report does not compute it; it can only
-tell you the window to look at.
+`--task <id>` does that for you: it reads the task's journal (never writes it),
+takes the window from its first line to `task_closed` (or to now while it is
+open), the final tier from the last `tier_set`/`tier_raised`, and the runtimes
+from the journal lines and any `runtime_handoff`. It then prints each involved
+runtime's tokens in the window — in, cache, out, total — and that runtime's own
+plan budget for the tier (`budgets.tokens.per_task` in
+`<home>/claude-agentic/profile.json`) with the share used:
+
+```
+task T-2026-09-21-001 tier T3 window 2026-09-21T10:00:00+00:00..2026-09-21T11:00:00+00:00
+claude   tokens in 400,000 cache 1,900,000 out 100,000 total 2,400,000
+         budget max T3 6.0M · used 2.4M (40%)
+```
+
+Say two things whenever you quote it: the window includes anything else the
+session did in the same minutes, and the budgets are reported, never enforced —
+conservative placeholders to be calibrated from these very numbers.
+`--budgets` prints the tables themselves for every installed runtime.
 
 ## Reading the numbers
 

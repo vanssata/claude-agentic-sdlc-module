@@ -1,0 +1,121 @@
+{
+  "task_id": "T-2026-09-01-002",
+  "goal": "widen the export",
+  "workflow": "feature",
+  "risk_tier": "T2",
+  "current_stage": "implementation",
+  "affected_modules": [
+    "export"
+  ],
+  "context_summary_ref": "inline: the CSV export and its one caller",
+  "approved_plan": {
+    "ref": ".ai/reports/T-2026-09-01-002/implementation-plan.md",
+    "current_step_id": "2",
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "add the column",
+        "allowed_files": [
+          "src/Export/*.php"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this step",
+        "required_tests": [
+          "tests/Export/CsvTest.php"
+        ],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": null
+      },
+      {
+        "step_id": "2",
+        "description": "wire it into the command",
+        "allowed_files": [
+          "src/Command/*.php"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this step",
+        "required_tests": [],
+        "status": "in_progress",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": null
+      }
+    ]
+  },
+  "completed_steps": [
+    "1"
+  ],
+  "test_status": "not_run",
+  "e2e_status": "not_run",
+  "review_status": "not_started",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "finish step 2",
+  "human_approval": {
+    "required": true,
+    "granted": false,
+    "granted_by": null,
+    "granted_at": null,
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": null,
+    "unattended": false
+  },
+  "owner_runtime": "claude",
+  "resume_point": "step 2",
+  "questions": {
+    "file": ".ai/reports/T-2026-09-01-002/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": null,
+    "reason": null
+  },
+  "created_at": "2026-09-01T10:00:00Z",
+  "updated_at": "2026-09-01T11:00:00Z",
+  "history": [
+    {
+      "at": "2026-09-01T10:00:00Z",
+      "event": "task_started",
+      "detail": "widen the export"
+    }
+  ],
+  "diff": {
+    "base_commit": null,
+    "base_tree": null,
+    "task": {
+      "files": 0,
+      "added": 0,
+      "deleted": 0,
+      "lines": 0,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 0,
+      "tree": null,
+      "measured_at": null,
+      "status": "not_measured"
+    },
+    "rescored_tier": null,
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-09-01-002/sensors.json",
+    "tree": null,
+    "verdict": null,
+    "checked_at": null
+  },
+  "tests": {
+    "runs": [],
+    "suite_runs": 0
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  }
+}

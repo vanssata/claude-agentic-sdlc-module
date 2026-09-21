@@ -717,7 +717,7 @@ E init --goal "nothing recorded yet" --workflow investigation >/dev/null
 E handoff --print | tail -1 | grep -q '^> none recorded$' && pass "and a task with no session.json says so" || fail "should print 'none recorded'"
 AI_HANDOFF_NO_PROMPT=1 python3 "$STATE" --root "$ROOTE" handoff --print | tail -1 | grep -q 'omitted (AI_HANDOFF_NO_PROMPT=1)' \
   && pass "AI_HANDOFF_NO_PROMPT keeps the prompt out of the project tree" || fail "the opt-out should work"
-E handoff --help 2>&1 | grep -q -- "--to" && fail "handoff must not have --to (that is WP5)" || pass "handoff has no --to: moving a task is WP5's"
+E handoff --help 2>&1 | grep -q -- "--to" && pass "handoff has --to: WP5 moves a task on purpose" || fail "handoff should offer --to (WP5)"
 
 echo "== archive takes it away again"
 E done >/dev/null; E archive >/dev/null
@@ -1150,5 +1150,158 @@ out=$(X questions --sync 2>&1)
 X get --field human_approval | jq -e '.granted==false' >/dev/null \
   && pass "a gate opened with no session on record cannot be closed from the file" \
   || fail "the file route must fail closed without a requested_session" "$out"
+
+echo "== WP5: handoff --to, exit 7, cross-vendor review, advice, direct-mode cap"
+W5="$TMP/wp5"; CLH="$W5/claude"; CXH="$W5/codex"
+mkdir -p "$CLH/skills/ai-task" "$CXH/skills/ai-task" "$CLH/claude-agentic" "$CXH/claude-agentic"
+: > "$CLH/skills/ai-task/state.py"; : > "$CXH/skills/ai-task/state.py"   # "installed" is presence
+RP="$PLUGIN_ROOT/scripts/resolve-profile.py"
+python3 "$RP" max --fable yes --print agentic > "$CLH/claude-agentic/profile.json"
+python3 "$RP" codex-pro --fable no --print agentic > "$CXH/claude-agentic/profile.json"
+S5() { CLAUDE_CONFIG_DIR="$CLH" CODEX_HOME="$CXH" AI_RUNTIME= python3 "$STATE" --root "$R5" "$@"; }
+field5() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1]))
+for k in sys.argv[2].split("."): d = d.get(k) if isinstance(d, dict) else None
+print(json.dumps(d))' "$R5/.ai/state/current.json" "$1"; }
+fresh5() { R5="$TMP/wp5-$1"; rm -rf "$R5"; mkdir -p "$R5/.ai"; }
+
+fresh5 handoff
+S5 --runtime claude init --goal "move it" --workflow feature >/dev/null 2>&1
+S5 --runtime claude risk T3 >/dev/null 2>&1
+out=$(S5 --runtime claude handoff --to codex --why "claude quota" 2>&1); rc=$?
+[ $rc = 0 ] && printf '%s' "$out" | grep -q 'Handed .* to codex (manual)' && pass "handoff --to codex succeeds" || fail "handoff --to" "rc=$rc $out"
+printf '%s' "$out" | grep -q "headless (not run): cd .* && codex exec '/ai-task'" && pass "it prints the headless command, not run" || fail "no headless line" "$out"
+[ "$(field5 owner_runtime)" = '"codex"' ] && [ "$(field5 resume_point.runtime)" = '"codex"' ] && [ "$(field5 handoff.pending_to)" = '"codex"' ] \
+    && pass "owner_runtime, resume_point.runtime and handoff.pending_to all say codex" || fail "state after handoff" "$(field5 handoff)"
+TID5=$(field5 task_id | tr -d '"'); EV5="$R5/.ai/reports/$TID5/events.jsonl"
+grep '"runtime_handoff"' "$EV5" | tail -1 | jq -e '.data.from == "claude" and .data.to == "codex" and .data.via == "manual"
+        and .data.tty == false and .data.reason == "claude quota" and .data.tier == "T3" and .actor == "agent"' >/dev/null \
+    && pass "runtime_handoff journaled with via, reason, tier and tty" || fail "runtime_handoff line" "$(grep '"runtime_handoff"' "$EV5" | tail -1)"
+grep -q '^Handed to codex at .* resume there with /ai-task' "$R5/.ai/state/handoff.md" && pass "handoff.md says who has it" || fail "handoff.md has no Handed line"
+out=$(S5 --runtime claude handoff --to codex 2>&1); rc=$?
+[ $rc = 2 ] && pass "handing to the owner again exits 2" || fail "same-owner handoff should exit 2" "rc=$rc $out"
+out=$(S5 --runtime claude set next_action "keep going here" 2>&1); rc=$?
+[ $rc = 7 ] && printf '%s' "$out" | grep -q '^state.py: RUNTIME_HANDOFF_PENDING' && pass "a change from the old owner exits 7 RUNTIME_HANDOFF_PENDING" || fail "old owner should be refused" "rc=$rc $out"
+S5 --runtime claude get --field current_stage >/dev/null 2>&1 && pass "reading it from the old owner is still fine" || fail "a read was refused"
+n_before=$(grep -c '"runtime_handoff"' "$EV5")
+S5 --runtime codex set next_action "resumed in codex" >/dev/null 2>&1; rc=$?
+[ $rc = 0 ] && [ "$(field5 handoff.pending_to)" = null ] && pass "the first change from codex completes the handoff" || fail "codex resume" "rc=$rc $(field5 handoff)"
+[ "$(grep -c '"runtime_handoff"' "$EV5")" = "$n_before" ] && pass "with no second runtime_handoff event" || fail "resume emitted another runtime_handoff"
+S5 --runtime codex handoff --to claude --why back >/dev/null 2>&1 && S5 --runtime claude set next_action "back home" >/dev/null 2>&1 \
+    && [ "$(field5 owner_runtime)" = '"claude"' ] && pass "handoff --to claude takes it back" || fail "take-back failed"
+S5 --runtime claude ask "Which one?" --option "A: a" --option "B: b" >/dev/null 2>&1
+S5 --runtime claude handoff --to codex >/dev/null 2>&1 && pass "pending questions do not block a handoff" || fail "a pending question blocked the handoff"
+S5 --runtime codex handoff --to claude >/dev/null 2>&1
+S5 --runtime claude done --abandon >/dev/null 2>&1
+out=$(S5 --runtime claude handoff --to codex 2>&1); rc=$?
+[ $rc = 2 ] && printf '%s' "$out" | grep -q 'closed' && pass "a closed task cannot be handed over (exit 2)" || fail "closed task handoff" "rc=$rc $out"
+fresh5 missing
+S5 --runtime claude init --goal g --workflow feature >/dev/null 2>&1
+out=$(CODEX_HOME="$W5/nowhere" CLAUDE_CONFIG_DIR="$CLH" python3 "$STATE" --root "$R5" --runtime claude handoff --to codex 2>&1); rc=$?
+[ $rc = 2 ] && printf '%s' "$out" | grep -q 'not installed' && pass "a runtime that is not installed is refused (exit 2)" || fail "missing target" "rc=$rc $out"
+
+echo "== WP5: cross-vendor review (R11)"
+fresh5 review
+S5 --runtime claude init --goal "pay" --workflow feature >/dev/null 2>&1
+S5 --runtime claude risk T4 >/dev/null 2>&1
+S5 --runtime claude handoff --to codex --for review >/dev/null 2>&1
+field5 cross_vendor_review | jq -e '.from == "claude" and .to == "codex" and .tier == "T4" and .status == "requested" and .requested_at != null' >/dev/null \
+    && pass "T4 --for review records a requested cross-vendor review" || fail "cross_vendor_review" "$(field5 cross_vendor_review)"
+grep -q 'for the cross-vendor review' "$R5/.ai/state/handoff.md" && pass "handoff.md names the review" || fail "handoff.md should name the review"
+S5 --runtime codex set review_status passed >/dev/null 2>&1
+field5 cross_vendor_review | jq -e '.status == "done" and .by_runtime == "codex" and .result == "passed"' >/dev/null \
+    && pass "set review_status under codex marks it done, by codex" || fail "review not closed" "$(field5 cross_vendor_review)"
+fresh5 review-low
+S5 --runtime claude init --goal "small" --workflow feature >/dev/null 2>&1
+S5 --runtime claude risk T2 >/dev/null 2>&1
+out=$(S5 --runtime claude handoff --to codex --for review 2>&1); rc=$?
+[ $rc = 0 ] && printf '%s' "$out" | grep -q 'below cross_vendor_review_from T4' && [ "$(field5 cross_vendor_review)" = null ] \
+    && pass "T2 --for review is allowed and noted, not recorded as a cross-vendor review" || fail "T2 review handoff" "rc=$rc $out"
+
+echo "== WP5 review fixes: blockers win, a stale request is cancelled, the process names the runtime"
+fresh5 review-block
+S5 --runtime claude init --goal "pay" --workflow feature >/dev/null 2>&1
+S5 --runtime claude risk T4 >/dev/null 2>&1
+S5 --runtime claude set review_status blockers_open >/dev/null 2>&1
+S5 --runtime claude handoff --to codex --for review >/dev/null 2>&1
+S5 --runtime codex set review_status passed >/dev/null 2>&1
+[ "$(field5 review_status)" = '"blockers_open"' ] && field5 cross_vendor_review | jq -e '.status == "done" and .result == "passed"' >/dev/null \
+    && pass "the other vendor's passed does not clear the owner's blockers" || fail "blockers cleared" "$(field5 review_status) $(field5 cross_vendor_review)"
+fresh5 review-back
+S5 --runtime claude init --goal "pay" --workflow feature >/dev/null 2>&1
+S5 --runtime claude risk T4 >/dev/null 2>&1
+S5 --runtime claude handoff --to codex --for review >/dev/null 2>&1
+S5 --runtime claude handoff --to claude --why "not now" >/dev/null 2>&1
+field5 cross_vendor_review | jq -e '.status == "cancelled"' >/dev/null && pass "taking the task back cancels the review request" || fail "request left open" "$(field5 cross_vendor_review)"
+S5 --runtime claude set next_action x >/dev/null 2>&1
+S5 --runtime claude handoff --to codex >/dev/null 2>&1
+grep -q 'for the cross-vendor review' "$R5/.ai/state/handoff.md" && fail "a plain handoff inherited the old review" || pass "a later plain handoff is not a review"
+out=$(S5 --runtime claude init --goal "other" --workflow feature --force 2>&1); rc=$?
+[ $rc = 7 ] && printf '%s' "$out" | grep -q 'would discard it' && pass "init --force cannot drop a task handed to the other runtime (exit 7)" || fail "init --force" "rc=$rc $out"
+out=$(env -u CLAUDECODE CLAUDE_CONFIG_DIR="$CLH" CODEX_HOME="$CXH" AI_RUNTIME= python3 "$STATE" --root "$R5" set next_action y 2>&1); rc=$?
+[ $rc = 7 ] && printf '%s' "$out" | grep -q -- '--runtime claude handoff --to claude' && pass "a plain shell is told a command it can run" || fail "shell message" "rc=$rc $out"
+fresh5 detect
+S5 --runtime claude init --goal g --workflow feature >/dev/null 2>&1
+printf '{"runtime":"codex","session_id":"s1"}' > "$R5/.ai/state/session.json"
+CLAUDECODE=1 CLAUDE_CONFIG_DIR="$CLH" CODEX_HOME="$CXH" AI_RUNTIME= python3 "$STATE" --root "$R5" set next_action "from claude" >/dev/null 2>&1
+[ "$(field5 owner_runtime)" = '"claude"' ] && pass "CLAUDECODE outranks a session.json written by codex" || fail "session.json won over the process" "$(field5 owner_runtime)"
+CXR="$W5/codex-real"; mkdir -p "$CXR/skills/ai-task"; cp "$STATE" "$CXR/skills/ai-task/state.py"
+printf '{"runtime":"claude","session_id":"s2"}' > "$R5/.ai/state/session.json"
+env -u CLAUDECODE CLAUDE_CONFIG_DIR="$CLH" CODEX_HOME="$CXR" AI_RUNTIME= python3 "$CXR/skills/ai-task/state.py" --root "$R5" set next_action "from codex home" >/dev/null 2>&1
+[ "$(field5 owner_runtime)" = '"codex"' ] && pass "the copy under CODEX_HOME is codex whatever session.json says" || fail "install location ignored" "$(field5 owner_runtime)"
+S5 --runtime claude set next_action "back with claude" >/dev/null 2>&1
+CLAUDECODE=1 CLAUDE_CONFIG_DIR="$CLH" CODEX_HOME="$CXR" AI_RUNTIME= python3 "$CXR/skills/ai-task/state.py" --root "$R5" set next_action "codex under a claude shell" >/dev/null 2>&1
+[ "$(field5 owner_runtime)" = '"codex"' ] && pass "an inherited CLAUDECODE=1 does not make the codex copy claude" || fail "CLAUDECODE outranked the install location" "$(field5 owner_runtime)"
+fresh5 selfhand
+S5 --runtime claude init --goal g --workflow feature >/dev/null 2>&1
+jq '.owner_runtime = null' "$R5/.ai/state/current.json" > "$R5/c.tmp" && mv "$R5/c.tmp" "$R5/.ai/state/current.json"
+out=$(S5 --runtime claude handoff --to claude 2>&1); rc=$?
+[ $rc = 2 ] && [ "$(field5 handoff.pending_to)" = null ] && pass "a self-handoff on an unowned task is refused (exit 2)" || fail "self-handoff" "rc=$rc $out"
+
+echo "== WP5: the advisory line (R12)"
+fresh5 advice
+err=$(S5 --runtime claude init --goal "rename everything" --workflow refactoring 2>&1 >/dev/null)
+printf '%s' "$err" | grep -qx 'preferred runtime: codex (plan table: refactoring -> codex)' && pass "init names codex for refactoring, on stderr" || fail "no advisory line" "$err"
+grep -qx 'preferred runtime: codex (plan table: refactoring -> codex)' "$R5/.ai/state/handoff.md" && pass "handoff.md carries the same line" || fail "handoff.md lacks the advice"
+[ "$(wc -l < "$R5/.ai/state/handoff.md")" -le 30 ] && pass "handoff.md is still at most 30 lines" || fail "handoff.md grew past 30 lines"
+[ "$(field5 owner_runtime)" = '"claude"' ] && pass "nothing moves by itself" || fail "the advice moved the task"
+err=$(S5 --runtime claude risk T3 2>&1 >/dev/null)
+printf '%s' "$err" | grep -q '^preferred runtime: codex' && pass "risk repeats it" || fail "risk should print the advice" "$err"
+fresh5 advice-none
+err=$(CODEX_HOME="$W5/nowhere" CLAUDE_CONFIG_DIR="$CLH" python3 "$STATE" --root "$R5" --runtime claude init --goal g --workflow refactoring 2>&1 >/dev/null)
+[ -z "$err" ] && pass "no advice when the other runtime is not installed" || fail "advice without codex" "$err"
+fresh5 advice-quota
+mkdir -p "$CLH/state"; NOW5=$(date +%s)
+jq -n --argjson n "$NOW5" '{quota:{weekly_pct:95,seen_at:$n,resets_at:($n+3600),source:"statusline"}}' > "$CLH/state/runtime-gate.json"
+err=$(S5 --runtime claude init --goal g --workflow feature 2>&1 >/dev/null)
+printf '%s' "$err" | grep -qx 'preferred runtime: codex (quota 95% >= 90%)' && pass "own quota >= 90% names the other runtime" || fail "quota advice" "$err"
+mkdir -p "$CXH/state"; jq -n --argjson n "$NOW5" '{quota:{weekly_pct:97,seen_at:$n,resets_at:($n+3600),source:"rollout"}}' > "$CXH/state/runtime-gate.json"
+fresh5 advice-both
+err=$(S5 --runtime claude init --goal g --workflow feature 2>&1 >/dev/null)
+[ -z "$err" ] && pass "no quota advice when the other runtime is just as spent" || fail "advice despite codex quota" "$err"
+jq '.quota.seen_at = 1000' "$CLH/state/runtime-gate.json" > "$W5/q.json" && mv "$W5/q.json" "$CLH/state/runtime-gate.json"
+rm -f "$CXH/state/runtime-gate.json"; fresh5 advice-stale
+err=$(S5 --runtime claude init --goal g --workflow feature 2>&1 >/dev/null)
+[ -z "$err" ] && pass "a stale quota gives no advice" || fail "stale quota advised" "$err"
+rm -rf "$CLH/state"
+
+echo "== WP5: the direct-mode cap (R13) and profile"
+python3 "$RP" pro --print agentic > "$CLH/claude-agentic/profile.json"
+fresh5 cap
+out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T3 --files a.py 2>&1); rc=$?
+[ $rc = 8 ] && printf '%s' "$out" | grep -q '^state.py: DIRECT_MODE_CAP T2 (plan pro)' && pass "quick T3 under solo on pro exits 8 DIRECT_MODE_CAP" || fail "cap" "rc=$rc $out"
+fresh5 cap-ok
+S5 --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py >/dev/null 2>&1 && pass "quick T2 is within the cap" || fail "T2 refused"
+fresh5 cap-none
+out=$(CLAUDE_CONFIG_DIR="$W5/nowhere" CODEX_HOME="$W5/nowhere" python3 "$STATE" --root "$R5" --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py 2>&1); rc=$?
+[ $rc = 0 ] && pass "no profile file: no cap" || fail "no-profile quick" "rc=$rc $out"
+out=$(CLAUDE_CONFIG_DIR="$W5/nowhere" python3 "$STATE" --root "$R5" --runtime claude quick --goal g --workflow bugfix --tier T3 --files a.py --force 2>&1); rc=$?
+[ $rc = 1 ] && pass "and quick still refuses T3 on its own (exit 1)" || fail "T3 without profile" "rc=$rc"
+python3 "$RP" max --fable yes --print agentic > "$CLH/claude-agentic/profile.json"
+[ "$(cd "$W5" && S5 --runtime claude profile --tier STRONG)" = opus ] && pass "profile --tier STRONG prints this runtime's model" || fail "profile --tier claude"
+[ "$(cd "$W5" && S5 --runtime codex profile --tier STRONG)" = gpt-5.6-sol ] && pass "and Codex's under codex" || fail "profile --tier codex"
+[ "$(cd "$W5" && S5 --runtime claude profile --other --tier EXPERT)" = gpt-6-astra ] && pass "--other reads the other runtime's plan" || fail "profile --other"
+[ "$(cd "$W5" && S5 --runtime claude profile --field budgets.fan_out.max_parallel_agents)" = 3 ] && pass "--field walks a dotted path" || fail "profile --field"
+(cd "$W5" && CLAUDE_CONFIG_DIR="$W5/nowhere" python3 "$STATE" --runtime claude profile >/dev/null 2>&1); rc=$?
+[ $rc = 1 ] && pass "no profile: exit 1, and no .ai/ is needed" || fail "profile without a file: rc=$rc"
 
 summary "state.py"

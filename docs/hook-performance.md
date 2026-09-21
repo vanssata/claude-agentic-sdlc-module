@@ -122,6 +122,17 @@ UserPromptSubmit payload, with and without a task in flight, is 1 process and
 `transcript_path`, which isolates the write — the transcript scan dominates the
 real payload and WP2 did not touch it.)
 
+**WP5: one gate instead of two, on every plan.** `runtime-gate.py` replaces
+`fable-gate.py` (Max + Fable only) and `codex-model-gate.py`, and is registered on
+every Claude plan (OQ4). One `PreToolUse:Agent` call with a max `profile.json`
+measured 27 ms against 24 ms for the pre-WP5 `fable-gate.py` on the same payload
+(20-run mean, 2026-09-21) — within noise, one process either way. The budget
+checks read `profile.json` and the gate's own state file in that process; the
+`model_fallback` journal line spawns `state.py` only on a rewrite with a task in
+flight, which is rare by construction. The old names are shims that `exec`
+the gate: 35 ms through `fable-gate.py`, the price of a second interpreter start,
+paid only by an old registration the installer has not yet replaced.
+
 ## How to measure
 
 There is no bench script in the repository on purpose — a number recorded once and

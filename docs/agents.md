@@ -88,8 +88,8 @@ Two mechanisms, deliberately different:
   agent's Model setting) and the last-resort tier must not drop below the `opus`
   reviewer it escalates from. Fable, where enabled, is pinned on
   `architect` alone — design questions outside a task — and nothing else ever
-  runs on it. Under Codex `ai-expert` is pinned to Astra, and `codex-model-gate`
-  rewrites an Astra launch to Sol while Astra is rate-limited or unavailable.
+  runs on it. Under Codex `ai-expert` is pinned to the plan's EXPERT model, and `runtime-gate`
+  rewrites such a launch to the STRONG model while Astra is rate-limited or unavailable.
   Baking the resolution into the frontmatter at install time means every skill
   can just say "call `ai-expert`" and be correct on any plan and runtime.
 

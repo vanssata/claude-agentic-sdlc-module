@@ -153,7 +153,7 @@ else
         && pass "the constitution template is within 15 principles and 4096 B" \
         || fail "the constitution template is over its cap"
 fi
-for f in skills/sdlc-spec/SKILL.md skills/sdlc-plan/SKILL.md agents/ai-planner.md; do
+for f in skills/sdlc-spec/SKILL.md skills/sdlc-plan/SKILL.md agents/ai-planner.md.tmpl; do
     grep -q 'docs/sdlc/constitution.md' "$PLUGIN_ROOT/$f" \
         && pass "$f reads the constitution" || fail "$f does not read the constitution"
 done

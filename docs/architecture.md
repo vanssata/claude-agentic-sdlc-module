@@ -221,8 +221,7 @@ Registered once per runtime — in `~/.claude/settings.json`, in
 | `ai-scope-guard` | `PreToolUse` on writes | this step | `current_stage == "implementation"` and a current step | both |
 | `cap-large-read.py` | `PreToolUse:Read` | every session | always | Claude |
 | `project-scaffold.sh` | `Setup:init` | a new project | `/init` | Claude |
-| `fable-gate.py` | `StopFailure`, `PreToolUse:Agent` | the EXPERT tier | a Fable install | Claude |
-| `codex-model-gate.py` | `PreToolUse`/`PostToolUse:Agent`, `SubagentStop` | the EXPERT tier | always | Codex |
+| `runtime-gate.py` | `PreToolUse`/`PostToolUse:Agent`, `SubagentStart`/`SubagentStop`, `StopFailure` (Fable) | the top tier, the plan's budgets, the quota | always; budgets only with `profile.json` | both (`fable-gate.py`, `codex-model-gate.py` are shims) |
 | `context-guard.py` | `UserPromptSubmit`, `PreCompact`, `SessionStart` | the session's context, and `session.json` | always | both — snapshot Claude-only |
 
 The path and scope guards check for their arming condition in their first few
@@ -300,13 +299,15 @@ an explicit `model` and `model_reasoning_effort` into every agent — an omitted
 that Claude Code does with `model: opus`. `tests/test-codex-agent-render.sh`
 asserts each role's *effective* model, not the one that was requested.
 
-**There is no `StopFailure`.** Claude's `fable-gate` learns about a rate limit
-from a dedicated failure event. Codex has no such event, so `codex-model-gate`
+**There is no `StopFailure`.** On Claude Code `runtime-gate` learns about a Fable rate limit
+from a dedicated failure event. Codex has no such event, so there it
 watches `SubagentStop` and marks the gate only when the evidence actually points
 at an EXPERT agent: its name in the text, an explicit expert `model`, an agent
 file pinned to the expert model, or an expert launch inside the last five minutes.
-Both gates then do the same thing — rewrite an EXPERT launch to the tier below,
-say so in the agent's context, and expire on their own.
+Both sides then do the same thing — rewrite an EXPERT launch to the tier below,
+say so in the agent's context, and expire on their own. The budget checks differ
+in one way: Codex parses `ask` but does not support it, so where Claude Code asks,
+Codex allows the launch and explains it in `additionalContext`.
 
 `config.toml` gets one more piece of care. There is no comment-preserving TOML
 writer in the standard library, so `scripts/merge-codex-config.py` edits the

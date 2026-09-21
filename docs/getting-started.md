@@ -36,10 +36,10 @@ Restart the runtime, then check:
 Claude Code
   /config     → the model and effort match your plan
   /skills     → ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*, usage-report
-  /hooks      → the three guards, cap-large-read, project-scaffold, and fable-gate on a Fable install
+  /hooks      → the three guards, cap-large-read, project-scaffold, and runtime-gate (StopFailure too on a Fable install)
 
 Codex
-  /hooks      → the three guards and codex-model-gate — REVIEW AND TRUST THEM HERE,
+  /hooks      → the three guards and runtime-gate — REVIEW AND TRUST THEM HERE,
                 or they do not run and nothing is enforced
   codex --version && grep -E '^model' ~/.codex/config.toml
 ```

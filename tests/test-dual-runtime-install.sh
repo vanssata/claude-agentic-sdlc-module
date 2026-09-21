@@ -39,22 +39,22 @@ stub claude
 out=$(run claude-only --target auto --plan max --fable yes)
 wrote "$TMP/claude-only/claude" && pass "auto installed Claude" || fail "Claude should have been installed" "$out"
 wrote "$TMP/claude-only/codex" && fail "auto must not touch Codex when it is absent" || pass "Codex is left untouched"
-printf '%s' "$out" | grep -q 'detected runtime: claude$' && pass "the detected runtime is reported" || fail "expected 'detected runtime: claude'" "$out"
+printf '%s' "$out" | grep -c >/dev/null 'detected runtime: claude$' && pass "the detected runtime is reported" || fail "expected 'detected runtime: claude'" "$out"
 
 echo "== only codex present"
 stub codex
 out=$(run codex-only --target auto)
 wrote "$TMP/codex-only/codex" && pass "auto installed Codex" || fail "Codex should have been installed" "$out"
 wrote "$TMP/codex-only/claude" && fail "auto must not touch Claude when it is absent" || pass "Claude is left untouched"
-printf '%s' "$out" | grep -q 'Enter plan' && fail "a Codex-only install must not ask for a Claude plan" || pass "no Claude plan is asked for"
+printf '%s' "$out" | grep -c >/dev/null 'Enter plan' && fail "a Codex-only install must not ask for a Claude plan" || pass "no Claude plan is asked for"
 
 echo "== both present"
 stub claude codex
 out=$(run both --target auto --plan max --fable yes)
 wrote "$TMP/both/claude" && pass "auto installed Claude" || fail "Claude missing" "$out"
 wrote "$TMP/both/codex" && pass "auto installed Codex" || fail "Codex missing" "$out"
-printf '%s' "$out" | grep -q 'Done (Claude Code)' && pass "the Claude summary is printed" || fail "no Claude summary" "$out"
-printf '%s' "$out" | grep -q 'Done (Codex)' && pass "the Codex summary is printed" || fail "no Codex summary" "$out"
+printf '%s' "$out" | grep -c >/dev/null 'Done (Claude Code)' && pass "the Claude summary is printed" || fail "no Claude summary" "$out"
+printf '%s' "$out" | grep -c >/dev/null 'Done (Codex)' && pass "the Codex summary is printed" || fail "no Codex summary" "$out"
 
 echo "== neither present"
 stub
@@ -62,7 +62,7 @@ out=$(run neither --target auto); rc=$?
 [ $rc -ne 0 ] && pass "a host with no runtime exits non-zero" || fail "expected a non-zero exit" "$out"
 wrote "$TMP/neither/claude" && fail "nothing may be written when no runtime is found" || pass "nothing is written"
 wrote "$TMP/neither/codex" && fail "nothing may be written when no runtime is found" || pass "no Codex tree either"
-printf '%s' "$out" | grep -q -- '--target claude' && pass "the error names the override" || fail "the error should suggest --target" "$out"
+printf '%s' "$out" | grep -c >/dev/null -- '--target claude' && pass "the error names the override" || fail "the error should suggest --target" "$out"
 
 echo "== an explicit target overrides detection"
 stub codex
@@ -99,8 +99,8 @@ stub claude codex
 out=$(run dry --target both --plan max --fable yes --dry-run)
 wrote "$TMP/dry/claude" && fail "a dry run wrote to the Claude tree" || pass "the Claude tree is untouched"
 wrote "$TMP/dry/codex" && fail "a dry run wrote to the Codex tree" || pass "the Codex tree is untouched"
-printf '%s' "$out" | grep -q '== claude:' && pass "the dry run has a Claude section" || fail "no Claude section" "$out"
-printf '%s' "$out" | grep -q '== codex:' && pass "the dry run has a Codex section" || fail "no Codex section" "$out"
-printf '%s' "$out" | grep -q '{{' && fail "the dry run left an unrendered placeholder" || pass "every placeholder is rendered"
+printf '%s' "$out" | grep -c >/dev/null '== claude:' && pass "the dry run has a Claude section" || fail "no Claude section" "$out"
+printf '%s' "$out" | grep -c >/dev/null '== codex:' && pass "the dry run has a Codex section" || fail "no Codex section" "$out"
+printf '%s' "$out" | grep -c >/dev/null '{{' && fail "the dry run left an unrendered placeholder" || pass "every placeholder is rendered"
 
 summary "dual-runtime install"

@@ -19,7 +19,7 @@ out=$(python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT"
 if [ $? -eq 0 ]; then pass "renderer exits 0"; else fail "renderer should exit 0" "$out"; fi
 
 count=$(ls "$OUT"/*.toml 2>/dev/null | wc -l)
-[ "$count" -ge 16 ] && pass "rendered $count agents" || fail "expected at least 16 agents, got $count"
+[ "$count" -ge 17 ] && pass "rendered $count agents" || fail "expected at least 17 agents, got $count"
 
 echo "== every file is valid TOML with the three required fields"
 bad=$(python3 - "$OUT" <<'PY'
@@ -88,8 +88,19 @@ field ai-planner-strong developer_instructions | grep -q 'T3 or T4' \
 field ai-risk-strong developer_instructions | grep -q 'You classify risk' \
     && pass "ai-risk-strong reuses the shared ai-risk body" || fail "ai-risk-strong should reuse the shared prompt body"
 
+echo "== the T2 review runs on BALANCED (R20)"
+for p in plus pro; do
+    d="$TMP/r20-$p"
+    python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$d" --profile "$PLUGIN_ROOT/profiles/codex-$p.json" >/dev/null 2>&1
+    want=$(jq -r '"\(.tiers.BALANCED.model) \(.tiers.BALANCED.effort)"' "$PLUGIN_ROOT/profiles/codex-$p.json")
+    got=$(python3 -c 'import sys,tomllib;d=tomllib.load(open(sys.argv[1],"rb"));print(d["model"],d["model_reasoning_effort"],d.get("sandbox_mode"))' "$d/ai-reviewer-balanced.toml" 2>&1)
+    [ "$got" = "$want read-only" ] && pass "codex-$p: ai-reviewer-balanced is read-only on BALANCED" || fail "codex-$p: ai-reviewer-balanced got '$got', want '$want read-only'"
+done
+field ai-reviewer-balanced developer_instructions | grep -q 'You review as an adversary' \
+    && pass "ai-reviewer-balanced reuses the shared ai-reviewer body" || fail "ai-reviewer-balanced should reuse the ai-reviewer body"
+
 echo "== read-only roles get a read-only sandbox"
-for a in ai-reviewer ai-security ai-expert ai-discovery Explore ai-risk ai-planner architect ai-context ai-indexer ai-tester log-reader; do
+for a in ai-reviewer ai-security ai-expert ai-discovery Explore ai-risk ai-planner architect ai-context ai-indexer ai-tester log-reader ai-reviewer-balanced; do
     [ "$(field "$a" sandbox_mode)" = "read-only" ] && pass "$a is sandboxed read-only" || fail "$a should be read-only, got $(field "$a" sandbox_mode)"
 done
 for a in ai-implementer ai-release; do

@@ -36,11 +36,11 @@
         ]
       },
       {
-        "matcher": "Agent",
+        "matcher": "Agent|spawn_agent",
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.codex/hooks/codex-model-gate.py\"",
+            "command": "\"$HOME/.codex/hooks/runtime-gate.py\"",
             "timeout": 5,
             "statusMessage": "Checking expert-model availability"
           }
@@ -49,13 +49,25 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Agent",
+        "matcher": "Agent|spawn_agent",
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.codex/hooks/codex-model-gate.py\"",
+            "command": "\"$HOME/.codex/hooks/runtime-gate.py\"",
             "timeout": 5,
             "statusMessage": "Recording expert-model availability"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.codex/hooks/runtime-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Counting running agents"
           }
         ]
       }
@@ -65,7 +77,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.codex/hooks/codex-model-gate.py\"",
+            "command": "\"$HOME/.codex/hooks/runtime-gate.py\"",
             "timeout": 5,
             "statusMessage": "Recording expert-model availability"
           }

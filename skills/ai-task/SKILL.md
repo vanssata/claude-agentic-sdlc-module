@@ -1,6 +1,6 @@
 ---
 name: ai-task
-description: Run one task through the agentic pipeline with the gates its risk tier requires. In the default solo profile T0–T2 run in direct mode (name the files, edit, one verification run at the end, failures fixed as one batch, one sonnet review at T2) and T3–T5 run the full SDLC pipeline — discovery, context, impact, risk tier, plan, plan review, implementation, test, adversarial review, security review, release report, human approval. Resumes an interrupted task from .ai/state/current.json. Use for any change in a repository that has .ai/.
+description: Run one task through the agentic pipeline with the gates its risk tier requires. In the default solo profile T0–T2 run in direct mode (name the files, edit, one verification run at the end, failures fixed as one batch, one BALANCED-tier review at T2) and T3–T5 run the full SDLC pipeline — discovery, context, impact, risk tier, plan, plan review, implementation, test, adversarial review, security review, release report, human approval. Resumes an interrupted task from .ai/state/current.json. Use for any change in a repository that has .ai/.
 argument-hint: <what you want done> | --resume | --abandon
 ---
 
@@ -52,6 +52,18 @@ summary where the two disagree — it is rendered from the state, not remembered
   `implementation`, warn that it may have stopped mid-step and say which step.
   Ask whether to resume, close it, or abandon it. **Never silently discard it** —
   a live state file is what the scope guard is enforcing against.
+- **The handoff says `Handed to <this runtime>`**: the task was moved here on
+  purpose. Resume at its resume point; your first state change completes the
+  handoff. If `cross_vendor_review` (`$STATE get --field cross_vendor_review`)
+  is `requested` with `to` = this runtime, go straight to **ADVERSARIAL
+  REVIEW** with this runtime's own reviewer on the STRONG tier, record it with
+  `$STATE set review_status <passed|blockers_open>` (that marks the review
+  `done` and stores your verdict as its `result`; an owner's `blockers_open`
+  stays), then hand it back: `$STATE handoff --to <from>`.
+- **It says `Handed to <the other runtime>`**: do not work on it here. Every
+  state change exits 7 `RUNTIME_HANDOFF_PENDING` until that runtime resumes it.
+  Tell the user where to resume; take it back with `$STATE handoff --to <this
+  runtime>` only when they ask.
 - **`--abandon`**: `$STATE done` then `$STATE archive`, and say what was left
   unfinished.
 - **Nothing in flight**: classify the request into one of the five workflows —
@@ -63,6 +75,13 @@ $STATE init --goal "<one sentence>" --workflow <workflow>
 
 Read `.ai/workflows/<workflow>.md`. It tells you what is specific to this shape
 of work.
+
+`init`, `quick` and `risk` may print `preferred runtime: <runtime> (<reason>)`
+on stderr — the plan's table or the quota rule names the other runtime. It is
+advice: say it to the user, and move the task only when they agree, with
+`$STATE handoff --to <runtime> --why "<reason>"` (`--for review` to ask the
+other vendor for the T4+ review). It prints the command to resume there; it
+never runs it.
 
 Then read the profile:
 
@@ -78,7 +97,11 @@ the stages that go to a subagent. `solo`, the default, has two modes:
   own scoped tests, then the verification command once at the end and the e2e
   suite once after it, and fix every failure as one batch.
   The only subagents are cheap readers (`Explore`, `log-reader`) and, at T2,
-  one `ai-reviewer` on `sonnet`. Nothing runs on `opus` below T3.
+  one review on the BALANCED tier (`ai-reviewer` with
+  `model: $($STATE profile --tier BALANCED)` on Claude Code,
+  `ai-reviewer-balanced` on Codex). Nothing runs on STRONG below T3. `quick`
+  exits 8 `DIRECT_MODE_CAP` when the plan caps direct mode below the tier:
+  then use `init` and the pipeline.
 - **sdlc** (T3–T5): the full pipeline below, recorded stage by stage, with the
   delegations the profile lists.
 
@@ -91,7 +114,7 @@ Skip `$STATE init` above for T0–T2; direct mode has its own single call.
 
 1. **Tier and files.** Take the entry points from the request; confirm them with
    `grep -n`. Say the tier, the trigger and the files you will touch, in one to
-   five lines. At T2 that is the plan. Use `Explore` (haiku) when a file is not
+   five lines. At T2 that is the plan. Use `Explore` (FAST) when a file is not
    found in a few `grep` calls, never a six-agent fan-out — and when a file is
    too large to open, that reader brings back the excerpt, not the file.
    If this task needs a tool or MCP server the project does not enable by
@@ -109,7 +132,7 @@ Skip `$STATE init` above for T0–T2; direct mode has its own single call.
    $STATE quick --goal "<one sentence>" --workflow <workflow> --tier T2 --files "<a>,<b>" --note "<trigger>"
    ```
 
-3. **Implement**, yourself, in this session. `ai-implementer` (sonnet, low) only
+3. **Implement**, yourself, in this session. `ai-implementer` (BALANCED, low) only
    for a mechanical pattern-copy the human asks for. When you finish a piece of
    work, run **only its own tests** — `step_test_command` from
    `.ai/policies/testing.md` scoped to the files you just touched — and fix
@@ -135,8 +158,10 @@ Skip `$STATE init` above for T0–T2; direct mode has its own single call.
    ```bash
    $STATE set e2e_status <passing|failing|not_applicable>   # T2
    ```
-5. **Review — T2 only.** After the tests pass, one `ai-reviewer` with
-   `model: sonnet` over `git diff`, no ledger and no probe. Fix BLOCKER and
+5. **Review — T2 only.** After the tests pass, one review on the BALANCED tier
+   over `git diff` — `ai-reviewer` with `model: $($STATE profile --tier
+   BALANCED)` on Claude Code, `ai-reviewer-balanced` on Codex — no ledger and
+   no probe. Fix BLOCKER and
    HIGH findings as one batch (`$STATE remediate`), re-run the verification
    command, and ask for one scoped re-review only when a BLOCKER was fixed.
 6. **Close.** Print what changed, the verification command and its result, the
@@ -193,8 +218,8 @@ $STATE triage T<n> --note "<the trigger>" --context "<entry points, callers, wha
 **T3 and above, or `team`:** the stages run one at a time and are recorded one
 at a time. `ai-discovery` — one agent per area in parallel, after `ai-indexer`
 when the area is large — into `discovery.md`; `ai-context` for the summary; a
-second `ai-discovery` pass for `.ai/templates/impact-report.md`; `ai-risk` with
-`model: opus` for the tier (`ai-risk-strong` under Codex, whose agent files
+second `ai-discovery` pass for `.ai/templates/impact-report.md`; `ai-risk` on
+STRONG — `model: $($STATE profile --tier STRONG)` — for the tier (`ai-risk-strong` under Codex, whose agent files
 outrank a spawn-time model), re-run when it says `confidence: uncertain`.
 In `solo` you may still write context and impact yourself at T3 when the area
 is one you know; the risk call at STRONG is not optional there.
@@ -227,7 +252,7 @@ numbered list of steps, each with its files, registered with:
 $STATE plan --ref ".ai/reports/<task-id>/task.md" --steps /tmp/steps.json
 ```
 
-**T3 and T4:** `ai-planner` with `model: opus` (`ai-planner-strong` under
+**T3 and T4:** `ai-planner` on STRONG — `model: $($STATE profile --tier STRONG)` — (`ai-planner-strong` under
 Codex), in plan mode. **T5:** `ai-expert`. Save to `.ai/reports/<task-id>/implementation-plan.md` following
 `.ai/templates/implementation-plan.md`, register the steps as above.
 
@@ -321,7 +346,7 @@ $STATE test-run --scope suite        # and, at the end of the task, --scope e2e
 ```
 
 A **green** run needs no agent at all: exit 0 is the verdict and `test_status`
-is set from it. A **red** run is where `ai-tester` (haiku) earns its keep —
+is set from it. A **red** run is where `ai-tester` (FAST) earns its keep —
 hand it the log path, not the output; it classifies and never re-runs anything.
 An environment failure it calls transient gets exactly one
 `--env-retry`. The suite is capped at `sensors.max_suite_runs`: running it a
@@ -387,8 +412,9 @@ Nothing here weakens a review: `unavailable` is not green, and
 measurements.
 
 Then, when it is required: one `ai-reviewer` on the diff — a fresh context that did not write the code —
-with the model from `pipeline_profiles.<profile>.review_model[<tier>]`: `sonnet`
-at T2 in solo, `opus` above. Save findings to
+on the tier from `pipeline_profiles.<profile>.review_model[<tier>]`: BALANCED
+at T2 in solo (`ai-reviewer` with `model: $($STATE profile --tier BALANCED)`
+on Claude Code, `ai-reviewer-balanced` on Codex), STRONG above. Save findings to
 `.ai/reports/<task-id>/review-report.md`.
 
 The sensor rows are already in the ledger, so the reviewer inherits them
@@ -569,8 +595,8 @@ repository with no `.ai/` at all.
   step's own scoped tests are the exception: they are fixed in that step.
 - A step runs its own tests, and only those. The full suite runs once after the
   last step; the e2e suite runs once after that. Never per step.
-- Nothing below T3 runs on `opus`. Readers and runners are `haiku`; the T2
-  review is `sonnet`; STRONG is paid for from T3. Large files are read by the
+- Nothing below T3 runs on STRONG. Readers and runners are FAST; the T2
+  review is BALANCED; STRONG is paid for from T3. Large files are read by the
   cheapest model, and only the relevant part comes back.
 - Tools and MCP servers are off unless the task named them, and go off again
   when it closes.

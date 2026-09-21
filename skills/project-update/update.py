@@ -594,6 +594,13 @@ def three_way(plan, history, key, target, theirs):
             plan.add("merge", target, "your edits kept", content=dump_json(merged), policy=policy)
         if conflicts:
             plan.add("conflict", target, "kept your value for: " + ", ".join(conflicts), conflict_copy=theirs)
+            model_keys = [c for c in conflicts if c.split(".")[0] == "model_tiers" or ".review_model" in "." + c]
+            if target.endswith("policies/risk-tiers.json") and model_keys:
+                hint = ("%s: %s — the plugin now names tiers (FAST/BALANCED/STRONG/EXPERT), not models; "
+                        "the model of a tier comes from the installed plan: state.py profile --tier <TIER>"
+                        % (target, ", ".join(model_keys)))
+                if hint not in plan.hints:
+                    plan.hints.append(hint)
         return
 
     base = closest(versions, norm(ours), lambda b, o: text_ratio(norm(b), o)) if versions else None
