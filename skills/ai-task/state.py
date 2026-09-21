@@ -42,6 +42,11 @@ Usage:
   state.py questions [--pending] [--sync] [--format md|prose|json] [--topic SLUG]
   state.py note   decision|rejected|failed "<text>" [--why TEXT] [--error TEXT]
   state.py handoff [--print] [--reason stage|precompact|manual|session-start]
+  state.py handoff --to claude|codex [--for continue|review] [--why TEXT]
+                                         move the task to the other runtime: it must resume there
+                                         (exit 7 RUNTIME_HANDOFF_PENDING from anywhere else)
+  state.py profile [--field a.b.c] [--tier FAST|BALANCED|STRONG|EXPERT] [--other] [--json]
+                                         the installed plan's tables (read-only, no task needed)
   state.py events [--last N] [--type t1,t2] [--task ID] [--format lines|jsonl]
   state.py event  <type> [--detail TEXT] [--data JSON]   # for hooks; type must be in EVENT_TYPES
   state.py approve --by NAME [--note TEXT]   # outside the agent: a TTY, or AI_UNATTENDED
@@ -190,7 +195,8 @@ def find_root(start):
 
 def die(message, code=1):
     """1 validation · 2 argparse · 4 QUESTIONS_PENDING · 5 APPROVAL_REFUSED ·
-    6 DIFF_BUDGET_EXCEEDED / SCOPE_CHANGE_REQUIRED (I1, WP4 I4)."""
+    6 DIFF_BUDGET_EXCEEDED / SCOPE_CHANGE_REQUIRED (I1, WP4 I4) ·
+    7 RUNTIME_HANDOFF_PENDING / DIRECT_MODE_CAP (WP5 I4)."""
     print("state.py: %s" % message, file=sys.stderr)
     sys.exit(code)
 
@@ -326,6 +332,10 @@ def apply_defaults(state):
         state["tests"] = {"runs": [], "suite_runs": 0}
     if not isinstance(state.get("risk_tier_lowered"), dict):
         state["risk_tier_lowered"] = {"by": None, "at": None, "from": None}
+    # Schema 5 (WP5 I4): a task handed to the other runtime, and a review asked of it.
+    state["handoff"].setdefault("pending_to", None)
+    state["handoff"].setdefault("pending_since", None)
+    state.setdefault("cross_vendor_review", None)
     for step in ((state.get("approved_plan") or {}).get("steps") or []):
         if isinstance(step, dict):
             step.setdefault("kind", "remediation"
@@ -359,6 +369,17 @@ def claim_runtime(root, state):
     """Called from load() for the commands in MUTATING_COMMANDS, so ownership is
     taken once rather than in fifteen call sites. A task that changes runtime says
     so in the journal; WP5 is what will move a task on purpose."""
+    pending = (state.get("handoff") or {}).get("pending_to")
+    if pending in RUNTIMES:
+        if RUNTIME != pending:
+            die("RUNTIME_HANDOFF_PENDING: task %s was handed to %s at %s. Resume it there "
+                "(/ai-task), or take it back here with: state.py handoff --to %s"
+                % (state.get("task_id"), pending, state["handoff"].get("pending_since"),
+                   RUNTIME if RUNTIME in RUNTIMES else "<runtime>"), 7)
+        # The receiving runtime's first change: the handoff is complete. The
+        # move itself was journaled when it was made, so there is no second event.
+        state["handoff"]["pending_to"] = None
+        state["handoff"]["pending_since"] = None
     previous = state.get("owner_runtime")
     if RUNTIME not in RUNTIMES or previous == RUNTIME:
         return
@@ -411,6 +432,127 @@ def next_task_id(root):
     return "T-%s-%03d" % (day, len(existing) + 1)
 
 
+# ------------------------------------------------------------------ plan profile (WP5)
+def runtime_home(runtime):
+    if runtime == "codex":
+        return os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")
+    return os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+
+
+def own_runtime():
+    """This process's runtime; an undetected one is read from where this file
+    is installed, so a plain shell under ~/.codex still reads the Codex plan."""
+    if RUNTIME in RUNTIMES:
+        return RUNTIME
+    return "codex" if "%s.codex%s" % (os.sep, os.sep) in os.path.abspath(__file__) else "claude"
+
+
+def other_runtime(runtime=None):
+    return "codex" if (runtime or own_runtime()) == "claude" else "claude"
+
+
+def installed(runtime):
+    return os.path.isfile(os.path.join(runtime_home(runtime), "skills", "ai-task", "state.py"))
+
+
+def read_profile(runtime=None):
+    """<home>/claude-agentic/profile.json, written by install.sh; {} when absent,
+    which turns every plan budget into a no-op."""
+    try:
+        with open(os.path.join(runtime_home(runtime or own_runtime()), "claude-agentic",
+                               "profile.json"), encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def read_quota(runtime):
+    """The weekly percentage runtime-gate last recorded, or None when unknown
+    or stale — advice never rests on a reading older than a day."""
+    try:
+        with open(os.path.join(runtime_home(runtime), "state", "runtime-gate.json"),
+                  encoding="utf-8") as fh:
+            quota = json.load(fh).get("quota") or {}
+        seen, resets = float(quota.get("seen_at") or 0), float(quota.get("resets_at") or 0)
+        now_s = datetime.now(timezone.utc).timestamp()
+        if not seen or now_s - seen > 86400 or (resets and now_s > resets):
+            return None
+        pct = quota.get("weekly_pct")
+        return float(pct) if pct is not None else None
+    except (OSError, ValueError, AttributeError, TypeError):
+        return None
+
+
+def preferred_runtime(workflow):
+    """(runtime, reason) when the plan's table or the quota rule names the
+    other runtime and it is installed; None otherwise. Advice only (D3)."""
+    me = own_runtime()
+    other = other_runtime(me)
+    if not installed(other):
+        return None
+    pref = read_profile(me).get("preferred_runtime") or {}
+    named = (pref.get("by_workflow") or {}).get(workflow) or pref.get("default") or "same"
+    if named == other:
+        return other, "plan table: %s -> %s" % (workflow, other)
+    limit = pref.get("quota_pct")
+    mine, theirs = read_quota(me), read_quota(other)
+    if limit is not None and mine is not None and mine >= float(limit) \
+            and (theirs is None or theirs < float(limit)):
+        return other, "quota %.0f%% >= %.0f%%" % (mine, float(limit))
+    return None
+
+
+def advisory_line(state):
+    found = preferred_runtime(state.get("workflow"))
+    return "preferred runtime: %s (%s)" % found if found else None
+
+
+def advise(state):
+    line = advisory_line(state)
+    if line:
+        print(line, file=sys.stderr)      # stdout carries the task id callers capture
+
+
+def cmd_profile(args, _root):
+    runtime = other_runtime() if args.other else own_runtime()
+    prof = read_profile(runtime)
+    if not prof:
+        die("no plan profile for %s (%s/claude-agentic/profile.json); install.sh writes it"
+            % (runtime, runtime_home(runtime)))
+    if args.tier:
+        model = ((prof.get("tiers") or {}).get(args.tier) or {}).get("model")
+        if not model:
+            die("the %s profile has no %s tier" % (runtime, args.tier))
+        print(model)
+        return
+    value = prof
+    if args.field:
+        for part in args.field.split("."):
+            if not isinstance(value, dict) or part not in value:
+                die("the %s profile has no %s" % (runtime, args.field))
+            value = value[part]
+    if args.json or isinstance(value, (dict, list)):
+        print(json.dumps(value, indent=None if args.field else 2, ensure_ascii=False))
+    else:
+        print(value)
+
+
+def direct_mode_cap(root, tier):
+    """quick under the solo profile reaches only as far as the plan allows."""
+    cap = ((read_profile().get("budgets") or {}).get("direct_mode") or {}).get("max_tier")
+    if cap not in TIERS or tier not in TIERS:
+        return
+    try:
+        with open(os.path.join(root, ".ai", "policies", "risk-tiers.json"), encoding="utf-8") as fh:
+            profile_name = json.load(fh).get("pipeline_profile", "solo")
+    except (OSError, ValueError, AttributeError):
+        profile_name = "solo"
+    if profile_name == "solo" and TIERS.index(tier) > TIERS.index(cap):
+        die("DIRECT_MODE_CAP %s (plan %s): use init, triage and a reviewed plan"
+            % (cap, read_profile().get("plan") or "?"), 7)
+
+
 def cmd_init(args, root):
     if args.workflow not in WORKFLOWS:
         die("workflow must be one of: %s" % ", ".join(WORKFLOWS))
@@ -452,6 +594,8 @@ def cmd_init(args, root):
     write_handoff(root, state, "stage")
     save(root, state)
     print(task_id)
+    if not getattr(args, "quiet_advice", False):
+        advise(state)
 
 
 def cmd_get(args, root):
@@ -550,6 +694,7 @@ def cmd_risk(args, root):
     write_handoff(root, state, "stage")
     save(root, state)
     print(args.tier)
+    advise(state)
 
 
 def cmd_triage(args, root):
@@ -864,11 +1009,13 @@ def cmd_quick(args, root):
     """The direct path for T0–T2: one call records the task, the four inline
     triage stages and a single step whose allowed files are the ones named, so
     the scope guard is armed without a plan file, a task.md or four round trips."""
+    direct_mode_cap(root, args.tier)
     if args.tier not in ("T0", "T1", "T2"):
         die("quick is for T0, T1 and T2; from T3 the task needs init, triage and a reviewed plan")
     files = _split_files(args.files)
     if not files:
         die("--files must name at least one file or glob the step may touch")
+    args.quiet_advice = True              # said once, below, after the step line
     cmd_init(args, root)
     state = load(root)
     previous = state["current_stage"]
@@ -896,6 +1043,7 @@ def cmd_quick(args, root):
     write_handoff(root, state, "stage")
     save(root, state)
     print("%s %s: step 1 armed for %s" % (state["task_id"], args.tier, ", ".join(files)))
+    advise(state)
 
 
 def cmd_remediate(args, root):
@@ -1082,6 +1230,10 @@ def cmd_set(args, root):
     state = load(root)
     previous = state.get(args.field)
     state[args.field] = args.value
+    review = state.get("cross_vendor_review")
+    if args.field == "review_status" and isinstance(review, dict) and review.get("status") == "requested" \
+            and RUNTIME == review.get("to") and args.value not in ("not_started", "in_progress"):
+        review.update({"status": "done", "by_runtime": RUNTIME, "done_at": now(), "result": args.value})
     emit(root, state, "field_set", "%s = %s" % (args.field, args.value),
          {"field": args.field, "from": previous, "value": args.value}, legacy="set")
     write_handoff(root, state, "stage")
@@ -1864,6 +2016,16 @@ def handoff_lines(root, state, reason):
                 why = one_line(data.get("why"), 200)
                 out.append("- %s%s" % (text, " — because %s" % why if why else ""))
 
+    pending_to = (state.get("handoff") or {}).get("pending_to")
+    if pending_to:
+        review = state.get("cross_vendor_review") or {}
+        out.append("Handed to %s at %s%s — resume there with /ai-task" % (
+            pending_to, (state.get("handoff") or {}).get("pending_since"),
+            " for the cross-vendor review" if review.get("status") == "requested" else ""))
+    advice = advisory_line(state)
+    if advice:
+        out.append(advice)
+
     session = read_session(root)
     out.append("## Latest user instruction (verbatim, %s, %s)"
                % (session.get("last_prompt_at") or "never", session.get("runtime") or "unknown"))
@@ -1900,7 +2062,10 @@ def write_handoff(root, state, reason):
         os.replace(tmp, path)
     except Exception:  # pylint: disable=broad-exception-caught  # derived artefact: never fatal
         return None
-    state["handoff"] = {"file": os.path.relpath(path, root), "written_at": now(), "reason": reason}
+    # Updated, not replaced: pending_to/pending_since (schema 5) live here too.
+    if not isinstance(state.get("handoff"), dict):
+        state["handoff"] = {}
+    state["handoff"].update({"file": os.path.relpath(path, root), "written_at": now(), "reason": reason})
     # Journal-only, like note: the handoff is derived, and history[] records
     # what changed the task, not what was rendered from it.
     append_journal(root, state.get("task_id"), journal_line(
@@ -1909,7 +2074,56 @@ def write_handoff(root, state, reason):
     return lines
 
 
+RESUME_COMMAND = {"claude": "claude -p '/ai-task'", "codex": "codex exec '/ai-task'"}
+
+
+def handoff_to(args, root):
+    """Move the task to the other runtime on purpose (WP5 R10). Ownership moves
+    now; the receiving runtime's first change completes it, and until then any
+    other runtime's change is refused with exit 7. Pending questions do not
+    block it: they travel with the task."""
+    state = load(root, claim=False)
+    source = state.get("owner_runtime") or (RUNTIME if RUNTIME in RUNTIMES else None)
+    if args.to == state.get("owner_runtime"):
+        die("task %s is already owned by %s%s" % (
+            state.get("task_id"), args.to,
+            " (handed over, waiting for it to resume)" if (state.get("handoff") or {}).get("pending_to") else ""), 2)
+    if state.get("current_stage") == "done":
+        die("task %s is closed; start a new one with init" % state.get("task_id"), 2)
+    if not installed(args.to):
+        die("%s is not installed here (%s has no skills/ai-task/state.py); run install.sh --target %s"
+            % (args.to, runtime_home(args.to), args.to), 2)
+    tier = state.get("risk_tier")
+    via = "review" if args.for_ == "review" else "manual"
+    data = {"from": source, "to": args.to, "via": via, "reason": args.why or "", "tier": tier,
+            "tty": bool(os.isatty(0) and os.isatty(1))}
+    if via == "review":
+        threshold = (read_profile().get("preferred_runtime") or {}).get("cross_vendor_review_from") or "T4"
+        if tier in TIERS and threshold in TIERS and TIERS.index(tier) >= TIERS.index(threshold):
+            state["cross_vendor_review"] = {"from": source, "to": args.to, "tier": tier,
+                                            "requested_at": now(), "status": "requested",
+                                            "by_runtime": None}
+        else:
+            data["below_threshold"] = threshold
+            print("note: %s is below cross_vendor_review_from %s — handed over for review anyway, "
+                  "not recorded as a cross-vendor review" % (tier or "an untiered task", threshold))
+    state["owner_runtime"] = args.to
+    set_resume_point(state)
+    state["resume_point"]["runtime"] = args.to
+    state["handoff"]["pending_to"] = args.to
+    state["handoff"]["pending_since"] = now()
+    emit(root, state, "runtime_handoff", "%s -> %s (%s)" % (source, args.to, via), data)
+    write_handoff(root, state, "manual")
+    save(root, state)
+    print("Handed %s to %s (%s). In %s, run /ai-task: it resumes from .ai/state/current.json."
+          % (state.get("task_id"), args.to, via, args.to))
+    print("headless (not run): cd %s && %s" % (shlex.quote(root), RESUME_COMMAND[args.to]))
+
+
 def cmd_handoff(args, root):
+    if args.to:
+        handoff_to(args, root)
+        return
     state = load(root)
     lines = write_handoff(root, state, args.reason)
     if lines is None:
@@ -2356,7 +2570,15 @@ def main():
     p.add_argument("--print", dest="print_it", action="store_true")
     p.add_argument("--reason", choices=["stage", "precompact", "manual", "session-start"],
                    default="manual")
+    p.add_argument("--to", choices=RUNTIMES)
+    p.add_argument("--for", dest="for_", choices=["continue", "review"], default="continue")
+    p.add_argument("--why", default="")
     p.set_defaults(func=cmd_handoff)
+
+    p = sub.add_parser("profile"); p.add_argument("--field")
+    p.add_argument("--tier", choices=["FAST", "BALANCED", "STRONG", "EXPERT"])
+    p.add_argument("--other", action="store_true"); p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_profile)
 
     p = sub.add_parser("note"); p.add_argument("kind"); p.add_argument("text")
     p.add_argument("--why", default=""); p.add_argument("--error", default="")
@@ -2387,6 +2609,12 @@ def main():
     if getattr(args, "topic", None):
         # Topic mode never touches .ai/: it must work where there is none (I11).
         args.func(args, find_docs_root(args.root))
+        return
+    if args.command == "profile":
+        # Read-only and task-free: it answers where there is no .ai/ at all.
+        RUNTIME = args.runtime or os.environ.get("AI_RUNTIME") or \
+            ("claude" if os.environ.get("CLAUDECODE") else "unknown")
+        args.func(args, None)
         return
     root = find_root(args.root)
     RUNTIME = detect_runtime(args.runtime, root)
