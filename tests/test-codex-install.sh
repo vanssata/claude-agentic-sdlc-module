@@ -120,6 +120,16 @@ grep -q 'gpt-6-astra' "$DIR/claude-agentic/routing.md" && pass "routing.md names
 grep -q 'Models are tiers, not names' "$DIR/AGENTS.md" && pass "the block carries tiers, not model names" || fail "the block should carry tiers, not names"
 grep -q 'ai-task' "$DIR/AGENTS.md" && pass "the block carries the pipeline contract" || fail "the pipeline contract is missing"
 
+echo "== profile.json (R4)"
+jq -e '.runtime == "codex" and (.plan == "plus" or .plan == "pro") and .fable == false and (.tiers.STRONG.model | length > 0)' \
+    "$DIR/claude-agentic/profile.json" >/dev/null \
+    && pass "profile.json written for the Codex install, tiers read from the Codex profile" || fail "codex profile.json missing or wrong"
+grep -q 'claude_agentic' "$DIR/config.toml" && fail "claude_agentic leaked into config.toml" || pass "config.toml has no claude_agentic"
+out=$(CODEX_DIR="$TMP/probe-profile" bash "$INSTALL" --target codex --codex-plan plus --dry-run 2>&1)
+printf '%s' "$out" | grep -q "^== profile.json (plan tables): $TMP/probe-profile/claude-agentic/profile.json" \
+    && pass "--dry-run lists the Codex profile.json" || fail "codex dry run should list profile.json"
+[ ! -e "$TMP/probe-profile/claude-agentic/profile.json" ] && pass "and does not write it" || fail "dry run wrote profile.json"
+
 echo "== re-install is idempotent"
 before=$(cd "$DIR" && find . -type f ! -name '*.bak' -print0 | sort -z | xargs -0 sha256sum)
 CODEX_DIR="$DIR" bash "$INSTALL" --target codex >/dev/null 2>&1

@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 # claude-agentic installer (Claude Code and/or Codex).
-#   ./install.sh [--target auto|claude|codex|both] [--plan pro|team-pro|team-max|max]
+#   ./install.sh [--target auto|claude|codex|both] [--plan pro|team-pro|team-max|max|max20]
 #                [--fable auto|yes|no] [--codex-plan plus|pro] [--dry-run]
 # --target defaults to auto: each runtime is installed only if it is present.
-# --plan   Claude only: pro, team-pro (Team Standard seat), team-max (Team Premium seat) or max.
-#          Defaults to auto-detect from ~/.claude.json (organizationType, then the seat and
-#          rate-limit tiers for a Team org); prompts if unknown.
-# --fable  Claude only. auto = yes on max and team-max, no on pro and team-pro. On max the
+# --plan   Claude only: pro, team-pro (Team Standard seat), team-max (Team Premium seat), max
+#          or max20 (Max 20x: max's settings, larger budgets). Defaults to auto-detect from
+#          ~/.claude.json (organizationType, organizationRateLimitTier, the seat tiers for a
+#          Team org). On a terminal the detected plan is proposed and Enter confirms it (a plan
+#          recorded by an earlier install is the proposal); without one the detection is used
+#          and printed on stderr. --plan skips the question.
+# --fable  Claude only. auto = yes on max, max20 and team-max, no on pro and team-pro. On max the
 #          session runs Opus 5 (200k window) either way; yes pins Fable 5.1 [1m] on architect alone.
 # --codex-plan  Codex only: plus or pro. Defaults to auto-detect from the ChatGPT login in
-#          ~/.codex/auth.json (chatgpt_plan_type); prompts if unknown, and assumes pro when it cannot.
+#          ~/.codex/auth.json (chatgpt_plan_type); confirmed on a terminal like --plan, and
+#          assumes pro when it cannot detect or ask.
+# Both runtimes get <home>/claude-agentic/profile.json: the resolved plan tables
+# (scripts/resolve-profile.py) that the gate, state.py and the reports read.
 # --dry-run prints everything that would be written, per runtime, and writes nothing.
 #
 # Claude Code (~/.claude): model, effort and context settings for the detected
@@ -159,6 +165,28 @@ codex_doc_advisory() {
   fi
 }
 
+# agentic_profile <runtime> <profile> <plan> <label> <fable> — the resolved
+# claude_agentic tables plus who wrote them (I2), for <home>/claude-agentic/profile.json.
+PLUGIN_VERSION=$(jq -r '.version // "unknown"' "$SRC/.codex-plugin/plugin.json" 2>/dev/null || echo unknown)
+agentic_profile() {
+  python3 "$SRC/scripts/resolve-profile.py" "$2" --src "$SRC" --plan "$3" --label "$4" --fable "$5" --print agentic \
+    | jq --arg rt "$1" --arg v "$PLUGIN_VERSION" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+         '.runtime = $rt | .plugin_version = $v | .written_at = $at'
+}
+
+# write_profile <home> <rendered> — profile.json is plugin state, replaced
+# rather than backed up, and only when something other than written_at changed,
+# so a second install leaves it alone.
+write_profile() {
+  local dst="$1/claude-agentic/profile.json"
+  if [ -f "$dst" ] && [ "$(jq -S 'del(.written_at)' "$dst" 2>/dev/null)" = "$(jq -S 'del(.written_at)' "$2")" ]; then
+    return 0
+  fi
+  mkdir -p "$1/claude-agentic"
+  cp "$2" "$dst"
+  chmod 0644 "$dst"
+}
+
 # ================================================================= Claude Code
 # The Claude branch is unchanged from the single-runtime installer. It lives in
 # functions so the Codex branch can be skipped or run independently; the bodies
@@ -170,32 +198,51 @@ claude_render() {
 # profile; max and team-max (a Team Premium seat) share the max profile. A Team
 # org says nothing about the seat in organizationType, so the seat and rate-limit
 # tier fields decide, and an undetectable Team seat is asked for on a tty.
+PREV_PLAN=$(jq -r '.plan // empty' "$CLAUDE_DIR/claude-agentic/profile.json" 2>/dev/null || true)
 if [ -z "$PLAN" ]; then
   org=$(jq -r '.oauthAccount.organizationType // .organizationType // empty' "$HOME/.claude.json" 2>/dev/null || true)
+  ratelimit=$(jq -r '.oauthAccount.organizationRateLimitTier // empty' "$HOME/.claude.json" 2>/dev/null || true)
+  DETECTED="" DETECTED_FROM=""
   case "$org" in
-    claude_max*|*max*) PLAN=max; echo "detected plan: max ($org)";;
-    claude_pro*|*pro*) PLAN=pro; echo "detected plan: pro ($org)";;
+    claude_max*|*max*)
+      case "$ratelimit" in
+        *max_20x*) DETECTED=max20; DETECTED_FROM="organizationRateLimitTier $ratelimit";;
+        *)         DETECTED=max;   DETECTED_FROM="organizationType $org${ratelimit:+, $ratelimit}";;
+      esac;;
+    claude_pro*|*pro*) DETECTED=pro; DETECTED_FROM="organizationType $org";;
     claude_team*|*team*|claude_enterprise*|*enterprise*)
       seat=$(jq -r '.oauthAccount | [.seatTier, .userRateLimitTier, .organizationRateLimitTier] | map(select(. != null and . != "")) | join(" ")' \
              "$HOME/.claude.json" 2>/dev/null || true)
       case "$seat" in
-        *premium*|*max*) PLAN=team-max; echo "detected plan: team-max ($org, seat '$seat')";;
-        *standard*|*pro*) PLAN=team-pro; echo "detected plan: team-pro ($org, seat '$seat')";;
-        *)
-          if [ -t 0 ]; then
-            read -r -p "Team org detected ($org) but not the seat. Enter plan [team-pro/team-max]: " PLAN
-          else
-            PLAN=team-pro
-            echo "detected plan: team ($org) — seat unknown, using team-pro (Pro's models and limits); pass --plan team-max for a Premium seat" >&2
-          fi;;
+        *premium*|*max*) DETECTED=team-max; DETECTED_FROM="$org, seat '$seat'";;
+        *standard*|*pro*) DETECTED=team-pro; DETECTED_FROM="$org, seat '$seat'";;
+        *) DETECTED_FROM="team";;
       esac;;
-    *)
-      if [ -t 0 ]; then
-        read -r -p "Could not detect plan (organizationType='$org'). Enter plan [pro/team-pro/team-max/max]: " PLAN
-      else
-        echo "Could not detect plan; pass --plan pro|team-pro|team-max|max" >&2; exit 1
-      fi;;
   esac
+  if [ -t 0 ]; then
+    # Propose, then confirm: a plan an earlier install recorded wins over the
+    # detection, because the person already chose it once.
+    PROPOSED="${PREV_PLAN:-$DETECTED}"
+    if [ -n "$PROPOSED" ]; then
+      why="detected from $DETECTED_FROM"
+      [ -n "$PREV_PLAN" ] && why="recorded by the previous install"
+      read -r -p "plan: $PROPOSED ($why) — Enter to confirm, or type pro/team-pro/team-max/max/max20: " PLAN
+      PLAN="${PLAN:-$PROPOSED}"
+    elif [ "$DETECTED_FROM" = team ]; then
+      read -r -p "Team org detected ($org) but not the seat. Enter plan [team-pro/team-max]: " PLAN
+    else
+      read -r -p "Could not detect plan (organizationType='$org'). Enter plan [pro/team-pro/team-max/max/max20]: " PLAN
+    fi
+  elif [ -n "$DETECTED" ]; then
+    PLAN=$DETECTED; echo "detected plan: $PLAN ($DETECTED_FROM)" >&2
+  elif [ "$DETECTED_FROM" = team ]; then
+    PLAN=team-pro
+    echo "detected plan: team ($org) — seat unknown, using team-pro (Pro's models and limits); pass --plan team-max for a Premium seat" >&2
+  elif [ -n "$PREV_PLAN" ]; then
+    PLAN=$PREV_PLAN; echo "plan: $PLAN (recorded by the previous install; organizationType='$org')" >&2
+  else
+    echo "Could not detect plan; pass --plan pro|team-pro|team-max|max|max20" >&2; exit 1
+  fi
 fi
 case "$PLAN" in
   team-standard|team_standard|team) PLAN=team-pro;;
@@ -204,11 +251,12 @@ case "$PLAN" in
   team_max) PLAN=team-max;;
 esac
 case "$PLAN" in
-  pro)      TIER=pro; PLAN_LABEL="Pro";;
-  team-pro) TIER=pro; PLAN_LABEL="Team Pro";;
-  team-max) TIER=max; PLAN_LABEL="Team Max";;
-  max)      TIER=max; PLAN_LABEL="Max";;
-  *) echo "--plan must be pro, team-pro, team-max or max (got '$PLAN')" >&2; exit 2;;
+  pro)      TIER=pro; PROFILE_NAME=pro;   PLAN_LABEL="Pro";;
+  team-pro) TIER=pro; PROFILE_NAME=pro;   PLAN_LABEL="Team Pro";;
+  team-max) TIER=max; PROFILE_NAME=max;   PLAN_LABEL="Team Max";;
+  max)      TIER=max; PROFILE_NAME=max;   PLAN_LABEL="Max";;
+  max20|max-20x|max_20x) PLAN=max20; TIER=max; PROFILE_NAME=max20; PLAN_LABEL="Max 20x";;
+  *) echo "--plan must be pro, team-pro, team-max, max or max20 (got '$PLAN')" >&2; exit 2;;
 esac
 case "$FABLE" in
   auto) [ "$TIER" = max ] && FABLE=yes || FABLE=no;;
@@ -220,13 +268,16 @@ if [ "$TIER" = pro ] && [ "$FABLE" = yes ]; then
 fi
 
 # ---------------------------------------------------------------- render settings
-PROFILE="$SRC/profiles/$TIER.json"
+# The profile's claude_agentic tables are the plugin's, not Claude Code's: the
+# resolver prints the settings half alone, so they never reach settings.json.
+python3 "$SRC/scripts/resolve-profile.py" "$PROFILE_NAME" --src "$SRC" --print settings > "$TMP/profile.settings.json"
 if [ "$TIER" = max ] && [ "$FABLE" = no ]; then
   jq '.availableModels = (.availableModels | map(select(startswith("fable") | not)))
-      | del(.modelSettings["claude-fable-5-1"])' "$PROFILE" > "$TMP/profile.json"
+      | del(.modelSettings["claude-fable-5-1"])' "$TMP/profile.settings.json" > "$TMP/profile.json"
 else
-  cp "$PROFILE" "$TMP/profile.json"
+  cp "$TMP/profile.settings.json" "$TMP/profile.json"
 fi
+agentic_profile claude "$PROFILE_NAME" "$PLAN" "$PLAN_LABEL" "$FABLE" > "$TMP/claude-profile.json"
 jq -s '.[0] * .[1]' "$SRC/settings.common.json" "$TMP/profile.json" > "$TMP/settings.snippet.json"
 
 SESSION_MODEL=$(jq -r .model "$TMP/settings.snippet.json")
@@ -410,6 +461,8 @@ claude_dry_run() {
   cat "$TMP/CLAUDE.block.md"
   echo "== routing.md (on demand): $CLAUDE_DIR/claude-agentic/routing.md"
   cat "$TMP/routing.md"
+  echo "== profile.json (plan tables): $CLAUDE_DIR/claude-agentic/profile.json"
+  jq . "$TMP/claude-profile.json"
   echo "== would install:"
   echo "   agents:  $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd,)"
   echo "   hooks:   $(ls "$SRC/hooks" | paste -sd,)"
@@ -417,6 +470,7 @@ claude_dry_run() {
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
   echo "   config:  ai-git-guard.json (only if absent)"
   echo "   routing: claude-agentic/routing.md"
+  echo "   profile: claude-agentic/profile.json"
   echo "== would migrate: the claude-routing managed block, if present, into this one"
 }
 
@@ -630,6 +684,7 @@ GLOBAL_MD="$CLAUDE_DIR/CLAUDE.md"
 managed_block "$GLOBAL_MD" "$TMP/CLAUDE.block.md" "CLAUDE.md"
 mkdir -p "$CLAUDE_DIR/claude-agentic"
 install_file "$TMP/routing.md" "$CLAUDE_DIR/claude-agentic/routing.md"
+write_profile "$CLAUDE_DIR" "$TMP/claude-profile.json"
 block_size "$GLOBAL_MD" 2560
 
 # ---------------------------------------------------------------- 6. audits
@@ -680,7 +735,8 @@ cat <<SUM
 
 Done (Claude Code).
   target          $CLAUDE_DIR
-  plan            $PLAN  ($PLAN_LABEL, $TIER profile, fable=$FABLE)
+  plan            $PLAN  ($PLAN_LABEL, $PROFILE_NAME profile, fable=$FABLE)
+  plan tables     $CLAUDE_DIR/claude-agentic/profile.json
   session model   $SESSION_MODEL ($SESSION_HUMAN), effort $EFFORT
   fallback        $FALLBACK
   EXPERT tier     ai-expert on opus, pinned, at effort $EXPERT_EFFORT;
@@ -740,21 +796,34 @@ PY
 }
 
 codex_render() {
+  CODEX_PREV_PLAN=$(jq -r '.plan // empty' "$CODEX_DIR/claude-agentic/profile.json" 2>/dev/null || true)
   if [ -z "$CODEX_PLAN" ]; then
     detected=$(codex_detect_plan 2>/dev/null || true)
+    CODEX_DETECTED="" CODEX_WHY=""
     case "$detected" in
-      plus)   CODEX_PLAN=plus; echo "detected codex plan: plus (chatgpt_plan_type)";;
-      pro)    CODEX_PLAN=pro;  echo "detected codex plan: pro (chatgpt_plan_type)";;
+      plus)   CODEX_DETECTED=plus; CODEX_WHY="chatgpt_plan_type";;
+      pro)    CODEX_DETECTED=pro;  CODEX_WHY="chatgpt_plan_type";;
       team*|business*|enterprise*|edu*)
-              CODEX_PLAN=pro;  echo "detected codex plan: $detected (chatgpt_plan_type) — uses the pro profile";;
-      *)
-        if [ -t 0 ]; then
-          read -r -p "Could not detect the ChatGPT plan (chatgpt_plan_type='$detected'). Enter plan [plus/pro]: " CODEX_PLAN
-        else
-          CODEX_PLAN=pro
-          echo "could not detect the ChatGPT plan; using the pro profile — pass --codex-plan plus on Plus" >&2
-        fi;;
+              CODEX_DETECTED=pro;  CODEX_WHY="chatgpt_plan_type $detected, uses the pro profile";;
     esac
+    if [ -t 0 ]; then
+      proposed="${CODEX_PREV_PLAN:-$CODEX_DETECTED}"
+      if [ -n "$proposed" ]; then
+        why="detected from $CODEX_WHY"
+        [ -n "$CODEX_PREV_PLAN" ] && why="recorded by the previous install"
+        read -r -p "codex plan: $proposed ($why) — Enter to confirm, or type plus/pro: " CODEX_PLAN
+        CODEX_PLAN="${CODEX_PLAN:-$proposed}"
+      else
+        read -r -p "Could not detect the ChatGPT plan (chatgpt_plan_type='$detected'). Enter plan [plus/pro]: " CODEX_PLAN
+      fi
+    elif [ -n "$CODEX_DETECTED" ]; then
+      CODEX_PLAN=$CODEX_DETECTED; echo "detected codex plan: $CODEX_PLAN ($CODEX_WHY)" >&2
+    elif [ -n "$CODEX_PREV_PLAN" ]; then
+      CODEX_PLAN=$CODEX_PREV_PLAN; echo "codex plan: $CODEX_PLAN (recorded by the previous install)" >&2
+    else
+      CODEX_PLAN=pro
+      echo "could not detect the ChatGPT plan; using the pro profile — pass --codex-plan plus on Plus" >&2
+    fi
   fi
   case "$CODEX_PLAN" in
     plus) CODEX_PLAN_LABEL="Plus";;
@@ -762,6 +831,7 @@ codex_render() {
     *) echo "--codex-plan must be plus or pro (got '$CODEX_PLAN')" >&2; exit 2;;
   esac
   CODEX_PROFILE="$SRC/profiles/codex-$CODEX_PLAN.json"
+  agentic_profile codex "codex-$CODEX_PLAN" "$CODEX_PLAN" "$CODEX_PLAN_LABEL" no > "$TMP/codex-profile.json"
 
   CODEX_SESSION_MODEL=$(jq -r .session.model "$CODEX_PROFILE")
   CODEX_SESSION_EFFORT=$(jq -r .session.model_reasoning_effort "$CODEX_PROFILE")
@@ -822,12 +892,15 @@ codex_dry_run() {
   cat "$TMP/AGENTS.block.md"
   echo "== routing.md (on demand): $CODEX_DIR/claude-agentic/routing.md"
   cat "$TMP/routing.md"
+  echo "== profile.json (plan tables): $CODEX_DIR/claude-agentic/profile.json"
+  jq . "$TMP/codex-profile.json"
   echo "== would install:"
   echo "   agents:  $(ls "$TMP/codex-agents" | sed 's/\.toml$//' | paste -sd,)"
   echo "   hooks:   $(codex_hook_files | xargs -n1 basename | paste -sd,)"
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
   echo "   config:  ai-git-guard.json (only if absent)"
   echo "   routing: claude-agentic/routing.md"
+  echo "   profile: claude-agentic/profile.json"
   echo "== hooks.json entries (merged into $CODEX_DIR/hooks.json):"
   jq . "$SRC/codex/hooks.json"
   echo "== reminder: Codex lists a non-managed hook until you review it in /hooks"
@@ -906,6 +979,7 @@ codex_apply() {
   managed_block "$CODEX_DIR/AGENTS.md" "$TMP/AGENTS.block.md" "AGENTS.md"
   mkdir -p "$CODEX_DIR/claude-agentic"
   install_file "$TMP/routing.md" "$CODEX_DIR/claude-agentic/routing.md" "$CODEX_DIR"
+  write_profile "$CODEX_DIR" "$TMP/codex-profile.json"
   block_size "$CODEX_DIR/AGENTS.md" 2560
   codex_doc_advisory "$CODEX_DIR/AGENTS.md"
 }

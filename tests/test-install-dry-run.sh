@@ -21,7 +21,7 @@ for combo in "max yes:xhigh:fable[1m]" "max no:high:Opus 5 with the 200k window"
     printf '%s' "$out" | grep -q 'nothing written' && pass "--plan $1 --fable $2 writes nothing" || fail "dry run should write nothing"
 done
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable no --dry-run 2>&1)
-printf '%s' "$out" | grep -q '"fable' && fail "--fable no must drop fable from the settings" "$out" || pass "--fable no drops fable from the settings"
+printf '%s' "$out" | sed -n '/^== settings snippet/,/^== agents/p' | grep -q '"fable' && fail "--fable no must drop fable from the settings" "$out" || pass "--fable no drops fable from the settings"
 
 echo "== pro: opusplan session, EXPERT tier pinned to opus"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan pro --dry-run 2>&1)
@@ -69,6 +69,38 @@ printf '{"oauthAccount":{"organizationType":"claude_max"}}' > "$HOME_T/.claude.j
 out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
 printf '%s' "$out" | grep -q 'plan=max (Max' && pass "claude_max is still detected as max" || fail "max org should map to max" "$out"
 
+echo "== max20: Max 20x, detected from organizationRateLimitTier (R3)"
+snippet() { sed -n '/^== settings snippet/,/^== agents/p'; }
+out20=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan max20 --dry-run 2>&1)
+outmax=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan max --dry-run 2>&1)
+printf '%s' "$out20" | grep -q 'plan=max20 (Max 20x, max profile) fable=yes' && pass "--plan max20 is Max 20x on the max profile" || fail "--plan max20 header" "$(printf '%s' "$out20" | grep '^== claude: plan')"
+[ "$(printf '%s' "$out20" | snippet)" = "$(printf '%s' "$outmax" | snippet)" ] \
+    && pass "max20's settings snippet equals max's" || fail "max20 snippet differs from max"
+for plan in pro team-pro team-max max max20; do
+    o=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan "$plan" --dry-run 2>&1)
+    printf '%s' "$o" | snippet | sed '1d;$d' | jq -e 'has("claude_agentic") | not' >/dev/null \
+        && pass "$plan: claude_agentic never reaches settings.json" || fail "$plan: claude_agentic leaked into the snippet"
+    printf '%s' "$o" | grep -q "^== profile.json (plan tables): $TMP/none/claude-agentic/profile.json" \
+        && pass "$plan: --dry-run lists profile.json" || fail "$plan: profile.json not listed"
+done
+printf '%s' "$out20" | sed -n '/^== profile.json/,/^== would install/p' | sed '1d;$d' \
+    | jq -e '.plan == "max20" and .label == "Max 20x" and .runtime == "claude" and .fable == true
+             and .budgets.fan_out.max_parallel_agents == 6 and (.plugin_version | length > 0) and (.written_at | length > 0)' >/dev/null \
+    && pass "max20 profile.json carries plan, runtime, fable and the max20 budgets" || fail "max20 profile.json content"
+printf '{"oauthAccount":{"organizationType":"claude_max","organizationRateLimitTier":"default_claude_max_20x"}}' > "$HOME_T/.claude.json"
+out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
+printf '%s' "$out" | grep -q 'plan=max20 (Max 20x' && pass "default_claude_max_20x is detected as max20" || fail "max_20x should map to max20" "$out"
+err=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 >/dev/null </dev/null)
+printf '%s' "$err" | grep -q 'detected plan: max20 (organizationRateLimitTier default_claude_max_20x)' \
+    && pass "without a terminal the detection is printed on stderr" || fail "detection should be on stderr" "$err"
+printf '{"oauthAccount":{"organizationType":"claude_max","organizationRateLimitTier":"default_claude_max_5x"}}' > "$HOME_T/.claude.json"
+out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
+printf '%s' "$out" | grep -q 'plan=max (Max' && pass "default_claude_max_5x stays max" || fail "max_5x should map to max" "$out"
+PREV="$TMP/prev"; mkdir -p "$PREV/claude-agentic"; printf '{"plan":"max20"}' > "$PREV/claude-agentic/profile.json"
+printf '{}' > "$HOME_T/.claude.json"
+out=$(HOME="$HOME_T" CLAUDE_DIR="$PREV" bash "$INSTALL" --dry-run 2>&1 </dev/null)
+printf '%s' "$out" | grep -q 'plan=max20' && pass "an undetectable account falls back to the plan the last install recorded" || fail "previous profile.json plan not used" "$out"
+
 echo "== dry run writes nothing at all"
 PROBE="$TMP/probe"; mkdir -p "$PROBE"
 CLAUDE_DIR="$PROBE" bash "$INSTALL" --plan max --dry-run >/dev/null 2>&1
@@ -84,6 +116,10 @@ echo "== real install into a scratch CLAUDE_DIR"
 DIR="$TMP/claude"; mkdir -p "$DIR"
 out=$(CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes 2>&1)
 [ $? -eq 0 ] && pass "install exits 0" || fail "install should exit 0" "$out"
+jq -e '.plan == "max" and .runtime == "claude" and .fable == true' "$DIR/claude-agentic/profile.json" >/dev/null \
+    && pass "profile.json written for the Claude install (R4)" || fail "profile.json missing or wrong"
+[ "$(stat -c %a "$DIR/claude-agentic/profile.json" 2>/dev/null)" = 644 ] && pass "profile.json is mode 0644" || fail "profile.json mode"
+jq -e 'has("claude_agentic") | not' "$DIR/settings.json" >/dev/null && pass "settings.json has no claude_agentic" || fail "claude_agentic leaked into settings.json"
 
 for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Explore.md \
          agents/log-reader.md hooks/ai-git-guard.sh hooks/lib/ai-hook-common.sh \
