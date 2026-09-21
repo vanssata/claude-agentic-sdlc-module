@@ -8,5 +8,84 @@
     "claude-sonnet-5": { "effortLevel": "medium" },
     "claude-haiku-4-5-20251001": { "effortLevel": "high" }
   },
-  "autoCompactWindow": 300000
+  "autoCompactWindow": 300000,
+  "claude_agentic": {
+    "inherits": null,
+    "plan": "pro",
+    "label": "Pro",
+    "runtime": "claude",
+    "tiers": {
+      "FAST": {
+        "model": "haiku",
+        "effort": "low",
+        "agents": [
+          "Explore",
+          "log-reader",
+          "ai-tester",
+          "ai-indexer"
+        ]
+      },
+      "BALANCED": {
+        "model": "sonnet",
+        "effort": "medium",
+        "agents": [
+          "ai-discovery",
+          "ai-context",
+          "ai-implementer",
+          "ai-release",
+          "ai-risk",
+          "ai-planner"
+        ]
+      },
+      "STRONG": {
+        "model": "opus",
+        "effort": "high",
+        "agents": [
+          "ai-reviewer",
+          "ai-security"
+        ]
+      },
+      "EXPERT": {
+        "model": "opus",
+        "effort": "high",
+        "agents": [
+          "ai-expert",
+          "architect"
+        ]
+      }
+    },
+    "budgets": {
+      "fan_out": {
+        "max_parallel_agents": 1,
+        "max_parallel_on_strong": 1,
+        "serial": true
+      },
+      "direct_mode": {
+        "max_tier": "T2"
+      },
+      "expert": {
+        "without_asking": false,
+        "max_per_task": 1
+      },
+      "tokens": {
+        "unit": "total_tokens_millions",
+        "per_task": {
+          "T0": 0.2,
+          "T1": 0.4,
+          "T2": 1,
+          "T3": 3,
+          "T4": 5,
+          "T5": 8
+        }
+      }
+    },
+    "preferred_runtime": {
+      "default": "same",
+      "by_workflow": {
+        "refactoring": "codex"
+      },
+      "quota_pct": 90,
+      "cross_vendor_review_from": "T4"
+    }
+  }
 }

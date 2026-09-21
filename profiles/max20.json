@@ -1,0 +1,28 @@
+{
+  "claude_agentic": {
+    "inherits": "max",
+    "plan": "max20",
+    "label": "Max 20x",
+    "budgets": {
+      "fan_out": {
+        "max_parallel_agents": 6,
+        "max_parallel_on_strong": 4,
+        "serial": false
+      },
+      "expert": {
+        "without_asking": true,
+        "max_per_task": 2
+      },
+      "tokens": {
+        "per_task": {
+          "T0": 0.8,
+          "T1": 1.6,
+          "T2": 4,
+          "T3": 12,
+          "T4": 20,
+          "T5": 32
+        }
+      }
+    }
+  }
+}
