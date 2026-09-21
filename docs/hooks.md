@@ -302,9 +302,22 @@ anything else is Claude Code.
 `fable-gate.py` and `codex-model-gate.py` still exist, as sixteen-line shims
 that exec `runtime-gate.py` with their argv and stdin, so an old registration, an
 old statusline wrapper, or a habit (`fable-gate.py status`) keeps working. On
-Codex an upgrade keeps registering `codex-model-gate.py`: Codex runs only hooks
-the user has reviewed and knows them by command, so the old name keeps the trust
-already given; only the new `SubagentStart` entry needs a look in `/hooks`.
+Codex an upgrade keeps registering `codex-model-gate.py`. Codex runs only hooks
+the user has reviewed, and `config.toml` keeps each approval as a hash of the
+whole entry at its position (`[hooks.state."<file>:<event>:<group>:<index>"]`),
+so an unchanged entry keeps its approval and a changed one — the WP5 matchers
+now include `spawn_agent`, and `SubagentStart` is new — needs one look in
+`/hooks`; until then Codex skips it.
+
+**Codex 0.155 limit (checked live, 2026-09-22).** Codex launches agents through
+the `spawn_agent` tool and fires **no** `PreToolUse`/`PostToolUse` for it — a
+traced session with both matchers trusted delivered only `SubagentStart` and
+`SubagentStop`. So on Codex the reroute below and the budget explanations never
+run (the reroute did not run before WP5 either); outages are still recorded
+from `SubagentStop`, the running-agent count is kept, and parallelism is capped
+by Codex itself through `agents.max_threads` in `config.toml`. The matchers
+list `Agent|spawn_agent` so the gate works unchanged if Codex starts firing
+them.
 
 | Event | Claude Code | Codex |
 |---|---|---|
@@ -351,6 +364,9 @@ already running on Fable and failed, the managed `CLAUDE.md` block has the main
 session re-run that brief once on Opus.
 
 ### The reroute — Codex (EXPERT → STRONG)
+
+Inactive on Codex 0.155: it needs a `PreToolUse` for the launch, which Codex
+does not fire for `spawn_agent` (see above).
 
 `ai-expert` is pinned to the plan's EXPERT model; when it is rate-limited or the
 account cannot reach it, the agent fails, and so does the next one. The gate

@@ -199,6 +199,17 @@ out=$(launch "$G" ai-reviewer)
 out=$(launch "$G" ai-reviewer s1 sonnet)
 [ -z "$out" ] && pass "the same agent with model: sonnet counts as BALANCED and goes through" || fail "explicit model should decide the tier" "$out"
 
+# The tool-call shape of a Codex 0.155 launch, from a live rollout. Codex 0.155
+# fires no PreToolUse for spawn_agent (traced live); this proves the gate is
+# ready for the day it does, not that it runs there today.
+echo "== codex: a spawn_agent launch, if Codex ever delivers one"
+rm -rf "$CX/state"
+spawn() { jq -nc --arg a "$1" --arg s "$2" '{hook_event_name:"PreToolUse",tool_name:"spawn_agent",session_id:$s,cwd:"/nonexistent",
+          tool_input:{task_name:"t",agent_type:$a,fork_turns:"all",message:"m"}}' | python3 "$CX/hooks/runtime-gate.py"; }
+s1=$(spawn Explore cx); s2=$(spawn log-reader cx)
+[ -z "$s1" ] && printf '%s' "$s2" | jq -e '.hookSpecificOutput.additionalContext | test("1 agent\\(s\\) already running, the .* fan-out is 1")' >/dev/null \
+    && pass "codex-plus: the second spawn_agent of a batch is explained" || fail "spawn_agent fan-out" "$s1|$s2"
+
 echo "== budgets: one message that launches several agents (WP5 review)"
 rm -rf "$CL/state"
 b1=$(launch "$G" Explore batch); b2=$(launch "$G" log-reader batch); b3=$(launch "$G" ai-tester batch)

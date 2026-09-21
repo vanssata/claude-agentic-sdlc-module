@@ -981,15 +981,17 @@ codex_apply() {
   cp "$HOOKS" "$HOOKS.bak"
   # codex-model-gate entries from before WP5 and runtime-gate ones from an
   # earlier run are removed first, so the merge below adds exactly one gate per
-  # event. Codex runs only hooks the user has reviewed, and it knows a hook by
-  # its command: an install that already registers codex-model-gate.py keeps
-  # that command (the shim execs runtime-gate.py), so the trust given to it
-  # survives the upgrade and the gate never silently stops.
+  # event. Codex runs only hooks the user has reviewed; config.toml keeps each
+  # approval as [hooks.state."<file>:<event>:<group>:<index>"] trusted_hash, a
+  # hash of the whole entry. An install that already registers
+  # codex-model-gate.py keeps that command (the shim execs runtime-gate.py), so
+  # an entry that is otherwise unchanged keeps its approval; a changed one
+  # (a new matcher, a new event) needs one review in /hooks.
   local GATE_HOOKS="$SRC/codex/hooks.json"
   if jq -e '[.hooks // {} | .[]?[]? | .hooks[]?.command // "" | select(test("/hooks/codex-model-gate\\.py"))] | length > 0' "$HOOKS" >/dev/null 2>&1; then
     GATE_HOOKS="$TMP/codex-hooks.json"
     sed 's|/hooks/runtime-gate\.py|/hooks/codex-model-gate.py|g' "$SRC/codex/hooks.json" > "$GATE_HOOKS"
-    echo "kept: codex-model-gate.py as the gate command (it runs runtime-gate.py); only the new SubagentStart entry needs a review in /hooks"
+    echo "kept: codex-model-gate.py as the gate command (it runs runtime-gate.py); review the changed gate entries once in /hooks, or Codex skips them"
   fi
   jq 'if (.hooks | type) == "object" then
       .hooks |= (with_entries(.value |= [ .[]

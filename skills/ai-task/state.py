@@ -232,13 +232,15 @@ def installed_runtime():
 
 
 def detect_runtime(explicit, root):
-    """--runtime > AI_RUNTIME > CLAUDECODE > install location > session.json >
+    """--runtime > AI_RUNTIME > install location > CLAUDECODE > session.json >
     unknown (I10). session.json names whichever runtime was prompted last, so it
     comes after everything the process itself can tell: read first, it let one
-    runtime's change pass as the other's while both were working."""
-    for candidate in (explicit, os.environ.get("AI_RUNTIME"),
+    runtime's change pass as the other's while both were working. The install
+    location outranks CLAUDECODE because an environment variable is inherited:
+    codex started from a Claude Code shell carries CLAUDECODE=1 (seen live)."""
+    for candidate in (explicit, os.environ.get("AI_RUNTIME"), installed_runtime(),
                       "claude" if os.environ.get("CLAUDECODE") else None,
-                      installed_runtime(), read_session(root).get("runtime")):
+                      read_session(root).get("runtime")):
         if candidate in RUNTIMES:
             return candidate
     return "unknown"

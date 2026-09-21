@@ -96,6 +96,14 @@ jq -e '.hooks.SubagentStop[0].hooks[0].command | test("runtime-gate")' "$DIR/hoo
     && pass "the runtime gate listens on SubagentStop" || fail "SubagentStop hook missing"
 jq -e '.hooks.SubagentStart[0].hooks[0].command | test("runtime-gate")' "$DIR/hooks.json" >/dev/null \
     && pass "and on SubagentStart, to count running agents" || fail "SubagentStart hook missing"
+for ev in PreToolUse PostToolUse; do
+    # Codex 0.155 launches agents through spawn_agent (seen in a live rollout); a
+    # matcher of only "Agent" never lets the gate see a launch.
+    jq -e --arg e "$ev" '[.hooks[$e][] | select(.hooks[].command | test("runtime-gate")) | .matcher]
+        | length == 1 and (.[0] | split("|") | index("spawn_agent") != null)' "$DIR/hooks.json" >/dev/null \
+        || fail "$ev gate matcher misses spawn_agent"
+done
+pass "the gate's PreToolUse/PostToolUse matchers include spawn_agent"
 [ "$(jq '[.hooks[]?[]?.hooks[]? | select(.command | test("codex-model-gate"))] | length' "$DIR/hooks.json")" = 0 ] \
     && pass "no codex-model-gate command is registered" || fail "codex-model-gate still registered"
 

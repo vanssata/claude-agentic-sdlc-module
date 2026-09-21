@@ -1248,6 +1248,9 @@ CXR="$W5/codex-real"; mkdir -p "$CXR/skills/ai-task"; cp "$STATE" "$CXR/skills/a
 printf '{"runtime":"claude","session_id":"s2"}' > "$R5/.ai/state/session.json"
 env -u CLAUDECODE CLAUDE_CONFIG_DIR="$CLH" CODEX_HOME="$CXR" AI_RUNTIME= python3 "$CXR/skills/ai-task/state.py" --root "$R5" set next_action "from codex home" >/dev/null 2>&1
 [ "$(field5 owner_runtime)" = '"codex"' ] && pass "the copy under CODEX_HOME is codex whatever session.json says" || fail "install location ignored" "$(field5 owner_runtime)"
+S5 --runtime claude set next_action "back with claude" >/dev/null 2>&1
+CLAUDECODE=1 CLAUDE_CONFIG_DIR="$CLH" CODEX_HOME="$CXR" AI_RUNTIME= python3 "$CXR/skills/ai-task/state.py" --root "$R5" set next_action "codex under a claude shell" >/dev/null 2>&1
+[ "$(field5 owner_runtime)" = '"codex"' ] && pass "an inherited CLAUDECODE=1 does not make the codex copy claude" || fail "CLAUDECODE outranked the install location" "$(field5 owner_runtime)"
 fresh5 selfhand
 S5 --runtime claude init --goal g --workflow feature >/dev/null 2>&1
 jq '.owner_runtime = null' "$R5/.ai/state/current.json" > "$R5/c.tmp" && mv "$R5/c.tmp" "$R5/.ai/state/current.json"
