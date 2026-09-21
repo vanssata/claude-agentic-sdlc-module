@@ -26,6 +26,13 @@ literal `effort:` line in any template whose effort differs from its tier's; the
 is used for the model always and for the effort only where it matches. No installed model or
 effort changes.
 
+**Amendment, 2026-09-21 (step 4 scope):** step 4 also touches `install.sh` — one line adding
+`hooks/runtime-gate.py` to `codex_hook_files`, because the `codex-model-gate.py` shim execs it and a
+Codex install without it would break between steps 4 and 7. Registration itself stays in step 7.
+It also touches `tests/test-dual-runtime-install.sh`: its `printf "$out" | grep -q` checks die of
+SIGPIPE under `pipefail` once the dry-run output passes the 64 KB pipe buffer (it grew with
+`profile.json` in step 2), so they now read all their input (`grep -c >/dev/null`); no assertion changes.
+
 Twelve steps, twelve commits. Each step names the only files it may touch; anything else is
 `SCOPE_CHANGE_REQUIRED` and an amendment to this plan. Step tests run the suites the step names;
 `bash tests/run-all.sh` runs **once**, at step 12. There is no e2e suite (`e2e_command: none`) — the

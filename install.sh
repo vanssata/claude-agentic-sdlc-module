@@ -927,6 +927,7 @@ codex_hook_files() {
     "$SRC/hooks/ai-path-guard.sh" \
     "$SRC/hooks/ai-scope-guard.sh" \
     "$SRC/hooks/codex-model-gate.py" \
+    "$SRC/hooks/runtime-gate.py" \
     "$SRC/hooks/context-guard.py"
 }
 

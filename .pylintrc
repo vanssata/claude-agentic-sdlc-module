@@ -22,8 +22,8 @@ disable=
     too-many-boolean-expressions,
     too-few-public-methods,
     use-dict-literal,
-    # fable-gate.py and codex-model-gate.py are standalone hooks for two runtimes;
-    # each must run as a single file, so their shared helpers are copied on purpose.
+    # runtime-gate.py is a standalone hook for two runtimes and must run as a single
+    # file; fable-gate.py and codex-model-gate.py are shims that exec it.
     duplicate-code,
 
 [REFACTORING]
