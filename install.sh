@@ -981,9 +981,15 @@ codex_apply() {
   cp "$HOOKS" "$HOOKS.bak"
   # codex-model-gate entries from before WP5 and runtime-gate ones from an
   # earlier run are removed first, so the merge below adds exactly one gate per
-  # event. The renamed command is a new hook to Codex: review it once in /hooks.
-  if jq -e '[.hooks // {} | .[]?[]? | .hooks[]?.command // "" | select(test("codex-model-gate"))] | length > 0' "$HOOKS" >/dev/null 2>&1; then
-    echo "replaced: codex-model-gate hooks with runtime-gate (review it once in /hooks)"
+  # event. Codex runs only hooks the user has reviewed, and it knows a hook by
+  # its command: an install that already registers codex-model-gate.py keeps
+  # that command (the shim execs runtime-gate.py), so the trust given to it
+  # survives the upgrade and the gate never silently stops.
+  local GATE_HOOKS="$SRC/codex/hooks.json"
+  if jq -e '[.hooks // {} | .[]?[]? | .hooks[]?.command // "" | select(test("/hooks/codex-model-gate\\.py"))] | length > 0' "$HOOKS" >/dev/null 2>&1; then
+    GATE_HOOKS="$TMP/codex-hooks.json"
+    sed 's|/hooks/runtime-gate\.py|/hooks/codex-model-gate.py|g' "$SRC/codex/hooks.json" > "$GATE_HOOKS"
+    echo "kept: codex-model-gate.py as the gate command (it runs runtime-gate.py); only the new SubagentStart entry needs a review in /hooks"
   fi
   jq 'if (.hooks | type) == "object" then
       .hooks |= (with_entries(.value |= [ .[]
@@ -1008,7 +1014,7 @@ codex_apply() {
                                         | index($c) ) | not ) ) )
           )
         )
-  ' "$HOOKS" "$SRC/codex/hooks.json" > "$HOOKS.tmp" && mv "$HOOKS.tmp" "$HOOKS"
+  ' "$HOOKS" "$GATE_HOOKS" > "$HOOKS.tmp" && mv "$HOOKS.tmp" "$HOOKS"
   echo "merged: hooks.json (backup in hooks.json.bak)"
 
   # -------------------------------------------------------------- 5. config.toml

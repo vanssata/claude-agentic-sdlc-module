@@ -39,7 +39,7 @@ intent's decisions 1–3.
 | R10 | `state.py handoff --to <rt>` (I4) sets `owner_runtime`, `resume_point.runtime`, `handoff.pending_to`; journals `runtime_handoff{via: manual\|review}` with `data.tty` (OQ5); rewrites `handoff.md` with a `Handed to <rt>` line and prints the resume instruction (and the headless command, **not run**). Refuses: `--to` = owner, a closed task, a target whose home has no `skills/ai-task/state.py` (exit 2). A later mutating command from a runtime ≠ `pending_to` exits **7** `RUNTIME_HANDOFF_PENDING`; the first one from `pending_to` clears it with no second event. Pending questions do not block a handoff. | RP1, D3 | `tests/test-ai-task-state.sh` (amended) |
 | R11 | `handoff --to X --for review` at tier ≥ `preferred_runtime.cross_vendor_review_from` (default T4) records `cross_vendor_review{from,to,tier,requested_at,status:"requested"}`; `set review_status …` run under runtime `to` marks it `done` with `by_runtime`. Below that tier it is allowed and noted. | RP3, D3 | `test-ai-task-state.sh` |
 | R12 | `state.py init`/`quick`/`risk` print one advisory line `preferred runtime: <rt> (<reason>)` — only when the other runtime is installed and the table or the quota rule names it; `handoff.md` carries the same line (still ≤ 30 lines). Nothing moves automatically. | RP2, D3 | `test-ai-task-state.sh` with a fake `CLAUDE_CONFIG_DIR`/`CODEX_HOME` holding fixture `profile.json` files |
-| R13 | `state.py quick --tier T<n>` exits 7 `DIRECT_MODE_CAP` when `pipeline_profile == solo` and T<n> > `budgets.direct_mode.max_tier`; no profile file → no cap. | RP5 ("how far direct mode reaches") | `test-ai-task-state.sh` |
+| R13 | `state.py quick --tier T<n>` exits 8 `DIRECT_MODE_CAP` (7 until the WP5 review gave each code one meaning) when `pipeline_profile == solo` and T<n> > `budgets.direct_mode.max_tier`; no profile file → no cap. | RP5 ("how far direct mode reaches") | `test-ai-task-state.sh` |
 | R14 | `usage-report.py --task <id>` prints the task window's tokens per provider, its final tier, the plan budget of each involved runtime and the percentage used; `--budgets` prints the tables. Read-only; budgets are reported, never enforced. | QC7, D2 | `tests/test-usage-report.sh` (amended) |
 | R15 | `tests/test-shared-prompts-model-free.sh`: the I8 patterns find zero hits in the shared-prompt scope; the rendered global block of every `--plan` dry run is model-free, and `routing.md` renders with no `{{` left. | RP4, WP3 R6/I11 | new test + `test-install-dry-run.sh` |
 | R16 | `instructions/routing.md` rows use `{{FAST_MODEL}}` … placeholders fed from `claude_agentic.tiers`. Every agent source is `agents/<name>.md.tmpl` with `model: {{<TIER>_MODEL}}` and `effort: {{<TIER>_EFFORT}}`; no agent source names a model. The tier in each template equals that role's `tier` in the Codex profiles, and each installed Claude agent's `model:` equals the resolved profile's `tiers[<tier>].model` for every `--plan`. | RP4, WP3 I11 | `test-profiles.sh`, `test-install-dry-run.sh`, `tests/test-instruction-budget.sh` |
@@ -273,13 +273,13 @@ When absent and `fable-gate.json` or `codex-model-gate.json` exists, `unavailabl
 ```
 profile  [--field a.b.c] [--tier FAST|BALANCED|STRONG|EXPERT] [--other] [--json]   # read-only
 handoff  [--print] [--reason …] [--to claude|codex [--for continue|review] [--why TEXT]]
-quick    … --tier T<n>        # exit 7 "DIRECT_MODE_CAP T2 (plan pro): use init" when capped
+quick    … --tier T<n>        # exit 8 "DIRECT_MODE_CAP T2 (plan pro): use init" when capped
 ```
 
 State keys (schema 5): `handoff.pending_to: null|"claude"|"codex"`, `handoff.pending_since`,
 `cross_vendor_review: null | {from, to, tier, requested_at, status: "requested"|"done", by_runtime}`.
 Exit codes: 0; 2 misuse (same owner, closed task, target not installed); 4, 5, 6 unchanged; **7**
-runtime/plan refusal, first token `RUNTIME_HANDOFF_PENDING` or `DIRECT_MODE_CAP`.
+`RUNTIME_HANDOFF_PENDING`; **8** `DIRECT_MODE_CAP` (one meaning per code, from the WP5 review).
 
 ### I5 `install.sh`
 

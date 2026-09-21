@@ -1285,7 +1285,7 @@ echo "== WP5: the direct-mode cap (R13) and profile"
 python3 "$RP" pro --print agentic > "$CLH/claude-agentic/profile.json"
 fresh5 cap
 out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T3 --files a.py 2>&1); rc=$?
-[ $rc = 7 ] && printf '%s' "$out" | grep -q '^state.py: DIRECT_MODE_CAP T2 (plan pro)' && pass "quick T3 under solo on pro exits 7 DIRECT_MODE_CAP" || fail "cap" "rc=$rc $out"
+[ $rc = 8 ] && printf '%s' "$out" | grep -q '^state.py: DIRECT_MODE_CAP T2 (plan pro)' && pass "quick T3 under solo on pro exits 8 DIRECT_MODE_CAP" || fail "cap" "rc=$rc $out"
 fresh5 cap-ok
 S5 --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py >/dev/null 2>&1 && pass "quick T2 is within the cap" || fail "T2 refused"
 fresh5 cap-none

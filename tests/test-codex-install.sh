@@ -124,16 +124,19 @@ jq -n --arg c "$OLD" '{hooks:{PreToolUse:[{matcher:"Agent",hooks:[{type:"command
     PostToolUse:[{matcher:"Agent",hooks:[{type:"command",command:$c,timeout:5}]}],
     SubagentStop:[{hooks:[{type:"command",command:$c,timeout:5}]},{hooks:[{type:"command",command:"my-stop.sh"}]}]}}' > "$UP/hooks.json"
 out=$(CODEX_DIR="$UP" bash "$INSTALL" --target codex --codex-plan pro 2>&1)
-[ "$(jq '[.hooks[]?[]?.hooks[]? | select(.command | test("codex-model-gate"))] | length' "$UP/hooks.json")" = 0 ] \
-    && pass "every codex-model-gate entry is replaced" || fail "codex-model-gate entries left"
+[ "$(jq '[.hooks[]?[]?.hooks[]? | select(.command | test("runtime-gate"))] | length' "$UP/hooks.json")" = 0 ] \
+    && pass "an upgrade keeps the trusted codex-model-gate command" || fail "the upgrade registered a new, unreviewed command"
 for ev in PreToolUse PostToolUse SubagentStart SubagentStop; do
-    n=$(jq --arg e "$ev" '[.hooks[$e][]?.hooks[]? | select(.command | test("runtime-gate"))] | length' "$UP/hooks.json")
+    n=$(jq --arg e "$ev" '[.hooks[$e][]?.hooks[]? | select(.command | test("codex-model-gate"))] | length' "$UP/hooks.json")
     [ "$n" = 1 ] || fail "$ev has $n gate commands after the upgrade"
 done
 pass "exactly one gate command per event after the upgrade"
+CODEX_DIR="$UP" bash "$INSTALL" --target codex --codex-plan pro >/dev/null 2>&1
+[ "$(jq '[.hooks[]?[]?.hooks[]? | select(.command | test("-gate\\.py"))] | length' "$UP/hooks.json")" = 4 ] \
+    && pass "a second install changes nothing" || fail "reinstall doubled or renamed the gate"
 jq -e '[.hooks.SubagentStop[].hooks[].command] | index("my-stop.sh")' "$UP/hooks.json" >/dev/null \
     && pass "the user's own SubagentStop hook survives" || fail "user hook lost"
-printf '%s' "$out" | grep -q 'replaced: codex-model-gate hooks with runtime-gate' && pass "the replacement is reported, with the /hooks reminder" || fail "replacement not reported" "$out"
+printf '%s' "$out" | grep -q 'kept: codex-model-gate.py as the gate command' && pass "the kept command is reported, with the /hooks reminder" || fail "kept command not reported" "$out"
 
 echo "== the managed AGENTS.md block"
 [ "$(grep -c 'claude-agentic:start' "$DIR/AGENTS.md")" = 1 ] && pass "exactly one managed block" || fail "expected one managed block"

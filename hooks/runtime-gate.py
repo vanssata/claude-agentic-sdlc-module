@@ -26,9 +26,13 @@ Budgets (from <home>/claude-agentic/profile.json; no profile, no budget):
                      `expert.max_per_task` for the task in flight, and a launch past
                      `fan_out.max_parallel_agents` (or past `max_parallel_on_strong`
                      for a STRONG/EXPERT agent) asks on Claude Code; Codex cannot
-                     ask, so there — and under AI_UNATTENDED=1 — it allows and explains
+                     ask, so there — and under AI_UNATTENDED=1 or `claude -p`
+                     (CLAUDE_CODE_SESSION_ATTENDED=0) — it allows and explains.
+                     A launch that goes ahead counts at once, so one message
+                     launching several agents meets the fan-out too
   SubagentStart / SubagentStop   keep the per-session count of running agents;
-                     an entry older than AGENT_TTL (1800 s) no longer counts
+                     a start claims its launch; an entry older than AGENT_TTL
+                     (1800 s), or a launch unclaimed for 60 s, no longer counts
 A rewrite made while a task is in flight is journaled as `model_fallback`
 through that project's state.py.
 
@@ -878,6 +882,24 @@ def running(data, session, now):
     return [a for a in agents if isinstance(a, dict) and now - float(a.get("started_at") or 0) < AGENT_TTL]
 
 
+PENDING_TTL = 60
+
+
+def pending(data, session, now):
+    """Launches PreToolUse let through that no SubagentStart has claimed yet.
+    One message that launches five agents runs five PreToolUse hooks before
+    the first SubagentStart, so without these each saw the same empty count.
+    A launch the user declined leaves one behind for at most PENDING_TTL."""
+    entries = (data.get("pending_launches") or {}).get(session) or []
+    return [p for p in entries if isinstance(p, dict) and now - float(p.get("at") or 0) < PENDING_TTL]
+
+
+def put_session(data, key, session, entries):
+    table = data.get(key) if isinstance(data.get(key), dict) else {}
+    table[session] = entries
+    data[key] = {k: v for k, v in table.items() if v}
+
+
 def subagent_start(payload):
     tiers = profile().get("tiers") or {}
     name = payload.get("agent_type") or payload.get("subagent_type") or ""
@@ -886,11 +908,13 @@ def subagent_start(payload):
     session = str(payload.get("session_id") or "unknown")
     with locked():
         data = load()
-        table = data.get("running_agents") if isinstance(data.get("running_agents"), dict) else {}
         live = running(data, session, now)
         live.append({"agent_id": str(payload.get("agent_id") or ""), "tier": tier, "started_at": int(now)})
-        table[session] = live
-        data["running_agents"] = {k: v for k, v in table.items() if v}
+        put_session(data, "running_agents", session, live)
+        waiting = pending(data, session, now)
+        if waiting:                             # the start claims its launch: same tier first, else the oldest
+            waiting.pop(next((i for i, p in enumerate(waiting) if p.get("tier") == tier), 0))
+        put_session(data, "pending_launches", session, waiting)
         save(data)
 
 
@@ -912,10 +936,21 @@ def subagent_stop(payload):
         save(data)
 
 
+def unattended():
+    """Nobody can answer an ask: AI_UNATTENDED=1, or Claude Code's own
+    CLAUDE_CODE_SESSION_ATTENDED=0 (set by `claude -p` and the SDK). Unset —
+    an older Claude Code — still asks."""
+    return os.environ.get("AI_UNATTENDED") == "1" or os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0"
+
+
+def will_ask():
+    return RUNTIME == "claude" and not unattended()
+
+
 def ask_or_explain(reason):
     """Ask on Claude Code; Codex cannot ask and an unattended run has nobody
     to answer, so there the launch goes through with the reason in context."""
-    if RUNTIME == "claude" and os.environ.get("AI_UNATTENDED") != "1":
+    if will_ask():
         respond({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask",
                                         "permissionDecisionReason": f"runtime-gate: {reason}"}})
     else:
@@ -937,33 +972,44 @@ def budget_pre_tool_use(payload):
     plan = prof.get("label") or prof.get("plan") or "this plan"
     reasons = []
 
-    if tier == "EXPERT":
-        expert = budgets.get("expert") or {}
-        _root, task = project_task(payload.get("cwd"))
-        with locked():
-            data = load()
+    task = project_task(payload.get("cwd"))[1] if tier == "EXPERT" else None
+    session = str(payload.get("session_id") or "unknown")
+    now = time.time()
+    with locked():                              # one read and one write: parallel launches see each other
+        data = load()
+        used = 0
+        if task:
             counts = data.get("expert_launches") if isinstance(data.get("expert_launches"), dict) else {}
-            used = int(counts.get(task, 0)) if task else 0
-            if task:
-                counts[task] = used + 1
-                data["expert_launches"] = counts
-                save(data)
-        limit = int(expert.get("max_per_task") or 0)
-        if not expert.get("without_asking"):
-            reasons.append(f"EXPERT agents run only when asked on {plan}")
-        elif task and limit and used >= limit:
-            reasons.append(f"task {task} already launched {used} EXPERT agent(s), the {plan} budget is {limit}")
+            used = int(counts.get(task, 0))
+            counts[task] = used + 1
+            data["expert_launches"] = counts
+        waiting = pending(data, session, now)
+        live = running(data, session, now) + waiting
 
-    fan = budgets.get("fan_out") or {}
-    live = running(load(), str(payload.get("session_id") or "unknown"), time.time())
-    most = int(fan.get("max_parallel_agents") or 0)
-    if most and len(live) >= most:
-        reasons.append(f"{len(live)} agent(s) already running, the {plan} fan-out is {most}"
-                       + (" and serial" if fan.get("serial") else ""))
-    strong = [a for a in live if a.get("tier") in ("STRONG", "EXPERT")]
-    most_strong = int(fan.get("max_parallel_on_strong") or 0)
-    if tier in ("STRONG", "EXPERT") and most_strong and len(strong) >= most_strong:
-        reasons.append(f"{len(strong)} STRONG/EXPERT agent(s) already running, the {plan} limit is {most_strong}")
+        if tier == "EXPERT":
+            expert = budgets.get("expert") or {}
+            limit = int(expert.get("max_per_task") or 0)
+            if not expert.get("without_asking"):
+                reasons.append(f"EXPERT agents run only when asked on {plan}")
+            elif task and limit and used >= limit:
+                reasons.append(f"task {task} already launched {used} EXPERT agent(s), the {plan} budget is {limit}")
+        fan = budgets.get("fan_out") or {}
+        most = int(fan.get("max_parallel_agents") or 0)
+        if most and len(live) >= most:
+            reasons.append(f"{len(live)} agent(s) already running, the {plan} fan-out is {most}"
+                           + (" and serial" if fan.get("serial") else ""))
+        strong = [a for a in live if a.get("tier") in ("STRONG", "EXPERT")]
+        most_strong = int(fan.get("max_parallel_on_strong") or 0)
+        if tier in ("STRONG", "EXPERT") and most_strong and len(strong) >= most_strong:
+            reasons.append(f"{len(strong)} STRONG/EXPERT agent(s) already running, the {plan} limit is {most_strong}")
+
+        # A launch that goes ahead now counts at once; one that asks does not —
+        # declined, it would hold a slot for PENDING_TTL; approved, its
+        # SubagentStart counts it.
+        if not (reasons and will_ask()):
+            waiting.append({"tier": tier, "at": int(now)})
+        put_session(data, "pending_launches", session, waiting)
+        save(data)
     if reasons:
         ask_or_explain("; ".join(reasons))
 
@@ -1025,7 +1071,8 @@ def cli(argv):
     if cmd == "clear":
         with locked():
             data = load()
-            data.pop("unavailable", None)
+            for key in ("unavailable", "running_agents", "pending_launches"):
+                data.pop(key, None)             # the count too, as docs/hooks.md promises
             save(data)
         print("cleared")
         return 0

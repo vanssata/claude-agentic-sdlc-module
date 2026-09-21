@@ -100,7 +100,7 @@ the stages that go to a subagent. `solo`, the default, has two modes:
   one review on the BALANCED tier (`ai-reviewer` with
   `model: $($STATE profile --tier BALANCED)` on Claude Code,
   `ai-reviewer-balanced` on Codex). Nothing runs on STRONG below T3. `quick`
-  exits 7 `DIRECT_MODE_CAP` when the plan caps direct mode below the tier:
+  exits 8 `DIRECT_MODE_CAP` when the plan caps direct mode below the tier:
   then use `init` and the pipeline.
 - **sdlc** (T3–T5): the full pipeline below, recorded stage by stage, with the
   delegations the profile lists.

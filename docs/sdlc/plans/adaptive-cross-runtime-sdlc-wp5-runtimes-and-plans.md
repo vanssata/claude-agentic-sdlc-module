@@ -192,7 +192,7 @@ and back on a scratch project.
 | R10 | `test-ai-task-state.sh`: the three state fields, the journal line with `data.tty`, `handoff.md` line, the printed command not run; each refusal exits 2; exit 7 from the old owner; first command from `pending_to` clears with no second event |
 | R11 | `test-ai-task-state.sh`: T4 `--for review` record, `done` with `by_runtime`; T2 allowed and noted |
 | R12 | `test-ai-task-state.sh` with fake `CLAUDE_CONFIG_DIR`/`CODEX_HOME`: the line appears only when the other runtime is installed and named; `handoff.md` ≤ 30 lines |
-| R13 | `test-ai-task-state.sh`: `quick --tier T3` under solo on a pro fixture exits 7 `DIRECT_MODE_CAP`; no profile file → exit 0 |
+| R13 | `test-ai-task-state.sh`: `quick --tier T3` under solo on a pro fixture exits 8 `DIRECT_MODE_CAP`; no profile file → exit 0 |
 | R14 | `test-usage-report.sh`: `--task` prints tier, window, per-provider totals and `%`; `--budgets` prints the tables; the journal untouched |
 | R15 | `test-shared-prompts-model-free.sh` green; every `--plan` dry-run block model-free and `routing.md` without `{{` |
 | R16 | `test-profiles.sh` (template tier = Codex role tier), `test-install-dry-run.sh` (installed `model:` = resolved `tiers[tier].model` per plan), `test-instruction-budget.sh` |

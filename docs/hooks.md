@@ -301,7 +301,10 @@ anything else is Claude Code.
 
 `fable-gate.py` and `codex-model-gate.py` still exist, as sixteen-line shims
 that exec `runtime-gate.py` with their argv and stdin, so an old registration, an
-old statusline wrapper, or a habit (`fable-gate.py status`) keeps working.
+old statusline wrapper, or a habit (`fable-gate.py status`) keeps working. On
+Codex an upgrade keeps registering `codex-model-gate.py`: Codex runs only hooks
+the user has reviewed and knows them by command, so the old name keeps the trust
+already given; only the new `SubagentStart` entry needs a look in `/hooks`.
 
 | Event | Claude Code | Codex |
 |---|---|---|
@@ -392,7 +395,12 @@ budget check is a no-op.
   session; a launch at `fan_out.max_parallel_agents`, or a STRONG/EXPERT launch
   at `max_parallel_on_strong`, asks. An entry older than
   `AI_RUNTIME_GATE_AGENT_TTL` (30 min) stops counting, so a lost `SubagentStop`
-  costs at most an extra question; `clear` empties the count. Every write to
+  costs at most an extra question; `clear` empties the count. A launch that
+  goes ahead counts from its `PreToolUse` until its `SubagentStart` claims it
+  (60 s at most), so one message that launches several agents meets the limit
+  too; a launch that asks is counted only once it starts. `claude -p` sets
+  `CLAUDE_CODE_SESSION_ATTENDED=0`, and the gate treats that like
+  `AI_UNATTENDED=1`: nobody can answer, so it explains instead of asking. Every write to
   the state file holds `<state>.lock` (`flock`), so a fan-out's parallel
   starts, stops and outage records do not overwrite one another.
 

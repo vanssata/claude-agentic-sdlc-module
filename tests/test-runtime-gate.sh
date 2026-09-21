@@ -198,6 +198,26 @@ out=$(launch "$G" ai-reviewer)
     && pass "max: a third STRONG agent asks (max_parallel_on_strong 2)" || fail "on-strong ask" "$out"
 out=$(launch "$G" ai-reviewer s1 sonnet)
 [ -z "$out" ] && pass "the same agent with model: sonnet counts as BALANCED and goes through" || fail "explicit model should decide the tier" "$out"
+
+echo "== budgets: one message that launches several agents (WP5 review)"
+rm -rf "$CL/state"
+b1=$(launch "$G" Explore batch); b2=$(launch "$G" log-reader batch); b3=$(launch "$G" ai-tester batch)
+b4=$(launch "$G" ai-indexer batch)
+[ -z "$b1$b2$b3" ] && [ "$(decision "$b4")" = ask ] \
+    && pass "the fourth launch of one batch asks before any SubagentStart" || fail "batch fan-out" "$b1|$b2|$b3|$b4"
+jq -e '.pending_launches.batch | length == 3' "$CL/state/runtime-gate.json" >/dev/null \
+    && pass "the launch that asked holds no slot" || fail "pending count" "$(jq -c .pending_launches "$CL/state/runtime-gate.json")"
+sub "$G" Start Explore x1 batch; sub "$G" Start log-reader x2 batch; sub "$G" Start ai-tester x3 batch
+jq -e '(.pending_launches.batch // [] | length) == 0 and (.running_agents.batch | length) == 3' "$CL/state/runtime-gate.json" >/dev/null \
+    && pass "each SubagentStart claims its launch, nothing is counted twice" || fail "claim" "$(jq -c '{pending_launches,running_agents}' "$CL/state/runtime-gate.json")"
+python3 "$G" clear >/dev/null
+jq -e '.running_agents == null and .pending_launches == null' "$CL/state/runtime-gate.json" >/dev/null \
+    && pass "clear empties the count" || fail "clear left the count"
+out=$(CLAUDE_CODE_SESSION_ATTENDED=0 launch "$G" architect)
+[ "$(decision "$out")" = none ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | test("unattended")' >/dev/null \
+    && pass "claude -p (CLAUDE_CODE_SESSION_ATTENDED=0) is unattended: explained, never asked" || fail "headless ask" "$out"
+out=$(CLAUDE_CODE_SESSION_ATTENDED=1 launch "$G" architect)
+[ "$(decision "$out")" = ask ] && pass "an attended session still asks" || fail "attended should ask" "$out"
 jq '.running_agents.s1 |= map(.started_at = 1000)' "$CL/state/runtime-gate.json" > "$TMP/s.json" && mv "$TMP/s.json" "$CL/state/runtime-gate.json"
 out=$(launch "$G" ai-reviewer)
 [ -z "$out" ] && pass "an entry older than the agent TTL (a lost SubagentStop) no longer counts" || fail "stale entries still counted" "$out"

@@ -196,7 +196,7 @@ def find_root(start):
 def die(message, code=1):
     """1 validation · 2 argparse · 4 QUESTIONS_PENDING · 5 APPROVAL_REFUSED ·
     6 DIFF_BUDGET_EXCEEDED / SCOPE_CHANGE_REQUIRED (I1, WP4 I4) ·
-    7 RUNTIME_HANDOFF_PENDING / DIRECT_MODE_CAP (WP5 I4)."""
+    7 RUNTIME_HANDOFF_PENDING · 8 DIRECT_MODE_CAP (WP5 I4; one meaning per code)."""
     print("state.py: %s" % message, file=sys.stderr)
     sys.exit(code)
 
@@ -569,7 +569,7 @@ def direct_mode_cap(root, tier):
         profile_name = "solo"
     if profile_name == "solo" and TIERS.index(tier) > TIERS.index(cap):
         die("DIRECT_MODE_CAP %s (plan %s): use init, triage and a reviewed plan"
-            % (cap, read_profile().get("plan") or "?"), 7)
+            % (cap, read_profile().get("plan") or "?"), 8)
 
 
 def cmd_init(args, root):
