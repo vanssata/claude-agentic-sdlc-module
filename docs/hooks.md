@@ -305,25 +305,28 @@ old statusline wrapper, or a habit (`fable-gate.py status`) keeps working. On
 Codex an upgrade keeps registering `codex-model-gate.py`. Codex runs only hooks
 the user has reviewed, and `config.toml` keeps each approval as a hash of the
 whole entry at its position (`[hooks.state."<file>:<event>:<group>:<index>"]`),
-so an unchanged entry keeps its approval and a changed one — the WP5 matchers
-now include `spawn_agent`, and `SubagentStart` is new — needs one look in
-`/hooks`; until then Codex skips it.
+so an unchanged entry keeps its approval and a changed one — the gate's
+`PreToolUse`/`PostToolUse` matcher is now `^Agent$|spawn_agent$`, and
+`SubagentStart` is new — needs one look in `/hooks`; until then Codex skips it,
+which leaves the gate as blind to launches as it was before.
 
-**Codex 0.155 limit (checked live, 2026-09-22).** Codex launches agents through
-the `spawn_agent` tool and fires **no** `PreToolUse`/`PostToolUse` for it — a
-traced session with both matchers trusted delivered only `SubagentStart` and
-`SubagentStop`. So on Codex the reroute below and the budget explanations never
-run (the reroute did not run before WP5 either); outages are still recorded
-from `SubagentStop`, the running-agent count is kept, and parallelism is capped
-by Codex itself through `agents.max_threads` in `config.toml`. The matchers
-list `Agent|spawn_agent` so the gate works unchanged if Codex starts firing
-them.
+**Codex 0.155 agent launches (checked live against codex-cli 0.155.1, 2026-09-22).**
+Multi-agent v2 puts `spawn_agent` in the `collaboration` namespace, and hooks
+see the tool as `collaborationspawn_agent` — namespace and name, no separator,
+no `Agent` alias; v1 calls it `spawn_agent`. `PreToolUse` and `PostToolUse` do
+fire for it. Codex reads a matcher made only of `[A-Za-z0-9_|]` as a list of
+exact names, so the old `Agent|spawn_agent` never matched; any other character
+makes it a regex, tested unanchored, so the gate's matcher is
+`^Agent$|spawn_agent$`. (An MCP tool whose name ends in `spawn_agent` matches
+too; the gate treats it as a launch, which is harmless.) Parallelism is capped
+by Codex itself through `agents.max_concurrent_threads_per_session` in
+`config.toml`; the budgets below only explain.
 
 | Event | Claude Code | Codex |
 |---|---|---|
-| `PreToolUse:Agent` | Fable reroute; budgets | EXPERT reroute; budgets; refreshes the quota |
-| `PostToolUse:Agent` | a Fable agent that fell back (overload) | an expert launch that returned an availability error |
-| `SubagentStart` / `SubagentStop` | the running-agent count | the running-agent count; `SubagentStop` also records an EXPERT failure |
+| `PreToolUse` (`Agent`; Codex: `spawn_agent`, `collaborationspawn_agent`) | Fable reroute; budgets | EXPERT reroute; budgets; refreshes the quota |
+| `PostToolUse` (same tools) | a Fable agent that fell back (overload) | an expert launch that returned an availability error |
+| `SubagentStart` / `SubagentStop` | the running-agent count | the running-agent count, rated by the child's resolved `model` when that is STRONG or EXPERT; `SubagentStart` also catches a missed reroute; `SubagentStop` records an EXPERT failure |
 | `StopFailure` (`rate_limit\|model_not_found`) | on a Fable install only | — (Codex has no such event) |
 | `statusline --then <cmd>` | the quota, and the Fable weekly limit | — |
 
@@ -365,9 +368,6 @@ session re-run that brief once on Opus.
 
 ### The reroute — Codex (EXPERT → STRONG)
 
-Inactive on Codex 0.155: it needs a `PreToolUse` for the launch, which Codex
-does not fire for `spawn_agent` (see above).
-
 `ai-expert` is pinned to the plan's EXPERT model; when it is rate-limited or the
 account cannot reach it, the agent fails, and so does the next one. The gate
 records that and sends EXPERT launches to the STRONG model at the STRONG effort
@@ -376,8 +376,28 @@ records that and sends EXPERT launches to the STRONG model at the STRONG effort
 | Event | Does |
 |---|---|
 | `SubagentStop` | when the failure text names a rate limit, an unavailable model or an overload **and** the failure is attributable to an EXPERT agent, records the EXPERT model as unavailable — 1 h for a rate limit or overload, 6 h for model-not-found |
-| `PostToolUse:Agent` | the same signals in an expert launch's result |
-| `PreToolUse:Agent` | while a record is live, returns `permissionDecision: "allow"` with `updatedInput` carrying the STRONG `model` and `model_reasoning_effort`, and says in `additionalContext` whose answer it is |
+| `PostToolUse` | the same signals in an expert launch's result |
+| `PreToolUse` | while a record is live, reroutes the launch in the one way Codex honours (below), with `permissionDecision: "allow"` and `updatedInput`, and says in `additionalContext` whose answer it is — or, when it cannot reroute, that the launch is **not rerouted** and why |
+| `SubagentStart` | backstop: a child whose resolved `model` is EXPERT while the record is live was missed. `SubagentStart` output accepts only `additionalContext` (it goes to the child; `continue: false` and exit 2 are ignored), so the gate tells the child and journals `missed_reroute {agent, model, reason}` |
+
+**How a launch is rerouted.** Codex applies a role's pinned model *after* the
+call's own `model` (`prepare_agent_spawn_config`), so rewriting `model` cannot
+move a pinned role. What does work is naming another role:
+
+- **(a) a role that pins EXPERT** (`ai-expert`) becomes its twin: `agent_type`
+  is rewritten to `<role>-strong`, which the installer renders pinned to the
+  STRONG model and effort (`ai-expert-strong`, like `ai-risk-strong` and
+  `ai-planner-strong`). Only a twin whose file declares that `name` and pins a
+  model below EXPERT is used — naming a role Codex has not registered would fail
+  the spawn.
+- **(b) a launch no role pins** — an explicit EXPERT `model`, or EXPERT as
+  `default_subagent_model` — gets `model` and `reasoning_effort` set to the
+  STRONG values. The key is `reasoning_effort` in both v1 and v2; v2's
+  `SpawnAgentArgs` refuses unknown fields, so a `model_reasoning_effort` in the
+  call is dropped rather than passed on, and an effort outside
+  `minimal|low|medium|high|xhigh` is left out.
+- **(c) anything else** — a pinned EXPERT role without a usable twin, or
+  `AI_RUNTIME_GATE_MODE=context` — is explained, not rewritten.
 
 **Why `SubagentStop`.** Codex has no `StopFailure` event, so there is no signal
 that says "this agent failed for this reason". The gate therefore only marks the
@@ -389,14 +409,25 @@ no-access, overloaded, 503, capacity. A bare "error" or "failed" does not count,
 because a gate that trips on any failure would keep the whole EXPERT tier
 downgraded for an hour over an unrelated bug.
 
-To resolve which model a launch would use, it checks the explicit `model` first,
-then the agent's own file (project `.codex/agents/` before `~/.codex/agents/`),
-then `default_subagent_model` in `config.toml` — the same precedence Codex itself
-applies. `AI_RUNTIME_GATE_MODE=context` makes it annotate instead of rewriting.
+To resolve which model a launch would use, it checks the agent's own file first
+(`.codex/agents/` at the payload's `cwd` and each directory above it up to the
+git root, then `~/.codex/agents/`), then the explicit `model`, then `default_subagent_model` in
+`config.toml` — the order in which Codex itself lets them win. So an explicit
+cheap `model` on `ai-expert` does not take it past the gate, and an explicit
+EXPERT `model` on a pinned cheap role is left alone: it runs on the cheap one.
 
 Every rewrite made while a task is in flight is journaled once, as
-`model_fallback {agent, from, to, reason}` (actor `hook`), through the
-project's `state.py event`; with no task, nothing is written.
+`model_fallback {agent, from, to, reason}` (actor `hook`), where `to` is the
+model the child actually gets, through the project's `state.py event`; a missed
+reroute is journaled as `missed_reroute`; with no task, nothing is written.
+`state.py events --type missed_reroute` lists the misses — each one means an
+untrusted hook entry, a missing twin, a launch shape the gate does not know, or
+a child that inherits the session's model — a spawn with no role, no `model` and
+no `default_subagent_model` (and v2's default `fork_turns: all`, which skips
+role application) runs on the parent's model, which the `PreToolUse` payload
+does not carry. Under `AI_RUNTIME_GATE_MODE=context` nothing is journaled: the
+gate chose not to reroute. Project agent files are looked up from the payload's
+`cwd` up to the first directory holding `.git`, then in `~/.codex/agents/`.
 
 ### Budgets
 

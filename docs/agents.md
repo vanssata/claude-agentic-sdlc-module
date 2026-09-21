@@ -7,8 +7,9 @@ every project; the project-specific half of their instructions comes from
 The roster and the tiers are the same in both runtimes. The prompt bodies are
 written once, in `agents/*.md`; `scripts/render-codex-agents.py` converts them
 into `~/.codex/agents/*.toml` using the tier and sandbox mode declared for each
-role in `profiles/codex-{plus,pro}.json`, plus two Codex-only variants, `ai-risk-strong`
-and `ai-planner-strong`, that pin Sol — Codex reads an agent's own file ahead of
+role in `profiles/codex-{plus,pro}.json`, plus three Codex-only variants, `ai-risk-strong`,
+`ai-planner-strong` and `ai-expert-strong` (the runtime gate's stand-in for
+`ai-expert` while the EXPERT model is unavailable), that pin Sol — Codex reads an agent's own file ahead of
 the model passed at spawn time, so "run `ai-risk` on a stronger model" cannot
 work there. Under Claude Code the same escalation is `model: opus` on the
 ordinary agent.

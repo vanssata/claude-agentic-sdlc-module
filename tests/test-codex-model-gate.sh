@@ -39,17 +39,19 @@ gate status | grep -q '^active: gpt-6-astra -> gpt-5.6-sol' && pass "a rate limi
 gate status | grep -q 'rate_limit' && pass "status names the reason" || fail "status should name the reason"
 gate status | grep -q 'SubagentStop' && pass "status names the source" || fail "status should name the source"
 
-echo "== while active, an expert launch is rewritten to STRONG"
+echo "== while active, an expert role is rerouted to its STRONG twin"
+# Codex applies a role's pinned model after the call's `model`, so rewriting
+# `model` cannot move ai-expert; rewriting agent_type to ai-expert-strong does.
 out=$(feed 30-agent-expert-launch.json)
 [ -n "$out" ] && pass "the gate answers the launch" || fail "the gate should answer"
 [ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision')" = allow ] \
     && pass "the launch is allowed, not blocked" || fail "the decision should be allow" "$out"
-[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model')" = "gpt-5.6-sol" ] \
-    && pass "the model is rewritten to Sol" || fail "updatedInput.model should be gpt-5.6-sol" "$out"
-[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model_reasoning_effort')" = high \
-  ] && pass "the effort is rewritten to high" || fail "updatedInput effort should be high" "$out"
-[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.agent_type')" = "ai-expert" ] \
-    && pass "the rest of the spawn arguments are preserved" || fail "agent_type was lost" "$out"
+[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.agent_type')" = "ai-expert-strong" ] \
+    && pass "agent_type is rewritten to the twin" || fail "updatedInput.agent_type should be ai-expert-strong" "$out"
+printf '%s' "$out" | jq -e '.hookSpecificOutput.updatedInput | (has("model") or has("model_reasoning_effort") or has("reasoning_effort")) | not' >/dev/null \
+    && pass "the twin's pinned model and effort decide, nothing else is injected" || fail "a role reroute must not inject model or effort" "$out"
+[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.prompt')" != null ] \
+    && pass "the rest of the spawn arguments are preserved" || fail "the prompt was lost" "$out"
 printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext' | grep -q "is gpt-5.6-sol's, not gpt-6-astra's" \
     && pass "the agent is told whose answer it is about to give" || fail "the context should name both models" "$out"
 
@@ -59,8 +61,8 @@ out=$(feed 31-agent-balanced-launch.json)
 
 echo "== repeated launches keep being rewritten"
 out=$(feed 30-agent-expert-launch.json)
-[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model')" = "gpt-5.6-sol" ] \
-    && pass "a second launch is rewritten too" || fail "the gate should stay active" "$out"
+[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.agent_type')" = "ai-expert-strong" ] \
+    && pass "a second launch is rerouted too" || fail "the gate should stay active" "$out"
 
 echo "== a poor answer is not an availability failure"
 reset
@@ -103,23 +105,31 @@ gate set 3600 "manual" >/dev/null
 gate clear | grep -q cleared && pass "clear reports what it did" || fail "clear should report"
 gate status | grep -q '^inactive' && pass "clear deactivates the gate" || fail "clear should deactivate"
 
-echo "== an explicit model on the spawn wins over the agent file"
+echo "== a role's pinned model wins over an explicit model on the spawn, as in Codex"
 reset
 gate set 3600 "manual" >/dev/null
 out=$(jq -nc --arg r "$TMP" '{hook_event_name:"PreToolUse",tool_name:"Agent",cwd:$r,
       tool_input:{agent_type:"ai-discovery",model:"gpt-6-astra",prompt:"x"}}' | gate)
-[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model')" = "gpt-5.6-sol" ] \
-    && pass "an explicit expert model on a cheap agent is still gated" || fail "an explicit model must be honoured" "$out"
+[ -z "$out" ] && pass "an explicit expert model on a pinned cheap role is left alone (it runs on Terra)" || fail "should be silent" "$out"
 out=$(jq -nc --arg r "$TMP" '{hook_event_name:"PreToolUse",tool_name:"Agent",cwd:$r,
-      tool_input:{agent_type:"ai-expert",model:"gpt-5.6-terra",prompt:"x"}}' | gate)
-[ -z "$out" ] && pass "an explicit cheap model on the expert agent is left alone" || fail "should be silent" "$out"
+      tool_input:{agent_type:"ai-expert",model:"gpt-5.6-terra",model_reasoning_effort:"xhigh",prompt:"x"}}' | gate)
+[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.agent_type')" = "ai-expert-strong" ] \
+    && pass "an explicit cheap model does not take ai-expert past the gate" || fail "the pinned role decides" "$out"
+printf '%s' "$out" | jq -e '.hookSpecificOutput.updatedInput | has("model_reasoning_effort") | not' >/dev/null \
+    && pass "a caller's model_reasoning_effort (never a spawn argument) is dropped" || fail "model_reasoning_effort must be dropped" "$out"
+
+echo "== a spawn with no role and an explicit expert model gets model and reasoning_effort"
+out=$(jq -nc --arg r "$TMP" '{hook_event_name:"PreToolUse",tool_name:"Agent",cwd:$r,
+      tool_input:{model:"gpt-6-astra",model_reasoning_effort:"xhigh",prompt:"x"}}' | gate)
+printf '%s' "$out" | jq -e '.hookSpecificOutput.updatedInput | .model == "gpt-5.6-sol" and .reasoning_effort == "high" and (has("model_reasoning_effort") | not)' >/dev/null \
+    && pass "model -> gpt-5.6-sol, reasoning_effort -> high, no model_reasoning_effort" || fail "call-level rewrite" "$out"
 
 echo "== context-only mode explains without rewriting"
 out=$(CODEX_MODEL_GATE_MODE=context bash -c "jq -r '.payload' '$FIX/30-agent-expert-launch.json' | sed 's|__ROOT__|$TMP|g' | CODEX_HOME='$HOME_DIR' CODEX_MODEL_GATE_STATE='$STATE' '$GATE'")
 [ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput // "none"')" = none ] \
     && pass "context mode does not rewrite the spawn arguments" || fail "context mode should not rewrite" "$out"
-printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext' >/dev/null \
-    && pass "context mode still explains the fallback" || fail "context mode should explain"
+printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext' | grep -q 'not rerouted' \
+    && pass "context mode says the launch is not rerouted" || fail "context mode should say it is not rerouted" "$out"
 
 echo "== the gate can be turned off entirely"
 out=$(CODEX_MODEL_GATE=off bash -c "jq -r '.payload' '$FIX/30-agent-expert-launch.json' | sed 's|__ROOT__|$TMP|g' | CODEX_HOME='$HOME_DIR' CODEX_MODEL_GATE_STATE='$STATE' '$GATE'")

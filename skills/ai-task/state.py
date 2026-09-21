@@ -94,7 +94,8 @@ EVENT_TYPES = [
     "task_started", "stage_started", "tier_set", "tier_raised", "plan_registered",
     "scope_change", "step_started", "step_done", "field_set", "question_asked",
     "question_answered", "gate_requested", "gate_approved", "gate_rejected", "note",
-    "handoff_written", "runtime_handoff", "model_fallback", "schema_migrated", "task_closed",
+    "handoff_written", "runtime_handoff", "model_fallback", "missed_reroute", "schema_migrated",
+    "task_closed",
 ]
 # The types `event` will not write: each is the record of an authorization or a
 # lifecycle decision, and is emitted by the transition that made it. `event` is

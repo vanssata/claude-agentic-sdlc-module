@@ -1142,6 +1142,9 @@ done
 pass "the other lifecycle types are refused the same way"
 X event model_fallback --detail "fable overloaded" --data '{"agent":"architect"}' >/dev/null \
   && pass "but the type the hooks actually emit still works" || fail "model_fallback must stay available"
+X event missed_reroute --detail "gpt-6-astra reached during an outage" \
+      --data '{"agent":"ai-expert","model":"gpt-6-astra","reason":"rate_limit"}' >/dev/null \
+  && pass "and so does missed_reroute, the SubagentStart backstop's line" || fail "missed_reroute must be accepted"
 
 X stage human_approval >/dev/null
 printf '%s' '{"runtime":"claude","last_prompt_session":"s9","last_prompt_at":"2099-01-01T00:00:00Z"}' \

@@ -66,7 +66,7 @@ out=$(CODEX_DIR="$DIR" bash "$INSTALL" --target codex 2>&1); rc=$?
 printf '%s' "$out" | grep -q 'plan            pro' && pass "the summary names the plan" || fail "summary should name the plan" "$out"
 
 for f in agents/ai-expert.toml agents/ai-reviewer.toml agents/ai-risk-strong.toml \
-         agents/ai-planner-strong.toml agents/architect.toml agents/Explore.toml \
+         agents/ai-planner-strong.toml agents/ai-expert-strong.toml agents/architect.toml agents/Explore.toml \
          hooks/ai-git-guard.sh hooks/ai-path-guard.sh hooks/ai-scope-guard.sh \
          hooks/codex-model-gate.py hooks/context-guard.py hooks/lib/ai-hook-common.sh hooks/ai-git-guard.json \
          hooks/ai-path-guard-defaults.json hooks.json config.toml AGENTS.md \
@@ -97,13 +97,20 @@ jq -e '.hooks.SubagentStop[0].hooks[0].command | test("runtime-gate")' "$DIR/hoo
 jq -e '.hooks.SubagentStart[0].hooks[0].command | test("runtime-gate")' "$DIR/hooks.json" >/dev/null \
     && pass "and on SubagentStart, to count running agents" || fail "SubagentStart hook missing"
 for ev in PreToolUse PostToolUse; do
-    # Codex 0.155 launches agents through spawn_agent (seen in a live rollout); a
-    # matcher of only "Agent" never lets the gate see a launch.
-    jq -e --arg e "$ev" '[.hooks[$e][] | select(.hooks[].command | test("runtime-gate")) | .matcher]
-        | length == 1 and (.[0] | split("|") | index("spawn_agent") != null)' "$DIR/hooks.json" >/dev/null \
-        || fail "$ev gate matcher misses spawn_agent"
+    # Codex 0.155 multi-agent v2 names the tool collaborationspawn_agent (namespace
+    # + name, no separator). A matcher of only [A-Za-z0-9_|] is an exact list in
+    # Codex, so it must be a regex; Codex tests it unanchored, like jq's test().
+    m=$(jq -r --arg e "$ev" '[.hooks[$e][] | select(.hooks[].command | test("runtime-gate")) | .matcher] | if length == 1 then .[0] else "" end' "$DIR/hooks.json")
+    [ -n "$m" ] || fail "$ev: expected exactly one gate entry"
+    printf '%s' "$m" | grep -q '[^A-Za-z0-9_|]' || fail "$ev gate matcher '$m' is an exact list in Codex, not a regex"
+    for t in collaborationspawn_agent spawn_agent Agent; do
+        jq -en --arg m "$m" --arg t "$t" '$t | test($m)' >/dev/null || fail "$ev gate matcher '$m' misses $t"
+    done
+    for t in Bash apply_patch AgentX wait_agent; do
+        jq -en --arg m "$m" --arg t "$t" '$t | test($m)' >/dev/null && fail "$ev gate matcher '$m' also matches $t"
+    done
 done
-pass "the gate's PreToolUse/PostToolUse matchers include spawn_agent"
+pass "the gate's PreToolUse/PostToolUse matcher is a regex that sees collaborationspawn_agent, spawn_agent and Agent only"
 [ "$(jq '[.hooks[]?[]?.hooks[]? | select(.command | test("codex-model-gate"))] | length' "$DIR/hooks.json")" = 0 ] \
     && pass "no codex-model-gate command is registered" || fail "codex-model-gate still registered"
 

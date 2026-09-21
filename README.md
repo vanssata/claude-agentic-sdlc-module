@@ -433,7 +433,8 @@ Pro and says so.
 *ahead* of the model asked for at spawn time, so that would silently be ignored —
 the Codex roster therefore carries dedicated `ai-risk-strong` and
 `ai-planner-strong` agents that pin Sol. Same tier, same trigger, different
-mechanism. Every rendered Codex agent writes an explicit `model` and
+mechanism. `ai-expert-strong` is the third: the runtime gate reroutes an
+`ai-expert` launch to it while the EXPERT model is unavailable. Every rendered Codex agent writes an explicit `model` and
 `model_reasoning_effort` for the same reason: an omitted `model` falls back to the
 Terra `[agents]` default, which is not the tier a reviewer needs.
 
@@ -456,7 +457,7 @@ model, and nothing in the design depends on a local model existing.
 | `cap-large-read.py` | Claude only | every session | refuses an unbounded `Read` of a large file; an explicit `limit` passes |
 | `project-scaffold.sh` | Claude only | `Setup:init` | creates the `docs/sdlc/` and runtime layout on `/init` |
 | `context-guard.py` | both | `UserPromptSubmit` / `PreCompact` / `SessionStart:startup\|resume\|clear\|compact` | reads the context size from the transcript: warns once per 10k from 80% of the compaction point, holds a prompt back once from 120% (the same prompt again passes). Before a compaction it writes a snapshot — edited files, latest instructions verbatim, todo list, git state, `.ai/` task state — and tells the summary what to keep; after it, the snapshot goes back into the context. On every session start it writes `.ai/state/session.json` and, with a task in flight, injects `handoff.md` and the pending questions. The snapshot is Claude-only; everything else crosses to Codex. Fails open |
-| `runtime-gate.py` | both, every plan | `PreToolUse`/`PostToolUse:Agent`, `SubagentStart`/`SubagentStop`, `StopFailure` (Fable installs), the statusline | sends the top model's launches one tier down while it is rate-limited or unreachable (Fable → Opus, the EXPERT model → STRONG); asks before an EXPERT launch or a launch past the plan's fan-out (explains instead on Codex, where 0.155 fires no `PreToolUse` for `spawn_agent`, so there only the outage record and the running-agent count work); records the quota; journals `model_fallback`. `fable-gate.py` and `codex-model-gate.py` are shims that exec it |
+| `runtime-gate.py` | both, every plan | `PreToolUse`/`PostToolUse` on `Agent` (Codex: `spawn_agent`, or `collaborationspawn_agent` under multi-agent v2 — matcher `^Agent$\|spawn_agent$`), `SubagentStart`/`SubagentStop`, `StopFailure` (Fable installs), the statusline | sends the top model's launches one tier down while it is rate-limited or unreachable (Fable → Opus; on Codex `ai-expert` → `ai-expert-strong` by rewriting `agent_type`, since a role's pinned model beats the call's); asks before an EXPERT launch or a launch past the plan's fan-out (explains instead on Codex, which cannot ask); records the quota; journals `model_fallback`, and `missed_reroute` when an EXPERT child starts during an outage anyway. After an upgrade, re-trust the changed Codex entries in `/hooks`. `fable-gate.py` and `codex-model-gate.py` are shims that exec it |
 
 The three shared guards see Codex's `apply_patch` as well. One `apply_patch` can
 touch many files, so every `*** Add/Update/Delete File:` and `*** Move to:` path

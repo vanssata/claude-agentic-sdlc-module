@@ -357,13 +357,16 @@ Codex install the approval gate is policy, not enforcement. Nothing in the
 plugin can approve a hook for you — that is the point of the review — so trust
 them right after installing. `/ai-status` says whether you have.
 
-## Why does Codex have `ai-risk-strong` and `ai-planner-strong`?
+## Why does Codex have `ai-risk-strong`, `ai-planner-strong` and `ai-expert-strong`?
 
 Because Codex resolves a value in an agent's own file *ahead* of the value passed
 when the agent is spawned. "Run `ai-risk` on a stronger model" is silently ignored
 there, so the STRONG re-run is a separate agent that pins Sol. Under Claude Code
 the same escalation is `model: opus` on the ordinary agent. Same tier, same
-trigger.
+trigger. `ai-expert-strong` exists for the same reason in the other direction:
+while the EXPERT model is rate-limited or unreachable, the runtime gate cannot
+move `ai-expert` by rewriting its `model`, so it rewrites `agent_type` to the
+twin, which pins Sol.
 
 ## Why are my MCP servers off in this project?
 

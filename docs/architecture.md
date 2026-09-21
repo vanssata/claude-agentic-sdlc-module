@@ -296,7 +296,9 @@ at spawn time therefore does nothing there. The renderer handles this by writing
 an explicit `model` and `model_reasoning_effort` into every agent — an omitted
 `model` would fall back to the Terra `[agents]` default — and by emitting
 `ai-risk-strong` and `ai-planner-strong`, which pin Sol, for the T3/T4 re-runs
-that Claude Code does with `model: opus`. `tests/test-codex-agent-render.sh`
+that Claude Code does with `model: opus` — and `ai-expert-strong`, which the
+runtime gate reroutes `ai-expert` to, by `agent_type`, while the EXPERT model
+is unavailable. `tests/test-codex-agent-render.sh`
 asserts each role's *effective* model, not the one that was requested.
 
 **There is no `StopFailure`.** On Claude Code `runtime-gate` learns about a Fable rate limit
