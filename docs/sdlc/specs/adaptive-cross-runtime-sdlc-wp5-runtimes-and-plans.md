@@ -387,7 +387,9 @@ matches this stack.
 Revised 2026-09-21 with the user: concerns 1, 6, 8, 9, 11 and 12 of the first draft were fixed in
 the design (R16, R19–R21, I6, I8); 3, 4, 10, 13, 14 and 15 were closed — 3 by OQ4, 10 by OQ5, 13 by
 correcting the memory note, 15 as the accepted consequence of OQ1, 4 and 14 as statements rather
-than risks (the grep scope in I8, data protection in Policy conformance). What remains:
+than risks (the grep scope in I8, data protection in Policy conformance). What remains — 1 and 3
+accepted as below, 2 settled by OQ3, and 4–7 accepted with the user on 2026-09-21 as risks the plan
+carries with the mitigations named here:
 
 1. **"Pro and Plus run strictly serially" is enforced by the plugin, not by Codex** (accepted,
    2026-09-21). `codex-plus.json` keeps `max_concurrent_threads_per_session: 3`; the plugin's
