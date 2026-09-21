@@ -24,7 +24,13 @@ Codex (EXPERT model -> STRONG model):
 A record expires on its own. The gate never denies, always exits 0, and any
 error inside it fails open: the call goes through unchanged.
 
-  runtime-gate.py status | clear | set <seconds> [reason] | statusline [--then <cmd>]
+  runtime-gate.py status | quota [--json] | clear | set <seconds> [reason]
+                  | statusline [--then <cmd>]
+
+Quota (advice only, it never refuses anything): Claude Code's comes from the
+statusline payload, Codex's from the newest rollout's token_count event. Both
+are stored in the state file; `quota --json` prints
+{runtime, weekly_pct, five_hour_pct, resets_at, seen_at, source, stale}.
 
 The runtime is the home the hook runs from (~/.codex/hooks -> Codex, anything
 else -> Claude Code); the shims name theirs. State lives in
@@ -50,7 +56,7 @@ LEGACY = {"claude": ("fable-gate", "CLAUDE_FABLE_GATE"), "codex": ("codex-model-
 # Set by configure(); module-level so the shims (and the old suites through
 # them) can read STATE and call mark() exactly as before.
 RUNTIME = "claude"
-HOME = STATE = LEGACY_STATE = ""
+HOME = STATE = LEGACY_STATE = QUOTA_STATE = ""
 LIMIT_TTL = NOT_FOUND_TTL = OVERLOAD_TTL = LAUNCH_WINDOW = 0
 WEEKLY_PCT = 0.0
 EXPERT = FALLBACK = FALLBACK_EFFORT = MODE = ""
@@ -77,10 +83,20 @@ def profile_tier(home, tier, field, default):
         return default
 
 
+def profile_fable(home):
+    """profile.json's `fable`; True when there is no profile (an install from
+    before WP5 wrapped the statusline only on a Fable install)."""
+    try:
+        with open(os.path.join(home, "claude-agentic", "profile.json"), encoding="utf-8") as fh:
+            return bool(json.load(fh).get("fable", True))
+    except (OSError, ValueError, AttributeError):
+        return True
+
+
 def configure(runtime):
     """Bind every setting for one runtime."""
     # pylint: disable=global-statement
-    global RUNTIME, HOME, STATE, LEGACY_STATE, LIMIT_TTL, NOT_FOUND_TTL, OVERLOAD_TTL
+    global RUNTIME, HOME, STATE, LEGACY_STATE, QUOTA_STATE, LIMIT_TTL, NOT_FOUND_TTL, OVERLOAD_TTL
     global LAUNCH_WINDOW, WEEKLY_PCT, EXPERT, FALLBACK, FALLBACK_EFFORT, MODE, TTL_BY_ERROR
     RUNTIME = runtime
     if runtime == "codex":
@@ -88,6 +104,11 @@ def configure(runtime):
     else:
         HOME = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
     STATE = setting("STATE", "") or os.path.join(HOME, "state", "runtime-gate.json")
+    # The quota ledger belongs in runtime-gate.json. A state file named by the
+    # old variable only ever held the outage record, so the ledger does not
+    # move into it: it stays at the default path beside it.
+    QUOTA_STATE = STATE if os.environ.get("AI_RUNTIME_GATE_STATE") or \
+        not os.environ.get(f"{LEGACY[runtime][1]}_STATE") else os.path.join(HOME, "state", "runtime-gate.json")
     LEGACY_STATE = os.path.join(HOME, "state", LEGACY[runtime][0] + ".json")
     LIMIT_TTL = int(setting("TTL", "3600"))
     NOT_FOUND_TTL = int(setting("NOT_FOUND_TTL", "21600"))
@@ -117,13 +138,13 @@ def detect_runtime():
 
 
 # ------------------------------------------------------------------ state
-def load():
+def load(path=None):
     try:
-        with open(STATE, encoding="utf-8") as fh:
+        with open(path or STATE, encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
     except OSError:
-        return import_legacy()
+        return import_legacy() if path in (None, STATE) else {}
     except ValueError:
         return {}
 
@@ -149,12 +170,13 @@ def import_legacy():
     return data
 
 
-def save(data):
-    os.makedirs(os.path.dirname(STATE), exist_ok=True)
-    tmp = f"{STATE}.{os.getpid()}.tmp"
+def save(data, path=None):
+    path = path or STATE
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(data, fh)
-    os.replace(tmp, STATE)
+    os.replace(tmp, path)
 
 
 def active(now=None):
@@ -376,14 +398,135 @@ def reset_epoch(value):
 
 
 def statusline(payload):
-    week = ((payload.get("rate_limits") or {}).get("seven_day") or {})
+    limits = payload.get("rate_limits") or {}
+    week = limits.get("seven_day") or {}
+    five = limits.get("five_hour") or {}
     pct = week.get("used_percentage")
-    if pct is None or float(pct) < WEEKLY_PCT:
+    record_quota(pct, five.get("used_percentage"), reset_epoch(week.get("resets_at")), "statusline")
+    if pct is None or float(pct) < WEEKLY_PCT or not profile_fable(HOME):
         return
     until = reset_epoch(week.get("resets_at"))
     if not until or until <= time.time():
         until = time.time() + LIMIT_TTL
     mark(until, f"weekly limit {float(pct):.0f}% used", "statusline")
+
+
+# ================================================================== quota
+QUOTA_STALE = 24 * 3600
+ROLLOUT_EVERY = 60
+ROLLOUT_TAIL = 64 * 1024
+
+
+def number(value):
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def record_quota(weekly, five_hour, resets_at, source, seen_at=None):
+    """Store what the runtime last said about the account's limits. A write
+    happens only when a number moved or the record is a minute old, so a
+    statusline that redraws every second does not rewrite the file each time."""
+    weekly, five_hour = number(weekly), number(five_hour)
+    if weekly is None and five_hour is None:
+        return
+    now = time.time()
+    data = load(QUOTA_STATE)
+    old = data.get("quota") if isinstance(data.get("quota"), dict) else {}
+    new = {"weekly_pct": weekly, "five_hour_pct": five_hour, "resets_at": int(resets_at or 0),
+           "seen_at": int(seen_at or now), "source": source}
+    same = all(old.get(k) == new[k] for k in ("weekly_pct", "five_hour_pct", "resets_at", "source"))
+    if same and now - float(old.get("seen_at") or 0) < ROLLOUT_EVERY:
+        return
+    data["quota"] = new
+    save(data, QUOTA_STATE)
+
+
+def newest_rollout():
+    """The newest rollout-*.jsonl in the three newest day directories."""
+    root = os.path.join(HOME, "sessions")
+    days = []
+    for year in sorted(os.listdir(root), reverse=True) if os.path.isdir(root) else []:
+        for month in sorted(os.listdir(os.path.join(root, year)), reverse=True):
+            for day in sorted(os.listdir(os.path.join(root, year, month)), reverse=True):
+                days.append(os.path.join(root, year, month, day))
+                if len(days) == 3:
+                    break
+            if len(days) == 3:
+                break
+        if len(days) == 3:
+            break
+    files = [os.path.join(d, f) for d in days if os.path.isdir(d)
+             for f in os.listdir(d) if f.startswith("rollout-") and f.endswith(".jsonl")]
+    return max(files, key=os.path.getmtime) if files else None
+
+
+def rollout_limits(path):
+    """(weekly_pct, five_hour_pct, weekly resets_at, seen_at) from the last
+    token_count event in the last 64 KB of a rollout, or None."""
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            fh.seek(max(0, fh.tell() - ROLLOUT_TAIL))
+            lines = fh.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        if '"token_count"' not in line or '"rate_limits"' not in line:
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        limits = (event.get("payload") or {}).get("rate_limits") or {}
+        weekly = five = None
+        resets = 0
+        for window in (limits.get("primary"), limits.get("secondary")):
+            if not isinstance(window, dict):
+                continue
+            minutes = number(window.get("window_minutes")) or 0
+            if minutes >= 7 * 24 * 60:
+                weekly, resets = window.get("used_percent"), window.get("resets_at") or 0
+            elif minutes:
+                five = window.get("used_percent")
+        if weekly is None and five is None:
+            continue
+        seen = reset_epoch(event.get("timestamp")) or os.path.getmtime(path)
+        return weekly, five, reset_epoch(resets) or 0, seen
+    return None
+
+
+def refresh_codex_quota():
+    """Read the newest rollout, at most once a minute."""
+    data = load(QUOTA_STATE)
+    if time.time() - float(data.get("quota_checked_at") or 0) < ROLLOUT_EVERY:
+        return
+    data["quota_checked_at"] = int(time.time())
+    save(data, QUOTA_STATE)
+    path = newest_rollout()
+    found = rollout_limits(path) if path else None
+    if found:
+        record_quota(found[0], found[1], found[2], "rollout", seen_at=found[3])
+
+
+def quota():
+    if RUNTIME == "codex":
+        refresh_codex_quota()
+    q = load(QUOTA_STATE).get("quota")
+    q = q if isinstance(q, dict) else {}
+    now = time.time()
+    seen = float(q.get("seen_at") or 0)
+    resets = float(q.get("resets_at") or 0)
+    return {
+        "runtime": RUNTIME,
+        "weekly_pct": q.get("weekly_pct"),
+        "five_hour_pct": q.get("five_hour_pct"),
+        "resets_at": int(resets),
+        "seen_at": int(seen),
+        "source": q.get("source"),
+        "stale": not seen or now - seen > QUOTA_STALE or (resets and now > resets),
+    }
 
 
 # ================================================================== Codex
@@ -485,6 +628,10 @@ def codex_pre_tool_use(payload):
     tool_input = payload.get("tool_input")
     if not is_agent_event(payload) or not isinstance(tool_input, dict):
         return
+    try:
+        refresh_codex_quota()
+    except (OSError, ValueError):
+        pass
     if not is_expert(launch_model(tool_input)):
         return
 
@@ -562,6 +709,20 @@ def cli(argv):
         else:
             print(f"inactive: EXPERT agents run on {EXPERT}")
         return 0
+    if cmd == "quota":
+        q = quota()
+        if "--json" in argv[1:]:
+            print(json.dumps(q))
+        elif q["seen_at"]:
+            def pct(v):
+                return "?" if v is None else f"{v:.0f}%"
+            print(f"quota ({RUNTIME}, from {q['source']}): weekly {pct(q['weekly_pct'])}, "
+                  f"5-hour {pct(q['five_hour_pct'])}, seen {hhmm(q['seen_at'])}"
+                  + (f", resets {hhmm(q['resets_at'])}" if q["resets_at"] else "")
+                  + (" — stale" if q["stale"] else ""))
+        else:
+            print(f"quota ({RUNTIME}): unknown — no statusline or rollout seen yet")
+        return 0
     if cmd == "clear":
         data = load()
         data.pop("unavailable", None)
@@ -571,7 +732,7 @@ def cli(argv):
     if cmd == "set" and len(argv) >= 2 and argv[1].isdigit():
         mark(time.time() + int(argv[1]), " ".join(argv[2:]) or "manual", "cli")
         return cli(["status"])
-    print("usage: runtime-gate.py status | clear | set <seconds> [reason] | statusline [--then <cmd>] < json",
+    print("usage: runtime-gate.py status | quota [--json] | clear | set <seconds> [reason] | statusline [--then <cmd>] < json",
           file=sys.stderr)
     return 2
 

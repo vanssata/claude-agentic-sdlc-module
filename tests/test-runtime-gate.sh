@@ -72,6 +72,73 @@ rm -rf "$CX/state"; mkdir -p "$CX/state"
 jq -n --argjson u $(( $(date +%s) + 600 )) '{unavailable:{until:$u,reason:"model_unavailable",source:"SubagentStop"}}' > "$CX/state/codex-model-gate.json"
 python3 "$CX/hooks/runtime-gate.py" status | grep -q '^active: gpt-6-astra -> gpt-5.6-sol' && pass "a live codex-model-gate record carries over" || fail "codex-model-gate state not imported"
 
+echo "== quota: Claude Code from the statusline (R7)"
+rm -rf "$CL/state" "$CL/claude-agentic"
+NOW=$(date +%s)
+jq -nc --argjson r $((NOW + 86400)) '{rate_limits:{seven_day:{used_percentage:42.5,resets_at:$r},five_hour:{used_percentage:7}}}' \
+    | python3 "$CL/hooks/runtime-gate.py" statusline --then 'cat >/dev/null; echo LINE' | grep -qx LINE \
+    && pass "the statusline still prints the user's own line" || fail "statusline output lost"
+q=$(python3 "$CL/hooks/runtime-gate.py" quota --json)
+printf '%s' "$q" | jq -e --argjson r $((NOW + 86400)) '.runtime == "claude" and .weekly_pct == 42.5 and .five_hour_pct == 7
+        and .resets_at == $r and .source == "statusline" and .stale == false and (.seen_at > 0)
+        and (keys == ["five_hour_pct","resets_at","runtime","seen_at","source","stale","weekly_pct"])' >/dev/null \
+    && pass "quota --json has the seven keys from the statusline payload" || fail "claude quota shape" "$q"
+python3 "$CL/hooks/runtime-gate.py" status | grep -q '^inactive' && pass "42% used marks nothing" || fail "below the threshold must not mark"
+python3 "$CL/hooks/runtime-gate.py" quota | grep -q 'weekly 42%, 5-hour 7%' && pass "quota prints one readable line" || fail "quota text" "$(python3 "$CL/hooks/runtime-gate.py" quota)"
+
+mkdir -p "$CL/claude-agentic"; printf '{"plan":"max","fable":false}' > "$CL/claude-agentic/profile.json"
+jq -nc '{rate_limits:{seven_day:{used_percentage:95}}}' | python3 "$CL/hooks/runtime-gate.py" statusline
+python3 "$CL/hooks/runtime-gate.py" status | grep -q '^inactive' && pass "fable: false — 95% records the quota but marks no Fable outage" || fail "Fable mark without Fable"
+python3 "$CL/hooks/runtime-gate.py" quota --json | jq -e '.weekly_pct == 95' >/dev/null && pass "and the quota is still recorded" || fail "quota not recorded on a non-Fable plan"
+printf '{"plan":"max","fable":true}' > "$CL/claude-agentic/profile.json"
+jq -nc '{rate_limits:{seven_day:{used_percentage:95}}}' | python3 "$CL/hooks/runtime-gate.py" statusline
+python3 "$CL/hooks/runtime-gate.py" status | grep -q '^active: Fable' && pass "fable: true — 95% marks Fable unavailable" || fail "Fable mark missing"
+python3 "$CL/hooks/runtime-gate.py" clear >/dev/null
+
+jq '.quota.seen_at = 1000' "$CL/state/runtime-gate.json" > "$TMP/s.json" && mv "$TMP/s.json" "$CL/state/runtime-gate.json"
+python3 "$CL/hooks/runtime-gate.py" quota --json | jq -e '.stale == true' >/dev/null && pass "a reading older than 24 h is stale" || fail "old seen_at not stale"
+jq --argjson n "$NOW" '.quota.seen_at = $n | .quota.resets_at = ($n - 60)' "$CL/state/runtime-gate.json" > "$TMP/s.json" && mv "$TMP/s.json" "$CL/state/runtime-gate.json"
+python3 "$CL/hooks/runtime-gate.py" quota --json | jq -e '.stale == true' >/dev/null && pass "a reading past its reset is stale" || fail "past resets_at not stale"
+rm -rf "$CL/state"
+python3 "$CL/hooks/runtime-gate.py" quota --json | jq -e '.stale == true and .weekly_pct == null' >/dev/null && pass "no reading at all is stale" || fail "empty quota"
+
+rm -rf "$CL/state"
+jq -nc '{rate_limits:{seven_day:{used_percentage:30}}}' | CLAUDE_FABLE_GATE_STATE="$TMP/legacy-q.json" python3 "$CL/hooks/runtime-gate.py" statusline
+[ ! -e "$TMP/legacy-q.json" ] && jq -e '.quota.weekly_pct == 30' "$CL/state/runtime-gate.json" >/dev/null \
+    && pass "a state named by the old variable gets no quota; the ledger stays in runtime-gate.json" || fail "quota written into the legacy-named state"
+
+echo "== quota: Codex from the newest rollout (R7)"
+rm -rf "$CX/state"
+old_day="$CX/sessions/2026/09/19"; new_day="$CX/sessions/2026/09/21"; mkdir -p "$old_day" "$new_day"
+tc() {  # tc <weekly> <five_hour> <resets> <iso-timestamp>
+    jq -nc --argjson w "$1" --argjson f "$2" --argjson r "$3" --arg t "$4" \
+        '{timestamp:$t,type:"event_msg",payload:{type:"token_count",info:{},rate_limits:{limit_id:"codex",
+          primary:{used_percent:$f,window_minutes:300,resets_at:($r - 3600)},
+          secondary:{used_percent:$w,window_minutes:10080,resets_at:$r}}}}'
+}
+ISO=$(date -u -d "@$NOW" +%Y-%m-%dT%H:%M:%S.000Z)
+{ tc 10 1 $((NOW + 9000)) "$ISO"; } > "$old_day/rollout-old.jsonl"
+touch -d '2 days ago' "$old_day/rollout-old.jsonl"
+{ tc 50 20 $((NOW + 9000)) "$ISO"; printf '{"type":"response_item","payload":{}}\n'; tc 73 36 $((NOW + 7200)) "$ISO"; printf '{"type":"event_msg","payload":{"type":"agent_message"}}\n'; } > "$new_day/rollout-new.jsonl"
+q=$(python3 "$CX/hooks/runtime-gate.py" quota --json)
+printf '%s' "$q" | jq -e --argjson r $((NOW + 7200)) --argjson n "$NOW" '.runtime == "codex" and .weekly_pct == 73 and .five_hour_pct == 36
+        and .resets_at == $r and .source == "rollout" and .seen_at == $n and .stale == false' >/dev/null \
+    && pass "the last token_count of the newest rollout: secondary is weekly, primary is 5-hour" || fail "codex quota" "$q"
+tc 99 99 $((NOW + 7200)) "$ISO" >> "$new_day/rollout-new.jsonl"
+python3 "$CX/hooks/runtime-gate.py" quota --json | jq -e '.weekly_pct == 73' >/dev/null \
+    && pass "the rollout is read at most once a minute" || fail "rollout re-read within 60 s"
+jq '.quota_checked_at = 0' "$CX/state/runtime-gate.json" > "$TMP/s.json" && mv "$TMP/s.json" "$CX/state/runtime-gate.json"
+python3 "$CX/hooks/runtime-gate.py" quota --json | jq -e '.weekly_pct == 99' >/dev/null \
+    && pass "and again once the minute is up" || fail "rollout not re-read after 60 s"
+head -c 70000 /dev/zero | tr '\0' 'x' > "$new_day/rollout-pad.jsonl"; printf '\n' >> "$new_day/rollout-pad.jsonl"
+tc 5 5 $((NOW + 7200)) "$ISO" > "$TMP/early.jsonl"; cat "$TMP/early.jsonl" "$new_day/rollout-pad.jsonl" > "$new_day/rollout-big.jsonl"; rm "$new_day/rollout-pad.jsonl"
+jq '.quota_checked_at = 0' "$CX/state/runtime-gate.json" > "$TMP/s.json" && mv "$TMP/s.json" "$CX/state/runtime-gate.json"
+python3 "$CX/hooks/runtime-gate.py" quota --json | jq -e '.weekly_pct == 99' >/dev/null \
+    && pass "only the last 64 KB is read: a newest file with no token_count there changes nothing" || fail "read beyond 64 KB"
+rm -rf "$CX/sessions" "$CX/state"
+python3 "$CX/hooks/runtime-gate.py" quota --json | jq -e '.stale == true and .source == null' >/dev/null \
+    && pass "no rollout: unknown and stale" || fail "codex quota without rollouts"
+
 echo "== fails open, never denies"
 for input in '' 'not json' '[]' '{"hook_event_name":"PreToolUse","tool_name":"Agent","tool_input":"x"}'; do
     for g in "$CL/hooks/runtime-gate.py" "$CX/hooks/runtime-gate.py"; do
