@@ -36,7 +36,7 @@ out=$(claude_call python3 "$CL/hooks/runtime-gate.py")
 python3 "$CL/hooks/runtime-gate.py" clear >/dev/null
 python3 "$CX/hooks/runtime-gate.py" set 600 test >/dev/null
 out=$(codex_call python3 "$CX/hooks/runtime-gate.py")
-[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model')" = gpt-5.6-sol ] && pass "an EXPERT spawn is rewritten to STRONG" || fail "codex reroute" "$out"
+[ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.agent_type')" = ai-expert-strong ] && pass "an EXPERT spawn is rerouted to its STRONG twin" || fail "codex reroute" "$out"
 python3 "$CX/hooks/runtime-gate.py" clear >/dev/null
 
 echo "== the shims name their runtime wherever they sit"
@@ -199,16 +199,107 @@ out=$(launch "$G" ai-reviewer)
 out=$(launch "$G" ai-reviewer s1 sonnet)
 [ -z "$out" ] && pass "the same agent with model: sonnet counts as BALANCED and goes through" || fail "explicit model should decide the tier" "$out"
 
-# The tool-call shape of a Codex 0.155 launch, from a live rollout. Codex 0.155
-# fires no PreToolUse for spawn_agent (traced live); this proves the gate is
-# ready for the day it does, not that it runs there today.
-echo "== codex: a spawn_agent launch, if Codex ever delivers one"
+# Codex 0.155 multi-agent v2: spawn_agent sits in the `collaboration` namespace,
+# and hooks see namespace + name with no separator (traced live 2026-09-22).
+# PreToolUse and PostToolUse fire for it; updatedInput is applied, but a role's
+# pinned model beats the call's `model`, so an EXPERT role is rerouted through
+# agent_type; SpawnAgentArgs refuses unknown fields, so the effort key is
+# `reasoning_effort`. SubagentStart accepts only additionalContext.
+echo "== codex: multi-agent v2 launches arrive as collaborationspawn_agent"
+CXG="$CX/hooks/runtime-gate.py"
+ln -sfn "$PLUGIN_ROOT/skills" "$CX/skills"          # where install.sh puts state.py
+v2() {  # v2 <event> <tool_input json> [session] [tool_name] [extra json] -> stdout
+    jq -nc --arg e "$1" --argjson i "$2" --arg s "${3:-cx}" --arg t "${4:-collaborationspawn_agent}" --arg c "$PROJ" \
+        --argjson x "${5:-{\}}" '{hook_event_name:$e,tool_name:$t,session_id:$s,turn_id:"u",cwd:$c,tool_input:$i} + $x' | python3 "$CXG"
+}
+upd() { jq -c '.hookSpecificOutput.updatedInput // null' 2>/dev/null <<<"${1:-{\}}"; }
 rm -rf "$CX/state"
-spawn() { jq -nc --arg a "$1" --arg s "$2" '{hook_event_name:"PreToolUse",tool_name:"spawn_agent",session_id:$s,cwd:"/nonexistent",
-          tool_input:{task_name:"t",agent_type:$a,fork_turns:"all",message:"m"}}' | python3 "$CX/hooks/runtime-gate.py"; }
-s1=$(spawn Explore cx); s2=$(spawn log-reader cx)
+s1=$(v2 PreToolUse '{"task_name":"t","agent_type":"Explore","message":"m"}')
+s2=$(v2 PreToolUse '{"task_name":"t","agent_type":"log-reader","message":"m"}')
 [ -z "$s1" ] && printf '%s' "$s2" | jq -e '.hookSpecificOutput.additionalContext | test("1 agent\\(s\\) already running, the .* fan-out is 1")' >/dev/null \
-    && pass "codex-plus: the second spawn_agent of a batch is explained" || fail "spawn_agent fan-out" "$s1|$s2"
+    && pass "codex-plus: the second collaborationspawn_agent of a batch is explained" || fail "v2 fan-out" "$s1|$s2"
+[ "$(decision "$s2")" = none ] && pass "and never asked or allowed: Codex cannot ask" || fail "v2 budget decision" "$s2"
+
+rm -rf "$CX/state"; python3 "$CXG" set 600 rate_limit >/dev/null
+EV="$PROJ/.ai/reports/$TASK/events.jsonl"
+before=$(grep -c '"model_fallback"' "$EV" 2>/dev/null || true)
+out=$(v2 PreToolUse '{"task_name":"t","agent_type":"ai-expert","message":"m"}' e1)
+upd "$out" | jq -e '.agent_type == "ai-expert-strong" and (has("model") | not) and (has("reasoning_effort") | not) and .message == "m"' >/dev/null \
+    && [ "$(decision "$out")" = allow ] && pass "ai-expert is rerouted by agent_type to ai-expert-strong, nothing injected" || fail "twin reroute" "$out"
+printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | test("ai-expert-strong") and test("gpt-5.6-sol")' >/dev/null \
+    && pass "the context names the twin and the model it runs on" || fail "twin context" "$out"
+[ $(( $(grep -c '"model_fallback"' "$EV") - before )) = 1 ] && tail -1 "$EV" | jq -e '.data.agent == "ai-expert" and .data.from == "gpt-6-astra" and .data.to == "gpt-5.6-sol"' >/dev/null \
+    && pass "one model_fallback line, to the model the twin pins" || fail "twin journal" "$(tail -1 "$EV")"
+jq -e --arg t "$TASK" '(.expert_launches[$t] // 0) == 0' "$CX/state/runtime-gate.json" >/dev/null \
+    && pass "the budget rates the rerouted launch: no EXPERT launch counted" || fail "rerouted launch counted as EXPERT" "$(jq -c .expert_launches "$CX/state/runtime-gate.json")"
+
+out=$(v2 PreToolUse '{"task_name":"t","model":"gpt-6-astra","model_reasoning_effort":"xhigh","message":"m"}' e2)
+upd "$out" | jq -e '.model == "gpt-5.6-sol" and .reasoning_effort == "high" and (has("model_reasoning_effort") | not)' >/dev/null \
+    && pass "no role, explicit expert model: model and reasoning_effort rewritten, model_reasoning_effort dropped" || fail "call-level rewrite" "$out"
+out=$(AI_RUNTIME_GATE_FALLBACK_EFFORT=bogus v2 PreToolUse '{"task_name":"t","model":"gpt-6-astra","message":"m"}' e3)
+upd "$out" | jq -e '.model == "gpt-5.6-sol" and (has("reasoning_effort") | not)' >/dev/null \
+    && pass "an effort Codex would refuse is left out, not sent" || fail "invalid effort sent" "$out"
+cp "$CX/config.toml" "$TMP/config.bak"
+printf 'model = "gpt-5.6-sol"\n\n[agents]\ndefault_subagent_model = "gpt-6-astra"\n' > "$CX/config.toml"
+out=$(v2 PreToolUse '{"task_name":"t","message":"m"}' e4)
+upd "$out" | jq -e '.model == "gpt-5.6-sol" and .reasoning_effort == "high"' >/dev/null \
+    && pass "no role, no model, EXPERT as default_subagent_model: the call gets model and reasoning_effort" || fail "config-default reroute" "$out"
+mv "$TMP/config.bak" "$CX/config.toml"
+
+printf 'name = "my-expert"\nmodel = "gpt-6-astra"\n' > "$CX/agents/my-expert.toml"
+out=$(v2 PreToolUse '{"task_name":"t","agent_type":"my-expert","message":"m"}' e5)
+[ "$(upd "$out")" = null ] && [ "$(decision "$out")" = none ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | test("not rerouted")' >/dev/null \
+    && pass "a pinned EXPERT role with no twin is explained, not rewritten" || fail "no-twin explain" "$out"
+printf 'name = "someone-else"\nmodel = "gpt-5.6-sol"\n' > "$CX/agents/my-expert-strong.toml"
+out=$(v2 PreToolUse '{"task_name":"t","agent_type":"my-expert","message":"m"}' e6)
+[ "$(upd "$out")" = null ] && pass "a twin file whose name Codex would not register is not used" || fail "unregistered twin used" "$out"
+rm -f "$CX/agents/my-expert.toml" "$CX/agents/my-expert-strong.toml"
+out=$(AI_RUNTIME_GATE_MODE=context v2 PreToolUse '{"task_name":"t","agent_type":"ai-expert","message":"m"}' e7)
+[ "$(upd "$out")" = null ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | test("not rerouted")' >/dev/null \
+    && pass "context mode: explained as not rerouted, no updatedInput" || fail "context mode" "$out"
+for t in Task mcp__x__spawn_agent; do
+    out=$(v2 PreToolUse '{"agent_type":"ai-expert","message":"m"}' e8 "$t")
+    [ "$(upd "$out" | jq -r .agent_type)" = ai-expert-strong ] || fail "$t should be an agent event" "$out"
+done
+pass "Task stays an agent event; an MCP tool ending in spawn_agent matches too (documented)"
+
+python3 "$CXG" clear >/dev/null
+mkdir -p "$PROJ/.git" "$PROJ/.codex/agents" "$PROJ/sub"
+printf 'name = "ai-expert"\nmodel = "gpt-5.6-sol"\n' > "$PROJ/.codex/agents/ai-expert.toml"
+rm -rf "$CX/state"
+out=$(jq -nc --arg c "$PROJ/sub" '{hook_event_name:"PreToolUse",tool_name:"collaborationspawn_agent",session_id:"ov",cwd:$c,
+      tool_input:{agent_type:"ai-expert",message:"m"}}' | python3 "$CXG")
+[ -z "$out" ] && jq -e '[.pending_launches.ov[].tier] == ["STRONG"]' "$CX/state/runtime-gate.json" >/dev/null \
+    && pass "a project file re-pinning ai-expert to Sol (from a subdirectory) is rated STRONG by the budget too" \
+    || fail "project override rating" "$out $(jq -c .pending_launches "$CX/state/runtime-gate.json")"
+rm -rf "$PROJ/.git" "$PROJ/.codex" "$PROJ/sub"
+v2 PostToolUse '{"agent_type":"ai-expert","message":"m"}' p1 collaborationspawn_agent '{"tool_response":"429 Too Many Requests"}' >/dev/null
+python3 "$CXG" status | grep -q '^active' && pass "PostToolUse on collaborationspawn_agent records the outage" || fail "v2 PostToolUse" "$(python3 "$CXG" status)"
+
+echo "== codex: SubagentStart takes the tier from the resolved model"
+rm -rf "$CX/state"
+st() {  # st <agent_type> <model> <agent_id> [session] -> stdout
+    jq -nc --arg a "$1" --arg m "$2" --arg i "$3" --arg s "${4:-st}" --arg c "$PROJ" \
+        '{hook_event_name:"SubagentStart",session_id:$s,turn_id:"u",cwd:$c,agent_id:$i,agent_type:$a,model:$m}' | python3 "$CXG"
+}
+st worker gpt-5.6-sol w1 >/dev/null; st Explore gpt-5.6-terra w2 >/dev/null
+jq -e '[.running_agents.st[].tier] == ["STRONG", "FAST"]' "$CX/state/runtime-gate.json" >/dev/null \
+    && pass "a STRONG model decides the tier; a Terra one (FAST or BALANCED) leaves it to the name" || fail "start tier" "$(jq -c .running_agents "$CX/state/runtime-gate.json")"
+out=$(st ai-expert gpt-6-astra w3)
+[ -z "$out" ] && pass "no outage: an EXPERT start is silent" || fail "backstop fired without an outage" "$out"
+python3 "$CXG" set 600 rate_limit >/dev/null
+before=$(grep -c '"missed_reroute"' "$EV" 2>/dev/null || true)
+out=$(st ai-expert gpt-6-astra w4)
+printf '%s' "$out" | jq -e '(keys == ["hookSpecificOutput"]) and (.hookSpecificOutput | keys == ["additionalContext", "hookEventName"])
+    and .hookSpecificOutput.hookEventName == "SubagentStart" and (.hookSpecificOutput.additionalContext | test("gpt-6-astra") and test("not rerouted"))' >/dev/null \
+    && pass "backstop: an EXPERT start during an outage tells the child, in the only field SubagentStart takes" || fail "backstop output" "$out"
+[ $(( $(grep -c '"missed_reroute"' "$EV") - before )) = 1 ] && tail -1 "$EV" | jq -e '.actor == "hook" and .data.model == "gpt-6-astra" and .data.agent == "ai-expert"' >/dev/null \
+    && pass "and journals one missed_reroute line" || fail "missed_reroute journal" "$(tail -1 "$EV")"
+b=$(grep -c '"missed_reroute"' "$EV")
+out=$(AI_RUNTIME_GATE_MODE=context st ai-expert gpt-6-astra w5)
+[ -z "$out" ] && [ "$(grep -c '"missed_reroute"' "$EV")" = "$b" ] \
+    && pass "context mode chose not to reroute: nothing is reported as missed" || fail "backstop in context mode" "$out"
+python3 "$CXG" clear >/dev/null
 
 echo "== budgets: one message that launches several agents (WP5 review)"
 rm -rf "$CL/state"

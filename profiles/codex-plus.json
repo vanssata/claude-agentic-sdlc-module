@@ -115,6 +115,13 @@
       "description_prefix": "STRONG planner. Use for T3 and T4 plans; T5 goes to ai-expert instead.",
       "escalation_note": "You are the STRONG planner, spawned because the risk tier is T3 or T4. Plan with the care that tier demands: name the files each step may touch, the compatibility risk, the rollback and what a human must approve."
     },
+    "ai-expert-strong": {
+      "variant_of": "ai-expert",
+      "tier": "STRONG",
+      "sandbox_mode": "read-only",
+      "description_prefix": "STRONG stand-in for ai-expert, launched by runtime-gate while the EXPERT model is unavailable. Do not spawn it directly.",
+      "escalation_note": "You stand in for `ai-expert` because the EXPERT model is unavailable (rate-limited or unreachable), and runtime-gate rerouted this launch to the STRONG tier. Your answer is the STRONG model's, not the EXPERT model's: say so under residual risk, and say plainly when the question should wait for the EXPERT model instead of being settled now."
+    },
     "ai-reviewer-balanced": {
       "variant_of": "ai-reviewer",
       "tier": "BALANCED",

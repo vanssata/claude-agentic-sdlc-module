@@ -129,7 +129,9 @@ measured 27 ms against 24 ms for the pre-WP5 `fable-gate.py` on the same payload
 (20-run mean, 2026-09-21) — within noise, one process either way. The budget
 checks read `profile.json` and the gate's own state file in that process; the
 `model_fallback` journal line spawns `state.py` only on a rewrite with a task in
-flight, which is rare by construction. The old names are shims that `exec`
+flight, and the `missed_reroute` line only on a Codex `SubagentStart` that
+resolved to EXPERT during an outage with a task in flight — both rare by
+construction. The old names are shims that `exec`
 the gate: 35 ms through `fable-gate.py`, the price of a second interpreter start,
 paid only by an old registration the installer has not yet replaced.
 

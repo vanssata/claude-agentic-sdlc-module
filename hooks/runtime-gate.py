@@ -15,11 +15,18 @@ Claude Code (model: fable -> opus):
   statusline [--then <command>]             records it when the weekly limit is nearly used, then
                                             runs the user's own statusline command on the same input
 
-Codex (EXPERT model -> STRONG model):
+Codex (EXPERT model -> STRONG model); an agent launch is `spawn_agent`, or
+`collaborationspawn_agent` under multi-agent v2:
   SubagentStop (rate limit / model unavailable)  records that EXPERT is unusable
-  PostToolUse:Agent (same signals in the result) records it too
-  PreToolUse:Agent   while a record is live, rewrites an EXPERT launch to STRONG
-                     (MODE=context: explains the outage without rewriting)
+  PostToolUse (same signals in the result)       records it too
+  PreToolUse         while a record is live, reroutes an EXPERT launch to STRONG:
+                     a role pinning EXPERT becomes its `<role>-strong` twin
+                     (agent_type is rewritten: a role's pinned model beats the
+                     call's), a launch no role pins gets `model` and
+                     `reasoning_effort`; anything else, and MODE=context, is
+                     explained as not rerouted
+  SubagentStart      a child that resolved to EXPERT during an outage was missed:
+                     journaled as `missed_reroute`, and the child is told
 
 Budgets (from <home>/claude-agentic/profile.json; no profile, no budget):
   PreToolUse:Agent   an EXPERT launch without `expert.without_asking`, or past
@@ -624,30 +631,63 @@ SIGNALS = (
      "overloaded", "TTL"),
 )
 
-AGENT_TOOLS = {"agent", "spawn_agent", "task"}
+# Codex multi-agent v1 calls the tool `spawn_agent`; v2 puts it in the
+# `collaboration` namespace and hooks see `collaborationspawn_agent` (namespace +
+# name, no separator), so a name is an agent launch when it ends in spawn_agent.
+AGENT_TOOLS = {"agent", "task"}
 AGENT_NAME_KEYS = ("agent_type", "subagent_type", "agent", "agent_name", "name", "type")
+# The values SpawnAgentArgs.reasoning_effort accepts; anything else fails the spawn.
+EFFORTS = {"minimal", "low", "medium", "high", "xhigh"}
 
 
 def is_expert(model):
     return isinstance(model, str) and EXPERT.lower() in model.lower()
 
 
-def agent_file_model(name):
-    """The `model` pinned by a custom agent file, or None when there is none.
-    Project agents win over personal ones, the way Codex layers config."""
+def toml_field(text, key):
+    match = re.search(r"(?m)^\s*%s\s*=\s*[\"']([^\"']+)[\"']" % re.escape(key), text or "")
+    return match.group(1) if match else None
+
+
+def agent_files(name, cwd=None):
+    """The text of each custom agent file Codex could load for `name`, nearest
+    first: `.codex/agents` at cwd and every directory above it, then the
+    personal one — project agents win over personal ones, the way Codex layers
+    config. The walk stops at the first directory holding `.git`."""
     if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", name or ""):
-        return None
-    roots = [os.path.join(os.getcwd(), ".codex", "agents"), os.path.join(HOME, "agents")]
-    for root in roots:
-        path = os.path.join(root, f"{name}.toml")
+        return
+    here = os.path.abspath(cwd) if isinstance(cwd, str) and cwd else os.getcwd()
+    roots = []
+    while True:                                 # up to the project root, as Codex layers it
+        roots.append(os.path.join(here, ".codex", "agents"))
+        parent = os.path.dirname(here)
+        if parent == here or os.path.exists(os.path.join(here, ".git")):
+            break
+        here = parent
+    roots.append(os.path.join(HOME, "agents"))
+    for root in dict.fromkeys(roots):
         try:
-            with open(path, encoding="utf-8") as fh:
-                text = fh.read(16384)
+            with open(os.path.join(root, f"{name}.toml"), encoding="utf-8") as fh:
+                yield fh.read(16384)
         except OSError:
             continue
-        match = re.search(r"(?m)^\s*model\s*=\s*[\"']([^\"']+)[\"']", text)
-        if match:
-            return match.group(1)
+
+
+def agent_file_model(name, cwd=None):
+    """The `model` pinned by a custom agent file, or None when there is none."""
+    return next((m for m in map(lambda t: toml_field(t, "model"), agent_files(name, cwd)) if m), None)
+
+
+def strong_twin(name, cwd=None):
+    """(`<name>-strong`, its pinned model) when that twin exists as Codex would
+    register it — its file declares that name — and pins a model below EXPERT;
+    else None. Rewriting agent_type to a role Codex does not know fails the spawn."""
+    twin = f"{name}-strong"
+    for text in agent_files(twin, cwd):
+        model = toml_field(text, "model")
+        if toml_field(text, "name") == twin and model and not is_expert(model):
+            return twin, model
+        return None
     return None
 
 
@@ -661,24 +701,32 @@ def config_default_model():
     return match.group(1) if match else ""
 
 
-def agent_name(tool_input):
+def agent_name_key(tool_input):
+    """(the key the call named its agent with, the name), or (None, "")."""
     for key in AGENT_NAME_KEYS:
         value = tool_input.get(key)
         if isinstance(value, str) and value:
-            return value
-    return ""
+            return key, value
+    return None, ""
 
 
-def launch_model(tool_input):
-    """The model an Agent spawn will use: its own `model`, else the named custom
-    agent's pinned model, else the configured subagent default."""
-    if isinstance(tool_input.get("model"), str) and tool_input["model"]:
-        return tool_input["model"]
-    return agent_file_model(agent_name(tool_input)) or config_default_model()
+def agent_name(tool_input):
+    return agent_name_key(tool_input)[1]
+
+
+def launch_model(tool_input, cwd=None):
+    """The model a Codex spawn will run on, in Codex's own order: the named
+    role's pinned model (applied after the call's, so it wins), else the call's
+    `model`, else the configured subagent default."""
+    own = tool_input.get("model")
+    return (agent_file_model(agent_name(tool_input), cwd)
+            or (own if isinstance(own, str) and own else "")
+            or config_default_model())
 
 
 def is_agent_event(payload):
-    return (payload.get("tool_name") or "").lower() in AGENT_TOOLS
+    name = (payload.get("tool_name") or "").lower()
+    return name in AGENT_TOOLS or name.endswith("spawn_agent")
 
 
 def classify(text):
@@ -705,6 +753,11 @@ def texts(*values):
 
 
 def codex_pre_tool_use(payload):
+    """While EXPERT is out, move an EXPERT launch to STRONG in the one way Codex
+    honours: (a) a role that pins EXPERT becomes its `-strong` twin (agent_type
+    is rewritten; the call's `model` could not beat the role's pin); (b) a launch
+    no role pins gets `model` and `reasoning_effort`; (c) anything else is
+    explained, not rewritten — and says so."""
     tool_input = payload.get("tool_input")
     if not is_agent_event(payload) or not isinstance(tool_input, dict):
         return
@@ -712,7 +765,11 @@ def codex_pre_tool_use(payload):
         refresh_codex_quota()
     except (OSError, ValueError):
         pass
-    if not is_expert(launch_model(tool_input)):
+    cwd = payload.get("cwd")
+    key, name = agent_name_key(tool_input)
+    pinned = agent_file_model(name, cwd)
+    model = launch_model(tool_input, cwd)
+    if not is_expert(model):
         return
 
     rec = active()
@@ -720,21 +777,35 @@ def codex_pre_tool_use(payload):
         note_launch()
         return
 
-    name = agent_name(tool_input) or "the expert agent"
+    label = name or "the expert agent"
     why = f"{EXPERT} is unavailable ({rec.get('reason', 'unknown')}) until {hhmm(float(rec['until']))}"
-    context = (
-        f"codex-model-gate: {why}. {name} runs on {FALLBACK} instead, so its answer is "
-        f"{FALLBACK}'s, not {EXPERT}'s. Say so when you report it. "
-        "`runtime-gate.py clear` re-enables the expert model early."
-    )
+    rest = {k: v for k, v in tool_input.items() if k != "model_reasoning_effort"}
+    twin = strong_twin(name, cwd) if pinned else None
+    updated = to = via = not_why = None
+    if MODE != "rewrite":
+        not_why = f"AI_RUNTIME_GATE_MODE={MODE}"
+    elif pinned and twin:
+        updated, to, via = {**rest, key: twin[0]}, twin[1], f" as {twin[0]}"
+    elif pinned:
+        not_why = (f"{name} pins {pinned} in its agent file, which Codex applies over the call's model, "
+                   f"and there is no usable {name}-strong twin: one whose file declares that name and pins a model below {EXPERT}")
+    else:
+        updated, to, via = {**rest, "model": FALLBACK}, FALLBACK, ""
+        updated.pop("reasoning_effort", None)
+        if FALLBACK_EFFORT in EFFORTS:
+            updated["reasoning_effort"] = FALLBACK_EFFORT
+
     out = {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
-    if MODE == "rewrite":
-        journal_fallback(payload, name, launch_model(tool_input), FALLBACK, rec)
+    if updated is not None:
+        journal_fallback(payload, label, model, to, rec)
         out["hookSpecificOutput"]["permissionDecision"] = "allow"
-        out["hookSpecificOutput"]["updatedInput"] = {
-            **tool_input, "model": FALLBACK, "model_reasoning_effort": FALLBACK_EFFORT,
-        }
-    out["hookSpecificOutput"]["additionalContext"] = context
+        out["hookSpecificOutput"]["updatedInput"] = updated
+        context = (f"codex-model-gate: {why}. {label} runs on {to}{via} instead, so its answer is "
+                   f"{to}'s, not {EXPERT}'s. Say so when you report it. ")
+    else:
+        context = (f"codex-model-gate: {why}. {label} is not rerouted ({not_why}): it runs on {EXPERT} "
+                   "and may fail the same way. Say so when you report it. ")
+    out["hookSpecificOutput"]["additionalContext"] = context + "`runtime-gate.py clear` re-enables the expert model early."
     respond(out)
 
 
@@ -742,7 +813,7 @@ def codex_post_tool_use(payload):
     tool_input = payload.get("tool_input")
     if not is_agent_event(payload) or not isinstance(tool_input, dict):
         return
-    if not is_expert(launch_model(tool_input)):
+    if not is_expert(launch_model(tool_input, payload.get("cwd"))):
         return
     hit = classify(texts(payload.get("tool_response")))
     if hit:
@@ -761,7 +832,7 @@ def codex_subagent_stop(payload):
     involved = (
         EXPERT.lower() in text.lower()
         or is_expert(payload.get("model"))
-        or is_expert(agent_file_model(agent_type) or "")
+        or is_expert(agent_file_model(agent_type, payload.get("cwd")) or "")
         or time.time() - last_launch() <= LAUNCH_WINDOW
     )
     if involved:
@@ -813,17 +884,27 @@ def model_tier(model, tiers):
 
 
 def launch_tier(tool_input, payload, tiers):
-    """An explicit model on the call wins; then the agent's name in the tier
-    lists; then the model its definition pins."""
+    """Claude Code: an explicit model on the call wins; then the agent's name in
+    the tier lists; then the model its definition pins. Codex: the model the
+    launch resolves to (a role's pin beats the call's `model`), named by the
+    tier list when that tier pins the same model — FAST and BALANCED can share
+    one — so a project file that re-pins a listed role is rated by its pin."""
+    if RUNTIME == "codex":
+        name = agent_name(tool_input)
+        model = launch_model(tool_input, payload.get("cwd"))
+        for tier in TIERS:
+            listed = (tiers.get(tier) or {})
+            if name and name in (listed.get("agents") or []) and (not model or listed.get("model") == model):
+                return tier
+        return model_tier(model, tiers)
     own = tool_input.get("model")
     if own:
         return model_tier(own, tiers)
-    name = (tool_input.get("subagent_type") if RUNTIME == "claude" else agent_name(tool_input)) or ""
+    name = tool_input.get("subagent_type") or ""
     for tier in TIERS:
         if name in ((tiers.get(tier) or {}).get("agents") or []):
             return tier
-    pinned = agent_model(tool_input, payload) if RUNTIME == "claude" else launch_model(tool_input)
-    return model_tier(pinned, tiers)
+    return model_tier(agent_model(tool_input, payload), tiers)
 
 
 def project_task(cwd):
@@ -857,23 +938,31 @@ FALLBACK_REASONS = (("weekly", "weekly_limit"), ("fell back", "overloaded"), ("o
                     ("rate", "rate_limit"))
 
 
-def journal_fallback(payload, agent, from_model, to_model, rec):
-    """One model_fallback line in the task's journal (WP2 vocabulary, actor
-    hook). No task, no line; any failure is swallowed."""
+def fallback_reason(rec):
+    raw = str(rec.get("reason") or "")
+    return next((r for key, r in FALLBACK_REASONS if key in raw.lower()), raw or "rate_limit")
+
+
+def journal_event(payload, event, data):
+    """One `event` line in the journal of the task in flight at the payload's
+    cwd (WP2 vocabulary, actor hook). No task, no line; any failure is swallowed."""
     try:
         root, _task = project_task(payload.get("cwd"))
         script = state_script()
         if not root or not script:
             return
-        raw = str(rec.get("reason") or "")
-        reason = next((r for key, r in FALLBACK_REASONS if key in raw.lower()), raw or "rate_limit")
-        data = {"agent": agent, "from": from_model or EXPERT, "to": to_model, "reason": reason}
-        subprocess.run([sys.executable, script, "--root", root, "event", "model_fallback",
+        subprocess.run([sys.executable, script, "--root", root, "event", event,
                         "--data", json.dumps(data)],
                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                        timeout=3, check=False)
     except (OSError, subprocess.SubprocessError, ValueError):
         pass
+
+
+def journal_fallback(payload, agent, from_model, to_model, rec):
+    """One model_fallback line: `to` is the model the child actually gets."""
+    journal_event(payload, "model_fallback", {"agent": agent, "from": from_model or EXPERT,
+                                              "to": to_model, "reason": fallback_reason(rec)})
 
 
 def running(data, session, now):
@@ -903,7 +992,12 @@ def put_session(data, key, session, entries):
 def subagent_start(payload):
     tiers = profile().get("tiers") or {}
     name = payload.get("agent_type") or payload.get("subagent_type") or ""
-    tier = launch_tier({"subagent_type": name, "agent_type": name}, payload, tiers) if name else None
+    # Codex's payload carries the model the child resolved to. It decides the
+    # tier when it names STRONG or EXPERT; FAST and BALANCED can share a model,
+    # so below that the name still does.
+    tier = model_tier(payload.get("model"), tiers) if RUNTIME == "codex" else None
+    if tier not in ("STRONG", "EXPERT"):
+        tier = launch_tier({"subagent_type": name, "agent_type": name}, payload, tiers) if name else None
     now = time.time()
     session = str(payload.get("session_id") or "unknown")
     with locked():
@@ -916,6 +1010,31 @@ def subagent_start(payload):
             waiting.pop(next((i for i, p in enumerate(waiting) if p.get("tier") == tier), 0))
         put_session(data, "pending_launches", session, waiting)
         save(data)
+
+
+def codex_missed_reroute(payload):
+    """Backstop: a child that resolved to EXPERT while EXPERT is out was not
+    rerouted (an untrusted hook entry, a missing twin, a shape the gate does not
+    know). SubagentStart cannot stop it; it can only tell the child, and the
+    journal keeps the miss."""
+    model = payload.get("model")
+    rec = active() if is_expert(model) and MODE == "rewrite" else None   # context mode chose not to reroute
+    if rec is None:
+        return
+    name = payload.get("agent_type") or "this agent"
+    journal_event(payload, "missed_reroute", {"agent": name, "model": model, "reason": fallback_reason(rec)})
+    respond({"hookSpecificOutput": {"hookEventName": "SubagentStart", "additionalContext": (
+        f"runtime-gate: you run on {model}, which is unavailable ({rec.get('reason', 'unknown')}) until "
+        f"{hhmm(float(rec['until']))}; this launch was not rerouted to {FALLBACK}. If you hit a rate limit "
+        "or an unavailable model, stop and say so instead of retrying.")}})
+
+
+def codex_subagent_start(payload):
+    for step in (subagent_start, codex_missed_reroute):
+        try:
+            step(payload)
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
 
 
 def subagent_stop(payload):
@@ -964,6 +1083,8 @@ def budget_pre_tool_use(payload):
     agent_call = payload.get("tool_name") == "Agent" if RUNTIME == "claude" else is_agent_event(payload)
     if not agent_call or not isinstance(tool_input, dict) or tool_input.get("subagent_type") == "fork":
         return
+    if RUNTIME == "codex":                      # rate the launch Codex will make: the reroute's, if any
+        tool_input = (RESPONSE.get("hookSpecificOutput") or {}).get("updatedInput") or tool_input
     prof = profile()
     budgets = prof.get("budgets")
     if not isinstance(budgets, dict):
@@ -1037,7 +1158,7 @@ HANDLERS = {
                "StopFailure": claude_stop_failure,
                "SubagentStart": subagent_start, "SubagentStop": subagent_stop},
     "codex": {"PreToolUse": pre_tool_use, "PostToolUse": codex_post_tool_use,
-              "SubagentStart": subagent_start, "SubagentStop": codex_stop},
+              "SubagentStart": codex_subagent_start, "SubagentStop": codex_stop},
 }
 
 

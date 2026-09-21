@@ -59,7 +59,7 @@ for a in ai-context ai-risk ai-planner ai-release ai-implementer; do
 done
 
 echo "== strong reviewers and designers resolve to Sol"
-for a in ai-reviewer ai-security architect ai-risk-strong ai-planner-strong; do
+for a in ai-reviewer ai-security architect ai-risk-strong ai-planner-strong ai-expert-strong; do
     [ "$(field "$a" model)" = "gpt-5.6-sol" ] && pass "$a runs on Sol" || fail "$a should run on Sol, got $(field "$a" model)"
     [ "$(field "$a" model_reasoning_effort)" = "high" ] && pass "$a runs at high effort" || fail "$a should run at high effort"
 done
@@ -87,6 +87,13 @@ field ai-planner-strong developer_instructions | grep -q 'T3 or T4' \
     && pass "ai-planner-strong names the tiers it serves" || fail "ai-planner-strong is missing its escalation note"
 field ai-risk-strong developer_instructions | grep -q 'You classify risk' \
     && pass "ai-risk-strong reuses the shared ai-risk body" || fail "ai-risk-strong should reuse the shared prompt body"
+field ai-expert-strong developer_instructions | grep -q 'EXPERT model is unavailable' \
+    && pass "ai-expert-strong says it stands in for the EXPERT model" || fail "ai-expert-strong is missing its stand-in note"
+python3 -c 'import sys,tomllib;a,b=(tomllib.load(open(f,"rb"))["developer_instructions"] for f in sys.argv[1:]);sys.exit(not a.endswith("\n\n"+b))' "$OUT/ai-expert-strong.toml" "$OUT/ai-expert.toml" 2>/dev/null \
+    && pass "ai-expert-strong reuses the shared ai-expert body" || fail "ai-expert-strong should reuse the ai-expert body"
+[ "$(field ai-expert-strong sandbox_mode)" = read-only ] && pass "ai-expert-strong is read-only" || fail "ai-expert-strong should be read-only"
+grep -q '^model = "gpt-5.6-sol"' "$OUTP/ai-expert-strong.toml" \
+    && pass "ai-expert-strong runs on Sol on plus too" || fail "plus ai-expert-strong should run on Sol"
 
 echo "== the T2 review runs on BALANCED (R20)"
 for p in plus pro; do

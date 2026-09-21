@@ -1042,7 +1042,8 @@ Done (Codex).
   FAST tier       $CODEX_FAST at $CODEX_FAST_EFFORT (ai-indexer, Explore, log-reader, ai-tester)
   BALANCED tier   $CODEX_BALANCED at $CODEX_BALANCED_EFFORT (ai-discovery at low, ai-context, ai-risk, ai-planner, ai-release, ai-implementer,
                   ai-reviewer-balanced for the T2 review)
-  STRONG tier     $CODEX_STRONG at $CODEX_STRONG_EFFORT (ai-reviewer, ai-security, architect, ai-risk-strong, ai-planner-strong)
+  STRONG tier     $CODEX_STRONG at $CODEX_STRONG_EFFORT (ai-reviewer, ai-security, architect, ai-risk-strong, ai-planner-strong,
+                  ai-expert-strong: the gate's stand-in for ai-expert)
   EXPERT tier     $CODEX_EXPERT at $CODEX_EXPERT_EFFORT (ai-expert)
   runtime gate    sends EXPERT work to $CODEX_STRONG while $CODEX_EXPERT is rate-limited or
                   unavailable, explains launches past the plan's budgets, reads the quota
