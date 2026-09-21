@@ -1,0 +1,64 @@
+{
+  "_comment": "runtime-gate registrations, merged into settings.json on every Claude install. StopFailure is the Fable branch: install.sh keeps it only on a Fable install (profile.json fable: true). Every older fable-gate or runtime-gate entry is replaced, never kept beside these.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/runtime-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Checking model availability and budgets"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/runtime-gate.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/runtime-gate.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/runtime-gate.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "rate_limit|model_not_found",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/runtime-gate.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

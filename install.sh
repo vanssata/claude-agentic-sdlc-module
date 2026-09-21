@@ -20,7 +20,7 @@
 #
 # Claude Code (~/.claude): model, effort and context settings for the detected
 # plan (each agent pins its own tier); the ai-* pipeline agents plus architect,
-# Explore and log-reader; six hooks, plus fable-gate on a Fable install; the
+# Explore and log-reader; six hooks plus runtime-gate (Fable branch on a Fable install); the
 # skills; and one managed block in ~/.claude/CLAUDE.md.
 #
 # Codex (~/.codex): the same pipeline on the Terra -> Sol -> Astra ladder, sized
@@ -340,7 +340,7 @@ else
     ARCHITECT_EFFORT="xhigh"
     EXPERT_ROW="\`opus\` / \`xhigh\`, pinned so a Sonnet session cannot weaken it; \`architect\` alone pins \`fable[1m]\` / \`xhigh\`"
     PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice for a change that genuinely needs a huge context, never the default — above 200k every turn re-reads a context that costs more than the thinking. ${ONE_M_RULE} \`ai-expert\` pins \`opus\` at \`xhigh\` rather than inheriting the session: a session may run on Sonnet (the IDE agent's Model setting), and the last-resort tier must not drop below the \`opus\` reviewer it escalates from. Fable 5.1 [1m] is pinned on \`architect\` (\`model: fable[1m]\`, \`xhigh\`) and is the session only when the user starts one with \`claude-1m fable\` — never pick it for a reader, a reviewer or \`ai-expert\`. \`max\` stays off.
-- \`fable-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/fable-gate.py status\` shows the gate; \`clear\` re-enables Fable early."
+- \`runtime-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/runtime-gate.py status\` shows the gate (\`fable-gate.py status\` still works); \`clear\` re-enables Fable early."
   else
     ARCHITECT_MODEL_LINE="# model: intentionally omitted — inherits the session model (Opus 5, Fable disabled in this install)"
     ARCHITECT_EFFORT="high"
@@ -350,18 +350,21 @@ else
   EFFORT_RULE="Raise to \`high\` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; readers stay at \`low\`."
 fi
 
-# The Fable gate exists only where Fable does — on Max with --fable yes, where
-# architect is pinned to fable[1m]. Its hooks are merged into the snippet on
-# such an install, and stripped from settings.json on any other.
+# runtime-gate runs on every plan (budgets, the running-agent count, quota).
+# Its Fable branch — StopFailure, and the Fable reroute it feeds — exists only
+# where Fable does: on Max with --fable yes, where architect is pinned to
+# fable[1m]. Elsewhere the StopFailure entry is left out of the snippet.
 if [ "$TIER" = max ] && [ "$FABLE" = yes ]; then
   GATE=on
-  jq -s '.[0] as $base | reduce (.[1].hooks | to_entries[]) as $e
-           ($base; .hooks[$e.key] = ((.hooks[$e.key] // []) + $e.value))' \
-     "$TMP/settings.snippet.json" "$SRC/settings.fable.json" > "$TMP/snippet.gate.json"
-  mv "$TMP/snippet.gate.json" "$TMP/settings.snippet.json"
+  jq '.' "$SRC/settings.gate.json" > "$TMP/gate.json"
 else
   GATE=off
+  jq 'del(.hooks.StopFailure)' "$SRC/settings.gate.json" > "$TMP/gate.json"
 fi
+jq -s '.[0] as $base | reduce (.[1].hooks | to_entries[]) as $e
+         ($base; .hooks[$e.key] = ((.hooks[$e.key] // []) + $e.value))' \
+   "$TMP/settings.snippet.json" "$TMP/gate.json" > "$TMP/snippet.gate.json"
+mv "$TMP/snippet.gate.json" "$TMP/settings.snippet.json"
 
 RENDER_PLAN="$PLAN_LABEL" \
 RENDER_PLAN_LABEL="$PLAN_LABEL" \
@@ -410,14 +413,15 @@ pretty() {  # model id -> human name
 
 # Only the statusline receives the account's rate_limits, so the gate's weekly
 # check rides on it: on a Fable install the statusline command is wrapped as
-#   "$HOME/.claude/hooks/fable-gate.py" statusline --then '<your command>'
+#   "$HOME/.claude/hooks/runtime-gate.py" statusline --then '<your command>'
 # (or set to the bare check when there was none), and unwrapped to exactly the
 # original command on any other install.
 statusline_gate() {  # statusline_gate <settings.json> <on|off> <apply|dry>
   python3 - "$@" <<'PY'
 import json, os, shlex, sys
 path, gate, mode = sys.argv[1:4]
-PREFIX = '"$HOME/.claude/hooks/fable-gate.py" statusline'
+PREFIX = '"$HOME/.claude/hooks/runtime-gate.py" statusline'
+OLD_PREFIX = '"$HOME/.claude/hooks/fable-gate.py" statusline'
 try:
     settings = json.load(open(path)) if os.path.exists(path) else {}
 except ValueError:
@@ -425,16 +429,22 @@ except ValueError:
 line = settings.get("statusLine")
 cmd = line.get("command", "") if isinstance(line, dict) else ""
 ours = isinstance(cmd, str) and cmd.startswith(PREFIX)
+if isinstance(cmd, str) and cmd.startswith(OLD_PREFIX):
+    # A wrapper an earlier install wrote: re-point it, keeping the user's command.
+    line["command"] = PREFIX + cmd[len(OLD_PREFIX):]
+    ours, gate = True, "moved"
 action = None
-if gate == "on":
+if gate == "moved":
+    action = "moved the fable-gate statusline wrapper to runtime-gate (your command is unchanged)"
+elif gate == "on":
     if ours:
-        print("statusline: already checks the Fable weekly limit"); sys.exit(0)
+        print("statusline: already records the quota"); sys.exit(0)
     if line is None:
         settings["statusLine"] = {"type": "command", "command": PREFIX}
-        action = "added a silent statusline that checks the Fable weekly limit"
+        action = "added a silent statusline that records the quota (and the Fable weekly limit)"
     elif isinstance(line, dict) and line.get("type") == "command" and cmd.strip():
         line["command"] = f"{PREFIX} --then {shlex.quote(cmd)}"
-        action = "wrapped your statusline command with the Fable weekly-limit check (its output is unchanged)"
+        action = "wrapped your statusline command with the quota check (its output is unchanged)"
     else:
         print("statusline: not a command statusline; the weekly-limit check is not wired"); sys.exit(0)
 else:
@@ -444,10 +454,10 @@ else:
     if rest.startswith("--then"):
         parts = shlex.split(rest)
         line["command"] = parts[1] if len(parts) > 1 else ""
-        action = "restored your original statusline command (no Fable on this install)"
+        action = "restored your original statusline command (runtime-gate off)"
     else:
         del settings["statusLine"]
-        action = "removed the Fable weekly-limit statusline (no Fable on this install)"
+        action = "removed the quota statusline (runtime-gate off)"
 if mode == "dry":
     print("statusline: would have " + action); sys.exit(0)
 tmp = path + ".tmp"
@@ -459,9 +469,9 @@ PY
 }
 
 claude_dry_run() {
-  echo "== claude: plan=$PLAN ($PLAN_LABEL, $TIER profile) fable=$FABLE fable-gate=$GATE (dry run, nothing written)"
+  echo "== claude: plan=$PLAN ($PLAN_LABEL, $TIER profile) fable=$FABLE fable-gate=$GATE runtime-gate=on (dry run, nothing written)"
   echo "== claude: target directory $CLAUDE_DIR"
-  statusline_gate "$CLAUDE_DIR/settings.json" "$GATE" dry | sed 's/^/== /'
+  statusline_gate "$CLAUDE_DIR/settings.json" on dry | sed 's/^/== /'
   echo "== settings snippet (merged into $CLAUDE_DIR/settings.json):"
   jq . "$TMP/settings.snippet.json"
   echo "== agents/ai-expert.md (rendered head):"
@@ -637,6 +647,24 @@ install_skills "$CLAUDE_DIR"
 # ---------------------------------------------------------------- 4. settings.json
 SETTINGS="$CLAUDE_DIR/settings.json"
 if [ -f "$SETTINGS" ]; then cp "$SETTINGS" "$SETTINGS.bak"; else echo '{}' > "$SETTINGS"; fi
+# Every gate entry already in settings.json — fable-gate from before WP5, or
+# runtime-gate from an earlier run — is removed first and the snippet's own are
+# merged below, so an upgrade never leaves two gates on one event (the shim
+# would run the gate twice and count every agent twice). An event list that
+# held nothing else is dropped with it; the user's own hooks stay.
+before_gate=$(jq -c '[.hooks // {} | .[]?[]? | select((.hooks // []) | map(.command // "") | any(test("fable-gate")))] | length' "$SETTINGS" 2>/dev/null || echo 0)
+had_stopfailure=$(jq -c '[.hooks.StopFailure // [] | .[] | select((.hooks // []) | map(.command // "") | any(test("fable-gate|runtime-gate")))] | length' "$SETTINGS" 2>/dev/null || echo 0)
+jq 'if (.hooks | type) == "object" then
+      .hooks |= with_entries(
+        . as $e
+        | ($e.value | map(select(((.hooks // []) | map(.command // "") | any(test("fable-gate|runtime-gate"))) | not))) as $kept
+        | if ($kept | length) == ($e.value | length) then $e
+          elif ($kept | length) == 0 then empty
+          else $e | .value = $kept end)
+    else . end' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+[ "$before_gate" != 0 ] && echo "replaced: fable-gate hooks with runtime-gate" || true
+[ "$GATE" = off ] && [ "$had_stopfailure" != 0 ] && echo "removed: runtime-gate StopFailure (no Fable on this install)" || true
+
 # jq's * replaces arrays wholesale (wanted for availableModels/fallbackModel), so
 # merge everything but .hooks first, then append our hook entries only when no
 # existing entry under the same event already runs the same command.
@@ -671,21 +699,7 @@ jq -s '
 ' "$SETTINGS" "$TMP/settings.snippet.json" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 echo "merged: settings.json (backup in settings.json.bak)"
 
-# No Fable on this install: drop the gate's entries a previous Fable install left,
-# and an event list only when the gate was all it held. Other hooks stay.
-if [ "$GATE" = off ]; then
-  before=$(jq -c '.hooks // {}' "$SETTINGS")
-  jq 'if (.hooks | type) == "object" then
-        .hooks |= with_entries(
-          . as $e
-          | ($e.value | map(select(((.hooks // []) | map(.command // "") | any(test("fable-gate"))) | not))) as $kept
-          | if ($kept | length) == ($e.value | length) then $e
-            elif ($kept | length) == 0 then empty
-            else $e | .value = $kept end)
-      else . end' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-  [ "$before" != "$(jq -c '.hooks // {}' "$SETTINGS")" ] && echo "removed: fable-gate hooks (no Fable on this install)" || true
-fi
-statusline_gate "$SETTINGS" "$GATE" apply
+statusline_gate "$SETTINGS" on apply
 
 # ---------------------------------------------------------------- 5. CLAUDE.md block
 GLOBAL_MD="$CLAUDE_DIR/CLAUDE.md"
@@ -759,13 +773,14 @@ $( [ "$TIER" = max ] && echo "  large context   claude-1m$( [ "$FABLE" = yes ] &
   hooks           cap-large-read, project-scaffold (Setup:init), ai-git-guard (global),
                   ai-path-guard + ai-scope-guard (active where .ai/ exists),
                   context-guard (UserPromptSubmit, PreCompact, SessionStart:compact)
-  fable gate      $GATE $( [ "$GATE" = on ] && echo "(Fable agents go to Opus while Fable is rate-limited, unreachable,
+  runtime gate    on — budgets from claude-agentic/profile.json, running agents, quota through the statusline
+  fable branch    $GATE $( [ "$GATE" = on ] && echo "(Fable agents go to Opus while Fable is rate-limited, unreachable,
                   or the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% used — checked through the statusline)" || echo "(no Fable on this install)" )
   skills          $(ls "$SRC/skills" | paste -sd' ')
 
 Restart Claude Code, then:
   /config        model and effort match the profile
-  /hooks         lists the six hooks$( [ "$GATE" = on ] && echo ", plus fable-gate on PreToolUse, PostToolUse and StopFailure" )
+  /hooks         lists the six hooks, plus runtime-gate on PreToolUse, PostToolUse, SubagentStart, SubagentStop$( [ "$GATE" = on ] && echo " and StopFailure" )
   /skills        lists ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*, usage-report
   /ai-init       in a project, to survey it and build .ai/
   /project-update in a project that already has .ai/ or docs/sdlc/, to pull in these rules
@@ -963,6 +978,20 @@ codex_apply() {
   local HOOKS="$CODEX_DIR/hooks.json"
   [ -f "$HOOKS" ] || echo '{}' > "$HOOKS"
   cp "$HOOKS" "$HOOKS.bak"
+  # codex-model-gate entries from before WP5 and runtime-gate ones from an
+  # earlier run are removed first, so the merge below adds exactly one gate per
+  # event. The renamed command is a new hook to Codex: review it once in /hooks.
+  if jq -e '[.hooks // {} | .[]?[]? | .hooks[]?.command // "" | select(test("codex-model-gate"))] | length > 0' "$HOOKS" >/dev/null 2>&1; then
+    echo "replaced: codex-model-gate hooks with runtime-gate (review it once in /hooks)"
+  fi
+  jq 'if (.hooks | type) == "object" then
+        .hooks |= with_entries(
+          . as $e
+          | ($e.value | map(select(((.hooks // []) | map(.command // "") | any(test("codex-model-gate|runtime-gate"))) | not))) as $kept
+          | if ($kept | length) == ($e.value | length) then $e
+            elif ($kept | length) == 0 then empty
+            else $e | .value = $kept end)
+      else . end' "$HOOKS" > "$HOOKS.tmp" && mv "$HOOKS.tmp" "$HOOKS"
   jq -s '
     .[0] as $cur
     | (.[1].hooks // {}) as $new
@@ -1001,15 +1030,17 @@ Done (Codex).
   plan            $CODEX_PLAN  ($CODEX_PLAN_LABEL)
   session model   $CODEX_SESSION_MODEL at effort $CODEX_SESSION_EFFORT
   subagent default $CODEX_SUBAGENT_MODEL at $CODEX_SUBAGENT_EFFORT, at most $CODEX_MAX_THREADS threads at once
-  FAST tier       $CODEX_FAST at $CODEX_FAST_EFFORT (ai-indexer, Explore, ai-discovery, log-reader, ai-tester)
-  BALANCED tier   $CODEX_BALANCED at $CODEX_BALANCED_EFFORT (ai-context, ai-risk, ai-planner, ai-release, ai-implementer)
+  FAST tier       $CODEX_FAST at $CODEX_FAST_EFFORT (ai-indexer, Explore, log-reader, ai-tester)
+  BALANCED tier   $CODEX_BALANCED at $CODEX_BALANCED_EFFORT (ai-discovery at low, ai-context, ai-risk, ai-planner, ai-release, ai-implementer,
+                  ai-reviewer-balanced for the T2 review)
   STRONG tier     $CODEX_STRONG at $CODEX_STRONG_EFFORT (ai-reviewer, ai-security, architect, ai-risk-strong, ai-planner-strong)
   EXPERT tier     $CODEX_EXPERT at $CODEX_EXPERT_EFFORT (ai-expert)
-  expert gate     codex-model-gate sends EXPERT work to $CODEX_STRONG while $CODEX_EXPERT is
-                  rate-limited or unavailable; 'codex-model-gate.py status' shows it
+  runtime gate    sends EXPERT work to $CODEX_STRONG while $CODEX_EXPERT is rate-limited or
+                  unavailable, explains launches past the plan's budgets, reads the quota
+                  from the session rollouts; 'runtime-gate.py status' / 'quota' show it
   agents          $(ls "$TMP/codex-agents" | sed 's/\.toml$//' | paste -sd' ')
   hooks           ai-git-guard (global), ai-path-guard + ai-scope-guard (active where .ai/ exists),
-                  codex-model-gate. No cap-large-read: Codex has no hookable Read tool.
+                  runtime-gate. No cap-large-read: Codex has no hookable Read tool.
   skills          $(ls "$SRC/skills" | paste -sd' ')
 
 Restart Codex, then:

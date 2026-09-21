@@ -33,6 +33,13 @@ It also touches `tests/test-dual-runtime-install.sh`: its `printf "$out" | grep 
 SIGPIPE under `pipefail` once the dry-run output passes the 64 KB pipe buffer (it grew with
 `profile.json` in step 2), so they now read all their input (`grep -c >/dev/null`); no assertion changes.
 
+**Amendment, 2026-09-21 (step 7 scope): R5's "test-fable-gate.sh unchanged" covers its gate half only.**
+Lines 1–236 of that suite (the gate's behaviour through the `fable-gate.py` shim) stay byte-identical.
+Its installer half asserted the pre-WP5 registration — `fable-gate` commands, no gate and an untouched
+statusline off Max + Fable — which OQ4 (runtime-gate and the statusline wrapper on every Claude plan)
+and step 7's "replace, do not append" contradict. Step 7 therefore also rewrites that installer section
+to the new registration and adds the pre-WP5-upgrade cases (exactly one gate command per event).
+
 Twelve steps, twelve commits. Each step names the only files it may touch; anything else is
 `SCOPE_CHANGE_REQUIRED` and an amendment to this plan. Step tests run the suites the step names;
 `bash tests/run-all.sh` runs **once**, at step 12. There is no e2e suite (`e2e_command: none`) — the

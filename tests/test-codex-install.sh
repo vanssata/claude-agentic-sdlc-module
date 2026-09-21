@@ -92,8 +92,12 @@ n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/hooks.json")
 [ "$n" = 4 ] && pass "four PreToolUse guards registered" || fail "expected 4 PreToolUse commands, got $n"
 jq -e '.hooks.PreToolUse[] | select(.matcher | test("apply_patch")) | .hooks[0].command | test("ai-scope-guard")' "$DIR/hooks.json" >/dev/null \
     && pass "the scope guard watches apply_patch" || fail "the scope guard should match apply_patch"
-jq -e '.hooks.SubagentStop[0].hooks[0].command | test("codex-model-gate")' "$DIR/hooks.json" >/dev/null \
-    && pass "the model gate listens on SubagentStop" || fail "SubagentStop hook missing"
+jq -e '.hooks.SubagentStop[0].hooks[0].command | test("runtime-gate")' "$DIR/hooks.json" >/dev/null \
+    && pass "the runtime gate listens on SubagentStop" || fail "SubagentStop hook missing"
+jq -e '.hooks.SubagentStart[0].hooks[0].command | test("runtime-gate")' "$DIR/hooks.json" >/dev/null \
+    && pass "and on SubagentStart, to count running agents" || fail "SubagentStart hook missing"
+[ "$(jq '[.hooks[]?[]?.hooks[]? | select(.command | test("codex-model-gate"))] | length' "$DIR/hooks.json")" = 0 ] \
+    && pass "no codex-model-gate command is registered" || fail "codex-model-gate still registered"
 
 # Codex has both compaction events and SessionStart, so the context guard is
 # registered on the same three events it serves on the Claude side.
@@ -112,6 +116,24 @@ n=$(jq '[.hooks | to_entries[] | .value[] | .hooks[] | .command | select(test("c
 [ "$n" = 3 ] && pass "a second install does not duplicate any of the three" || fail "expected 3 registrations after a re-install, got $n"
 n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/hooks.json")
 [ "$n" = 4 ] && pass "and the PreToolUse count is still four" || fail "PreToolUse should stay 4, got $n"
+
+echo "== an install from before WP5 is upgraded, not doubled"
+UP="$TMP/codex-upgrade"; mkdir -p "$UP"
+OLD='"$HOME/.codex/hooks/codex-model-gate.py"'
+jq -n --arg c "$OLD" '{hooks:{PreToolUse:[{matcher:"Agent",hooks:[{type:"command",command:$c,timeout:5}]}],
+    PostToolUse:[{matcher:"Agent",hooks:[{type:"command",command:$c,timeout:5}]}],
+    SubagentStop:[{hooks:[{type:"command",command:$c,timeout:5}]},{hooks:[{type:"command",command:"my-stop.sh"}]}]}}' > "$UP/hooks.json"
+out=$(CODEX_DIR="$UP" bash "$INSTALL" --target codex --codex-plan pro 2>&1)
+[ "$(jq '[.hooks[]?[]?.hooks[]? | select(.command | test("codex-model-gate"))] | length' "$UP/hooks.json")" = 0 ] \
+    && pass "every codex-model-gate entry is replaced" || fail "codex-model-gate entries left"
+for ev in PreToolUse PostToolUse SubagentStart SubagentStop; do
+    n=$(jq --arg e "$ev" '[.hooks[$e][]?.hooks[]? | select(.command | test("runtime-gate"))] | length' "$UP/hooks.json")
+    [ "$n" = 1 ] || fail "$ev has $n gate commands after the upgrade"
+done
+pass "exactly one gate command per event after the upgrade"
+jq -e '[.hooks.SubagentStop[].hooks[].command] | index("my-stop.sh")' "$UP/hooks.json" >/dev/null \
+    && pass "the user's own SubagentStop hook survives" || fail "user hook lost"
+printf '%s' "$out" | grep -q 'replaced: codex-model-gate hooks with runtime-gate' && pass "the replacement is reported, with the /hooks reminder" || fail "replacement not reported" "$out"
 
 echo "== the managed AGENTS.md block"
 [ "$(grep -c 'claude-agentic:start' "$DIR/AGENTS.md")" = 1 ] && pass "exactly one managed block" || fail "expected one managed block"

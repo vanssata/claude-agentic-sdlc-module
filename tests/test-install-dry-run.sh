@@ -188,7 +188,7 @@ grep -q '^model: opus$' "$DIR/agents/architect.md" && fail "max: architect must 
 
 echo "== settings.json"
 n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/settings.json")
-[ "$n" = 5 ] && pass "five PreToolUse hooks registered (four guards + fable-gate on a Fable install)" || fail "expected 5 PreToolUse commands, got $n"
+[ "$n" = 5 ] && pass "five PreToolUse hooks registered (four guards + runtime-gate)" || fail "expected 5 PreToolUse commands, got $n"
 jq -e '.hooks.Setup[0].hooks[0].command | test("project-scaffold")' "$DIR/settings.json" >/dev/null \
     && pass "the Setup:init scaffold hook is registered" || fail "Setup hook missing"
 [ "$(jq -r .model "$DIR/settings.json")" = "opus" ] && pass "the max session model is Opus 5 with the 200k window, not opus[1m] and not Fable" || fail "model not set"
