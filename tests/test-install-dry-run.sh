@@ -101,6 +101,38 @@ printf '{}' > "$HOME_T/.claude.json"
 out=$(HOME="$HOME_T" CLAUDE_DIR="$PREV" bash "$INSTALL" --dry-run 2>&1 </dev/null)
 printf '%s' "$out" | grep -q 'plan=max20' && pass "an undetectable account falls back to the plan the last install recorded" || fail "previous profile.json plan not used" "$out"
 
+echo "== R16/R18: every installed agent's model and effort, per plan"
+# Captured from the installer before the agent sources became templates (WP5
+# step 3). The twelve tier agents are the same on every plan; only the EXPERT
+# pair differs. A change here is a model or effort change, which R18 forbids.
+COMMON="ai-context sonnet low;ai-discovery sonnet low;ai-implementer sonnet low;ai-indexer haiku low;ai-planner sonnet medium;ai-release sonnet low;ai-reviewer opus high;ai-risk sonnet medium;ai-security opus high;ai-tester haiku low;Explore haiku low;log-reader haiku low"
+for combo in "pro no|ai-expert opus high;architect opus high" \
+             "team-pro no|ai-expert opus high;architect opus high" \
+             "max yes|ai-expert opus xhigh;architect fable[1m] xhigh" \
+             "max no|ai-expert opus xhigh;architect - high" \
+             "team-max yes|ai-expert opus xhigh;architect fable[1m] xhigh" \
+             "team-max no|ai-expert opus xhigh;architect - high" \
+             "max20 yes|ai-expert opus xhigh;architect fable[1m] xhigh"; do
+    args="${combo%%|*}"; set -- $args
+    D="$TMP/fm-$1-$2"; mkdir -p "$D"
+    CLAUDE_DIR="$D" bash "$INSTALL" --target claude --plan "$1" --fable "$2" >/dev/null 2>&1 </dev/null
+    got=$(for f in "$D"/agents/*.md; do
+              awk -v n="$(basename "$f" .md)" 'NR>1 && /^---$/{exit} /^model:/{m=$2} /^effort:/{e=$2} END{print n, (m==""?"-":m), e}' "$f"
+          done | sort | paste -sd';')
+    want=$(printf '%s' "$COMMON;${combo#*|}" | tr ';' '\n' | sort | paste -sd';')
+    [ "$got" = "$want" ] && pass "--plan $1 --fable $2: all 14 agents keep their model and effort" \
+        || fail "--plan $1 --fable $2: agent frontmatter changed" "$(diff <(tr ';' '\n' <<<"$want") <(tr ';' '\n' <<<"$got") | head -6)"
+    bad=""
+    for t in "$PLUGIN_ROOT"/agents/*.md.tmpl; do
+        tier=$(sed -n 's/^model: {{\([A-Z]*\)_MODEL}}$/\1/p' "$t"); [ -n "$tier" ] || continue
+        n=$(basename "$t" .md.tmpl)
+        want_m=$(jq -r --arg t "$tier" '.tiers[$t].model' "$D/claude-agentic/profile.json")
+        grep -qx "model: $want_m" "$D/agents/$n.md" || bad="$bad $n"
+    done
+    [ -z "$bad" ] && pass "--plan $1: each installed model is the profile's tiers[<tier>].model" || fail "--plan $1: model differs from its tier:$bad"
+    grep -rl '{{' "$D/agents" >/dev/null && fail "--plan $1: an installed agent has an unrendered placeholder" || pass "--plan $1: no placeholder left in any agent"
+done
+
 echo "== dry run writes nothing at all"
 PROBE="$TMP/probe"; mkdir -p "$PROBE"
 CLAUDE_DIR="$PROBE" bash "$INSTALL" --plan max --dry-run >/dev/null 2>&1

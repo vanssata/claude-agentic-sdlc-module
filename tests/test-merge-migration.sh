@@ -74,7 +74,8 @@ after=$(find "$REPO" -type f | sort | xargs md5sum 2>/dev/null | md5sum)
 [ "$before" = "$after" ] && pass "the combined scaffold is idempotent" || fail "a second run changed files"
 
 echo "== every agent this plugin ships declares its tier"
-for f in "$PLUGIN_ROOT"/agents/*.md; do
+# The sources are templates now; what must declare a tier is what gets installed.
+for f in "$DIR4"/agents/*.md; do
     name=$(basename "$f")
     grep -qE '^effort:' "$f" || fail "$name declares no effort:"
     grep -qE '^model:' "$f" || fail "$name declares no model: (it would resolve to the Sonnet default)"

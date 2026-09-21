@@ -14,17 +14,17 @@ Facts are collected cheaply; thinking is paid for. Session model {{SESSION_MODEL
 <!-- stub: runtime=claude -->
 | Tier | Model / effort | Used for |
 |---|---|---|
-| FAST | `haiku` / `low` | reading and running: file search, listings, counting, logs and test output, running a command and reporting it (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
-| BALANCED | `sonnet` / `low`–`medium` | discovery with judgement, context compression, mechanical edits, release assembly, the T2 review (`ai-discovery`, `ai-context`, `ai-implementer`, `ai-release`, `ai-reviewer` at T2) |
-| STRONG | `opus` / `high` | planning and plan review at T3+, adversarial review, security review (`ai-planner`, `ai-reviewer`, `ai-security`) |
+| FAST | `{{FAST_MODEL}}` / `{{FAST_EFFORT}}` | reading and running: file search, listings, counting, logs and test output, running a command and reporting it (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
+| BALANCED | `{{BALANCED_MODEL}}` / `low`–`{{BALANCED_EFFORT}}` | discovery with judgement, context compression, mechanical edits, release assembly, the T2 review (`ai-discovery`, `ai-context`, `ai-implementer`, `ai-release`, `ai-reviewer` at T2) |
+| STRONG | `{{STRONG_MODEL}}` / `{{STRONG_EFFORT}}` | planning and plan review at T3+, adversarial review, security review (`ai-planner`, `ai-reviewer`, `ai-security`) |
 | EXPERT | {{EXPERT_ROW}} | design (`architect`) and `ai-expert`, only when STRONG said it cannot settle the question |
 
 <!-- stub: runtime=claude -->
 {{PLAN_SPECIFIC_ROUTING}}
 - Every agent definition and Workflow `agent()` call declares `model:` and `effort:`. Readers and runners never go above `low`. Forks inherit the session and take no `model`.
-- Five or more parallel agents never run on `opus`. Escalate one task at a time on a stated trigger, never the whole fleet; never retry a failed thinking task on a cheaper model.
+- Five or more parallel agents never run on `{{STRONG_MODEL}}`. Escalate one task at a time on a stated trigger, never the whole fleet; never retry a failed thinking task on a cheaper model.
 - {{EFFORT_RULE}}
-- Implement in the main session. Delegate reading: logs and test output to `log-reader`, wide searches to `Explore` — both on `haiku`. Nothing below T3 runs on `opus`. The conclusion a human reads is written here, never delegated.
+- Implement in the main session. Delegate reading: logs and test output to `log-reader`, wide searches to `Explore` — both on `{{FAST_MODEL}}`. Nothing below T3 runs on `{{STRONG_MODEL}}`. The conclusion a human reads is written here, never delegated.
 
 <!-- stub: runtime=claude -->
 # Context hygiene

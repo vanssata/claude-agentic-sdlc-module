@@ -87,4 +87,24 @@ for name in pro max max20; do
         && pass "$name: refactoring prefers codex" || fail "$name: runtime/by_workflow"
 done
 
+echo "== R16: each agent template's tier is its tier everywhere"
+for t in "$PLUGIN_ROOT"/agents/*.md.tmpl; do
+    n=$(basename "$t" .md.tmpl)
+    tier=$(sed -n 's/^model: {{\([A-Z]*\)_MODEL}}$/\1/p' "$t")
+    # ai-expert and architect carry a whole model line rendered per plan
+    # (EXPERT_MODEL_LINE, ARCHITECT_MODEL_LINE), not a tier placeholder.
+    [ -n "$tier" ] || continue
+    grep -qE '^model: [a-z]' "$t" && fail "$n names a model in its source"
+    for p in codex-plus codex-pro; do
+        role=$(jq -r --arg n "$n" '.roles[$n].tier // "none"' "$PLUGIN_ROOT/profiles/$p.json")
+        [ "$role" = "$tier" ] && pass "$n: $tier in the template and in $p" || fail "$n: template $tier, $p role $role"
+    done
+    for p in pro max; do
+        jq -e --arg n "$n" --arg t "$tier" '.tiers[$t].agents | index($n)' "$TMP/$p.json" >/dev/null \
+            && pass "$n listed under $tier in $p" || fail "$n not listed under $tier in $p's claude_agentic.tiers"
+    done
+    eff=$(sed -n 's/^effort: \(.*\)$/\1/p' "$t")
+    case "$eff" in "{{${tier}_EFFORT}}"|low|medium|high) ;; *) fail "$n: effort '$eff' is neither its tier's placeholder nor a literal";; esac
+done
+
 summary "test-profiles"

@@ -3,8 +3,8 @@ name: ai-reviewer
 description: Adversarial review of a change in a project with .ai/ — assumes the implementation is wrong and looks for unintended behaviour change, hidden coupling, race conditions, retry and idempotency problems, contract breaks, scope creep and weakened checks. Read-only; returns findings by severity, never a patch.
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, NotebookEdit
-model: opus
-effort: high
+model: {{STRONG_MODEL}}
+effort: {{STRONG_EFFORT}}
 color: red
 ---
 You review as an adversary. Assume the implementation is wrong and find out why.

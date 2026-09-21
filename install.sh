@@ -278,6 +278,7 @@ else
   cp "$TMP/profile.settings.json" "$TMP/profile.json"
 fi
 agentic_profile claude "$PROFILE_NAME" "$PLAN" "$PLAN_LABEL" "$FABLE" > "$TMP/claude-profile.json"
+tier_field() { jq -r --arg t "$1" --arg f "$2" '.tiers[$t][$f]' "$TMP/claude-profile.json"; }
 jq -s '.[0] * .[1]' "$SRC/settings.common.json" "$TMP/profile.json" > "$TMP/settings.snippet.json"
 
 SESSION_MODEL=$(jq -r .model "$TMP/settings.snippet.json")
@@ -378,12 +379,22 @@ RENDER_EXPERT_MODEL_LINE="$EXPERT_MODEL_LINE" \
 RENDER_EXPERT_ROW="$EXPERT_ROW" \
 RENDER_ARCHITECT_MODEL_LINE="$ARCHITECT_MODEL_LINE" \
 RENDER_ARCHITECT_EFFORT="$ARCHITECT_EFFORT" \
+RENDER_FAST_MODEL="$(tier_field FAST model)" \
+RENDER_FAST_EFFORT="$(tier_field FAST effort)" \
+RENDER_BALANCED_MODEL="$(tier_field BALANCED model)" \
+RENDER_BALANCED_EFFORT="$(tier_field BALANCED effort)" \
+RENDER_STRONG_MODEL="$(tier_field STRONG model)" \
+RENDER_STRONG_EFFORT="$(tier_field STRONG effort)" \
   render_claude_files
 }
 
 render_claude_files() {
-  render "$SRC/agents/ai-expert.md.tmpl" "$TMP/ai-expert.md"
-  render "$SRC/agents/architect.md.tmpl" "$TMP/architect.md"
+  # Every agent source is a template: the tier placeholders come from the
+  # resolved profile's tiers, the EXPERT lines from the plan logic above.
+  mkdir -p "$TMP/agents"
+  for f in "$SRC"/agents/*.md.tmpl; do
+    render "$f" "$TMP/agents/$(basename "$f" .tmpl)"
+  done
   render_stub global claude "$TMP/CLAUDE.block.md"
   render_stub global claude "$TMP/routing.md" routing
 }
@@ -454,9 +465,9 @@ claude_dry_run() {
   echo "== settings snippet (merged into $CLAUDE_DIR/settings.json):"
   jq . "$TMP/settings.snippet.json"
   echo "== agents/ai-expert.md (rendered head):"
-  sed -n '1,10p' "$TMP/ai-expert.md"
+  sed -n '1,10p' "$TMP/agents/ai-expert.md"
   echo "== agents/architect.md (rendered head):"
-  sed -n '1,8p' "$TMP/architect.md"
+  sed -n '1,8p' "$TMP/agents/architect.md"
   echo "== CLAUDE.md managed block:"
   cat "$TMP/CLAUDE.block.md"
   echo "== routing.md (on demand): $CLAUDE_DIR/claude-agentic/routing.md"
@@ -563,12 +574,9 @@ claude_apply() {
 mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/hooks/lib" "$CLAUDE_DIR/skills"
 
 # ---------------------------------------------------------------- 1. agents
-for f in "$SRC"/agents/*.md; do
-  [ -e "$f" ] || continue
+for f in "$TMP"/agents/*.md; do
   install_file "$f" "$CLAUDE_DIR/agents/$(basename "$f")"
 done
-install_file "$TMP/ai-expert.md" "$CLAUDE_DIR/agents/ai-expert.md"
-install_file "$TMP/architect.md" "$CLAUDE_DIR/agents/architect.md"
 
 # `reviewer` is superseded by `ai-reviewer`, which is adversarial, tier-aware and
 # reads the project's policies. Retire it only when it is byte-identical to the

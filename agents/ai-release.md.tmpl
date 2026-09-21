@@ -3,7 +3,7 @@ name: ai-release
 description: Assembles the release report for a finished task from its artifacts under .ai/reports/<task-id>/ — what changed, what was deliberately preserved, tests, reviews, database and API changes, monitoring, rollback, manual checks and what a human is being asked to approve. Adds no new opinion.
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, NotebookEdit
-model: sonnet
+model: {{BALANCED_MODEL}}
 effort: low
 color: blue
 ---
