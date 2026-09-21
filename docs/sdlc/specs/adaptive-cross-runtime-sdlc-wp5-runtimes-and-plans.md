@@ -34,17 +34,20 @@ intent's decisions 1–3.
 | R5 | `hooks/runtime-gate.py` replaces `fable-gate.py` and `codex-model-gate.py`, which become exec shims. `tests/test-fable-gate.sh` and `tests/test-codex-model-gate.sh` pass **unchanged** against the shims; old env names and `status\|clear\|set\|statusline` keep working; an old state file is imported once. | RP2, parity | the two suites unchanged + new `tests/test-runtime-gate.sh` |
 | R6 | `tests/test-guard-characterization.sh`'s golden file is byte-identical; WP5 modifies none of `hooks/ai-*.sh`, `hooks/lib/`, `hooks/*-defaults.json`. | constraint (guard rules frozen) | suite green; `git diff --stat` of the package |
 | R7 | `runtime-gate.py quota --json` returns `{runtime, weekly_pct, five_hour_pct, resets_at, seen_at, source, stale}` — on Claude from the statusline wrapper (installed on every Claude plan), on Codex from the newest rollout's `token_count.rate_limits`. `stale` when older than 24 h or past `resets_at`. | RP2 | `test-runtime-gate.sh` with a statusline payload and a rollout fixture |
-| R8 | With `budgets.expert.without_asking=false`, or above `max_per_task`, a PreToolUse:Agent launch of an EXPERT-tier agent returns `permissionDecision: "ask"` with the reason. Never a deny. Under `AI_UNATTENDED=1` it allows and says so in `additionalContext`. | RP5 ("whether EXPERT runs without asking") | `test-runtime-gate.sh` |
+| R8 | With `budgets.expert.without_asking=false`, or above `max_per_task`, a PreToolUse:Agent launch of an EXPERT-tier agent returns `permissionDecision: "ask"` with the reason. Never a deny. Codex parses but does not support `ask` (only allow/deny), so on Codex the same condition allows and explains in `additionalContext`; so does `AI_UNATTENDED=1` on either runtime. | RP5 ("whether EXPERT runs without asking") | `test-runtime-gate.sh`, one case per runtime |
 | R9 | When the gate rewrites a launch (Fable→Opus on Claude, EXPERT→STRONG on Codex) and `payload.cwd` is inside a project with a task in flight, exactly one `model_fallback{agent,from,to,reason}` line (actor `hook`) is journaled through `state.py event`; no task → no line; any failure → fail-open. | WP2 I3 ("emitted from WP5") | `test-runtime-gate.sh` (fixture project) |
 | R10 | `state.py handoff --to <rt>` (I4) sets `owner_runtime`, `resume_point.runtime`, `handoff.pending_to`; journals `runtime_handoff{via: manual\|review}` with `data.tty` (OQ5); rewrites `handoff.md` with a `Handed to <rt>` line and prints the resume instruction (and the headless command, **not run**). Refuses: `--to` = owner, a closed task, a target whose home has no `skills/ai-task/state.py` (exit 2). A later mutating command from a runtime ≠ `pending_to` exits **7** `RUNTIME_HANDOFF_PENDING`; the first one from `pending_to` clears it with no second event. Pending questions do not block a handoff. | RP1, D3 | `tests/test-ai-task-state.sh` (amended) |
 | R11 | `handoff --to X --for review` at tier ≥ `preferred_runtime.cross_vendor_review_from` (default T4) records `cross_vendor_review{from,to,tier,requested_at,status:"requested"}`; `set review_status …` run under runtime `to` marks it `done` with `by_runtime`. Below that tier it is allowed and noted. | RP3, D3 | `test-ai-task-state.sh` |
-| R12 | `state.py init`/`quick`/`risk` print one advisory line `preferred runtime: <rt> (<reason>)` — only when the other runtime is installed and the table or the quota rule names it; `handoff.md` carries the same line (still ≤ 30 lines). Nothing moves automatically. | RP2, D3 | `test-ai-task-state.sh` with `AI_PROFILE_FILE` fixtures |
+| R12 | `state.py init`/`quick`/`risk` print one advisory line `preferred runtime: <rt> (<reason>)` — only when the other runtime is installed and the table or the quota rule names it; `handoff.md` carries the same line (still ≤ 30 lines). Nothing moves automatically. | RP2, D3 | `test-ai-task-state.sh` with a fake `CLAUDE_CONFIG_DIR`/`CODEX_HOME` holding fixture `profile.json` files |
 | R13 | `state.py quick --tier T<n>` exits 7 `DIRECT_MODE_CAP` when `pipeline_profile == solo` and T<n> > `budgets.direct_mode.max_tier`; no profile file → no cap. | RP5 ("how far direct mode reaches") | `test-ai-task-state.sh` |
 | R14 | `usage-report.py --task <id>` prints the task window's tokens per provider, its final tier, the plan budget of each involved runtime and the percentage used; `--budgets` prints the tables. Read-only; budgets are reported, never enforced. | QC7, D2 | `tests/test-usage-report.sh` (amended) |
 | R15 | `tests/test-shared-prompts-model-free.sh`: the I8 patterns find zero hits in the shared-prompt scope; the rendered global block of every `--plan` dry run is model-free, and `routing.md` renders with no `{{` left. | RP4, WP3 R6/I11 | new test + `test-install-dry-run.sh` |
-| R16 | `instructions/routing.md` rows use `{{FAST_MODEL}}` … placeholders fed from `claude_agentic.tiers`; every `agents/*.md` frontmatter `model:` equals `max.json`'s `tiers[<role tier>].model` (role → tier from `codex-pro.json` `roles`). | RP4, WP3 I11 | `test-profiles.sh`, `tests/test-instruction-budget.sh` |
+| R16 | `instructions/routing.md` rows use `{{FAST_MODEL}}` … placeholders fed from `claude_agentic.tiers`. Every agent source is `agents/<name>.md.tmpl` with `model: {{<TIER>_MODEL}}` and `effort: {{<TIER>_EFFORT}}`; no agent source names a model. The tier in each template equals that role's `tier` in the Codex profiles, and each installed Claude agent's `model:` equals the resolved profile's `tiers[<tier>].model` for every `--plan`. | RP4, WP3 I11 | `test-profiles.sh`, `test-install-dry-run.sh`, `tests/test-instruction-budget.sh` |
 | R17 | Migration `0005_runtimes_and_plans.py` (`patch_state` only) raises `.ai/VERSION` 4 → 5; a v4 fixture with a task in flight migrates with defaults; the migration names neither runtime. | constraint (task in flight survives) | `tests/test-project-update.sh` (fixture `schema-v4/`) |
 | R18 | No model id or effort of an existing tier changes: `--plan pro\|team-pro\|team-max\|max` and `--codex-plan plus\|pro` render the same agent frontmatter, TOML and settings values as before. | out of scope ("changing models") | existing assertions in `test-install-dry-run.sh`, `test-codex-agent-render.sh` |
+| R19 | `runtime-gate` counts running subagents per session: `SubagentStart` adds an entry, `SubagentStop` removes it, an entry older than `AI_RUNTIME_GATE_AGENT_TTL` (default 1800 s) expires. A PreToolUse:Agent launch with `running ≥ budgets.fan_out.max_parallel_agents`, or an agent on the STRONG/EXPERT tier with `running_strong ≥ max_parallel_on_strong`, returns `ask` on Claude and allow + `additionalContext` on Codex. Never a deny; any error fails open. | RP5 (fan-out), "five or more never on opus" | `test-runtime-gate.sh` (start/stop pairs, a lost stop expiring, both runtimes) |
+| R20 | Codex renders `ai-reviewer-balanced` (`variant_of: ai-reviewer`, tier BALANCED, read-only) in both Codex profiles; `/ai-task` names it for the T2 review on Codex, as the Claude side already runs the T2 review on BALANCED. | RP4 parity | `tests/test-codex-agent-render.sh` |
+| R21 | When the three-way walk leaves a conflict in `.ai/policies/risk-tiers.json` touching `review_model` or `model_tiers`, `project-update` prints one hint naming the tier vocabulary (`FAST/BALANCED/STRONG/EXPERT`) and `state.py profile --tier`. No other behaviour changes. | constraint (project-update guarantees) | `tests/test-project-update.sh` (fixture with an edited `review_model`) |
 
 ## Design
 
@@ -76,6 +79,14 @@ intent's decisions 1–3.
   (`risk-tiers.json` `review_model` and `model_tiers.*.model/codex_model`, `risk-tiers.md`,
   `model-routing.md`, `context-management.md`, five workflows, `manager.md`), ~15 lines in
   `agents/*.md` bodies, `instructions/routing.md:17-27`.
+- Hook documentation, checked 2026-09-21: Codex PreToolUse `permissionDecision` supports allow and
+  deny only (`ask` is parsed, not supported); both runtimes have `SubagentStart` and `SubagentStop`;
+  Claude's PostToolUse fires for a background launch too, so launches are counted from
+  `SubagentStart`, not from PostToolUse. Plan step 3 re-checks the Codex fact against
+  `developers.openai.com` for Codex CLI 0.146.
+- `install.sh` already renders `agents/ai-expert.md.tmpl` and `architect.md.tmpl` through
+  `RENDER_*` placeholders (`install.sh:114-120, 334-335`); `scripts/render-codex-agents.py` reads
+  only the body and takes the tier from the role (`:84-109`), and supports `variant_of`.
 - Drift, verified 2026-09-21: the repo's `hooks/fable-gate.py` is **ahead of** the installed
   `~/.claude/hooks/fable-gate.py` (version-aware `CLAUDE_CODE_SUBAGENT_MODEL` handling), so the
   rename ships newer code and rolls nothing back. `context-guard.py` differs too; WP5 does not touch
@@ -88,7 +99,9 @@ intent's decisions 1–3.
 | `profiles/*.json` + new `profiles/max20.json` | Per plan: the runtime settings (unchanged) and the plugin's own tables under one namespaced key `claude_agentic` (I1) |
 | `scripts/resolve-profile.py` (new, stdlib) | Resolve `inherits` (deep merge, arrays replaced), apply plan/label/fable overrides, print the `settings` part or the `agentic` part — the single resolver for install.sh, state.py and tests |
 | `install.sh` | Detect → propose → confirm the plan; strip `claude_agentic` before the settings merge; write `<home>/claude-agentic/profile.json` for each runtime; export `RENDER_*_MODEL/_EFFORT` for Claude from `tiers` (as the Codex branch already does); register runtime-gate on every install; install the shims |
-| `hooks/runtime-gate.py` (new) | One process per Agent event: top-model availability reroute (Fable→Opus; EXPERT→STRONG), the quota ledger, the EXPERT ask/count, `model_fallback` emission (I6) |
+| `hooks/runtime-gate.py` (new) | One process per Agent event: top-model availability reroute (Fable→Opus; EXPERT→STRONG), the quota ledger, the EXPERT ask/count, the running-agent count and fan-out ask (R19), `model_fallback` emission (I6) |
+| `agents/*.md.tmpl` (all twelve renamed from `.md`) | Provider-neutral bodies; frontmatter names a tier placeholder only. Rendered by `install.sh` for Claude and by `render-codex-agents.py` (which learns to read `.md.tmpl`) for Codex |
+| `skills/project-update/update.py` | One conflict hint for `risk-tiers.json` (R21); nothing else |
 | `hooks/fable-gate.py`, `hooks/codex-model-gate.py` | Six-line shims: `os.execv(runtime-gate.py, argv)` with stdin intact — keeps statusline lines, old settings entries, the installed `CLAUDE.md`'s `fable-gate.py status`, and the protected path name alive |
 | `skills/ai-task/state.py` | `profile` reader; `handoff --to`; the pending-handoff refusal; the cross-vendor review record; the direct-mode cap; the advisory line (I4) |
 | `skills/usage-report/usage-report.py` | `--task` window + budget %, `--budgets` (I9) |
@@ -106,8 +119,9 @@ intent's decisions 1–3.
    `$CODEX_DIR/claude-agentic/profile.json`.
 2. **Runtime reads.** `state.py` finds its home from `__file__`, reads
    `<home>/claude-agentic/profile.json`; the other runtime's home is `$CODEX_HOME|~/.codex` or
-   `$CLAUDE_CONFIG_DIR|~/.claude`. `AI_PROFILE_FILE` overrides for tests. No file ⇒ every budget
-   check is a no-op (a project without a plugin install still works).
+   `$CLAUDE_CONFIG_DIR|~/.claude`. There is no environment override: tests point
+   `CLAUDE_CONFIG_DIR`/`CODEX_HOME` at a fake home, as the gate suites already do. No file ⇒ every
+   budget check is a no-op (a project without a plugin install still works).
 3. **Quota.** Claude: `runtime-gate.py statusline` stores `quota{…, source:"statusline"}` in
    `<home>/state/runtime-gate.json`; the Fable "unavailable" mark at ≥ `WEEKLY_PCT` applies only when
    `profile.json.fable` is true. Codex: the newest `rollout-*.jsonl` in the three newest day
@@ -125,7 +139,8 @@ intent's decisions 1–3.
    `set review_status …` marks it done, then `handoff --to <from>`. Manual on both hops (D3).
 7. **EXPERT ask.** PreToolUse:Agent resolves the agent's tier as the gates do today; EXPERT agents
    come from `tiers.EXPERT.agents`; the count is keyed by the task id in
-   `<cwd>/.ai/state/current.json`.
+   `<cwd>/.ai/state/current.json`. The same PreToolUse also checks the running-agent count kept by
+   `SubagentStart`/`SubagentStop` (R19).
 8. **`model_fallback`.** On a rewrite with a task in flight: `state.py --root R event
    model_fallback --data …` with a 3 s timeout; errors swallowed.
 9. **Budgets report.** `usage-report.py --task` turns the SKILL's window approximation into a flag;
@@ -179,6 +194,8 @@ intent's decisions 1–3.
 this runtime's concrete id); the `risk-tiers.json` template's `review_model` values become tier
 names and `model_tiers.*` lose `model`/`codex_model` (keep `agent`, `effort`, `note`). Template edits
 reach projects through the existing three-way walk (WP4 precedent), not through the migration.
+Agent sources become `.md.tmpl` with tier placeholders (R16), so the only literal models left in
+the tree are in `profiles/`, `install.sh` prose, `docs/`, `tests/` and the frozen history.
 
 ## Interfaces
 
@@ -226,6 +243,10 @@ rather than this spec deciding it.
 | codex-plus | 1 / 1 / true | T2 | false / 1 | 0.2 0.4 1 3 5 8 |
 | codex-pro | 6 / 2 / false | T2 | true / 2 | 0.8 1.6 4 12 20 32 |
 
+`fan_out` is enforced by `runtime-gate` (R19) through `ask` on Claude and an explanation on Codex.
+Codex's own `max_concurrent_threads_per_session` stays as it is (3 on Plus, 6 on Pro) — the
+plugin's lower number is the one that asks.
+
 Codex budgets mirror the Claude plan of similar price (Plus ↔ Pro, Pro ↔ Max 20x). The token
 numbers are conservative placeholders scaled from the intent's measured baseline ($5–15 per
 ordinary task); they are reported, never enforced (D2), and calibrated from `/usage-report`.
@@ -241,7 +262,8 @@ mode 0644; written only by `install.sh`; listed by `--dry-run`.
 {"unavailable": {"until": 0, "reason": "", "source": "", "set_at": 0},
  "last_expert_launch": 0,
  "quota": {"weekly_pct": 93.5, "five_hour_pct": 12.0, "resets_at": 0, "seen_at": 0, "source": "statusline|rollout"},
- "expert_launches": {"T-2026-09-21-001": 1}}
+ "expert_launches": {"T-2026-09-21-001": 1},
+ "running_agents": {"<session_id>": [{"agent_id": "…", "tier": "STRONG", "started_at": 0}]}}
 ```
 
 When absent and `fable-gate.json` or `codex-model-gate.json` exists, `unavailable` is imported once.
@@ -270,14 +292,16 @@ pro/team-pro/team-max/max/max20:`; the Codex plan is confirmed the same way. Dry
 ### I6 `runtime-gate.py`
 
 CLI `status | quota [--json] | clear | set <seconds> [reason] | statusline [--then <cmd>]`.
-Events: Claude `PreToolUse:Agent`, `PostToolUse:Agent`, `StopFailure(rate_limit|model_not_found)`;
-Codex `PreToolUse:Agent`, `PostToolUse:Agent`, `SubagentStop`. Env, new name before old before
+Events: Claude `PreToolUse:Agent`, `PostToolUse:Agent`, `SubagentStart`, `SubagentStop`,
+`StopFailure(rate_limit|model_not_found)`; Codex `PreToolUse:Agent`, `PostToolUse:Agent`,
+`SubagentStart`, `SubagentStop`. Env, new name before old before
 default: `AI_RUNTIME_GATE=off` (`CLAUDE_FABLE_GATE`, `CODEX_MODEL_GATE`), `AI_RUNTIME_GATE_STATE`,
 `_TTL`, `_NOT_FOUND_TTL`, `_OVERLOAD_TTL`, `_LAUNCH_WINDOW`, `_WEEKLY_PCT`, `_FALLBACK`, `_EXPERT`,
-`_FALLBACK_EFFORT`, `_MODE`. Registration: `settings.fable.json` renamed `settings.gate.json`, merged
+`_FALLBACK_EFFORT`, `_MODE`, `_AGENT_TTL`. Runtime is detected from the home the hook runs
+from and the event payload; there is no runtime override variable. Registration: `settings.fable.json` renamed `settings.gate.json`, merged
 on every Claude install (the Fable branch inside is driven by `profile.json.fable`); `codex/hooks.json`
-commands renamed. Outputs: rewrite (`allow` + `updatedInput`), `ask`, `additionalContext`; never deny;
-always exit 0.
+commands renamed. Outputs: rewrite (`allow` + `updatedInput`), `ask` (Claude only), `additionalContext`; never
+deny; always exit 0.
 
 ### I7 Events — WP2 vocabulary, no new type
 
@@ -291,10 +315,10 @@ always exit 0.
 
 Patterns: `\b(haiku|sonnet|opus|opusplan|fable)\b` (case-insensitive), `\b(Terra|Sol|Astra)\b`
 (case-sensitive), `gpt-[0-9]`, `claude-(opus|sonnet|haiku|fable)-`.
-**Shared-prompt scope**: `instructions/stub.md`, `instructions/routing.md`, `agents/*.md` and
-`*.tmpl` **bodies** (after the closing `---`), `skills/**/*.md`, `skills/ai-init/templates/**`,
+**Shared-prompt scope**: `instructions/stub.md`, `instructions/routing.md`, `agents/*.md.tmpl` (frontmatter
+and body), `skills/**/*.md`, `skills/ai-init/templates/**`,
 `skills/project-init/templates/**`.
-**Excluded explicitly**: `profiles/`, agent frontmatter, `install.sh`, `scripts/`, `hooks/`,
+**Excluded explicitly**: `profiles/`, `install.sh`, `scripts/`, `hooks/`,
 `tests/`, `docs/`, `README.md`, `skills/usage-report/prices.json`, `skills/project-update/history/**`
 (frozen blobs), `agents/superseded/`. The installed `~/.claude/CLAUDE.md` is not in scope: its
 managed block's source is checked, the rest is the user's (WP3's block-only rule).
@@ -317,14 +341,17 @@ convention). Template `.ai/VERSION` → 5.
 ### Implementation order (for `/sdlc-plan`)
 
 1. Resolver, `claude_agentic` in the four profiles, `max20.json`, `test-profiles.sh`.
-2. `install.sh` (max20, detect/propose/confirm, strip, `profile.json`, `RENDER_*` from tiers),
-   `routing.md` placeholders, install tests.
+2. `install.sh` (max20, detect/propose/confirm, strip, `profile.json`, `RENDER_*` from tiers,
+   render every agent template), `agents/*.md` → `agents/*.md.tmpl` with tier placeholders,
+   `render-codex-agents.py` reading `.md.tmpl`, `ai-reviewer-balanced` in both Codex profiles,
+   `routing.md` placeholders, install and Codex render tests.
 3. `runtime-gate.py`, shims, `settings.gate.json`, `codex/hooks.json`, install wiring,
-   `test-runtime-gate.sh`; the two old gate suites unchanged; guard golden byte-identical; one
+   `test-runtime-gate.sh` (incl. the running-agent count); the two old gate suites unchanged; guard golden byte-identical; one
    PreToolUse:Agent call timed.
 4. `state.py` (`profile`, `handoff --to`, exit 7, cross-vendor record, `quick` cap, advice line),
    `ai-task/SKILL.md` §0, migration 0005, template VERSION, `schema-v4/` fixture.
-5. `usage-report.py --task/--budgets`, `usage-report` and `ai-status` SKILLs.
+5. `usage-report.py --task/--budgets`, `usage-report` and `ai-status` SKILLs, the `risk-tiers.json`
+   conflict hint in `update.py`.
 6. The model-name sweep and `test-shared-prompts-model-free.sh`.
 7. Docs (`docs/hooks.md`, `architecture.md`, `getting-started.md`, `agents.md`,
    `hook-performance.md`, `README.md`), then `bash tests/run-all.sh` once, to the end.
@@ -339,7 +366,7 @@ matches this stack.
 | Policy | How the design honours it |
 |---|---|
 | Global `CLAUDE.md` — tier routing (FAST/BALANCED/STRONG/EXPERT), `ai-expert` pins opus, `architect` pins `fable[1m]`, `max` off | The tables encode today's values; R18 proves no model or effort changes. |
-| Global — five or more parallel agents never on opus | `max_parallel_on_strong ≤ 4` on every profile (R2), even where `max_parallel_agents` is 6. |
+| Global — five or more parallel agents never on opus | `max_parallel_on_strong ≤ 4` on every profile (R2), counted and enforced by `runtime-gate` (R19), even where `max_parallel_agents` is 6. |
 | Global — fable-gate behaviour (≥ 90 % weekly → Opus, `status`/`clear`) | Kept verbatim inside runtime-gate; the old command names still work through the shims (R5). |
 | Global — deterministic tools first; checks replace model steps | Resolver, quota, grep test, gate, cap are stdlib Python; budgets are read, not judged by a model. |
 | Global — no agent commits, merges or deploys; the pipeline ends at human approval | `handoff --to` prints the other runtime's command and never runs it; approval stays WP2's human condition. |
@@ -350,66 +377,44 @@ matches this stack.
 | Intent — plugin-owned files in projects change only through the skills | Template changes travel through `project-update`'s three-way walk; state keys through migration 0005. |
 | Intent D1–D3 | R3 (propose + confirm, `--plan max20` skips); fixed defaults, reported not enforced (I1, R14); cross-vendor review manual, headless not built (R10, R11). |
 | WP2 R10 — "nothing WP5 must undo"; the vocabulary grows only with a consumer | `handoff --to` extends `handoff`; `via: resume` untouched; no new event type (I7). |
-| WP3 R6/I11 — WP5 converts `routing.md` and owns the grep | R15, R16, I8; the grep scope is stated explicitly (concern 4). |
+| WP3 R6/I11 — WP5 converts `routing.md` and owns the grep | R15, R16, I8; the grep scope, including the `prices.json` and `history/**` exclusions that amend I11, is stated explicitly in I8. |
 | WP4 Q6 — per-plan token budgets are WP5's | `budgets.tokens` (I1), reported by `/usage-report` (R14). |
+| Data protection | No personal data is stored: `profile.json` holds plan names and tables, the gate state percentages and agent ids. The installer reads `organizationRateLimitTier` locally and writes nothing about the account. No security review at T3. |
 | Memory — run tests once to the end; pylint clean in CI on 3.11–3.13 | One `run-all.sh` at the end; new Python uses `check=`, context-managed handles, no unused parameters. |
 
 ## Flagged concerns
 
-1. **The intent's "concrete models appear only in `profiles/*.json`" is not fully met.** Claude
-   agent definitions must name a concrete `model:` in frontmatter, and `install.sh` renders plan
-   prose with model names. WP5 makes those provably *consistent* with the profiles (R16) and
-   excludes them from the grep test (I8); templating `agents/*.md` frontmatter from the profiles is a
-   follow-up. Policy-vs-intent, resolved by narrowing — please confirm.
-2. **"Pro and Plus run strictly serially" vs `codex-plus.json`'s
-   `max_concurrent_threads_per_session: 3`.** Changing that value would change a Codex setting,
-   which is close to "changing the existing tiers" (out of scope). The plugin's table says 1, a test
-   asserts table ≤ ceiling, and fan-out is advisory (concern 6). Codex can still run three threads
-   if the model asks for them.
-3. **A runtime-gate hook on every Claude plan.** Pro and Team-Pro installs gain one PreToolUse:Agent
-   process (≈ interpreter start, ~25 ms per *Agent* call, not per Bash call) and a wrapped
-   statusline, so quota is known everywhere. Measured in plan step 3 and recorded in
-   `docs/hook-performance.md`. Fail-open by design.
-4. **The grep scope amends WP3 I11.** I11 names `skills/` wholesale; `prices.json` and the frozen
-   `history/**` blobs must be excluded or the test can never pass (history is never edited). The
-   exclusions are explicit in I8, not a pattern.
-5. **The renamed hook is less protected than the old name.** The path guard protects
+Revised 2026-09-21 with the user: concerns 1, 6, 8, 9, 11 and 12 of the first draft were fixed in
+the design (R16, R19–R21, I6, I8); 3, 4, 10, 13, 14 and 15 were closed — 3 by OQ4, 10 by OQ5, 13 by
+correcting the memory note, 15 as the accepted consequence of OQ1, 4 and 14 as statements rather
+than risks (the grep scope in I8, data protection in Policy conformance). What remains:
+
+1. **"Pro and Plus run strictly serially" is enforced by the plugin, not by Codex** (accepted,
+   2026-09-21). `codex-plus.json` keeps `max_concurrent_threads_per_session: 3`; the plugin's
+   `max_parallel_agents: 1` makes a second concurrent launch explain itself (R19), but Codex can still
+   run it, because a Codex hook cannot ask. The user chose not to change the Codex setting.
+2. **The renamed hook is less protected than the old name.** The path guard protects
    `.codex/hooks/codex-model-gate.py` by literal name; `runtime-gate.py` is only as protected as
-   `context-guard.py` is today. Guard rules are frozen in this package (golden byte-identical), so
-   the shim keeps the protected name and an additive rule is a follow-up (OQ3).
-6. **Fan-out is advisory.** No cheap deterministic count of concurrently running agents exists in a
-   hook; `max_parallel_agents` is read by the skill and shown by `/ai-status`. Enforcing it (counting
-   Pre/PostToolUse:Agent pairs in gate state) would be a later gate.
-7. **Quota signals can be stale.** Codex quota comes only from rollouts of a past or running session;
-   Claude's only while a session with a statusline runs. Hence `stale`, `resets_at` and advice-only —
-   the quota never refuses anything.
-8. **Codex `permissionDecision: "ask"` is unverified.** `codex-model-gate` only ever returns `allow`.
-   If Codex rejects `ask`, R8 falls back to `MODE=context` (explain, allow). A fixture covers both;
-   the fact is checked against the Codex hook documentation in plan step 3.
-9. **Agent-settable overrides.** `AI_PROFILE_FILE`, `AI_HOOK_RUNTIME` and the `profile.json` file
-   itself are writable by an agent. They change budgets and advice, never authorization (approval is
-   WP2's human condition; `profile.json` sits under `~/.claude`, which WP7 protects during a task).
-   Accepted.
-10. **`handoff --to` records `data.tty`, not an identity** (OQ5, settled). Actor stays `agent`; a pty
-    can fake a tty, so the field is audit evidence only and gates nothing — the same limit WP2 accepted
-    for approval.
-11. **Template sweep meets user edits.** Projects that edited `review_model` or `model_tiers` in
-    `risk-tiers.json` get a three-way conflict (never overwritten). Acceptable; `project-update`
-    should print a hint naming the tier vocabulary.
-12. **A per-call review model on Codex.** A spawn cannot override a custom agent file's `model`, so a
-    T2 review on Codex stays on the pinned STRONG TOML. This asymmetry already exists; the tier
-    vocabulary only makes it visible.
-13. **Stale memory about drift.** A memory note says `~/.claude` is ahead of the repo for
-    `fable-gate.py`; the reverse is true as of 2026-09-21. `context-guard.py` and the global
-    `CLAUDE.md` block still differ — the standing rule (dry-run `install.sh`, diff) applies before
-    any real install. The memory is corrected after this spec.
-14. **Security/data protection.** No personal data is stored: `profile.json` holds plan names and
-    tables, the quota ledger percentages. The installer reads `organizationRateLimitTier` locally
-    and writes nothing about the account. No security review needed at T3.
-15. **The direct-mode cap is inert on the shipped defaults** (OQ1 → T2 on every plan). `solo`
-    already stops direct mode at T2, so R13 changes no behaviour today; it is a knob for a profile
-    that lowers `max_tier`, proven by a fixture profile in `test-ai-task-state.sh`. "How far direct
-    mode reaches" (intent RP5) is therefore configurable, not yet different between plans.
+   `context-guard.py` is today. Guard rules are frozen in this package, the shim keeps the protected
+   name, and an additive rule for both hooks is a separate task (OQ3), created 2026-09-21.
+3. **Quota signals can be stale** (accepted). Codex quota comes only from rollouts of a past or
+   running session; Claude's only while a session with a statusline runs. Hence `stale`, `resets_at`
+   and advice only — the quota never refuses anything.
+4. **The running-agent count can drift.** A `SubagentStop` lost to a crash or a killed session leaves
+   an entry behind; the TTL (30 min) bounds the damage to an extra question, never a block, and
+   `runtime-gate.py clear` empties it. A subagent that genuinely runs longer than the TTL stops being
+   counted — the budget errs towards letting work through.
+5. **Twelve agent files are renamed to `.md.tmpl`.** Anything that reads `agents/<name>.md` from the
+   repository by path — `render-codex-agents.py`, `install.sh`'s agent listing (`:414, :694`),
+   tests, docs — must follow; a missed reader fails loudly (file not found), not silently. Installed
+   agents keep their `.md` names, so users and the gate see no change. The history of the old paths
+   stays in git.
+6. **Codex hook facts come from one documentation page.** "`ask` is parsed but not supported" and the
+   `SubagentStart` event were read on 2026-09-21; Codex moves fast. R8 and R19 therefore degrade to
+   "allow and explain" on Codex by construction, and plan step 3 re-checks against the Codex CLI
+   0.146 documentation and a live `codex` hook run.
+7. **A new `project-update` output.** R21 adds one hint line on a specific conflict. It changes no
+   decision of the walk, but `test-project-update.sh` asserts output, so the fixture set grows by one.
 
 ## Open questions
 
@@ -418,7 +423,7 @@ matches this stack.
 | OQ1 | For max20, `direct_mode.max_tier`: **T1** (the richer plan pays for a delegated review at T2) or **T2** (max20 differs from max only in fan-out and EXPERT)? The intent says max20 changes "how far direct mode reaches" but not in which direction. | T1 | user | **T2** — max20 differs from max in fan-out, EXPERT without asking and token budgets only (2026-09-21) |
 | OQ2 | Defer `handoff --to --launch` (a headless run of the other vendor) to a later package, keeping WP5 at T3, and only print the command? | defer | user | **defer** — WP5 stays T3; the command is printed, never run (2026-09-21) |
 | OQ3 | Protect `runtime-gate.py` (and `context-guard.py`) with an additive path-guard rule — in a WP7-style follow-up with an additive golden re-record, or inside WP5 (breaks "guard files untouched")? | follow-up | user | **follow-up** — a separate WP7-style task with an additive golden re-record; WP5 touches no guard file (2026-09-21) |
-| OQ4 | Accept runtime-gate and the statusline wrapper on **every** Claude plan (concern 3), rather than only on Max + Fable as today? | accept | user | **accept** — runtime-gate and the statusline wrapper on every Claude plan; cost measured in plan step 3 (2026-09-21) |
-| OQ5 | Record `data.tty` on `runtime_handoff` so the journal shows whether a human moved the task (concern 10)? | yes, small | user | **yes** — `data.tty` on `runtime_handoff` (I7) (2026-09-21) |
+| OQ4 | Accept runtime-gate and the statusline wrapper on **every** Claude plan (first-draft concern 3), rather than only on Max + Fable as today? | accept | user | **accept** — runtime-gate and the statusline wrapper on every Claude plan; cost measured in plan step 3 (2026-09-21) |
+| OQ5 | Record `data.tty` on `runtime_handoff` so the journal shows whether a human moved the task (first-draft concern 10)? | yes, small | user | **yes** — `data.tty` on `runtime_handoff` (I7) (2026-09-21) |
 | OQ6 | Default `preferred_runtime.by_workflow` on Claude profiles: `{"refactoring": "codex"}` (the intent names mass refactoring as OpenAI work) or `{}`? Advice only, and only when Codex is installed. | `{"refactoring": "codex"}` | user | **`{"refactoring": "codex"}`** on Claude profiles, `{}` on Codex (2026-09-21) |
 | OQ7 | Intent open question 1 (Codex question picker and session-start hook) was settled in WP2; intent open question 2 in WP2 as well. Nothing carried. | — | — | settled |
