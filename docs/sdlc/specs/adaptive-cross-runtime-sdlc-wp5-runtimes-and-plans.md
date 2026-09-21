@@ -14,7 +14,8 @@ Recommended tier: **T3**, as in the intent's table — plugin infrastructure sha
 and every install; no payments, auth or customer data; the only project change is a `patch_state`
 migration. It becomes **T4** only if a headless launch of the other vendor (`handoff --to --launch`)
 is built here, because that crosses the human-approval boundary WP2 was raised to T4 for — this spec
-defers it (OQ2). No EXPERT trigger fired; one user-visible default is put to the user (OQ1).
+defers it (OQ2, settled). No EXPERT trigger fired; all six open questions were answered by the user
+on 2026-09-21.
 
 Outcome labels used below: **RP1** owner runtime and `runtime_handoff` · **RP2** preferred runtime
 per kind of task, and the ≥ 90 % quota rule · **RP3** T4+ reviewed by the other vendor · **RP4**
@@ -35,7 +36,7 @@ intent's decisions 1–3.
 | R7 | `runtime-gate.py quota --json` returns `{runtime, weekly_pct, five_hour_pct, resets_at, seen_at, source, stale}` — on Claude from the statusline wrapper (installed on every Claude plan), on Codex from the newest rollout's `token_count.rate_limits`. `stale` when older than 24 h or past `resets_at`. | RP2 | `test-runtime-gate.sh` with a statusline payload and a rollout fixture |
 | R8 | With `budgets.expert.without_asking=false`, or above `max_per_task`, a PreToolUse:Agent launch of an EXPERT-tier agent returns `permissionDecision: "ask"` with the reason. Never a deny. Under `AI_UNATTENDED=1` it allows and says so in `additionalContext`. | RP5 ("whether EXPERT runs without asking") | `test-runtime-gate.sh` |
 | R9 | When the gate rewrites a launch (Fable→Opus on Claude, EXPERT→STRONG on Codex) and `payload.cwd` is inside a project with a task in flight, exactly one `model_fallback{agent,from,to,reason}` line (actor `hook`) is journaled through `state.py event`; no task → no line; any failure → fail-open. | WP2 I3 ("emitted from WP5") | `test-runtime-gate.sh` (fixture project) |
-| R10 | `state.py handoff --to <rt>` (I4) sets `owner_runtime`, `resume_point.runtime`, `handoff.pending_to`; journals `runtime_handoff{via: manual\|review}`; rewrites `handoff.md` with a `Handed to <rt>` line and prints the resume instruction (and the headless command, **not run**). Refuses: `--to` = owner, a closed task, a target whose home has no `skills/ai-task/state.py` (exit 2). A later mutating command from a runtime ≠ `pending_to` exits **7** `RUNTIME_HANDOFF_PENDING`; the first one from `pending_to` clears it with no second event. Pending questions do not block a handoff. | RP1, D3 | `tests/test-ai-task-state.sh` (amended) |
+| R10 | `state.py handoff --to <rt>` (I4) sets `owner_runtime`, `resume_point.runtime`, `handoff.pending_to`; journals `runtime_handoff{via: manual\|review}` with `data.tty` (OQ5); rewrites `handoff.md` with a `Handed to <rt>` line and prints the resume instruction (and the headless command, **not run**). Refuses: `--to` = owner, a closed task, a target whose home has no `skills/ai-task/state.py` (exit 2). A later mutating command from a runtime ≠ `pending_to` exits **7** `RUNTIME_HANDOFF_PENDING`; the first one from `pending_to` clears it with no second event. Pending questions do not block a handoff. | RP1, D3 | `tests/test-ai-task-state.sh` (amended) |
 | R11 | `handoff --to X --for review` at tier ≥ `preferred_runtime.cross_vendor_review_from` (default T4) records `cross_vendor_review{from,to,tier,requested_at,status:"requested"}`; `set review_status …` run under runtime `to` marks it `done` with `by_runtime`. Below that tier it is allowed and noted. | RP3, D3 | `test-ai-task-state.sh` |
 | R12 | `state.py init`/`quick`/`risk` print one advisory line `preferred runtime: <rt> (<reason>)` — only when the other runtime is installed and the table or the quota rule names it; `handoff.md` carries the same line (still ≤ 30 lines). Nothing moves automatically. | RP2, D3 | `test-ai-task-state.sh` with `AI_PROFILE_FILE` fixtures |
 | R13 | `state.py quick --tier T<n>` exits 7 `DIRECT_MODE_CAP` when `pipeline_profile == solo` and T<n> > `budgets.direct_mode.max_tier`; no profile file → no cap. | RP5 ("how far direct mode reaches") | `test-ai-task-state.sh` |
@@ -221,7 +222,7 @@ rather than this spec deciding it.
 |---|---|---|---|---|
 | pro, team-pro (`pro.json`; plan/label overridden) | 1 / 1 / true | T2 | false / 1 | 0.2 0.4 1 3 5 8 |
 | max, team-max (`max.json`; overridden) | 3 / 2 / false | T2 | false / 1 | 0.4 0.8 2 6 10 16 |
-| max20 (`max20.json`, inherits max) | 6 / 4 / false | **T1** (OQ1) | **true** / 2 | 0.8 1.6 4 12 20 32 |
+| max20 (`max20.json`, inherits max) | 6 / 4 / false | T2 (OQ1) | **true** / 2 | 0.8 1.6 4 12 20 32 |
 | codex-plus | 1 / 1 / true | T2 | false / 1 | 0.2 0.4 1 3 5 8 |
 | codex-pro | 6 / 2 / false | T2 | true / 2 | 0.8 1.6 4 12 20 32 |
 
@@ -250,7 +251,7 @@ When absent and `fable-gate.json` or `codex-model-gate.json` exists, `unavailabl
 ```
 profile  [--field a.b.c] [--tier FAST|BALANCED|STRONG|EXPERT] [--other] [--json]   # read-only
 handoff  [--print] [--reason …] [--to claude|codex [--for continue|review] [--why TEXT]]
-quick    … --tier T<n>        # exit 7 "DIRECT_MODE_CAP T1 (plan max20): use init" when capped
+quick    … --tier T<n>        # exit 7 "DIRECT_MODE_CAP T2 (plan pro): use init" when capped
 ```
 
 State keys (schema 5): `handoff.pending_to: null|"claude"|"codex"`, `handoff.pending_since`,
@@ -280,8 +281,9 @@ always exit 0.
 
 ### I7 Events — WP2 vocabulary, no new type
 
-- `runtime_handoff {"from","to","via":"manual"|"review"|"resume","reason","tier"}`, actor `agent`.
-  A quota-motivated move is `manual` with `data.reason`.
+- `runtime_handoff {"from","to","via":"manual"|"review"|"resume","reason","tier","tty":bool}`, actor `agent`.
+  A quota-motivated move is `manual` with `data.reason`. `tty` is `os.isatty(0) and os.isatty(1)`
+  when `handoff --to` ran (OQ5) — evidence of who moved the task, not an authorization.
 - `model_fallback {"agent","from","to","reason":"rate_limit"|"model_not_found"|"overloaded"|"weekly_limit"}`,
   actor `hook`, via `state.py event`.
 
@@ -388,8 +390,9 @@ matches this stack.
    itself are writable by an agent. They change budgets and advice, never authorization (approval is
    WP2's human condition; `profile.json` sits under `~/.claude`, which WP7 protects during a task).
    Accepted.
-10. **`handoff --to` does not record who moved the task.** Actor is `agent` whether the user ran it on
-    a tty or the agent did. D3 does not require it; adding WP2's tty leg (`data.tty`) is small (OQ5).
+10. **`handoff --to` records `data.tty`, not an identity** (OQ5, settled). Actor stays `agent`; a pty
+    can fake a tty, so the field is audit evidence only and gates nothing — the same limit WP2 accepted
+    for approval.
 11. **Template sweep meets user edits.** Projects that edited `review_model` or `model_tiers` in
     `risk-tiers.json` get a three-way conflict (never overwritten). Acceptable; `project-update`
     should print a hint naming the tier vocabulary.
@@ -403,15 +406,19 @@ matches this stack.
 14. **Security/data protection.** No personal data is stored: `profile.json` holds plan names and
     tables, the quota ledger percentages. The installer reads `organizationRateLimitTier` locally
     and writes nothing about the account. No security review needed at T3.
+15. **The direct-mode cap is inert on the shipped defaults** (OQ1 → T2 on every plan). `solo`
+    already stops direct mode at T2, so R13 changes no behaviour today; it is a knob for a profile
+    that lowers `max_tier`, proven by a fixture profile in `test-ai-task-state.sh`. "How far direct
+    mode reaches" (intent RP5) is therefore configurable, not yet different between plans.
 
 ## Open questions
 
 | # | Question | Recommendation | Owner | Status |
 |---|---|---|---|---|
-| OQ1 | For max20, `direct_mode.max_tier`: **T1** (the richer plan pays for a delegated review at T2) or **T2** (max20 differs from max only in fan-out and EXPERT)? The intent says max20 changes "how far direct mode reaches" but not in which direction. | T1 | user | open |
-| OQ2 | Defer `handoff --to --launch` (a headless run of the other vendor) to a later package, keeping WP5 at T3, and only print the command? | defer | user | open |
-| OQ3 | Protect `runtime-gate.py` (and `context-guard.py`) with an additive path-guard rule — in a WP7-style follow-up with an additive golden re-record, or inside WP5 (breaks "guard files untouched")? | follow-up | user | open |
-| OQ4 | Accept runtime-gate and the statusline wrapper on **every** Claude plan (concern 3), rather than only on Max + Fable as today? | accept | user | open |
-| OQ5 | Record `data.tty` on `runtime_handoff` so the journal shows whether a human moved the task (concern 10)? | yes, small | user | open |
-| OQ6 | Default `preferred_runtime.by_workflow` on Claude profiles: `{"refactoring": "codex"}` (the intent names mass refactoring as OpenAI work) or `{}`? Advice only, and only when Codex is installed. | `{"refactoring": "codex"}` | user | open |
+| OQ1 | For max20, `direct_mode.max_tier`: **T1** (the richer plan pays for a delegated review at T2) or **T2** (max20 differs from max only in fan-out and EXPERT)? The intent says max20 changes "how far direct mode reaches" but not in which direction. | T1 | user | **T2** — max20 differs from max in fan-out, EXPERT without asking and token budgets only (2026-09-21) |
+| OQ2 | Defer `handoff --to --launch` (a headless run of the other vendor) to a later package, keeping WP5 at T3, and only print the command? | defer | user | **defer** — WP5 stays T3; the command is printed, never run (2026-09-21) |
+| OQ3 | Protect `runtime-gate.py` (and `context-guard.py`) with an additive path-guard rule — in a WP7-style follow-up with an additive golden re-record, or inside WP5 (breaks "guard files untouched")? | follow-up | user | **follow-up** — a separate WP7-style task with an additive golden re-record; WP5 touches no guard file (2026-09-21) |
+| OQ4 | Accept runtime-gate and the statusline wrapper on **every** Claude plan (concern 3), rather than only on Max + Fable as today? | accept | user | **accept** — runtime-gate and the statusline wrapper on every Claude plan; cost measured in plan step 3 (2026-09-21) |
+| OQ5 | Record `data.tty` on `runtime_handoff` so the journal shows whether a human moved the task (concern 10)? | yes, small | user | **yes** — `data.tty` on `runtime_handoff` (I7) (2026-09-21) |
+| OQ6 | Default `preferred_runtime.by_workflow` on Claude profiles: `{"refactoring": "codex"}` (the intent names mass refactoring as OpenAI work) or `{}`? Advice only, and only when Codex is installed. | `{"refactoring": "codex"}` | user | **`{"refactoring": "codex"}`** on Claude profiles, `{}` on Codex (2026-09-21) |
 | OQ7 | Intent open question 1 (Codex question picker and session-start hook) was settled in WP2; intent open question 2 in WP2 as well. Nothing carried. | — | — | settled |
