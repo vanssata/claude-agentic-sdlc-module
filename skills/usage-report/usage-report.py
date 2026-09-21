@@ -16,6 +16,14 @@ Usage:
     usage-report.py --session ab          # session/thread id prefix
     usage-report.py --provider codex      # one runtime only
     usage-report.py --provider claude --root DIR   # explicit transcript dir
+    usage-report.py --task T-2026-09-21-001 [--project DIR]
+                                          # one /ai-task task: its window, tokens per
+                                          # runtime, and each runtime's plan budget
+    usage-report.py --budgets             # the installed plans' budget tables
+
+--task and --budgets read the plan tables install.sh writes to
+<home>/claude-agentic/profile.json. Budgets are reported, never enforced, and
+the task's journal is only read.
 """
 
 from __future__ import annotations
@@ -267,6 +275,142 @@ def parse_codex(root: str, args) -> list[Call]:
     return list(seen.values())
 
 
+# --------------------------------------------------------------- plan budgets
+
+RUNTIMES = ("claude", "codex")
+
+
+def runtime_home(runtime: str) -> str:
+    if runtime == "codex":
+        return os.path.expanduser(os.environ.get("CODEX_HOME", "~/.codex"))
+    return os.path.expanduser(os.environ.get("CLAUDE_CONFIG_DIR", "~/.claude"))
+
+
+def read_profile(runtime: str) -> dict:
+    try:
+        with open(os.path.join(runtime_home(runtime), "claude-agentic", "profile.json"),
+                  encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def print_budgets() -> int:
+    found = False
+    for runtime in RUNTIMES:
+        prof = read_profile(runtime)
+        budgets = prof.get("budgets")
+        if not isinstance(budgets, dict):
+            continue
+        found = True
+        fan = budgets.get("fan_out") or {}
+        expert = budgets.get("expert") or {}
+        tokens = (budgets.get("tokens") or {}).get("per_task") or {}
+        print(f"{runtime}: {prof.get('label') or prof.get('plan')} ({prof.get('plan')})")
+        print(f"  fan-out        {fan.get('max_parallel_agents')} agents, "
+              f"{fan.get('max_parallel_on_strong')} on STRONG/EXPERT"
+              + (", serial" if fan.get("serial") else ""))
+        print(f"  direct mode    up to {(budgets.get('direct_mode') or {}).get('max_tier')}")
+        print(f"  EXPERT         {'without asking' if expert.get('without_asking') else 'asks first'}, "
+              f"at most {expert.get('max_per_task')} per task")
+        print("  tokens / task  " + "  ".join(f"{t} {v}M" for t, v in sorted(tokens.items())))
+    if not found:
+        print("no plan profile installed (install.sh writes <home>/claude-agentic/profile.json)")
+        return 1
+    print("\nBudgets are reported, never enforced. Calibrate them from --task.")
+    return 0
+
+
+def parse_ts(value: str):
+    try:
+        return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def find_project(start: str) -> str | None:
+    d = os.path.abspath(start)
+    while True:
+        if os.path.isdir(os.path.join(d, ".ai")):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
+
+
+def task_report(args) -> int:
+    """One task's window from its journal, the tokens each runtime spent in it,
+    and each involved runtime's budget for the task's final tier."""
+    project = find_project(args.project or os.getcwd())
+    journal = os.path.join(project or "", ".ai", "reports", args.task, "events.jsonl")
+    if not project or not os.path.isfile(journal):
+        print(f"no journal for {args.task} (looked for {journal})")
+        return 1
+    events = []
+    with open(journal, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    stamps = [parse_ts(e.get("ts")) for e in events if parse_ts(e.get("ts"))]
+    if not stamps:
+        print(f"the journal of {args.task} has no timestamps")
+        return 1
+    start = min(stamps)
+    closed = [parse_ts(e.get("ts")) for e in events if e.get("event") == "task_closed"]
+    end = max(c for c in closed if c) if any(closed) else dt.datetime.now(dt.timezone.utc)
+    tier = "untiered"
+    involved = []
+    for e in events:
+        data = e.get("data") or {}
+        if e.get("event") in ("tier_set", "tier_raised"):
+            tier = data.get("tier") or data.get("to") or tier
+        for rt in (e.get("runtime"), data.get("from") if e.get("event") == "runtime_handoff" else None,
+                   data.get("to") if e.get("event") == "runtime_handoff" else None):
+            if rt in RUNTIMES and rt not in involved:
+                involved.append(rt)
+
+    here = os.getcwd()
+    os.chdir(project)                     # the Codex parser keeps the threads of cwd
+    try:
+        calls = []
+        for rt in involved or list(RUNTIMES):
+            root = claude_project_root(project) if rt == "claude" else CODEX_ROOT
+            if not os.path.isdir(root):
+                continue
+            calls += parse_claude(root, args) if rt == "claude" else parse_codex(root, args)
+    finally:
+        os.chdir(here)
+
+    used: dict[str, list] = {rt: [0, 0, 0] for rt in involved}
+    for c in calls:
+        ts = parse_ts(c.ts)
+        if ts is None or not start <= ts <= end:
+            continue
+        acc = used.setdefault(c.provider, [0, 0, 0])
+        acc[0] += c.inp
+        acc[1] += c.cw + c.cr
+        acc[2] += c.out
+
+    print(f"task {args.task} tier {tier} window {start.isoformat(timespec='seconds')}"
+          f"..{end.isoformat(timespec='seconds')}")
+    for rt in involved or sorted(used):
+        inp, cache, out = used.get(rt, [0, 0, 0])
+        total = inp + cache + out
+        print(f"{rt:<8} tokens in {inp:,} cache {cache:,} out {out:,} total {total:,}")
+        prof = read_profile(rt)
+        limit = (((prof.get("budgets") or {}).get("tokens") or {}).get("per_task") or {}).get(tier)
+        if limit:
+            print(f"         budget {prof.get('plan')} {tier} {float(limit):.1f}M · used "
+                  f"{total / 1e6:.1f}M ({total / (float(limit) * 1e6):.0%})")
+        else:
+            print(f"         budget: no {rt} plan table for {tier}")
+    return 0
+
+
 # --------------------------------------------------------------- the report
 
 def sniff_provider(root: str) -> str:
@@ -305,7 +449,15 @@ def main() -> int:
     ap.add_argument("--root", help="explicit transcript directory (needs a single --provider)")
     ap.add_argument("--provider", choices=("auto", "claude", "codex", "both"), default="auto",
                     help="which runtime's transcripts to read (default: auto — whichever are present)")
+    ap.add_argument("--task", metavar="ID", help="one /ai-task task: window, tokens per runtime, budget")
+    ap.add_argument("--project", metavar="DIR", help="the project holding .ai/ (default: search upwards)")
+    ap.add_argument("--budgets", action="store_true", help="print the installed plans' budget tables")
     args = ap.parse_args()
+
+    if args.budgets:
+        return print_budgets()
+    if args.task:
+        return task_report(args)
 
     prices = load_prices()
 

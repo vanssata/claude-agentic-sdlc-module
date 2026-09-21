@@ -610,4 +610,19 @@ env -u CLAUDECODE python3 "$STATE" --root "$S10" set next_action "after 0005" >/
 grep -qiE 'claude|codex' "$PLUGIN_ROOT/skills/project-update/migrations/0005_runtimes_and_plans.py" \
     && fail "a migration must not name a runtime" || pass "0005 names no runtime"
 
+echo "== a conflict on a model key in risk-tiers.json prints the tier hint (R21)"
+P21="$TMP/proj21"; mkdir -p "$P21"
+CLAUDE_AGENTIC_TEMPLATES="$OLD/ai-init/templates" bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$P21" >/dev/null
+jq '.model_tiers.EXPERT.model = "my own expert"' "$P21/.ai/policies/risk-tiers.json" > "$TMP/rt" && mv "$TMP/rt" "$P21/.ai/policies/risk-tiers.json"
+out=$(python3 "$UPDATE" "$P21" 2>&1)
+printf '%s' "$out" | grep -q 'kept your value for: .*model_tiers.EXPERT.model' && pass "the edited model value is a conflict" || fail "no model_tiers conflict" "$out"
+[ "$(printf '%s' "$out" | grep -c 'the plugin now names tiers (FAST/BALANCED/STRONG/EXPERT), not models; the model of a tier comes from the installed plan: state.py profile --tier <TIER>')" = 1 ] \
+    && pass "one hint names the tier vocabulary and state.py profile --tier" || fail "tier hint missing or repeated" "$out"
+P22="$TMP/proj22"; mkdir -p "$P22"
+CLAUDE_AGENTIC_TEMPLATES="$OLD/ai-init/templates" bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$P22" >/dev/null
+row=$(grep -n '^| TEST |' "$P22/.ai/workflows/feature.md" | cut -d: -f1)
+sed -i "${row}s/.*/| TEST | \`ai-tester\` | my own rule |/" "$P22/.ai/workflows/feature.md"
+out=$(python3 "$UPDATE" "$P22" 2>&1)
+printf '%s' "$out" | grep -q 'names tiers' && fail "the hint must appear only for a model-key conflict" "$out" || pass "any other conflict prints no tier hint"
+
 summary "project-update"

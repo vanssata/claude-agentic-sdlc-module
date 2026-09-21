@@ -1,6 +1,6 @@
 ---
 name: ai-status
-description: Show where the current agentic task stands — which .ai/ root governs this directory, id, stage, next action, risk tier, current step and its allowed files, test/e2e/review/security status, open risks, what the always-loaded instruction block costs — plus which model the EXPERT tier resolves to and whether the risk-tier mirror is stale. Read-only. Use for "/ai-status", "where are we", "what is the agent working on", "why did a guard fire here".
+description: Show where the current agentic task stands — which .ai/ root governs this directory, id, stage, next action, risk tier, current step and its allowed files, test/e2e/review/security status, open risks, what the always-loaded instruction block costs — plus what each tier resolves to on this plan, the runtime gate and quota, and whether the risk-tier mirror is stale. Read-only. Use for "/ai-status", "where are we", "what is the agent working on", "why did a guard fire here".
 ---
 
 # /ai-status
@@ -103,43 +103,33 @@ done
    run `/project-update` — fall back to the last few `history` entries and say
    which of the two you are showing.
 
-4. **Model routing.** Report the ladder of the runtime you are actually running
-   in. Read whichever configuration exists:
+4. **Model routing, gate and quota.** Read them from the tools, not from a
+   table in this file — the plan decides the models, and the same tier names a
+   different model on each plan and each runtime:
 
    ```bash
-   # Claude Code
-   jq -r '{model, fallbackModel, effortLevel}' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
-   grep -E '^(model|effort):' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/ai-expert.md"
-   python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/fable-gate.py" status 2>/dev/null
-
-   # Codex
-   grep -E '^(model|model_reasoning_effort|default_subagent_)' "${CODEX_HOME:-$HOME/.codex}/config.toml"
-   grep -E '^(model|model_reasoning_effort) *=' "${CODEX_HOME:-$HOME/.codex}/agents/ai-expert.toml"
-   python3 "${CODEX_HOME:-$HOME/.codex}/hooks/codex-model-gate.py" status 2>/dev/null
+   STATE="python3 $AI_HOME/skills/ai-task/state.py"
+   for t in FAST BALANCED STRONG EXPERT; do echo "$t $($STATE profile --tier $t 2>/dev/null || echo '?')"; done
+   $STATE profile --field label 2>/dev/null
+   GATE="$AI_HOME/hooks/runtime-gate.py"
+   python3 "$GATE" status 2>/dev/null
+   python3 "$GATE" quota 2>/dev/null
    ```
 
-   Report what the tiers resolve to on this machine, and **name the model, not
-   the tier** — so the reader knows what an escalation would actually cost:
+   Report what each tier resolves to on this machine and **name the model, not
+   only the tier**, so the reader knows what an escalation would cost. With no
+   plan profile (an install from before WP5) say so, and read the pins instead:
+   `grep -E '^(model|effort):' "$AI_HOME/agents/ai-expert.md"` on Claude Code,
+   `grep -E '^model' "$AI_HOME/agents/ai-expert.toml"` on Codex. `architect` may
+   pin a model of its own (or inherit the session): check its frontmatter.
 
-   | Tier | Claude Code | Codex |
-   |---|---|---|
-   | FAST | haiku | `gpt-5.6-terra` (Terra) |
-   | BALANCED | sonnet | `gpt-5.6-terra` (Terra) |
-   | STRONG | opus | `gpt-5.6-sol` (Sol) |
-   | EXPERT | `ai-expert`: `opus` pinned everywhere (`xhigh` on Max and Team Max, `high` on Pro and Team Pro) | the `model` pinned in `ai-expert.toml` (`xhigh` on Pro, `high` on Plus) |
+   When the gate reports `active`, the top model is running one tier down right
+   now — say until when, and why. Give the quota line as it prints, `stale`
+   included; a stale or unknown quota is not a reason to move anything.
 
-   Under Claude Code, when `model` is `opusplan`, say so in one line: Opus in
-   plan mode, Sonnet when executing, and `ai-expert` and `architect` pin `opus`
-   explicitly. On Max and Team Max the session is Opus 5, `ai-expert` pins `opus` at `xhigh`, and
-   `architect` alone may be pinned to `fable[1m]` — check its frontmatter:
-
-   ```bash
-   grep -E '^model:' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/architect.md" || echo "architect inherits the session model"
-   ```
-
-   When a runtime's gate reports `active`, its top model is running one tier down
-   right now — say until when, and why. A Codex install has no `fable-gate`, a
-   Claude install has no `codex-model-gate`; report only the one that exists.
+   If a task is in flight, add the preferred runtime when there is one — the
+   last `preferred runtime:` line in `.ai/state/handoff.md` — and whether the
+   task is handed over (`Handed to …` in the same file).
 
    Also print the pipeline profile, because it decides how much of a task is
    delegated:
