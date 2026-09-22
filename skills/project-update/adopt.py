@@ -55,3 +55,24 @@ def refuse(reason, how):
     print("%s: %s" % (REFUSED, reason))
     print("  %s" % how)
     return 5
+
+
+def budget_offenders(root, files, caps, block_of):
+    """R21: one line per root instruction file over budget — its managed block
+    over `caps["project"]`, or the whole file over `caps["skeleton"]`. Files that
+    do not exist are skipped; a file under both budgets prints nothing."""
+    out = []
+    for name in files:
+        path = os.path.join(root, name)
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        block = block_of(text)
+        size = len(text.encode("utf-8"))
+        if block is not None and caps.get("project") and len(block.encode("utf-8")) > caps["project"]:
+            out.append("%s block %d B over the project budget of %d B"
+                       % (name, len(block.encode("utf-8")), caps["project"]))
+        if caps.get("skeleton") and size > caps["skeleton"]:
+            out.append("%s file %d B over the skeleton budget of %d B" % (name, size, caps["skeleton"]))
+    return out

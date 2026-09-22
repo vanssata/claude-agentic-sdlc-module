@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Bring a project's claude-agentic files up to date with the installed plugin.
 
-  update.py [project-dir] [--apply [--confirm-delete NAME]] [--check]
+  update.py [project-dir] [--apply [--confirm-delete NAME]] [--check [--budget]]
 
 Default is a dry run: print what would change, write nothing.
   --apply   write the changes
   --check   print one line and exit 1 when an automatic update is pending
+  --check --budget   print one line per root instruction file over its byte
+            budget (block over `project`, file over `skeleton`) and exit 1
   --confirm-delete NAME   a human confirms this run's proposed deletions; refused
             (exit 5) when no human is present: no terminal and no AI_UNATTENDED
 
 Exit codes:
   0  done (or, with --check, the project is current)
-  1  --check: an update is pending
+  1  --check: an update is pending; --check --budget: a file is over budget
   2  usage error, missing templates, a schema the plugin cannot read
   3  an apply aborted part-way; nothing after the failing item was written
   5  refused: --confirm-delete without a human (ADOPT_REFUSED on stdout line 1)
@@ -1137,6 +1139,8 @@ def main():
     ap.add_argument("root", nargs="?", default=".")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--budget", action="store_true",
+                    help="with --check: exit 1 when a root instruction file is over its byte budget")
     ap.add_argument("--confirm-delete", metavar="NAME",
                     help="a human confirms this run's proposed deletions, and is recorded in "
                          "the migration report; only with --apply")
@@ -1150,7 +1154,16 @@ def main():
             return adopt.refuse("--confirm-delete is typed by a human, and this run has no terminal",
                                 "run the same command yourself in a terminal, or set AI_UNATTENDED=1 "
                                 "if a launcher runs it unattended on your behalf")
+    if args.budget and not args.check:
+        ap.error("--budget only makes sense with --check")
     root = os.path.abspath(args.root)
+    if args.check and args.budget:
+        offenders = adopt.budget_offenders(
+            root, [INSTRUCTION_FILE[rt][0] for rt in project_runtimes(root)],
+            render_instructions.budgets(render_instructions.DEFAULT_SOURCE), render_instructions.block_of)
+        for line in offenders:
+            print(line)
+        return 1 if offenders else 0
     for name, tpl in TEMPLATES.items():
         if not os.path.isdir(tpl):
             print("project-update: %s templates not found at %s (run claude-agentic/install.sh)" % (name, tpl), file=sys.stderr)
