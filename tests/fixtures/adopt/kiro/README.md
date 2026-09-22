@@ -10,6 +10,8 @@ Layout assumed:
 - `.kiro/settings/mcp.json`.
 - `.kiro/hooks/<id>.json`, plain JSON (the older `*.kiro.hook` format is gone). Not stored here: the test plants one to prove R4 (`unmapped`, exit 4).
 
+AI-DLC v1 installed for Kiro is included (`.kiro/steering/aws-aidlc-rules/`, `.kiro/aws-aidlc-rule-details/`) so both `ignore` rows are exercised.
+
 The fixture covers `always` (product.md), no frontmatter (tech.md), `fileMatch` (api-standards.md)
 and `manual` (release-checklist.md).
 

@@ -549,11 +549,11 @@ class Plan:
         return self.seen[target]
 
     def add(self, action, target, note="", content=None, conflict_copy=None, policy=None,
-            migration=None, src=None, reason=None):
+            migration=None, src=None, reason=None, tool=None):
         expect = self.before(target)
         self.items.append(dict(action=action, target=target, note=note, content=content,
                                conflict_copy=conflict_copy, policy=policy, migration=migration,
-                               src=src, reason=reason, expect=expect,
+                               src=src, reason=reason, tool=tool, expect=expect,
                                src_expect=self.before(src) if src else None))
         if content is not None:
             self.final[target] = content
@@ -1097,6 +1097,11 @@ def apply_item(plan, item, written, recorded):
         write_file(plan.root, os.path.join(plan.local_dir, target), item["conflict_copy"])
 
 
+def shipped_block(runtime):
+    """The managed block the installed plugin ships for a runtime, as text."""
+    return read(os.path.join(TEMPLATES["ai-init"], INSTRUCTION_FILE[runtime][1])).decode("utf-8").rstrip("\n")
+
+
 def report(plan, applied):
     auto = [i for i in plan.items if i["action"] not in ("conflict", "delete?")]
     conflicts = [i for i in plan.items if i["action"] == "conflict"]
@@ -1117,6 +1122,8 @@ def report(plan, applied):
         note = i["note"]
         if i["migration"] is not None:
             note = "[%04d]%s" % (i["migration"], " " + note if note else "")
+        if i.get("tool") and not note.startswith("[%s]" % i["tool"]):
+            note = "[%s] %s" % (i["tool"], note)
         if i["action"] == "delete?":
             note += "; needs --apply --confirm-delete NAME"
         if i["action"] == "conflict" and i["conflict_copy"] is not None:
@@ -1139,6 +1146,11 @@ def main():
     ap.add_argument("root", nargs="?", default=".")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--adopt", action="store_true",
+                    help="adopt a foreign AI-tool structure (Spec Kit, Kiro, Cursor, ...); a dry run unless --apply")
+    ap.add_argument("--mode", choices=("migrate", "coexist"), default="migrate",
+                    help="with --adopt: migrate (default) moves the foreign files; coexist only routes to them")
+    ap.add_argument("--tool", metavar="LIST", help="with --adopt: only these tools, comma-separated")
     ap.add_argument("--budget", action="store_true",
                     help="with --check: exit 1 when a root instruction file is over its byte budget")
     ap.add_argument("--confirm-delete", metavar="NAME",
@@ -1156,7 +1168,14 @@ def main():
                                 "if a launcher runs it unattended on your behalf")
     if args.budget and not args.check:
         ap.error("--budget only makes sense with --check")
+    if not args.adopt and (args.tool or args.mode != "migrate"):
+        ap.error("--mode and --tool only make sense with --adopt")
     root = os.path.abspath(args.root)
+    if args.adopt:
+        if args.apply or args.check or args.confirm_delete is not None:
+            ap.error("--adopt is a dry run only in this version")
+        caps = render_instructions.budgets(render_instructions.DEFAULT_SOURCE)
+        return adopt.run(Plan(root), args, shipped_block, caps.get("skeleton"))
     if args.check and args.budget:
         offenders = adopt.budget_offenders(
             root, [INSTRUCTION_FILE[rt][0] for rt in project_runtimes(root)],
