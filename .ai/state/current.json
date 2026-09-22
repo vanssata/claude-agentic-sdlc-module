@@ -3,7 +3,7 @@
   "goal": "WP6: project-update --adopt — detect, migrate/coexist and clean up foreign AI-tool structures (Spec Kit, Kiro, Cursor, Copilot, AI-DLC, large instruction files)",
   "workflow": "feature",
   "risk_tier": "T3",
-  "current_stage": "plan_review",
+  "current_stage": "implementation",
   "affected_modules": [],
   "context_summary_ref": "inline: entry: skills/project-update/update.py (Plan, report, apply, keep_original:981, --confirm-delete); new adopt.py + adopt-map.json; callers: skills/ai-status step 7 reads --check; must stay unaffected: hooks/guards, test-guard-characterization golden, plain --check output, migrations/, state.py",
   "approved_plan": {
@@ -20,7 +20,7 @@
         "forbidden_files": [],
         "forbidden_reason": "not part of this step",
         "required_tests": [],
-        "status": "pending"
+        "status": "done"
       },
       {
         "step_id": "2",
@@ -138,10 +138,12 @@
       }
     ]
   },
-  "completed_steps": [],
+  "completed_steps": [
+    "1"
+  ],
   "test_status": "not_run",
   "e2e_status": "not_run",
-  "review_status": "blockers_open",
+  "review_status": "not_started",
   "security_status": "not_started",
   "open_risks": [],
   "next_action": "run DISCOVERY",
@@ -152,7 +154,7 @@
     "granted_at": null
   },
   "created_at": "2026-09-21T23:56:09Z",
-  "updated_at": "2026-09-22T00:21:54Z",
+  "updated_at": "2026-09-22T00:34:12Z",
   "history": [
     {
       "at": "2026-09-21T23:56:09Z",
@@ -233,6 +235,31 @@
       "at": "2026-09-22T00:21:54Z",
       "event": "stage",
       "detail": "plan_review -> plan_review: re-review findings A (option 2: foreign = no managed block), B, C, 5 LOW, stale texts closed in plan text; awaiting human approval"
+    },
+    {
+      "at": "2026-09-22T00:24:12Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-09-22T00:24:12Z",
+      "event": "stage",
+      "detail": "plan_review -> implementation: plan approved by Ivan Kakurov 2026-09-22; branch feat/wp6-adopt"
+    },
+    {
+      "at": "2026-09-22T00:24:12Z",
+      "event": "step_started",
+      "detail": "1: Verify format assumptions, write 8 fixtures + adopt-map.json"
+    },
+    {
+      "at": "2026-09-22T00:34:07Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-09-22T00:34:12Z",
+      "event": "set",
+      "detail": "review_status = not_started"
     }
   ]
 }

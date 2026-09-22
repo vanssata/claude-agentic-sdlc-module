@@ -1,0 +1,8 @@
+---
+description: Project-wide conventions
+globs:
+alwaysApply: true
+---
+
+- Use pnpm, never npm or yarn.
+- Every package has its own tsconfig that extends tsconfig.base.json.

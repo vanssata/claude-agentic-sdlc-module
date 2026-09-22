@@ -1,0 +1,8 @@
+---
+description: React component rules
+globs: src/components/**/*.tsx,src/hooks/**/*.ts
+alwaysApply: false
+---
+
+- Components are function components with typed props.
+- Hooks start with `use` and live in src/hooks.

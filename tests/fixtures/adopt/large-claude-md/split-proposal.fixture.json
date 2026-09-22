@@ -1,0 +1,7 @@
+{"version": 1,
+ "keep": [],
+ "moves": [{"lines": [1, 5], "dest": ".ai/project/overview.md"},
+           {"lines": [6, 18], "dest": ".ai/policies/adopted/conventions.md", "heading": "## Conventions"},
+           {"lines": [19, 31], "dest": ".ai/rules/payment.md", "dirs": ["src/Payment"], "paths": ["src/Payment/**"]},
+           {"lines": [32, 42], "dest": ".ai/project/overview.md"}],
+ "dropped": [{"lines": [43, 47], "why": "repeats rules 1, 4 and 5 of the managed block"}]}
