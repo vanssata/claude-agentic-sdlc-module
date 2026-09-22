@@ -657,4 +657,69 @@ out=$(AI_UNATTENDED=1 python3 "$UPDATE" "$SK" --adopt --cleanup --apply --confir
 [ $rc -eq 0 ] && [ ! -e "$SK/.specify" ] && [ -f "$SK/CLAUDE.md" ] && [ -d "$SK/.claude" ] \
     && pass "with no task in flight they are deleted; .specify/ goes, CLAUDE.md and .claude/ stay" || fail "speckit cleanup (rc=$rc)" "$out"
 
+echo "== review: cleanup and decisions never reach outside the project, and never lose what git cannot restore"
+# forge <dir> <jq filter> [jq args]: a hand edit of the committed adopt.json, committed.
+forge() {
+    local rec; rec=$(ls "$1"/.ai/reports/adopt-*/adopt.json)
+    jq "${@:3}" "$2" "$rec" > "$rec.new" && mv "$rec.new" "$rec"; commit "$1" forged
+}
+printf 'keep me\n' > "$TMP/outside.txt"; osha="sha256:$(sha256sum "$TMP/outside.txt" | cut -d' ' -f1)"
+R="$TMP/forge-parent"; cleaned "$R"
+forge "$R" '.sources += [{"path":"../outside.txt","sha":$s,"tool":"cursor","transform":"copy","cleanup":true}]' --arg s "$osha"
+cleanup_refused "$R" "an adopt.json source with ../"
+R="$TMP/forge-abs"; cleaned "$R"
+forge "$R" '.sources += [{"path":$p,"sha":$s,"tool":"cursor","transform":"copy","cleanup":true}]' --arg p "$TMP/outside.txt" --arg s "$osha"
+cleanup_refused "$R" "an adopt.json source with an absolute path"
+[ -f "$TMP/outside.txt" ] && pass "and the file outside the project is still there" || fail "a file outside the project was deleted"
+R="$TMP/forge-stranger"; cleaned "$R"
+bsha="sha256:$(sha256sum "$R/src/components/Button.tsx" | cut -d' ' -f1)"
+forge "$R" '.sources += [{"path":"src/components/Button.tsx","sha":$s,"tool":"cursor","transform":"copy","cleanup":true}]' --arg s "$bsha"
+cleanup_refused "$R" "an adopt.json source the mapping does not offer for cleanup"
+[ -f "$R/src/components/Button.tsx" ] && pass "and the project's own source file stays" || fail "src/components/Button.tsx was deleted"
+R="$TMP/cleanup-ignored"; adopt_fixture cursor "$R"
+printf '.cursor/rules/local.mdc\n' >> "$R/.gitignore"; commit "$R" ignore
+cp "$R/.cursor/rules/testing.mdc" "$R/.cursor/rules/local.mdc"
+python3 "$UPDATE" "$R" --adopt --apply >/dev/null; commit "$R" adopted
+out=$(AI_UNATTENDED=1 python3 "$UPDATE" "$R" --adopt --cleanup --apply --confirm-delete tester </dev/null)
+cleanup_refused "$R" "a git-ignored cleanup source"
+printf '%s' "$out" | head -1 | grep -q 'git does not track' && [ -f "$R/.cursor/rules/local.mdc" ] \
+    && pass "it names the untracked file, which stays" || fail "ignored-file refusal" "$out"
+R="$TMP/cleanup-resumed"; cleaned "$R"
+forge "$R" '.cleanup += {"confirmed_by":"first","at":"2000-01-01T00:00:00Z","unattended":false,"tty":true,"deleted":["gone-earlier.md"]}'
+AI_UNATTENDED=1 python3 "$UPDATE" "$R" --adopt --cleanup --apply --confirm-delete tester </dev/null >/dev/null
+rec=$(ls "$R"/.ai/reports/adopt-*/adopt.json)
+[ "$(jq -r '.cleanup.deleted[0]' "$rec")" = gone-earlier.md ] && [ "$(jq -r '.cleanup.history[0].confirmed_by' "$rec")" = first ] \
+    && [ "$(jq -r '.cleanup.confirmed_by' "$rec")" = tester ] \
+    && pass "a second cleanup keeps the first one's deletions and who confirmed them" || fail "cleanup audit trail" "$(jq .cleanup "$rec")"
+grep -q 'confirmed by first' "$(dirname "$rec")/report.md" && grep -q 'over 2 run(s)' "$(dirname "$rec")/report.md" \
+    && pass "and report.md names both runs, not only the last" || fail "report.md credits only the last run"
+R="$TMP/forge-nopath"; cleaned "$R"; forge "$R" '.sources += [{"sha":"sha256:x","tool":"cursor","cleanup":false}]'
+out=$(python3 "$UPDATE" "$R" --adopt --cleanup 2>&1); rc=$?
+[ $rc -eq 0 ] && ! printf '%s' "$out" | grep -q Traceback && pass "a record entry without a path is skipped, not a traceback" \
+    || fail "entry without path (rc=$rc)" "$out"
+
+K2="$TMP/decision-escape"; adopt_fixture kiro "$K2"
+mkdir -p "$K2/.kiro/hooks" "$K2/.ai/reports/adopt-2000-01-01"; printf '{"hooks": []}\n' > "$K2/.kiro/hooks/lint-on-save.json"; commit "$K2"
+printf '{"version":1,"unmapped":{".kiro/hooks/lint-on-save.json":{"action":"copy","dest":"../escape.md"}}}\n' \
+    > "$K2/.ai/reports/adopt-2000-01-01/decisions.json"
+out=$(python3 "$UPDATE" "$K2" --adopt); rc=$?
+[ $rc -eq 4 ] && printf '%s' "$out" | grep -q '^  unmapped  .kiro/hooks/lint-on-save.json .*not an allowed destination' \
+    && pass "a decisions.json copy to ../ stays unmapped, exit 4" || fail "decision escape dry run (rc=$rc)" "$out"
+out=$(python3 "$UPDATE" "$K2" --adopt --apply); rc=$?
+[ $rc -eq 4 ] && [ ! -e "$TMP/escape.md" ] && pass "and --apply writes nothing outside the project" || fail "decision escape apply (rc=$rc)" "$out"
+printf '{"version":1,"unmapped":{".kiro/hooks/lint-on-save.json":{"action":"copy","dest":"docs/sdlc/specs/kiro-hooks/lint-on-save.json"}}}\n' \
+    > "$K2/.ai/reports/adopt-2000-01-01/decisions.json"
+out=$(python3 "$UPDATE" "$K2" --adopt); rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -q 'lint-on-save.json -> docs/sdlc/specs/kiro-hooks/lint-on-save.json' \
+    && pass "a copy under docs/sdlc/specs/ is accepted (I6)" || fail "allowed decision dest (rc=$rc)" "$out"
+
+B="$TMP/broken-decisions"; adopt_fixture cursor "$B"; mkdir -p "$B/.ai/reports/adopt-2000-01-01"
+printf '{"version":' > "$B/.ai/reports/adopt-2000-01-01/decisions.json"
+out=$(python3 "$UPDATE" "$B" 2>&1); rc=$?
+[ $rc -eq 0 ] && ! printf '%s' "$out" | grep -q Traceback && printf '%s' "$out" | grep -q '^  hint      adopt state unreadable' \
+    && pass "a truncated decisions.json is a hint in the plain dry run, not a traceback" || fail "plain dry run on broken decisions (rc=$rc)" "$out"
+out=$(python3 "$UPDATE" "$B" --adopt --check 2>&1); rc=$?
+[ $rc -eq 1 ] && [ "$(printf '%s\n' "$out" | wc -l)" -eq 1 ] && printf '%s' "$out" | grep -q '^adopt state unreadable' \
+    && pass "and --adopt --check prints one line, exit 1" || fail "--adopt --check on broken decisions (rc=$rc)" "$out"
+
 summary "project-adopt"

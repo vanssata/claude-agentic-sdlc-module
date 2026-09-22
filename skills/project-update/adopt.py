@@ -65,6 +65,16 @@ def refuse(reason, how):
     return 5
 
 
+def safe_rel(path):
+    """A path adopt may read, write or delete: relative, normalised, inside the
+    project and outside .git/. adopt.json, decisions.json and proposals are
+    project files anyone can edit, so every path taken from them passes this."""
+    if not isinstance(path, str) or not path or path.startswith("/") or "\\" in path or "\0" in path:
+        return False
+    parts = path.split("/")
+    return all(p not in ("", ".", "..") for p in parts) and parts[0] != ".git"
+
+
 def budget_offenders(root, files, caps, block_of):
     """R21: one line per root instruction file over budget — its managed block
     over `caps["project"]`, or the whole file over `caps["skeleton"]`. Files that
@@ -294,6 +304,14 @@ def rule_content(plan, path, text, row, tool, adoption):
     return dest, (front_out + head + body).encode("utf-8"), note
 
 
+DECISION_DOCS_RE = re.compile(r"\Adocs/sdlc/(?:intent|specs|plans)/[^/]")
+
+
+def decision_dest_ok(dest):
+    """I6: a human's `copy` goes to the I5 allow-list or under docs/sdlc/{intent,specs,plans}/."""
+    return safe_rel(dest) and bool(ALLOWED_DEST_RE.match(dest) or DECISION_DOCS_RE.match(dest))
+
+
 def plan_file(plan, adoption, path, row, tool, roots):
     """Plan one matched source."""
     transform = row["transform"]
@@ -424,6 +442,11 @@ def plan_adopt(plan, table, mode="migrate", tools=None, shipped_block=None, skel
         for path, row in entries:
             if row is None:
                 decided = decisions.get(path)
+                if decided and decided.get("action") == "copy" and not decision_dest_ok(decided.get("dest")):
+                    adoption.unmapped.append((path, tool))
+                    adoption.note("unmapped", path, "[%s] decisions.json copies it to %r, not an allowed destination"
+                                  % (tool, decided.get("dest")))
+                    continue
                 if decided and decided.get("action") in ("drop", "ignore", "copy"):
                     row = {"tool": tool, "source": path, "transform": decided["action"], "_n": 0,
                            "why": decided.get("why", "decided by a human"), "dest": decided.get("dest"),
@@ -631,7 +654,15 @@ def check_state(root, table, shipped_block, skeleton_cap, instruction_files, shi
 
 def state_line(root, shipped_block, skeleton_cap, table=None, instruction_files=frozenset(), shipped_files=None):
     """(exit code, one I11 line). Detection only — no reference scan — so the
-    plain dry run (D5) can afford it on every call."""
+    plain dry run (D5) can afford it on every call. A broken adopt artefact is
+    one line, never a traceback: /ai-status and the plain update read this."""
+    try:
+        return _state_line(root, shipped_block, skeleton_cap, table, instruction_files, shipped_files)
+    except (TableError, OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        return 1, "adopt state unreadable (%s) — run /project-update --adopt" % exc
+
+
+def _state_line(root, shipped_block, skeleton_cap, table, instruction_files, shipped_files):
     if table is None:
         try:
             table = load_table()
@@ -656,6 +687,8 @@ def state_line(root, shipped_block, skeleton_cap, table=None, instruction_files=
     regenerated = []
     deleted = set((record_data.get("cleanup") or {}).get("deleted") or [])
     for src in record_data.get("sources", []):
+        if not safe_rel(src.get("path")):
+            continue
         full = os.path.join(root, src["path"])
         if src["path"] in deleted and os.path.isfile(full):
             regenerated.append(src["path"])  # it reappeared after cleanup (R16)
@@ -677,7 +710,8 @@ def state_line(root, shipped_block, skeleton_cap, table=None, instruction_files=
         what = failed[0].replace("_", "-") + " FAIL" if failed else "the apply was interrupted"
         return 1, "adoption of %s incomplete: %s — run /project-update --adopt" % (date, what)
     tools = ", ".join(sorted(record_data.get("tools", {})))
-    pending = sum(1 for s in record_data.get("sources", []) if s.get("cleanup") and os.path.isfile(os.path.join(root, s["path"])))
+    pending = sum(1 for s in record_data.get("sources", []) if s.get("cleanup") and safe_rel(s.get("path"))
+                  and os.path.isfile(os.path.join(root, s["path"])))
     tail = "; %d file(s) await cleanup" % pending if pending else ""
     return 0, "adopted %s: %s — up to date%s" % (date, tools, tail)
 
@@ -1256,10 +1290,16 @@ def plan_cleanup(plan, args, u, table, skeleton_cap, instruction_files, shipped_
         more = " and %d more" % (len(dirty) - 3) if len(dirty) > 3 else ""
         return no("the tree has uncommitted changes: %s%s" % (", ".join(dirty[:3]), more),
                   "commit the adopt (its record included) first, so the deletion is its own change")
+    unsafe = [str(s.get("path")) for s in record.get("sources", []) if s.get("cleanup") and not safe_rel(s.get("path"))]
+    if unsafe:
+        return no("adopt.json names path(s) outside the project: %s" % ", ".join(unsafe[:3]),
+                  "the record was edited; restore it from git, then --cleanup")
     targets, changed = [], []
     for src in record.get("sources", []):
+        if not src.get("cleanup"):
+            continue  # safe_rel above holds for every cleanup entry, and only for those
         path = src["path"]
-        if not src.get("cleanup") or path in INSTRUCTION_ROOT or not os.path.isfile(os.path.join(root, path)):
+        if path in INSTRUCTION_ROOT or not os.path.isfile(os.path.join(root, path)):
             continue  # R17: an instruction file is never deleted
         if sha256(plan.read(path) or b"") != src.get("sha"):
             changed.append(path)
@@ -1280,6 +1320,18 @@ def plan_cleanup(plan, args, u, table, skeleton_cap, instruction_files, shipped_
     if what:
         return no("the adopt no longer holds on the current tree: %s" % "; ".join(what),
                   "run /project-update --adopt to see why, settle it, then --cleanup", adoption)
+    # Only what the adopt finds again as a cleanup source, and only what git
+    # can restore: an ignored file skipped from original/ would be gone for good.
+    found = {path for path, _t, _tr, _n, cleanup in adoption.sources if cleanup}
+    stranger = [s["path"] for s in targets if s["path"] not in found]
+    if stranger:
+        return no("adopt.json lists file(s) the adopt does not map for cleanup: %s" % ", ".join(stranger[:3]),
+                  "the record was edited; restore it from git, then --cleanup")
+    tracked = set(git_files(root) or [])
+    untracked = [s["path"] for s in targets if s["path"] not in tracked]
+    if untracked:
+        return no("file(s) git does not track (ignored?): %s" % ", ".join(untracked[:3]),
+                  "cleanup deletes only what git can restore; commit them or delete them yourself")
     return None, where, record, targets, adoption
 
 
@@ -1319,8 +1371,14 @@ def cleanup_run(plan, args, u, skeleton_cap, instruction_files=frozenset(), ship
         print("%d deletion(s) awaiting --confirm-delete" % len(targets))
         return 0
     tty = os.isatty(0)
+    prior = record.get("cleanup") or {}
+    history = list(prior.get("history") or [])
+    if prior.get("at"):  # an earlier, interrupted cleanup keeps its line in the trail
+        history.append({k: prior.get(k) for k in ("confirmed_by", "at", "unattended", "tty")})
     record["cleanup"] = {"offered": True, "confirmed_by": confirm, "at": u.utc_now(),
-                         "unattended": not tty, "tty": tty, "deleted": []}
+                         "unattended": not tty, "tty": tty, "deleted": list(prior.get("deleted") or [])}
+    if history:
+        record["cleanup"]["history"] = history
     plan.report_dir = plan.adopt_report_dir = where  # the record's own directory, not today's
     rec_path = where + "/adopt.json"
     write_json(u, plan.root, rec_path, record)  # who and when, before the first removal
@@ -1344,6 +1402,8 @@ def remove_confirmed(u, plan, rel, record, table):
     """Delete one confirmed source: its original kept first (bounded, into the
     record's directory), then the file, then any directory left empty inside
     its tool's roots — so the signature goes with the files."""
+    if not safe_rel(rel):  # plan_cleanup refused it already; never trust one caller
+        raise OSError("refusing to delete %r: not a path inside the project" % rel)
     keep_original_bounded(u, plan, rel, record)
     os.remove(os.path.join(plan.root, rel))
     record["cleanup"]["deleted"].append(rel)
@@ -1368,9 +1428,15 @@ def cleanup_report_md(u, root, where, record):
         text = ""
     text = text.split("\n" + CLEANUP_HEADING + "\n", 1)[0].rstrip("\n") + "\n"
     c = record["cleanup"]
-    out = ["", CLEANUP_HEADING, "",
-           "- %d file(s) deleted at %s, confirmed by %s%s" % (
-               len(c["deleted"]), c["at"], c["confirmed_by"], " (deleted unattended)" if c["unattended"] else "")]
+    runs = list(c.get("history") or []) + [c]
+
+    def who(entry):
+        return "%s, confirmed by %s%s" % (entry.get("at"), entry.get("confirmed_by"),
+                                         " (deleted unattended)" if entry.get("unattended") else "")
+    # deleted is cumulative and not per run, so an earlier interrupted run is
+    # named, never credited with a count it cannot prove.
+    out = ["", CLEANUP_HEADING, "", "- %d file(s) deleted over %d run(s)" % (len(c["deleted"]), len(runs))]
+    out += ["- run at %s" % who(entry) for entry in runs]
     out += ["- `%s`" % p for p in c["deleted"]]
     u.write_file(root, where + "/report.md", (text + "\n".join(out) + "\n").encode("utf-8"))
 
