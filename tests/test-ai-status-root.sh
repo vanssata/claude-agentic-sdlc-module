@@ -91,4 +91,12 @@ for phrase in "GEMINI.md" ".junie/guidelines.md" "docs/sdlc/constitution.md" "OV
     else fail "the budget step no longer covers: $phrase"; fi
 done
 
+# R16: a regenerated or unattended-deleted foreign structure must reach the
+# report; without the second line of step 7 nobody is told.
+echo "== the plugin-version step carries the adopt line"
+for phrase in "--adopt --check" "(deleted unattended)"; do
+    if grep -qF -- "$phrase" "$SKILL"; then pass "step 7 covers: $phrase"
+    else fail "step 7 no longer covers: $phrase"; fi
+done
+
 summary "ai-status project root"
