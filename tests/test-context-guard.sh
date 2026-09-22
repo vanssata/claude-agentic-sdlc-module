@@ -15,6 +15,9 @@ export AI_CONTEXT_GUARD_STATE="$TMP/state"
 unset CLAUDE_CODE_AUTO_COMPACT_WINDOW AI_CONTEXT_WARN_TOKENS AI_CONTEXT_BLOCK_TOKENS
 mkdir -p "$CLAUDE_CONFIG_DIR" "$TMP/project/src"
 PROJECT="$TMP/project"
+# A payload without cwd falls back to the hook's own; left at the caller's, that
+# is this checkout, whose .ai/ task would be recorded into and handed off.
+cd "$PROJECT" || exit 1
 T="$TMP/transcript.jsonl"
 
 set_window() {   # set_window <tokens> [model] — the model decides the cap below
