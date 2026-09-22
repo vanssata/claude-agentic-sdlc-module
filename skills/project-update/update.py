@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
 """Bring a project's claude-agentic files up to date with the installed plugin.
 
-  update.py [project-dir] [--apply] [--check]
+  update.py [project-dir] [--apply [--confirm-delete NAME]] [--check]
 
 Default is a dry run: print what would change, write nothing.
   --apply   write the changes
   --check   print one line and exit 1 when an automatic update is pending
+  --confirm-delete NAME   a human confirms this run's proposed deletions; refused
+            (exit 5) when no human is present: no terminal and no AI_UNATTENDED
+
+Exit codes:
+  0  done (or, with --check, the project is current)
+  1  --check: an update is pending
+  2  usage error, missing templates, a schema the plugin cannot read
+  3  an apply aborted part-way; nothing after the failing item was written
+  5  refused: --confirm-delete without a human (ADOPT_REFUSED on stdout line 1)
 
 What it manages, and how:
   .ai/** (policies, workflows, agents, templates)   three-way update
@@ -37,6 +46,7 @@ sys.path.insert(0, HERE)
 import migrations  # noqa: E402  # lives next to this script
 from migrations import SchemaError  # noqa: E402
 import render_instructions  # noqa: E402  # lives next to this script
+import adopt  # noqa: E402  # lives next to this script
 SKILLS = os.path.dirname(HERE)
 TEMPLATES = {
     "ai-init": os.environ.get("CLAUDE_AGENTIC_TEMPLATES", os.path.join(SKILLS, "ai-init", "templates")),
@@ -1136,6 +1146,10 @@ def main():
             ap.error("--confirm-delete only makes sense with --apply")
         if not args.confirm_delete.strip():
             ap.error("--confirm-delete needs the name of the human who confirmed the deletion")
+        if not adopt.human_present():
+            return adopt.refuse("--confirm-delete is typed by a human, and this run has no terminal",
+                                "run the same command yourself in a terminal, or set AI_UNATTENDED=1 "
+                                "if a launcher runs it unattended on your behalf")
     root = os.path.abspath(args.root)
     for name, tpl in TEMPLATES.items():
         if not os.path.isdir(tpl):

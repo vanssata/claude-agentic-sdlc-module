@@ -432,7 +432,12 @@ out=$(python3 "$UPDATE" "$S3" --check); [ $? -eq 1 ] && printf '%s' "$out" | gre
 echo "== a human confirms the deletion, and only then is it performed"
 python3 "$UPDATE" "$S3" --confirm-delete tester >/dev/null 2>&1; [ $? -eq 2 ] && pass "--confirm-delete without --apply is refused" || fail "should be an argparse error"
 python3 "$UPDATE" "$S3" --apply --confirm-delete "" >/dev/null 2>&1; [ $? -eq 2 ] && pass "an empty confirmation name is refused" || fail "empty --confirm-delete should be refused"
-python3 "$UPDATE" "$S3" --apply --confirm-delete tester >/dev/null
+out=$(env -u AI_UNATTENDED python3 "$UPDATE" "$S3" --apply --confirm-delete tester </dev/null); rc=$?
+[ $rc -eq 5 ] && pass "--confirm-delete without a human present is refused (exit 5)" || fail "expected exit 5 without a terminal, got $rc" "$out"
+[ "$(printf '%s' "$out" | head -1 | cut -d: -f1)" = ADOPT_REFUSED ] && pass "and says so on the first stdout line" || fail "no ADOPT_REFUSED on line 1" "$out"
+[ -e "$S3/.ai/legacy-notes.md" ] && pass "and the file is still there" || fail "a refused deletion removed the file"
+# The launcher's declaration, on this command only: no terminal here or in CI.
+AI_UNATTENDED=1 python3 "$UPDATE" "$S3" --apply --confirm-delete tester >/dev/null
 [ ! -e "$S3/.ai/legacy-notes.md" ] && pass "the confirmed deletion is performed" || fail "the file should be gone"
 [ -f "$S3"/.ai/reports/project-update-*/original/.ai/legacy-notes.md ] && pass "its original is kept too" || fail "no original for the deletion"
 rec=$(cat "$S3"/.ai/reports/project-update-*/migration.json)
@@ -479,7 +484,7 @@ grep -q 'keep me' "$RD/src/Payment/CLAUDE.md" \
     && pass "the human's text around a removed block survives" || fail "the human's text was lost"
 grep -q 'claude-agentic:rule:payment' "$RD/src/Payment/CLAUDE.md" \
     && fail "the stale block should have been taken out" || pass "the stale block was taken out without a gate: it is ours"
-python3 "$UPDATE" "$RD" --apply --confirm-delete "Ivan" >/dev/null 2>&1
+AI_UNATTENDED=1 python3 "$UPDATE" "$RD" --apply --confirm-delete "Ivan" >/dev/null 2>&1
 [ -f "$RD/.claude/rules/payment.md" ] \
     && fail "the confirmed deletion did not happen" || pass "the confirmed deletion is performed"
 [ -f "$RD/.ai/reports/project-update-$(date -u +%Y-%m-%d)/original/.claude/rules/payment.md" ] \
