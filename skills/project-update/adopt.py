@@ -198,8 +198,10 @@ class Adoption:
         self.unmapped = []              # (path, tool)
         self.split = []                 # instruction files that are split candidates
         self.dropped = []               # dropped.jsonl records (spec I7)
-        self.sources = []               # (path, tool, transform, row number)
+        self.sources = []               # (path, tool, transform, row number, cleanup)
+        self.destinations = []          # (dest-or-path, tool, router text or None, coexist bool)
         self.rows_used = set()
+        self.checks = {}                # "no-line-lost"/"no-dangling" -> (status, detail text)
 
     def note(self, action, subject, text):
         self.notes.append((action, subject, text))
@@ -294,7 +296,7 @@ def plan_file(plan, adoption, path, row, tool, roots):
     if transform == "ignore":
         adoption.note("ignored", path, "[%s] %s" % (tool, row["why"]))
         return
-    adoption.sources.append((path, tool, transform, row["_n"]))
+    adoption.sources.append((path, tool, transform, row["_n"], bool(row.get("cleanup"))))
     data = plan.read(path) or b""
     for n, line in enumerate(data.decode("utf-8", "replace").split("\n"), 1):
         if SECRET_RE.search(line):
@@ -306,6 +308,7 @@ def plan_file(plan, adoption, path, row, tool, roots):
         return
     if adoption.mode == "coexist":
         adoption.note("kept", path, "[%s] %s, kept in place (coexist)" % (tool, transform))
+        adoption.destinations.append((path, tool, row.get("router"), True))
         return
     text = data.decode("utf-8", "replace")
     if transform == "rule":
@@ -330,10 +333,12 @@ def plan_file(plan, adoption, path, row, tool, roots):
     tag = "[%s] %s" % (tool, note)
     if transform == "append-section":
         plan.add("adopt", dest, note=tag, content=content, src=path, tool=tool)
+        adoption.destinations.append((dest, tool, row.get("router"), False))
     elif existing is not None and existing != content:
         plan.add("conflict", dest, note=tag + "; the destination exists and differs", src=path, tool=tool)
     elif existing != content:
         plan.add("adopt", dest, note=tag, content=content, src=path, tool=tool)
+        adoption.destinations.append((dest, tool, row.get("router"), False))
 
 
 def latest_with(root, name):
@@ -360,7 +365,8 @@ def load_decisions(root):
         raise TableError("%s/decisions.json: %s" % (where, exc)) from exc
 
 
-def plan_adopt(plan, table, mode="migrate", tools=None, shipped_block=None, skeleton_cap=None):
+def plan_adopt(plan, table, mode="migrate", tools=None, shipped_block=None, skeleton_cap=None,
+               instruction_files=frozenset(), shipped_files=None):
     """Detect every foreign structure at the root and plan it onto `plan`.
     Returns the Adoption. Nothing is written."""
     root = plan.root
@@ -430,7 +436,7 @@ def plan_adopt(plan, table, mode="migrate", tools=None, shipped_block=None, skel
         if block is None:
             adoption.detected[tool] = OrderedDict([(sig, 1)])
             adoption.rows_used.add(row["_n"])
-            adoption.sources.append((sig, tool, "instruction-file", row["_n"]))
+            adoption.sources.append((sig, tool, "instruction-file", row["_n"], False))
             for n, line in enumerate(text.split("\n"), 1):
                 if SECRET_RE.search(line):
                     adoption.note("hint", "%s:%d" % (sig, n), "looks like a secret (value not shown)")
@@ -446,6 +452,12 @@ def plan_adopt(plan, table, mode="migrate", tools=None, shipped_block=None, skel
             adoption.split.append(sig)
             adoption.note("split?", sig, "%d B outside the block, keep budget %d B; needs --adopt "
                           "--split-request or --split fallback" % (outside, keep))
+    add_router_rows(plan, router_rows_text(adoption))
+    if not adoption.unmapped:
+        line_status, lines, missing, missing_n = check_lines(plan, adoption)
+        adoption.checks["no-line-lost"] = (line_status, lines, missing, missing_n)
+        ref_status, hard_misses, warn_n = check_refs(plan, adoption, table, instruction_files, shipped_files)
+        adoption.checks["no-dangling"] = (ref_status, hard_misses, warn_n)
     return adoption
 
 
@@ -489,15 +501,40 @@ def report(plan, adoption, applied=False):
         return "%s -> %s" % (i["src"], i["target"]) if i.get("src") else i["target"]
     width = max([len(shown(i)) for i in plan.items] + [len(n[1]) for n in adoption.notes]
                 + [len(t) for t in adoption.detected] + [10])
+
+    def row(action, subject, text):
+        print("  %-9s %-*s  %s" % (action, width, subject, text))
+
     for tool, groups in adoption.detected.items():
         text = ", ".join("%s (%d)" % (g, c) if c > 1 or g.endswith("/") else g for g, c in groups.items())
-        print("  %-9s %-*s  %s" % ("detect", width, tool, text))
+        row("detect", tool, text)
     for i in plan.items:
-        print("  %-9s %-*s  %s" % (i["action"], width, shown(i), i["note"]))
+        row(i["action"], shown(i), i["note"])
     for action in NOTE_ORDER:
         for act, subject, text in adoption.notes:
             if act == action:
-                print("  %-9s %-*s  %s" % (act, width, subject, text))
+                row(act, subject, text)
+    if "no-line-lost" in adoption.checks:
+        status, lines, missing, missing_n = adoption.checks["no-line-lost"]
+        if status == "not_applicable":
+            row("check", "no-line-lost", "not applicable (coexist)")
+        elif status == "pass":
+            row("check", "no-line-lost",
+               "PASS (%d line(s), %d rewritten -> dropped.jsonl)" % (lines, len(adoption.dropped)))
+        else:
+            row("check", "no-line-lost", "FAIL: %d line(s): %s" % (missing_n, ", ".join(missing)))
+    if "no-dangling" in adoption.checks:
+        status, hard_misses, warn_n = adoption.checks["no-dangling"]
+        if status == "pass":
+            row("check", "no-dangling", "PASS (%d warning(s) outside the new structure)" % warn_n)
+        elif adoption.mode == "coexist":
+            row("check", "no-dangling", "FAIL: %s" % ", ".join(p for _tag, p in hard_misses[:20]))
+        else:
+            row("check", "no-dangling", "FAIL: %s" % ", ".join("%s:%s -> %s" % m for m in hard_misses[:20]))
+    cleanup_n = sum(1 for _p, _t, _tr, _n, cleanup in adoption.sources if cleanup)
+    both_pass = all(c[0] in ("pass", "not_applicable") for c in adoption.checks.values())
+    if adoption.mode == "migrate" and cleanup_n and both_pass and not adoption.unmapped:
+        row("cleanup?", "", "%d file(s) offered after both checks pass: --adopt --cleanup" % cleanup_n)
     auto = [i for i in plan.items if i["action"] not in ("conflict", "delete?")]
     conflicts = [i for i in plan.items if i["action"] == "conflict"]
     tail = ""
@@ -508,7 +545,7 @@ def report(plan, adoption, applied=False):
     print("%d automatic, %d conflict(s)%s" % (len(auto), len(conflicts), tail))
 
 
-def run(plan, args, shipped_block, skeleton_cap):
+def run(plan, args, shipped_block, skeleton_cap, instruction_files=frozenset(), shipped_files=None):
     """`update.py --adopt` without --apply: plan, report, and the exit code."""
     try:
         table = load_table()
@@ -522,8 +559,10 @@ def run(plan, args, shipped_block, skeleton_cap):
             print("project-update: unknown --tool %s (known: %s)" % (", ".join(unknown), ", ".join(table["tools"])),
                   file=sys.stderr)
             return 2
+    if getattr(args, "check", False):
+        return check_state(plan.root, table, shipped_block, skeleton_cap, instruction_files, shipped_files)
     try:
-        adoption = plan_adopt(plan, table, args.mode, tools, shipped_block, skeleton_cap)
+        adoption = plan_adopt(plan, table, args.mode, tools, shipped_block, skeleton_cap, instruction_files, shipped_files)
     except TableError as exc:
         print("project-update: %s" % exc, file=sys.stderr)
         return 2
@@ -531,3 +570,299 @@ def run(plan, args, shipped_block, skeleton_cap):
         print("%s: %d file(s) have no mapping row" % (INCOMPLETE, len(adoption.unmapped)))
     report(plan, adoption)
     return 4 if adoption.unmapped else 0
+
+
+# ---------------------------------------------------------------------------
+# I11 --adopt --check
+# ---------------------------------------------------------------------------
+
+def check_state(root, table, shipped_block, skeleton_cap, instruction_files, shipped_files=None):
+    """`update.py --adopt --check`: exactly one of I11's five lines."""
+    where = latest_with(root, "adopt.json")
+    if where is None:
+        plan = _ThrowawayPlan(root)
+        adoption = plan_adopt(plan, table, "migrate", None, shipped_block, skeleton_cap, instruction_files, shipped_files)
+        if not adoption.detected and not adoption.split:
+            print("no foreign structure detected")
+            return 0
+        bits = ["%s (%d file(s))" % (t, sum(g.values())) for t, g in adoption.detected.items()]
+        print("foreign structure detected: %s — run /project-update --adopt" % ", ".join(bits))
+        return 1
+    try:
+        with open(os.path.join(root, where, "adopt.json"), encoding="utf-8") as fh:
+            record_data = json.load(fh)
+    except (OSError, ValueError):
+        print("no foreign structure detected")
+        return 0
+    date = where.rsplit("adopt-", 1)[-1]
+    regenerated = []
+    for src in record_data.get("sources", []):
+        full = os.path.join(root, src["path"])
+        if not os.path.isfile(full):
+            continue
+        with open(full, "rb") as fh:
+            current = "sha256:" + hashlib.sha256(fh.read()).hexdigest()
+        if current != src.get("sha"):
+            regenerated.append(src["path"])
+    if regenerated:
+        print("foreign files regenerated since the adopt of %s: %s — run /project-update --adopt"
+             % (date, ", ".join(sorted(regenerated))))
+        return 1
+    checks = record_data.get("checks", {})
+    failed = [name for name, c in checks.items() if c.get("status") not in ("pass", "not_applicable")]
+    if failed:
+        print("adoption of %s incomplete: %s FAIL — run /project-update --adopt"
+             % (date, failed[0].replace("_", "-")))
+        return 1
+    tools = ", ".join(sorted(record_data.get("tools", {})))
+    pending = sum(1 for s in record_data.get("sources", []) if s.get("cleanup") and os.path.isfile(os.path.join(root, s["path"])))
+    tail = "; %d file(s) await cleanup" % pending if pending else ""
+    print("adopted %s: %s — up to date%s" % (date, tools, tail))
+    return 0
+
+
+class _ThrowawayPlan:
+    """The minimal reader `plan_adopt` needs, for `--adopt --check` when no
+    record exists yet: nothing is ever written through it."""
+
+    def __init__(self, root):
+        self.root = root
+        self.items = []
+        self.hints = []
+        self.final = {}
+
+    def exists(self, target):
+        return os.path.exists(os.path.join(self.root, target))
+
+    def read(self, target):
+        path = os.path.join(self.root, target)
+        if not os.path.isfile(path):
+            return None
+        with open(path, "rb") as fh:
+            return fh.read()
+
+    def add(self, *_a, **_k):
+        pass  # a check never writes
+
+
+# ---------------------------------------------------------------------------
+# I7 no-line-lost: normalise, source/destination sets, dropped.jsonl coverage
+# ---------------------------------------------------------------------------
+
+LIST_MARKER_RE = re.compile(r"^([-*+]|\d+[.)])\s+")
+CHECKBOX_RE = re.compile(r"^\[[ xX]\]\s+")
+HEADING_RE = re.compile(r"^#{1,6}\s")
+ALNUM_RE = re.compile(r"[A-Za-z0-9]")
+
+
+def normalise(line):
+    """I7: strip, ignorable (empty / bare heading / no alphanumeric character)
+    is None, otherwise one list marker and one checkbox marker stripped,
+    whitespace collapsed, casefolded."""
+    line = line.strip()
+    if not line or HEADING_RE.match(line) or not ALNUM_RE.search(line):
+        return None
+    line = LIST_MARKER_RE.sub("", line, count=1)
+    line = CHECKBOX_RE.sub("", line, count=1)
+    return re.sub(r"\s+", " ", line).casefold()
+
+
+def text_of(content):
+    return content.decode("utf-8", "replace") if isinstance(content, bytes) else content
+
+
+def check_lines(plan, adoption):
+    """I7 no-line-lost: source lines, minus what a transform or a decision
+    dropped, must all be in some destination the run writes. `plan.final`
+    covers the whole file, per target, so a router row's own text never
+    counts against a source (it is not a source, and dest coverage only ever
+    helps). Returns (status "pass"/"fail", lines, missing[:20] as "file:line",
+    missing_count)."""
+    if adoption.mode == "coexist":
+        return "not_applicable", 0, [], 0
+    dest_lines = set()
+    for item in plan.items:
+        if item["content"] is not None:
+            for raw in text_of(item["content"]).split("\n"):
+                n = normalise(raw)
+                if n:
+                    dest_lines.add(n)
+    dropped_star = {d["source"] for d in adoption.dropped if d.get("line") == "*"}
+    dropped_at = {(d["source"], d["line"]) for d in adoption.dropped if d.get("line") != "*"}
+    lines, missing = 0, []
+    for path, _tool, transform, _n, _cleanup in adoption.sources:
+        if transform in ("ignore", "instruction-file"):
+            continue  # not planned onto a destination in this step; step 7 owns them
+        text = text_of(plan.read(path) or b"")
+        whole_dropped = path in dropped_star
+        for i, raw in enumerate(text.split("\n"), 1):
+            n = normalise(raw)
+            if n is None:
+                continue
+            lines += 1
+            if whole_dropped or (path, i) in dropped_at:
+                continue
+            if n not in dest_lines:
+                missing.append("%s:%d" % (path, i))
+    status = "fail" if missing else "pass"
+    return status, lines, missing[:20], len(missing)
+
+
+# ---------------------------------------------------------------------------
+# I8 no-dangling-reference
+# ---------------------------------------------------------------------------
+
+REF_BOUNDARY_BEFORE = r"(^|[\s`\"'(@=:,])"
+REF_BOUNDARY_AFTER = r"(?=$|[\s`\"')>,:;])"
+MAX_SCAN_BYTES = 20 * 1024 * 1024
+
+
+def ref_pattern(old_path):
+    """The reference pattern for a path (and for `./path`); a directory root
+    (trailing `/`) also matches everything below it."""
+    escaped = re.escape(old_path.rstrip("/"))
+    if old_path.endswith("/"):
+        return re.compile(REF_BOUNDARY_BEFORE + r"\.?/?" + escaped + r"/\S*")
+    return re.compile(REF_BOUNDARY_BEFORE + r"\.?/?" + escaped + REF_BOUNDARY_AFTER)
+
+
+def old_paths_for(adoption, table):
+    """I8: every source whose row has cleanup: true, plus every detected
+    tool's `roots` entries."""
+    paths = {path for path, _tool, _transform, _n, cleanup in adoption.sources if cleanup}
+    for tool in adoption.detected:
+        paths |= set(table["tools"][tool]["roots"])
+    return sorted(paths)
+
+
+HARD_PREFIXES = (".ai/", "docs/sdlc/", ".claude/", ".codex/", ".gemini/", ".junie/",
+                 ".github/prompts/", ".github/instructions/")
+HARD_AI_EXCEPT = (".ai/reports/adopt-", ".ai/state/", ".ai/local/")
+
+
+def is_hard_scope(path, text, instruction_files):
+    if path in instruction_files:
+        return True
+    if os.path.basename(path) in (".junie/guidelines.md".rsplit("/", 1)[-1], "CLAUDE.md", "AGENTS.md")             and render_instructions.RULE_MARKER_RE.search(text):
+        return True  # a nested instruction file carrying a rule block (I8)
+    if path.startswith(".ai/"):
+        return not any(path.startswith(p) for p in HARD_AI_EXCEPT)
+    return any(path.startswith(p) for p in HARD_PREFIXES if p != ".ai/")
+
+
+def is_binary(data):
+    return b"\0" in data[:8192]
+
+
+def git_files(root):
+    try:
+        proc = subprocess.run(["git", "-C", root, "ls-files", "-z"], capture_output=True, check=False)
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    return [p for p in proc.stdout.decode("utf-8", "surrogateescape").split("\0") if p]
+
+
+COEXIST_LINK_RE = re.compile(r"^\| .* \| (?P<path>\S+) \(kept in place; its globs are "
+                             r"not applied by this runtime\) \|$", re.M)
+
+
+def check_refs(plan, adoption, table, instruction_files=frozenset(), shipped_files=None):
+    """I8 no-dangling-reference: every old path (or, in coexist, every linked
+    foreign path) still readable, and no reference to a path this run took
+    away is left behind in the hard scope; a reference in the warn scope is
+    reported but does not fail. Returns (status, hard_misses, warn_count)."""
+    if adoption.mode == "coexist":
+        linked = {path for path, _tool, _router, _coexist in adoption.destinations}
+        linked |= set(COEXIST_LINK_RE.findall(text_of(plan.read(ROUTER_FILE) or b"")))
+        missing = sorted(path for path in linked if not plan.exists(path))
+        return ("fail" if missing else "pass"), [("<coexist>", p) for p in missing], 0
+    old = old_paths_for(adoption, table)
+    if not old:
+        return "pass", [], 0
+    patterns = [ref_pattern(p) for p in old]
+    moved = {path for path, _tool, _transform, _n, cleanup in adoption.sources if cleanup}
+    files = git_files(plan.root)
+    if files is None:
+        files = walk(plan.root)
+    hard_misses, warn_count = [], 0
+    for path in files:
+        if path in moved or path in old:
+            continue
+        full = os.path.join(plan.root, path)
+        try:
+            if os.path.getsize(full) > MAX_SCAN_BYTES:
+                continue
+            with open(full, "rb") as fh:
+                data = fh.read()
+        except OSError:
+            continue
+        if is_binary(data):
+            continue
+        # A file whose bytes still match what the plugin ships is the plugin's
+        # own words, not this project's: a generic example ("a `.cursorrules`
+        # or the like", `.ai/policies/security.md`) is not a dependency on
+        # this project's foreign structure, so it never fails hard scope —
+        # it still counts toward warn (harmless: warn never fails the run).
+        unedited = shipped_files is not None and shipped_files.get(path) == data
+        text = data.decode("utf-8", "replace")
+        hard = is_hard_scope(path, text, instruction_files) and not unedited
+        for i, line in enumerate(text.split("\n"), 1):
+            hit = next((p for p, rx in zip(old, patterns) if rx.search(line)), None)
+            if hit is None:
+                continue
+            if hard:
+                hard_misses.append((path, i, hit))
+            else:
+                warn_count += 1
+            break  # one hit per line is enough to classify it
+    return ("fail" if hard_misses else "pass"), hard_misses, warn_count
+
+
+# ---------------------------------------------------------------------------
+# I9 router rows
+# ---------------------------------------------------------------------------
+
+TOOL_TITLE = {"speckit": "Spec Kit", "kiro": "Kiro", "aidlc": "AI-DLC", "cursor": "Cursor",
+             "copilot": "Copilot", "junie": "Junie", "gemini": "Gemini", "claude": "Claude", "codex": "Codex"}
+ROUTER_FILE = ".ai/AGENTS.md"
+
+
+def router_rows_text(adoption):
+    """I9: one row per (tool, destination directory) in migrate mode, one row
+    per (tool, path) in coexist. Returns the row texts, in first-seen order."""
+    rows = OrderedDict()
+    for dest, tool, router_text, coexist in adoption.destinations:
+        title = router_text or ("an adopted %s file" % TOOL_TITLE.get(tool, tool))
+        if coexist:
+            key = (tool, dest)
+            shown = dest
+            suffix = " (kept in place; its globs are not applied by this runtime)"
+        else:
+            rel_dir = os.path.dirname(dest)
+            key = (tool, rel_dir)
+            shown = (rel_dir[len(".ai/"):] if rel_dir.startswith(".ai/") else rel_dir) + "/"
+            suffix = ""
+        rows.setdefault(key, "| %s | %s%s |" % (title, shown, suffix))
+    return list(rows.values())
+
+
+def add_router_rows(plan, rows):
+    """Append new router rows after the last row of `.ai/AGENTS.md`'s routing
+    table, idempotent by exact text. Returns the count actually added."""
+    if not rows:
+        return 0
+    text = text_of(plan.read(ROUTER_FILE) or b"")
+    if not text:
+        return 0
+    lines = text.split("\n")
+    last = max((i for i, l in enumerate(lines) if l.startswith("|")), default=None)
+    if last is None:
+        return 0
+    to_add = [r for r in rows if r not in lines]
+    if not to_add:
+        return 0
+    new_lines = lines[:last + 1] + to_add + lines[last + 1:]
+    plan.add("router", ROUTER_FILE, note="+%d row(s)" % len(to_add), content="\n".join(new_lines).encode("utf-8"))
+    return len(to_add)

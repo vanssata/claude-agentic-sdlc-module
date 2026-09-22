@@ -1097,6 +1097,28 @@ def apply_item(plan, item, written, recorded):
         write_file(plan.root, os.path.join(plan.local_dir, target), item["conflict_copy"])
 
 
+def shipped_ai_files():
+    """{project-relative path: current shipped bytes} for every file this
+    plugin ships unedited into a scaffold: `.ai/**` from the ai-init templates,
+    and the project-init docs (`docs/sdlc/README.md`, the `TEMPLATE.md`s). Used
+    only to tell adopt's no-dangling check that an untouched plugin file
+    mentioning a tool's name in passing (a generic example, a policy) is not a
+    project-specific dependency on it — the same "unedited = ours, not the
+    project's words" rule the three-way update already applies."""
+    out = {}
+    base = os.path.join(TEMPLATES["ai-init"], ".ai")
+    for here, _dirs, files in os.walk(base):
+        for name in files:
+            full = os.path.join(here, name)
+            rel = ".ai/" + os.path.relpath(full, base).replace(os.sep, "/")
+            out[rel] = read(full)
+    for src, target, _kind in PROJECT_INIT_MAP:
+        path = os.path.join(TEMPLATES["project-init"], src)
+        if os.path.isfile(path):
+            out[target] = read(path)
+    return out
+
+
 def shipped_block(runtime):
     """The managed block the installed plugin ships for a runtime, as text."""
     return read(os.path.join(TEMPLATES["ai-init"], INSTRUCTION_FILE[runtime][1])).decode("utf-8").rstrip("\n")
@@ -1172,10 +1194,11 @@ def main():
         ap.error("--mode and --tool only make sense with --adopt")
     root = os.path.abspath(args.root)
     if args.adopt:
-        if args.apply or args.check or args.confirm_delete is not None:
-            ap.error("--adopt is a dry run only in this version")
+        if args.apply or args.confirm_delete is not None:
+            ap.error("--adopt --apply is not implemented in this version")
         caps = render_instructions.budgets(render_instructions.DEFAULT_SOURCE)
-        return adopt.run(Plan(root), args, shipped_block, caps.get("skeleton"))
+        instruction_files = frozenset(INSTRUCTION_FILE[rt][0] for rt in INSTRUCTION_FILE)
+        return adopt.run(Plan(root), args, shipped_block, caps.get("skeleton"), instruction_files, shipped_ai_files())
     if args.check and args.budget:
         offenders = adopt.budget_offenders(
             root, [INSTRUCTION_FILE[rt][0] for rt in project_runtimes(root)],

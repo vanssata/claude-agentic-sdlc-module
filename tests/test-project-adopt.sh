@@ -181,4 +181,150 @@ printf '%s' "$out" | grep -q '^  adopt ' && fail "coexist plans no move" "$out" 
 python3 "$UPDATE" "$P/cursor" --adopt --mode merge >/dev/null 2>&1; [ $? -eq 2 ] && pass "an unknown mode is a usage error" || fail "--mode merge accepted"
 python3 "$UPDATE" "$P/cursor" --mode coexist >/dev/null 2>&1; [ $? -eq 2 ] && pass "--mode without --adopt is a usage error" || fail "--mode alone accepted"
 
+echo "== I9 router rows: appended once, idempotent by exact text"
+R="$TMP/router"; adopt_fixture cursor "$R"
+out=$(python3 "$UPDATE" "$R" --adopt)
+printf '%s' "$out" | grep -qE '^  router    .ai/AGENTS.md +\+2 row\(s\)$' && pass "the dry run plans +2 router rows" || fail "no router plan item" "$out"
+router_content=$(cd "$PLUGIN_ROOT/skills/project-update" && python3 - "$R" <<'ROUTEREOF'
+import sys, os
+sys.dont_write_bytecode = True
+import update, adopt
+root = sys.argv[1]
+plan = update.Plan(root)
+table = adopt.load_table()
+caps = update.render_instructions.budgets(update.render_instructions.DEFAULT_SOURCE)
+files = frozenset(update.INSTRUCTION_FILE[rt][0] for rt in update.INSTRUCTION_FILE)
+adopt.plan_adopt(plan, table, "migrate", None, update.shipped_block, caps["skeleton"], files, update.shipped_ai_files())
+router_item = next(i for i in plan.items if i["action"] == "router")
+print(router_item["content"].decode("utf-8"))
+ROUTEREOF
+)
+printf '%s' "$router_content" | grep -qF '| anything, first (rules adopted from Cursor) | policies/adopted/ |' \
+    && pass "the cursorrules row names the directory relative to .ai" || fail "no cursorrules router row" "$router_content"
+printf '%s' "$router_content" | grep -qF '| an adopted Cursor file | rules/ |' \
+    && pass "a rule with no explicit router text gets a default" || fail "no default router row" "$router_content"
+# Simulate an already-applied router edit: write the planned content, then re-plan.
+printf '%s\n' "$router_content" > "$R/.ai/AGENTS.md"
+out=$(python3 "$UPDATE" "$R" --adopt)
+printf '%s' "$out" | grep -q '^  router' && fail "the second run re-planned the router edit" "$out" || pass "a second run adds no router item: idempotent by text"
+
+echo "== R9, R10: no-line-lost passes on every fixture, and a genuinely missing line fails it"
+for f in speckit kiro cursor copilot aidlc junie-gemini large-claude-md large-agents-md; do
+    F2="$TMP/lines-$f"; adopt_fixture "$f" "$F2"
+    out=$(python3 "$UPDATE" "$F2" --adopt)
+    printf '%s' "$out" | grep -qE '^  check +no-line-lost +PASS' \
+        && pass "$f: check no-line-lost PASS" || fail "$f: no-line-lost did not pass" "$out"
+done
+out=$(cd "$PLUGIN_ROOT/skills/project-update" && python3 - "$TMP/lines-cursor" <<'LOSTEOF'
+import sys, os
+sys.dont_write_bytecode = True
+import update, adopt
+root = sys.argv[1]
+plan = update.Plan(root)
+table = adopt.load_table()
+caps = update.render_instructions.budgets(update.render_instructions.DEFAULT_SOURCE)
+files = frozenset(update.INSTRUCTION_FILE[rt][0] for rt in update.INSTRUCTION_FILE)
+adoption = adopt.plan_adopt(plan, table, "migrate", None, update.shipped_block, caps["skeleton"], files, update.shipped_ai_files())
+dest = ".ai/policies/adopted/cursorrules.md"
+for i in plan.items:
+    if i["target"] == dest:
+        i["content"] = b"nothing kept\n"
+plan.final[dest] = b"nothing kept\n"
+status, lines, missing, missing_n = adopt.check_lines(plan, adoption)
+print(status)
+print(missing_n)
+print(missing[0] if missing else "")
+LOSTEOF
+)
+echo "$out" | sed -n 1p | grep -q '^fail$' && pass "a genuinely lost line fails the check" || fail "check_lines did not fail" "$out"
+echo "$out" | sed -n 2p | grep -qE '^[1-9]' && pass "and counts how many" || fail "no missing count" "$out"
+echo "$out" | sed -n 3p | grep -q '^.cursorrules:' && pass "and names file:line" || fail "no file:line" "$out"
+
+echo "== R11: a hard-scope stale reference fails no-dangling, the same in warn scope only warns"
+D="$TMP/dangling"; adopt_fixture cursor "$D"
+printf '\nSee `@.cursorrules` for the legacy rules.\n' >> "$D/.ai/policies/coding.md"; commit "$D"
+out=$(python3 "$UPDATE" "$D" --adopt)
+printf '%s' "$out" | grep -qE '^  check +no-dangling +FAIL: .ai/policies/coding.md:[0-9]+ -> .cursorrules$' \
+    && pass "a hard-scope reference to .cursorrules fails no-dangling" || fail "hard-scope reference not caught" "$out"
+W="$TMP/warn-only"; adopt_fixture cursor "$W"
+baseline=$(python3 "$UPDATE" "$W" --adopt | grep -oE 'no-dangling +PASS \([0-9]+' | grep -oE '[0-9]+$')
+mkdir -p "$W/src"; printf '# Notes\n\nSee `@.cursorrules` for the legacy rules.\n' > "$W/src/README.md"; commit "$W"
+out=$(python3 "$UPDATE" "$W" --adopt)
+after=$(printf '%s' "$out" | grep -oE 'no-dangling +PASS \([0-9]+' | grep -oE '[0-9]+$')
+printf '%s' "$out" | grep -qE '^  check +no-dangling +PASS' && [ "$after" -eq $((baseline + 1)) ] \
+    && pass "the same reference in src/README.md adds one warning, not a failure" || fail "warn-scope reference wrongly failed" "$out (baseline=$baseline after=$after)"
+
+echo "== R14: coexist plans only the router edit; no-line-lost is not applicable, no-dangling checks the linked paths exist"
+CO="$TMP/coexist"; adopt_fixture cursor "$CO"
+out=$(python3 "$UPDATE" "$CO" --adopt --mode coexist)
+[ "$(printf '%s' "$out" | grep -c '^  router\|^  adopt\|^  conflict')" -eq 1 ] \
+    && pass "coexist plans exactly one write: the router edit" || fail "coexist planned more than the router row" "$out"
+printf '%s' "$out" | grep -qE '^  check +no-line-lost +not applicable' && pass "no-line-lost is not applicable in coexist" || fail "coexist ran no-line-lost" "$out"
+printf '%s' "$out" | grep -qE '^  check +no-dangling +PASS' && pass "no-dangling passes: every linked path exists" || fail "coexist no-dangling failed" "$out"
+# Simulate an already-linked coexist run: write the router content this dry run
+# planned, so the .cursorrules link is on record, then take the file away.
+router_content=$(cd "$PLUGIN_ROOT/skills/project-update" && python3 - "$CO" <<'COEXROUTEREOF'
+import sys
+sys.dont_write_bytecode = True
+import update, adopt
+root = sys.argv[1]
+plan = update.Plan(root)
+table = adopt.load_table()
+caps = update.render_instructions.budgets(update.render_instructions.DEFAULT_SOURCE)
+files = frozenset(update.INSTRUCTION_FILE[rt][0] for rt in update.INSTRUCTION_FILE)
+adopt.plan_adopt(plan, table, "coexist", None, update.shipped_block, caps["skeleton"], files, update.shipped_ai_files())
+router_item = next(i for i in plan.items if i["action"] == "router")
+print(router_item["content"].decode("utf-8"))
+COEXROUTEREOF
+)
+printf '%s\n' "$router_content" > "$CO/.ai/AGENTS.md"
+rm "$CO/.cursorrules"; commit "$CO"
+out=$(python3 "$UPDATE" "$CO" --adopt --mode coexist)
+printf '%s' "$out" | grep -qE '^  check +no-dangling +FAIL' && pass "a missing linked path fails no-dangling in coexist" || fail "missing linked path not caught" "$out"
+
+echo "== I11: --adopt --check prints exactly one of the five lines"
+plant_record() {
+    local dir="$1" date="$2" sll="$3" sd="$4" srcsha="$5"
+    mkdir -p "$dir/.ai/reports/adopt-$date"
+    python3 - "$dir" "$date" "$sll" "$sd" "$srcsha" <<'PLANTEOF'
+import json, os, sys
+root, date, sll, sd, srcsha = sys.argv[1:6]
+rec = {"version": 1, "mode": "migrate", "adopted_at": date + "T00:00:00Z", "plugin_schema": 5,
+       "tools": {"cursor": {"files": 1}},
+       "sources": [{"path": ".cursorrules", "sha": srcsha, "tool": "cursor", "transform": "copy",
+                    "dest": ".ai/policies/adopted/cursorrules.md", "dest_sha": "sha256:x", "cleanup": True}],
+       "dropped": 0, "ignored": [], "unmapped": [], "original_bytes": 0,
+       "checks": {"no_line_lost": {"status": sll, "checked_at": date + "T00:00:00Z"},
+                  "no_dangling": {"status": sd, "checked_at": date + "T00:00:00Z"}},
+       "cleanup": {"offered": True, "confirmed_by": None, "at": None, "unattended": None, "tty": None, "deleted": []}}
+out = os.path.join(root, ".ai", "reports", "adopt-" + date, "adopt.json")
+json.dump(rec, open(out, "w"))
+PLANTEOF
+}
+N="$TMP/check-none"; scaffold "$N" claude; commit "$N"
+out=$(python3 "$UPDATE" "$N" --adopt --check); rc=$?
+[ "$out" = "no foreign structure detected" ] && [ $rc -eq 0 ] && pass "no record, nothing foreign: line 1, exit 0" || fail "line 1 wrong" "$out/$rc"
+U="$TMP/check-undetected"; adopt_fixture cursor "$U"
+out=$(python3 "$UPDATE" "$U" --adopt --check); rc=$?
+printf '%s' "$out" | grep -q '^foreign structure detected: cursor (.*file' && [ $rc -eq 1 ] \
+    && pass "no record, foreign structure present: line 3, exit 1" || fail "line 3 wrong" "$out/$rc"
+G="$TMP/check-good"; adopt_fixture cursor "$G"
+srcsha="sha256:$(sha256sum "$G/.cursorrules" | cut -d' ' -f1)"
+plant_record "$G" "2000-01-01" pass pass "$srcsha"
+out=$(python3 "$UPDATE" "$G" --adopt --check); rc=$?
+printf '%s' "$out" | grep -qE '^adopted 2000-01-01: cursor — up to date; [0-9]+ file\(s\) await cleanup$' && [ $rc -eq 0 ] \
+    && pass "a matching record, both checks pass: line 2, exit 0" || fail "line 2 wrong" "$out/$rc"
+RG="$TMP/check-regen"; adopt_fixture cursor "$RG"
+plant_record "$RG" "2000-01-01" pass pass "sha256:0000000000000000000000000000000000000000000000000000000000000"
+out=$(python3 "$UPDATE" "$RG" --adopt --check); rc=$?
+printf '%s' "$out" | grep -q '^foreign files regenerated since the adopt of 2000-01-01: .cursorrules' && [ $rc -eq 1 ] \
+    && pass "the source sha no longer matches: line 4, exit 1" || fail "line 4 wrong" "$out/$rc"
+IC="$TMP/check-incomplete"; adopt_fixture cursor "$IC"
+srcsha="sha256:$(sha256sum "$IC/.cursorrules" | cut -d' ' -f1)"
+plant_record "$IC" "2000-01-01" fail pass "$srcsha"
+out=$(python3 "$UPDATE" "$IC" --adopt --check); rc=$?
+printf '%s' "$out" | grep -q '^adoption of 2000-01-01 incomplete: no-line-lost FAIL' && [ $rc -eq 1 ] \
+    && pass "a failed check: line 5, exit 1" || fail "line 5 wrong" "$out/$rc"
+python3 "$UPDATE" "$G" --check >/dev/null; [ $? -eq 0 ] && pass "the plain --check line is unchanged by any of this (OQ10)" || fail "plain --check disturbed"
+
 summary "project-adopt"
