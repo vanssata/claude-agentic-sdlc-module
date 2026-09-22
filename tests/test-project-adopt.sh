@@ -571,4 +571,90 @@ grep -q 'Our own rule, written into the block by hand' "$HE/.ai/policies/adopted
     && pass "and the hand-written line moved with the rest, not lost" || fail "the edited line was lost"
 [ -f "$(ls -d "$HE"/.ai/reports/adopt-*/)original/CLAUDE.md" ] && pass "the original CLAUDE.md is kept" || fail "no original CLAUDE.md"
 
+echo "== R13, R14: cleanup deletes only after both checks hold again and a human confirms"
+# cleaned <dir>: the fixture adopted and committed, ready for --cleanup.
+cleaned() { adopt_fixture cursor "$1"; python3 "$UPDATE" "$1" --adopt --apply >/dev/null; commit "$1" adopted; }
+# cleanup_refused <dir> <what>: confirmed as a launcher would, still exit 5, ADOPT_REFUSED on line 1, nothing removed.
+cleanup_refused() {
+    local before out rc
+    before=$(tree_sha "$1")
+    out=$(AI_UNATTENDED=1 python3 "$UPDATE" "$1" --adopt --cleanup --apply --confirm-delete tester </dev/null); rc=$?
+    [ $rc -eq 5 ] && [ "$(printf '%s' "$out" | head -1 | cut -d: -f1)" = ADOPT_REFUSED ] && [ "$(tree_sha "$1")" = "$before" ] \
+        && pass "$2: cleanup refused, exit 5, nothing removed" || fail "$2: expected a cleanup refusal (rc=$rc)" "$out"
+}
+CL="$TMP/cleanup"; cleaned "$CL"
+before=$(tree_sha "$CL")
+out=$(python3 "$UPDATE" "$CL" --adopt --cleanup); rc=$?
+want=$(jq -r '.sources[] | select(.cleanup) | .path' "$CL"/.ai/reports/adopt-*/adopt.json | sort)
+got=$(printf '%s\n' "$out" | awk '$1 == "delete?" {print $2}' | sort)
+[ $rc -eq 0 ] && [ -n "$want" ] && [ "$got" = "$want" ] && [ "$(tree_sha "$CL")" = "$before" ] \
+    && pass "the cleanup dry run lists exactly the cleanup: true sources and writes nothing" || fail "cleanup list (rc=$rc)" "$out"
+printf '%s' "$out" | grep -qE '^  check +no-dangling +PASS \(recomputed' && pass "both checks are recomputed for the listing" || fail "no recomputed check line" "$out"
+out=$(python3 "$UPDATE" "$CL" --adopt --cleanup --apply 2>&1); rc=$?
+[ $rc -eq 2 ] && pass "--cleanup --apply without --confirm-delete is a usage error" || fail "--cleanup --apply alone (rc=$rc)" "$out"
+out=$(python3 "$UPDATE" "$CL" --adopt --cleanup --apply --confirm-delete tester </dev/null); rc=$?
+[ $rc -eq 5 ] && printf '%s' "$out" | head -1 | grep -q '^ADOPT_REFUSED' && [ "$(tree_sha "$CL")" = "$before" ] \
+    && pass "--confirm-delete with no terminal and no AI_UNATTENDED: exit 5, nothing removed" || fail "no-human cleanup (rc=$rc)" "$out"
+out=$(AI_UNATTENDED=1 python3 "$UPDATE" "$CL" --adopt --cleanup --apply --confirm-delete tester </dev/null); rc=$?
+REC=$(ls -d "$CL"/.ai/reports/adopt-*/)
+gone=0; kept=0
+for f in $want; do [ -e "$CL/$f" ] || gone=$((gone + 1)); [ -f "$REC/original/$f" ] && kept=$((kept + 1)); done
+n=$(printf '%s\n' "$want" | wc -l)
+[ $rc -eq 0 ] && [ $gone -eq "$n" ] && pass "AI_UNATTENDED=1: every listed file is deleted" || fail "cleanup apply (rc=$rc, $gone/$n gone)" "$out"
+[ $kept -eq "$n" ] && pass "and original/ still holds every one of them" || fail "original/ holds $kept/$n"
+[ "$(jq -r '.cleanup.unattended' "$REC/adopt.json")" = true ] && [ "$(jq -r '.cleanup.confirmed_by' "$REC/adopt.json")" = tester ] \
+    && [ "$(jq -r '.cleanup.tty' "$REC/adopt.json")" = false ] && [ "$(jq -r '.cleanup.at | length > 0' "$REC/adopt.json")" = true ] \
+    && pass "adopt.json.cleanup records who, when, unattended and tty" || fail "cleanup record" "$(jq .cleanup "$REC/adopt.json")"
+grep -q 'deleted unattended' "$REC/report.md" && printf '%s' "$out" | grep -q '(deleted unattended)' \
+    && pass "report.md and the output say deleted unattended" || fail "no deleted unattended line"
+[ ! -d "$CL/.cursor/rules" ] && [ -f "$CL/.cursor/mcp.json" ] \
+    && pass "a directory left empty inside the tool's roots goes with its files; an ignored file keeps its own" \
+    || fail ".cursor/rules/ left behind, or the ignored .cursor/mcp.json removed"
+[ -z "$(find "$CL/.ai/reports" -name migration.json)" ] && pass "cleanup writes no migration.json" || fail "cleanup wrote migration.json"
+commit "$CL" cleanup
+out=$(python3 "$UPDATE" "$CL" --adopt --check); rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -qE '^adopted [0-9-]+: cursor — up to date$' \
+    && pass "--adopt --check after cleanup says up to date" || fail "check after cleanup (rc=$rc)" "$out"
+git -C "$CL" checkout -q HEAD~1 -- .cursorrules
+out=$(python3 "$UPDATE" "$CL" --adopt --check); rc=$?
+[ $rc -eq 1 ] && printf '%s' "$out" | grep -q '^foreign files regenerated since the adopt of .*\.cursorrules' \
+    && pass "a .cursorrules that reappears byte for byte says regenerated (R16)" || fail "reappearing file (rc=$rc)" "$out"
+
+LD="$TMP/cleanup-later"; cleaned "$LD"
+dirs=$(ls "$LD/.ai/reports" | grep -c '^adopt-')
+out=$(CLAUDE_AGENTIC_TEST=1 ADOPT_TODAY=2099-01-01 AI_UNATTENDED=1 python3 "$UPDATE" "$LD" --adopt --cleanup --apply --confirm-delete tester </dev/null); rc=$?
+[ $rc -eq 0 ] && [ ! -e "$LD/.ai/reports/adopt-2099-01-01" ] && [ "$(ls "$LD/.ai/reports" | grep -c '^adopt-')" = "$dirs" ] \
+    && [ "$(jq -r '.cleanup.deleted | length > 0' "$LD"/.ai/reports/adopt-*/adopt.json)" = true ] \
+    && pass "a cleanup on a later day writes into the adopt's own directory, none new" || fail "later-day cleanup (rc=$rc)" "$out"
+
+R="$TMP/cleanup-changed"; cleaned "$R"; printf 'Use spaces.\n' >> "$R/.cursorrules"; commit "$R"
+cleanup_refused "$R" "a source changed after adopt"
+R="$TMP/cleanup-task"; cleaned "$R"; mkdir -p "$R/.ai/state"
+cp "$TF"/.ai/state/* "$R/.ai/state/"  # the stage-plan task of the R5 case above
+cleanup_refused "$R" "a task in flight at stage plan"
+R="$TMP/cleanup-dirty"; cleaned "$R"; printf 'wip\n' > "$R/notes.txt"
+cleanup_refused "$R" "an untracked file anywhere in the tree"
+R="$TMP/cleanup-uncommitted"; adopt_fixture cursor "$R"; python3 "$UPDATE" "$R" --adopt --apply >/dev/null
+cleanup_refused "$R" "the adopt itself not yet committed"
+R="$TMP/cleanup-stale"; cleaned "$R"; printf 'Read .cursorrules before you start.\n' > "$R/docs/sdlc/specs/notes.md"; commit "$R"
+out=$(AI_UNATTENDED=1 python3 "$UPDATE" "$R" --adopt --cleanup --apply --confirm-delete tester </dev/null)
+cleanup_refused "$R" "a stale reference planted after adopt"
+printf '%s' "$out" | head -1 | grep -q 'no-dangling FAIL' && pass "and the refusal names no-dangling" || fail "stale refusal reason" "$out"
+R="$TMP/cleanup-coexist"; adopt_fixture cursor "$R"; python3 "$UPDATE" "$R" --adopt --apply --mode coexist >/dev/null; commit "$R"
+out=$(python3 "$UPDATE" "$R" --adopt --cleanup); rc=$?
+[ $rc -eq 5 ] && printf '%s' "$out" | head -1 | grep -q '^ADOPT_REFUSED: coexist keeps the foreign files' \
+    && pass "coexist cleanup: exit 5, coexist keeps the foreign files (R14)" || fail "coexist cleanup (rc=$rc)" "$out"
+cleanup_refused "$R" "coexist, even confirmed"
+
+SK="$TMP/cleanup-speckit"; adopt_fixture speckit "$SK"
+python3 "$UPDATE" "$SK" --apply >/dev/null; commit "$SK" "plain update"
+python3 "$UPDATE" "$SK" --adopt --apply >/dev/null; commit "$SK" adopted
+out=$(python3 "$UPDATE" "$SK" --adopt --cleanup); rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -qE '^  delete\? +\.claude/commands/speckit' \
+    && ! printf '%s' "$out" | grep -qE '^  delete\? +(CLAUDE\.md|AGENTS\.md|GEMINI\.md|\.junie/guidelines\.md) ' \
+    && pass "Spec Kit's .claude/ commands are listed, the instruction files never (R17)" || fail "speckit cleanup list (rc=$rc)" "$out"
+out=$(AI_UNATTENDED=1 python3 "$UPDATE" "$SK" --adopt --cleanup --apply --confirm-delete tester </dev/null); rc=$?
+[ $rc -eq 0 ] && [ ! -e "$SK/.specify" ] && [ -f "$SK/CLAUDE.md" ] && [ -d "$SK/.claude" ] \
+    && pass "with no task in flight they are deleted; .specify/ goes, CLAUDE.md and .claude/ stay" || fail "speckit cleanup (rc=$rc)" "$out"
+
 summary "project-adopt"

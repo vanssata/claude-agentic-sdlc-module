@@ -654,8 +654,12 @@ def state_line(root, shipped_block, skeleton_cap, table=None, instruction_files=
         return 0, "no foreign structure detected"
     date = where.rsplit("adopt-", 1)[-1]
     regenerated = []
+    deleted = set((record_data.get("cleanup") or {}).get("deleted") or [])
     for src in record_data.get("sources", []):
         full = os.path.join(root, src["path"])
+        if src["path"] in deleted and os.path.isfile(full):
+            regenerated.append(src["path"])  # it reappeared after cleanup (R16)
+            continue
         if src.get("transform") == "instruction-file" or not os.path.isfile(full):
             # An instruction file stays, and the plain update re-renders its
             # block; growing again shows as split? in the dry run, not here.
@@ -1211,6 +1215,164 @@ def report_md(plan, adoption, record):
     else:
         out += ["- nothing"]
     return "\n".join(out) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# --adopt --cleanup (R13, R14's refusal): the one deletion adopt makes, behind
+# the record, a clean tree, both checks recomputed, and a human
+# ---------------------------------------------------------------------------
+
+CLEANUP_HEADING = "## Cleanup"
+
+
+def plan_cleanup(plan, args, u, table, skeleton_cap, instruction_files, shipped_files):
+    """(refusal, where, record, targets, adoption). `refusal` is (reason, how)
+    or None; every gate runs before anything is listed, so a refusal never
+    shows a list to confirm. `adoption` is set once the checks were recomputed."""
+    root = plan.root
+
+    def no(reason, how, adoption=None):
+        return (reason, how), None, None, None, adoption
+    if not os.path.isdir(os.path.join(root, ".ai")):
+        return no("the project has no .ai/", "run /ai-init first")
+    where = latest_with(root, "adopt.json")
+    record = read_record(root, where) if where else None
+    if record is None:
+        return no("no adopt record to clean up", "run /project-update --adopt --apply first")
+    if args.mode == "coexist" or record.get("mode") == "coexist":
+        return no("coexist keeps the foreign files",
+                  "to move them, run /project-update --adopt --apply (mode migrate), then --cleanup")
+    checks = record.get("checks", {})
+    if record.get("status") != "applied" or any(c.get("status") != "pass" for c in checks.values()):
+        return no("the adopt of %s is not complete (R12)" % where.rsplit("adopt-", 1)[-1],
+                  "run /project-update --adopt --apply until both checks pass")
+    running = task_in_flight(root)
+    if running:
+        return no("a task is in flight (%s)" % running, "finish or abandon it with /ai-task first")
+    dirty = clean_tree(root)
+    if dirty is None:
+        return no("the project is not a git work tree", "cleanup deletes only what git can restore")
+    if dirty:  # no exceptions: `git checkout -- <path>` is the rollback
+        more = " and %d more" % (len(dirty) - 3) if len(dirty) > 3 else ""
+        return no("the tree has uncommitted changes: %s%s" % (", ".join(dirty[:3]), more),
+                  "commit the adopt (its record included) first, so the deletion is its own change")
+    targets, changed = [], []
+    for src in record.get("sources", []):
+        path = src["path"]
+        if not src.get("cleanup") or path in INSTRUCTION_ROOT or not os.path.isfile(os.path.join(root, path)):
+            continue  # R17: an instruction file is never deleted
+        if sha256(plan.read(path) or b"") != src.get("sha"):
+            changed.append(path)
+        targets.append(src)
+    if changed:
+        return no("source(s) changed since the adopt: %s" % ", ".join(changed[:3]),
+                  "run /project-update --adopt --apply again, then --cleanup")
+    # R13: both checks recomputed on the tree as it is now. A pending adopt
+    # write would let them pass against the plan instead of the disk.
+    adoption = plan_adopt(plan, table, "migrate", None, u.shipped_block, skeleton_cap,
+                          instruction_files, shipped_files)
+    what = ["%s FAIL" % name for name, c in adoption.checks.items() if c[0] == "fail"]
+    pending = [i for i in plan.items if i["action"] != "delete?"]
+    if pending:
+        what.append("%d adopt item(s) pending" % len(pending))
+    if adoption.unmapped or adoption.split:
+        what.append("%d unmapped, %d split(s) waiting" % (len(adoption.unmapped), len(adoption.split)))
+    if what:
+        return no("the adopt no longer holds on the current tree: %s" % "; ".join(what),
+                  "run /project-update --adopt to see why, settle it, then --cleanup", adoption)
+    return None, where, record, targets, adoption
+
+
+def cleanup_run(plan, args, u, skeleton_cap, instruction_files=frozenset(), shipped_files=None):
+    """`update.py --adopt --cleanup [--apply --confirm-delete NAME]`. Exit 0 or
+    5 (refused); a failed removal is exit 3 with the record naming what went."""
+    try:
+        table = load_table()
+    except TableError as exc:
+        print("project-update: %s" % exc, file=sys.stderr)
+        return 2
+    refusal, where, record, targets, adoption = plan_cleanup(
+        plan, args, u, table, skeleton_cap, instruction_files, shipped_files)
+    if refusal:
+        code = refuse(*refusal)
+        if adoption is not None:
+            report(plan, adoption)  # the recomputed checks, so the human sees what fails
+        return code
+    confirm = (getattr(args, "confirm_delete", None) or "").strip()
+    if confirm and not human_present():  # update.py checks too; this module stands alone
+        return refuse("--confirm-delete is typed by a human, and this run has no terminal",
+                      "run the same command yourself in a terminal")
+    date = where.rsplit("adopt-", 1)[-1]
+    head = "adopt cleanup of %s, applied" % date if confirm else \
+        "adopt cleanup dry run of %s, nothing deleted; a human confirms with --apply --confirm-delete NAME" % date
+    print("project-update: %s (%s)" % (plan.root, head))
+    width = max([len(s["path"]) for s in targets] + [12])
+    for name in ("no-line-lost", "no-dangling"):
+        print("  %-9s %-*s  PASS (recomputed on the current tree)" % ("check", width, name))
+    if not targets:
+        print("0 deletion(s): nothing left to clean up")
+        return 0
+    if not confirm:
+        for src in targets:
+            print("  %-9s %-*s  [%s] %s; needs --apply --confirm-delete NAME"
+                  % ("delete?", width, src["path"], src["tool"], src["transform"]))
+        print("%d deletion(s) awaiting --confirm-delete" % len(targets))
+        return 0
+    tty = os.isatty(0)
+    record["cleanup"] = {"offered": True, "confirmed_by": confirm, "at": u.utc_now(),
+                         "unattended": not tty, "tty": tty, "deleted": []}
+    plan.report_dir = plan.adopt_report_dir = where  # the record's own directory, not today's
+    rec_path = where + "/adopt.json"
+    write_json(u, plan.root, rec_path, record)  # who and when, before the first removal
+    code = 0
+    try:
+        for src in targets:
+            remove_confirmed(u, plan, src["path"], record, table)
+            print("  %-9s %-*s  [%s] confirmed by %s" % ("delete", width, src["path"], src["tool"], confirm))
+    except OSError as exc:
+        print("project-update: aborted: %s — %s names what was deleted" % (exc, rec_path), file=sys.stderr)
+        code = 3
+    write_json(u, plan.root, rec_path, record)
+    cleanup_report_md(u, plan.root, where, record)
+    print("%d deleted, confirmed by %s%s; originals in %s/original/" % (
+        len(record["cleanup"]["deleted"]), confirm,
+        " (deleted unattended)" if record["cleanup"]["unattended"] else "", where))
+    return code
+
+
+def remove_confirmed(u, plan, rel, record, table):
+    """Delete one confirmed source: its original kept first (bounded, into the
+    record's directory), then the file, then any directory left empty inside
+    its tool's roots — so the signature goes with the files."""
+    keep_original_bounded(u, plan, rel, record)
+    os.remove(os.path.join(plan.root, rel))
+    record["cleanup"]["deleted"].append(rel)
+    tool = next((s["tool"] for s in record.get("sources", []) if s["path"] == rel), None)
+    roots = [r.rstrip("/") for r in table["tools"].get(tool, {}).get("roots", []) if r.endswith("/")]
+    parent = os.path.dirname(rel)
+    while parent and any(parent == r or parent.startswith(r + "/") for r in roots):
+        full = os.path.join(plan.root, parent)
+        if not os.path.isdir(full) or os.listdir(full):
+            break
+        os.rmdir(full)
+        parent = os.path.dirname(parent)
+
+
+def cleanup_report_md(u, root, where, record):
+    """report.md gains (or replaces) its Cleanup section."""
+    path = os.path.join(root, where, "report.md")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        text = ""
+    text = text.split("\n" + CLEANUP_HEADING + "\n", 1)[0].rstrip("\n") + "\n"
+    c = record["cleanup"]
+    out = ["", CLEANUP_HEADING, "",
+           "- %d file(s) deleted at %s, confirmed by %s%s" % (
+               len(c["deleted"]), c["at"], c["confirmed_by"], " (deleted unattended)" if c["unattended"] else "")]
+    out += ["- `%s`" % p for p in c["deleted"]]
+    u.write_file(root, where + "/report.md", (text + "\n".join(out) + "\n").encode("utf-8"))
 
 
 # ---------------------------------------------------------------------------

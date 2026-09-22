@@ -458,7 +458,10 @@ class MigrationContext:
 
     def delete(self, path, reason):
         """Propose a deletion. It is only listed until a human passes
-        --apply --confirm-delete NAME; nothing else in this file removes a file."""
+        --apply --confirm-delete NAME. Three places remove a file, each behind a
+        human confirmation or a block the plugin owns: this one (a migration),
+        rules_update (a rendered rule block whose rule is gone) and
+        adopt.remove_confirmed (--adopt --cleanup, behind --confirm-delete)."""
         if not self.exists(path):
             return
         if not self.plan.confirm_delete:
@@ -1200,6 +1203,9 @@ def main():
                     help="with --adopt: split by the session's proposal, or move every line outside the "
                          "block verbatim to .ai/policies/adopted/ (default: the proposal if one matches)")
     ap.add_argument("--diff", action="store_true", help="with --adopt: print the unified diff of the dry run")
+    ap.add_argument("--cleanup", action="store_true",
+                    help="with --adopt: list the adopted foreign files for deletion; they are deleted only "
+                         "with --apply --confirm-delete NAME, typed by a human")
     ap.add_argument("--budget", action="store_true",
                     help="with --check: exit 1 when a root instruction file is over its byte budget")
     ap.add_argument("--confirm-delete", metavar="NAME",
@@ -1217,18 +1223,26 @@ def main():
                                 "if a launcher runs it unattended on your behalf")
     if args.budget and not args.check:
         ap.error("--budget only makes sense with --check")
-    if not args.adopt and (args.tool or args.mode != "migrate" or args.split_request or args.split or args.diff):
-        ap.error("--mode, --tool, --split, --split-request and --diff only make sense with --adopt")
+    if not args.adopt and (args.tool or args.mode != "migrate" or args.split_request or args.split or args.diff
+                           or args.cleanup):
+        ap.error("--mode, --tool, --split, --split-request, --diff and --cleanup only make sense with --adopt")
     root = os.path.abspath(args.root)
     if args.adopt:
-        if args.confirm_delete is not None:
-            ap.error("--adopt --confirm-delete belongs to --cleanup, which is not implemented in this version")
+        if args.confirm_delete is not None and not args.cleanup:
+            ap.error("--adopt --confirm-delete belongs to --cleanup")
+        if args.cleanup and (args.check or args.split_request or args.split or args.diff or args.tool):
+            ap.error("--cleanup takes only --apply --confirm-delete NAME")
+        if args.cleanup and args.apply and args.confirm_delete is None:
+            ap.error("--cleanup --apply needs --confirm-delete NAME, typed by the human who confirmed it")
         if sum((args.apply, args.check, args.split_request)) > 1:
             ap.error("--adopt takes one of --apply, --check and --split-request")
         if args.diff and (args.apply or args.check or args.split_request):
             ap.error("--diff is a dry run; it takes no --apply, --check or --split-request")
         caps = render_instructions.budgets(render_instructions.DEFAULT_SOURCE)
         instruction_files = frozenset(INSTRUCTION_FILE[rt][0] for rt in INSTRUCTION_FILE)
+        if args.cleanup:
+            return adopt.cleanup_run(Plan(root), args, sys.modules[__name__], caps.get("skeleton"),
+                                     instruction_files, shipped_ai_files())
         if args.apply:
             return adopt.apply_run(Plan(root), args, sys.modules[__name__], caps.get("skeleton"),
                                    instruction_files, shipped_ai_files())
