@@ -159,13 +159,21 @@ def vocabulary(source, runtime):
     return runtimes[runtime]
 
 
+# The budgets an installed plugin uses: install.sh copies skills/, not
+# instructions/, so runtimes.json is only there in a checkout. Kept equal to
+# `_budgets` in instructions/runtimes.json by tests/test-project-update.sh.
+DEFAULT_BUDGETS = {"global": 2560, "project": 2048, "skeleton": 2048, "skeleton-sdlc": 2048}
+
+
 def budgets(source):
-    """scope -> byte budget. `_budgets` is absent until the diet switches it on."""
+    """scope -> byte budget. `_budgets` is absent until the diet switches it on.
+    Without runtimes.json (an installed plugin) the shipped DEFAULT_BUDGETS
+    apply; a runtimes.json that exists but does not parse is still an error."""
     path = Path(source) / "instructions" / "runtimes.json"
     try:
         return json.loads(path.read_text(encoding="utf-8")).get("_budgets", {})
-    except FileNotFoundError as exc:
-        raise RenderError("no %s" % path) from exc
+    except FileNotFoundError:
+        return dict(DEFAULT_BUDGETS)
 
 
 def substitute(text, runtime_vars, extra_vars):

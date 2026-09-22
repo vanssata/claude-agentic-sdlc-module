@@ -180,6 +180,21 @@ done
    and say that `/project-update` cannot run until it is resolved; a newer
    version means this machine's plugin needs updating, not the project.
 
+   A second line, on foreign AI-tool structures (Spec Kit, Kiro, Cursor,
+   Copilot, AI-DLC, an oversized instruction file):
+
+   ```bash
+   python3 "$AI_HOME/skills/project-update/update.py" "$PWD" --adopt --check
+   ```
+
+   Show it as is. Exit 0 is `no foreign structure detected` or `adopted <date>:
+   … — up to date`, possibly with files that still await cleanup. Exit 1 — a
+   structure detected, files regenerated since the adopt, or an adopt left
+   incomplete — points at `/project-update --adopt`. When the latest
+   `.ai/reports/adopt-*/adopt.json` has `cleanup.unattended: true`, append
+   `(deleted unattended)`: the deletion ran without a terminal, on a launcher's
+   `AI_UNATTENDED`, and the human should know nobody typed it.
+
 8. **Instruction budget.** What this project loads on every turn, before any
    skill or policy is read. Advisory: the plugin measures its own block and
    never refuses the project's file.

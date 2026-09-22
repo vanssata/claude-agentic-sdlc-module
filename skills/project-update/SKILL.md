@@ -1,7 +1,7 @@
 ---
 name: project-update
-description: Bring an existing project's claude-agentic files up to date with the installed plugin — .ai/ policies, workflows, agent contracts and templates, the managed block in CLAUDE.md, the docs/sdlc templates and .gitignore entries. Untouched files are replaced, edited files are three-way merged keeping every edit, real conflicts are never overwritten. Use on "/project-update", "update the rules in this project", "обнови правилата", after reinstalling the plugin, or when /ai-status says the project is behind. /ai-init and /project-init call it when run again.
-argument-hint: [--apply]
+description: Bring an existing project's claude-agentic files up to date with the installed plugin — .ai/ policies, workflows, agent contracts and templates, the managed block in CLAUDE.md, the docs/sdlc templates and .gitignore entries. Untouched files are replaced, edited files are three-way merged keeping every edit, real conflicts are never overwritten. Use on "/project-update", "update the rules in this project", "обнови правилата", after reinstalling the plugin, or when /ai-status says the project is behind. /ai-init and /project-init call it when run again. With --adopt it moves a foreign AI-tool structure (Spec Kit, Kiro, Cursor, Copilot, AI-DLC, an oversized CLAUDE.md or AGENTS.md) into this layout, with nothing lost.
+argument-hint: [--apply] [--adopt [--mode coexist]]
 ---
 
 # /project-update $ARGUMENTS
@@ -133,6 +133,10 @@ move the principles that are really policy into `.ai/policies/`.
 parse. Name it and what it needs (a `paths:` list and a body); the other rules
 were rendered.
 
+`foreign structure detected: …` / `foreign files regenerated since the adopt
+of …`: another AI tool's files are in the project, or came back after an adopt.
+Nothing changes by itself; offer §8.
+
 ## 7. Report
 
 ```bash
@@ -146,6 +150,58 @@ and its markdown mirror disagreed before this update, and the mirror needs a
 hand edit. Suggest `git add -A .ai docs/sdlc .gitignore` plus the runtime
 directories and instruction files the project has (`.claude CLAUDE.md`,
 `.codex AGENTS.md`) and a commit; do not commit.
+
+## 8. Adopting a foreign structure
+
+Run when `$ARGUMENTS` contains `--adopt`, or when the human says yes to the hint
+above. Every command below is `$UPDATE --adopt …`; `--mode coexist` goes on each
+of them when the team still uses the other tool (it only adds router rows to
+`.ai/AGENTS.md` and moves nothing). Exit 4 (`ADOPT_INCOMPLETE`) means a decision
+is needed and names it; exit 5 (`ADOPT_REFUSED`) means a precondition failed and
+says which. Either way, show the first line and stop there.
+
+1. **Preconditions.** `state.py get --quiet` shows no task short of `done`,
+   `git status` is clean, and `$UPDATE --check` exits 0. Otherwise stop and say
+   which one failed; the tool refuses the same three.
+2. Run `$UPDATE --adopt` and show its output as is.
+3. For each `unmapped` line, ask the human what to do with the file (drop it
+   with a reason, or copy it to a named destination) and, after a yes, write
+   their answers into `.ai/reports/adopt-<date>/decisions.json`:
+   `{"version": 1, "unmapped": {"<path>": {"action": "drop", "why": "…"}}}`.
+4. For a `split?` line (an instruction file too large to keep as it is):
+   - On a `pro` or `plus` plan (`state.py profile --field plan`), when that
+     command fails, or under `AI_UNATTENDED`, use `--split fallback`: every line
+     outside the managed block moves verbatim to `.ai/policies/adopted/`.
+   - Otherwise run `$UPDATE --adopt --split-request` and produce the proposal
+     **once**, at the BALANCED tier: in the session when
+     `state.py profile --field budgets.fan_out.max_parallel_agents` prints 1,
+     else one BALANCED subagent that reads `split-request.json` and the file and
+     returns the JSON. Write it to the `proposal` path the request names. It
+     holds line ranges, destinations from the request's `allowed_dest` and
+     headings copied from its `outline` — never text; the tool refuses a
+     proposal that carries any. A proposal for the same file sha is reused,
+     never requested again.
+5. Run `$UPDATE --adopt --diff`, show it, and ask "apply?".
+6. Run `$UPDATE --adopt --apply` (with `--split fallback` if step 4 chose it)
+   and show the two `check` lines. On a FAIL, read `dropped.jsonl`, amend the
+   proposal or the decisions, and run it again. Never edit a destination by
+   hand to make a check pass.
+7. Point at `.ai/reports/adopt-<date>/report.md`. Suggest `git add` of the new
+   structure and the report directory, and a commit; do not commit. Cleanup
+   refuses until that commit exists.
+8. **Cleanup.** The foreign files are deleted only by the human: the
+   `--confirm-delete` rule in §4 holds here too, and setting `AI_UNATTENDED` so
+   the command passes without a terminal is the same act as typing their name.
+   Run `$UPDATE --adopt --cleanup` to show what would go, then give the human
+   the full command, both paths absolute, for their own terminal:
+
+   ```bash
+   python3 "<AI_HOME>/skills/project-update/update.py" "<project>" --adopt --cleanup --apply --confirm-delete "<your name>"
+   ```
+
+   It recomputes both checks and refuses on a changed source, a dirty tree or a
+   task in flight; the originals stay under `.ai/reports/adopt-<date>/original/`.
+   Instruction files are never on the list.
 
 ## Rules
 

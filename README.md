@@ -271,6 +271,21 @@ merge conflict does not.
 Changed a template? Run `tools/build-template-history.py` and commit the result;
 the test suite fails until you do.
 
+A project that already carries another AI tool's structure — Spec Kit
+(`.specify/`, `specs/`), Kiro (`.kiro/`), Cursor (`.cursorrules`,
+`.cursor/rules/`), Copilot (`.github/copilot-instructions.md`), AI-DLC, or a
+`CLAUDE.md`/`AGENTS.md` too large to load on every turn — is adopted with
+`/project-update --adopt`. The dry run maps every file through
+`skills/project-update/adopt-map.json` and writes nothing; `--apply` moves the
+content into `docs/sdlc/` and `.ai/`, keeps each original under
+`.ai/reports/adopt-<date>/original/`, and passes two checks on disk: no line
+lost, no reference left pointing at an old path. A file no row maps stops the
+run until a human decides. `--mode coexist` leaves the files where they are and
+only routes to them. The foreign files are deleted by a separate
+`--adopt --cleanup`, on a committed tree, and only with `--apply
+--confirm-delete NAME` typed by a human. `/ai-status` says when a structure is
+waiting, or came back after an adopt.
+
 For work that needs a written intent and specification before any code:
 
 ```bash

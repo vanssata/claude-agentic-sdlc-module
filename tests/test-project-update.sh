@@ -66,7 +66,10 @@ after=$(cd "$P" && find . -path ./.git -prune -o -type f -print | sort | xargs m
 [ "$before" = "$after" ] && pass "the dry run writes nothing" || fail "the dry run changed files"
 printf '%s' "$out" | grep -q 'policy .*+ pipeline_profile$' && pass "policy changes are listed for confirmation" || fail "pipeline_profile should be a listed policy change" "$out"
 printf '%s' "$out" | grep -q 'pipeline_profiles\.' && fail "a new subtree should be listed once, at its top" "$out" || pass "a new subtree is listed once"
-python3 "$UPDATE" "$P" --check >/dev/null; [ $? -eq 1 ] && pass "--check exits 1 while an update is pending" || fail "--check should exit 1"
+out=$(python3 "$UPDATE" "$P" --check); [ $? -eq 1 ] && pass "--check exits 1 while an update is pending" || fail "--check should exit 1"
+# The exact shape /ai-status reads: one line, the reasons, the command (R21 keeps it byte-identical).
+[ "$(printf '%s\n' "$out" | wc -l)" -eq 1 ] && printf '%s' "$out" | grep -qE '^project is behind the installed plugin: schema 0 -> [0-9]+, [0-9]+ file\(s\) to update, 1 need a manual merge — run /project-update$' \
+    && pass "the plain --check line keeps its exact shape" || fail "the plain --check line changed" "$out"
 
 echo "== apply"
 out=$(python3 "$UPDATE" "$P" --apply 2>&1)
@@ -99,7 +102,9 @@ out=$(python3 "$UPDATE" "$P" --apply 2>&1)
 printf '%s' "$out" | grep -q '^0 automatic, 1 conflict' && pass "a second run has nothing automatic left" || fail "second run not clean" "$out"
 [ "$snap" = "$(cd "$P" && find . -path ./.git -prune -o -type f -print | sort | xargs md5sum | md5sum)" ] \
     && pass "a second run changes nothing" || fail "second run changed files"
-python3 "$UPDATE" "$P" --check >/dev/null && pass "--check exits 0 once only a hand-merge choice remains" || fail "--check should exit 0"
+out=$(python3 "$UPDATE" "$P" --check) && pass "--check exits 0 once only a hand-merge choice remains" || fail "--check should exit 0"
+[ "$out" = "project matches the installed plugin (1 file(s) differ by hand-merge choice)" ] \
+    && pass "the plain --check line is byte-identical" || fail "the plain --check line changed" "$out"
 
 echo "== a stale mirror stays stale"
 P2="$TMP/proj2"; mkdir -p "$P2"
@@ -185,7 +190,8 @@ python3 "$UPDATE" "$S0" >/dev/null
 python3 "$UPDATE" "$S0" --apply >/dev/null
 [ "$(cat "$S0/.ai/VERSION")" = "$CURRENT" ] && pass "the apply records the schema version" || fail "VERSION not written"
 python3 "$UPDATE" "$S0" | grep -q '^0 automatic' && pass "a second run has nothing left to migrate" || fail "not idempotent" "$(python3 "$UPDATE" "$S0")"
-python3 "$UPDATE" "$S0" --check >/dev/null && pass "--check exits 0 once the schema is current" || fail "--check should exit 0"
+out=$(python3 "$UPDATE" "$S0" --check) && pass "--check exits 0 once the schema is current" || fail "--check should exit 0"
+[ "$out" = "project matches the installed plugin" ] && pass "the plain current line is byte-identical" || fail "the plain --check line changed" "$out"
 
 echo "== a task in flight survives the journey to schema 2 (R14)"
 S7="$TMP/schema1"; mkdir -p "$S7"
@@ -432,7 +438,12 @@ out=$(python3 "$UPDATE" "$S3" --check); [ $? -eq 1 ] && printf '%s' "$out" | gre
 echo "== a human confirms the deletion, and only then is it performed"
 python3 "$UPDATE" "$S3" --confirm-delete tester >/dev/null 2>&1; [ $? -eq 2 ] && pass "--confirm-delete without --apply is refused" || fail "should be an argparse error"
 python3 "$UPDATE" "$S3" --apply --confirm-delete "" >/dev/null 2>&1; [ $? -eq 2 ] && pass "an empty confirmation name is refused" || fail "empty --confirm-delete should be refused"
-python3 "$UPDATE" "$S3" --apply --confirm-delete tester >/dev/null
+out=$(env -u AI_UNATTENDED python3 "$UPDATE" "$S3" --apply --confirm-delete tester </dev/null); rc=$?
+[ $rc -eq 5 ] && pass "--confirm-delete without a human present is refused (exit 5)" || fail "expected exit 5 without a terminal, got $rc" "$out"
+[ "$(printf '%s' "$out" | head -1 | cut -d: -f1)" = ADOPT_REFUSED ] && pass "and says so on the first stdout line" || fail "no ADOPT_REFUSED on line 1" "$out"
+[ -e "$S3/.ai/legacy-notes.md" ] && pass "and the file is still there" || fail "a refused deletion removed the file"
+# The launcher's declaration, on this command only: no terminal here or in CI.
+AI_UNATTENDED=1 python3 "$UPDATE" "$S3" --apply --confirm-delete tester >/dev/null
 [ ! -e "$S3/.ai/legacy-notes.md" ] && pass "the confirmed deletion is performed" || fail "the file should be gone"
 [ -f "$S3"/.ai/reports/project-update-*/original/.ai/legacy-notes.md ] && pass "its original is kept too" || fail "no original for the deletion"
 rec=$(cat "$S3"/.ai/reports/project-update-*/migration.json)
@@ -479,7 +490,7 @@ grep -q 'keep me' "$RD/src/Payment/CLAUDE.md" \
     && pass "the human's text around a removed block survives" || fail "the human's text was lost"
 grep -q 'claude-agentic:rule:payment' "$RD/src/Payment/CLAUDE.md" \
     && fail "the stale block should have been taken out" || pass "the stale block was taken out without a gate: it is ours"
-python3 "$UPDATE" "$RD" --apply --confirm-delete "Ivan" >/dev/null 2>&1
+AI_UNATTENDED=1 python3 "$UPDATE" "$RD" --apply --confirm-delete "Ivan" >/dev/null 2>&1
 [ -f "$RD/.claude/rules/payment.md" ] \
     && fail "the confirmed deletion did not happen" || pass "the confirmed deletion is performed"
 [ -f "$RD/.ai/reports/project-update-$(date -u +%Y-%m-%d)/original/.claude/rules/payment.md" ] \
@@ -624,5 +635,26 @@ row=$(grep -n '^| TEST |' "$P22/.ai/workflows/feature.md" | cut -d: -f1)
 sed -i "${row}s/.*/| TEST | \`ai-tester\` | my own rule |/" "$P22/.ai/workflows/feature.md"
 out=$(python3 "$UPDATE" "$P22" 2>&1)
 printf '%s' "$out" | grep -q 'names tiers' && fail "the hint must appear only for a model-key conflict" "$out" || pass "any other conflict prints no tier hint"
+
+echo "== --check --budget: a root instruction file over its byte budget exits 1 (WP6 R21)"
+B="$TMP/budget"; mkdir -p "$B"
+bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$B" --runtime claude >/dev/null
+bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$B" --runtime claude >/dev/null
+out=$(python3 "$UPDATE" "$B" --check --budget); rc=$?
+[ $rc -eq 0 ] && [ -z "$out" ] && pass "a fresh scaffold is within budget: exit 0, nothing printed" || fail "fresh scaffold: rc=$rc" "$out"
+python3 "$UPDATE" "$B" --budget >/dev/null 2>&1; [ $? -eq 2 ] && pass "--budget without --check is a usage error" || fail "--budget alone should exit 2"
+head -c 400 /dev/zero | tr '\0' 'x' >> "$B/CLAUDE.md"; printf '\n' >> "$B/CLAUDE.md"
+out=$(python3 "$UPDATE" "$B" --check --budget); rc=$?
+[ $rc -eq 1 ] && printf '%s' "$out" | grep -qE '^CLAUDE\.md file [0-9]+ B over the skeleton budget of 2048 B$' \
+    && pass "a padded CLAUDE.md exits 1 and names the file and the budget" || fail "padded file: rc=$rc" "$out"
+printf '%s' "$out" | grep -q ' block ' && fail "the block itself is within budget and must not be listed" "$out" || pass "only the offender is listed"
+# An installed plugin has skills/ but no instructions/: the budgets must still apply.
+INST="$TMP/installed/skills"; mkdir -p "$INST"; cp -r "$PLUGIN_ROOT/skills/project-update" "$INST/"
+out=$(python3 "$INST/project-update/update.py" "$B" --check --budget 2>&1); rc=$?
+[ $rc -eq 1 ] && printf '%s' "$out" | grep -q 'over the skeleton budget of 2048 B' && ! printf '%s' "$out" | grep -q Traceback \
+    && pass "from a skills-only install the shipped budgets apply" || fail "skills-only install: rc=$rc" "$out"
+shipped=$(jq -cS '._budgets' "$PLUGIN_ROOT/instructions/runtimes.json")
+default=$(cd "$PLUGIN_ROOT/skills/project-update" && python3 -c 'import json, render_instructions as r; print(json.dumps(r.DEFAULT_BUDGETS, sort_keys=True, separators=(",", ":")))')
+[ "$shipped" = "$default" ] && pass "DEFAULT_BUDGETS equals _budgets in runtimes.json" || fail "DEFAULT_BUDGETS drifted from runtimes.json" "$shipped / $default"
 
 summary "project-update"

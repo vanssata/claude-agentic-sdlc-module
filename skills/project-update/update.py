@@ -1,11 +1,22 @@
 #!/usr/bin/env python3
 """Bring a project's claude-agentic files up to date with the installed plugin.
 
-  update.py [project-dir] [--apply] [--check]
+  update.py [project-dir] [--apply [--confirm-delete NAME]] [--check [--budget]]
 
 Default is a dry run: print what would change, write nothing.
   --apply   write the changes
   --check   print one line and exit 1 when an automatic update is pending
+  --check --budget   print one line per root instruction file over its byte
+            budget (block over `project`, file over `skeleton`) and exit 1
+  --confirm-delete NAME   a human confirms this run's proposed deletions; refused
+            (exit 5) when no human is present: no terminal and no AI_UNATTENDED
+
+Exit codes:
+  0  done (or, with --check, the project is current)
+  1  --check: an update is pending; --check --budget: a file is over budget
+  2  usage error, missing templates, a schema the plugin cannot read
+  3  an apply aborted part-way; nothing after the failing item was written
+  5  refused: --confirm-delete without a human (ADOPT_REFUSED on stdout line 1)
 
 What it manages, and how:
   .ai/** (policies, workflows, agents, templates)   three-way update
@@ -37,6 +48,7 @@ sys.path.insert(0, HERE)
 import migrations  # noqa: E402  # lives next to this script
 from migrations import SchemaError  # noqa: E402
 import render_instructions  # noqa: E402  # lives next to this script
+import adopt  # noqa: E402  # lives next to this script
 SKILLS = os.path.dirname(HERE)
 TEMPLATES = {
     "ai-init": os.environ.get("CLAUDE_AGENTIC_TEMPLATES", os.path.join(SKILLS, "ai-init", "templates")),
@@ -446,7 +458,10 @@ class MigrationContext:
 
     def delete(self, path, reason):
         """Propose a deletion. It is only listed until a human passes
-        --apply --confirm-delete NAME; nothing else in this file removes a file."""
+        --apply --confirm-delete NAME. Three places remove a file, each behind a
+        human confirmation or a block the plugin owns: this one (a migration),
+        rules_update (a rendered rule block whose rule is gone) and
+        adopt.remove_confirmed (--adopt --cleanup, behind --confirm-delete)."""
         if not self.exists(path):
             return
         if not self.plan.confirm_delete:
@@ -537,11 +552,11 @@ class Plan:
         return self.seen[target]
 
     def add(self, action, target, note="", content=None, conflict_copy=None, policy=None,
-            migration=None, src=None, reason=None):
+            migration=None, src=None, reason=None, tool=None):
         expect = self.before(target)
         self.items.append(dict(action=action, target=target, note=note, content=content,
                                conflict_copy=conflict_copy, policy=policy, migration=migration,
-                               src=src, reason=reason, expect=expect,
+                               src=src, reason=reason, tool=tool, expect=expect,
                                src_expect=self.before(src) if src else None))
         if content is not None:
             self.final[target] = content
@@ -694,15 +709,25 @@ def rendered_rules(plan):
     return blocks, docs
 
 
-def rules_update(plan, runtimes):
+def rules_update(plan, runtimes, planned=None):
     """Render `.ai/rules/<slug>.md` into the instruction file of every directory
     it names, and take back what a rule no longer asks for. The text around a
-    block belongs to the project and is never read for meaning, only preserved."""
+    block belongs to the project and is never read for meaning, only preserved.
+
+    `planned` ({".ai/rules/<slug>.md": text}) are rules this same run is about
+    to write (an adopt): they replace or join the ones on disk by slug, so their
+    blocks render in the same run. The plain update passes nothing."""
     rules_path = os.path.join(plan.root, RULES_DIR)
-    if not os.path.isdir(rules_path):
+    if not os.path.isdir(rules_path) and not planned:
         return
     try:
         rules = render_instructions.load_rules(rules_path)
+        if planned:
+            by_slug = OrderedDict((r.slug, r) for r in rules)
+            for rel, text in sorted(planned.items()):
+                slug = os.path.basename(rel)[:-3]
+                by_slug[slug] = render_instructions.parse_rule(slug, text, where=rel)
+            rules = list(by_slug.values())
     except render_instructions.RenderError as exc:
         plan.hints.append("%s — that rule is not rendered; the rest are" % exc)
         return
@@ -1085,6 +1110,44 @@ def apply_item(plan, item, written, recorded):
         write_file(plan.root, os.path.join(plan.local_dir, target), item["conflict_copy"])
 
 
+def plain_pending(root, ignore=()):
+    """True when the plain --check would exit 1: an automatic item or a schema
+    step is pending. Targets in `ignore` (an adopt resuming its own writes) do
+    not count. Same condition as main()'s --check branch."""
+    plan = build_plan(root)
+    if plan is None:
+        return False
+    pending = [i for i in plan.items if i["action"] not in ("conflict", "delete?") and i["target"] not in ignore]
+    return bool(pending or plan.schema)
+
+
+def shipped_ai_files():
+    """{project-relative path: current shipped bytes} for every file this
+    plugin ships unedited into a scaffold: `.ai/**` from the ai-init templates,
+    and the project-init docs (`docs/sdlc/README.md`, the `TEMPLATE.md`s). Used
+    only to tell adopt's no-dangling check that an untouched plugin file
+    mentioning a tool's name in passing (a generic example, a policy) is not a
+    project-specific dependency on it — the same "unedited = ours, not the
+    project's words" rule the three-way update already applies."""
+    out = {}
+    base = os.path.join(TEMPLATES["ai-init"], ".ai")
+    for here, _dirs, files in os.walk(base):
+        for name in files:
+            full = os.path.join(here, name)
+            rel = ".ai/" + os.path.relpath(full, base).replace(os.sep, "/")
+            out[rel] = read(full)
+    for src, target, _kind in PROJECT_INIT_MAP:
+        path = os.path.join(TEMPLATES["project-init"], src)
+        if os.path.isfile(path):
+            out[target] = read(path)
+    return out
+
+
+def shipped_block(runtime):
+    """The managed block the installed plugin ships for a runtime, as text."""
+    return read(os.path.join(TEMPLATES["ai-init"], INSTRUCTION_FILE[runtime][1])).decode("utf-8").rstrip("\n")
+
+
 def report(plan, applied):
     auto = [i for i in plan.items if i["action"] not in ("conflict", "delete?")]
     conflicts = [i for i in plan.items if i["action"] == "conflict"]
@@ -1105,6 +1168,8 @@ def report(plan, applied):
         note = i["note"]
         if i["migration"] is not None:
             note = "[%04d]%s" % (i["migration"], " " + note if note else "")
+        if i.get("tool") and not note.startswith("[%s]" % i["tool"]):
+            note = "[%s] %s" % (i["tool"], note)
         if i["action"] == "delete?":
             note += "; needs --apply --confirm-delete NAME"
         if i["action"] == "conflict" and i["conflict_copy"] is not None:
@@ -1127,6 +1192,22 @@ def main():
     ap.add_argument("root", nargs="?", default=".")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--adopt", action="store_true",
+                    help="adopt a foreign AI-tool structure (Spec Kit, Kiro, Cursor, ...); a dry run unless --apply")
+    ap.add_argument("--mode", choices=("migrate", "coexist"), default="migrate",
+                    help="with --adopt: migrate (default) moves the foreign files; coexist only routes to them")
+    ap.add_argument("--tool", metavar="LIST", help="with --adopt: only these tools, comma-separated")
+    ap.add_argument("--split-request", action="store_true",
+                    help="with --adopt: write split-request.json for each oversized instruction file, nothing else")
+    ap.add_argument("--split", choices=("proposal", "fallback"),
+                    help="with --adopt: split by the session's proposal, or move every line outside the "
+                         "block verbatim to .ai/policies/adopted/ (default: the proposal if one matches)")
+    ap.add_argument("--diff", action="store_true", help="with --adopt: print the unified diff of the dry run")
+    ap.add_argument("--cleanup", action="store_true",
+                    help="with --adopt: list the adopted foreign files for deletion; they are deleted only "
+                         "with --apply --confirm-delete NAME, typed by a human")
+    ap.add_argument("--budget", action="store_true",
+                    help="with --check: exit 1 when a root instruction file is over its byte budget")
     ap.add_argument("--confirm-delete", metavar="NAME",
                     help="a human confirms this run's proposed deletions, and is recorded in "
                          "the migration report; only with --apply")
@@ -1136,7 +1217,43 @@ def main():
             ap.error("--confirm-delete only makes sense with --apply")
         if not args.confirm_delete.strip():
             ap.error("--confirm-delete needs the name of the human who confirmed the deletion")
+        if not adopt.human_present():
+            return adopt.refuse("--confirm-delete is typed by a human, and this run has no terminal",
+                                "run the same command yourself in a terminal, or set AI_UNATTENDED=1 "
+                                "if a launcher runs it unattended on your behalf")
+    if args.budget and not args.check:
+        ap.error("--budget only makes sense with --check")
+    if not args.adopt and (args.tool or args.mode != "migrate" or args.split_request or args.split or args.diff
+                           or args.cleanup):
+        ap.error("--mode, --tool, --split, --split-request, --diff and --cleanup only make sense with --adopt")
     root = os.path.abspath(args.root)
+    if args.adopt:
+        if args.confirm_delete is not None and not args.cleanup:
+            ap.error("--adopt --confirm-delete belongs to --cleanup")
+        if args.cleanup and (args.check or args.split_request or args.split or args.diff or args.tool):
+            ap.error("--cleanup takes only --apply --confirm-delete NAME")
+        if args.cleanup and args.apply and args.confirm_delete is None:
+            ap.error("--cleanup --apply needs --confirm-delete NAME, typed by the human who confirmed it")
+        if sum((args.apply, args.check, args.split_request)) > 1:
+            ap.error("--adopt takes one of --apply, --check and --split-request")
+        if args.diff and (args.apply or args.check or args.split_request):
+            ap.error("--diff is a dry run; it takes no --apply, --check or --split-request")
+        caps = render_instructions.budgets(render_instructions.DEFAULT_SOURCE)
+        instruction_files = frozenset(INSTRUCTION_FILE[rt][0] for rt in INSTRUCTION_FILE)
+        if args.cleanup:
+            return adopt.cleanup_run(Plan(root), args, sys.modules[__name__], caps.get("skeleton"),
+                                     instruction_files, shipped_ai_files())
+        if args.apply:
+            return adopt.apply_run(Plan(root), args, sys.modules[__name__], caps.get("skeleton"),
+                                   instruction_files, shipped_ai_files())
+        return adopt.run(Plan(root), args, shipped_block, caps.get("skeleton"), instruction_files, shipped_ai_files())
+    if args.check and args.budget:
+        offenders = adopt.budget_offenders(
+            root, [INSTRUCTION_FILE[rt][0] for rt in project_runtimes(root)],
+            render_instructions.budgets(render_instructions.DEFAULT_SOURCE), render_instructions.block_of)
+        for line in offenders:
+            print(line)
+        return 1 if offenders else 0
     for name, tpl in TEMPLATES.items():
         if not os.path.isdir(tpl):
             print("project-update: %s templates not found at %s (run claude-agentic/install.sh)" % (name, tpl), file=sys.stderr)
@@ -1151,6 +1268,13 @@ def main():
         print("project-update: %s has neither .ai/ nor docs/sdlc/ — run /ai-init or /project-init first" % root,
               file=sys.stderr)
         return 2
+    if not args.check:
+        # D5: the plain dry run says when a foreign structure waits for --adopt
+        # (never --check, whose one line /ai-status reads byte for byte).
+        caps = render_instructions.budgets(render_instructions.DEFAULT_SOURCE)
+        code, line = adopt.state_line(root, shipped_block, caps.get("skeleton"))
+        if code:
+            plan.hints.append(line)
     pending = [i for i in plan.items if i["action"] not in ("conflict", "delete?")]
     if args.check:
         conflicts = sum(1 for i in plan.items if i["action"] == "conflict")

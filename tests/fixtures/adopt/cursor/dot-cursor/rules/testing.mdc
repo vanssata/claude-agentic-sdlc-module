@@ -1,0 +1,8 @@
+---
+description: How to write and run tests; apply when adding or changing tests
+globs:
+alwaysApply: false
+---
+
+- Tests use Vitest; run them with `pnpm test`.
+- A bug fix starts with a failing test.
