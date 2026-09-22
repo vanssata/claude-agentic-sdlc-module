@@ -1,0 +1,314 @@
+{
+  "task_id": "T-2026-09-21-001",
+  "goal": "Make runtime-gate see and reroute Codex multi-agent v2 spawns (collaborationspawn_agent): matcher, is_agent_event, agent_type reroute to -strong twin, reasoning_effort key, SubagentStart tier+backstop, tests, docs",
+  "workflow": "bugfix",
+  "risk_tier": "T3",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": "inline: see .ai/reports/T-2026-09-21-001/task.md",
+  "approved_plan": {
+    "ref": ".ai/reports/T-2026-09-21-001/implementation-plan.md",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "kind": "implementation",
+        "description": "Failing tests first: collaborationspawn_agent cases, regex matcher assertion, ai-expert-strong render, missed_reroute accepted; update old model/model_reasoning_effort expectations",
+        "allowed_files": [
+          "tests/test-runtime-gate.sh",
+          "tests/test-codex-model-gate.sh",
+          "tests/test-codex-install.sh",
+          "tests/test-codex-agent-render.sh",
+          "tests/test-ai-task-state.sh"
+        ],
+        "forbidden_files": [
+          "hooks/**",
+          "codex/**",
+          "profiles/**",
+          "scripts/**",
+          "skills/**",
+          "install.sh",
+          "tests/fixtures/**"
+        ],
+        "forbidden_reason": "tests only",
+        "required_tests": [
+          "tests/test-runtime-gate.sh",
+          "tests/test-codex-model-gate.sh",
+          "tests/test-codex-install.sh",
+          "tests/test-codex-agent-render.sh",
+          "tests/test-ai-task-state.sh"
+        ],
+        "status": "done"
+      },
+      {
+        "step_id": "2",
+        "kind": "implementation",
+        "description": "Role ai-expert-strong in codex-pro/plus, install.sh summary, renderer docstring; missed_reroute in EVENT_TYPES",
+        "allowed_files": [
+          "profiles/codex-pro.json",
+          "profiles/codex-plus.json",
+          "install.sh",
+          "scripts/render-codex-agents.py",
+          "skills/ai-task/state.py"
+        ],
+        "forbidden_files": [
+          "hooks/**",
+          "codex/**",
+          "agents/**",
+          "instructions/routing.md",
+          "tests/**"
+        ],
+        "forbidden_reason": "role data and event list only",
+        "required_tests": [
+          "tests/test-codex-agent-render.sh",
+          "tests/test-ai-task-state.sh"
+        ],
+        "status": "done"
+      },
+      {
+        "step_id": "3",
+        "kind": "implementation",
+        "description": "runtime-gate.py: is_agent_event suffix, Codex pin-first resolution, cases a/b/c with reasoning_effort, truthful context, journal_event, budget on rewritten input, subagent_start tier from model + missed_reroute backstop; codex/hooks.json matcher",
+        "allowed_files": [
+          "hooks/runtime-gate.py",
+          "codex/hooks.json"
+        ],
+        "forbidden_files": [
+          "hooks/fable-gate.py",
+          "hooks/codex-model-gate.py",
+          "settings.gate.json",
+          "settings.common.json"
+        ],
+        "forbidden_reason": "shims and Claude registration unchanged",
+        "required_tests": [
+          "tests/test-runtime-gate.sh",
+          "tests/test-codex-model-gate.sh",
+          "tests/test-codex-install.sh"
+        ],
+        "status": "done"
+      },
+      {
+        "step_id": "4",
+        "kind": "implementation",
+        "description": "Docs: Codex 0.155 limit correction, matcher/re-trust, agent_type reroute, reasoning_effort, SubagentStart backstop, max_concurrent_threads_per_session, ai-expert-strong",
+        "allowed_files": [
+          "docs/hooks.md",
+          "README.md",
+          "docs/agents.md",
+          "docs/architecture.md",
+          "docs/hook-performance.md",
+          "docs/faq.md"
+        ],
+        "forbidden_files": [
+          "docs/sdlc/**",
+          "skills/project-update/history/**",
+          "instructions/**"
+        ],
+        "forbidden_reason": "records, not current docs",
+        "required_tests": [],
+        "status": "done"
+      },
+      {
+        "step_id": "R1",
+        "description": "review: 1 MEDIUM (codex launch_tier order vs pinned override) + 3 LOW (backstop in context mode, walk-up past git root, inherited session model undocumented)",
+        "allowed_files": [
+          "tests/test-runtime-gate.sh",
+          "tests/test-codex-model-gate.sh",
+          "tests/test-codex-install.sh",
+          "tests/test-codex-agent-render.sh",
+          "tests/test-ai-task-state.sh",
+          "profiles/codex-pro.json",
+          "profiles/codex-plus.json",
+          "install.sh",
+          "scripts/render-codex-agents.py",
+          "skills/ai-task/state.py",
+          "hooks/runtime-gate.py",
+          "codex/hooks.json",
+          "docs/hooks.md",
+          "README.md",
+          "docs/agents.md",
+          "docs/architecture.md",
+          "docs/hook-performance.md",
+          "docs/faq.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done"
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "R1"
+  ],
+  "test_status": "existing_failure",
+  "e2e_status": "passing",
+  "review_status": "passed",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "Ivan Kakurov",
+    "granted_at": "2026-09-21T23:07:33Z"
+  },
+  "created_at": "2026-09-21T22:20:06Z",
+  "updated_at": "2026-09-21T23:07:33Z",
+  "history": [
+    {
+      "at": "2026-09-21T22:20:06Z",
+      "event": "task_started",
+      "detail": "Make runtime-gate see and reroute Codex multi-agent v2 spawns (collaborationspawn_agent): matcher, is_agent_event, agent_type reroute to -strong twin, reasoning_effort key, SubagentStart tier+backstop, tests, docs (bugfix)"
+    },
+    {
+      "at": "2026-09-21T22:20:34Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-09-21T22:20:34Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-09-21T22:20:34Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-09-21T22:20:34Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-09-21T22:20:34Z",
+      "event": "risk_classified",
+      "detail": "T3: shared routing behaviour: every Codex agent spawn passes runtime-gate; model tier escalation path"
+    },
+    {
+      "at": "2026-09-21T22:27:34Z",
+      "event": "plan_approved",
+      "detail": "4 steps, .ai/reports/T-2026-09-21-001/implementation-plan.md"
+    },
+    {
+      "at": "2026-09-21T22:35:36Z",
+      "event": "plan_approved",
+      "detail": "4 steps, .ai/reports/T-2026-09-21-001/implementation-plan.md"
+    },
+    {
+      "at": "2026-09-21T22:35:36Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan_review: ai-reviewer opus: pass, 1 HIGH + 3 MEDIUM folded into plan"
+    },
+    {
+      "at": "2026-09-21T22:36:00Z",
+      "event": "stage",
+      "detail": "plan_review -> implementation"
+    },
+    {
+      "at": "2026-09-21T22:36:00Z",
+      "event": "step_started",
+      "detail": "1: Failing tests first: collaborationspawn_agent cases, regex matcher assertion, ai-expert-strong render, missed_reroute accepted; update old model/model_reasoning_effort expectations"
+    },
+    {
+      "at": "2026-09-21T22:38:53Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-09-21T22:38:53Z",
+      "event": "step_started",
+      "detail": "2: Role ai-expert-strong in codex-pro/plus, install.sh summary, renderer docstring; missed_reroute in EVENT_TYPES"
+    },
+    {
+      "at": "2026-09-21T22:39:39Z",
+      "event": "step_completed",
+      "detail": "2"
+    },
+    {
+      "at": "2026-09-21T22:39:39Z",
+      "event": "step_started",
+      "detail": "3: runtime-gate.py: is_agent_event suffix, Codex pin-first resolution, cases a/b/c with reasoning_effort, truthful context, journal_event, budget on rewritten input, subagent_start tier from model + missed_reroute backstop; codex/hooks.json matcher"
+    },
+    {
+      "at": "2026-09-21T22:41:48Z",
+      "event": "step_completed",
+      "detail": "3"
+    },
+    {
+      "at": "2026-09-21T22:41:48Z",
+      "event": "step_started",
+      "detail": "4: Docs: Codex 0.155 limit correction, matcher/re-trust, agent_type reroute, reasoning_effort, SubagentStart backstop, max_concurrent_threads_per_session, ai-expert-strong"
+    },
+    {
+      "at": "2026-09-21T22:42:36Z",
+      "event": "step_completed",
+      "detail": "4"
+    },
+    {
+      "at": "2026-09-21T22:48:49Z",
+      "event": "stage",
+      "detail": "implementation -> test: run-all: 24 suites pass; test-context-guard.sh 1 failure ('no snapshot and no transcript: silent') reproduces on a clean HEAD worktree — existing, not fixed here"
+    },
+    {
+      "at": "2026-09-21T22:48:49Z",
+      "event": "set",
+      "detail": "test_status = existing_failure"
+    },
+    {
+      "at": "2026-09-21T22:48:49Z",
+      "event": "set",
+      "detail": "e2e_status = passing"
+    },
+    {
+      "at": "2026-09-21T22:53:26Z",
+      "event": "remediation",
+      "detail": "R1: review: 1 MEDIUM (codex launch_tier order vs pinned override) + 3 LOW (backstop in context mode, walk-up past git root, inherited session model undocumented)"
+    },
+    {
+      "at": "2026-09-21T22:53:26Z",
+      "event": "step_started",
+      "detail": "R1: review: 1 MEDIUM (codex launch_tier order vs pinned override) + 3 LOW (backstop in context mode, walk-up past git root, inherited session model undocumented)"
+    },
+    {
+      "at": "2026-09-21T23:00:28Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-09-21T23:00:28Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-09-21T23:00:28Z",
+      "event": "stage",
+      "detail": "implementation -> adversarial_review: opus: pass; 1 MEDIUM + 3 LOW fixed in R1"
+    },
+    {
+      "at": "2026-09-21T23:00:28Z",
+      "event": "stage",
+      "detail": "adversarial_review -> release_report: short form in task.md"
+    },
+    {
+      "at": "2026-09-21T23:00:28Z",
+      "event": "stage",
+      "detail": "release_report -> human_approval"
+    },
+    {
+      "at": "2026-09-21T23:07:33Z",
+      "event": "human_approval",
+      "detail": "granted by Ivan Kakurov"
+    },
+    {
+      "at": "2026-09-21T23:07:33Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ]
+}
