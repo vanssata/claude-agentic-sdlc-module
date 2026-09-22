@@ -196,7 +196,12 @@ class Adoption:
         self.detected = OrderedDict()   # tool -> OrderedDict(group -> count)
         self.notes = []                 # (action, subject, note), printed in I3 order
         self.unmapped = []              # (path, tool)
-        self.split = []                 # instruction files that are split candidates
+        self.split = []                 # split candidates awaiting a proposal or the fallback
+        self.candidates = []            # (Candidate, row number): every split candidate
+        self.split_errors = []          # (file, reason): a split that cannot be applied, exit 4
+        self.split_done = OrderedDict()  # file -> what plan_split recorded (adopt.json.split)
+        self.split_before = {}          # target -> bytes before the split wrote it (R9)
+        self.split_dests = []           # every target a split writes, the instruction file included
         self.dropped = []               # dropped.jsonl records (spec I7)
         self.sources = []               # (path, tool, transform, row number, cleanup)
         self.destinations = []          # (dest-or-path, tool, router text or None, coexist bool)
@@ -371,7 +376,8 @@ def load_decisions(root):
 
 
 def plan_adopt(plan, table, mode="migrate", tools=None, shipped_block=None, skeleton_cap=None,
-               instruction_files=frozenset(), shipped_files=None, run_checks=True):
+               instruction_files=frozenset(), shipped_files=None, run_checks=True, split_mode=None,
+               splits=True):
     """Detect every foreign structure at the root and plan it onto `plan`.
     Returns the Adoption. Nothing is written."""
     root = plan.root
@@ -392,7 +398,8 @@ def plan_adopt(plan, table, mode="migrate", tools=None, shipped_block=None, skel
     detected = [t for t in wanted if table["tools"][t]["roots"]
                 and any(has_signature(root, s) for s in table["tools"][t]["signature"])]
     files = walk(root)
-    decisions = load_decisions(root).get("unmapped", {})
+    all_decisions = load_decisions(root)
+    decisions = all_decisions.get("unmapped", {})
     by_tool = OrderedDict((t, []) for t in detected)
     rows_of = {t: [r for r in table["rows"] if r["tool"] == t] for t in table["tools"]}
     for path in files:
@@ -452,11 +459,11 @@ def plan_adopt(plan, table, mode="migrate", tools=None, shipped_block=None, skel
         size = len(whole.encode("utf-8"))
         if size > skeleton_cap:
             adoption.rows_used.add(row["_n"])
-            outside = len(text.replace(block, "").encode("utf-8")) if block is not None else len(text.encode("utf-8"))
-            keep = skeleton_cap - len(shipped.encode("utf-8"))
-            adoption.split.append(sig)
-            adoption.note("split?", sig, "%d B outside the block, keep budget %d B; needs --adopt "
-                          "--split-request or --split fallback" % (outside, keep))
+            adoption.candidates.append((Candidate(sig, tool, text, shipped, skeleton_cap), row["_n"]))
+    if splits and adoption.mode == "migrate":
+        plan_splits(plan, adoption, adoption.candidates, split_mode, all_decisions)
+    elif not splits:
+        adoption.split = [c.path for c, _ in adoption.candidates]
     add_router_rows(plan, router_rows_text(adoption))
     if run_checks and not adoption.unmapped:
         line_status, lines, missing, missing_n = check_lines(plan, adoption)
@@ -505,7 +512,7 @@ def report(plan, adoption, applied=False):
     head = "adopt, applied" if applied else \
         "adopt dry run, mode: %s, nothing written; --apply to write" % adoption.mode
     print("project-update: %s (%s)" % (plan.root, head))
-    if not adoption.detected and not adoption.split and not adoption.unmapped:
+    if not (adoption.detected or adoption.candidates or adoption.unmapped):
         print("  no foreign structure detected")
 
     def shown(i):
@@ -572,15 +579,43 @@ def run(plan, args, shipped_block, skeleton_cap, instruction_files=frozenset(), 
             return 2
     if getattr(args, "check", False):
         return check_state(plan.root, table, shipped_block, skeleton_cap, instruction_files, shipped_files)
+    requesting = getattr(args, "split_request", False)
     try:
-        adoption = plan_adopt(plan, table, args.mode, tools, shipped_block, skeleton_cap, instruction_files, shipped_files)
+        adoption = plan_adopt(plan, table, args.mode, tools, shipped_block, skeleton_cap, instruction_files,
+                              shipped_files, run_checks=not requesting, split_mode=getattr(args, "split", None),
+                              splits=not requesting)
     except TableError as exc:
         print("project-update: %s" % exc, file=sys.stderr)
         return 2
-    if adoption.unmapped:
-        print("%s: %d file(s) have no mapping row" % (INCOMPLETE, len(adoption.unmapped)))
+    if requesting:
+        return write_requests(plan, adoption.candidates)
+    problems = incomplete_reasons(plan, adoption, conflicts=False, checks=False)
+    if problems:
+        print("%s: %s" % (INCOMPLETE, "; ".join(problems)))
     report(plan, adoption)
-    return 4 if adoption.unmapped else 0
+    if getattr(args, "diff", False):
+        print_diff(plan)
+    return 4 if problems else 0
+
+
+def incomplete_reasons(plan, adoption, conflicts=True, checks=True):
+    """Why an adopt cannot be applied as planned (exit 4), in the order a
+    human settles them. The dry run leaves conflicts and checks to the report."""
+    problems = []
+    if adoption.unmapped:
+        problems.append("%d file(s) have no mapping row" % len(adoption.unmapped))
+    problems += ["%s: %s" % err for err in adoption.split_errors]
+    if conflicts:
+        if adoption.split:
+            problems.append("%s: a split needs a proposal or --split fallback" % ", ".join(adoption.split))
+        clash = [i["target"] for i in plan.items if i["action"] == "conflict"]
+        if clash:
+            problems.append("destination(s) exist and differ: %s" % ", ".join(clash))
+    if checks:
+        failed = [name for name, c in adoption.checks.items() if c[0] == "fail"]
+        if failed:
+            problems.append("%s FAIL on the plan" % ", ".join(failed))
+    return problems
 
 
 # ---------------------------------------------------------------------------
@@ -606,11 +641,11 @@ def state_line(root, shipped_block, skeleton_cap, table=None, instruction_files=
     if where is None:
         plan = _ThrowawayPlan(root)
         adoption = plan_adopt(plan, table, "migrate", None, shipped_block, skeleton_cap,
-                              instruction_files, shipped_files, run_checks=False)
-        if not adoption.detected and not adoption.split:
+                              instruction_files, shipped_files, run_checks=False, splits=False)
+        if not adoption.detected and not adoption.candidates:
             return 0, "no foreign structure detected"
         bits = ["%s (%d file(s))" % (t, sum(g.values())) for t, g in adoption.detected.items()]
-        bits += ["%s (split?)" % f for f in adoption.split]
+        bits += ["%s (split?)" % c.path for c, _ in adoption.candidates]
         return 1, "foreign structure detected: %s — run /project-update --adopt" % ", ".join(bits)
     try:
         with open(os.path.join(root, where, "adopt.json"), encoding="utf-8") as fh:
@@ -621,7 +656,9 @@ def state_line(root, shipped_block, skeleton_cap, table=None, instruction_files=
     regenerated = []
     for src in record_data.get("sources", []):
         full = os.path.join(root, src["path"])
-        if not os.path.isfile(full):
+        if src.get("transform") == "instruction-file" or not os.path.isfile(full):
+            # An instruction file stays, and the plain update re-renders its
+            # block; growing again shows as split? in the dry run, not here.
             continue
         with open(full, "rb") as fh:
             current = "sha256:" + hashlib.sha256(fh.read()).hexdigest()
@@ -702,6 +739,7 @@ def check_lines(plan, adoption):
         return "not_applicable", 0, [], 0
     targets = {d for d, _t, _r, coexist in adoption.destinations if not coexist}
     targets |= {i["target"] for i in plan.items if i["content"] is not None}
+    targets |= set(adoption.split_dests)  # on disk after --apply, `plan` has no items
     dest_lines = set()
     for target in targets:
         for raw in text_of(plan.read(target) or b"").split("\n"):
@@ -712,11 +750,21 @@ def check_lines(plan, adoption):
     dropped_at = {(d["source"], d["line"]) for d in adoption.dropped if d.get("line") != "*"}
     lines, missing = 0, []
     for path, _tool, transform, _n, _cleanup in adoption.sources:
-        if transform in ("ignore", "instruction-file"):
-            continue  # not planned onto a destination in this step; step 7 owns them
-        text = text_of(plan.read(path) or b"")
+        only = None
+        if transform == "instruction-file":
+            if path not in adoption.split_done:
+                continue  # not a split: the file stays where it is, whole
+            # The text as the split read it: on disk it is already rewritten.
+            text = adoption.split_done[path]["text"]
+            only = set(adoption.split_done[path]["nums"])
+        elif transform == "ignore":
+            continue
+        else:
+            text = text_of(plan.read(path) or b"")
         whole_dropped = path in dropped_star
         for i, raw in enumerate(text.split("\n"), 1):
+            if only is not None and i not in only:
+                continue
             n = normalise(raw)
             if n is None:
                 continue
@@ -1017,18 +1065,8 @@ def apply_run(plan, args, u, skeleton_cap, instruction_files=frozenset(), shippe
         return refuse(*refusal)
     plan.report_dir = plan.adopt_report_dir = resume_dir or ".ai/reports/adopt-%s" % today()
     adoption = plan_adopt(plan, table, args.mode, tools, u.shipped_block, skeleton_cap,
-                          instruction_files, shipped_files)
-    problems = []
-    if adoption.unmapped:
-        problems.append("%d unmapped file(s)" % len(adoption.unmapped))
-    if adoption.split:
-        problems.append("%s: a split needs a proposal or --split fallback" % ", ".join(adoption.split))
-    conflicts = [i["target"] for i in plan.items if i["action"] == "conflict"]
-    if conflicts:
-        problems.append("destination(s) exist and differ: %s" % ", ".join(conflicts))
-    failed = [name for name, c in adoption.checks.items() if c[0] == "fail"]
-    if failed:
-        problems.append("%s FAIL on the plan" % ", ".join(failed))
+                          instruction_files, shipped_files, split_mode=getattr(args, "split", None))
+    problems = incomplete_reasons(plan, adoption)
     if problems:
         print("%s: %s — nothing written" % (INCOMPLETE, "; ".join(problems)))
         report(plan, adoption)
@@ -1081,8 +1119,12 @@ def finish(plan, adoption, record, rec_path, u, table, instruction_files, shippe
     disk = u.Plan(root)  # reads the tree as it is now
     line_status, lines, missing, missing_n = check_lines(disk, adoption)
     ref_status, hard_misses, warn_n = check_refs(disk, adoption, table, instruction_files, shipped_files)
+    added = check_added(disk, adoption)
     now = u.utc_now()
     tools = OrderedDict((t, {"files": sum(g.values())}) for t, g in adoption.detected.items())
+    for cand, _row in adoption.candidates:  # a split is never `detect`ed, but it is adopted
+        if cand.path in adoption.split_done:
+            tools.setdefault(cand.tool, {"files": 1})
     sources = []
     for path, tool, transform, _n, cleanup in adoption.sources:
         entry = {"path": path, "sha": sha256(disk.read(path) or b""), "tool": tool,
@@ -1097,18 +1139,25 @@ def finish(plan, adoption, record, rec_path, u, table, instruction_files, shippe
     merged = OrderedDict((s["path"], s) for s in record.get("sources", []))
     for entry in sources:  # same-day runs merge by source path (I10)
         merged[entry["path"]] = entry
-    status = "applied" if "fail" not in (line_status, ref_status) else "incomplete"
+    status = "applied" if "fail" not in (line_status, ref_status) and not added else "incomplete"
+    split = dict(record.get("split", {}))
+    for path, done in adoption.split_done.items():
+        split[path] = {k: done[k] for k in ("by", "proposal_sha", "kept_bytes", "moves", "dropped")}
+    if split:
+        record["split"] = split
     record.update({
         "status": status, "mode": adoption.mode, "tools": dict(record.get("tools", {}), **tools),
         "sources": list(merged.values()), "dropped": len(adoption.dropped),
         "ignored": sorted({s for a, s, _t in adoption.notes if a == "ignored"}),
         "unmapped": [p for p, _t in adoption.unmapped],
-        "checks": {"no_line_lost": {"status": line_status, "checked_at": now, "lines": lines, "missing": missing_n},
-                   "no_dangling": {"status": ref_status, "checked_at": now, "hard": len(hard_misses), "warn": warn_n}},
+        "checks": record_checks(line_status, lines, missing_n, ref_status, hard_misses, warn_n, now),
         "cleanup": record.get("cleanup") or {"offered": adoption.mode == "migrate" and status == "applied",
                                              "confirmed_by": None, "at": None, "unattended": None,
                                              "tty": None, "deleted": []},
     })
+    if adoption.split_done:  # R9 for a split, on disk
+        record["checks"]["no_line_added"] = {"status": "fail" if added else "pass", "checked_at": now,
+                                             "added": len(added)}
     record.pop("planned_writes", None)
     write_json(u, root, rec_path, record)
     u.write_file(root, plan.report_dir + "/dropped.jsonl",
@@ -1122,10 +1171,18 @@ def finish(plan, adoption, record, rec_path, u, table, instruction_files, shippe
         record["original_bytes"], plan.report_dir,
         "; %d skipped (git has them): %s" % (len(skipped), ", ".join(skipped)) if skipped else ""))
     print("  record    %s" % rec_path)
+    if added:
+        row_fmt = "  %-9s %s"
+        print(row_fmt % ("check", "no-line-added FAIL: %s" % ", ".join(added[:20])))
     if status != "applied":
         print("%s: a check failed on disk — see %s" % (INCOMPLETE, rec_path))
         return 4
     return 0
+
+
+def record_checks(line_status, lines, missing_n, ref_status, hard_misses, warn_n, now):
+    return {"no_line_lost": {"status": line_status, "checked_at": now, "lines": lines, "missing": missing_n},
+            "no_dangling": {"status": ref_status, "checked_at": now, "hard": len(hard_misses), "warn": warn_n}}
 
 
 def report_md(plan, adoption, record):
@@ -1154,3 +1211,418 @@ def report_md(plan, adoption, record):
     else:
         out += ["- nothing"]
     return "\n".join(out) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# The instruction-file split (R7, R8, R9, R17, R19): a request with no text,
+# a proposal of line ranges, the deterministic fallback, the diff
+# ---------------------------------------------------------------------------
+
+SPLIT_KEYS = frozenset(("version", "source", "source_sha", "keep", "moves", "dropped"))
+MOVE_KEYS = frozenset(("lines", "dest", "heading", "dirs", "paths"))
+DROP_KEYS = frozenset(("lines", "why"))
+ALLOWED_DEST = (".ai/policies/adopted/<slug>.md", ".ai/rules/<slug>.md", ".ai/project/<slug>.md",
+                "docs/sdlc/constitution.md")
+ALLOWED_DEST_RE = re.compile(r"\A(?:\.ai/(?:policies/adopted|rules|project)/[a-z0-9][a-z0-9-]*\.md"
+                             r"|docs/sdlc/constitution\.md)\Z")
+
+
+class SplitError(Exception):
+    """A proposal the tool will not apply: exit 4 with this reason."""
+
+
+class Candidate:
+    """A root instruction file over `_budgets.skeleton` once its block is the
+    shipped one. `nums` are the 1-based lines a split must place: every line
+    outside the block, or only the markers left out when the block was edited
+    (WP3 R13's case), so the human's edits inside it are split too."""
+
+    def __init__(self, path, tool, text, shipped, cap):
+        self.path, self.tool, self.text, self.shipped = path, tool, text, shipped
+        self.sha = sha256(text.encode("utf-8"))
+        self.lines = text.split("\n")
+        if self.lines and self.lines[-1] == "":
+            self.lines.pop()
+        block = render_instructions.block_of(text)
+        self.block = None
+        if block is not None:
+            start = next(i for i, l in enumerate(self.lines, 1) if render_instructions.BLOCK_START in l)
+            end = next(i for i, l in enumerate(self.lines, 1) if render_instructions.BLOCK_END in l)
+            self.block = (start, end)
+        self.edited = block is not None and block != shipped
+        if self.block is None:
+            self.nums = list(range(1, len(self.lines) + 1))
+        elif self.edited:
+            self.nums = [n for n in range(1, len(self.lines) + 1) if n not in self.block]
+        else:
+            self.nums = [n for n in range(1, len(self.lines) + 1) if not self.block[0] <= n <= self.block[1]]
+        self.keep_budget = cap - len(shipped.encode("utf-8"))
+        self.outline = [{"line": n, "heading": self.lines[n - 1]} for n in self.nums
+                        if HEADING_RE.match(self.lines[n - 1])]
+
+    def line(self, n):
+        return self.lines[n - 1]
+
+
+def file_slug(path):
+    return slugify(path)  # CLAUDE.md -> claude-md, .junie/guidelines.md -> junie-guidelines-md
+
+
+def spans(nums):
+    """[3, 4, 5, 9] -> "3-5, 9"."""
+    out, nums = [], sorted(nums)
+    for n in nums:
+        if out and n == out[-1][1] + 1:
+            out[-1][1] = n
+        else:
+            out.append([n, n])
+    return ", ".join("%d" % a if a == b else "%d-%d" % (a, b) for a, b in out)
+
+
+def request_name(cand, all_candidates, kind):
+    """`split-request.json` / `split-proposal.json` for one candidate, with the
+    file slug in the name when several files are split in one adopt."""
+    if len(all_candidates) == 1:
+        return "split-%s.json" % kind
+    return "split-%s-%s.json" % (kind, file_slug(cand.path))
+
+
+def split_request(cand, where, all_candidates):
+    """I4: the outline, the allow-list and the keep budget. No text."""
+    return OrderedDict([
+        ("version", 1), ("source", cand.path), ("source_sha", cand.sha), ("lines", len(cand.lines)),
+        ("block", list(cand.block) if cand.block else None), ("block_edited", cand.edited),
+        ("cover", spans(cand.nums)), ("outline", cand.outline), ("keep_budget_bytes", cand.keep_budget),
+        ("allowed_dest", list(ALLOWED_DEST)),
+        ("proposal", "%s/%s" % (where, request_name(cand, all_candidates, "proposal")))])
+
+
+def find_proposal(root, cand, stale=False):
+    """(where, data) of a split-proposal*.json in any adopt-* directory whose
+    `source` and `source_sha` match the file on disk; newest first. One
+    proposal per sha: a match is always reused, never re-requested (R7).
+    With `stale`, the newest proposal for this file whatever its sha."""
+    base = os.path.join(root, ".ai", "reports")
+    try:
+        dirs = sorted((d for d in os.listdir(base) if d.startswith("adopt-")), reverse=True)
+    except OSError:
+        return None, None
+    for d in dirs:
+        try:
+            names = sorted(n for n in os.listdir(os.path.join(base, d))
+                           if n.startswith("split-proposal") and n.endswith(".json"))
+        except OSError:
+            continue
+        for name in names:
+            try:
+                with open(os.path.join(base, d, name), encoding="utf-8") as fh:
+                    data = json.load(fh)
+            except (OSError, ValueError):
+                continue
+            if isinstance(data, dict) and data.get("source") == cand.path and (stale or data.get("source_sha") == cand.sha):
+                return ".ai/reports/%s/%s" % (d, name), data
+    return None, None
+
+
+def _range(value, cand, what):
+    if (not isinstance(value, list) or len(value) != 2 or not all(isinstance(v, int) and not isinstance(v, bool)
+                                                                  for v in value)):
+        raise SplitError("%s: a range is [first, last], two line numbers" % what)
+    first, last = value
+    if not 1 <= first <= last <= len(cand.lines):
+        raise SplitError("%s: range [%d, %d] is outside lines 1-%d" % (what, first, last, len(cand.lines)))
+    return list(range(first, last + 1))
+
+
+def _strings(value, what):
+    if not isinstance(value, list) or not value or not all(isinstance(v, str) and v for v in value):
+        raise SplitError("%s must be a non-empty list of strings" % what)
+    return value
+
+
+def load_proposal(data, cand, root, tracked):
+    """Validate an I5 proposal against the file on disk. Returns
+    (keep nums, moves, dropped) where each move is a dict with `nums`; raises
+    SplitError naming the first reason it cannot be applied. No key carries
+    text into a destination: `heading` must be empty or an outline heading,
+    byte for byte (plan-review MEDIUM 14)."""
+    if not isinstance(data, dict):
+        raise SplitError("the proposal is not a JSON object")
+    extra = sorted(set(data) - SPLIT_KEYS)
+    if extra:
+        raise SplitError("unknown key(s) %s — a proposal carries line ranges, never text" % ", ".join(extra))
+    if data.get("version") != 1:
+        raise SplitError("version must be 1")
+    if data.get("source") != cand.path:
+        raise SplitError("source is %r, not %s" % (data.get("source"), cand.path))
+    if data.get("source_sha") != cand.sha:
+        raise SplitError("source_sha does not match %s on disk — ask for a new --split-request" % cand.path)
+    covered = {}
+
+    def claim(nums, what):
+        for n in nums:
+            if n in covered:
+                raise SplitError("line %d is in both %s and %s" % (n, covered[n], what))
+            if n not in cand_nums:
+                raise SplitError("%s: line %d is %s" % (what, n, "a managed-block marker" if cand.edited
+                                                          else "inside the managed block"))
+            covered[n] = what
+        return nums
+    cand_nums = set(cand.nums)
+    for key in ("keep", "moves", "dropped"):
+        if not isinstance(data.get(key, []), list):
+            raise SplitError("%s must be a list" % key)
+    keep = []
+    for i, rng in enumerate(data.get("keep", []), 1):
+        keep += claim(_range(rng, cand, "keep[%d]" % i), "keep[%d]" % i)
+    headings = {o["heading"] for o in cand.outline}
+    moves = []
+    for i, move in enumerate(data.get("moves", []), 1):
+        what = "moves[%d]" % i
+        if not isinstance(move, dict):
+            raise SplitError("%s is not an object" % what)
+        extra = sorted(set(move) - MOVE_KEYS)
+        if extra:
+            raise SplitError("%s: unknown key(s) %s — a move carries line ranges, never text" % (what, ", ".join(extra)))
+        dest = move.get("dest")
+        if not isinstance(dest, str) or not ALLOWED_DEST_RE.match(dest):
+            raise SplitError("%s: dest %r is not one of %s" % (what, dest, ", ".join(ALLOWED_DEST)))
+        heading = move.get("heading") or ""
+        if not isinstance(heading, str) or (heading and heading not in headings):
+            raise SplitError("%s: heading %r is not a heading of the request's outline" % (what, heading))
+        rule = dest.startswith(".ai/rules/")
+        dirs, paths = [], []
+        if rule:
+            dirs = _strings(move.get("dirs"), "%s: dirs (required for .ai/rules/)" % what)
+            for d in dirs:
+                d = d.rstrip("/")
+                if d.startswith("/") or ".." in d.split("/") or not os.path.isdir(os.path.join(root, d)):
+                    raise SplitError("%s: dirs entry %r is not a directory of the tree" % (what, d))
+            if "paths" in move:
+                paths = _strings(move["paths"], "%s: paths" % what)
+                for p in paths:
+                    pat = glob_re(p)
+                    if not any(pat.match(f) for f in tracked or ()):
+                        raise SplitError("%s: paths glob %r matches no tracked file" % (what, p))
+        elif "dirs" in move or "paths" in move:
+            raise SplitError("%s: dirs and paths belong to an .ai/rules/ destination only" % what)
+        nums = claim(_range(move.get("lines"), cand, what), what)
+        moves.append({"nums": nums, "dest": dest, "heading": heading, "dirs": [d.rstrip("/") for d in dirs],
+                      "paths": paths})
+    dropped = []
+    for i, drop in enumerate(data.get("dropped", []), 1):
+        what = "dropped[%d]" % i
+        if not isinstance(drop, dict):
+            raise SplitError("%s is not an object" % what)
+        extra = sorted(set(drop) - DROP_KEYS)
+        if extra:
+            raise SplitError("%s: unknown key(s) %s" % (what, ", ".join(extra)))
+        why = drop.get("why")
+        if not isinstance(why, str) or not why.strip():
+            raise SplitError("%s: why must say why the lines are dropped" % what)
+        dropped.append({"nums": claim(_range(drop.get("lines"), cand, what), what), "why": why.strip()})
+    gap = cand_nums - set(covered)
+    if gap:
+        raise SplitError("lines %s are in no range — every line outside the block is kept, moved or dropped"
+                         % spans(gap))
+    kept = sum(len(cand.line(n).encode("utf-8")) + 1 for n in keep)
+    if kept > cand.keep_budget:
+        raise SplitError("keep is %d B, over the keep budget of %d B" % (kept, cand.keep_budget))
+    return sorted(keep), moves, dropped
+
+
+def fallback_split(cand):
+    """R8's deterministic split: every line to place goes, verbatim, to one
+    `.ai/policies/adopted/<file-slug>.md`. No model."""
+    return [], [{"nums": list(cand.nums), "dest": ".ai/policies/adopted/%s.md" % file_slug(cand.path),
+                 "heading": "", "dirs": [], "paths": []}], []
+
+
+def rewritten(cand, keep):
+    """The instruction file after the split: the kept lines where they were,
+    the shipped block in place of the old one (at the end when there was none)."""
+    keep = set(keep)
+    out, inside = [], []
+    for n, line in enumerate(cand.lines, 1):
+        if cand.block and n == cand.block[0]:
+            out.append(cand.shipped)
+        elif cand.block and cand.block[0] < n <= cand.block[1]:
+            if n in keep:
+                inside.append(line)  # an edited block's kept lines follow the shipped block
+            if n == cand.block[1]:
+                out += inside
+        elif n in keep:
+            out.append(line)
+    if cand.block is None:
+        while out and not out[-1].strip():
+            out.pop()
+        out += ([""] if out else []) + [cand.shipped]
+    return "\n".join(out).strip("\n") + "\n"
+
+
+def section_of(cand, move):
+    body = "\n".join(cand.line(n) for n in move["nums"]).strip("\n")
+    heading = move["heading"] or "## Adopted from %s, lines %s" % (cand.path, spans(move["nums"]))
+    first = body.split("\n", 1)[0]
+    return (body if first == heading else heading + "\n\n" + body), heading
+
+
+def plan_split(plan, adoption, cand, row_n, how, keep, moves, dropped, proposal_sha=None):
+    """Put one split on `plan`: the destinations first, then the rewrite of
+    the instruction file (apply's phase 2, so no line leaves before it has
+    somewhere to be)."""
+    tag = "[%s] split (%s)" % (cand.tool, how)
+    generated = set()
+    by_dest = OrderedDict()
+    for move in moves:
+        by_dest.setdefault(move["dest"], []).append(move)
+    for dest, group in by_dest.items():
+        sections = []
+        for move in group:
+            text, heading = section_of(cand, move)
+            sections.append(text)
+            generated.add(normalise(heading))
+        body = "\n\n".join(sections)
+        current = plan.read(dest)
+        adoption.split_before.setdefault(dest, current)
+        current_text = text_of(current or b"")
+        ranges = spans([n for m in group for n in m["nums"]])
+        if body in current_text:
+            adoption.split_dests.append(dest)  # already there: a resumed apply
+            continue
+        if dest.startswith(".ai/rules/"):
+            dirs = list(OrderedDict.fromkeys(d for m in group for d in m["dirs"]))
+            paths = list(OrderedDict.fromkeys(p for m in group for p in m["paths"]))
+            front = "---\ndirs: [%s]\n" % ", ".join(dirs)
+            front += ("paths: [%s]\n" % ", ".join('"%s"' % p for p in paths)) if paths else ""
+            front += "---\n"
+            generated.update(normalise(l) for l in front.split("\n"))
+            content = front + "\n" + body + "\n"
+            if current is not None:
+                plan.add("conflict", dest, note=tag + "; the rule exists and differs", src=cand.path, tool=cand.tool)
+                continue
+        else:
+            content = (current_text.rstrip("\n") + "\n\n" if current_text.strip() else "") + body + "\n"
+        plan.add("adopt", dest, note="%s lines %s" % (tag, ranges), content=content.encode("utf-8"),
+                 src=cand.path, tool=cand.tool)
+        adoption.split_dests.append(dest)
+        if dest.startswith(".ai/policies/adopted/"):
+            adoption.destinations.append((dest, cand.tool, None, False))
+    for drop in dropped:
+        for n in drop["nums"]:
+            if normalise(cand.line(n)) is not None:
+                adoption.dropped.append({"source": cand.path, "line": n, "text": cand.line(n),
+                                         "reason": drop["why"], "by": "proposal"})
+    result = rewritten(cand, keep)
+    generated.update(normalise(l) for l in cand.shipped.split("\n"))
+    adoption.split_before.setdefault(cand.path, plan.read(cand.path))
+    if result.encode("utf-8") != plan.read(cand.path):
+        plan.add("adopt", cand.path, note="%s: %d B kept, managed block re-rendered" % (tag, len(result.encode("utf-8"))),
+                 content=result.encode("utf-8"), src=cand.path, tool=cand.tool)
+    adoption.split_dests.append(cand.path)
+    if all(s[0] != cand.path for s in adoption.sources):
+        adoption.sources.append((cand.path, cand.tool, "instruction-file", row_n, False))
+    adoption.split_done[cand.path] = {
+        "by": how, "proposal_sha": proposal_sha, "kept_bytes": sum(len(cand.line(n).encode("utf-8")) + 1 for n in keep),
+        "moves": len(moves), "dropped": len(dropped), "text": cand.text, "nums": cand.nums, "generated": generated}
+
+
+def check_added(plan, adoption):
+    """R9 for a split, the other direction of I7: every non-ignorable line of
+    a file the split writes is a source line, a generated line (a heading,
+    frontmatter, the shipped block) or content the file already had.
+    Returns the offending "file:line"s."""
+    if not adoption.split_done:
+        return []
+    allowed = set()
+    for done in adoption.split_done.values():
+        allowed.update(normalise(l) for l in done["text"].split("\n"))
+        allowed.update(done["generated"])
+    bad = []
+    for target in OrderedDict.fromkeys(adoption.split_dests):
+        before = {normalise(l) for l in text_of(adoption.split_before.get(target) or b"").split("\n")}
+        for i, raw in enumerate(text_of(plan.read(target) or b"").split("\n"), 1):
+            n = normalise(raw)
+            if n is not None and n not in allowed and n not in before:
+                bad.append("%s:%d" % (target, i))
+    return bad
+
+
+def plan_splits(plan, adoption, candidates, split_mode, decisions):
+    """Plan every candidate by proposal or fallback; what cannot be planned
+    stays `split?` (awaiting) or goes to `split_errors` (exit 4)."""
+    tracked = None
+    fallback = decisions.get("split")
+    for cand, row_n in candidates:
+        how = split_mode
+        wants_fallback = fallback == "fallback" or (isinstance(fallback, dict) and fallback.get(cand.path) == "fallback")
+        where, data = (None, None) if how == "fallback" else find_proposal(plan.root, cand)
+        if how is None:
+            how = "proposal" if data is not None else ("fallback" if wants_fallback else None)
+        if how is None:
+            where, data = find_proposal(plan.root, cand, stale=True)
+            how = "proposal" if data is not None else None  # stale: validation names the sha
+        if how is None:
+            adoption.split.append(cand.path)
+            adoption.note("split?", cand.path, "%d B outside the block, keep budget %d B; needs --adopt "
+                          "--split-request or --split fallback"
+                          % (sum(len(cand.line(n).encode("utf-8")) + 1 for n in cand.nums), cand.keep_budget))
+            continue
+        if how == "fallback":
+            plan_split(plan, adoption, cand, row_n, "fallback", *fallback_split(cand))
+            continue
+        if data is None:
+            adoption.split_errors.append((cand.path, "--split proposal, and no split-proposal.json matches "
+                                                     "its sha — run --adopt --split-request"))
+            continue
+        if tracked is None:
+            tracked = git_files(plan.root) or []
+        try:
+            keep, moves, dropped = load_proposal(data, cand, plan.root, tracked)
+        except SplitError as exc:
+            adoption.split_errors.append((cand.path, "%s: %s" % (where, exc)))
+            continue
+        with open(os.path.join(plan.root, where), "rb") as fh:
+            proposal_sha = sha256(fh.read())
+        plan_split(plan, adoption, cand, row_n, "proposal", keep, moves, dropped, proposal_sha)
+    bad = check_added(plan, adoption)
+    if bad:
+        adoption.split_errors.append((", ".join(sorted(adoption.split_done)),
+                                      "no-line-added FAIL: %d line(s) come from no source: %s"
+                                      % (len(bad), ", ".join(bad[:20]))))
+
+
+def write_requests(plan, candidates):
+    """`--adopt --split-request`: one I4 file per candidate with no matching
+    proposal, into today's record. Writes nothing else. Returns the exit code."""
+    if not candidates:
+        print("project-update: no split candidate — nothing to request")
+        return 0
+    where = report_dir(plan)
+    for cand, _row in candidates:
+        found, _data = find_proposal(plan.root, cand)
+        if found:
+            print("  split     %s  a proposal for this sha exists, reused: %s" % (cand.path, found))
+            continue
+        rel = "%s/%s" % (where, request_name(cand, [c for c, _ in candidates], "request"))
+        full = os.path.join(plan.root, rel)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w", encoding="utf-8") as fh:
+            json.dump(split_request(cand, where, [c for c, _ in candidates]), fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        print("  split     %s  request written: %s (the session writes the proposal next to it)" % (cand.path, rel))
+    return 0
+
+
+def print_diff(plan):
+    """`--adopt --diff`: one unified diff per target this run would write."""
+    import difflib  # pylint: disable=import-outside-toplevel
+    for target in OrderedDict.fromkeys(i["target"] for i in plan.items if i["content"] is not None):
+        path = os.path.join(plan.root, target)
+        before = ""
+        if os.path.isfile(path):
+            with open(path, "rb") as fh:
+                before = fh.read().decode("utf-8", "replace")
+        after = text_of(plan.final.get(target, b""))
+        sys.stdout.writelines(difflib.unified_diff(before.splitlines(True), after.splitlines(True),
+                                                   "a/" + target, "b/" + target))

@@ -420,4 +420,155 @@ changed=$(git -C "$CA" status --porcelain --untracked-files=all | awk '{print $2
 [ $rc -eq 0 ] && [ "$changed" = ".ai/AGENTS.md " ] && pass "coexist changed only .ai/AGENTS.md (and its record)" || fail "coexist apply (rc=$rc) changed: $changed" "$out"
 grep -q '(kept in place; its globs are not applied by this runtime)' "$CA/.ai/AGENTS.md" && pass "its rows say the files are kept in place" || fail "no kept-in-place rows"
 
+echo "== R7, R8: the instruction-file split — request, fallback, proposal, diff"
+# proposal <project> <file> [jq filter]: the fixture's canned proposal as a real
+# I5 document for the file on disk (tests/fixtures/adopt/README.md), into the
+# record directory; the filter plants a defect.
+proposal() {
+    local dir="$1" name="$2" filter="${3:-.}" fx rec
+    fx="$FIX/large-$( [ "$name" = CLAUDE.md ] && echo claude || echo agents )-md"
+    rec="$dir/.ai/reports/adopt-$(date -u +%F)"; mkdir -p "$rec"
+    python3 - "$dir/$name" "$name" "$fx/split-proposal.fixture.json" "$fx/fixture-$name" <<'PROPEOF' | jq -c "$filter" > "$rec/split-proposal.json"
+import hashlib, json, sys
+path, name, canned, appended = sys.argv[1:5]
+text = open(path, encoding="utf-8").read()
+lines = text.split("\n")[:-1]
+off = len(lines) - len(open(appended, encoding="utf-8").read().split("\n")[:-1])
+start = next(i for i, l in enumerate(lines, 1) if "claude-agentic:start" in l)
+fx = json.load(open(canned))
+sh = lambda r: [r[0] + off, r[1] + off]
+json.dump({"version": 1, "source": name, "source_sha": "sha256:" + hashlib.sha256(text.encode()).hexdigest(),
+           "keep": [[1, start - 1]] + [sh(r) for r in fx["keep"]],
+           "moves": [dict(m, lines=sh(m["lines"])) for m in fx["moves"]],
+           "dropped": [dict(d, lines=sh(d["lines"])) for d in fx["dropped"]]}, sys.stdout)
+PROPEOF
+}
+SQ="$TMP/split-request"; adopt_fixture large-claude-md "$SQ"
+before=$(cd "$SQ" && find . -path ./.git -prune -o -type f -print | sort)
+out=$(python3 "$UPDATE" "$SQ" --adopt --split-request); rc=$?
+REQ=$(ls "$SQ"/.ai/reports/adopt-*/split-request.json 2>/dev/null)
+after=$(cd "$SQ" && find . -path ./.git -prune -o -type f -print | grep -v '/split-request.json$' | sort)
+[ $rc -eq 0 ] && [ -n "$REQ" ] && [ "$before" = "$after" ] && [ -z "$(git -C "$SQ" status --porcelain | grep -v '^?? .ai/reports/')" ] \
+    && pass "--split-request writes split-request.json and nothing else" || fail "split-request (rc=$rc)" "$out"
+[ "$(jq -r '.source, .keep_budget_bytes > 0, (.outline | length > 0), .block[0] > 0' "$REQ" | tr '\n' ' ')" = "CLAUDE.md true true true " ] \
+    && pass "the request has the outline, the block and the keep budget" || fail "request fields" "$(cat "$REQ")"
+grep -q 'Money is an integer' "$REQ" && fail "the request carries source text" || pass "and no line of body text"
+proposal "$SQ" CLAUDE.md; commit "$SQ"; PROP=$(ls "$SQ"/.ai/reports/adopt-*/split-proposal.json)
+mtime=$(stat -c %Y "$PROP"); sleep 1
+out=$(python3 "$UPDATE" "$SQ" --adopt --split-request)
+printf '%s' "$out" | grep -q 'a proposal for this sha exists, reused' && [ "$(stat -c %Y "$PROP")" = "$mtime" ] \
+    && pass "a matching proposal is reused, not re-requested (mtime unchanged)" || fail "proposal not reused" "$out"
+
+FB="$TMP/split-fallback"; adopt_fixture large-claude-md "$FB"
+out=$(python3 "$UPDATE" "$FB" --adopt --split fallback); rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -q '^  adopt     CLAUDE.md -> .ai/policies/adopted/claude-md.md .*split (fallback)' \
+    && pass "--split fallback plans every line to .ai/policies/adopted/claude-md.md" || fail "fallback dry run (rc=$rc)" "$out"
+out=$(python3 "$UPDATE" "$FB" --adopt --apply --split fallback); rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -qE '^  check +no-line-lost +PASS' && printf '%s' "$out" | grep -qE '^  check +no-dangling +PASS' \
+    && pass "the fallback applies with both checks PASS" || fail "fallback apply (rc=$rc)" "$out"
+[ "$(grep -c '^| .* | policies/adopted/ |$' "$FB/.ai/AGENTS.md")" -eq 1 ] && pass "and one router row" || fail "fallback router row" "$(grep '^|' "$FB/.ai/AGENTS.md" | tail -3)"
+python3 "$UPDATE" "$FB" --check --budget >/dev/null && pass "the split CLAUDE.md is within the skeleton budget" || fail "fallback result over budget"
+grep -q 'Money is an integer number of cents' "$FB/.ai/policies/adopted/claude-md.md" && ! grep -q 'Money is an integer' "$FB/CLAUDE.md" \
+    && pass "the notes moved verbatim, out of CLAUDE.md" || fail "fallback did not move the notes"
+[ "$(jq -r '.sources[] | select(.path == "CLAUDE.md") | .cleanup' "$FB"/.ai/reports/adopt-*/adopt.json)" = false ] \
+    && [ "$(jq -r '.split["CLAUDE.md"].by' "$FB"/.ai/reports/adopt-*/adopt.json)" = fallback ] \
+    && pass "the instruction file is recorded, split by fallback, never for cleanup (R17)" || fail "adopt.json split record"
+DF="$TMP/split-decided"; adopt_fixture large-claude-md "$DF"; mkdir -p "$DF/.ai/reports/adopt-2000-01-01"
+printf '{"version":1,"split":"fallback"}\n' > "$DF/.ai/reports/adopt-2000-01-01/decisions.json"; commit "$DF"
+out=$(python3 "$UPDATE" "$DF" --adopt); rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -q 'split (fallback)' && pass "\"split\": \"fallback\" in decisions.json chooses the fallback" || fail "decided fallback (rc=$rc)" "$out"
+out=$(python3 "$UPDATE" "$DF" --adopt --split proposal); rc=$?
+[ $rc -eq 4 ] && printf '%s' "$out" | head -1 | grep -q 'no split-proposal.json matches' && pass "--split proposal with no proposal exits 4" || fail "--split proposal (rc=$rc)" "$out"
+
+declare -A DESTS
+for name in CLAUDE.md AGENTS.md; do
+    f=$( [ $name = CLAUDE.md ] && echo large-claude-md || echo large-agents-md )
+    S="$TMP/split-$f"; adopt_fixture "$f" "$S"; proposal "$S" "$name"; commit "$S"
+    out=$(python3 "$UPDATE" "$S" --adopt --diff); rc=$?
+    [ $rc -eq 0 ] && [ "$(printf '%s' "$out" | grep -c '^+++ b/')" -eq "$(printf '%s' "$out" | grep -c '^--- a/')" ] \
+        && printf '%s' "$out" | grep -q "^+++ b/$name$" && printf '%s' "$out" | grep -q '^+++ b/.ai/rules/payment.md$' \
+        && pass "$f: --diff prints ---/+++ for each target" || fail "$f: --diff (rc=$rc)" "$out"
+    out=$(python3 "$UPDATE" "$S" --adopt --apply); rc=$?
+    [ $rc -eq 0 ] && printf '%s' "$out" | grep -qE '^  check +no-line-lost +PASS' \
+        && pass "$f: the proposal applies, both checks PASS" || fail "$f: proposal apply (rc=$rc)" "$out"
+    DESTS[$f]=$(printf '%s' "$out" | sed -nE "s#^  adopt     $name -> ([^ ]+) .*#\1#p" | grep -v "^$name$" | sort | tr '\n' ' ')
+    python3 "$UPDATE" "$S" --check --budget >/dev/null && pass "$f: $name is within the skeleton budget after the split" || fail "$f: over budget after the split"
+    python3 "$UPDATE" "$S" --check >/dev/null && pass "$f: and the project is current" || fail "$f: behind after the split"
+    grep -q '^dirs: \[src/Payment\]$' "$S/.ai/rules/payment.md" && grep -q 'declined card' "$S/src/Payment/$name" \
+        && pass "$f: the payment rule has dirs and renders into src/Payment/$name" || fail "$f: payment rule"
+    grep -q '^## Conventions$' "$S/.ai/policies/adopted/conventions.md" && [ "$(grep -c '^## Conventions$' "$S/.ai/policies/adopted/conventions.md")" -eq 1 ] \
+        && pass "$f: an outline heading is used once, not repeated" || fail "$f: conventions heading"
+    grep -q 'takes orders and payments' "$S/.ai/project/overview.md" && pass "$f: overview.md gets its lines under a generated heading" || fail "$f: overview"
+    [ "$(jq -r '.checks.no_line_added.status' "$S"/.ai/reports/adopt-*/adopt.json)" = pass ] && pass "$f: no-line-added is recorded PASS (R9)" || fail "$f: no no_line_added"
+    commit "$S" split
+    out=$(python3 "$UPDATE" "$S" --adopt)
+    printf '%s' "$out" | grep -q '^0 automatic' && ! printf '%s' "$out" | grep -q 'split?' \
+        && pass "$f: a second --adopt plans nothing" || fail "$f: not idempotent after the split" "$out"
+done
+[ -n "${DESTS[large-claude-md]}" ] && [ "${DESTS[large-claude-md]}" = "${DESTS[large-agents-md]}" ] \
+    && pass "large-claude-md and large-agents-md reach the same destinations (R19)" || fail "parity" "${DESTS[large-claude-md]} / ${DESTS[large-agents-md]}"
+
+IR="$TMP/split-interrupted"; adopt_fixture large-claude-md "$IR"; proposal "$IR" CLAUDE.md; commit "$IR"
+CLAUDE_AGENTIC_TEST=1 ADOPT_STOP_AFTER=1 python3 "$UPDATE" "$IR" --adopt --apply >/dev/null
+grep -q 'Money is an integer' "$IR/CLAUDE.md" && pass "stopped after phase 1: the lines are at their destinations and still in CLAUDE.md" || fail "phase 1 already rewrote CLAUDE.md"
+out=$(python3 "$UPDATE" "$IR" --adopt --apply); rc=$?
+[ $rc -eq 0 ] && [ "$(grep -c 'takes orders and payments' "$IR/.ai/project/overview.md")" -eq 1 ] && ! grep -q 'Money is an integer' "$IR/CLAUDE.md" \
+    && pass "the re-run completes the split without appending the moved lines twice" || fail "split resume (rc=$rc)" "$out"
+
+echo "== R7, R9: a proposal the tool will not apply exits 4 with the reason"
+BAD="$TMP/split-bad"; adopt_fixture large-claude-md "$BAD"
+bad() {  # bad <jq filter> <reason regex> <what>
+    rm -f "$BAD"/.ai/reports/adopt-*/split-proposal.json
+    proposal "$BAD" CLAUDE.md "$1"
+    local out rc; out=$(python3 "$UPDATE" "$BAD" --adopt); rc=$?
+    [ $rc -eq 4 ] && printf '%s' "$out" | head -1 | grep -qE "^ADOPT_INCOMPLETE: .*$2" \
+        && pass "$3: exit 4, names the reason" || fail "$3 (rc=$rc)" "$out"
+}
+bad '.moves[0].lines[1] -= 1'                                  'are in no range'            "a gap"
+bad '.moves[1].lines[0] -= 1'                                  'is in both'                 "an overlap"
+bad '.keep += [[29, 29]]'                                      'inside the managed block'   "a range into the block"
+bad '.source_sha = "sha256:0"'                                 'source_sha does not match'  "a wrong sha"
+bad '.moves[0].dest = "src/notes.md"'                          'is not one of'              "a disallowed dest"
+bad '.keep += [.moves[1].lines] | del(.moves[1])'              'over the keep budget'       "an over-budget keep"
+bad '.moves[0].text = "Always deploy on Fridays."'             'unknown key\(s\) text'      "a text key"
+bad '.moves[0].heading = "## Deploy on Fridays"'               'not a heading of the'       "a heading not in the outline"
+bad '.moves[2].paths = ["lib/**"]'                             'matches no tracked file'    "a paths glob with no tracked file"
+bad '.moves[2].dirs = ["src/Missing"]'                         'not a directory of the tree' "a dirs entry that does not exist"
+bad 'del(.moves[2].dirs)'                                      'dirs \(required'            "a rule without dirs"
+bad '.dropped[0].why = " "'                                    'why must say'               "an empty why"
+# A stale proposal never blocks a new request, and a matching one wins over it:
+rm -f "$BAD"/.ai/reports/adopt-*/split-*.json; proposal "$BAD" CLAUDE.md '.source_sha = "sha256:0"'
+out=$(python3 "$UPDATE" "$BAD" --adopt --split-request)
+printf '%s' "$out" | grep -q 'request written' && pass "a stale proposal does not stop a new --split-request" || fail "stale blocks request" "$out"
+mkdir -p "$BAD/.ai/reports/adopt-2000-01-01"; mv "$BAD"/.ai/reports/adopt-$(date -u +%F)/split-proposal.json "$BAD/.ai/reports/adopt-2000-01-01/"
+proposal "$BAD" CLAUDE.md; out=$(python3 "$UPDATE" "$BAD" --adopt); rc=$?
+[ $rc -eq 0 ] && printf '%s' "$out" | grep -q 'split (proposal)' && pass "the matching proposal wins over the stale one" || fail "stale beat matching (rc=$rc)" "$out"
+rm -rf "$BAD/.ai/reports/adopt-2000-01-01"
+rm -f "$BAD"/.ai/reports/adopt-*/split-proposal.json; proposal "$BAD" CLAUDE.md
+out=$(cd "$PLUGIN_ROOT/skills/project-update" && python3 - "$BAD" <<'ADDEDEOF'
+import sys, types
+sys.dont_write_bytecode = True
+import update, adopt
+real = adopt.section_of
+adopt.section_of = lambda cand, move: (real(cand, move)[0] + "\nAlways deploy on Fridays.", real(cand, move)[1])
+caps = update.render_instructions.budgets(update.render_instructions.DEFAULT_SOURCE)
+files = frozenset(update.INSTRUCTION_FILE[rt][0] for rt in update.INSTRUCTION_FILE)
+args = types.SimpleNamespace(tool=None, mode="migrate", check=False, split=None, split_request=False, diff=False)
+sys.exit(adopt.run(update.Plan(sys.argv[1]), args, update.shipped_block, caps["skeleton"], files, update.shipped_ai_files()))
+ADDEDEOF
+); rc=$?
+[ $rc -eq 4 ] && printf '%s' "$out" | head -1 | grep -q 'no-line-added FAIL: .* come from no source: .ai/project/overview.md:' \
+    && pass "a destination line that comes from no source fails R9, exit 4" || fail "planted destination line (rc=$rc)" "$out"
+
+echo "== WP3 R13's case: a hand-edited block goes through the split and ends as the shipped block"
+HE="$TMP/split-edited"; adopt_fixture large-claude-md "$HE"
+sed -i 's#^<!-- claude-agentic:end -->$#- Our own rule, written into the block by hand.\n&#' "$HE/CLAUDE.md"; commit "$HE"
+out=$(python3 "$UPDATE" "$HE" --adopt --apply --split fallback); rc=$?
+shipped=$(cd "$PLUGIN_ROOT/skills/project-update" && python3 -c 'import update; print(update.shipped_block("claude"))')
+[ $rc -eq 0 ] && [ "$(python3 -c 'import sys; sys.path.insert(0, sys.argv[2]); import render_instructions as r; print(r.block_of(open(sys.argv[1]).read()))' "$HE/CLAUDE.md" "$PLUGIN_ROOT/skills/project-update")" = "$shipped" ] \
+    && pass "the edited block is replaced by the shipped one" || fail "edited block (rc=$rc)" "$out"
+grep -q 'Our own rule, written into the block by hand' "$HE/.ai/policies/adopted/claude-md.md" \
+    && pass "and the hand-written line moved with the rest, not lost" || fail "the edited line was lost"
+[ -f "$(ls -d "$HE"/.ai/reports/adopt-*/)original/CLAUDE.md" ] && pass "the original CLAUDE.md is kept" || fail "no original CLAUDE.md"
+
 summary "project-adopt"
