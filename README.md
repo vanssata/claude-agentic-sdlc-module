@@ -684,7 +684,7 @@ one; nothing references it any more.
 bash tests/run-all.sh
 ```
 
-Sixteen suites, 663 assertions. The guards against JSON fixtures in both runtimes (including
+Twenty-five suites, 2,129 assertions. The guards against JSON fixtures in both runtimes (including
 `apply_patch` payloads that touch several files at once); the state machine and
 its `triage` call; scaffold idempotency for one runtime, the other, and both
 over a single `.ai/` tree; installer rendering for every plan combination and

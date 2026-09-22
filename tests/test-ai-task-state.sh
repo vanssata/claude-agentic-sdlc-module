@@ -6,6 +6,10 @@ set -uo pipefail
 
 STATE="$PLUGIN_ROOT/skills/ai-task/state.py"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+# Pin both runtime homes to empty scratch dirs: no plan profile, so no plan cap
+# and no runtime advice leaks in from the developer's real ~/.claude or ~/.codex.
+# Section 5 pins its own profiles where a plan is what it tests.
+export CLAUDE_CONFIG_DIR="$TMP/home/.claude" CODEX_HOME="$TMP/home/.codex"
 ROOT="$TMP/project"; mkdir -p "$ROOT/.ai/state" "$ROOT/.ai/reports"
 S() { python3 "$STATE" --root "$ROOT" "$@"; }
 
@@ -108,8 +112,8 @@ S get --field approved_plan.steps | jq -e '.[0].allowed_files | index("translati
   && pass "quick keeps the named files as the step scope" || fail "allowed files missing"
 n=$(S get --field history | jq '[.[] | select(.event=="stage" and (.detail|test("inline")))] | length')
 [ "$n" = 4 ] && pass "quick still writes the four triage stages to the audit trail" || fail "expected 4 inline stage records, got $n"
-out=$(S quick --goal "x" --workflow feature --tier T3 --files a --force 2>&1 || true)
-printf '%s' "$out" | grep -q "quick is for T0, T1 and T2" && pass "quick refuses T3 and above" || fail "quick should refuse T3" "$out"
+out=$(S quick --goal "x" --workflow feature --tier T3 --files a --force 2>&1); rc=$?
+[ $rc = 1 ] && printf '%s' "$out" | grep -q "quick is for T0, T1 and T2" && pass "quick refuses T3 and above" || fail "quick should refuse T3 with exit 1" "rc=$rc $out"
 out=$(S quick --goal "x" --workflow feature --tier T1 --files "" --force 2>&1 || true)
 printf '%s' "$out" | grep -q "at least one file" && pass "quick refuses an empty scope" || fail "quick should refuse empty --files" "$out"
 
