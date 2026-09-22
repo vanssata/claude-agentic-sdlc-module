@@ -122,13 +122,13 @@ out=$(python3 "$UPDATE" "$S" --adopt); rc=$?
 printf '%s' "$out" | grep -q '^  split?    CLAUDE.md' && [ $rc -eq 0 ] && ! printf '%s' "$out" | grep -q unmapped \
     && pass "the scaffold plus 200 B of notes is a split candidate, not unmapped" || fail "no split? for a grown CLAUDE.md (rc=$rc)" "$out"
 S="$TMP/fresh-codex"; head -c 200 /dev/zero | tr '\0' 'n' >> "$S/AGENTS.md"; printf '\n' >> "$S/AGENTS.md"
-python3 "$UPDATE" "$S" --adopt | grep -q '^  split?    AGENTS.md' && pass "the same for AGENTS.md" || fail "no split? for a grown AGENTS.md"
+printf "%s" "$(python3 "$UPDATE" "$S" --adopt)" | grep -q '^  split?    AGENTS.md' && pass "the same for AGENTS.md" || fail "no split? for a grown AGENTS.md"
 out=$(python3 "$UPDATE" "$P/junie-gemini" --adopt)
 printf '%s' "$out" | grep -qE '^  detect +gemini +GEMINI.md' && printf '%s' "$out" | grep -qE '^  detect +junie ' \
     && pass "GEMINI.md and .junie/guidelines.md without the block are foreign" || fail "junie/gemini not detected" "$out"
 printf '%s' "$out" | grep -q 'split?' && fail "small foreign instruction files are not split candidates" "$out" || pass "and at this size neither is a split candidate"
-python3 "$UPDATE" "$P/large-claude-md" --adopt | grep -q '^  split?    CLAUDE.md' && pass "large-claude-md lists split?" || fail "large-claude-md: no split?"
-python3 "$UPDATE" "$P/large-agents-md" --adopt | grep -q '^  split?    AGENTS.md' && pass "large-agents-md lists split?" || fail "large-agents-md: no split?"
+printf "%s" "$(python3 "$UPDATE" "$P/large-claude-md" --adopt)" | grep -q '^  split?    CLAUDE.md' && pass "large-claude-md lists split?" || fail "large-claude-md: no split?"
+printf "%s" "$(python3 "$UPDATE" "$P/large-agents-md" --adopt)" | grep -q '^  split?    AGENTS.md' && pass "large-agents-md lists split?" || fail "large-agents-md: no split?"
 
 echo "== R4: what no row maps fails loudly, and a human's decision settles it"
 K="$TMP/kiro-hooks"; adopt_fixture kiro "$K"
@@ -326,5 +326,98 @@ out=$(python3 "$UPDATE" "$IC" --adopt --check); rc=$?
 printf '%s' "$out" | grep -q '^adoption of 2000-01-01 incomplete: no-line-lost FAIL' && [ $rc -eq 1 ] \
     && pass "a failed check: line 5, exit 1" || fail "line 5 wrong" "$out/$rc"
 python3 "$UPDATE" "$G" --check >/dev/null; [ $? -eq 0 ] && pass "the plain --check line is unchanged by any of this (OQ10)" || fail "plain --check disturbed"
+
+echo "== R5: --adopt --apply refuses, exit 5, until the project is ready"
+refused() {  # refused <dir> <what>: exit 5, ADOPT_REFUSED on line 1, and nothing written
+    local before out rc
+    before=$(tree_sha "$1")
+    out=$(python3 "$UPDATE" "$1" --adopt --apply); rc=$?
+    [ $rc -eq 5 ] && [ "$(printf '%s' "$out" | head -1 | cut -d: -f1)" = ADOPT_REFUSED ] && [ "$(tree_sha "$1")" = "$before" ] \
+        && pass "$2: refused, exit 5, nothing written" || fail "$2: expected a refusal (rc=$rc)" "$out"
+}
+NA="$TMP/no-ai"; mkdir -p "$NA"; printf 'Use tabs.\n' > "$NA/.cursorrules"; commit "$NA"
+refused "$NA" "no .ai/"
+NG="$TMP/no-git"; adopt_fixture cursor "$NG"; rm -rf "$NG/.git"
+refused "$NG" "not a git work tree"
+DT="$TMP/dirty"; adopt_fixture cursor "$DT"; printf 'wip\n' > "$DT/notes.txt"
+refused "$DT" "an untracked file outside the record"
+TF="$TMP/task"; adopt_fixture cursor "$TF"; mkdir -p "$TF/.ai/state"
+printf '{"task_id":"T-1","current_stage":"plan"}\n' > "$TF/.ai/state/current.json"
+refused "$TF" "a task in flight"
+BH="$TMP/behind"; adopt_fixture cursor "$BH"; rm "$BH/.ai/policies/security.md"; commit "$BH"
+refused "$BH" "the project behind the plugin"
+SP="$TMP/split-apply"; adopt_fixture large-claude-md "$SP"
+out=$(python3 "$UPDATE" "$SP" --adopt --apply); rc=$?
+[ $rc -eq 4 ] && printf '%s' "$out" | head -1 | grep -q '^ADOPT_INCOMPLETE: .*CLAUDE.md: a split needs a proposal' \
+    && pass "a split candidate with no proposal exits 4 and writes nothing (R8)" || fail "split apply (rc=$rc)" "$out"
+
+echo "== R6, R15: apply once, keep the originals, and a second run changes nothing"
+A="$TMP/applied"; adopt_fixture speckit "$A"
+# Spec Kit's .gemini/commands/ makes the project declare Gemini, so the plain
+# update is pending first — R5 refuses until it is applied, as a user would.
+refused "$A" "Spec Kit's .gemini/ declares a runtime the project has not scaffolded yet"
+python3 "$UPDATE" "$A" --apply >/dev/null; commit "$A" "plain update"
+chmod 0640 "$A/specs/001-user-auth/spec.md"
+head -c 1048577 /dev/zero | tr '\0' 'r' | fold -w 80 > "$A/specs/001-user-auth/research.md"; commit "$A"
+out=$(python3 "$UPDATE" "$A" --adopt --apply); rc=$?
+[ $rc -eq 0 ] && pass "speckit applies, exit 0" || fail "speckit apply (rc=$rc)" "$out"
+REC=$(ls -d "$A"/.ai/reports/adopt-*/)
+[ -f "$REC/original/specs/001-user-auth/spec.md" ] && [ "$(stat -c %a "$REC/original/specs/001-user-auth/spec.md")" = 640 ] \
+    && pass "the original is kept with its mode" || fail "no original with mode 640"
+[ -f "$REC/original/docs/sdlc/constitution.md" ] && pass "the project file this run rewrites (constitution.md) is kept too" || fail "no original of the rewritten constitution"
+[ ! -e "$REC/original/specs/001-user-auth/research.md" ] && printf '%s' "$out" | grep -q 'skipped (git has them): specs/001-user-auth/research.md' \
+    && pass "a file over 1 MiB is not copied, and says so" || fail "the 1 MiB file was copied or not listed" "$out"
+[ "$(jq -r '.original_skipped[0]' "$REC/adopt.json")" = specs/001-user-auth/research.md ] && [ "$(jq '.original_bytes > 0' "$REC/adopt.json")" = true ] \
+    && pass "adopt.json records the bytes kept and the file skipped" || fail "original_* not recorded"
+[ "$(jq -r '.status' "$REC/adopt.json")" = applied ] && [ "$(jq -r '.checks.no_line_lost.checked_at | length > 0' "$REC/adopt.json")" = true ] \
+    && pass "the checks ran on disk and are timestamped (R12)" || fail "adopt.json has no applied status or checked_at"
+[ -s "$REC/report.md" ] && [ -f "$REC/dropped.jsonl" ] && [ "$(wc -l < "$REC/dropped.jsonl")" -gt 0 ] \
+    && pass "report.md and dropped.jsonl are written" || fail "record files missing"
+[ ! -e "$REC/migration.json" ] && pass "no migration.json under adopt-*" || fail "adopt wrote migration.json"
+python3 "$UPDATE" "$A" --check >/dev/null && pass "plain --check exits 0 right after the apply" || fail "the project is behind after adopt"
+commit "$A" adopted
+before=$(tree_sha "$A")
+out=$(python3 "$UPDATE" "$A" --adopt)
+printf '%s' "$out" | grep -q '^0 automatic' && [ "$(tree_sha "$A")" = "$before" ] \
+    && pass "a second --adopt plans nothing and writes nothing" || fail "not idempotent" "$out"
+out=$(python3 "$UPDATE" "$A")
+printf '%s' "$out" | grep -q '^  conflict  .ai/AGENTS.md' && fail "the router rows became a conflict for the plain update" "$out" \
+    || pass "the plain dry run keeps the router rows as project edits"
+printf 'extra\n' >> "$A/specs/001-user-auth/spec.md"; commit "$A" regen
+out=$(python3 "$UPDATE" "$A" --adopt --check); rc=$?
+printf '%s' "$out" | grep -q '^foreign files regenerated since the adopt of .*specs/001-user-auth/spec.md' && [ $rc -eq 1 ] \
+    && pass "a changed source makes --adopt --check say regenerated (R16)" || fail "no regenerated line (rc=$rc)" "$out"
+printf "%s" "$(python3 "$UPDATE" "$A")" | grep -q '^  hint      foreign files regenerated' \
+    && pass "and the plain dry run carries it as a hint (D5)" || fail "no D5 hint for regeneration"
+printf "%s" "$(python3 "$UPDATE" "$P/cursor")" | grep -q '^  hint      foreign structure detected: cursor' \
+    && pass "an un-adopted foreign structure is a hint in the plain dry run (D5)" || fail "no D5 hint for detection"
+
+echo "== R15: an interrupted apply resumes, and only its own writes count as allowed dirt"
+for phase in 1 2; do
+    I="$TMP/interrupt-$phase"; adopt_fixture cursor "$I"
+    out=$(CLAUDE_AGENTIC_TEST=1 ADOPT_STOP_AFTER=$phase python3 "$UPDATE" "$I" --adopt --apply); rc=$?
+    [ $rc -eq 3 ] && [ "$(jq -r '.status' "$I"/.ai/reports/adopt-*/adopt.json)" = partial ] \
+        && pass "stopped after phase $phase: exit 3, the record says partial" || fail "phase $phase stop (rc=$rc)" "$out"
+    out=$(python3 "$UPDATE" "$I" --adopt --check)
+    printf '%s' "$out" | grep -q 'incomplete: the apply was interrupted' \
+        && pass "--adopt --check calls it incomplete" || fail "no incomplete line after phase $phase" "$out"
+    out=$(python3 "$UPDATE" "$I" --adopt --apply); rc=$?
+    [ $rc -eq 0 ] && [ "$(jq -r '.status' "$I"/.ai/reports/adopt-*/adopt.json)" = applied ] \
+        && printf '%s' "$out" | grep -qE '^  check +no-line-lost +PASS' \
+        && pass "the re-run completes past the clean-tree gate and passes both checks" || fail "resume after phase $phase (rc=$rc)" "$out"
+done
+I="$TMP/interrupt-dirty"; adopt_fixture cursor "$I"
+CLAUDE_AGENTIC_TEST=1 ADOPT_STOP_AFTER=1 python3 "$UPDATE" "$I" --adopt --apply >/dev/null
+printf 'wip\n' > "$I/notes.txt"
+refused "$I" "a dirty path that is not a planned destination, while resuming"
+out=$(ADOPT_STOP_AFTER=1 python3 "$UPDATE" "$TMP/check-good" --adopt --apply 2>&1)
+[ -n "$(ls "$TMP"/check-good/.ai/reports/ 2>/dev/null)" ] && pass "without CLAUDE_AGENTIC_TEST the stop switch is ignored" || fail "stop switch honoured outside tests"
+
+echo "== R14: coexist --apply writes only the router rows and the record"
+CA="$TMP/coexist-apply"; adopt_fixture cursor "$CA"
+out=$(python3 "$UPDATE" "$CA" --adopt --apply --mode coexist); rc=$?
+changed=$(git -C "$CA" status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^.ai/reports/adopt-' | sort | tr '\n' ' ')
+[ $rc -eq 0 ] && [ "$changed" = ".ai/AGENTS.md " ] && pass "coexist changed only .ai/AGENTS.md (and its record)" || fail "coexist apply (rc=$rc) changed: $changed" "$out"
+grep -q '(kept in place; its globs are not applied by this runtime)' "$CA/.ai/AGENTS.md" && pass "its rows say the files are kept in place" || fail "no kept-in-place rows"
 
 summary "project-adopt"

@@ -706,15 +706,25 @@ def rendered_rules(plan):
     return blocks, docs
 
 
-def rules_update(plan, runtimes):
+def rules_update(plan, runtimes, planned=None):
     """Render `.ai/rules/<slug>.md` into the instruction file of every directory
     it names, and take back what a rule no longer asks for. The text around a
-    block belongs to the project and is never read for meaning, only preserved."""
+    block belongs to the project and is never read for meaning, only preserved.
+
+    `planned` ({".ai/rules/<slug>.md": text}) are rules this same run is about
+    to write (an adopt): they replace or join the ones on disk by slug, so their
+    blocks render in the same run. The plain update passes nothing."""
     rules_path = os.path.join(plan.root, RULES_DIR)
-    if not os.path.isdir(rules_path):
+    if not os.path.isdir(rules_path) and not planned:
         return
     try:
         rules = render_instructions.load_rules(rules_path)
+        if planned:
+            by_slug = OrderedDict((r.slug, r) for r in rules)
+            for rel, text in sorted(planned.items()):
+                slug = os.path.basename(rel)[:-3]
+                by_slug[slug] = render_instructions.parse_rule(slug, text, where=rel)
+            rules = list(by_slug.values())
     except render_instructions.RenderError as exc:
         plan.hints.append("%s — that rule is not rendered; the rest are" % exc)
         return
@@ -1097,6 +1107,17 @@ def apply_item(plan, item, written, recorded):
         write_file(plan.root, os.path.join(plan.local_dir, target), item["conflict_copy"])
 
 
+def plain_pending(root, ignore=()):
+    """True when the plain --check would exit 1: an automatic item or a schema
+    step is pending. Targets in `ignore` (an adopt resuming its own writes) do
+    not count. Same condition as main()'s --check branch."""
+    plan = build_plan(root)
+    if plan is None:
+        return False
+    pending = [i for i in plan.items if i["action"] not in ("conflict", "delete?") and i["target"] not in ignore]
+    return bool(pending or plan.schema)
+
+
 def shipped_ai_files():
     """{project-relative path: current shipped bytes} for every file this
     plugin ships unedited into a scaffold: `.ai/**` from the ai-init templates,
@@ -1194,10 +1215,15 @@ def main():
         ap.error("--mode and --tool only make sense with --adopt")
     root = os.path.abspath(args.root)
     if args.adopt:
-        if args.apply or args.confirm_delete is not None:
-            ap.error("--adopt --apply is not implemented in this version")
+        if args.confirm_delete is not None:
+            ap.error("--adopt --confirm-delete belongs to --cleanup, which is not implemented in this version")
+        if args.apply and args.check:
+            ap.error("--adopt takes --apply or --check, not both")
         caps = render_instructions.budgets(render_instructions.DEFAULT_SOURCE)
         instruction_files = frozenset(INSTRUCTION_FILE[rt][0] for rt in INSTRUCTION_FILE)
+        if args.apply:
+            return adopt.apply_run(Plan(root), args, sys.modules[__name__], caps.get("skeleton"),
+                                   instruction_files, shipped_ai_files())
         return adopt.run(Plan(root), args, shipped_block, caps.get("skeleton"), instruction_files, shipped_ai_files())
     if args.check and args.budget:
         offenders = adopt.budget_offenders(
@@ -1220,6 +1246,13 @@ def main():
         print("project-update: %s has neither .ai/ nor docs/sdlc/ — run /ai-init or /project-init first" % root,
               file=sys.stderr)
         return 2
+    if not args.check:
+        # D5: the plain dry run says when a foreign structure waits for --adopt
+        # (never --check, whose one line /ai-status reads byte for byte).
+        caps = render_instructions.budgets(render_instructions.DEFAULT_SOURCE)
+        code, line = adopt.state_line(root, shipped_block, caps.get("skeleton"))
+        if code:
+            plan.hints.append(line)
     pending = [i for i in plan.items if i["action"] not in ("conflict", "delete?")]
     if args.check:
         conflicts = sum(1 for i in plan.items if i["action"] == "conflict")

@@ -319,10 +319,13 @@ def plan_file(plan, adoption, path, row, tool, roots):
             return
     elif transform == "append-section":
         dest = expand(row["dest"], path, roots)
-        heading = "## Adopted from %s" % path
+        # Not "## Adopted from <path>" (spec I2): that heading is itself a
+        # reference to the old path, and would dangle after cleanup (I8).
+        heading = "## Adopted from %s (%s)" % (TOOL_TITLE.get(tool, tool), os.path.basename(path))
         current = (plan.read(dest) or b"").decode("utf-8", "replace")
         if heading in current.split("\n"):
-            return
+            adoption.destinations.append((dest, tool, row.get("router"), False))
+            return  # already appended by an earlier run
         content = (current.rstrip("\n") + "\n\n" + heading + "\n\n" + text.strip("\n") + "\n").lstrip("\n").encode("utf-8")
         principles = sum(1 for line in text.split("\n") if line.startswith("### "))
         note = "append-section" + (" (hint: %d principles, at most 15)" % principles if principles > 15 else "")
@@ -339,6 +342,8 @@ def plan_file(plan, adoption, path, row, tool, roots):
     elif existing != content:
         plan.add("adopt", dest, note=tag, content=content, src=path, tool=tool)
         adoption.destinations.append((dest, tool, row.get("router"), False))
+    else:
+        adoption.destinations.append((dest, tool, row.get("router"), False))  # already there
 
 
 def latest_with(root, name):
@@ -366,7 +371,7 @@ def load_decisions(root):
 
 
 def plan_adopt(plan, table, mode="migrate", tools=None, shipped_block=None, skeleton_cap=None,
-               instruction_files=frozenset(), shipped_files=None):
+               instruction_files=frozenset(), shipped_files=None, run_checks=True):
     """Detect every foreign structure at the root and plan it onto `plan`.
     Returns the Adoption. Nothing is written."""
     root = plan.root
@@ -453,7 +458,7 @@ def plan_adopt(plan, table, mode="migrate", tools=None, shipped_block=None, skel
             adoption.note("split?", sig, "%d B outside the block, keep budget %d B; needs --adopt "
                           "--split-request or --split fallback" % (outside, keep))
     add_router_rows(plan, router_rows_text(adoption))
-    if not adoption.unmapped:
+    if run_checks and not adoption.unmapped:
         line_status, lines, missing, missing_n = check_lines(plan, adoption)
         adoption.checks["no-line-lost"] = (line_status, lines, missing, missing_n)
         ref_status, hard_misses, warn_n = check_refs(plan, adoption, table, instruction_files, shipped_files)
@@ -481,9 +486,15 @@ def nested_signature(path, table, tools):
     return None
 
 
+def today():
+    """UTC date; ADOPT_TODAY overrides it only under CLAUDE_AGENTIC_TEST=1."""
+    if os.environ.get("CLAUDE_AGENTIC_TEST") == "1" and os.environ.get("ADOPT_TODAY"):
+        return os.environ["ADOPT_TODAY"]
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
 def report_dir(plan):
-    return getattr(plan, "adopt_report_dir", None) or \
-        ".ai/reports/adopt-%s" % datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return getattr(plan, "adopt_report_dir", None) or ".ai/reports/adopt-%s" % today()
 
 
 NOTE_ORDER = ("kept", "split?", "dropped", "ignored", "unmapped", "hint")
@@ -578,22 +589,34 @@ def run(plan, args, shipped_block, skeleton_cap, instruction_files=frozenset(), 
 
 def check_state(root, table, shipped_block, skeleton_cap, instruction_files, shipped_files=None):
     """`update.py --adopt --check`: exactly one of I11's five lines."""
+    code, line = state_line(root, shipped_block, skeleton_cap, table, instruction_files, shipped_files)
+    print(line)
+    return code
+
+
+def state_line(root, shipped_block, skeleton_cap, table=None, instruction_files=frozenset(), shipped_files=None):
+    """(exit code, one I11 line). Detection only — no reference scan — so the
+    plain dry run (D5) can afford it on every call."""
+    if table is None:
+        try:
+            table = load_table()
+        except TableError:
+            return 0, "no foreign structure detected"
     where = latest_with(root, "adopt.json")
     if where is None:
         plan = _ThrowawayPlan(root)
-        adoption = plan_adopt(plan, table, "migrate", None, shipped_block, skeleton_cap, instruction_files, shipped_files)
+        adoption = plan_adopt(plan, table, "migrate", None, shipped_block, skeleton_cap,
+                              instruction_files, shipped_files, run_checks=False)
         if not adoption.detected and not adoption.split:
-            print("no foreign structure detected")
-            return 0
+            return 0, "no foreign structure detected"
         bits = ["%s (%d file(s))" % (t, sum(g.values())) for t, g in adoption.detected.items()]
-        print("foreign structure detected: %s — run /project-update --adopt" % ", ".join(bits))
-        return 1
+        bits += ["%s (split?)" % f for f in adoption.split]
+        return 1, "foreign structure detected: %s — run /project-update --adopt" % ", ".join(bits)
     try:
         with open(os.path.join(root, where, "adopt.json"), encoding="utf-8") as fh:
             record_data = json.load(fh)
     except (OSError, ValueError):
-        print("no foreign structure detected")
-        return 0
+        return 0, "no foreign structure detected"
     date = where.rsplit("adopt-", 1)[-1]
     regenerated = []
     for src in record_data.get("sources", []):
@@ -605,20 +628,17 @@ def check_state(root, table, shipped_block, skeleton_cap, instruction_files, shi
         if current != src.get("sha"):
             regenerated.append(src["path"])
     if regenerated:
-        print("foreign files regenerated since the adopt of %s: %s — run /project-update --adopt"
-             % (date, ", ".join(sorted(regenerated))))
-        return 1
+        return 1, ("foreign files regenerated since the adopt of %s: %s — run /project-update --adopt"
+                   % (date, ", ".join(sorted(regenerated))))
     checks = record_data.get("checks", {})
     failed = [name for name, c in checks.items() if c.get("status") not in ("pass", "not_applicable")]
-    if failed:
-        print("adoption of %s incomplete: %s FAIL — run /project-update --adopt"
-             % (date, failed[0].replace("_", "-")))
-        return 1
+    if failed or record_data.get("status") == "partial":
+        what = failed[0].replace("_", "-") + " FAIL" if failed else "the apply was interrupted"
+        return 1, "adoption of %s incomplete: %s — run /project-update --adopt" % (date, what)
     tools = ", ".join(sorted(record_data.get("tools", {})))
     pending = sum(1 for s in record_data.get("sources", []) if s.get("cleanup") and os.path.isfile(os.path.join(root, s["path"])))
     tail = "; %d file(s) await cleanup" % pending if pending else ""
-    print("adopted %s: %s — up to date%s" % (date, tools, tail))
-    return 0
+    return 0, "adopted %s: %s — up to date%s" % (date, tools, tail)
 
 
 class _ThrowawayPlan:
@@ -680,13 +700,14 @@ def check_lines(plan, adoption):
     missing_count)."""
     if adoption.mode == "coexist":
         return "not_applicable", 0, [], 0
+    targets = {d for d, _t, _r, coexist in adoption.destinations if not coexist}
+    targets |= {i["target"] for i in plan.items if i["content"] is not None}
     dest_lines = set()
-    for item in plan.items:
-        if item["content"] is not None:
-            for raw in text_of(item["content"]).split("\n"):
-                n = normalise(raw)
-                if n:
-                    dest_lines.add(n)
+    for target in targets:
+        for raw in text_of(plan.read(target) or b"").split("\n"):
+            n = normalise(raw)
+            if n:
+                dest_lines.add(n)
     dropped_star = {d["source"] for d in adoption.dropped if d.get("line") == "*"}
     dropped_at = {(d["source"], d["line"]) for d in adoption.dropped if d.get("line") != "*"}
     lines, missing = 0, []
@@ -786,18 +807,23 @@ def check_refs(plan, adoption, table, instruction_files=frozenset(), shipped_fil
     files = git_files(plan.root)
     if files is None:
         files = walk(plan.root)
+    # What the run leaves behind: planned content first (plan.final), then disk.
+    files = sorted(set(files) | set(plan.final))
     hard_misses, warn_count = [], 0
     for path in files:
         if path in moved or path in old:
             continue
-        full = os.path.join(plan.root, path)
-        try:
-            if os.path.getsize(full) > MAX_SCAN_BYTES:
+        if path in plan.final:
+            data = plan.final[path]
+        else:
+            full = os.path.join(plan.root, path)
+            try:
+                if os.path.getsize(full) > MAX_SCAN_BYTES:
+                    continue
+                with open(full, "rb") as fh:
+                    data = fh.read()
+            except OSError:
                 continue
-            with open(full, "rb") as fh:
-                data = fh.read()
-        except OSError:
-            continue
         if is_binary(data):
             continue
         # A file whose bytes still match what the plugin ships is the plugin's
@@ -866,3 +892,265 @@ def add_router_rows(plan, rows):
     new_lines = lines[:last + 1] + to_add + lines[last + 1:]
     plan.add("router", ROUTER_FILE, note="+%d row(s)" % len(to_add), content="\n".join(new_lines).encode("utf-8"))
     return len(to_add)
+
+
+# ---------------------------------------------------------------------------
+# --adopt --apply (R5, R6, R15, R16)
+# ---------------------------------------------------------------------------
+
+# Dirt an adopt tolerates: its own record, and the two git-ignored directories.
+ALLOWED_DIRT = (".ai/reports/adopt-", ".ai/state/", ".ai/local/")
+ORIGINAL_CAP = 1024 * 1024
+INSTRUCTION_ROOT = ("CLAUDE.md", "AGENTS.md", "GEMINI.md", ".junie/guidelines.md")
+
+
+def sha256(data):
+    return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
+def read_record(root, where):
+    try:
+        with open(os.path.join(root, where, "adopt.json"), encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+def partial_record(root):
+    """(directory, record) of the latest adopt.json when it is `partial` — an
+    apply that stopped part-way — else (None, None)."""
+    where = latest_with(root, "adopt.json")
+    if where is None:
+        return None, None
+    rec = read_record(root, where)
+    if rec and rec.get("status") == "partial":
+        return where, rec
+    return None, None
+
+
+def task_in_flight(root):
+    """The task in .ai/state/current.json when its stage is not `done`."""
+    try:
+        with open(os.path.join(root, ".ai", "state", "current.json"), encoding="utf-8") as fh:
+            state = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    stage = state.get("current_stage")
+    return None if stage in (None, "done") else "%s at stage %s" % (state.get("task_id", "a task"), stage)
+
+
+def gates(root, u, planned_writes):
+    """R5, in the order a human fixes them. Returns a refusal (reason, how) or None."""
+    if not os.path.isdir(os.path.join(root, ".ai")):
+        return "the project has no .ai/", "run /ai-init first, then /project-update --adopt"
+    dirty = clean_tree(root)
+    if dirty is None:
+        return "the project is not a git work tree", "run `git init` and commit, so the adopt can be undone"
+    running = task_in_flight(root)
+    if running:
+        return "a task is in flight (%s)" % running, "finish or abandon it with /ai-task first"
+    outside = [p for p in dirty if not p.startswith(ALLOWED_DIRT) and p not in planned_writes]
+    if outside:
+        more = " and %d more" % (len(outside) - 3) if len(outside) > 3 else ""
+        return ("the tree has uncommitted changes: %s%s" % (", ".join(outside[:3]), more),
+                "commit or stash them first, so the adopt is one reviewable change")
+    if u.plain_pending(root, ignore=planned_writes):
+        return "the project is behind the installed plugin", "run /project-update --apply first, then adopt"
+    return None
+
+
+def keep_original_bounded(u, plan, rel, record):
+    """R6: a copy with its mode under <record dir>/original/, unless it is over
+    1 MiB or binary — then git keeps it, and it is listed."""
+    full = os.path.join(plan.root, rel)
+    if not os.path.isfile(full):
+        return
+    target = os.path.join(plan.report_dir, "original", rel)
+    if os.path.exists(os.path.join(plan.root, target)):
+        return  # a resumed apply already kept it
+    size = os.path.getsize(full)
+    with open(full, "rb") as fh:
+        head = fh.read(8192)
+    if size > ORIGINAL_CAP or b"\0" in head:
+        if rel not in record["original_skipped"]:
+            record["original_skipped"].append(rel)
+        return
+    u.write_file(plan.root, target, u.read(full), mode=os.stat(full).st_mode & 0o7777)
+    record["original_bytes"] += size
+
+
+def phase_of(item):
+    """1: destinations, router rows, rendered rule blocks; 2: a rewrite of a
+    root instruction file. A source never loses a line before its destination
+    exists (plan step 6)."""
+    return 2 if item["target"] in INSTRUCTION_ROOT and item["action"] == "adopt" else 1
+
+
+def test_stop_after():
+    """ADOPT_STOP_AFTER=<phase>, read only under CLAUDE_AGENTIC_TEST=1."""
+    if os.environ.get("CLAUDE_AGENTIC_TEST") != "1":
+        return None
+    try:
+        return int(os.environ.get("ADOPT_STOP_AFTER", ""))
+    except ValueError:
+        return None
+
+
+def write_json(u, root, rel, data):
+    u.write_file(root, rel, (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+
+
+def apply_run(plan, args, u, skeleton_cap, instruction_files=frozenset(), shipped_files=None):
+    """`update.py --adopt --apply`: gates, originals, phased writes, the checks
+    on disk, the record. Exit 0, 3 (aborted), 4 (incomplete) or 5 (refused)."""
+    root = plan.root
+    try:
+        table = load_table()
+    except TableError as exc:
+        print("project-update: %s" % exc, file=sys.stderr)
+        return 2
+    tools = [t.strip() for t in args.tool.split(",")] if args.tool else None
+    resume_dir, resume = partial_record(root)
+    planned_writes = set(resume.get("planned_writes", [])) if resume else set()
+    refusal = gates(root, u, planned_writes)
+    if refusal:
+        return refuse(*refusal)
+    plan.report_dir = plan.adopt_report_dir = resume_dir or ".ai/reports/adopt-%s" % today()
+    adoption = plan_adopt(plan, table, args.mode, tools, u.shipped_block, skeleton_cap,
+                          instruction_files, shipped_files)
+    problems = []
+    if adoption.unmapped:
+        problems.append("%d unmapped file(s)" % len(adoption.unmapped))
+    if adoption.split:
+        problems.append("%s: a split needs a proposal or --split fallback" % ", ".join(adoption.split))
+    conflicts = [i["target"] for i in plan.items if i["action"] == "conflict"]
+    if conflicts:
+        problems.append("destination(s) exist and differ: %s" % ", ".join(conflicts))
+    failed = [name for name, c in adoption.checks.items() if c[0] == "fail"]
+    if failed:
+        problems.append("%s FAIL on the plan" % ", ".join(failed))
+    if problems:
+        print("%s: %s — nothing written" % (INCOMPLETE, "; ".join(problems)))
+        report(plan, adoption)
+        return 4
+    # Nested rule blocks for the rules this run writes (plan step 6, HIGH 5).
+    planned_rules = {i["target"]: text_of(i["content"]) for i in plan.items
+                     if i["content"] is not None and i["target"].startswith(".ai/rules/")}
+    if planned_rules:
+        u.rules_update(plan, u.project_runtimes(root), planned=planned_rules)
+    writes = [i for i in plan.items if i["content"] is not None and i["action"] != "delete?"]
+    record = resume or {"version": 1, "mode": args.mode, "adopted_at": u.utc_now(),
+                        "original_bytes": 0, "original_skipped": []}
+    record["status"] = "partial"
+    record["planned_writes"] = sorted(set(record.get("planned_writes", [])) | {i["target"] for i in writes})
+    record.setdefault("original_bytes", 0)
+    record.setdefault("original_skipped", [])
+    rec_path = plan.report_dir + "/adopt.json"
+    written, recorded = {}, []
+    try:
+        write_json(u, root, rec_path, record)
+        # Every source cleanup may take away, and every project file outside
+        # .ai/ this run rewrites, is kept before anything is written.
+        for path, _tool, _transform, _n, cleanup in adoption.sources:
+            if cleanup:
+                keep_original_bounded(u, plan, path, record)
+        for item in writes:
+            if not item["target"].startswith(".ai/") and item["expect"] is not None:
+                keep_original_bounded(u, plan, item["target"], record)
+        write_json(u, root, rec_path, record)
+        stop = test_stop_after()
+        for phase in (1, 2):
+            for item in writes:
+                if phase_of(item) == phase:
+                    u.apply_item(plan, item, written, recorded)
+            if stop == phase:
+                print("project-update: stopped after phase %d (ADOPT_STOP_AFTER, test only)" % phase)
+                return 3
+    except u.Abort as exc:
+        print("project-update: aborted: %s — re-run --adopt --apply to resume" % exc.why, file=sys.stderr)
+        return 3
+    except OSError as exc:
+        print("project-update: aborted: %s — re-run --adopt --apply to resume" % exc, file=sys.stderr)
+        return 3
+    return finish(plan, adoption, record, rec_path, u, table, instruction_files, shipped_files)
+
+
+def finish(plan, adoption, record, rec_path, u, table, instruction_files, shipped_files):
+    """The two checks on disk, then the record: adopt.json, report.md, dropped.jsonl."""
+    root = plan.root
+    disk = u.Plan(root)  # reads the tree as it is now
+    line_status, lines, missing, missing_n = check_lines(disk, adoption)
+    ref_status, hard_misses, warn_n = check_refs(disk, adoption, table, instruction_files, shipped_files)
+    now = u.utc_now()
+    tools = OrderedDict((t, {"files": sum(g.values())}) for t, g in adoption.detected.items())
+    sources = []
+    for path, tool, transform, _n, cleanup in adoption.sources:
+        entry = {"path": path, "sha": sha256(disk.read(path) or b""), "tool": tool,
+                 "transform": transform, "cleanup": cleanup}
+        item = next((i for i in plan.items if i.get("src") == path and i["content"] is not None), None)
+        if item is not None:
+            entry["dest"] = item["target"]
+            entry["dest_sha"] = sha256(disk.read(item["target"]) or b"")
+        if os.path.exists(os.path.join(root, plan.report_dir, "original", path)):
+            entry["original"] = "original/" + path
+        sources.append(entry)
+    merged = OrderedDict((s["path"], s) for s in record.get("sources", []))
+    for entry in sources:  # same-day runs merge by source path (I10)
+        merged[entry["path"]] = entry
+    status = "applied" if "fail" not in (line_status, ref_status) else "incomplete"
+    record.update({
+        "status": status, "mode": adoption.mode, "tools": dict(record.get("tools", {}), **tools),
+        "sources": list(merged.values()), "dropped": len(adoption.dropped),
+        "ignored": sorted({s for a, s, _t in adoption.notes if a == "ignored"}),
+        "unmapped": [p for p, _t in adoption.unmapped],
+        "checks": {"no_line_lost": {"status": line_status, "checked_at": now, "lines": lines, "missing": missing_n},
+                   "no_dangling": {"status": ref_status, "checked_at": now, "hard": len(hard_misses), "warn": warn_n}},
+        "cleanup": record.get("cleanup") or {"offered": adoption.mode == "migrate" and status == "applied",
+                                             "confirmed_by": None, "at": None, "unattended": None,
+                                             "tty": None, "deleted": []},
+    })
+    record.pop("planned_writes", None)
+    write_json(u, root, rec_path, record)
+    u.write_file(root, plan.report_dir + "/dropped.jsonl",
+                 "".join(json.dumps(d, ensure_ascii=False) + "\n" for d in adoption.dropped).encode("utf-8"))
+    u.write_file(root, plan.report_dir + "/report.md", report_md(plan, adoption, record).encode("utf-8"))
+    adoption.checks["no-line-lost"] = (line_status, lines, missing, missing_n)
+    adoption.checks["no-dangling"] = (ref_status, hard_misses, warn_n)
+    report(plan, adoption, applied=True)
+    skipped = record["original_skipped"]
+    print("  original  %d B kept in %s/original/%s" % (
+        record["original_bytes"], plan.report_dir,
+        "; %d skipped (git has them): %s" % (len(skipped), ", ".join(skipped)) if skipped else ""))
+    print("  record    %s" % rec_path)
+    if status != "applied":
+        print("%s: a check failed on disk — see %s" % (INCOMPLETE, rec_path))
+        return 4
+    return 0
+
+
+def report_md(plan, adoption, record):
+    """The human rendering of the record, in the intent's order."""
+    out = ["# Adopt %s (%s)" % (plan.report_dir.rsplit("adopt-", 1)[-1], adoption.mode), ""]
+    out += ["## Detected", ""] + ["- %s: %d file(s)" % (t, v["files"]) for t, v in record["tools"].items()]
+    out += ["", "## Where each piece went", ""]
+    out += ["- `%s` -> `%s` (%s)" % (s["path"], s["dest"], s["transform"]) for s in record["sources"] if s.get("dest")]
+    out += ["", "## Dropped", ""]
+    out += ["- `%s%s`: %s" % (d["source"], "" if d["line"] == "*" else ":%s" % d["line"], d["reason"])
+            for d in adoption.dropped]
+    out += ["", "## Ignored or unmapped", ""] + ["- ignored `%s`" % p for p in record["ignored"]]
+    out += ["- unmapped `%s`" % p for p in record["unmapped"]]
+    checks = record["checks"]
+    out += ["", "## Checks", "",
+            "- no-line-lost: %s (%d lines, %d missing)" % (
+                checks["no_line_lost"]["status"], checks["no_line_lost"]["lines"], checks["no_line_lost"]["missing"]),
+            "- no-dangling: %s (%d hard, %d warning(s))" % (
+                checks["no_dangling"]["status"], checks["no_dangling"]["hard"], checks["no_dangling"]["warn"])]
+    offered = [s["path"] for s in record["sources"]
+               if s.get("cleanup") and os.path.exists(os.path.join(plan.root, s["path"]))]
+    out += ["", "## Proposed for deletion", ""]
+    if offered and record["cleanup"]["offered"]:
+        out += ["- `%s`" % p for p in offered]
+        out += ["", "Run `/project-update --adopt --cleanup` to review; a human confirms the deletion."]
+    else:
+        out += ["- nothing"]
+    return "\n".join(out) + "\n"
