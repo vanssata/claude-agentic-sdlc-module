@@ -1,0 +1,238 @@
+{
+  "task_id": "T-2026-09-21-001",
+  "goal": "WP6: project-update --adopt — detect, migrate/coexist and clean up foreign AI-tool structures (Spec Kit, Kiro, Cursor, Copilot, AI-DLC, large instruction files)",
+  "workflow": "feature",
+  "risk_tier": "T3",
+  "current_stage": "plan_review",
+  "affected_modules": [],
+  "context_summary_ref": "inline: entry: skills/project-update/update.py (Plan, report, apply, keep_original:981, --confirm-delete); new adopt.py + adopt-map.json; callers: skills/ai-status step 7 reads --check; must stay unaffected: hooks/guards, test-guard-characterization golden, plain --check output, migrations/, state.py",
+  "approved_plan": {
+    "ref": "docs/sdlc/plans/adaptive-cross-runtime-sdlc-wp6-adopt.md",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "Verify format assumptions, write 8 fixtures + adopt-map.json",
+        "allowed_files": [
+          "tests/fixtures/adopt/**",
+          "skills/project-update/adopt-map.json"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this step",
+        "required_tests": [],
+        "status": "pending"
+      },
+      {
+        "step_id": "2",
+        "description": "human_present, clean_tree, --confirm-delete human gate (exit 5)",
+        "allowed_files": [
+          "skills/project-update/update.py",
+          "tests/test-project-update.sh",
+          "skills/project-update/adopt.py"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this step",
+        "required_tests": [],
+        "status": "pending"
+      },
+      {
+        "step_id": "3",
+        "description": "--check --budget",
+        "allowed_files": [
+          "skills/project-update/update.py",
+          "tests/test-project-update.sh",
+          "skills/project-update/render_instructions.py",
+          "skills/project-update/adopt.py"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this step",
+        "required_tests": [],
+        "status": "pending"
+      },
+      {
+        "step_id": "4",
+        "description": "adopt.py core: table, detection, dry-run plan, report lines",
+        "allowed_files": [
+          "skills/project-update/adopt.py",
+          "skills/project-update/update.py",
+          "skills/project-update/adopt-map.json",
+          "tests/test-project-adopt.sh",
+          "tests/fixtures/adopt/**"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this step",
+        "required_tests": [],
+        "status": "pending"
+      },
+      {
+        "step_id": "5",
+        "description": "checks, router rows, record, --adopt --check",
+        "allowed_files": [
+          "skills/project-update/adopt.py",
+          "skills/project-update/update.py",
+          "tests/test-project-adopt.sh",
+          "tests/fixtures/adopt/**"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this step",
+        "required_tests": [],
+        "status": "pending"
+      },
+      {
+        "step_id": "6",
+        "description": "--adopt --apply: R5 gates, originals, idempotency, D5 hint",
+        "allowed_files": [
+          "skills/project-update/adopt.py",
+          "skills/project-update/update.py",
+          "tests/test-project-adopt.sh",
+          "tests/fixtures/adopt/**"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this step",
+        "required_tests": [],
+        "status": "pending"
+      },
+      {
+        "step_id": "7",
+        "description": "instruction-file split transform (riskiest)",
+        "allowed_files": [
+          "skills/project-update/adopt.py",
+          "skills/project-update/update.py",
+          "tests/test-project-adopt.sh",
+          "tests/fixtures/adopt/**",
+          "docs/sdlc/specs/adaptive-cross-runtime-sdlc-wp3-context-diet.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this step",
+        "required_tests": [],
+        "status": "pending"
+      },
+      {
+        "step_id": "8",
+        "description": "cleanup with human gate",
+        "allowed_files": [
+          "skills/project-update/adopt.py",
+          "skills/project-update/update.py",
+          "tests/test-project-adopt.sh",
+          "tests/fixtures/adopt/**"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this step",
+        "required_tests": [],
+        "status": "pending"
+      },
+      {
+        "step_id": "9",
+        "description": "SKILL flows, ai-status, README, run-all registration",
+        "allowed_files": [
+          "skills/project-update/SKILL.md",
+          "skills/ai-status/SKILL.md",
+          "README.md",
+          "tests/run-all.sh",
+          "tests/test-ai-status-root.sh"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this step",
+        "required_tests": [],
+        "status": "pending"
+      }
+    ]
+  },
+  "completed_steps": [],
+  "test_status": "not_run",
+  "e2e_status": "not_run",
+  "review_status": "blockers_open",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "run DISCOVERY",
+  "human_approval": {
+    "required": true,
+    "granted": false,
+    "granted_by": null,
+    "granted_at": null
+  },
+  "created_at": "2026-09-21T23:56:09Z",
+  "updated_at": "2026-09-22T00:21:54Z",
+  "history": [
+    {
+      "at": "2026-09-21T23:56:09Z",
+      "event": "task_started",
+      "detail": "WP6: project-update --adopt — detect, migrate/coexist and clean up foreign AI-tool structures (Spec Kit, Kiro, Cursor, Copilot, AI-DLC, large instruction files) (feature)"
+    },
+    {
+      "at": "2026-09-21T23:56:23Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-09-21T23:56:23Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-09-21T23:56:23Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-09-21T23:56:23Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-09-21T23:56:23Z",
+      "event": "risk_classified",
+      "detail": "T3: plugin infrastructure shared by both runtimes; deletion gated by human (plan header)"
+    },
+    {
+      "at": "2026-09-21T23:56:23Z",
+      "event": "plan_approved",
+      "detail": "9 steps, docs/sdlc/plans/adaptive-cross-runtime-sdlc-wp6-adopt.md"
+    },
+    {
+      "at": "2026-09-21T23:56:23Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan_review: ai-reviewer opus on plan"
+    },
+    {
+      "at": "2026-09-22T00:04:04Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-09-22T00:04:04Z",
+      "event": "stage",
+      "detail": "plan_review -> plan_review: opus plan review: reject — 2 BLOCKER, 6 HIGH, 9 MEDIUM; plan text revision needed"
+    },
+    {
+      "at": "2026-09-22T00:08:11Z",
+      "event": "plan_approved",
+      "detail": "9 steps, docs/sdlc/plans/adaptive-cross-runtime-sdlc-wp6-adopt.md"
+    },
+    {
+      "at": "2026-09-22T00:08:11Z",
+      "event": "stage",
+      "detail": "plan_review -> plan_review: plan revised: BLOCKER 1-2 and HIGH 3-8 closed in plan text; MEDIUM/LOW pending"
+    },
+    {
+      "at": "2026-09-22T00:16:34Z",
+      "event": "plan_approved",
+      "detail": "9 steps, docs/sdlc/plans/adaptive-cross-runtime-sdlc-wp6-adopt.md"
+    },
+    {
+      "at": "2026-09-22T00:16:34Z",
+      "event": "stage",
+      "detail": "plan_review -> plan_review: MEDIUM 9-17 and LOW closed in plan text; scoped re-review next"
+    },
+    {
+      "at": "2026-09-22T00:18:29Z",
+      "event": "stage",
+      "detail": "plan_review -> plan_review: re-review: approve-with-changes — 1 new HIGH, 2 MEDIUM, 5 LOW + 2 stale texts"
+    },
+    {
+      "at": "2026-09-22T00:21:54Z",
+      "event": "stage",
+      "detail": "plan_review -> plan_review: re-review findings A (option 2: foreign = no managed block), B, C, 5 LOW, stale texts closed in plan text; awaiting human approval"
+    }
+  ]
+}
