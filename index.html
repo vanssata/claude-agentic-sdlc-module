@@ -618,14 +618,18 @@ cd claude-agentic-sdlc-module && ./install.sh
       el.textContent = pre + (to * e).toFixed(dec) + suf; if (k < 1) requestAnimationFrame(tick); };
     requestAnimationFrame(tick);
   };
-  const io = new IntersectionObserver(es => es.forEach(e => {
-    if (!e.isIntersecting) return;
-    e.target.classList.add('in');
-    $$('[data-count]', e.target).forEach(count);
-    if (e.target.dataset.count) count(e.target);
-    io.unobserve(e.target);
-  }), { threshold: .25 });
-  $$('[data-rv], #bar, #day, #steps').forEach(el => io.observe(el));
+  const pending = new Set($$('[data-rv], #bar, #day, #steps'));
+  const show = el => {
+    if (!pending.delete(el)) return;
+    el.classList.add('in');
+    $$('[data-count]', el).forEach(count);
+    if (el.dataset.count) count(el);
+    io.unobserve(el);
+  };
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting || e.boundingClientRect.top < 0) show(e.target); }), { threshold: .25 });
+  pending.forEach(el => io.observe(el));
+  // a nav jump skips elements without an intersection change; reveal anything already scrolled past
+  addEventListener('scroll', () => pending.forEach(el => el.getBoundingClientRect().bottom < 0 && show(el)), { passive: true });
 
   // kinetic lines in the bill section
   const kin = $$('#kin span');
