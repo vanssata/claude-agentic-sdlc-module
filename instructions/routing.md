@@ -57,8 +57,8 @@ Applies everywhere a model can be chosen: an explicit spawn request, a custom ag
 <!-- stub: runtime=codex -->
 | Tier | Model | Effort | Role |
 |---|---|---|---|
-| FAST | `{{FAST_MODEL_ID}}` | `{{FAST_EFFORT}}` | verbatim extraction, file and symbol inventories, listings, counting, logs and test output, running a command and reporting it (`ai-indexer`, `Explore`, `ai-discovery`, `log-reader`, `ai-tester`) |
-| BALANCED — default for agents | `{{BALANCED_MODEL_ID}}` | `{{BALANCED_EFFORT}}` | context compression, planning up to T2, release assembly, mechanical edits (`ai-context`, `ai-risk`, `ai-planner`, `ai-release`, `ai-implementer`) |
+| FAST | `{{FAST_MODEL_ID}}` | `{{FAST_EFFORT}}` | verbatim extraction, file and symbol inventories, listings, counting, logs and test output, running a command and reporting it (`ai-indexer`, `Explore`, `log-reader`, `ai-tester`) |
+| BALANCED — default for agents | `{{BALANCED_MODEL_ID}}` | `{{BALANCED_EFFORT}}` | discovery with judgement (at `low`), context compression, planning up to T2, release assembly, mechanical edits (`ai-discovery`, `ai-context`, `ai-risk`, `ai-planner`, `ai-release`, `ai-implementer`) |
 | STRONG | `{{STRONG_MODEL_ID}}` | `{{STRONG_EFFORT}}` | the {{STRONG_MODEL}} triggers below (`ai-reviewer`, `ai-security`, `architect`, `ai-risk-strong`, `ai-planner-strong`) |
 | EXPERT | `{{EXPERT_MODEL_ID}}` | `{{EXPERT_EFFORT}}` | the EXPERT triggers below (`ai-expert`) |
 

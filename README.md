@@ -1,10 +1,10 @@
 # claude-agentic
 
-[![Version](https://img.shields.io/badge/version-2.0.0-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v2.0.0)
+[![Version](https://img.shields.io/badge/version-2.0.1-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v2.0.1)
 [![Runtimes](https://img.shields.io/badge/runtimes-Claude%20Code%20%7C%20Codex-d2f878?labelColor=101210)](#one-module-two-runtimes)
 [![Known risks](https://img.shields.io/badge/known%20risks-documented-d2f878?labelColor=101210)](#known-risks)
 
-**Version 2.0.0**, the version `.codex-plugin/plugin.json` carries. Read
+**Version 2.0.1**, the version `.codex-plugin/plugin.json` carries. Read
 [Known risks](#known-risks) before relying on the guards.
 
 Host-wide model, effort and context routing for **Claude Code and Codex**, plus
@@ -505,7 +505,7 @@ and server-side branch protection.
 
 ## Known risks
 
-What version 2.0.0 knowingly does **not** protect against. Each entry says what
+What version 2.0.1 knowingly does **not** protect against. Each entry says what
 can happen, why it was left that way, what limits the damage, and what you should
 do. None is a secret. Each was found in a review or a spec, then accepted or
 deferred with a written reason in the file named under **Source**.

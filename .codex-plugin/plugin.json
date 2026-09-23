@@ -1,6 +1,6 @@
 {
   "name": "claude-agentic",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "A complete agentic engineering pipeline for Codex and Claude Code: risk-tiered task workflow, scoped implementation steps, adversarial and security review, enforcement hooks, and model routing that keeps routine work on the cheap tier.",
   "author": {
     "name": "Ivan Kakurov"
