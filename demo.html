@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>claude-agentic demo</title>
+<meta name="description" content="Watch one /ai-task run through claude-agentic: cheap readers fan out, the risk tier picks the pipeline, STRONG plans and reviews, guards hold the scope, and you approve at the end.">
+<meta property="og:title" content="claude-agentic: one task, start to finish">
+<meta property="og:description" content="A payment change taken from one typed line to a reviewed, tested diff waiting for human approval.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%230f0f0f'/%3E%3Cpath d='M18 44V20h6l16 24h6V20' fill='none' stroke='%23D97757' stroke-width='5'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --accent:#D97757; --abr-black:#0f0f0f; --abr-white:#ffffff;
+  --m50:#f5f5f5; --m100:#e2e3e5; --m200:#d3d3d4; --m300:#b6b6b6; --m400:#808080; --m600:#5a5a5a; --m700:#404040; --m800:#313131; --m900:#212121;
+  --abr-focus:#006bd6;
+  --fast:#8fd694; --balanced:#7ab7ff; --strong:#D97757; --expert:#c3a6ff;
+  --font:Inter,Arial,sans-serif; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --stroke:2px; --gut:clamp(16px,4vw,72px); --max:1296px;
+}
+*{box-sizing:border-box;border-radius:0}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--abr-black);color:var(--abr-white);font:300 18px/1.5 var(--font);overflow-x:hidden}
+b,strong{font-weight:600}
+a{color:inherit}
+::selection{background:var(--accent);color:var(--abr-black)}
+:focus-visible{outline:3px solid var(--abr-focus);outline-offset:4px}
+.wrap{max-width:calc(var(--max) + 2 * var(--gut));margin:0 auto;padding:0 var(--gut)}
+.skip{position:fixed;left:12px;top:-60px;background:var(--accent);color:var(--abr-black);padding:10px 14px;z-index:99;font-weight:700}.skip:focus{top:12px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+code{font-family:var(--mono);font-size:.84em;background:var(--m900);border:1px solid var(--m800);padding:.05em .35em}
+
+.frame{--frame:currentColor;position:relative;border-block:var(--stroke) solid var(--frame);border-inline:0}
+.frame::before{content:"";position:absolute;z-index:2;inset-block:calc(-1 * var(--stroke));inset-inline:0;pointer-events:none;
+  background:linear-gradient(var(--frame),var(--frame)) left top/var(--stroke) 25% no-repeat,linear-gradient(var(--frame),var(--frame)) left bottom/var(--stroke) 25% no-repeat,linear-gradient(var(--frame),var(--frame)) right top/var(--stroke) 25% no-repeat,linear-gradient(var(--frame),var(--frame)) right bottom/var(--stroke) 25% no-repeat}
+
+.btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 24px;border:0;background:none;color:var(--accent);font:700 18px/1 var(--font);text-decoration:none;white-space:nowrap;cursor:pointer;isolation:isolate}
+.btn.primary{background:var(--accent);color:var(--abr-black)}
+.btn.primary:hover{filter:brightness(.9)}
+.btn.secondary{border-block:var(--stroke) solid currentColor}
+.btn.secondary::before{content:"";position:absolute;inset-block:calc(-1 * var(--stroke));inset-inline:0;pointer-events:none;
+  background:linear-gradient(currentColor,currentColor) left top/var(--stroke) 25% no-repeat,linear-gradient(currentColor,currentColor) left bottom/var(--stroke) 25% no-repeat,linear-gradient(currentColor,currentColor) right top/var(--stroke) 25% no-repeat,linear-gradient(currentColor,currentColor) right bottom/var(--stroke) 25% no-repeat;transition:background-size .15s ease}
+.btn.secondary:hover::before{background-size:var(--stroke) 100%}
+
+.rail{position:fixed;inset:0 0 auto 0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:16px;height:72px;padding:0 var(--gut);background:var(--abr-black);color:var(--abr-white);border-bottom:1px solid var(--m800)}
+.brand{display:flex;align-items:center;gap:12px;font-weight:700;font-size:18px;text-decoration:none;color:var(--abr-white)}
+.brand svg{width:28px;height:28px}
+.rail nav{display:flex;gap:28px;font-size:16px;font-weight:400}
+.rail nav a{text-decoration:none;color:var(--m200);padding:8px 0;border-bottom:2px solid transparent;transition:color .15s ease}
+.rail nav a:hover,.rail nav a[aria-current]{color:var(--abr-white);border-bottom-color:currentColor}
+.rail .btn{height:40px;padding:0 16px;font-size:16px}
+@media (max-width:760px){.rail nav{display:none}}
+
+.intro{padding:128px 0 32px}
+.kicker{font:500 14px/1 var(--mono);color:var(--accent);letter-spacing:.04em;text-transform:uppercase;margin:0 0 20px}
+h1{font:700 clamp(36px,5.4vw,72px)/1.02 var(--font);letter-spacing:-.035em;margin:0 0 20px;max-width:15ch}
+.lede{max-width:62ch;color:var(--m200);margin:0}
+
+.stage{padding:24px 0 16px}
+.canvas-wrap{position:relative;width:100%}
+#demo{display:block;width:100%;height:auto;background:var(--abr-black)}
+
+.controls{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:18px}
+.ctl{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border:1px solid var(--m700);background:var(--m900);color:var(--abr-white);cursor:pointer}
+.ctl:hover{border-color:var(--m400)}
+.ctl svg{width:18px;height:18px;fill:currentColor}
+.caption{flex:1 1 280px;min-width:0}
+.caption .n{font:500 13px/1 var(--mono);color:var(--accent);letter-spacing:.04em}
+.caption .t{display:block;font-weight:600;font-size:20px;line-height:1.3;margin-top:6px}
+.chapters{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;width:100%;margin-top:14px}
+.chapters button{height:28px;padding:0;border:0;background:none;cursor:pointer;position:relative}
+.chapters button::after{content:"";position:absolute;left:0;right:0;top:12px;height:4px;background:var(--m800)}
+.chapters button .fill{position:absolute;left:0;top:12px;height:4px;width:0;background:var(--accent);z-index:1}
+.chapters button:hover::after{background:var(--m600)}
+
+.legend{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:48px 0 24px}
+.tier{padding:20px 20px 18px;--frame:var(--m700)}
+.tier .h{display:flex;align-items:center;gap:10px;font:700 15px/1 var(--mono);letter-spacing:.04em}
+.tier .h i{width:10px;height:10px;display:inline-block}
+.tier .m{font:400 14px/1 var(--mono);color:var(--m400);margin-top:8px}
+.tier p{font-size:16px;color:var(--m200);margin:14px 0 0}
+@media (max-width:900px){.legend{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:520px){.legend{grid-template-columns:1fr}}
+
+.cta{display:flex;gap:16px;flex-wrap:wrap;padding:24px 0 96px;align-items:center}
+.cta p{flex:1 1 360px;margin:0;color:var(--m200)}
+footer{border-top:1px solid var(--m800);padding:28px 0 40px;color:var(--m400);font-size:14px}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="rail">
+  <a class="brand" href="./" aria-label="claude-agentic home">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" fill="#D97757"/><path d="M18 44V20h6l16 24h6V20" fill="none" stroke="#0f0f0f" stroke-width="5"/></svg>
+    claude-agentic
+  </a>
+  <nav aria-label="Sections">
+    <a href="./#routing">Routing</a><a href="./#router">Risk tiers</a><a href="./#guards">Guards</a><a href="demo.html" aria-current="page">Demo</a><a href="benchmark.html">Benchmark</a><a href="./">Home</a>
+  </nav>
+  <a class="btn secondary" href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub ↗</a>
+</header>
+
+<main id="main">
+<section class="wrap intro">
+  <p class="kicker">Demo · one task, start to finish</p>
+  <h1>You type one line. The plugin routes the work.</h1>
+  <p class="lede">A payment change goes through <code>/ai-task</code> in Claude Code. Cheap readers fan out on FAST, the risk tier picks the pipeline, STRONG plans and reviews, the guards keep every edit inside its step, and the change stops at your approval. Time is compressed about 6×.</p>
+</section>
+
+<section class="wrap stage" aria-label="Animated terminal demo">
+  <div class="canvas-wrap" id="wrap">
+    <canvas id="demo" role="img" aria-label="Animated Claude Code terminal running /ai-task on a payment webhook change: parallel FAST discovery, a T4 risk tier, a STRONG plan approved by the user, implementation with a scope-guard refusal, a red test run fixed as one batch, STRONG adversarial and security reviews, and a release report waiting for human approval."></canvas>
+  </div>
+  <div class="controls">
+    <button class="ctl" id="play" type="button" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="playIcon" d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+    <button class="ctl" id="restart" type="button" aria-label="Restart"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg></button>
+    <div class="caption" aria-live="polite"><span class="n" id="capN">01 / 08</span><span class="t" id="capT">You type one line</span></div>
+    <div class="chapters" id="chapters" role="group" aria-label="Jump to chapter"></div>
+  </div>
+  <ol class="sr" id="chapterList"></ol>
+</section>
+
+<section class="wrap legend" aria-label="What each tier did in this run">
+  <div class="tier frame"><div class="h"><i style="background:var(--fast)"></i>FAST</div><div class="m">haiku · low</div><p>Three discovery readers in parallel, the red-test classifier, the release report. Reading is cheap, so it is done cheaply.</p></div>
+  <div class="tier frame"><div class="h"><i style="background:var(--balanced)"></i>BALANCED</div><div class="m">sonnet</div><p>Compressed the findings into one task context and did the mechanical step that copies an existing pattern.</p></div>
+  <div class="tier frame"><div class="h"><i style="background:var(--strong)"></i>STRONG</div><div class="m">opus · high</div><p>Risk tier, plan, adversarial review, security review. One agent at a time, only where being wrong is expensive.</p></div>
+  <div class="tier frame"><div class="h"><i style="background:var(--expert)"></i>EXPERT</div><div class="m">opus · xhigh</div><p>Not launched. It is the last resort for T5 and for what STRONG cannot settle, and it asks before it starts.</p></div>
+</section>
+
+<section class="wrap cta">
+  <p>Every stage in the run is a file under <code>.ai/reports/&lt;task-id&gt;/</code>. No agent commits, pushes or merges. The pipeline ends with you.</p>
+  <a class="btn primary" href="./#install">Install it</a>
+  <a class="btn secondary" href="benchmark.html">See the benchmark</a>
+</section>
+</main>
+
+<footer><div class="wrap">claude-agentic · MIT · the terminal above is a scripted illustration; paths, counts and timings are representative.</div></footer>
+
+<script>
+(() => {
+'use strict';
+const canvas = document.getElementById('demo');
+const ctx = canvas.getContext('2d');
+const wrapEl = document.getElementById('wrap');
+
+const C = {
+  page:'#0f0f0f', win:'#141414', chrome:'#1c1c1c', line:'#2a2a2a',
+  fg:'#ebe9e6', dim:'#9a9a9a', faint:'#5f5f5f', accent:'#D97757',
+  green:'#8fd694', red:'#f07a6e', yellow:'#e5c07b', blue:'#7ab7ff', violet:'#c3a6ff',
+  userBg:'#242424', addBg:'rgba(143,214,148,.13)', delBg:'rgba(240,122,110,.13)'
+};
+const TIERS = {
+  FAST:{c:C.green, m:'haiku · low'},
+  BALANCED:{c:C.blue, m:'sonnet'},
+  STRONG:{c:C.accent, m:'opus · high'},
+  EXPERT:{c:C.violet, m:'opus · xhigh'}
+};
+const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
+const SANS = 'Inter, Arial, sans-serif';
+const COLS = 84, ROWS = 25;
+const TIME_SCALE = 6;           // on-screen clocks run ~6x faster than the animation
+const TASK = '2026-09-23-webhook-retry';
+
+const CHAPTERS = [
+  'You type one line',
+  'Cheap readers fan out on FAST',
+  'Risk decides the pipeline',
+  'STRONG plans, you approve',
+  'Implementation stays inside the scope',
+  'Red tests, fixed as one batch',
+  'Reviews on STRONG, one at a time',
+  'You approve. No agent commits.'
+];
+const STAGES = ['Discovery','Context','Impact','Risk tier','Plan','Plan review','Implementation','Test','Adversarial review','Security review','Release report','Human approval'];
+
+// ---------- state ----------
+let lines, input, status, mode, panel, chapterIdx, scrollY, snap;
+let vt = 0, gen = 0, playing = true, visible = true, ff = null, waiters = [];
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function resetState(){
+  lines = []; input = ''; status = null; mode = 'normal'; chapterIdx = 0; scrollY = 0; snap = true;
+  panel = {
+    stages: STAGES.map(n => ({n, st:'wait', note:''})),
+    tier: null,
+    usage: {FAST:{runs:0,tok:0,live:0}, BALANCED:{runs:0,tok:0,live:0}, STRONG:{runs:0,tok:0,live:0}, EXPERT:{runs:0,tok:0,live:0}},
+    session: 0, refusals: 0, commits: 0
+  };
+}
+
+// ---------- virtual clock ----------
+function sleep(ms){
+  const g = gen;
+  if (ff !== null){ vt += ms; return Promise.resolve(); }
+  return new Promise(res => waiters.push({at: vt + ms, res, g}));
+}
+function alive(g){ return g === gen; }
+
+// ---------- line helpers ----------
+const s = (t, c = C.fg, o = {}) => Object.assign({t, c}, o);
+const dot = (c = C.fg, blink = false) => ({t:'⏺', c, blink});
+const elbow = () => ({t:'⎿', c:C.faint});
+const badge = tier => s(` ${tier} · ${TIERS[tier].m} `, TIERS[tier].c, {bg: hexA(TIERS[tier].c, .16), b:true});
+function hexA(hex, a){ const n = parseInt(hex.slice(1),16); return `rgba(${n>>16},${n>>8&255},${n&255},${a})`; }
+function push(line){ lines.push(line); return line; }
+const L = (...segs) => push({segs});
+const len = segs => segs.reduce((n, x) => n + x.t.length, 0);
+
+async function stream(line, cps = 90){
+  const n = len(line.segs);
+  const dur = ff !== null ? 0 : n / cps * 1000;
+  line.rev = {start: vt, dur, n};
+  await sleep(dur);
+  line.rev = null;
+}
+async function say(segs, pause = 500){
+  const l = push({segs:[dot(C.fg), s(' '), ...segs]});
+  await stream(l);
+  await sleep(pause);
+}
+async function sayMore(segs, pause = 300){
+  const l = push({segs:[s('  '), ...segs]});
+  await stream(l);
+  await sleep(pause);
+}
+async function tool(name, arg, result, dur = 900, opts = {}){
+  const hdr = L(dot(C.accent, true), s(' '), s(name, C.fg, {b:true}), s('(' + arg + ')', C.fg));
+  const sub = L(s('  '), elbow(), s('  Running…', C.dim));
+  panel.session += opts.tok || 600;
+  await sleep(dur);
+  hdr.segs[0] = dot(opts.error ? C.red : C.green);
+  sub.segs = [s('  '), elbow(), s('  '), ...result];
+  for (const extra of (opts.more || [])) L(s('     '), ...extra);
+  await sleep(opts.after ?? 450);
+}
+async function agent(kind, desc, tier, steps, done, tok, dur){
+  const hdr = L(dot(C.accent, true), s(' '), s(kind, C.fg, {b:true}), s('(' + desc + ')', C.fg), s('  '), badge(tier));
+  const sub = L(s('  '), elbow(), s('  Initializing…', C.dim));
+  const u = panel.usage[tier];
+  u.runs++; u.live++;
+  const per = dur / steps.length;
+  for (let i = 0; i < steps.length; i++){
+    sub.segs = [s('  '), elbow(), s('  ' + steps[i], C.dim)];
+    if (i > 0) sub.segs.push(s(`  +${i} more tool use${i > 1 ? 's' : ''}`, C.faint));
+    await sleep(per);
+    u.tok += tok / steps.length;
+  }
+  u.live--;
+  hdr.segs[0] = dot(C.green);
+  sub.segs = [s('  '), elbow(), s('  ' + done, C.dim)];
+  await sleep(250);
+}
+function setStatus(verb){ status = {verb, t0: vt, tok0: panel.session}; }
+function stage(name, st, note = ''){ const x = panel.stages.find(z => z.n === name); x.st = st; if (note) x.note = note; }
+function chapter(i){
+  chapterIdx = i;
+  if (ff !== null && i >= ff){ ff = null; snap = true; }
+  if (ff === null) updateCaption();
+}
+async function typeInput(text){
+  for (const ch of text){
+    input += ch;
+    await sleep(ch === ' ' ? 90 + Math.random()*80 : 38 + Math.random()*55);
+  }
+}
+function submit(){
+  push({segs:[s('> ', C.dim), s(input, C.fg)], fill: C.userBg});
+  L();
+  input = '';
+}
+
+// ---------- the scenario ----------
+async function scenario(){
+  const g = gen;
+  resetState();
+  chapter(0);
+  const BW = 56;
+  const box = (...segs) => L(s('│ ', C.accent), ...segs, s(' '.repeat(Math.max(0, BW - 3 - len(segs))) + '│', C.accent));
+  L(s('╭' + '─'.repeat(BW - 2) + '╮', C.accent));
+  box(s('✻', C.accent), s(' Welcome to ', C.fg), s('Claude Code', C.fg, {b:true}));
+  box(s('  cwd: ~/work/shop-api', C.dim));
+  box(s('  plugin: claude-agentic 2.0.1 · profile solo', C.dim));
+  L(s('╰' + '─'.repeat(BW - 2) + '╯', C.accent));
+  L();
+  await sleep(1400);
+  await typeInput('/ai-task Retry failed payment webhooks with idempotency keys');
+  await sleep(700);
+  if (!alive(g)) return;
+  submit();
+  setStatus('Routing');
+  await sleep(700);
+  await tool('Read', '.ai/AGENTS.md', [s('Read 142 lines · routes to 6 policies', C.dim)], 1000);
+  await say([s('Tier unknown until triage, so I act as T2. Discovery first, cheapest tier.')], 600);
+
+  // 2 — discovery on FAST
+  chapter(1);
+  stage('Discovery', 'run');
+  setStatus('Discovering');
+  await say([s('Fanning out '), s('3 readers', C.fg, {b:true}), s(' in parallel, one question each:')], 400);
+  L();
+  await Promise.all([
+    agent('Explore', 'Trace the webhook entrypoint', 'FAST',
+      ['Grep("webhook", src/Payment)', 'Read(StripeWebhookController.php)', 'Read(HandlePaymentEventHandler.php)', 'Grep("HandlePaymentEvent")'],
+      'Done (11 tool uses · 18.4k tokens · 34s)', 18400, 5200),
+    agent('Explore', 'Find retries and queue config', 'FAST',
+      ['Read(config/packages/messenger.yaml)', 'Grep("retry_strategy")', 'Grep("idempot", src/)'],
+      'Done (8 tool uses · 11.2k tokens · 22s)', 11200, 3900),
+    agent('log-reader', 'Last 7 days of webhook failures', 'FAST',
+      ['Bash(grep -c "webhook" var/log/prod.log)', 'Bash(grep "PSP timeout" … | wc -l)', 'Read(excerpt 40 lines)'],
+      'Done (6 tool uses · 9.7k tokens · 27s)', 9700, 4600)
+  ]);
+  if (!alive(g)) return;
+  L();
+  await say([s('Findings', C.fg, {b:true}), s(' (file:line, no raw logs in context):', C.dim)], 200);
+  await sayMore([elbow(), s('  src/Payment/Webhook/StripeWebhookController.php:48', C.blue), s(' dispatches HandlePaymentEvent')], 250);
+  await sayMore([elbow(), s('  config/packages/messenger.yaml:22', C.blue), s(' payment transport, max_retries: 0')], 250);
+  await sayMore([elbow(), s('  312 failed webhooks in 7 days · 94% PSP timeouts · 0 retried')], 250);
+  await sayMore([elbow(), s('  No idempotency check: a replayed event captures twice', C.red)], 700);
+  stage('Discovery', 'done');
+
+  // 3 — context, impact, risk
+  chapter(2);
+  stage('Context', 'run'); setStatus('Compressing context');
+  L();
+  await agent('ai-context', 'Compress findings into task-context.md', 'BALANCED',
+    ['Read(discovery ×3)', 'Write(.ai/reports/…/task-context.md)'],
+    'Done (4 tool uses · 9.8k tokens · 21s)', 9800, 2600);
+  stage('Context', 'done'); stage('Impact', 'run');
+  await tool('Write', `.ai/reports/${TASK}/impact.md`, [s('2 modules · 1 migration · no public API change', C.dim)], 900, {tok:1400});
+  stage('Impact', 'done'); stage('Risk tier', 'run'); setStatus('Classifying risk');
+  await agent('ai-risk', 'Assign one tier from risk-tiers.json', 'STRONG',
+    ['Read(.ai/policies/risk-tiers.json)', 'Read(task-context.md)', 'Read(impact.md)'],
+    'Done (5 tool uses · 12.7k tokens · 29s)', 12700, 3400);
+  if (!alive(g)) return;
+  panel.tier = 'T4';
+  stage('Risk tier', 'done', 'T4');
+  L();
+  await say([s('Risk tier '), s(' T4 ', C.page, {bg: C.accent, b:true}), s(' decided by '), s('path_scopes: **/Payment/**', C.yellow), s(' (money moves).')], 250);
+  await sayMore([s('T4 runs the full pipeline: STRONG plan, plan review, security review,', C.dim)], 120);
+  await sayMore([s('and your approval at the end. EXPERT stays off; that is for T5.', C.dim)], 500);
+  await tool('Bash', `state.py init --tier T4 --workflow sdlc`, [s('guards armed: ', C.dim), s('scope', C.green), s(' · ', C.dim), s('vendor-write', C.green), s(' · ', C.dim), s('no-commit', C.green)], 1000);
+
+  // 4 — plan
+  chapter(3);
+  mode = 'plan';
+  stage('Plan', 'run'); setStatus('Planning');
+  await agent('ai-planner', 'Plan the change in plan mode', 'STRONG',
+    ['Read(task-context.md)', 'Read(src/Shipping/Idempotency/KeyStore.php)', 'Read(migrations/…)', 'Write(implementation-plan.md)'],
+    'Done (19 tool uses · 31.2k tokens · 1m 48s)', 31200, 5600);
+  if (!alive(g)) return;
+  L();
+  const P = (segs) => L(s('│ ', C.accent), ...segs);
+  P([s('Implementation plan', C.fg, {b:true}), s(' · 4 steps · rollback: PAYMENT_WEBHOOK_RETRY=0', C.dim)]); await sleep(260);
+  P([s('1  Idempotency store + migration  ', C.fg), s('src/Payment/Idempotency/*    ', C.dim), s('BALANCED', C.blue)]); await sleep(260);
+  P([s('2  Dedupe events in the handler   ', C.fg), s('HandlePaymentEventHandler    ', C.dim), s('session', C.fg)]); await sleep(260);
+  P([s('3  Retry 5× exponential backoff   ', C.fg), s('config/…/messenger.yaml      ', C.dim), s('session', C.fg)]); await sleep(260);
+  P([s('4  Tests: replay, PSP timeout     ', C.fg), s('tests/Payment/Webhook/*      ', C.dim), s('session', C.fg)]); await sleep(260);
+  P([s('Risks: ', C.yellow), s('key TTL vs the PSP retry window · migration on a hot table', C.dim)]);
+  stage('Plan', 'done'); stage('Plan review', 'run', 'you');
+  status = null;
+  L();
+  L(s('Would you like to proceed?', C.fg, {b:true}));
+  const o1 = L(s('  ', C.fg), s('1. Yes, approve the plan', C.fg));
+  const o2 = L(s('  ', C.fg), s('2. No, keep planning', C.dim));
+  await sleep(1200);
+  o1.segs = [s('❯ ', C.accent), s('1. Yes, approve the plan', C.accent, {b:true})];
+  await sleep(1300);
+  o2.segs = [s('  2. No, keep planning', C.faint)];
+  L(s('  ✓ ', C.green), s('Plan approved by you', C.green), s(' · recorded before the first edit', C.dim));
+  stage('Plan review', 'done', 'you');
+  mode = 'normal';
+  L();
+  await sleep(700);
+
+  // 5 — implementation
+  chapter(4);
+  stage('Implementation', 'run'); setStatus('Implementing');
+  await say([s('Step 1 copies the pattern in '), s('src/Shipping/Idempotency', C.blue), s(': mechanical, so BALANCED.')], 300);
+  await agent('ai-implementer', 'Step 1 · idempotency store', 'BALANCED',
+    ['Read(src/Shipping/Idempotency/KeyStore.php)', 'Write(src/Payment/Idempotency/KeyStore.php)', 'Write(KeyStoreInterface.php)', 'Write(migrations/Version20260923101500.php)'],
+    'Done (9 tool uses · 14.2k tokens · 52s)', 14200, 4400);
+  if (!alive(g)) return;
+  L();
+  await say([s('Step 2, in this session.')], 250);
+  await tool('Update', 'src/Payment/Handler/HandlePaymentEventHandler.php', [s('Updated with ', C.dim), s('18 additions', C.green), s(' and ', C.dim), s('3 removals', C.red)], 1200, {
+    tok: 4200, after: 700,
+    more: [
+      [s(' 51 ', C.faint), s('+    if ($this->keys->seen($event->id)) {        ', C.green, {bg: C.addBg})],
+      [s(' 52 ', C.faint), s('+        return; // replayed by the PSP          ', C.green, {bg: C.addBg})],
+      [s(' 53 ', C.faint), s('+    }                                           ', C.green, {bg: C.addBg})]
+    ]
+  });
+  await tool('Update', 'src/Order/OrderMailer.php', [s('✗ scope-guard: ', C.red, {b:true}), s('not in step 2 allowed_files → ', C.red), s('SCOPE_CHANGE_REQUIRED', C.red, {b:true})], 900, {error:true, after:500});
+  panel.refusals++;
+  await say([s('Outside the step, so it is not edited. Logged in '), s('handoff.md', C.blue), s(' as a follow-up.')], 600);
+  await tool('Update', 'config/packages/messenger.yaml', [s('max_retries: ', C.dim), s('0', C.red), s(' → ', C.dim), s('5', C.green), s(' · delay 2s · multiplier 3', C.dim)], 900, {tok:1800});
+  await tool('Write', 'tests/Payment/Webhook/ReplayedEventTest.php', [s('Wrote 64 lines', C.dim)], 1000, {tok:3600});
+  stage('Implementation', 'done', '4 steps');
+
+  // 6 — tests
+  chapter(5);
+  stage('Test', 'run'); setStatus('Running the suite');
+  await tool('Bash', 'state.py test-run', [s('1,284 passed', C.green), s(' · ', C.dim), s('2 failed', C.red, {b:true}), s(' · log capped to var/test-run.log', C.dim)], 3000, {error:true, after:500});
+  await agent('ai-tester', 'Classify the red run', 'FAST',
+    ['Read(var/test-run.log)', 'Grep("FAILED")', 'Bash(phpunit --filter Replay at base tree)'],
+    'Done (7 tool uses · 8.9k tokens · 31s)', 8900, 3400);
+  if (!alive(g)) return;
+  L();
+  await say([s('NEW REGRESSION ×2', C.red, {b:true}), s(', one cause: fixtures send events without an id.')], 250);
+  await sayMore([s('Both fixed as one batch, then one re-run.', C.dim)], 400);
+  await tool('Update', 'tests/Fixtures/payment_events.yaml', [s('Added 2 event ids', C.dim)], 900, {tok:900});
+  await tool('Bash', 'state.py test-run', [s('1,286 passed', C.green, {b:true}), s(' · 0 failed · 41.3s', C.dim)], 3000);
+  stage('Test', 'done', 'green');
+
+  // 7 — reviews
+  chapter(6);
+  stage('Adversarial review', 'run'); setStatus('Reviewing');
+  await agent('ai-reviewer', 'Assume the diff is wrong', 'STRONG',
+    ['Bash(git diff --stat)', 'Read(HandlePaymentEventHandler.php)', 'Read(KeyStore.php)', 'Grep("PSP_RETRY_WINDOW")'],
+    'Done (16 tool uses · 27.5k tokens · 1m 12s)', 27500, 5000);
+  if (!alive(g)) return;
+  L();
+  await say([s('1 medium: ', C.yellow, {b:true}), s('key TTL 24h is shorter than the PSP retry window of 72h.')], 200);
+  await sayMore([s('A late replay would pass the check.', C.dim)], 400);
+  await tool('Update', 'src/Payment/Idempotency/KeyStore.php', [s('TTL ', C.dim), s('24h', C.red), s(' → ', C.dim), s('7d', C.green)], 900, {tok:1200});
+  stage('Adversarial review', 'done', '1 fixed');
+  stage('Security review', 'run');
+  await agent('ai-security', 'Webhook auth, replay, data exposure', 'STRONG',
+    ['Read(StripeWebhookController.php)', 'Grep("signature")', 'Grep("logger->")'],
+    'Done (12 tool uses · 21.9k tokens · 58s)', 21900, 4400);
+  if (!alive(g)) return;
+  L();
+  await say([s('No findings. ', C.green, {b:true}), s('Signature is verified before dedupe; no keys in logs.')], 500);
+  stage('Security review', 'done', 'clean');
+
+  // 8 — release and approval
+  chapter(7);
+  stage('Release report', 'run'); setStatus('Writing the release report');
+  await agent('ai-release', 'Assemble the release report', 'FAST',
+    ['Read(.ai/reports/…/*.md)', 'Bash(git diff --stat)', 'Write(release-report.md)'],
+    'Done (6 tool uses · 7.4k tokens · 19s)', 7400, 3000);
+  if (!alive(g)) return;
+  stage('Release report', 'done');
+  stage('Human approval', 'run', 'you');
+  status = null;
+  L();
+  await say([s('Ready for your approval.', C.fg, {b:true})], 250);
+  await sayMore([s('T4 · 4 steps · 1,286 tests green · 1 review finding fixed · 1 scope refusal', C.dim)], 200);
+  await sayMore([s('Report: ', C.dim), s(`.ai/reports/${TASK}/release-report.md`, C.blue)], 200);
+  await sayMore([s('Nothing was committed. ', C.accent, {b:true}), s('Commit, push and merge are yours.', C.fg)], 200);
+  L();
+  if (ff !== null){ ff = null; snap = true; updateCaption(); return; }
+  await sleep(9000);
+  if (!alive(g)) return;
+  restart();
+}
+
+// ---------- layout ----------
+let W, H, dpr, wide, panelW, termW, cw, fs, lh, PADX, CHROME, charRatio;
+function measureRatio(){
+  ctx.font = `100px ${MONO}`;
+  charRatio = ctx.measureText('0').width / 100 || 0.6;
+}
+function layout(){
+  W = Math.max(300, wrapEl.clientWidth);
+  wide = W >= 900;
+  panelW = wide ? Math.round(Math.min(340, Math.max(280, W * 0.27))) : 0;
+  const gap = wide ? 16 : 0;
+  termW = W - panelW - gap;
+  PADX = wide ? 20 : 10;
+  cw = (termW - 2 * PADX) / COLS;
+  fs = cw / charRatio;
+  lh = Math.round(fs * 1.5 * 10) / 10;
+  CHROME = wide ? 36 : 26;
+  H = Math.round(CHROME + 12 + ROWS * lh + lh * 4.2 + 12);
+  if (wide) H = Math.max(H, 730);
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  canvas.style.height = H + 'px';
+  snap = true;
+}
+
+// ---------- drawing ----------
+function rr(x, y, w, h, r){ ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
+function drawGlyphs(t, x, ym, seg){
+  let run = '', runX = x, col = 0;
+  const flush = () => { if (run){ ctx.fillText(run, runX, ym); run = ''; } };
+  for (const ch of t){
+    const cx = x + col * cw;
+    const code = ch.charCodeAt(0);
+    if (ch === '⏺'){
+      flush();
+      let a = 1;
+      if (seg.blink) a = .35 + .65 * (0.5 + 0.5 * Math.sin(vt / 180));
+      ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = seg.c;
+      ctx.beginPath(); ctx.arc(cx + cw / 2, ym, cw * .36, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    } else if (ch === '⎿'){
+      flush();
+      ctx.save(); ctx.strokeStyle = seg.c; ctx.lineWidth = Math.max(1, fs / 12);
+      ctx.beginPath(); ctx.moveTo(cx + cw * .35, ym - lh * .5); ctx.lineTo(cx + cw * .35, ym); ctx.lineTo(cx + cw * 1.1, ym); ctx.stroke(); ctx.restore();
+    } else if (code >= 0x2000){
+      flush();
+      ctx.fillText(ch, cx, ym);
+    } else {
+      if (!run) runX = cx;
+      run += ch;
+    }
+    col++;
+  }
+  flush();
+}
+function drawSegs(segs, x, y, limit = Infinity){
+  const ym = y + lh / 2;
+  let col = 0, left = limit;
+  for (const seg of segs){
+    if (left <= 0) break;
+    let t = seg.t;
+    if (t.length > left) t = t.slice(0, left);
+    left -= t.length;
+    if (seg.bg){
+      ctx.fillStyle = seg.bg;
+      ctx.fillRect(x + col * cw, y + lh * .12, t.length * cw, lh * .76);
+    }
+    ctx.fillStyle = seg.c;
+    ctx.font = `${seg.b ? 600 : 400} ${fs}px ${MONO}`;
+    drawGlyphs(t, x + col * cw, ym, seg);
+    col += t.length;
+  }
+}
+const SPIN = ['·','✢','✳','✶','✻','✽','✻','✶','✳','✢'];
+function fmtDur(sec){ sec = Math.floor(sec); return sec < 60 ? sec + 's' : Math.floor(sec / 60) + 'm ' + String(sec % 60).padStart(2, '0') + 's'; }
+function fmtTok(n){ return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(Math.round(n)); }
+
+function drawTerminal(){
+  ctx.fillStyle = C.win; rr(0, 0, termW, H, 10); ctx.fill();
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; rr(.5, .5, termW - 1, H - 1, 10); ctx.stroke();
+  // chrome
+  ctx.save(); rr(0, 0, termW, CHROME, [10, 10, 0, 0]); ctx.fillStyle = C.chrome; ctx.fill(); ctx.restore();
+  const dr = wide ? 6 : 4;
+  ['#ff5f57','#febc2e','#28c840'].forEach((c, i) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(PADX + dr + i * dr * 3.2, CHROME / 2, dr, 0, Math.PI * 2); ctx.fill(); });
+  ctx.fillStyle = C.dim; ctx.font = `500 ${wide ? 13 : 10}px ${SANS}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('claude — ~/work/shop-api', termW / 2, CHROME / 2 + 1);
+  ctx.textAlign = 'left';
+
+  // transcript
+  const x0 = PADX, y0 = CHROME + 12;
+  const target = Math.max(0, lines.length - ROWS);
+  if (snap){ scrollY = target; snap = false; }
+  else scrollY += (target - scrollY) * 0.16;
+  if (Math.abs(target - scrollY) < 0.01) scrollY = target;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, y0, termW, ROWS * lh); ctx.clip();
+  const first = Math.max(0, Math.floor(scrollY));
+  for (let i = first; i < Math.min(lines.length, first + ROWS + 2); i++){
+    const ln = lines[i];
+    const y = y0 + (i - scrollY) * lh;
+    if (ln.fill){ ctx.fillStyle = ln.fill; ctx.fillRect(x0 - 8, y + 1, termW - 2 * PADX + 16, lh - 2); }
+    let limit = Infinity;
+    if (ln.rev){ limit = ln.rev.dur ? Math.floor(ln.rev.n * Math.min(1, (vt - ln.rev.start) / ln.rev.dur)) : ln.rev.n; }
+    drawSegs(ln.segs, x0, y, limit);
+  }
+  ctx.restore();
+
+  // spinner row
+  let y = y0 + ROWS * lh + lh * .3;
+  if (status){
+    const el = (vt - status.t0) / 1000 * TIME_SCALE;
+    const tok = (panel.session - status.tok0) + el * 55;
+    const g = SPIN[Math.floor(vt / 110) % SPIN.length];
+    drawSegs([s(g, C.accent), s(' ' + status.verb + '… ', C.accent), s(`(${fmtDur(el)} · ↓ ${fmtTok(tok)} tokens · esc to interrupt)`, C.faint)], x0, y);
+  }
+  // input box
+  y += lh * 1.15;
+  ctx.strokeStyle = mode === 'plan' ? hexA(C.blue, .7) : '#3a3a3a'; ctx.lineWidth = 1;
+  rr(x0 - 6.5, y - lh * .15 + .5, termW - 2 * PADX + 13, lh * 1.3, 6); ctx.stroke();
+  const caret = Math.floor(vt / 530) % 2 === 0;
+  if (input || !status){
+    drawSegs([s('> ', C.dim), s(input, C.fg)], x0 + cw * .5, y);
+    if (caret){ ctx.fillStyle = C.fg; ctx.fillRect(x0 + cw * (2.5 + input.length), y + lh * .18, cw * .9, lh * .64); }
+  } else {
+    drawSegs([s('> ', C.dim)], x0 + cw * .5, y);
+  }
+  // status line
+  y += lh * 1.45;
+  const left = mode === 'plan'
+    ? [s('⏸ plan mode on', C.blue), s(' (shift+tab to cycle)', C.faint)]
+    : [s('⏵⏵ accept edits on', C.violet), s(' (shift+tab to cycle)', C.faint)];
+  drawSegs(left, x0, y);
+  const right = 'Opus 5.5 [1m] · Max · claude-agentic 2.0.1';
+  drawSegs([s(right, C.faint)], x0 + (COLS - right.length) * cw, y);
+}
+
+function drawPanel(){
+  const x = termW + 16, w = panelW;
+  ctx.fillStyle = C.win; rr(x, 0, w, H, 10); ctx.fill();
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; rr(x + .5, .5, w - 1, H - 1, 10); ctx.stroke();
+  const px = x + 20, pw = w - 40;
+  let y = 30;
+  ctx.textBaseline = 'middle';
+  const label = (t, yy) => { ctx.fillStyle = C.faint; ctx.font = `600 11px ${SANS}`; ctx.fillText(t.split('').join(' '), px, yy); };
+
+  label('PIPELINE', y);
+  if (panel.tier){
+    ctx.font = `700 13px ${MONO}`;
+    const tw = ctx.measureText(panel.tier).width + 14;
+    ctx.fillStyle = C.accent; ctx.fillRect(px + pw - tw, y - 10, tw, 20);
+    ctx.fillStyle = C.page; ctx.fillText(panel.tier, px + pw - tw + 7, y + 1);
+    ctx.fillStyle = C.dim; ctx.font = `400 12px ${SANS}`; ctx.textAlign = 'right';
+    ctx.fillText('risk tier', px + pw - tw - 8, y + 1); ctx.textAlign = 'left';
+  }
+  y += 26;
+  const rowH = 24;
+  for (const st of panel.stages){
+    const cy = y + rowH / 2;
+    if (st.st === 'done'){
+      ctx.strokeStyle = C.green; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(px + 1, cy); ctx.lineTo(px + 5, cy + 4); ctx.lineTo(px + 12, cy - 4); ctx.stroke();
+    } else if (st.st === 'run'){
+      const a = vt / 160;
+      ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px + 6, cy, 5.5, a, a + Math.PI * 1.4); ctx.stroke();
+    } else {
+      ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(px + 6, cy, 5, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.font = `${st.st === 'run' ? 600 : 400} 14px ${SANS}`;
+    ctx.fillStyle = st.st === 'wait' ? C.faint : st.st === 'run' ? C.fg : '#cfcdca';
+    ctx.fillText(st.n, px + 22, cy + 1);
+    if (st.note){
+      ctx.font = `400 12px ${MONO}`; ctx.fillStyle = st.note === 'you' ? C.yellow : C.dim; ctx.textAlign = 'right';
+      ctx.fillText(st.note, px + pw, cy + 1); ctx.textAlign = 'left';
+    }
+    y += rowH;
+  }
+
+  y += 22;
+  label('MODEL TIERS', y);
+  y += 20;
+  const maxTok = 110000;
+  for (const [name, t] of Object.entries(TIERS)){
+    const u = panel.usage[name];
+    ctx.fillStyle = u.live ? t.c : (u.runs ? '#cfcdca' : C.faint);
+    ctx.font = `700 12px ${MONO}`; ctx.fillText(name, px, y + 6);
+    ctx.fillStyle = C.faint; ctx.font = `400 12px ${MONO}`;
+    ctx.fillText(t.m, px + 78, y + 6);
+    ctx.fillStyle = '#262626'; ctx.fillRect(px, y + 16, pw, 5);
+    ctx.fillStyle = t.c; ctx.globalAlpha = u.live ? .6 + .4 * Math.sin(vt / 150) : 1;
+    ctx.fillRect(px, y + 16, pw * Math.min(1, u.tok / maxTok), 5);
+    ctx.globalAlpha = 1;
+    ctx.font = `400 11px ${MONO}`; ctx.fillStyle = u.runs ? C.dim : C.faint;
+    ctx.fillText(name === 'EXPERT' && !u.runs ? 'not needed at T4' : `${u.runs} run${u.runs === 1 ? '' : 's'} · ${fmtTok(u.tok)} tokens${u.live ? ' · running' : ''}`, px, y + 32);
+    y += 46;
+  }
+  // session row
+  ctx.fillStyle = '#cfcdca'; ctx.font = `700 12px ${MONO}`; ctx.fillText('SESSION', px, y + 6);
+  ctx.fillStyle = C.faint; ctx.font = `400 12px ${MONO}`; ctx.fillText('Opus 5.5 [1m]', px + 78, y + 6);
+  ctx.font = `400 11px ${MONO}`; ctx.fillStyle = C.dim; ctx.fillText('implements the steps itself', px, y + 22);
+
+  y += 44;
+  label('GUARDS', y);
+  y += 22;
+  const guard = (name, val, c) => {
+    ctx.font = `400 13px ${SANS}`; ctx.fillStyle = '#cfcdca'; ctx.fillText(name, px, y);
+    ctx.font = `600 12px ${MONO}`; ctx.fillStyle = c; ctx.textAlign = 'right'; ctx.fillText(val, px + pw, y); ctx.textAlign = 'left';
+    y += 22;
+  };
+  guard('Scope refusals', String(panel.refusals), panel.refusals ? C.red : C.faint);
+  guard('vendor/ writes', '0', C.faint);
+  guard('Agent commits', String(panel.commits), C.green);
+}
+
+function draw(){
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = C.page; ctx.fillRect(0, 0, W, H);
+  ctx.textBaseline = 'middle';
+  drawTerminal();
+  if (wide) drawPanel();
+  // chapter progress fills
+  fills.forEach((f, i) => { f.style.width = i < chapterIdx ? '100%' : i === chapterIdx ? '50%' : '0'; });
+}
+
+// ---------- loop ----------
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(100, now - last); last = now;
+  if (playing && visible) vt += dt;
+  const due = waiters.filter(w => w.at <= vt);
+  if (due.length){
+    waiters = waiters.filter(w => w.at > vt);
+    due.forEach(w => { if (w.g === gen) w.res(); });
+  }
+  draw();
+  requestAnimationFrame(frame);
+}
+
+// ---------- controls ----------
+const capN = document.getElementById('capN'), capT = document.getElementById('capT');
+const chaptersEl = document.getElementById('chapters'), listEl = document.getElementById('chapterList');
+const fills = CHAPTERS.map((t, i) => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.title = `${i + 1}. ${t}`; b.setAttribute('aria-label', `Jump to chapter ${i + 1}: ${t}`);
+  const f = document.createElement('span'); f.className = 'fill'; b.appendChild(f);
+  b.addEventListener('click', () => seek(i));
+  chaptersEl.appendChild(b);
+  const li = document.createElement('li'); li.textContent = t; listEl.appendChild(li);
+  return f;
+});
+function updateCaption(){
+  capN.textContent = String(chapterIdx + 1).padStart(2, '0') + ' / ' + String(CHAPTERS.length).padStart(2, '0');
+  capT.textContent = CHAPTERS[chapterIdx];
+}
+function restart(target = null){
+  gen++; waiters = [];
+  ff = target;
+  scenario();
+}
+function seek(i){ restart(i === 0 ? null : i); if (!playing) togglePlay(); }
+const playBtn = document.getElementById('play'), playIcon = document.getElementById('playIcon');
+function togglePlay(){
+  playing = !playing;
+  playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+  playIcon.setAttribute('d', playing ? 'M6 5h4v14H6zM14 5h4v14h-4z' : 'M7 4l13 8-13 8z');
+}
+playBtn.addEventListener('click', togglePlay);
+document.getElementById('restart').addEventListener('click', () => seek(0));
+canvas.addEventListener('click', togglePlay);
+document.addEventListener('keydown', e => {
+  if (e.target.closest('a,button,input,textarea')) return;
+  if (e.code === 'Space' && canvas.getBoundingClientRect().top < innerHeight){ e.preventDefault(); togglePlay(); }
+});
+new IntersectionObserver(es => { visible = es[0].isIntersecting; }, {threshold: .15}).observe(canvas);
+new ResizeObserver(() => layout()).observe(wrapEl);
+
+// ---------- start ----------
+const start = () => {
+  measureRatio(); layout();
+  if (reduced){ restart(CHAPTERS.length); togglePlay(); }
+  else restart();
+  requestAnimationFrame(frame);
+};
+(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(start);
+})();
+</script>
+</body>
+</html>
