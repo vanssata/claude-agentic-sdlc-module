@@ -127,6 +127,65 @@ pre .c{color:var(--m400)}
 footer{background:var(--abr-black);color:var(--m200);padding:28px 0;border-top:1px solid var(--m800)}
 footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;font:400 15px var(--font)}
 footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid transparent}footer a:hover{border-bottom-color:var(--accent)}
+
+/* task map */
+.map{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px 24px;margin:36px 0 8px}
+.map>div:first-child{grid-column:1/-1}
+.map h4{margin:0 0 10px;font:600 13px var(--font);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);display:flex;justify-content:space-between}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+.tile{position:relative;height:64px;border:0;padding:6px 7px;text-align:left;font:600 12px/1 var(--mono);color:var(--abr-black);cursor:pointer;transition:opacity .15s ease,transform .15s ease}
+.tile:hover{transform:translateY(-2px)}
+.tile .k{display:block;font:500 10px/1 var(--mono);opacity:.7;margin-top:5px;text-transform:uppercase}
+.tile .usd{position:absolute;left:0;right:0;bottom:0;padding:3px 7px;background:var(--abr-black);color:var(--abr-white);font:600 11px/1.2 var(--mono)}
+.tile.dim{opacity:.18}
+.tile.sel{outline:3px solid var(--abr-black);outline-offset:2px}
+.mapnote{font-size:14px;color:var(--muted);margin:14px 0 0;display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+.mapnote i{display:inline-block;width:26px;height:10px;background:var(--abr-black);vertical-align:middle;margin-right:6px}
+.detail{min-height:78px;margin-top:18px;padding:16px 20px;background:var(--m50);border-left:4px solid var(--accent);font-size:16px}
+.detail .h{font:600 14px var(--mono);margin-bottom:4px}
+.detail .m{color:var(--muted);font-size:14px;margin-top:4px}
+tr.hl td{background:#fff4ee}
+@media (max-width:760px){.map{grid-template-columns:1fr}}
+
+/* costs */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:40px}
+.kpis div{padding:20px 20px 20px 0;border-top:2px solid var(--fg)}
+.kpis b{display:block;font:700 clamp(30px,3.6vw,48px)/1 var(--font);letter-spacing:-.03em}
+.kpis b.save{color:#b3401c}
+.kpis span{display:block;font-size:15px;color:var(--muted);margin-top:8px}
+@media (max-width:820px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.swatch{display:flex;flex-wrap:wrap;gap:18px;font-size:14px;color:var(--muted);margin:28px 0 12px}
+.swatch i{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-1px}
+.swatch i.ghost{background:none;border:2px dashed var(--m400);width:14px}
+.crows{display:grid;gap:10px}
+.crow{display:grid;grid-template-columns:62px 42px minmax(150px,1.1fr) minmax(200px,2fr) 150px;gap:14px;align-items:center;font-size:15px;padding:8px 0;border-bottom:1px solid var(--line)}
+.crow .id{font:500 14px var(--mono)}
+.crow .nm{min-width:0}
+.crow .nm small{display:block;color:var(--muted);font-size:13px}
+.track{position:relative;height:22px}
+.track .ghost{position:absolute;top:0;bottom:0;left:0;border:2px dashed var(--m400)}
+.track .seg{position:absolute;top:3px;bottom:3px}
+.crow .num{text-align:right;font:500 14px/1.35 var(--mono)}
+.crow .num em{font-style:normal;display:block;color:var(--muted);font-size:12px;background:none;padding:0}
+.crow .num em.s{color:#1d7a3a}
+.crow.head{border-bottom:2px solid var(--fg);font:600 13px var(--font);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding-top:0}
+@media (max-width:760px){.crow{grid-template-columns:52px 38px 1fr 110px}.crow .track{grid-column:1/-1;order:5}}
+.tiersum{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:36px}
+.tiersum div{padding:18px 20px;background:var(--m50)}
+.tiersum b{font:700 28px/1 var(--font);display:block;margin:6px 0}
+.tiersum span{font-size:14px;color:var(--muted)}
+@media (max-width:760px){.tiersum{grid-template-columns:1fr}}
+.ba{display:grid;grid-template-columns:repeat(2,1fr);gap:48px;margin-top:40px}
+@media (max-width:900px){.ba{grid-template-columns:1fr}}
+.cmp{display:grid;gap:18px}
+.cmp .r{display:grid;grid-template-columns:170px 1fr 70px;gap:14px;align-items:center;font-size:15px}
+.cmp .r .d{text-align:right;font:600 14px var(--mono)}
+.cmp .bars{display:grid;gap:4px}
+.cmp .bars span{display:block;height:12px;position:relative}
+.cmp .bars span::after{content:attr(data-v);position:absolute;left:calc(100% + 8px);top:-3px;font:500 12px var(--mono);color:var(--muted);white-space:nowrap}
+.cmp .b{background:var(--m300)}.cmp .a{background:var(--accent)}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart text{font:500 11px var(--mono);fill:var(--muted)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
 </head>
@@ -142,7 +201,7 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
     claude-agentic
   </a>
   <nav aria-label="Sections">
-    <a href="#arms">Arms</a><a href="#suite">Tasks</a><a href="#scoring">Scoring</a><a href="#results">Results</a><a href="#reproduce">Reproduce</a><a href="demo.html">Demo</a><a href="./">Home</a>
+    <a href="#arms">Arms</a><a href="#suite">Tasks</a><a href="#scoring">Scoring</a><a href="#costs">Costs</a><a href="#results">Results</a><a href="#reproduce">Reproduce</a><a href="demo.html">Demo</a><a href="./">Home</a>
   </nav>
 </header>
 
@@ -192,6 +251,10 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
     <div class="dist" id="dist" role="img" aria-label="Tasks per risk tier"></div>
     <div class="legend" id="legend"></div>
 
+    <div class="map" id="map" aria-label="All 42 tasks by stack and tier"></div>
+    <p class="mapnote"><span><i></i>measured run, list-price cost at the bottom</span><span>Click a tile for the task; the filters below dim the rest.</span></p>
+    <div class="detail" id="detail" aria-live="polite"><div class="h">Pick a task</div><div class="m">Each tile is one task, coloured by the risk tier it was given before any run.</div></div>
+
     <div class="filters" role="group" aria-label="Filter tasks">
       <button type="button" data-f="all" aria-pressed="true">All</button>
       <span class="sep"></span>
@@ -224,6 +287,39 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
   </div>
 </section>
 
+<section id="costs" class="subtle">
+  <div class="wrap">
+    <h2>Real costs, from real transcripts</h2>
+    <p class="sub">Nine of the 42 tasks went through <code>/ai-task</code> on 23 Sep with a task journal, so their token windows can be priced call by call. Dollars are list-price equivalents from <code>prices.json</code> (Opus $5 / $25, Sonnet $2 / $10, Haiku $1 / $5 per million input / output tokens; cache writes 2×, cache reads 0.1× the input rate). The seat is a Max subscription, so this is what the same work would cost on the API, not an invoice.</p>
+
+    <div class="kpis">
+      <div><b id="k-total"></b><span>list price for the 9 tasks, 4.4 hours of work</span></div>
+      <div><b class="save" id="k-save"></b><span>vs the same tokens all billed at Opus 5.5</span></div>
+      <div><b class="save" id="k-t2"></b><span>on the four T2 tasks, where reading went to Sonnet</span></div>
+      <div><b class="save">−8.3%</b><span>cost per request after the 23 Sep update, 7,054 requests</span></div>
+    </div>
+
+    <h3 style="margin-top:64px">Per task: what it cost, and what it would have cost on Opus alone</h3>
+    <div class="swatch"><span><i style="background:var(--accent)"></i>Opus 5.5 (session, STRONG)</span><span><i style="background:#5b8fd9"></i>Sonnet 5 (BALANCED readers and reviewers)</span><span><i class="ghost"></i>same tokens repriced at Opus</span></div>
+    <div class="crows" id="crows"></div>
+
+    <div class="tiersum" id="tiersum"></div>
+    <div class="note"><b>What this shows, good and bad.</b> Routing pays where the task is mostly reading: a third less on T2. On T3 it saved nothing, because every one of those runs stayed on Opus, and seven of nine tasks went over the per-task token budget. The repricing assumes Opus alone would have used the same tokens, which is an assumption, not a measurement; the controlled arms in <a href="#results">Results</a> are what will settle it.</div>
+
+    <h3 style="margin-top:72px">Before and after the 23 Sep update</h3>
+    <p class="sub">Every request on this machine, all projects. Before: 15 Sep to 23 Sep 12:30 UTC, 5,270 requests, $598.47. After: 12:30 to 19:15 UTC, 1,784 requests, $185.88. The home page's −19% was taken at 924 requests; with the full afternoon it narrows to −8.3%.</p>
+    <div class="ba">
+      <div class="cmp" id="cmp"></div>
+      <div class="chart"><div id="daily"></div>
+        <div class="swatch" style="margin-top:14px"><span><i style="background:var(--accent)"></i>Opus</span><span><i style="background:#8a3a22"></i>Fable</span><span><i style="background:#5b8fd9"></i>Sonnet</span><span><i style="background:#58a86a"></i>Haiku</span></div>
+      </div>
+    </div>
+    <pre><span class="c"># reproduce every number above at zero model cost</span>
+python3 skills/usage-report/usage-report.py --task T-2026-09-23-002 --project ~/shop
+python3 skills/usage-report/usage-report.py --all --provider claude</pre>
+  </div>
+</section>
+
 <section id="results">
   <div class="wrap">
     <h2>Results</h2>
@@ -235,15 +331,6 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
       </table>
     </div>
 
-    <h3 style="margin-top:72px">What we already have: claude-agentic on the real tasks</h3>
-    <p class="sub">Nine of the 42 tasks were done through <code>/ai-task</code> on 23 Sep with a task journal, so <code>usage-report --task</code> can bracket their tokens. This is one arm, uncontrolled, on the private originals, and it is the baseline the plain arms will be compared against, not a result.</p>
-    <div class="tbl" style="margin-top:24px">
-      <table>
-        <thead><tr><th>Task</th><th>Tier</th><th>Minutes</th><th>Tokens (total)</th><th>Output</th><th>vs plan budget</th></tr></thead>
-        <tbody id="ref"></tbody>
-      </table>
-    </div>
-    <div class="note"><b>What this already shows.</b> Seven of nine tasks went over the per-task token budget in the Max profile, three of them close to three times over. The budgets are placeholders by design, reported and never enforced; these numbers are what they will be calibrated from. The window counts anything else the session did in those minutes, so it is an upper bound.</div>
   </div>
 </section>
 
@@ -355,19 +442,74 @@ bench/report.py results/v1/ &gt; results/v1/summary.json</pre>
   $('#matrix').innerHTML = TIERS.map((k, i) => `<tr><td><span class="tier ${k}" style="background:var(--${k.toLowerCase()})">${k}</span></td><td>${per[i]}</td><td>${pend}</td><td>${pend}</td><td>${pend}</td></tr>`).join('')
     + `<tr><td><b>All</b></td><td><b>${T.length}</b></td><td>${pend}</td><td>${pend}</td><td>${pend}</td></tr>`;
 
-  // measured 23 Sep 2026 with usage-report --task; budgets from the Max profile
+  // measured 23 Sep 2026: usage-report --task windows, priced call by call with prices.json
+  // [id, tier, minutes, tokens M, opus $, sonnet $, all-Opus $, budget M]
   const R = [
-    ['B-16','T2',8.4,5.70,6.4,2],['B-17','T4',103,34.90,144.5,10],['B-18','T4',53,15.36,60.8,10],
-    ['B-19','T2',6.2,3.24,8.4,2],['B-20','T2',4.4,2.67,6.8,2],['B-21','T3',35,17.25,49.8,6],
-    ['B-22','T3',34,16.55,37.3,6],['B-23','T3',12,5.99,16.7,6],['B-42','T2',10.7,2.55,18.3,2],
+    ['B-16','T2',8.4,5.70,1.72,0.94,4.08,2],['B-17','T4',103,34.90,26.40,1.00,28.90,10],['B-18','T4',53,15.36,14.02,0.30,14.75,10],
+    ['B-19','T2',6.2,3.24,1.44,0.50,2.69,2],['B-20','T2',4.4,2.67,0.97,0.68,2.68,2],['B-21','T3',35,17.25,12.20,0,12.20,6],
+    ['B-22','T3',34,16.55,11.53,0,11.53,6],['B-23','T3',12,5.99,4.57,0,4.57,6],['B-42','T2',10.7,2.55,1.23,0.43,2.30,2],
   ];
-  $('#ref').innerHTML = R.map(r => { const pc = Math.round(r[3] / r[5] * 100);
-    return `<tr><td class="id">${r[0]}</td><td><span class="tier ${r[1]}" style="background:var(--${r[1].toLowerCase()})">${r[1]}</span></td><td>${r[2]}</td><td>${r[3].toFixed(1)}M</td><td>${r[4].toFixed(1)}K</td><td><span class="${pc > 100 ? 'over' : ''}">${pc}%</span> of ${r[5]}M<span class="bar"><i style="width:${Math.min(100, 100 / Math.max(1, pc / 100))}%"></i></span></td></tr>`; }).join('');
+  const usd = v => '$' + v.toFixed(2);
+  const pct = (a, b) => Math.round((a / b - 1) * 1000) / 10;
+  const cost = r => r[4] + r[5];
+  const MEAS = Object.fromEntries(R.map(r => [r[0], r]));
+  const sum = (rs, f) => rs.reduce((n, r) => n + f(r), 0);
+  const tot = sum(R, cost), totO = sum(R, r => r[6]);
+  const T2 = R.filter(r => r[1] === 'T2');
+  $('#k-total').textContent = usd(tot);
+  $('#k-save').textContent = pct(tot, totO).toFixed(1) + '%';
+  $('#k-t2').textContent = pct(sum(T2, cost), sum(T2, r => r[6])).toFixed(1) + '%';
+
+  const maxO = Math.max(...R.map(r => r[6]));
+  $('#crows').innerHTML = `<div class="crow head"><span>Task</span><span>Tier</span><span>What</span><span>List price</span><span style="text-align:right">$ · vs Opus · budget</span></div>` +
+    R.map(r => { const i = +r[0].slice(2) - 1, c = cost(r), s = pct(c, r[6]), bp = Math.round(r[3] / r[7] * 100);
+      return `<div class="crow"><span class="id">${r[0]}</span><span><span class="tier ${r[1]}" style="background:var(--${r[1].toLowerCase()})">${r[1]}</span></span>
+        <span class="nm">${code(T[i][3].length > 70 ? T[i][3].slice(0, 68) + '…' : T[i][3])}<small>${r[2]} min · ${r[3].toFixed(1)}M tokens</small></span>
+        <span class="track" title="Opus ${usd(r[4])} · Sonnet ${usd(r[5])} · all-Opus ${usd(r[6])}"><span class="ghost" style="width:${r[6] / maxO * 100}%"></span><span class="seg" style="left:0;width:${r[4] / maxO * 100}%;background:var(--accent)"></span><span class="seg" style="left:${r[4] / maxO * 100}%;width:${r[5] / maxO * 100}%;background:#5b8fd9"></span></span>
+        <span class="num">${usd(c)}<em class="${s < 0 ? 's' : ''}">${s < 0 ? s.toFixed(0) + '% vs Opus' : 'Opus only'}</em><em class="${bp > 100 ? 'over' : ''}">${bp}% of ${r[7]}M budget</em></span></div>`; }).join('');
+
+  $('#tiersum').innerHTML = ['T2','T3','T4'].map(k => { const rs = R.filter(r => r[1] === k), a = sum(rs, cost), o = sum(rs, r => r[6]), s = pct(a, o);
+    return `<div><span class="tier ${k}" style="background:var(--${k.toLowerCase()})">${k}</span> <span>${rs.length} tasks</span><b>${usd(a)}</b><span>${s < 0 ? s.toFixed(1) + '% vs ' + usd(o) + ' on Opus alone' : 'no saving: all on Opus'}</span></div>`; }).join('');
+
+  // before / after, per request
+  const BA = [['Cost per request', 0.1136, 0.1042, v => '$' + v.toFixed(3)], ['Output tokens', 623, 501, v => v], ['Cache writes', 4903, 3209, v => (v / 1000).toFixed(1) + 'K'], ['Context re-read', 124046, 126344, v => (v / 1000).toFixed(0) + 'K']];
+  $('#cmp').innerHTML = BA.map(([n, b, a, f]) => { const m = Math.max(a, b), d = pct(a, b);
+    return `<div class="r"><span>${n}<br><small style="color:var(--muted)">per request</small></span><span class="bars"><span class="b" style="width:${b / m * 55}%" data-v="before ${f(b)}"></span><span class="a" style="width:${a / m * 55}%" data-v="after ${f(a)}"></span></span><span class="d" style="color:${d < 0 ? '#1d7a3a' : '#b3401c'}">${d > 0 ? '+' : ''}${d.toFixed(1)}%</span></div>`; }).join('');
+
+  // daily spend by model family, list price
+  const D = [['08-25',160.4,16.57,10.33,0],['08-31',82.69,17.49,3.05,0],['09-01',62.77,49.83,1.21,0],['09-02',63.38,90.19,7.6,.96],['09-03',125.34,49.16,11.04,.5],['09-04',72.74,15.45,10.17,0],
+    ['09-08',94.91,76.52,8.77,.05],['09-09',179.81,30.42,16.08,.13],['09-10',141.64,46.03,10.11,.23],['09-11',168.87,97.14,7.44,.22],['09-14',18.01,52.05,5.49,.22],
+    ['09-15',29.07,21.03,16.51,.6],['09-16',101.64,10.92,26.07,.28],['09-17',107.77,0,3.38,0],['09-18',111.36,0,1.99,0],['09-21',104.75,12.16,4.73,.92],['09-23',219.23,3.6,8.19,.17]];
+  const COL = ['var(--accent)','#8a3a22','#5b8fd9','#58a86a'];
+  const cw = 560, ch = 240, pad = 34, bw = (cw - pad) / D.length, top = 300;
+  let svg = `<svg viewBox="0 0 ${cw} ${ch + 26}" role="img" aria-label="Daily list-price spend by model family, 25 Aug to 23 Sep">`;
+  [0, 100, 200, 300].forEach(v => { const y = ch - v / top * ch; svg += `<line x1="${pad}" x2="${cw}" y1="${y}" y2="${y}" stroke="var(--m200)"/><text x="0" y="${y + 4}">$${v}</text>`; });
+  D.forEach((d, i) => { let y = ch; const x = pad + i * bw + 3, total = d[1] + d[2] + d[3] + d[4];
+    [1, 2, 3, 4].forEach(k => { const h = d[k] / top * ch; y -= h; if (h > 0) svg += `<rect x="${x}" y="${y}" width="${bw - 6}" height="${h}" fill="${COL[k - 1]}"><title>${d[0]}: $${total.toFixed(2)} total</title></rect>`; });
+    if ((i % 3 === 0 && i < D.length - 2) || i === D.length - 1) svg += `<text x="${x + (bw - 6) / 2}" y="${ch + 18}" text-anchor="middle">${d[0].replace('-', '/')}</text>`; });
+  const ux = pad + (D.length - 1) * bw + 3 + (bw - 6) / 2;
+  svg += `<line x1="${ux}" x2="${ux}" y1="4" y2="${ch}" stroke="var(--fg)" stroke-dasharray="3 3"/><text x="${ux - 6}" y="12" text-anchor="end" style="fill:var(--fg)">update 23 Sep 12:30</text></svg>`;
+  $('#daily').innerHTML = svg;
+
+  // task map
+  const tile = (t, i) => { const m = MEAS[id(i)];
+    return `<button type="button" class="tile" data-i="${i}" data-t="${t[0]}" data-s="${t[2]}" style="background:var(--${t[0].toLowerCase()})" aria-label="${id(i)}, ${t[0]}, ${esc(t[1])}${m ? ', ' + usd(cost(m)) : ''}">${id(i).slice(2)}<span class="k">${KIND[t[1]] || t[1]}</span>${m ? `<span class="usd">${usd(cost(m))}</span>` : ''}</button>`; };
+  const KIND = { investigation: 'inv', bugfix: 'fix', feature: 'feat', refactoring: 'refac', question: 'q&a', chore: 'chore' };
+  $('#map').innerHTML = Object.entries(STACK).map(([k, name]) => { const idx = T.map((t, i) => [t, i]).filter(([t]) => t[2] === k);
+    return `<div><h4><span>${name}</span><span>${idx.length}</span></h4><div class="tiles">${idx.map(([t, i]) => tile(t, i)).join('')}</div></div>`; }).join('');
+  $$('.tile').forEach(b => b.addEventListener('click', () => {
+    const i = +b.dataset.i, t = T[i], m = MEAS[id(i)];
+    $$('.tile').forEach(x => x.classList.toggle('sel', x === b));
+    $('#detail').innerHTML = `<div class="h">${id(i)} · ${t[0]} · ${esc(t[1])} · ${STACK[t[2]]} · ${t[5]}</div>${code(t[3])}<div class="m">✓ ${code(t[4])}</div>` +
+      (m ? `<div class="m"><b style="color:var(--fg)">Measured:</b> ${m[2]} min · ${m[3].toFixed(1)}M tokens · ${usd(cost(m))} list price · ${usd(m[6])} if all on Opus</div>` : '<div class="m">Not measured yet: no task journal for the original.</div>');
+    $$('#rows tr').forEach(tr => tr.classList.toggle('hl', tr.firstElementChild.textContent === id(i)));
+  }));
 
   // filters
   const btns = $$('.filters button');
   const apply = f => { let n = 0;
     $$('#rows tr').forEach(tr => { const on = f === 'all' || tr.dataset.t === f || tr.dataset.s === f; tr.hidden = !on; n += on; });
+    $$('.tile').forEach(x => x.classList.toggle('dim', !(f === 'all' || x.dataset.t === f || x.dataset.s === f)));
     $('#count').textContent = `${n} of ${T.length} tasks`; };
   btns.forEach(b => b.addEventListener('click', () => { btns.forEach(x => x.setAttribute('aria-pressed', x === b)); apply(b.dataset.f); }));
   apply('all');

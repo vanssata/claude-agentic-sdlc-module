@@ -6,7 +6,7 @@
 <title>claude-agentic</title>
 <meta name="description" content="Model routing, risk-tiered reviews and enforced guardrails for Claude Code and Codex, built for production codebases you cannot afford to break.">
 <meta property="og:title" content="claude-agentic: pay for thinking, not for re-reading">
-<meta property="og:description" content="One .ai/ tree, two runtimes, six risk tiers, hooks that refuse the dangerous stuff. Measured today: 19% cheaper per request.">
+<meta property="og:description" content="One .ai/ tree, two runtimes, six risk tiers, hooks that refuse the dangerous stuff. Measured on real work: 8.3% cheaper per request.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0f0f0f">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%230f0f0f'/%3E%3Cpath d='M18 44V20h6l16 24h6V20' fill='none' stroke='%23D97757' stroke-width='5'/%3E%3C/svg%3E">
@@ -390,20 +390,20 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
     <h2 id="proof-h" data-rv>Reinstalled at lunch. <em>Cheaper</em> by the afternoon.</h2>
     <p class="sub" data-rv>The plugin was updated at 12:30 today with the BalancedMax profile, T3 in direct mode and reading routed by difficulty. <code>/usage-report</code> then compared every request before and after, from local transcripts, at zero model cost.</p>
     <div class="hero-num" data-rv>
-      <div class="big"><span data-count="19" data-prefix="−">−19</span>%</div>
-      <p>cost per request, after the update<b>$0.115 → $0.093</b></p>
+      <div class="big"><span data-count="8.3" data-prefix="−" data-dec="1">−8.3</span>%</div>
+      <p>cost per request, after the update<b>$0.114 → $0.104</b></p>
     </div>
     <div class="nums">
-      <div class="num" data-rv><div class="v" data-count="35" data-prefix="−" data-suffix="%">−35%</div><div class="l"><b>output tokens</b> per request, 632 → 409</div></div>
-      <div class="num d1" data-rv><div class="v" data-count="32" data-prefix="−" data-suffix="%">−32%</div><div class="l"><b>cache writes</b> per request, 5.0K → 3.4K</div></div>
-      <div class="num d2" data-rv><div class="v" data-count="9" data-prefix="−" data-suffix="%">−9%</div><div class="l"><b>context re-read</b> per request, 124K → 113K</div></div>
-      <div class="num d3" data-rv><div class="v" data-count="14.5" data-prefix="−" data-suffix="%" data-dec="1">−14.5%</div><div class="l"><b>daily spend</b> vs last Friday, with 1.7% <em>more</em> requests</div></div>
+      <div class="num" data-rv><div class="v" data-count="20" data-prefix="−" data-suffix="%">−20%</div><div class="l"><b>output tokens</b> per request, 623 → 501</div></div>
+      <div class="num d1" data-rv><div class="v" data-count="35" data-prefix="−" data-suffix="%">−35%</div><div class="l"><b>cache writes</b> per request, 4.9K → 3.2K</div></div>
+      <div class="num d2" data-rv><div class="v" data-count="2" data-prefix="+" data-suffix="%">+2%</div><div class="l"><b>context re-read</b> per request, 124K → 126K</div></div>
+      <div class="num d3" data-rv><div class="v" data-count="32.7" data-prefix="−" data-suffix="%" data-dec="1">−32.7%</div><div class="l"><b>on T2 tasks</b> vs the same tokens on Opus alone, <a href="benchmark.html#costs">per task</a></div></div>
     </div>
     <div class="day" id="day">
-      <span class="lab">Fri 18 Sep · 988 req</span><div class="b" style="width:100%">$113.56</div>
-      <span class="lab">Wed 23 Sep · 1,005 req</span><div class="b now" style="width:85.5%">$97.04</div>
+      <span class="lab">Before · 5,270 req</span><div class="b" style="width:100%">$0.114 / req</div>
+      <span class="lab">After · 1,784 req</span><div class="b now" style="width:91.7%">$0.104 / req</div>
     </div>
-    <p class="fine">One developer, one Max seat, real work in two repositories. Dollars are list-price equivalents from <code>/usage-report</code>, not an invoice: the plan is a subscription. The before window is 15 to 23 Sep (4,949 requests), the after window is about 5.5 hours of the same day (924 requests), and the day was not over when it was measured. Your numbers will differ. The report that produced these runs on your machine too.</p>
+    <p class="fine">One developer, one Max seat, real work in two repositories. Dollars are list-price equivalents from <code>/usage-report</code>, not an invoice: the plan is a subscription. The before window is 15 Sep to 23 Sep 12:30 UTC (5,270 requests, $598.47), the after window is the rest of that day to 19:15 UTC (1,784 requests, $185.88). An early reading at 924 requests showed −19%; the full afternoon settled at −8.3%. Your numbers will differ. The report that produced these runs on your machine too.</p>
   </div>
 </section>
 
