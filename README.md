@@ -5,38 +5,43 @@
 [![Known risks](https://img.shields.io/badge/known%20risks-documented-d2f878?labelColor=101210)](#known-risks)
 [![License: MIT](https://img.shields.io/badge/license-MIT-d2f878?labelColor=101210)](LICENSE)
 
-**Version 2.0.1**, the version `.codex-plugin/plugin.json` carries. Read
-[Known risks](#known-risks) before relying on the guards.
+**Let an AI agent work on your legacy production code without the agent
+widening its own scope, reading a production secret, force-pushing or
+deploying.**
 
-Host-wide model, effort and context routing for **Claude Code and Codex**, plus
-agentic engineering infrastructure for **existing production codebases** — the
-kind with legacy code, undocumented business rules, historical workarounds and
-behaviour that customers depend on right now.
+`claude-agentic` is a plugin for **Claude Code and Codex**, built for codebases
+with undocumented business rules, old workarounds and behaviour customers
+rely on today. Small, well-defined changes go through easily. Risky ones are
+stopped by a hook, not by a polite request in a prompt.
 
-It gives a machine and a repository four things:
+```bash
+git clone https://github.com/vanssata/claude-agentic-sdlc-module.git
+cd claude-agentic-sdlc-module && ./install.sh   # detects Claude Code, Codex or both
+```
 
-1. **Routing** — model, effort, fallback, compaction and output limits for the
-   detected runtime and plan, plus the tier rules that keep fact collection cheap
-   and pay only for thinking.
-2. **`.ai/`** — a knowledge base and a policy set that says what agents may and
-   may not do in this repository. One tree, shared by both runtimes.
-3. **A pipeline** — discovery, context, impact, risk classification, plan,
-   implementation, test, adversarial review, security review, release report,
-   human approval — with the gates each risk tier requires.
-4. **Hooks** that enforce the parts that matter, so an agent cannot quietly widen
-   its scope, read a production secret, force-push, or deploy — plus a per-runtime
-   escalation gate that sends EXPERT agents one tier down while the top model is
-   rate-limited or unreachable.
+Then, in any project: `/ai-init` once, and `/ai-task <what you want>` for every
+change.
 
-The design goal is asymmetry: **it should be harder for an agent to damage the
-project than to make a small, well-defined change safely.**
+**What you get**
 
-The defaults are tuned for **one developer who knows the codebase, on a Pro or
-Team Pro plan**, following the [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook):
-the developer's knowledge is the first source of context, one verification
-command is the feedback loop, plan mode is where the expensive model is spent,
-and a subagent is spawned only where a second context window buys something.
+- **Guards, not guidelines.** Hooks refuse edits outside the approved step,
+  reads of production secrets, force-pushes and deploys. No agent commits,
+  merges or deploys: every task ends at your approval.
+- **Risk-tiered pipeline.** Each change gets a tier from T0 to T5. A typo fix
+  stays a one-line edit. A payment change gets a plan, tests, an adversarial
+  review and a security review.
+- **Cheap by default.** Routing puts readers on the cheapest model, keeps the
+  session on the one that does the thinking, and uses the top tier only when a
+  named trigger calls for it. `/usage-report` shows where the tokens went.
+- **One `.ai/` tree for both runtimes.** Start a task in Claude Code and finish
+  it in Codex; the knowledge base, policies and task state are shared.
+
+Tuned for **one developer who knows the codebase, on a Pro or Team Pro plan**,
+following the [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook).
 A fully delegated `team` profile is one JSON key away.
+
+**Version 2.0.1.** The guards have limits: read [Known risks](#known-risks)
+before relying on them.
 
 > This plugin absorbs the former `claude-routing`. Installing it migrates that
 > plugin's managed `CLAUDE.md` block into its own, so the two never coexist; see
