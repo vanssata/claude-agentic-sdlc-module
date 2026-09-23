@@ -3,6 +3,7 @@
 [![Version](https://img.shields.io/badge/version-2.0.1-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v2.0.1)
 [![Runtimes](https://img.shields.io/badge/runtimes-Claude%20Code%20%7C%20Codex-d2f878?labelColor=101210)](#one-module-two-runtimes)
 [![Known risks](https://img.shields.io/badge/known%20risks-documented-d2f878?labelColor=101210)](#known-risks)
+[![License: MIT](https://img.shields.io/badge/license-MIT-d2f878?labelColor=101210)](LICENSE)
 
 **Version 2.0.1**, the version `.codex-plugin/plugin.json` carries. Read
 [Known risks](#known-risks) before relying on the guards.
@@ -719,3 +720,10 @@ No suite reads or writes the developer's real `~/.claude` or `~/.codex`.
 | `docs/workflows.md` | the five workflows and how one is chosen |
 | `docs/faq.md` | why something was blocked, and how to change it |
 | `docs/sdlc/plans/dual-runtime-agentic-routing.md` | the approved plan this dual-runtime support was built from |
+
+## Contributing, security and license
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): setup, tests, and how a change gets merged
+- [SECURITY.md](SECURITY.md): what counts as a vulnerability and how to report
+  one privately
+- [LICENSE](LICENSE): MIT
