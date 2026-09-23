@@ -21,8 +21,8 @@ Usage:
   state.py stage  <stage> [--note TEXT]
   state.py risk   <T0..T5> [--note TEXT] [--by NAME]   # --by, outside the agent, to LOWER one
   state.py triage <T0..T5> [--note TEXT] [--context TEXT]   discovery+context+impact+risk in one call
-  state.py quick  --goal G --workflow W --tier <T0..T2> --files a,b [--note TEXT] [--context TEXT]
-                                         init+triage+one-step plan in one call: the direct path below T3
+  state.py quick  --goal G --workflow W --tier <T0..T3> --files a,b [--note TEXT] [--context TEXT]
+                                         init+triage+one-step plan in one call: the direct path below T4
   state.py plan   --ref PATH --steps STEPS.json
   state.py remediate --files a,b [--note TEXT]   one extra step R<n> for the batch of test/review fixes;
                                          allowed = every finished step's files + the ones named
@@ -1033,12 +1033,13 @@ def cmd_step_split(args, root):
 
 
 def cmd_quick(args, root):
-    """The direct path for T0–T2: one call records the task, the four inline
+    """The direct path for T0–T3 (T3 after the human approved the plan in plan
+    mode): one call records the task, the four inline
     triage stages and a single step whose allowed files are the ones named, so
     the scope guard is armed without a plan file, a task.md or four round trips."""
     direct_mode_cap(root, args.tier)
-    if args.tier not in ("T0", "T1", "T2"):
-        die("quick is for T0, T1 and T2; from T3 the task needs init, triage and a reviewed plan")
+    if args.tier not in ("T0", "T1", "T2", "T3"):
+        die("quick is for T0 to T3; from T4 the task needs init, triage and a reviewed plan")
     files = _split_files(args.files)
     if not files:
         die("--files must name at least one file or glob the step may touch")

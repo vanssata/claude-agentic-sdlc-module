@@ -2,17 +2,17 @@
   "_comment": "Codex routing profile. The Claude profiles (pro.json, max.json) are Claude Code settings.json fragments; this one is not — Codex is configured through ~/.codex/config.toml, so this file is the machine-readable source of truth that scripts/merge-codex-config.py and scripts/render-codex-agents.py both read. Keep the tier names identical to CLAUDE.snippet.md and AGENTS.snippet.md: the two runtimes run the same pipeline on two equivalent model ladders.",
   "session": {
     "model": "gpt-5.6-sol",
-    "model_reasoning_effort": "medium"
+    "model_reasoning_effort": "high"
   },
   "agents": {
     "enabled": true,
-    "max_concurrent_threads_per_session": 3,
+    "max_concurrent_threads_per_session": 6,
     "default_subagent_model": "gpt-5.6-terra",
     "default_subagent_reasoning_effort": "medium"
   },
   "tiers": {
     "FAST": {
-      "model": "gpt-5.6-terra",
+      "model": "gpt-5.6-luna",
       "effort": "low"
     },
     "BALANCED": {
@@ -31,7 +31,8 @@
   "labels": {
     "gpt-5.6-terra": "Terra",
     "gpt-5.6-sol": "Sol",
-    "gpt-6-astra": "Astra"
+    "gpt-6-astra": "Astra",
+    "gpt-5.6-luna": "Luna"
   },
   "_roles_comment": "One entry per rendered custom agent. `source` is the shared prompt body in agents/; when it is absent the agent is a rendered variant of another agent's body (see `variant_of`). `sandbox_mode` mirrors the Claude definition's tool surface: every agent that disallows Edit/Write is read-only.",
   "roles": {
@@ -135,18 +136,18 @@
       "sandbox_mode": "read-only"
     }
   },
-  "plan": "plus",
-  "plan_rule": "- On Plus the usage window is a fraction of Pro's, so `xhigh` stays off: `ai-expert` runs {{EXPERT_MODEL}} at `high`, the session and STRONG agents at `medium`/`high`. Plan T3+ work in one thread; a second EXPERT question in the same task waits for the first.",
+  "plan": "balanced-max",
+  "plan_rule": "- On BalancedMax only the session runs the strong model: Sol at `high` plans and implements, the readers (`ai-indexer`, `Explore`, `log-reader`, `ai-tester`) run on Luna at `low`, and `xhigh` stays off — `ai-expert` runs {{EXPERT_MODEL}} at `high`.",
   "claude_agentic": {
     "inherits": null,
-    "plan": "plus",
-    "label": "Plus",
+    "plan": "balanced-max",
+    "label": "BalancedMax",
     "runtime": "codex",
     "budgets": {
       "fan_out": {
-        "max_parallel_agents": 1,
-        "max_parallel_on_strong": 1,
-        "serial": true
+        "max_parallel_agents": 6,
+        "max_parallel_on_strong": 2,
+        "serial": false
       },
       "direct_mode": {
         "max_tier": "T3"
@@ -158,12 +159,12 @@
       "tokens": {
         "unit": "total_tokens_millions",
         "per_task": {
-          "T0": 0.2,
-          "T1": 0.4,
-          "T2": 1,
-          "T3": 3,
-          "T4": 5,
-          "T5": 8
+          "T0": 0.8,
+          "T1": 1.6,
+          "T2": 4,
+          "T3": 12,
+          "T4": 20,
+          "T5": 32
         }
       }
     },

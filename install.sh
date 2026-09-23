@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # claude-agentic installer (Claude Code and/or Codex).
-#   ./install.sh [--target auto|claude|codex|both] [--plan pro|team-pro|team-max|max|max20]
-#                [--fable auto|yes|no] [--codex-plan plus|pro] [--dry-run]
+#   ./install.sh [--target auto|claude|codex|both] [--plan pro|team-pro|team-max|max|max20|balanced-max]
+#                [--fable auto|yes|no] [--codex-plan plus|pro|balanced-max] [--dry-run]
 # --target defaults to auto: each runtime is installed only if it is present.
 # --plan   Claude only: pro, team-pro (Team Standard seat), team-max (Team Premium seat), max
 #          or max20 (Max 20x: max's settings, larger budgets). Defaults to auto-detect from
@@ -9,9 +9,13 @@
 #          Team org). On a terminal the detected plan is proposed and Enter confirms it (a plan
 #          recorded by an earlier install is the proposal); without one the detection is used
 #          and printed on stderr. --plan skips the question.
+#          balanced-max is never detected, only chosen: a Max account where only the session
+#          runs Opus 5.5 (200k window) — readers stay on Haiku, judgement on Sonnet, reviews on
+#          Opus, ai-expert on Opus at high; no Fable, no xhigh. It also selects the Codex
+#          balanced-max profile unless --codex-plan is given.
 # --fable  Claude only. auto = yes on max, max20 and team-max, no on pro and team-pro. On max the
-#          session runs Opus 5 (200k window) either way; yes pins Fable 5.1 [1m] on architect alone.
-# --codex-plan  Codex only: plus or pro. Defaults to auto-detect from the ChatGPT login in
+#          session runs Opus 5 [1m] (1M window) either way; yes pins Fable 5.1 [1m] on architect alone.
+# --codex-plan  Codex only: plus, pro or balanced-max (Sol session, readers on Luna). Defaults to auto-detect from the ChatGPT login in
 #          ~/.codex/auth.json (chatgpt_plan_type); confirmed on a terminal like --plan, and
 #          assumes pro when it cannot detect or ask.
 # Both runtimes get <home>/claude-agentic/profile.json: the resolved plan tables
@@ -33,8 +37,8 @@
 #
 # pro and team-pro (a Team Standard seat has Pro's models and limits): session model
 # `opusplan` — Opus in plan mode, Sonnet when executing — and the EXPERT tier pinned to opus.
-# max and team-max (a Team Premium seat has Max's models): session model Opus 5 (200k window,
-# opus[1m] per task), ai-expert pinned to opus at xhigh, architect alone on Fable.
+# max and team-max (a Team Premium seat has Max's models): session model Opus 5 [1m] (1M window
+# by default; `/model opus` for a 200k session), ai-expert pinned to opus at xhigh, architect alone on Fable.
 #
 # This plugin supersedes claude-routing. On the first run it migrates that
 # plugin's managed block into this one's, so the two never coexist.
@@ -226,7 +230,7 @@ if [ -z "$PLAN" ]; then
     if [ -n "$PROPOSED" ]; then
       why="detected from $DETECTED_FROM"
       [ -n "$PREV_PLAN" ] && why="recorded by the previous install"
-      read -r -p "plan: $PROPOSED ($why) — Enter to confirm, or type pro/team-pro/team-max/max/max20: " PLAN
+      read -r -p "plan: $PROPOSED ($why) — Enter to confirm, or type pro/team-pro/team-max/max/max20/balanced-max: " PLAN
       PLAN="${PLAN:-$PROPOSED}"
     elif [ "$DETECTED_FROM" = team ]; then
       read -r -p "Team org detected ($org) but not the seat. Enter plan [team-pro/team-max]: " PLAN
@@ -256,14 +260,15 @@ case "$PLAN" in
   team-max) TIER=max; PROFILE_NAME=max;   PLAN_LABEL="Team Max";;
   max)      TIER=max; PROFILE_NAME=max;   PLAN_LABEL="Max";;
   max20|max-20x|max_20x) PLAN=max20; TIER=max; PROFILE_NAME=max20; PLAN_LABEL="Max 20x";;
-  *) echo "--plan must be pro, team-pro, team-max, max or max20 (got '$PLAN')" >&2; exit 2;;
+  balanced-max|balanced_max|balancedmax) PLAN=balanced-max; TIER=max; PROFILE_NAME=balanced-max; PLAN_LABEL="BalancedMax";;
+  *) echo "--plan must be pro, team-pro, team-max, max, max20 or balanced-max (got '$PLAN')" >&2; exit 2;;
 esac
 case "$FABLE" in
-  auto) [ "$TIER" = max ] && FABLE=yes || FABLE=no;;
+  auto) [ "$TIER" = max ] && [ "$PLAN" != balanced-max ] && FABLE=yes || FABLE=no;;
   yes|no) ;;
   *) echo "--fable must be auto|yes|no" >&2; exit 2;;
 esac
-if [ "$TIER" = pro ] && [ "$FABLE" = yes ]; then
+if { [ "$TIER" = pro ] || [ "$PLAN" = balanced-max ]; } && [ "$FABLE" = yes ]; then
   echo "Fable is not available on the $PLAN plan; using --fable no" >&2; FABLE=no
 fi
 
@@ -294,6 +299,7 @@ COMPACT=$(jq -r .autoCompactWindow "$TMP/settings.snippet.json")
 # 200k session compacts near MODEL_WINDOW - 33000, a [1m] session near COMPACT - 33000.
 # Print the number that matches the session this install configures.
 MODEL_WINDOW=200000
+case "$SESSION_MODEL" in *"[1m]"*) MODEL_WINDOW=1000000;; esac
 COMPACT_EFFECTIVE=$COMPACT
 [ "$COMPACT" -gt "$MODEL_WINDOW" ] && COMPACT_EFFECTIVE=$MODEL_WINDOW
 COMPACT_AT=$((COMPACT_EFFECTIVE - 33000))
@@ -302,6 +308,9 @@ ONE_M_AT=$((ONE_M_WINDOW - 33000))
 ONE_M_FABLE=""
 [ "$FABLE" = yes ] && ONE_M_FABLE=" and \`claude-1m fable\` for Fable 5.1 [1m]"
 ONE_M_RULE="One \`autoCompactWindow\` of ${COMPACT} serves every model: Claude Code caps it at the model's own window, so this session compacts near ${COMPACT_AT} and a \`[1m]\` one near ${ONE_M_AT}, whether it was started with \`claude-1m\` (\`~/.claude/bin/claude-1m\`) for \`opus[1m]\`${ONE_M_FABLE} or switched to with \`/model\`. \`claude-1m\` pins the model at launch and \`CLAUDE_1M_COMPACT_WINDOW\` lowers the window for that one process; it is no longer what grants the large window. When a task inside an ordinary session needs one large-context read, say so and, once the user agrees, run \`claude-1m -p '<brief>'\` from Bash — its own process, only the answer comes back."
+if [ "$MODEL_WINDOW" -gt 200000 ]; then
+  ONE_M_RULE="\`autoCompactWindow\` ${COMPACT} applies uncapped to this 1M session, so it compacts near ${COMPACT_AT}; a 200k model picked with \`/model opus\` is capped at its own window and compacts near 167000. For a small task a 200k session is cheaper per turn — say so and let the user switch. \`claude-1m\` (\`~/.claude/bin/claude-1m\`) still pins the model at launch${ONE_M_FABLE}, and \`CLAUDE_1M_COMPACT_WINDOW\` lowers the window for that one process."
+fi
 READ_LINES=$(jq -r '.env.CLAUDE_READ_MAX_LINES' "$TMP/settings.snippet.json")
 READ_BYTES=$(jq -r '.env.CLAUDE_READ_MAX_BYTES' "$TMP/settings.snippet.json")
 
@@ -333,19 +342,23 @@ else
   # agent's Model setting, or /model), and the last-resort tier must not drop below
   # the opus reviewer it escalates from. xhigh is what separates it from STRONG,
   # which is already opus/high; fallbackModel still applies to a pinned agent.
-  EXPERT_EFFORT="xhigh"
+  EXPERT_EFFORT="$(tier_field EXPERT effort)"
   EXPERT_MODEL_LINE="model: opus"
   if [ "$FABLE" = yes ]; then
     ARCHITECT_MODEL_LINE="model: fable[1m]"
     ARCHITECT_EFFORT="xhigh"
     EXPERT_ROW="\`opus\` / \`xhigh\`, pinned so a Sonnet session cannot weaken it; \`architect\` alone pins \`fable[1m]\` / \`xhigh\`"
-    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice for a change that genuinely needs a huge context, never the default — above 200k every turn re-reads a context that costs more than the thinking. ${ONE_M_RULE} \`ai-expert\` pins \`opus\` at \`xhigh\` rather than inheriting the session: a session may run on Sonnet (the IDE agent's Model setting), and the last-resort tier must not drop below the \`opus\` reviewer it escalates from. Fable 5.1 [1m] is pinned on \`architect\` (\`model: fable[1m]\`, \`xhigh\`) and is the session only when the user starts one with \`claude-1m fable\` — never pick it for a reader, a reviewer or \`ai-expert\`. \`max\` stays off.
+    PLAN_SPECIFIC="- Session model is ${SESSION_HUMAN} by default, compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}). A large context is not free: every turn re-reads it, so keep \`/clear\` between tasks. ${ONE_M_RULE} \`ai-expert\` pins \`opus\` at \`xhigh\` rather than inheriting the session: a session may run on Sonnet (the IDE agent's Model setting), and the last-resort tier must not drop below the \`opus\` reviewer it escalates from. Fable 5.1 [1m] is pinned on \`architect\` (\`model: fable[1m]\`, \`xhigh\`) and is the session only when the user starts one with \`claude-1m fable\` — never pick it for a reader, a reviewer or \`ai-expert\`. \`max\` stays off.
 - \`runtime-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/runtime-gate.py status\` shows the gate (\`fable-gate.py status\` still works); \`clear\` re-enables Fable early."
   else
-    ARCHITECT_MODEL_LINE="# model: intentionally omitted — inherits the session model (Opus 5, Fable disabled in this install)"
+    ARCHITECT_MODEL_LINE="# model: intentionally omitted — inherits the session model (${SESSION_HUMAN}, Fable disabled in this install)"
     ARCHITECT_EFFORT="high"
-    EXPERT_ROW="\`opus\` / \`xhigh\`, pinned so a Sonnet session cannot weaken it"
-    PLAN_SPECIFIC="- Session model is Opus 5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); \`opus[1m]\` is a per-task choice, never the default. ${ONE_M_RULE} Fable is disabled in this install (\`--fable no\`). Do not request \`model: fable\` anywhere. \`ai-expert\` alone pins \`model: opus\` at \`xhigh\`, so a Sonnet session cannot weaken the last-resort tier; \`xhigh\` stays off everywhere else and \`max\` stays off."
+    EXPERT_ROW="\`opus\` / \`${EXPERT_EFFORT}\`, pinned so a Sonnet session cannot weaken it"
+    PLAN_SPECIFIC="- Session model is ${SESSION_HUMAN} by default, compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}). ${ONE_M_RULE} Fable is disabled in this install (\`--fable no\`). Do not request \`model: fable\` anywhere. \`ai-expert\` alone pins \`model: opus\` at \`xhigh\`, so a Sonnet session cannot weaken the last-resort tier; \`xhigh\` stays off everywhere else and \`max\` stays off."
+  fi
+  if [ "$PLAN" = balanced-max ]; then
+    ARCHITECT_MODEL_LINE="# model: intentionally omitted — inherits the session model (Opus 5.5; no Fable on BalancedMax)"
+    PLAN_SPECIFIC="- BalancedMax: only the session runs the strong model. Session model is Opus 5.5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); it plans and implements. Agents keep their cheap tiers — readers and runners (\`Explore\`, \`log-reader\`, \`ai-tester\`, \`ai-indexer\`) on \`$(tier_field FAST model)\` / \`$(tier_field FAST effort)\`, judgement on \`$(tier_field BALANCED model)\`, \`ai-reviewer\` and \`ai-security\` on \`$(tier_field STRONG model)\`. \`ai-expert\` pins \`opus\` at \`${EXPERT_EFFORT}\` and \`architect\` inherits the session. \`opus[1m]\` is a per-task choice, never the default. ${ONE_M_RULE} Fable is off on this plan; never request \`model: fable\`. \`xhigh\` and \`max\` stay off."
   fi
   EFFORT_RULE="Raise to \`high\` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; readers stay at \`low\`."
 fi
@@ -406,7 +419,7 @@ pretty() {  # model id -> human name
   case "$1" in
     "fable[1m]") echo "Fable 5.1 [1m]";; fable*) echo "Fable 5.1";;
     opusplan) echo "Opus 5 in plan mode, Sonnet 5 when executing (opusplan)";;
-    "opus[1m]") echo "Opus 5 [1m]";; opus*) echo "Opus 5";;
+    "opus[1m]") echo "Opus 5 [1m]";; claude-opus-5-5*) echo "Opus 5.5";; opus*) echo "Opus 5";;
     sonnet*) echo "Sonnet 5";; haiku*) echo "Haiku 4.5";; *) echo "$1";;
   esac
 }
@@ -764,7 +777,7 @@ Done (Claude Code).
   fallback        $FALLBACK
   EXPERT tier     ai-expert on opus, pinned, at effort $EXPERT_EFFORT;
                   architect on $( [ "$TIER" = pro ] && echo "opus, pinned" || { [ "$FABLE" = yes ] && echo "fable[1m], pinned" || echo "the session model"; } ) at effort $ARCHITECT_EFFORT
-  compaction      near $COMPACT_AT tokens on this 200k session (autoCompactWindow $COMPACT,
+  compaction      near $COMPACT_AT tokens on this $((MODEL_WINDOW / 1000))k session (autoCompactWindow $COMPACT,
                   capped at the model's window); context-guard warns from
                   $((COMPACT_AT * 80 / 100)) and holds a prompt back once from $((COMPACT_AT * 120 / 100))
 $( [ "$TIER" = max ] && echo "  large context   claude-1m$( [ "$FABLE" = yes ] && echo " [opus|fable]" ) starts one session on opus[1m]$( [ "$FABLE" = yes ] && echo " or fable[1m] (Fable 5.1)" ) that compacts near $ONE_M_AT
@@ -821,6 +834,9 @@ PY
 
 codex_render() {
   CODEX_PREV_PLAN=$(jq -r '.plan // empty' "$CODEX_DIR/claude-agentic/profile.json" 2>/dev/null || true)
+  # BalancedMax is one routing idea on both runtimes: --plan balanced-max selects
+  # the Codex balanced-max profile too, unless --codex-plan says otherwise.
+  if [ -z "$CODEX_PLAN" ] && [ "$PLAN" = balanced-max ]; then CODEX_PLAN=balanced-max; fi
   if [ -z "$CODEX_PLAN" ]; then
     detected=$(codex_detect_plan 2>/dev/null || true)
     CODEX_DETECTED="" CODEX_WHY=""
@@ -835,7 +851,7 @@ codex_render() {
       if [ -n "$proposed" ]; then
         why="detected from $CODEX_WHY"
         [ -n "$CODEX_PREV_PLAN" ] && why="recorded by the previous install"
-        read -r -p "codex plan: $proposed ($why) — Enter to confirm, or type plus/pro: " CODEX_PLAN
+        read -r -p "codex plan: $proposed ($why) — Enter to confirm, or type plus/pro/balanced-max: " CODEX_PLAN
         CODEX_PLAN="${CODEX_PLAN:-$proposed}"
       else
         read -r -p "Could not detect the ChatGPT plan (chatgpt_plan_type='$detected'). Enter plan [plus/pro]: " CODEX_PLAN
@@ -852,7 +868,8 @@ codex_render() {
   case "$CODEX_PLAN" in
     plus) CODEX_PLAN_LABEL="Plus";;
     pro)  CODEX_PLAN_LABEL="Pro";;
-    *) echo "--codex-plan must be plus or pro (got '$CODEX_PLAN')" >&2; exit 2;;
+    balanced-max|balanced_max|balancedmax) CODEX_PLAN=balanced-max; CODEX_PLAN_LABEL="BalancedMax";;
+    *) echo "--codex-plan must be plus, pro or balanced-max (got '$CODEX_PLAN')" >&2; exit 2;;
   esac
   CODEX_PROFILE="$SRC/profiles/codex-$CODEX_PLAN.json"
   agentic_profile codex "codex-$CODEX_PLAN" "$CODEX_PLAN" "$CODEX_PLAN_LABEL" no > "$TMP/codex-profile.json"

@@ -19,10 +19,12 @@ the judgement "this looks easy", which is the judgement that causes incidents.
 
 The tier decides whether a stage runs. `pipeline_profile` in the same JSON
 decides who runs it — the session inline, or a subagent with its own context
-window. The default `solo` profile runs T0–T2 in **direct mode** (no state file
-below T2, one `state.py quick` call at T2, the review at T2 on `sonnet`, cheap
-readers only) and the full pipeline from T3: plan and reviews on `opus` at T3,
-security and the release report as well at T4, and discovery too at T5. Tests
+window. The default `solo` profile runs T0–T3 in **direct mode** (no state file
+below T2, one `state.py quick` call at T2 and T3, cheap readers only; the review
+on `sonnet` at T2 and on `opus` at T3, where the session also writes the plan in
+plan mode and the human approves it before any edit) and the full pipeline from
+T4: delegated plan, plan review, security and the release report, and discovery
+too at T5. Tests
 run once, to the end, and every failure is fixed as one batch. `team` delegates every stage except
 implementation at every tier. The full table is in the mirror each project
 carries, `.ai/policies/risk-tiers.md`, and the triggers that make `solo`
