@@ -25,6 +25,7 @@ Facts are collected cheaply; thinking is paid for. Session model {{SESSION_MODEL
 - Five or more parallel agents never run on `{{STRONG_MODEL}}`. Escalate one task at a time on a stated trigger, never the whole fleet; never retry a failed thinking task on a cheaper model.
 - {{EFFORT_RULE}}
 - Implement in the main session. Delegate reading: logs and test output to `log-reader`, wide searches to `Explore` — both on `{{FAST_MODEL}}`. Nothing below T3 runs on `{{STRONG_MODEL}}`. The conclusion a human reads is written here, never delegated.
+- Split code reading by how many hops it needs. A lookup — where X is, one route, service id, config key or template — goes to `Explore` on `{{FAST_MODEL}}`. A trace of how the *installed* third-party code behaves (`vendor/`, `node_modules/`: decorators, compiler passes, service or template overrides, event subscribers) goes to a BALANCED reader at `low` — `ai-discovery`, or `Explore` spawned with `model: {{BALANCED_MODEL}}` where there is no `.ai/` — because a FAST reader stops at the first plausible match, and there a wrong answer reads like a right one.
 
 <!-- stub: runtime=claude -->
 # Context hygiene
@@ -93,6 +94,7 @@ The main session itself runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}` and does 
 - Every subagent pays its own start-up. Spawn one to keep hundreds of lines of reading out of the main context, not for what one `rg` answers.
 - Ask for a named agent (`ai-reviewer`, `ai-discovery`, …) rather than "spawn a subagent". A spawn with no agent named resolves to `agents.default_subagent_model` — {{BALANCED_MODEL}} — never the tier the role needs.
 - Readers, scouts and runners never go above `low` effort. Final synthesis and anything the user reads stays in the main session.
+- Split code reading by how many hops it needs. A lookup — where X is, one route, service id, config key or template — goes to `Explore` on {{FAST_MODEL}}. A trace of how the *installed* third-party code behaves (`vendor/`, `node_modules/`: decorators, compiler passes, service or template overrides, event subscribers) goes to `ai-discovery`, named, which runs on {{BALANCED_MODEL}} at `low` in a read-only sandbox. A FAST reader stops at the first plausible match, and there a wrong answer reads like a right one.
 - At most {{MAX_THREADS}} agent threads run at once (`agents.max_concurrent_threads_per_session`). Write-heavy work is not fanned out: parallel agents editing the same tree create conflicts.
 
 <!-- stub: runtime=codex -->

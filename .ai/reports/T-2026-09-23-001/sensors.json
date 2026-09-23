@@ -1,0 +1,71 @@
+{
+  "checked_at": "2026-09-23T16:02:39Z",
+  "declared_tier": "T2",
+  "rescored_tier": "T2",
+  "schema": 1,
+  "sensors": {
+    "bite": {
+      "detail": "the suite is not green on this tree \u2014 nothing to ask yet",
+      "status": "unavailable",
+      "tree": "1eda46328aa38776fc54247d358e8909f92ff5da"
+    },
+    "diff": {
+      "detail": "0 files / 0 lines (T2 task budget 15 / 400)",
+      "files": 0,
+      "lines": 0,
+      "status": "green",
+      "tree": "1eda46328aa38776fc54247d358e8909f92ff5da",
+      "unscoped": []
+    },
+    "duplicates": {
+      "detail": "nothing added outside tests and docs",
+      "status": "not_applicable",
+      "tree": "1eda46328aa38776fc54247d358e8909f92ff5da"
+    },
+    "lint": {
+      "detail": "lint_command missing \u2014 detected .pylintrc",
+      "proposal": "lint_command: python3 -m pylint $(git ls-files '*.py')",
+      "status": "unavailable",
+      "tree": "1eda46328aa38776fc54247d358e8909f92ff5da"
+    },
+    "plan_sections": {
+      "detail": "inline plan",
+      "status": "not_applicable",
+      "tree": "1eda46328aa38776fc54247d358e8909f92ff5da"
+    },
+    "rescore": {
+      "detail": "T2 \u2014 scopes: docs",
+      "reasons": [],
+      "status": "green",
+      "tier": "T2",
+      "tree": "1eda46328aa38776fc54247d358e8909f92ff5da"
+    },
+    "tests": {
+      "detail": "verify_command is not in testing.md",
+      "status": "unavailable",
+      "tree": "1eda46328aa38776fc54247d358e8909f92ff5da"
+    },
+    "traceability": {
+      "detail": "no finished step changed source",
+      "status": "not_applicable",
+      "tree": "1eda46328aa38776fc54247d358e8909f92ff5da"
+    },
+    "typecheck": {
+      "detail": "typecheck_command missing \u2014 write it, or `typecheck_command: none`, in .ai/policies/testing.md",
+      "status": "unavailable",
+      "tree": "1eda46328aa38776fc54247d358e8909f92ff5da"
+    }
+  },
+  "task": "T-2026-09-23-001",
+  "tree": "1eda46328aa38776fc54247d358e8909f92ff5da",
+  "verdict": {
+    "all_green": false,
+    "blocking": [
+      "tests: unavailable",
+      "lint: unavailable",
+      "typecheck: unavailable",
+      "bite: unavailable"
+    ],
+    "review": "required"
+  }
+}
