@@ -223,6 +223,40 @@ h2{font:700 clamp(34px,4.6vw,64px)/1.1 var(--font);letter-spacing:-.025em;margin
 .feat h3{margin:0;font:700 20px/1.25 var(--font)}
 .feat p{margin:0;color:var(--m600);font-size:17px}
 
+/* WHY: the four strengths */
+.why{padding:clamp(90px,12vw,160px) 0}
+.why .top{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:end;margin-bottom:56px}
+.poles{display:grid;grid-template-columns:1fr 1fr;gap:0;border-block:var(--stroke) solid var(--abr-black)}
+.pole{padding:32px clamp(20px,3vw,40px) 36px 0;display:flex;flex-direction:column}
+.pole+.pole{padding:32px 0 36px clamp(20px,3vw,40px);border-left:1px solid var(--m200)}
+.pole .tag,.pillar .tag{font:500 13px var(--mono);letter-spacing:.04em;color:var(--m600);margin-bottom:14px}
+.pole h3,.pillar h3{font:700 clamp(24px,2.4vw,32px)/1.15 var(--font);letter-spacing:-.015em;margin:0 0 14px}
+.pole p,.pillar p{margin:0;color:var(--m600);font-size:17px}
+.pole ul,.pillar ul{list-style:none;margin:20px 0 0;padding:0;display:grid;gap:10px;font-size:16px}
+.pole li,.pillar li{display:grid;grid-template-columns:14px 1fr;gap:12px;align-items:baseline}
+.pole li::before,.pillar li::before{content:"";width:8px;height:8px;background:var(--accent);transform:translateY(-1px)}
+.dots{display:flex;gap:5px;margin-top:auto;padding-top:28px;align-items:center}
+.dots i{width:14px;height:14px;border:2px solid var(--m300)}
+.dots i.on{background:var(--abr-black);border-color:var(--abr-black)}
+.pole.heavy .dots i.on{background:var(--accent);border-color:var(--accent)}
+.dots span{margin-left:12px;font:500 13px var(--mono);color:var(--m600)}
+.span6{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin:0 0 10px}
+.span6 b{height:10px;background:var(--m200);transform-origin:0 50%;transform:scaleX(0);transition:transform .7s cubic-bezier(.2,.8,.2,1)}
+.span6 b:nth-child(n+4){background:var(--m700)}.span6 b:nth-child(n+5){background:var(--accent)}
+.span6.in b{transform:none}
+.span6 b:nth-child(2){transition-delay:.06s}.span6 b:nth-child(3){transition-delay:.12s}.span6 b:nth-child(4){transition-delay:.18s}.span6 b:nth-child(5){transition-delay:.24s}.span6 b:nth-child(6){transition-delay:.3s}
+.spanlab{display:flex;justify-content:space-between;font:500 13px var(--mono);color:var(--m600);margin-bottom:28px}
+.pillars{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px}
+.pillar{--frame:var(--abr-black);padding:32px clamp(20px,3vw,36px) 32px;display:flex;flex-direction:column}
+.pillar.ink{background:var(--abr-black);color:var(--abr-white);--frame:var(--accent)}
+.pillar.ink .tag,.pillar.ink p{color:var(--m200)}
+.pillar.ink code{background:var(--m900);border-color:var(--m800);color:var(--abr-white)}
+.proofline{margin-top:auto;padding-top:24px;font:400 14px/1.6 var(--mono);color:var(--m600)}
+.proofline::before{content:"$ ";color:var(--m400)}
+.proofline b{color:var(--accent);font-weight:500}
+.pillar.ink .proofline{color:var(--m200)}
+@media (max-width:900px){.why .top,.poles,.pillars{grid-template-columns:1fr}.pole{padding-right:0}.pole+.pole{padding-left:0;border-left:0;border-top:1px solid var(--m200)}}
+
 /* CLOSE: accent ground */
 .close{background:var(--accent);color:var(--abr-black);--action:var(--abr-black);padding:clamp(100px,13vw,180px) 0 64px}
 .close h2{font-size:clamp(46px,7vw,104px);max-width:13ch;line-height:1.1}
@@ -306,7 +340,7 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
     claude-agentic
   </a>
   <nav aria-label="Sections">
-    <a href="#routing">Routing</a><a href="#proof">Measured</a><a href="#router">Risk tiers</a><a href="#guards">Guards</a><a href="#install">Install</a><a href="demo.html">Demo</a><a href="benchmark.html">Benchmark</a>
+    <a href="#why">Why</a><a href="#routing">Routing</a><a href="#proof">Measured</a><a href="#router">Risk tiers</a><a href="#guards">Guards</a><a href="#install">Install</a><a href="demo.html">Demo</a><a href="benchmark.html">Benchmark</a>
   </nav>
   <a class="btn secondary" href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub ↗</a>
 </header>
@@ -335,6 +369,69 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
   <div class="plane p-front" data-depth="0.9" aria-hidden="true">
     <div class="chip dark" style="right:13%;top:84%">git push --force <b>refused</b></div>
     <div class="chip yl" style="right:36%;top:13%"><b>SCOPE_CHANGE_REQUIRED</b></div>
+  </div>
+</section>
+
+<!-- WHY: the four strengths -->
+<section class="why" id="why" aria-labelledby="why-h">
+  <div class="wrap">
+    <div class="top">
+      <h2 id="why-h" data-rv>Light on the small jobs. <em>Strict</em> on the serious ones.</h2>
+      <p class="sub" data-rv>Most agent setups pick one speed: fast and loose, or careful and slow for everything. claude-agentic sizes the process to the change, keeps you in charge of the decisions that are yours, and gets more useful the harder the codebase is.</p>
+    </div>
+
+    <div class="span6" data-rv id="why-span" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b></div>
+    <div class="spanlab" aria-hidden="true"><span>T0 · a typo</span><span>T5 · a migration</span></div>
+
+    <div class="poles">
+      <div class="pole" data-rv>
+        <div class="tag">01 · SMALL AND LIGHT TASKS</div>
+        <h3>Quick when the job is small.</h3>
+        <p>A typo, a colour token or one admin screen is T0 or T1. The session names the files, edits them, runs the check once and stops. There is no plan document, no state file, no reviewer and no fan-out of agents, so a two-minute fix stays a two-minute fix.</p>
+        <ul>
+          <li><span>Direct mode up to T3: edit, one verification run, every failure fixed as one batch.</span></li>
+          <li><span>Searching and log reading go to the FAST tier at low effort, not to the expensive session model.</span></li>
+          <li><span>At T2, green sensors (linter, types, tests) can stand in for the review.</span></li>
+        </ul>
+        <div class="dots" aria-label="T0 runs 1 of 11 pipeline stages"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span>T0 · 1 of 11 stages</span></div>
+      </div>
+      <div class="pole heavy" data-rv>
+        <div class="tag">02 · SERIOUS TASKS</div>
+        <h3>Safe and controlled when it matters.</h3>
+        <p>Payments, tax, auth, customer data and migrations are T4 or T5 by policy, not by mood, and the tier is re-scored from the real diff. They get the full pipeline: discovery, a reviewed plan, adversarial and security review, a release report and your sign-off. Only a human can lower a tier.</p>
+        <ul>
+          <li><span>Hooks refuse force pushes, writes into <code>vendor/</code>, secret reads and self-approval.</span></li>
+          <li><span>Each step names the files it may touch; anything else is <code>SCOPE_CHANGE_REQUIRED</code>.</span></li>
+          <li><span>STRONG and EXPERT models are spent here, on plans and reviews, one at a time.</span></li>
+        </ul>
+        <div class="dots" aria-label="T5 runs all 11 pipeline stages"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><span>T5 · 11 of 11</span></div>
+      </div>
+    </div>
+
+    <div class="pillars">
+      <div class="pillar ink frame" data-rv>
+        <div class="tag">03 · FOR THE DEVELOPER</div>
+        <h3>You steer the work without drowning in it.</h3>
+        <p>The agent does not hand you a wall of generated code and wait for a nod. It stops at the gates that are yours (the T3 plan, the T4 release) and puts everything in between on the record, so you review decisions and a small diff instead of re-reading generated code.</p>
+        <ul>
+          <li><span>A diff budget per tier, and a refactor is never mixed with a feature change.</span></li>
+          <li><span>The release report lists what changed, what was deliberately left alone, the tests, the reviews and what you are asked to approve.</span></li>
+          <li><span><code>/ai-status</code> shows the stage, the current step, its allowed files and the open risks at any moment.</span></li>
+        </ul>
+        <div class="proofline">/ai-status <b>→ stage · current step · allowed files · open risks</b></div>
+      </div>
+      <div class="pillar frame" data-rv>
+        <div class="tag">04 · FOR THE PROJECT</div>
+        <h3>Fits any project. Pays off on the hard ones.</h3>
+        <p>One installer, then <code>/ai-init</code>: it surveys the codebase and writes the knowledge base, policies and test commands without touching application code. A small repository gets a small <code>.ai/</code> and barely notices it. The value grows with the complexity: legacy code, shared domains, several stacks, customers on production today.</p>
+        <ul>
+          <li><span>Works with Claude Code, Codex or both, over one shared <code>.ai/</code> and a recorded handoff.</span></li>
+          <li><span><code>--adopt</code> moves an existing Spec Kit, Kiro, Cursor or Copilot setup in, with nothing lost.</span></li>
+          <li><span>Known problems go to <code>known-risks.md</code>, never into an unrequested fix.</span></li>
+        </ul>
+        <div class="proofline">./install.sh &amp;&amp; /ai-init <b>→ .ai/ knowledge, policies, risk tiers</b></div>
+      </div>
+    </div>
   </div>
 </section>
 
