@@ -92,8 +92,9 @@ that judgement is exactly what risk classification exists to replace.
 stage, never whether it runs. The default, `solo`, is for one developer who
 knows the codebase — the setting the playbook describes for a team of one to
 five: CLAUDE.md, plan mode and a feedback loop, with light review. It runs
-T0–T2 in direct mode (no ceremony, cheap readers, one `sonnet` review at T2)
-and the full pipeline from T3.
+T0–T3 in direct mode (no ceremony, cheap readers, one `sonnet` review at T2,
+one `opus` review and a plan-mode plan the human approves at T3) and the full
+pipeline from T4.
 
 - Discovery, context, impact and risk come from the request plus `grep -n`,
   and up to T2 are recorded in one `state.py triage` call — four audit-trail

@@ -1,6 +1,6 @@
 ---
 name: ai-task
-description: Run one task through the agentic pipeline with the gates its risk tier requires. In the default solo profile T0–T2 run in direct mode (name the files, edit, one verification run at the end, failures fixed as one batch, one BALANCED-tier review at T2) and T3–T5 run the full SDLC pipeline — discovery, context, impact, risk tier, plan, plan review, implementation, test, adversarial review, security review, release report, human approval. Resumes an interrupted task from .ai/state/current.json. Use for any change in a repository that has .ai/.
+description: Run one task through the agentic pipeline with the gates its risk tier requires. In the default solo profile T0–T3 run in direct mode (name the files, edit, one verification run at the end, failures fixed as one batch, one BALANCED-tier review at T2; at T3 the plan is written in plan mode and approved by the human, and the one review is STRONG) and T4–T5 run the full SDLC pipeline — discovery, context, impact, risk tier, plan, plan review, implementation, test, adversarial review, security review, release report, human approval. Resumes an interrupted task from .ai/state/current.json. Use for any change in a repository that has .ai/.
 argument-hint: <what you want done> | --resume | --abandon
 ---
 
@@ -93,28 +93,37 @@ The stages are the same in every profile; the profile decides **who does each
 one**. `pipeline_profiles.<profile>.delegated_stages[<tier>]` in that file lists
 the stages that go to a subagent. `solo`, the default, has two modes:
 
-- **direct** (T0–T2): no ceremony. You name the files, edit, run each step's
+- **direct** (T0–T3): no ceremony. You name the files, edit, run each step's
   own scoped tests, then the verification command once at the end and the e2e
   suite once after it, and fix every failure as one batch.
   The only subagents are cheap readers (`Explore`, `log-reader`) and, at T2,
   one review on the BALANCED tier (`ai-reviewer` with
   `model: $($STATE profile --tier BALANCED)` on Claude Code,
-  `ai-reviewer-balanced` on Codex). Nothing runs on STRONG below T3. `quick`
-  exits 8 `DIRECT_MODE_CAP` when the plan caps direct mode below the tier:
-  then use `init` and the pipeline.
-- **sdlc** (T3–T5): the full pipeline below, recorded stage by stage, with the
+  `ai-reviewer-balanced` on Codex). Nothing runs on STRONG below T3. At T3 the
+  same path gains three things, and only three: the plan is written in plan
+  mode and the human approves it before any edit, characterization tests come
+  first where legacy behaviour changes, and the one review runs on STRONG.
+  No `ai-planner`, no plan-review agent, no `ai-release`. `quick` exits 8
+  `DIRECT_MODE_CAP` when the plan caps direct mode below the tier: then use
+  `init` and the pipeline.
+- **sdlc** (T4–T5): the full pipeline below, recorded stage by stage, with the
   delegations the profile lists.
 
 Decide the tier **first**, from the trigger table, before anything else; when
 two tiers are arguable take the higher. Until it is known, act as for T2.
 
-## 1a. Direct mode — T0, T1, T2
+## 1a. Direct mode — T0, T1, T2, T3
 
-Skip `$STATE init` above for T0–T2; direct mode has its own single call.
+Skip `$STATE init` above for T0–T3; direct mode has its own single call.
 
 1. **Tier and files.** Take the entry points from the request; confirm them with
    `grep -n`. Say the tier, the trigger and the files you will touch, in one to
-   five lines. At T2 that is the plan. Use `Explore` (FAST) when a file is not
+   five lines. At T2 that is the plan. **At T3** write it in plan mode: a
+   numbered list of steps with their files, the characterization tests as the
+   first step when legacy behaviour changes, and a one-line rollback (usually
+   `git revert`). The human accepting plan mode is the plan approval — no
+   agent reviews the plan. Call `ai-planner` on STRONG only on the T3 trigger
+   in `delegate_anyway_when`. Use `Explore` (FAST) when a file is not
    found in a few `grep` calls, never a six-agent fan-out — and when a file is
    too large to open, that reader brings back the excerpt, not the file.
    If this task needs a tool or MCP server the project does not enable by
@@ -125,11 +134,14 @@ Skip `$STATE init` above for T0–T2; direct mode has its own single call.
    ```
 
    Most tasks need none. See `.ai/policies/tooling.md`.
-2. **Record — T2 only.** One call arms the scope guard and writes the audit
-   trail; T0 and T1 keep no state file at all, the commit is the record:
+2. **Record — T2 and T3.** One call arms the scope guard and writes the audit
+   trail; T0 and T1 keep no state file at all, the commit is the record. At T3
+   run it only after the human accepted the plan, list every file of every
+   step, and say so in the note:
 
    ```bash
    $STATE quick --goal "<one sentence>" --workflow <workflow> --tier T2 --files "<a>,<b>" --note "<trigger>"
+   $STATE quick --goal "<one sentence>" --workflow <workflow> --tier T3 --files "<a>,<b>,<c>" --note "<trigger>; plan approved in plan mode"
    ```
 
 3. **Implement**, yourself, in this session. `ai-implementer` (BALANCED, low) only
@@ -145,31 +157,38 @@ Skip `$STATE init` above for T0–T2; direct mode has its own single call.
    then fix all new regressions in **one** remediation step and run once more:
 
    ```bash
-   $STATE step-done 1 && $STATE remediate --files "<failing tests>" --note "<n> regressions"   # T2
+   $STATE step-done 1 && $STATE remediate --files "<failing tests>" --note "<n> regressions"   # T2, T3
    ```
 
    At T0/T1 there is no state: just fix the batch and re-run. Two rounds at
    most; a third means the human decides. One failure never restarts the task.
 
    Then, **once**, after the fast suite is green: `e2e_command`. T0 and T1 skip
-   it. At T2 run it when the change can reach a flow the e2e suite covers; when
-   it cannot, say so in one line instead. It never runs inside step 3.
+   it. At T2 and T3 run it when the change can reach a flow the e2e suite
+   covers; when it cannot, say so in one line instead. It never runs inside
+   step 3.
 
    ```bash
-   $STATE set e2e_status <passing|failing|not_applicable>   # T2
+   $STATE set e2e_status <passing|failing|not_applicable>   # T2, T3
    ```
-5. **Review — T2 only.** After the tests pass, one review on the BALANCED tier
-   over `git diff` — `ai-reviewer` with `model: $($STATE profile --tier
+5. **Review — T2 and T3.** After the tests pass, one review over `git diff`.
+   T2: the BALANCED tier — `ai-reviewer` with `model: $($STATE profile --tier
    BALANCED)` on Claude Code, `ai-reviewer-balanced` on Codex — no ledger and
-   no probe. Fix BLOCKER and
+   no probe. T3: `ai-reviewer` on STRONG (`model: $($STATE profile --tier
+   STRONG)`, `ai-reviewer` under Codex), after `$STATE review-gate`; add
+   `ai-security` only when the diff touches authentication, authorization or
+   personal data. Fix BLOCKER and
    HIGH findings as one batch (`$STATE remediate`), re-run the verification
    command, and ask for one scoped re-review only when a BLOCKER was fixed.
 6. **Close.** Print what changed, the verification command and its result, the
    review verdict and the rollback (`git revert`), as the commit message body.
-   Then stop for the human. At T2: `$STATE close`.
+   Then stop for the human. At T2: `$STATE close`. At T3 the human approves the
+   result as well: `$STATE stage human_approval` after the summary is shown,
+   and the task closes once they have.
 
-That is the whole path. The sections below are for T3 and above, and for the
-`team` profile.
+That is the whole path. The sections below are for T4 and above, and for the
+`team` profile. A T3 whose diff is re-scored to T4 by the sensors leaves direct
+mode here: say so and continue with the sections below from ADVERSARIAL REVIEW.
 
 ## 1. Walk the pipeline
 
@@ -206,8 +225,8 @@ $STATE stage <stage> --note "<what happened>"
 
 ### TRIAGE — discovery, context, impact and risk
 
-**solo, T0–T2:** direct mode, section 1a. If a task that started as T2 turns
-out to be T3+, say so, `$STATE close` the quick record and start it here.
+**solo, T0–T3:** direct mode, section 1a. If a task that started as T3 or below
+turns out to be T4+, say so, `$STATE close` the quick record and start it here.
 
 **`team` below T3:** record the four stages in one call and go on to PLAN:
 
@@ -215,20 +234,20 @@ out to be T3+, say so, `$STATE close` the quick record and start it here.
 $STATE triage T<n> --note "<the trigger>" --context "<entry points, callers, what must stay unaffected — a few lines>"
 ```
 
-**T3 and above, or `team`:** the stages run one at a time and are recorded one
+**T4 and above, or `team` from T3:** the stages run one at a time and are recorded one
 at a time. `ai-discovery` — one agent per area in parallel, after `ai-indexer`
 when the area is large — into `discovery.md`; `ai-context` for the summary; a
 second `ai-discovery` pass for `.ai/templates/impact-report.md`; `ai-risk` on
 STRONG — `model: $($STATE profile --tier STRONG)` — for the tier (`ai-risk-strong` under Codex, whose agent files
 outrank a spawn-time model), re-run when it says `confidence: uncertain`.
-In `solo` you may still write context and impact yourself at T3 when the area
+In `solo` you may still write context and impact yourself at T4 when the area
 is one you know; the risk call at STRONG is not optional there.
 
 ```bash
 $STATE risk T<n> --note "<the trigger that decided it>"
 ```
 
-Delegate below T3 only on a trigger from `delegate_anyway_when`: one
+Delegate below T4 only on a trigger from `delegate_anyway_when`: one
 `ai-discovery` for an area the developer says is unfamiliar, or for an
 `UNKNOWN` the plan depends on. Never the six-agent fan-out — that is
 `/ai-init`'s job, once.
@@ -245,14 +264,14 @@ impression of how big the task feels.
 
 ### PLAN — only when the tier needs one
 
-**T0–T2 in solo:** handled in direct mode (1a). **`team` below T3:** a short
+**T0–T3 in solo:** handled in direct mode (1a). **`team` below T3:** a short
 numbered list of steps, each with its files, registered with:
 
 ```bash
 $STATE plan --ref ".ai/reports/<task-id>/task.md" --steps /tmp/steps.json
 ```
 
-**T3 and T4:** `ai-planner` on STRONG — `model: $($STATE profile --tier STRONG)` — (`ai-planner-strong` under
+**T4, and T3 in `team`:** `ai-planner` on STRONG — `model: $($STATE profile --tier STRONG)` — (`ai-planner-strong` under
 Codex), in plan mode. **T5:** `ai-expert`. Save to `.ai/reports/<task-id>/implementation-plan.md` following
 `.ai/templates/implementation-plan.md`, register the steps as above.
 
@@ -269,7 +288,9 @@ $STATE questions --pending --format md     # render for the human, then stop
 A plan registered with its blocking questions still open is a plan that was
 approved on an assumption. See **Questions** below.
 
-### PLAN REVIEW (T3 and above)
+### PLAN REVIEW (T4 and above; T3 in `team`)
+
+In `solo` a T3 plan is reviewed by the human in plan mode (1a) — no agent.
 
 `ai-reviewer` on the plan itself, before any code exists. Then show the human the
 plan and the review — both, in the conversation — and only **after** they have
@@ -282,7 +303,7 @@ $STATE stage human_approval
 That command is what opens the gate: it appends gate question `G1`, stamps
 `requested_at` and emits `gate_requested`. Running it before the human has seen
 what they are approving asks them to sign a blank page, and the journal records
-that it happened in that order. For T3+ this approval is required, not optional.
+that it happened in that order. For T4+ this approval is required, not optional.
 
 ### IMPLEMENTATION
 
@@ -451,12 +472,11 @@ When it is not applicable, say why in the note. Silence is not a verdict.
 
 ### RELEASE REPORT
 
-**solo, T3:** write the short form yourself: what changed, what was
-deliberately preserved, the verification command and its result, the review
-verdict, the rollback (usually one `git revert`), open risks. It becomes the
-commit message body and is appended to `task.md`. (T0–T2 wrote it in direct
-mode, step 6.) **T4, T5, and `team` from T2 up:**
-`ai-release` fills the full template into
+**solo, T0–T3:** the short form written in direct mode, step 6 — what changed,
+what was deliberately preserved, the verification command and its result, the
+review verdict, the rollback (usually one `git revert`), open risks. It becomes
+the commit message body; at T3 it is also appended to `task.md`. **T4, T5, and
+`team` from T2 up:** `ai-release` fills the full template into
 `.ai/reports/<task-id>/release-report.md`.
 
 ### HUMAN APPROVAL
@@ -566,7 +586,7 @@ repository with no `.ai/` at all.
 
 - Inline does not mean verbose: a stage you do yourself is a few lines, and
   below T2 not even a file — the state archive is the record.
-- One tool call where one will do: `quick` below T3, `triage` instead of four
+- One tool call where one will do: `quick` up to T3, `triage` instead of four
   `stage` calls, one `task.md` instead of four report files, one verification
   run and one e2e run instead of one per step, one `remediate` step instead of
   one per failure.

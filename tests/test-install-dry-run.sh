@@ -8,8 +8,8 @@ INSTALL="$PLUGIN_ROOT/install.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
 echo "== dry run renders for every plan"
-for combo in "max yes:xhigh:fable[1m]" "max no:high:Opus 5 with the 200k window" "pro no:high:Opus 5" \
-             "team-max yes:xhigh:fable[1m]" "team-max no:high:Opus 5 with the 200k window" "team-pro no:high:Opus 5"; do
+for combo in "max yes:xhigh:fable[1m]" "max no:high:Opus 5 [1m] by default" "pro no:high:Opus 5" \
+             "team-max yes:xhigh:fable[1m]" "team-max no:high:Opus 5 [1m] by default" "team-pro no:high:Opus 5"; do
     args="${combo%%:*}"; rest="${combo#*:}"; effort="${rest%%:*}"; model="${rest#*:}"
     set -- $args
     out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan "$1" --fable "$2" --dry-run 2>&1)
@@ -68,6 +68,17 @@ printf '%s' "$out" | grep -q 'detected plan: team-max' && pass "a max rate-limit
 printf '{"oauthAccount":{"organizationType":"claude_max"}}' > "$HOME_T/.claude.json"
 out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
 printf '%s' "$out" | grep -q 'plan=max (Max' && pass "claude_max is still detected as max" || fail "max org should map to max" "$out"
+
+echo "== balanced-max: only the session is strong"
+outb=$(CLAUDE_DIR="$TMP/none" CODEX_DIR="$TMP/nonecx" bash "$INSTALL" --target both --plan balanced-max --dry-run 2>&1)
+grep -q 'plan=balanced-max (BalancedMax, max profile) fable=no' <<<"$outb" && pass "--plan balanced-max: BalancedMax on the max profile, Fable off" || fail "--plan balanced-max header" "$(printf '%s' "$outb" | grep '^== claude: plan')"
+grep -q '"model": "claude-opus-5-5"' <<<"$outb" && pass "balanced-max pins the session to Opus 5.5" || fail "balanced-max session model"
+grep -q 'fable\[1m\]' <<<"$outb" && fail "balanced-max must not offer Fable" || pass "balanced-max offers no Fable"
+grep -qx 'effort: xhigh' <<<"$outb" && fail "balanced-max must not render xhigh" || pass "balanced-max renders no xhigh"
+grep -q '== codex: plan=balanced-max' <<<"$outb" && pass "--plan balanced-max selects the Codex balanced-max profile" || fail "codex profile not balanced-max"
+grep -q '| FAST | `gpt-5.6-luna`' <<<"$outb" && pass "Codex readers run on Luna" || fail "codex FAST should be Luna"
+o=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan balanced-max --fable yes --dry-run 2>&1)
+grep -q 'fable=no' <<<"$o" && pass "--fable yes is refused on balanced-max" || fail "balanced-max accepted Fable"
 
 echo "== max20: Max 20x, detected from organizationRateLimitTier (R3)"
 snippet() { sed -n '/^== settings snippet/,/^== agents/p'; }
@@ -191,14 +202,14 @@ n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/settings.json")
 [ "$n" = 5 ] && pass "five PreToolUse hooks registered (four guards + runtime-gate)" || fail "expected 5 PreToolUse commands, got $n"
 jq -e '.hooks.Setup[0].hooks[0].command | test("project-scaffold")' "$DIR/settings.json" >/dev/null \
     && pass "the Setup:init scaffold hook is registered" || fail "Setup hook missing"
-[ "$(jq -r .model "$DIR/settings.json")" = "opus" ] && pass "the max session model is Opus 5 with the 200k window, not opus[1m] and not Fable" || fail "model not set"
+[ "$(jq -r .model "$DIR/settings.json")" = "opus[1m]" ] && pass "the max session model is opus[1m] by default, not Fable" || fail "model not set"
 [ "$(jq -r .effortLevel "$DIR/settings.json")" = "medium" ] && pass "the default effort is medium" || fail "effort not set"
 jq -e '.availableModels | index("fable[1m]")' "$DIR/settings.json" >/dev/null && pass "fable[1m] stays available for architect" || fail "fable should remain in availableModels"
 DIRN="$TMP/claude-nofable"; mkdir -p "$DIRN"
 CLAUDE_DIR="$DIRN" bash "$INSTALL" --plan max --fable no >/dev/null 2>&1
 grep -q '^model:' "$DIRN/agents/architect.md" && fail "with --fable no, architect must inherit the session" || pass "with --fable no, architect inherits the Opus session"
 jq -e '.availableModels | index("fable[1m]")' "$DIRN/settings.json" >/dev/null && fail "fable should be removed with --fable no" || pass "with --fable no, fable is not offered"
-[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "800000" ] && pass "the compaction window is 800k on max; capped at the model's own, so a 200k session fires near 167k" || fail "compaction not set"
+[ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "800000" ] && pass "the compaction window is 800k on max; uncapped on the 1M session, so it fires near 767k" || fail "compaction not set"
 [ -x "$DIR/hooks/context-guard.py" ] && pass "context-guard is executable" || fail "context-guard should be executable"
 for ev in UserPromptSubmit PreCompact SessionStart; do
     [ "$(jq -r --arg e "$ev" '[.hooks[$e][]?.hooks[]?.command | select(test("context-guard"))] | length' "$DIR/settings.json")" = 1 ] \
@@ -207,8 +218,8 @@ done
 CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 [ "$(jq -r '[.hooks.UserPromptSubmit[]?.hooks[]?.command | select(test("context-guard"))] | length' "$DIR/settings.json")" = 1 ] \
     && pass "a second install does not register context-guard twice" || fail "context-guard registered twice"
-grep -q 'Compaction near 167 000 tokens' "$DIR/claude-agentic/routing.md" && pass "routing.md names the point where compaction fires, capped at the model's window" || fail "routing.md should say compaction fires near 167 000"
-grep -q 'warning from 133k tokens, and from 200k' "$DIR/claude-agentic/routing.md" && pass "routing.md names the guard's thresholds" || fail "the guard thresholds are not rendered"
+grep -q 'Compaction near 767 000 tokens' "$DIR/claude-agentic/routing.md" && pass "routing.md names the point where compaction fires on the 1M session" || fail "routing.md should say compaction fires near 767 000"
+grep -q 'warning from 613k tokens, and from 920k' "$DIR/claude-agentic/routing.md" && pass "routing.md names the guard's thresholds" || fail "the guard thresholds are not rendered"
 grep -q 'On compaction keep' "$DIR/CLAUDE.md" && pass "the block carries what a compaction must keep" || fail "the compaction rule is missing from the block"
 grep -q '{{' "$DIR/CLAUDE.md" && fail "an unrendered placeholder is left in CLAUDE.md" || pass "every placeholder is rendered"
 [ -x "$DIR/bin/claude-1m" ] && pass "max installs the opus[1m] launcher" || fail "bin/claude-1m missing or not executable"

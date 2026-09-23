@@ -101,7 +101,7 @@ S get --field context_summary_ref | grep -q '^inline: template' && pass "the inl
 out=$(S triage T9 2>&1 || true)
 printf '%s' "$out" | grep -q "risk tier must be one of" && pass "triage rejects an unknown tier" || fail "triage should reject T9" "$out"
 
-echo "== quick: the direct path below T3 in one call"
+echo "== quick: the direct path up to T3 in one call"
 S init --goal "quick base" --workflow feature --force >/dev/null; S done >/dev/null; S archive >/dev/null
 out=$(S quick --goal "rename a label" --workflow feature --tier T1 --files "templates/admin/*.twig,translations/messages.en.yaml" --note "isolated label" 2>&1)
 printf '%s' "$out" | grep -q "step 1 armed" && pass "quick records the task and arms step 1" || fail "quick should arm step 1" "$out"
@@ -112,8 +112,8 @@ S get --field approved_plan.steps | jq -e '.[0].allowed_files | index("translati
   && pass "quick keeps the named files as the step scope" || fail "allowed files missing"
 n=$(S get --field history | jq '[.[] | select(.event=="stage" and (.detail|test("inline")))] | length')
 [ "$n" = 4 ] && pass "quick still writes the four triage stages to the audit trail" || fail "expected 4 inline stage records, got $n"
-out=$(S quick --goal "x" --workflow feature --tier T3 --files a --force 2>&1); rc=$?
-[ $rc = 1 ] && printf '%s' "$out" | grep -q "quick is for T0, T1 and T2" && pass "quick refuses T3 and above" || fail "quick should refuse T3 with exit 1" "rc=$rc $out"
+out=$(S quick --goal "x" --workflow feature --tier T4 --files a --force 2>&1); rc=$?
+[ $rc = 1 ] && printf '%s' "$out" | grep -q "quick is for T0 to T3" && pass "quick refuses T4 and above" || fail "quick should refuse T4 with exit 1" "rc=$rc $out"
 out=$(S quick --goal "x" --workflow feature --tier T1 --files "" --force 2>&1 || true)
 printf '%s' "$out" | grep -q "at least one file" && pass "quick refuses an empty scope" || fail "quick should refuse empty --files" "$out"
 
@@ -1294,15 +1294,17 @@ rm -rf "$CLH/state"
 echo "== WP5: the direct-mode cap (R13) and profile"
 python3 "$RP" pro --print agentic > "$CLH/claude-agentic/profile.json"
 fresh5 cap
-out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T3 --files a.py 2>&1); rc=$?
-[ $rc = 8 ] && printf '%s' "$out" | grep -q '^state.py: DIRECT_MODE_CAP T2 (plan pro)' && pass "quick T3 under solo on pro exits 8 DIRECT_MODE_CAP" || fail "cap" "rc=$rc $out"
+out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T4 --files a.py 2>&1); rc=$?
+[ $rc = 8 ] && printf '%s' "$out" | grep -q '^state.py: DIRECT_MODE_CAP T3 (plan pro)' && pass "quick T4 under solo on pro exits 8 DIRECT_MODE_CAP" || fail "cap" "rc=$rc $out"
 fresh5 cap-ok
 S5 --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py >/dev/null 2>&1 && pass "quick T2 is within the cap" || fail "T2 refused"
+fresh5 cap-ok-t3
+S5 --runtime claude quick --goal g --workflow bugfix --tier T3 --files a.py >/dev/null 2>&1 && pass "quick T3 is within the cap (T3 runs in direct mode)" || fail "T3 refused"
 fresh5 cap-none
 out=$(CLAUDE_CONFIG_DIR="$W5/nowhere" CODEX_HOME="$W5/nowhere" python3 "$STATE" --root "$R5" --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py 2>&1); rc=$?
 [ $rc = 0 ] && pass "no profile file: no cap" || fail "no-profile quick" "rc=$rc $out"
-out=$(CLAUDE_CONFIG_DIR="$W5/nowhere" python3 "$STATE" --root "$R5" --runtime claude quick --goal g --workflow bugfix --tier T3 --files a.py --force 2>&1); rc=$?
-[ $rc = 1 ] && pass "and quick still refuses T3 on its own (exit 1)" || fail "T3 without profile" "rc=$rc"
+out=$(CLAUDE_CONFIG_DIR="$W5/nowhere" python3 "$STATE" --root "$R5" --runtime claude quick --goal g --workflow bugfix --tier T4 --files a.py --force 2>&1); rc=$?
+[ $rc = 1 ] && pass "and quick still refuses T4 on its own (exit 1)" || fail "T4 without profile" "rc=$rc"
 python3 "$RP" max --fable yes --print agentic > "$CLH/claude-agentic/profile.json"
 [ "$(cd "$W5" && S5 --runtime claude profile --tier STRONG)" = opus ] && pass "profile --tier STRONG prints this runtime's model" || fail "profile --tier claude"
 [ "$(cd "$W5" && S5 --runtime codex profile --tier STRONG)" = gpt-5.6-sol ] && pass "and Codex's under codex" || fail "profile --tier codex"

@@ -16,7 +16,7 @@ Facts are collected cheaply; thinking is paid for. Session model {{SESSION_MODEL
 |---|---|---|
 | FAST | `{{FAST_MODEL}}` / `{{FAST_EFFORT}}` | reading and running: file search, listings, counting, logs and test output, running a command and reporting it (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
 | BALANCED | `{{BALANCED_MODEL}}` / `low`–`{{BALANCED_EFFORT}}` | discovery with judgement, context compression, mechanical edits, release assembly, the T2 review (`ai-discovery`, `ai-context`, `ai-implementer`, `ai-release`, `ai-reviewer` at T2) |
-| STRONG | `{{STRONG_MODEL}}` / `{{STRONG_EFFORT}}` | planning and plan review at T3+, adversarial review, security review (`ai-planner`, `ai-reviewer`, `ai-security`) |
+| STRONG | `{{STRONG_MODEL}}` / `{{STRONG_EFFORT}}` | delegated planning and plan review at T4+, the diff review from T3, adversarial review, security review (`ai-planner`, `ai-reviewer`, `ai-security`) |
 | EXPERT | {{EXPERT_ROW}} | design (`architect`) and `ai-expert`, only when STRONG said it cannot settle the question |
 
 <!-- stub: runtime=claude -->
@@ -69,7 +69,7 @@ The main session itself runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}` and does 
 
 <!-- stub: runtime=codex -->
 1. **Review** of a finished change before a commit is proposed: `ai-reviewer`. Add `ai-security` for authentication, authorization, secrets, payments, personal data, webhooks, and any T4/T5 change.
-2. **Risk and plan**: `ai-risk` on {{BALANCED_MODEL}} answered T3+ or `confidence: uncertain` — re-run it as `ai-risk-strong`; use `ai-planner-strong` at T3/T4.
+2. **Risk and plan**: `ai-risk` on {{BALANCED_MODEL}} answered T3+ or `confidence: uncertain` — re-run it as `ai-risk-strong`; use `ai-planner-strong` at T4 (at T3 the session plans in plan mode; `ai-planner-strong` only on the T3 trigger in `delegate_anyway_when`).
 3. **Root cause** after a first diagnosis in the session already failed once (the fix did not hold, or competing hypotheses remain), or a bug in concurrency, retries/idempotency, caching or data integrity.
 4. **Reversible design** with two or more viable options that are costly to change later — module structure, service boundaries, a library choice: `architect`.
 

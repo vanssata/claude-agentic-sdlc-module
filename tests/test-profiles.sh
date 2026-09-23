@@ -63,13 +63,13 @@ done
 out=$(python3 "$RESOLVE" pro --plan team-pro --print agentic | jq -c .budgets.fan_out)
 [ "$(jq -r '"\(.max_parallel_agents)|\(.serial)"' <<<"$out")" = "1|true" ] \
     && pass "team-pro: one agent, serial" || fail "team-pro fan_out: $out"
-for name in pro max max20 codex-plus codex-pro; do
+for name in pro max max20 balanced-max codex-plus codex-pro codex-balanced-max; do
     jq -e '.budgets.fan_out.max_parallel_on_strong <= 4
            and .budgets.fan_out.max_parallel_on_strong <= .budgets.fan_out.max_parallel_agents' \
         "$TMP/$name.json" >/dev/null \
         && pass "$name: at most 4 on STRONG" || fail "$name: max_parallel_on_strong too high"
-    jq -e '.budgets.direct_mode.max_tier == "T2"' "$TMP/$name.json" >/dev/null \
-        && pass "$name: direct mode up to T2" || fail "$name: direct_mode.max_tier"
+    jq -e '.budgets.direct_mode.max_tier == "T3"' "$TMP/$name.json" >/dev/null \
+        && pass "$name: direct mode up to T3" || fail "$name: direct_mode.max_tier"
 done
 for name in codex-plus codex-pro; do
     jq -e '.claude_agentic.budgets.fan_out.max_parallel_agents <= .agents.max_concurrent_threads_per_session' \
