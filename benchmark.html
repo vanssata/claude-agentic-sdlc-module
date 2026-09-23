@@ -186,6 +186,11 @@ tr.hl td{background:#fff4ee}
 .cmp .b{background:var(--m300)}.cmp .a{background:var(--accent)}
 .chart svg{display:block;width:100%;height:auto;overflow:visible}
 .chart text{font:500 11px var(--mono);fill:var(--muted)}
+.kpis.res b{color:#1d7a3a}
+.fine{font-size:14px;color:var(--muted);margin:12px 0 0;max-width:900px}
+.ok{color:#1d7a3a;font-weight:600}.na{color:var(--m400)}.warn{color:#9a6a00;font-weight:600}
+.gates td,.gates th{text-align:center;white-space:nowrap}.gates td:first-child,.gates th:first-child{text-align:left}
+.matrix .est{color:var(--muted)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
 </head>
@@ -208,7 +213,7 @@ tr.hl td{background:#fff4ee}
 <main id="top">
 <section class="hero">
   <div class="wrap">
-    <p class="status"><i></i>v0 · suite frozen 23 Sep 2026 · first run pending</p>
+    <p class="status"><i></i>v0 · suite frozen 23 Sep 2026 · 9 tasks measured · plain arms pending</p>
     <h1>Plain Claude. Plain Codex. <em>claude-agentic.</em></h1>
     <p class="lede">A public benchmark built from <strong>two weeks of real production work</strong>: the tasks, their risk tiers and the acceptance checks were fixed before any arm ran. Every number on this page comes with the command that produced it, and every cell without a run says so.</p>
     <div class="facts">
@@ -323,14 +328,31 @@ python3 skills/usage-report/usage-report.py --all --provider claude</pre>
 <section id="results">
   <div class="wrap">
     <h2>Results</h2>
-    <p class="sub">No arm has run the suite yet. This table fills in from <code>results/v1/*.json</code> when the runs land; until then every cell says pending, on purpose.</p>
-    <div class="tbl" style="margin-top:32px">
+    <p class="sub">The three-arm run is next. What has already run: <b>nine real tasks through claude-agentic on 23 Sep</b>, each graded by its own gates and recorded in <code>.ai/reports/&lt;task-id&gt;/</code>. That is the column filled in below; the plain arms fill in from <code>results/v1/*.json</code> when they run.</p>
+
+    <div class="kpis res">
+      <div><b>9 / 9</b><span>tasks closed, none abandoned</span></div>
+      <div><b>0</b><span>new test regressions; the one red suite was pre-existing and classified as such</span></div>
+      <div><b>9 / 9</b><span>adversarial reviews passed, no BLOCKER or HIGH left open</span></div>
+      <div><b>2 / 2</b><span>T4 security reviews and e2e runs passed; 7 human gates signed</span></div>
+    </div>
+
+    <div class="tbl" style="margin-top:48px">
       <table class="matrix">
-        <thead><tr><th>Tier</th><th>Tasks</th><th>Plain Claude<br>solved · scope · $</th><th>Plain Codex<br>solved · scope · $</th><th>claude-agentic<br>solved · scope · $</th></tr></thead>
+        <thead><tr><th>Tier</th><th>Suite</th><th>Plain Claude<br>solved · scope · $</th><th>Plain Codex<br>solved · scope · $</th><th>claude-agentic, measured<br>closed · reviewed · $</th></tr></thead>
         <tbody id="matrix"></tbody>
       </table>
     </div>
+    <p class="fine">≈ The plain-Claude dollar figure is the same tokens repriced at Opus 5.5, an estimate until that arm runs; its solved and scope cells stay pending. T0 and T1 tasks had no task journal, so nothing is claimed for them.</p>
 
+    <h3 style="margin-top:64px">Every measured task, gate by gate</h3>
+    <div class="tbl" style="margin-top:20px">
+      <table class="gates">
+        <thead><tr><th>Task</th><th>Tier</th><th>Tests</th><th>Review</th><th>Security</th><th>E2E</th><th>Human gate</th><th>Scope</th><th>$</th></tr></thead>
+        <tbody id="gates"></tbody>
+      </table>
+    </div>
+    <div class="note"><b>Scope, read plainly.</b> Five scope widenings happened, on B-21 and B-22. None was silent: each is a <code>scope_change</code> event in the task journal, with the reason, made before the file was touched, because the scope guard refuses the edit otherwise.</div>
   </div>
 </section>
 
@@ -438,9 +460,6 @@ bench/report.py results/v1/ &gt; results/v1/summary.json</pre>
   $('#dist').innerHTML = TIERS.map((k, i) => per[i] ? `<span style="flex:${per[i]};background:var(--${k.toLowerCase()})" title="${k}: ${per[i]}">${k} · ${per[i]}</span>` : '').join('');
   $('#legend').innerHTML = ['T0 answer only','T1 trivial','T2 contained','T3 cross-cutting','T4 licensing, payments, data'].map((l, i) => `<span><i style="background:var(--t${i})"></i>${l}</span>`).join('');
 
-  const pend = '<span class="pend">pending</span>';
-  $('#matrix').innerHTML = TIERS.map((k, i) => `<tr><td><span class="tier ${k}" style="background:var(--${k.toLowerCase()})">${k}</span></td><td>${per[i]}</td><td>${pend}</td><td>${pend}</td><td>${pend}</td></tr>`).join('')
-    + `<tr><td><b>All</b></td><td><b>${T.length}</b></td><td>${pend}</td><td>${pend}</td><td>${pend}</td></tr>`;
 
   // measured 23 Sep 2026: usage-report --task windows, priced call by call with prices.json
   // [id, tier, minutes, tokens M, opus $, sonnet $, all-Opus $, budget M]
@@ -470,6 +489,26 @@ bench/report.py results/v1/ &gt; results/v1/summary.json</pre>
 
   $('#tiersum').innerHTML = ['T2','T3','T4'].map(k => { const rs = R.filter(r => r[1] === k), a = sum(rs, cost), o = sum(rs, r => r[6]), s = pct(a, o);
     return `<div><span class="tier ${k}" style="background:var(--${k.toLowerCase()})">${k}</span> <span>${rs.length} tasks</span><b>${usd(a)}</b><span>${s < 0 ? s.toFixed(1) + '% vs ' + usd(o) + ' on Opus alone' : 'no saving: all on Opus'}</span></div>`; }).join('');
+
+
+  // results: the claude-agentic column from the task journals, the rest pending
+  // [id, tests, review, security, e2e, human gates, scope changes]
+  const G = {
+    'B-16':['pre-existing','passed','—','—',0,0], 'B-17':['passing','passed','passed','passing',2,0], 'B-18':['passing','passed','passed','passing',2,0],
+    'B-19':['passing','passed','—','—',0,0], 'B-20':['passing','passed','—','—',0,0], 'B-21':['passing','passed','n/a','—',1,2],
+    'B-22':['passing','passed','—','—',1,3], 'B-23':['passing','passed','—','—',1,0], 'B-42':['not recorded','passed','—','—',0,0],
+  };
+  const cls = v => /^(passing|passed)$/.test(v) ? 'ok' : v === 'pre-existing' ? 'warn' : 'na';
+  const pend = '<span class="pend">pending</span>';
+  $('#matrix').innerHTML = TIERS.map((k, i) => { const rs = R.filter(r => r[1] === k);
+    const us = rs.length ? `<span class="ok">${rs.length} / ${rs.length}</span> · <span class="ok">${rs.length} / ${rs.length}</span> · <b>${usd(sum(rs, cost))}</b>` : '<span class="na">not measured</span>';
+    const pc = rs.length ? `${pend} · ${pend} · <span class="est">≈${usd(sum(rs, r => r[6]))}</span>` : `${pend}`;
+    return `<tr><td><span class="tier ${k}" style="background:var(--${k.toLowerCase()})">${k}</span></td><td>${per[i]}</td><td>${pc}</td><td>${pend}</td><td>${us}</td></tr>`; }).join('')
+    + `<tr><td><b>All</b></td><td><b>${T.length}</b></td><td>${pend} · ${pend} · <span class="est">≈${usd(totO)}</span></td><td>${pend}</td><td><span class="ok">9 / 9</span> · <span class="ok">9 / 9</span> · <b>${usd(tot)}</b></td></tr>`;
+  $('#gates').innerHTML = R.map(r => { const g = G[r[0]];
+    return `<tr><td class="id">${r[0]}</td><td><span class="tier ${r[1]}" style="background:var(--${r[1].toLowerCase()})">${r[1]}</span></td>` +
+      g.slice(0, 4).map(v => `<td class="${cls(v)}">${v}</td>`).join('') +
+      `<td class="${g[4] ? 'ok' : 'na'}">${g[4] ? g[4] + ' signed' : '—'}</td><td class="${g[5] ? 'warn' : 'ok'}">${g[5] ? g[5] + ' recorded' : 'held'}</td><td>${usd(cost(r))}</td></tr>`; }).join('');
 
   // before / after, per request
   const BA = [['Cost per request', 0.1136, 0.1042, v => '$' + v.toFixed(3)], ['Output tokens', 623, 501, v => v], ['Cache writes', 4903, 3209, v => (v / 1000).toFixed(1) + 'K'], ['Context re-read', 124046, 126344, v => (v / 1000).toFixed(0) + 'K']];
