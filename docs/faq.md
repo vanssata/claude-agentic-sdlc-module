@@ -172,7 +172,7 @@ Write `e2e_command: none` in `.ai/policies/testing.md`. An empty line means
 ## Where is Fable used on Max?
 
 Only on `architect`, and only when installed with `--fable yes` (the default on
-Max and Team Max). The session itself is Opus 5 [1m] by default (`/model opus` for a 200k session), `ai-expert` is pinned
+Max and Team Max). The session itself is Opus 5.5 [1m] by default (`claude-opus-5-5[1m]`) (`/model opus` for a 200k session), `ai-expert` is pinned
 to `opus` at `xhigh`, and every reader and reviewer runs on Sonnet or Opus. Design questions
 outside a task are the one place a stronger model changes the outcome enough
 to pay for.

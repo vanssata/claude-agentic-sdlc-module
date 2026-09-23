@@ -60,7 +60,7 @@ registered, and which model each tier resolves to.
 | BALANCED | `sonnet` | `gpt-5.6-terra` (Terra) |
 | STRONG | `opus` | `gpt-5.6-sol` (Sol) |
 | EXPERT | Fable 5.1, or Opus 5 with `--fable no` | `gpt-6-astra` (Astra) |
-| session | Opus 5 [1m] (1M window) at `medium` by default on Max, `/model opus` for a 200k session (Sonnet on Pro) | Sol at `high` |
+| session | Opus 5.5 [1m] (`claude-opus-5-5[1m]`, 1M window) at `medium` by default on Max, `/model opus` for a 200k session (Sonnet on Pro) | Sol at `high` |
 
 A repository can carry both instruction files over one `.ai/` tree. The task
 state is `.ai/state/current.json` either way, so a task started in one runtime
@@ -105,7 +105,7 @@ zero model cost — no model is involved in writing or reading any of these file
 ./install.sh --plan pro            # Pro: opusplan session, opus pinned for EXPERT
 ./install.sh --plan team-pro       # Team, Standard seat: the pro profile with the Team label
 ./install.sh --plan team-max       # Team, Premium seat: the max profile, Fable on architect
-./install.sh --plan max            # Max 5x: Opus 5 [1m] session (1M window by default), Fable only on architect
+./install.sh --plan max            # Max 5x: Opus 5.5 [1m] session (1M window by default), Fable only on architect
 ./install.sh --plan max20          # Max 20x: max's settings, larger budgets (6 agents, EXPERT without asking)
 ./install.sh --plan max --fable no # no Fable anywhere; architect inherits the Opus session
 ./install.sh --plan balanced-max   # BalancedMax: only the session is strong (Opus 5.5, 200k); readers on Haiku,
@@ -214,7 +214,7 @@ it should not be the most expensive model by default.
 | `autoCompactWindow` (Claude) | 800 000 on Max and Team Max, 300 000 on Pro and Team Pro. Claude Code caps it at the model's own window, so one setting means compaction near 167k on a 200k model and near 767k on a `[1m]` one; on Pro the cap decides, at 167k | the model window |
 | `claude-1m [opus\|fable]` (Claude, Max and Team Max) | pins one session to `opus[1m]`, or to `fable[1m]` (Fable 5.1), at launch. The large window comes from the per-model cap, not from the launcher, so `/model opus[1m]` reaches it too; `CLAUDE_1M_COMPACT_WINDOW` exports `CLAUDE_CODE_AUTO_COMPACT_WINDOW` for that process alone to compact *earlier* than 767k | `/model` only, and the same cap applies |
 | `context-guard.py` (both runtimes) | warns from 80% of the point where compaction fires and holds a prompt back once from 120% — 133k and 200k on a 200k Max session, 613k and 920k on a `[1m]` one; `AI_CONTEXT_WARN_TOKENS` / `AI_CONTEXT_BLOCK_TOKENS` set them in tokens, `0` turns one off | no guard |
-| `model` (Claude) | `opusplan` on Pro and Team Pro: Opus in plan mode, Sonnet when executing; `opus[1m]` (1M window) by default on Max, Max 20x and Team Max, `opus` (200k) per task through `/model`; `claude-opus-5-5` (200k) on BalancedMax | Sonnet 5 on Pro |
+| `model` (Claude) | `opusplan` on Pro and Team Pro: Opus in plan mode, Sonnet when executing; `claude-opus-5-5[1m]` (Opus 5.5, 1M window) by default on Max, Max 20x and Team Max, `opus` (200k) per task through `/model`; `claude-opus-5-5` (200k) on BalancedMax | Sonnet 5 on Pro |
 | `effortLevel` (Claude) | `medium` on both plans; agents raise it per task | — |
 | `model` (Codex) | `gpt-5.6-sol` at `high` on Pro, `medium` on Plus; subagents `gpt-5.6-terra` at `medium` | — |
 | `max_concurrent_threads_per_session` (Codex) | 6 on Pro, 3 on Plus | runtime default |
@@ -426,7 +426,7 @@ deliberately not set: before Claude Code v2.1.251 it overrides the frontmatter a
 the per-call model, which put every agent on Sonnet. A STRONG or EXPERT agent runs
 only when a named trigger fires; the triggers are listed in `.ai/policies/model-routing.md`.
 
-On a Max plan the session runs Opus 5 [1m] by default at `medium` effort,
+On a Max plan the session runs Opus 5.5 [1m] by default at `medium` effort,
 compacting near 767k tokens (`autoCompactWindow` 800 000, uncapped on a 1M model)
 — `/model opus` gives a 200k session that compacts near 167k, cheaper per turn for
 a small task — and escalates from there: `ai-expert` pins `opus` at `xhigh`, so a session switched to
