@@ -120,8 +120,8 @@ h2{font:700 clamp(34px,4.6vw,64px)/1.1 var(--font);letter-spacing:-.025em;margin
 .bar .track{display:flex;height:48px;overflow:hidden;margin:12px 0}
 .bar .seg{display:flex;align-items:center;padding:0 16px;white-space:nowrap;font-weight:700;font-size:15px;transform-origin:0 50%;transform:scaleX(0);transition:transform 1.2s cubic-bezier(.2,.8,.2,1)}
 .bar.in .seg{transform:none}
-.bar .ctx{flex:82;background:var(--accent);color:var(--abr-black)}
-.bar .out{flex:18;background:var(--m800);color:var(--abr-white);transition-delay:.3s}
+.bar .ctx{flex:79;background:var(--accent);color:var(--abr-black)}
+.bar .out{flex:21;background:var(--m800);color:var(--abr-white);transition-delay:.3s}
 
 /* LADDER */
 .ladder{height:320vh}
@@ -161,6 +161,23 @@ h2{font:700 clamp(34px,4.6vw,64px)/1.1 var(--font);letter-spacing:-.025em;margin
 .num .l b{color:var(--abr-white)}
 .num .l em{font-weight:600}
 .fine{margin-top:48px;max-width:880px;font:300 14px/1.7 var(--font);color:var(--m300)}
+.fleet{padding:clamp(80px,10vw,140px) 0}
+.fleet .stamp{--frame:var(--fg);color:var(--fg)}
+.fleet h2{max-width:17ch}
+.fleet .nums{border-top-color:var(--fg)}
+.fleet .num+.num{border-left-color:var(--line)}
+.fleet .num .l b{color:var(--fg)}
+.fleet .hero-num p b{color:#b3401c}
+.fleet .fine{color:var(--muted)}
+.fbars{margin-top:56px;display:grid;gap:12px;max-width:900px}
+.fb{display:grid;grid-template-columns:minmax(150px,220px) 1fr 84px;gap:20px;align-items:center;font-size:15px}
+.fb .n small{display:block;color:var(--muted);font:400 13px var(--mono);margin-top:2px}
+.fb .t{display:block;height:24px;background:var(--m100)}
+.fb .t i{display:block;height:100%;background:var(--accent);transform-origin:0 50%;transform:scaleX(0);transition:transform 1.1s cubic-bezier(.2,.8,.2,1)}
+.fbars.in .t i{transform:scaleX(1)}
+.fb .t i.plain{background:var(--m400)}
+.fb .v{font:600 15px var(--mono);text-align:right}
+@media (max-width:700px){.fb{grid-template-columns:1fr 84px}.fb .t{grid-column:1/-1}}
 .day{margin-top:60px;display:grid;grid-template-columns:auto 1fr;gap:16px 32px;align-items:center;max-width:880px}
 .day .lab{font:400 15px var(--font);color:var(--muted)}
 .day .b{height:40px;background:var(--m700);display:flex;align-items:center;justify-content:flex-end;padding:0 14px;color:var(--abr-white);font:700 15px var(--font);transform-origin:0 50%;transform:scaleX(.02);transition:transform 1.4s cubic-bezier(.2,.8,.2,1)}
@@ -320,7 +337,7 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
   *,*::before,*::after{animation:none!important;transition:none!important}
   h1 .line span{transform:none}.lede,.cta-row,.runtimes{opacity:1}
   [data-rv]{opacity:1;transform:none}
-  .bar .seg,.day .b,.step{transform:none}
+  .bar .seg,.day .b,.step,.fb .t i{transform:none}
   .kin span{opacity:1}
   .plane{transform:none!important}
   .ladder{height:auto}.ladder .stick{position:relative;height:auto;padding:100px 0}
@@ -340,7 +357,7 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
     claude-agentic
   </a>
   <nav aria-label="Sections">
-    <a href="#why">Why</a><a href="#routing">Routing</a><a href="#proof">Measured</a><a href="#router">Risk tiers</a><a href="#guards">Guards</a><a href="#install">Install</a><a href="demo.html">Demo</a><a href="benchmark.html">Benchmark</a>
+    <a href="#why">Why</a><a href="#routing">Routing</a><a href="#proof">Measured</a><a href="#fleet">A month</a><a href="#router">Risk tiers</a><a href="#guards">Guards</a><a href="#install">Install</a><a href="demo.html">Demo</a><a href="benchmark.html">Benchmark</a>
   </nav>
   <a class="btn secondary" href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub ↗</a>
 </header>
@@ -440,10 +457,10 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
   <div class="wrap">
     <div>
       <h2 id="bill-h" data-rv>The expensive part is <em>not</em> the answer.</h2>
-      <p class="sub" data-rv class="d1">In measured usage, more than 80% of the cost was the main session re-reading its own context, cache read and write, not output. So the session model and the context length are the levers that matter.</p>
+      <p class="sub" data-rv class="d1">Across 26,219 measured calls on one machine, <strong>79% of the cost was the session re-reading its own context</strong> — cache reads alone are 96% of all tokens — and only 21% was output. So the session model and the context length are the levers that matter.</p>
       <div class="bar" data-rv id="bar">
-        <div>where a session’s cost goes</div>
-        <div class="track"><div class="seg ctx">re-reading context · 80%+</div><div class="seg out">output</div></div>
+        <div>where a session’s cost goes · 26,219 calls, 11 projects, both runtimes</div>
+        <div class="track"><div class="seg ctx">re-reading context · 79%</div><div class="seg out">output · 21%</div></div>
       </div>
     </div>
     <p class="kin" id="kin" aria-label="So claude-agentic keeps one short always-loaded file per runtime, sends reading to the cheapest model, spends the strong model on plans and reviews, and never lets a subagent fan out without a reason.">
@@ -501,6 +518,36 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
       <span class="lab">After · 1,784 req</span><div class="b now" style="width:91.7%">$0.104 / req</div>
     </div>
     <p class="fine">One developer, one Max seat, real work in two repositories. Dollars are list-price equivalents from <code>/usage-report</code>, not an invoice: the plan is a subscription. The before window is 15 Sep to 23 Sep 12:30 UTC (5,270 requests, $598.47), the after window is the rest of that day to 19:15 UTC (1,784 requests, $185.88). An early reading at 924 requests showed −19%; the full afternoon settled at −8.3%. Your numbers will differ. The report that produced these runs on your machine too.</p>
+  </div>
+</section>
+
+<!-- FLEET: the whole machine, not one afternoon -->
+<section class="fleet" id="fleet" aria-labelledby="fl-h">
+  <div class="wrap">
+    <span class="stamp frame" data-rv>SCANNED · 23 SEP 2026 · EVERY PROJECT ON THE MACHINE</span>
+    <h2 id="fl-h" data-rv>Then we priced the <em>whole</em> machine.</h2>
+    <p class="sub" data-rv>One afternoon in two repositories is a small claim. So the same parser read <strong>every model call still on disk</strong>: both runtimes, eleven projects, 2 Aug to 23 Sep. This is what a month of agentic work on real client code actually costs.</p>
+    <div class="hero-num" data-rv>
+      <div class="big">$3,021</div>
+      <p>list price for a month<b>2.86B tokens · 26,219 calls · 16 active days</b></p>
+    </div>
+    <div class="nums">
+      <div class="num" data-rv><div class="v" data-count="96" data-suffix="%">96%</div><div class="l"><b>of tokens are cache reads</b>, billed at a tenth of the input rate — the bill is context, not code</div></div>
+      <div class="num d1" data-rv><div class="v" data-count="38">38</div><div class="l"><b>tasks through <code>/ai-task</code></b> in four repositories, every one closed, none abandoned</div></div>
+      <div class="num d2" data-rv><div class="v" data-count="21.2" data-prefix="−" data-suffix="%" data-dec="1">−21.2%</div><div class="l"><b>on the 11 T2 tasks</b> vs the same tokens on Opus alone, <a href="benchmark.html#fleet">task by task</a></div></div>
+      <div class="num d3" data-rv><div class="v" data-count="27" data-suffix="%">27%</div><div class="l"><b>of the spend is subagents</b> — readers, reviewers and testers, mostly off the top tier</div></div>
+    </div>
+
+    <div class="fbars" data-rv>
+      <div class="fb"><span class="n">claude-agentic<small>plugin · 9 days</small></span><span class="t"><i style="width:100%"></i></span><span class="v">$733</span></div>
+      <div class="fb"><span class="n">Desktop product editor<small>TypeScript · 8 days</small></span><span class="t"><i style="width:89%"></i></span><span class="v">$656</span></div>
+      <div class="fb"><span class="n">Design system v2<small>TypeScript · 9 days</small></span><span class="t"><i style="width:76%"></i></span><span class="v">$560</span></div>
+      <div class="fb"><span class="n">Learning workbench<small>prototype · no <code>.ai/</code></small></span><span class="t"><i class="plain" style="width:62%"></i></span><span class="v">$451</span></div>
+      <div class="fb"><span class="n">Legacy storefront v1<small>PHP · Symfony</small></span><span class="t"><i style="width:37%"></i></span><span class="v">$274</span></div>
+      <div class="fb"><span class="n">six smaller projects<small>ops, plugins, this site</small></span><span class="t"><i class="plain" style="width:41%"></i></span><span class="v">$298</span></div>
+    </div>
+
+    <p class="fine">Project names are generalised; the originals are client code. Orange bars are repositories that had claude-agentic installed at the time, grey ones are not. Dollars are list-price equivalents, not an invoice — the seat is a Max subscription — and Codex rates are marked unverified in <code>prices.json</code>. Only transcripts still on disk when the scan ran are counted, so the window is what survived rotation, not a ledger. <a href="benchmark.html#fleet">Every project, every task and the daily curve are on the benchmark page.</a></p>
   </div>
 </section>
 

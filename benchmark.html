@@ -191,6 +191,13 @@ tr.hl td{background:#fff4ee}
 .ok{color:#1d7a3a;font-weight:600}.na{color:var(--m400)}.warn{color:#9a6a00;font-weight:600}
 .gates td,.gates th{text-align:center;white-space:nowrap}.gates td:first-child,.gates th:first-child{text-align:left}
 .matrix .est{color:var(--muted)}
+.mix{display:flex;height:10px;min-width:96px;background:var(--m100)}
+.mix span{display:block;height:100%}
+table.fleet{min-width:940px}
+.fleet .sumrow td{border-top:2px solid var(--fg);border-bottom:0}
+.fleet td .check{white-space:normal;font-size:13px}
+.gates.fleet td,.gates.fleet th{white-space:nowrap}
+#f-tiers{grid-template-columns:repeat(auto-fit,minmax(212px,1fr))}
 
 /* motion: only with JS and without reduced motion (html.motion); transform, opacity and clip-path only */
 :root{--e:cubic-bezier(.2,.7,.2,1)}
@@ -247,7 +254,7 @@ tr.hl td{background:#fff4ee}
     claude-agentic
   </a>
   <nav aria-label="Sections">
-    <a href="#arms">Arms</a><a href="#suite">Tasks</a><a href="#scoring">Scoring</a><a href="#costs">Costs</a><a href="#results">Results</a><a href="#reproduce">Reproduce</a><a href="demo.html">Demo</a><a href="./">Home</a>
+    <a href="#arms">Arms</a><a href="#suite">Tasks</a><a href="#scoring">Scoring</a><a href="#costs">Costs</a><a href="#fleet">Machine</a><a href="#results">Results</a><a href="#reproduce">Reproduce</a><a href="demo.html">Demo</a><a href="./">Home</a>
   </nav>
 </header>
 
@@ -366,6 +373,56 @@ python3 skills/usage-report/usage-report.py --all --provider claude</pre>
   </div>
 </section>
 
+<section id="fleet">
+  <div class="wrap">
+    <h2>Everything this machine ran</h2>
+    <p class="sub">The section above prices nine tasks. This one prices <strong>every model call still on disk</strong>: both runtimes, every project, 2&nbsp;Aug to 23&nbsp;Sep 2026, read by the same <code>usage-report</code> parser at zero model cost. None of it is an arm of the benchmark — it is the working history the suite was cut from, and it is what a real month of agentic work costs.</p>
+
+    <div class="kpis">
+      <div><b id="f-cost"></b><span>list price, all projects, both runtimes</span></div>
+      <div><b id="f-tok"></b><span>tokens over <span id="f-calls"></span> model calls</span></div>
+      <div><b id="f-proj"></b><span>projects with usage, <span id="f-days"></span> active days</span></div>
+      <div><b id="f-tasks"></b><span>tasks through <code>/ai-task</code>, all closed</span></div>
+    </div>
+
+    <div class="note"><b>Read the tokens before the dollars.</b> <span id="f-cr"></span> of all tokens are cache <em>reads</em>, billed at a tenth of the input rate: the spend is dominated by re-reading context, not by writing code. Output is <span id="f-out"></span> of the tokens and <span id="f-outs"></span> of the bill.</div>
+
+    <h3 style="margin-top:64px">Per project</h3>
+    <p class="sub">Project names are generalised — the originals are client code, as everywhere else on this site. <code>.ai/</code> marks a repository that had claude-agentic installed at the time.</p>
+    <div class="swatch"><span><i style="background:var(--accent)"></i>Opus 5</span><span><i style="background:#8a3a22"></i>Fable 5.1</span><span><i style="background:#5b8fd9"></i>Sonnet 5</span><span><i style="background:#58a86a"></i>Haiku 4.5</span><span><i style="background:#9a9a9a"></i>Codex</span></div>
+    <div class="tbl" style="margin-top:18px">
+      <table class="fleet">
+        <thead><tr><th>Project</th><th>Stack</th><th><code>.ai/</code></th><th>Sessions</th><th>Days</th><th>Tokens</th><th>Model mix by spend</th><th style="text-align:right">List price</th></tr></thead>
+        <tbody id="f-rows"></tbody>
+      </table>
+    </div>
+    <p class="fine">Worktrees are folded into their parent repository, and a project's Codex threads are folded in by working directory. Subagent spend is included in every row and named under the project.</p>
+
+    <h3 style="margin-top:72px">38 tasks that went through the pipeline</h3>
+    <p class="sub">Four of these repositories ran <code>/ai-task</code>, leaving a state file per task under <code>.ai/reports/&lt;task-id&gt;/</code>, and six of them a full event journal. Every one of the 38 reached <code>done</code>; none was abandoned. Tokens are that project's transcripts inside the task's own window, repriced call by call — and beside them, the same tokens if every call had stayed on Opus.</p>
+    <div class="tiersum" id="f-tiers"></div>
+
+    <div class="filters" role="group" aria-label="Filter tasks by window quality">
+      <button type="button" data-w="all" aria-pressed="true">All 38</button>
+      <button type="button" data-w="j">Journal window</button>
+      <button type="button" data-w="t">State window ≤3h</button>
+      <button type="button" data-w="l">Overnight window</button>
+    </div>
+    <div class="tbl">
+      <table class="gates fleet">
+        <thead><tr><th>Task</th><th>Repo</th><th>Tier</th><th>Kind</th><th>Steps</th><th>Tests</th><th>Review</th><th>Security</th><th>Window</th><th>Tokens</th><th>$</th><th>vs Opus</th></tr></thead>
+        <tbody id="f-tasks-rows"></tbody>
+      </table>
+    </div>
+    <div class="note"><b>The window is the weak part, and it is in the table.</b> A task's cost is every call its project made between the task's first and last recorded timestamp, so anything else done in those minutes is counted with it. Six tasks have an event journal and therefore a tight window; twenty-two have a state window under three hours; ten span an overnight gap and are an <em>upper bound</em>, marked as such. The nine tasks in <a href="#costs">Costs</a> are measured the tight way and stay the ones to quote.</div>
+
+    <pre style="margin-top:72px"><span class="c"># every number in this section, on your own machine</span>
+python3 skills/usage-report/usage-report.py --all
+python3 skills/usage-report/usage-report.py --task T-2026-09-22-001 --project /path/to/repo</pre>
+    <div class="note"><b>What this is not.</b> No arm ran twice here, no task was graded by a hidden test, and nothing is controlled: it is one developer's real work, so it says what the harness costs in practice, not whether it is better. Codex dollars are an estimate — <code>prices.json</code> marks those rates unverified. Only transcripts still present when the scan ran, on <span class="f-scan"></span>, are counted.</div>
+  </div>
+</section>
+
 <section id="results">
   <div class="wrap">
     <h2>Results</h2>
@@ -437,6 +494,72 @@ bench/report.py results/v1/ &gt; results/v1/summary.json</pre>
     <span><a href="./">Home</a> · <a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a> · <a href="https://github.com/vanssata/claude-agentic-sdlc-module/issues">Issues</a></span>
   </div>
 </footer>
+
+<script>
+const FLEET={"PRJ":[["claude-agentic (this repo)","Plugin \u00b7 shell/python",1,732.98,767.7,145,9,22,[522.04,176.06,21.1,2.78,10.99],"09-12","09-23"],["Desktop product editor","TypeScript \u00b7 React/Tauri",1,655.83,578.0,285,8,35,[604.9,22.78,27.69,0.08,0.38],"09-12","09-19"],["Design system v2","TypeScript \u00b7 web",1,560.02,546.3,248,9,36,[440.39,36.93,55.78,0.86,26.06],"09-12","09-21"],["Learning workbench","Prototype \u00b7 mixed",0,450.9,299.5,149,7,34,[293.29,151.72,5.83,0.06,0.0],"09-13","09-20"],["Legacy storefront v1","PHP \u00b7 Symfony",1,273.68,333.5,19,3,15,[223.38,50.3,0.0,0.0,0.0],"08-02","09-08"],["Local model bench","Ops \u00b7 python",0,94.33,72.8,14,1,24,[69.41,20.9,1.23,0.0,2.79],"09-16","09-16"],["Sylius slider plugin","PHP \u00b7 Sylius",1,86.55,98.6,19,2,17,[74.91,8.12,3.52,0.0,0.0],"09-19","09-22"],["ComfyUI / Krita rig","Ops \u00b7 python",0,47.92,52.5,7,2,0,[24.44,0.0,0.0,0.0,23.48],"08-18","09-14"],["Codex routing spike","Plugin \u00b7 shell",0,30.47,36.8,4,1,0,[24.87,0.0,0.0,0.0,5.6],"09-14","09-14"],["Personal site","Static \u00b7 HTML",0,26.19,20.3,5,3,0,[14.39,11.77,0.0,0.04,0.0],"09-16","09-23"],["JetBrains bridge","Plugin \u00b7 Kotlin",0,13.0,14.0,4,2,3,[13.0,0.0,0.0,0.0,0.0],"09-14","09-19"]],"FN":["Design system v2","Desktop product editor","Sylius slider plugin","claude-agentic (this repo)"],"FT":[["2026-09-12-001",0,"T3","refactoring",7,7,1368,31.11,28.5,34.16,"l","passing","passed","not_applicable"],["2026-09-13-001",0,"T0","feature",1,1,3,1.57,0.98,0.98,"t","not_run","not_started","not_started"],["2026-09-13-002",0,"T2","feature",8,8,120,13.21,11.37,14.47,"t","passing","passed","not_applicable"],["2026-09-13-003",0,"T3","refactoring",6,6,1179,13.07,19.37,16.27,"l","passing","passed","not_applicable"],["2026-09-14-001",0,"T4","refactoring",7,7,151,29.65,31.05,34.26,"t","passing","passed","passed"],["2026-09-14-002",0,"T4","refactoring",16,16,5711,158.86,160.45,170.16,"l","passing","passed","not_started"],["2026-09-18-001",0,"T2","refactoring",2,2,17,5.77,4.56,6.33,"t","passing","passed","not_started"],["2026-09-18-002",0,"T2","refactoring",1,1,19,2.46,1.79,2.38,"t","passing","passed","not_started"],["2026-09-18-003",0,"T2","feature",1,1,8,1.11,1.16,1.64,"t","passing","passed","not_started"],["2026-09-18-004",0,"T3","refactoring",7,7,766,13.01,14.26,15.12,"l","passing","passed","not_applicable"],["2026-09-19-001",0,"T3","feature",6,6,42,14.5,16.8,19.73,"t","passing","passed","not_applicable"],["2026-09-19-002",0,"T2","investigation",1,1,13,7.33,3.6,7.01,"t","passing","passed","not_started"],["2026-09-19-003",0,"T4","feature",5,5,485,94.81,109.88,139.34,"l","passing","passed","not_started"],["2026-09-12-001",1,"T3","feature",13,13,124,65.98,55.8,60.46,"t","passing","passed","passed"],["2026-09-12-002",1,"T4","feature",1,12,142,41.03,45.1,46.86,"t","passing","passed","passed"],["2026-09-12-003",1,"T4","bugfix",24,24,104,32.74,34.96,36.77,"t","passing","passed","passed"],["2026-09-12-004",1,"T3","feature",13,13,1361,31.15,36.36,38.61,"l","passing","passed","not_applicable"],["2026-09-13-001",1,"T4","feature",16,16,133,32.44,39.68,41.15,"t","passing","passed","passed"],["2026-09-14-001",1,"T3","feature",7,7,1294,43.5,45.55,61.83,"l","passing","passed","passed"],["2026-09-15-001",1,"T4","feature",8,8,1696,28.13,33.36,36.37,"l","passing","passed","passed"],["2026-09-16-001",1,"T4","feature",12,12,56,22.13,25.49,26.71,"t","passing","passed","passed"],["2026-09-16-002",1,"\u2014","feature",0,0,2,0.47,0.77,0.77,"t","not_run","not_started","not_started"],["2026-09-16-003",1,"T3","feature",5,5,44,7.28,10.11,10.11,"t","passing","passed","not_applicable"],["2026-09-17-001",1,"T4","feature",6,6,81,20.34,28.9,28.97,"t","passing","passed","passed"],["2026-09-17-002",1,"T4","feature",7,7,616,40.6,49.69,50.48,"l","passing","passed","passed"],["2026-09-18-001",1,"T4","feature",13,13,107,29.51,33.56,34.88,"t","passing","passed","passed"],["2026-09-18-002",1,"T4","bugfix",7,7,76,18.91,22.56,22.85,"t","passing","passed","passed"],["2026-09-18-003",1,"T2","bugfix",1,1,3,1.04,0.67,0.93,"t","passing","passed","not_started"],["2026-09-18-004",1,"T4","feature",6,6,770,20.18,24.35,25.87,"l","passing","passed","passed"],["2026-09-19-001",1,"T4","feature",12,12,98,40.59,42.21,43.24,"t","passing","passed","passed"],["2026-09-19-002",1,"T4","feature",11,11,99,31.45,39.67,40.96,"t","passing","passed","passed"],["2026-09-19-003",1,"T4","feature",8,8,63,28.14,35.59,37.52,"t","passing","passed","passed"],["2026-09-22-001",2,"T2","bugfix",3,3,13,7.39,4.46,5.71,"j","passing","passed","not_started"],["2026-09-22-002",2,"T2","bugfix",2,2,11,7.65,4.98,5.8,"j","passing","passed","not_started"],["2026-09-22-003",2,"T2","bugfix",1,1,21,3.86,5.76,4.97,"j","passing","not_started","not_started"],["2026-09-22-004",2,"T2","refactoring",1,1,8,6.4,4.25,4.25,"j","passing","not_started","not_started"],["2026-09-22-005",2,"T2","bugfix",2,2,11,3.82,2.66,3.92,"j","passing","passed","not_started"],["2026-09-21-001",3,"T3","feature",11,11,86,29.67,23.49,23.11,"j","not_run","passed","not_started"]],"TOT":{"cost":3020.97,"tok":2860,"calls":26219,"days":16,"projects":11,"allprojects":32,"crshare":95.7,"outshare":0.9,"outcostshare":21,"sub":27,"labshare":98,"scanned":"23 Sep 2026"}};
+// This machine, every transcript still on disk. Generated by usage-report.py --all; see #fleet for the caveats.
+(() => {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const usd = v => '$' + v.toFixed(2);
+  const money = v => '$' + Math.round(v).toLocaleString('en-US');
+  const { PRJ, FN, FT, TOT } = FLEET;
+  const COL = ['var(--accent)', '#8a3a22', '#5b8fd9', '#58a86a', '#9a9a9a'];
+  const FAM = ['Opus', 'Fable', 'Sonnet', 'Haiku', 'Codex'];
+
+  $('#f-cost').textContent = money(TOT.cost);
+  $('#f-tok').textContent = (TOT.tok / 1000).toFixed(2) + 'B';
+  $('#f-calls').textContent = TOT.calls.toLocaleString('en-US');
+  $('#f-proj').textContent = PRJ.length;
+  $('#f-days').textContent = TOT.days;
+  $('#f-tasks').textContent = FT.length;
+  $('#f-cr').textContent = TOT.crshare + '%';
+  $('#f-out').textContent = TOT.outshare + '%';
+  $('#f-outs').textContent = TOT.outcostshare + '%';
+  document.querySelectorAll('.f-scan').forEach(el => { el.textContent = TOT.scanned; });
+
+  // per project
+  $('#f-rows').innerHTML = PRJ.map(p => {
+    const mix = p[8], tot = mix.reduce((a, b) => a + b, 0) || 1;
+    const bar = mix.map((v, i) => v > 0 ? `<span style="width:${v / tot * 100}%;background:${COL[i]}" title="${FAM[i]} ${usd(v)}"></span>` : '').join('');
+    return `<tr><td><b>${esc(p[0])}</b><span class="check">${p[9]} → ${p[10]} · ${p[7]}% subagents</span></td><td class="mono" style="font-size:13px">${esc(p[1])}</td>
+      <td>${p[2] ? '<span class="pill" style="border-color:var(--accent);color:var(--accent)">yes</span>' : '<span class="pill">—</span>'}</td>
+      <td>${p[5]}</td><td>${p[6]}</td><td>${p[4].toFixed(0)}M</td>
+      <td><span class="mix" title="${mix.map((v, i) => v > 0 ? FAM[i] + ' ' + usd(v) : '').filter(Boolean).join(' · ')}">${bar}</span></td>
+      <td style="text-align:right"><b>${usd(p[3])}</b></td></tr>`;
+  }).join('') + `<tr class="sumrow"><td><b>${PRJ.length} projects</b><span class="check">${TOT.labshare}% of everything on this machine</span></td><td></td><td></td>
+      <td>${PRJ.reduce((n, p) => n + p[5], 0)}</td><td>${TOT.days}</td><td>${PRJ.reduce((n, p) => n + p[4], 0).toFixed(0)}M</td><td></td>
+      <td style="text-align:right"><b>${usd(PRJ.reduce((n, p) => n + p[3], 0))}</b></td></tr>`;
+
+  // tasks
+  const WIN = { j: ['journal', 'ok'], t: ['state ≤3h', 'warn'], l: ['overnight', 'na'] };
+  const pct = (a, b) => b ? Math.round((a / b - 1) * 1000) / 10 : 0;
+  const cls = v => /^(passing|passed)$/.test(v) ? 'ok' : /^(not_applicable|—|not_started|not_run)$/.test(v) ? 'na' : 'warn';
+  const nice = v => String(v).replace(/_/g, ' ');
+  const tiers = [...new Set(FT.map(t => t[2]))].filter(t => /^T\d$/.test(t)).sort();
+  $('#f-tiers').innerHTML = tiers.map(k => {
+    const rs = FT.filter(t => t[2] === k), a = rs.reduce((n, t) => n + t[8], 0), o = rs.reduce((n, t) => n + t[9], 0), s = pct(a, o);
+    return `<div><span class="tier ${k}" style="background:var(--${k.toLowerCase()})">${k}</span> <span>${rs.length} task${rs.length === 1 ? '' : 's'}</span><b>${usd(a)}</b><span>${s < 0 ? s.toFixed(1) + '% vs ' + usd(o) + ' on Opus alone' : 'no saving: all on Opus'}</span></div>`;
+  }).join('');
+
+  const rows = FT.map(t => {
+    const s = pct(t[8], t[9]), w = WIN[t[10]];
+    return `<tr data-w="${t[10]}"><td class="id">${t[0]}</td><td style="font-size:14px">${esc(FN[t[1]])}</td>
+      <td>${/^T\d$/.test(t[2]) ? `<span class="tier ${t[2]}" style="background:var(--${t[2].toLowerCase()})">${t[2]}</span>` : '<span class="pend">—</span>'}</td>
+      <td><span class="pill">${esc(t[3])}</span></td><td>${t[4]}/${t[5]}</td>
+      <td class="${cls(t[11])}">${nice(t[11])}</td><td class="${cls(t[12])}">${nice(t[12])}</td><td class="${cls(t[13])}">${nice(t[13])}</td>
+      <td class="${w[1]}">${w[0]}<span class="check">${t[6] >= 120 ? (t[6] / 60).toFixed(1) + ' h' : t[6] + ' min'}</span></td>
+      <td>${t[7].toFixed(1)}M</td><td><b>${usd(t[8])}</b></td><td>${s < 0 ? `<span class="ok">${s.toFixed(0)}%</span>` : '<span class="pend">—</span>'}</td></tr>`;
+  }).join('');
+  $('#f-tasks-rows').innerHTML = rows;
+
+  const btns = [...document.querySelectorAll('#fleet .filters button')];
+  btns.forEach(b => b.addEventListener('click', () => {
+    btns.forEach(x => x.setAttribute('aria-pressed', x === b));
+    document.querySelectorAll('#f-tasks-rows tr').forEach(tr => { tr.hidden = !(b.dataset.w === 'all' || tr.dataset.w === b.dataset.w); });
+  }));
+})();
+</script>
 
 <script>
 (() => {
