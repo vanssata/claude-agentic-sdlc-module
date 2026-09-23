@@ -8,8 +8,8 @@ INSTALL="$PLUGIN_ROOT/install.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
 echo "== dry run renders for every plan"
-for combo in "max yes:xhigh:fable[1m]" "max no:high:Opus 5 [1m] by default" "pro no:high:Opus 5" \
-             "team-max yes:xhigh:fable[1m]" "team-max no:high:Opus 5 [1m] by default" "team-pro no:high:Opus 5"; do
+for combo in "max yes:xhigh:fable[1m]" "max no:high:Opus 5.5 [1m] by default" "pro no:high:Opus 5" \
+             "team-max yes:xhigh:fable[1m]" "team-max no:high:Opus 5.5 [1m] by default" "team-pro no:high:Opus 5"; do
     args="${combo%%:*}"; rest="${combo#*:}"; effort="${rest%%:*}"; model="${rest#*:}"
     set -- $args
     out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan "$1" --fable "$2" --dry-run 2>&1)
@@ -202,7 +202,7 @@ n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/settings.json")
 [ "$n" = 5 ] && pass "five PreToolUse hooks registered (four guards + runtime-gate)" || fail "expected 5 PreToolUse commands, got $n"
 jq -e '.hooks.Setup[0].hooks[0].command | test("project-scaffold")' "$DIR/settings.json" >/dev/null \
     && pass "the Setup:init scaffold hook is registered" || fail "Setup hook missing"
-[ "$(jq -r .model "$DIR/settings.json")" = "opus[1m]" ] && pass "the max session model is opus[1m] by default, not Fable" || fail "model not set"
+[ "$(jq -r .model "$DIR/settings.json")" = "claude-opus-5-5[1m]" ] && pass "the max session model is pinned to Opus 5.5 [1m], not Fable" || fail "model not set"
 [ "$(jq -r .effortLevel "$DIR/settings.json")" = "medium" ] && pass "the default effort is medium" || fail "effort not set"
 jq -e '.availableModels | index("fable[1m]")' "$DIR/settings.json" >/dev/null && pass "fable[1m] stays available for architect" || fail "fable should remain in availableModels"
 DIRN="$TMP/claude-nofable"; mkdir -p "$DIRN"

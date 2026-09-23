@@ -1,9 +1,6 @@
 {
   "model": "claude-opus-5-5",
   "availableModels": ["claude-opus-5-5", "opus", "opus[1m]", "sonnet", "haiku"],
-  "modelSettings": {
-    "claude-opus-5-5": { "effortLevel": "medium" }
-  },
   "claude_agentic": {
     "inherits": "max",
     "plan": "balanced-max",

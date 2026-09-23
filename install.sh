@@ -14,7 +14,7 @@
 #          Opus, ai-expert on Opus at high; no Fable, no xhigh. It also selects the Codex
 #          balanced-max profile unless --codex-plan is given.
 # --fable  Claude only. auto = yes on max, max20 and team-max, no on pro and team-pro. On max the
-#          session runs Opus 5 [1m] (1M window) either way; yes pins Fable 5.1 [1m] on architect alone.
+#          session runs Opus 5.5 [1m] (1M window) either way; yes pins Fable 5.1 [1m] on architect alone.
 # --codex-plan  Codex only: plus, pro or balanced-max (Sol session, readers on Luna). Defaults to auto-detect from the ChatGPT login in
 #          ~/.codex/auth.json (chatgpt_plan_type); confirmed on a terminal like --plan, and
 #          assumes pro when it cannot detect or ask.
@@ -37,8 +37,8 @@
 #
 # pro and team-pro (a Team Standard seat has Pro's models and limits): session model
 # `opusplan` — Opus in plan mode, Sonnet when executing — and the EXPERT tier pinned to opus.
-# max and team-max (a Team Premium seat has Max's models): session model Opus 5 [1m] (1M window
-# by default; `/model opus` for a 200k session), ai-expert pinned to opus at xhigh, architect alone on Fable.
+# max and team-max (a Team Premium seat has Max's models): session model Opus 5.5 [1m] (1M window
+# by default, pinned as claude-opus-5-5[1m]; `/model opus` for a 200k session), ai-expert pinned to opus at xhigh, architect alone on Fable.
 #
 # This plugin supersedes claude-routing. On the first run it migrates that
 # plugin's managed block into this one's, so the two never coexist.
@@ -419,7 +419,7 @@ pretty() {  # model id -> human name
   case "$1" in
     "fable[1m]") echo "Fable 5.1 [1m]";; fable*) echo "Fable 5.1";;
     opusplan) echo "Opus 5 in plan mode, Sonnet 5 when executing (opusplan)";;
-    "opus[1m]") echo "Opus 5 [1m]";; claude-opus-5-5*) echo "Opus 5.5";; opus*) echo "Opus 5";;
+    "claude-opus-5-5[1m]") echo "Opus 5.5 [1m]";; "opus[1m]") echo "Opus 5 [1m]";; claude-opus-5-5*) echo "Opus 5.5";; opus*) echo "Opus 5";;
     sonnet*) echo "Sonnet 5";; haiku*) echo "Haiku 4.5";; *) echo "$1";;
   esac
 }
