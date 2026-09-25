@@ -149,7 +149,7 @@
         "serial": false
       },
       "direct_mode": {
-        "max_tier": "T2"
+        "max_tier": "T3"
       },
       "expert": {
         "without_asking": true,

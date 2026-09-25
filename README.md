@@ -3,39 +3,45 @@
 [![Version](https://img.shields.io/badge/version-2.0.2-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v2.0.2)
 [![Runtimes](https://img.shields.io/badge/runtimes-Claude%20Code%20%7C%20Codex-d2f878?labelColor=101210)](#one-module-two-runtimes)
 [![Known risks](https://img.shields.io/badge/known%20risks-documented-d2f878?labelColor=101210)](#known-risks)
+[![License: MIT](https://img.shields.io/badge/license-MIT-d2f878?labelColor=101210)](LICENSE)
 
-**Version 2.0.2**, the version `.codex-plugin/plugin.json` carries. Read
-[Known risks](#known-risks) before relying on the guards.
+**Let an AI agent work on your legacy production code without the agent
+widening its own scope, reading a production secret, force-pushing or
+deploying.**
 
-Host-wide model, effort and context routing for **Claude Code and Codex**, plus
-agentic engineering infrastructure for **existing production codebases** — the
-kind with legacy code, undocumented business rules, historical workarounds and
-behaviour that customers depend on right now.
+`claude-agentic` is a plugin for **Claude Code and Codex**, built for codebases
+with undocumented business rules, old workarounds and behaviour customers
+rely on today. Small, well-defined changes go through easily. Risky ones are
+stopped by a hook, not by a polite request in a prompt.
 
-It gives a machine and a repository four things:
+```bash
+git clone https://github.com/vanssata/claude-agentic-sdlc-module.git
+cd claude-agentic-sdlc-module && ./install.sh   # detects Claude Code, Codex or both
+```
 
-1. **Routing** — model, effort, fallback, compaction and output limits for the
-   detected runtime and plan, plus the tier rules that keep fact collection cheap
-   and pay only for thinking.
-2. **`.ai/`** — a knowledge base and a policy set that says what agents may and
-   may not do in this repository. One tree, shared by both runtimes.
-3. **A pipeline** — discovery, context, impact, risk classification, plan,
-   implementation, test, adversarial review, security review, release report,
-   human approval — with the gates each risk tier requires.
-4. **Hooks** that enforce the parts that matter, so an agent cannot quietly widen
-   its scope, read a production secret, force-push, or deploy — plus a per-runtime
-   escalation gate that sends EXPERT agents one tier down while the top model is
-   rate-limited or unreachable.
+Then, in any project: `/ai-init` once, and `/ai-task <what you want>` for every
+change.
 
-The design goal is asymmetry: **it should be harder for an agent to damage the
-project than to make a small, well-defined change safely.**
+**What you get**
 
-The defaults are tuned for **one developer who knows the codebase, on a Pro or
-Team Pro plan**, following the [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook):
-the developer's knowledge is the first source of context, one verification
-command is the feedback loop, plan mode is where the expensive model is spent,
-and a subagent is spawned only where a second context window buys something.
+- **Guards, not guidelines.** Hooks refuse edits outside the approved step,
+  reads of production secrets, force-pushes and deploys. No agent commits,
+  merges or deploys: every task ends at your approval.
+- **Risk-tiered pipeline.** Each change gets a tier from T0 to T5. A typo fix
+  stays a one-line edit. A payment change gets a plan, tests, an adversarial
+  review and a security review.
+- **Cheap by default.** Routing puts readers on the cheapest model, keeps the
+  session on the one that does the thinking, and uses the top tier only when a
+  named trigger calls for it. `/usage-report` shows where the tokens went.
+- **One `.ai/` tree for both runtimes.** Start a task in Claude Code and finish
+  it in Codex; the knowledge base, policies and task state are shared.
+
+Tuned for **one developer who knows the codebase, on a Pro or Team Pro plan**,
+following the [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook).
 A fully delegated `team` profile is one JSON key away.
+
+**Version 2.0.2.** The guards have limits: read [Known risks](#known-risks)
+before relying on them.
 
 > This plugin absorbs the former `claude-routing`. Installing it migrates that
 > plugin's managed `CLAUDE.md` block into its own, so the two never coexist; see
@@ -60,7 +66,7 @@ registered, and which model each tier resolves to.
 | BALANCED | `sonnet` | `gpt-5.6-terra` (Terra) |
 | STRONG | `opus` | `gpt-5.6-sol` (Sol) |
 | EXPERT | Fable 5.1, or Opus 5 with `--fable no` | `gpt-6-astra` (Astra) |
-| session | Opus 5 (200k window) at `medium`, `opus[1m]` per task through `claude-1m` (Sonnet on Pro) | Sol at `high` |
+| session | Opus 5.5 [1m] (`claude-opus-5-5[1m]`, 1M window) at `medium` by default on Max, `/model opus` for a 200k session (Sonnet on Pro) | Sol at `high` |
 
 A repository can carry both instruction files over one `.ai/` tree. The task
 state is `.ai/state/current.json` either way, so a task started in one runtime
@@ -105,13 +111,17 @@ zero model cost — no model is involved in writing or reading any of these file
 ./install.sh --plan pro            # Pro: opusplan session, opus pinned for EXPERT
 ./install.sh --plan team-pro       # Team, Standard seat: the pro profile with the Team label
 ./install.sh --plan team-max       # Team, Premium seat: the max profile, Fable on architect
-./install.sh --plan max            # Max 5x: Opus 5 session (200k window), Fable only on architect
+./install.sh --plan max            # Max 5x: Opus 5.5 [1m] session (1M window by default), Fable only on architect
 ./install.sh --plan max20          # Max 20x: max's settings, larger budgets (6 agents, EXPERT without asking)
 ./install.sh --plan max --fable no # no Fable anywhere; architect inherits the Opus session
+./install.sh --plan balanced-max   # BalancedMax: only the session is strong (Opus 5.5, 200k); readers on Haiku,
+                                   # judgement on Sonnet, reviews on Opus, EXPERT at high, no Fable, no xhigh;
+                                   # also picks the Codex balanced-max profile (Sol session, readers on Luna)
 
 # Codex-side options (the ChatGPT plan is auto-detected from ~/.codex/auth.json):
 ./install.sh --codex-plan plus     # Plus: Sol at medium, three agent threads, Astra at high, no xhigh
 ./install.sh --codex-plan pro      # Pro: Sol at high, six agent threads, Astra at xhigh for ai-expert
+./install.sh --codex-plan balanced-max  # Pro's budgets, Sol session, FAST readers on Luna, Astra at high
 ```
 
 `--target auto` installs for each runtime it finds — the CLI on `PATH`, or an
@@ -210,7 +220,7 @@ it should not be the most expensive model by default.
 | `autoCompactWindow` (Claude) | 800 000 on Max and Team Max, 300 000 on Pro and Team Pro. Claude Code caps it at the model's own window, so one setting means compaction near 167k on a 200k model and near 767k on a `[1m]` one; on Pro the cap decides, at 167k | the model window |
 | `claude-1m [opus\|fable]` (Claude, Max and Team Max) | pins one session to `opus[1m]`, or to `fable[1m]` (Fable 5.1), at launch. The large window comes from the per-model cap, not from the launcher, so `/model opus[1m]` reaches it too; `CLAUDE_1M_COMPACT_WINDOW` exports `CLAUDE_CODE_AUTO_COMPACT_WINDOW` for that process alone to compact *earlier* than 767k | `/model` only, and the same cap applies |
 | `context-guard.py` (both runtimes) | warns from 80% of the point where compaction fires and holds a prompt back once from 120% — 133k and 200k on a 200k Max session, 613k and 920k on a `[1m]` one; `AI_CONTEXT_WARN_TOKENS` / `AI_CONTEXT_BLOCK_TOKENS` set them in tokens, `0` turns one off | no guard |
-| `model` (Claude) | `opusplan` on Pro and Team Pro: Opus in plan mode, Sonnet when executing; `opus` (200k window) on Max and Team Max, `opus[1m]` per task, started with `claude-1m` | Sonnet 5 on Pro |
+| `model` (Claude) | `opusplan` on Pro and Team Pro: Opus in plan mode, Sonnet when executing; `claude-opus-5-5[1m]` (Opus 5.5, 1M window) by default on Max, Max 20x and Team Max, `opus` (200k) per task through `/model`; `claude-opus-5-5` (200k) on BalancedMax | Sonnet 5 on Pro |
 | `effortLevel` (Claude) | `medium` on both plans; agents raise it per task | — |
 | `model` (Codex) | `gpt-5.6-sol` at `high` on Pro, `medium` on Plus; subagents `gpt-5.6-terra` at `medium` | — |
 | `max_concurrent_threads_per_session` (Codex) | 6 on Pro, 3 on Plus | runtime default |
@@ -339,7 +349,7 @@ reviews it, and whether a human signs it off. It does not depend on the runtime.
 | T0 | documentation, comments | no | no | no | no |
 | T1 | formatting, an isolated admin screen | no | no | no | no |
 | T2 | a normal isolated feature | no | yes | no | no |
-| T3 | shared domain behaviour, orders, workflows, async | yes | yes | when auth or personal data | yes |
+| T3 | shared domain behaviour, orders, workflows, async | the human, in plan mode | yes | when auth or personal data | yes |
 | T4 | payments, accounting, tax, fiscal, auth, order state, customer data | yes | yes | yes | yes |
 | T5 | migrations, infrastructure, production architecture | yes | yes | yes | yes |
 
@@ -350,14 +360,15 @@ The machine-readable source of truth is `.ai/policies/risk-tiers.json`, which
 
 The tier decides *whether* a stage runs; `pipeline_profile` in the same file
 decides *who* runs it. The default is `solo`, which has two modes: **direct**
-for T0–T2 — no pipeline ceremony, no report files, cheap readers only, one
-`sonnet` review at T2 — and **sdlc** for T3–T5, the full pipeline:
+for T0–T3 — no pipeline ceremony, cheap readers only, one `sonnet` review at T2,
+one `opus` review at T3 whose plan the human approves in plan mode — and
+**sdlc** for T4–T5, the full pipeline:
 
 | Tier | `solo` delegates to a subagent | `team` delegates |
 |---|---|---|
 | T0, T1 | nothing — direct mode, no state file: say which files, edit, verify (T1) | discovery, test |
 | T2 | the adversarial review, on `sonnet`; the plan is a few lines in the conversation, recorded by one `state.py quick` call | everything except implementation |
-| T3 | plan, plan review, adversarial review — on `opus` | everything except implementation |
+| T3 | the adversarial review, on `opus`; the plan is written in plan mode and approved by the human, recorded by one `state.py quick` call | everything except implementation |
 | T4 | plus security review and the release report | everything except implementation |
 | T5 | plus discovery and impact; the plan goes to `ai-expert` | everything except implementation |
 
@@ -378,7 +389,7 @@ and keeps the review. From T3 the review always runs, with the sensor rows
 already in the ledger so the reviewer does not re-derive them.
 
 In `solo`, discovery, context, impact and risk come from the request plus
-`grep -n`; below T3 they are a few lines in the conversation, from T3 they are
+`grep -n`; up to T3 they are a few lines in the conversation, from T4 they are
 recorded stage by stage. Tests run in three scopes: a step runs **only the
 tests it names**, the verification command runs **once, after the last step, to
 the end** (no fail-fast flag; the failing test first for a bugfix), and the
@@ -386,7 +397,7 @@ the end** (no fail-fast flag; the failing test first for a bugfix), and the
 Every failure of the two end-of-task runs is then fixed as **one batch** in a
 `state.py remediate` step before one more run — at most two rounds, then the
 human decides. Review
-findings are handled the same way. Below T3 the release report is the commit
+findings are handled the same way. Up to T3 the release report is the commit
 message. A subagent is still sent on a stated trigger: an unfamiliar
 area, an `UNKNOWN` the plan depends on, a non-obvious T3+ classification, or
 verification output too long to read inline. Switch to `team` by editing the
@@ -399,7 +410,9 @@ Each plan is one file in `profiles/`: the runtime's own settings plus a
 BALANCED, STRONG and EXPERT is on that plan), the budgets (how many agents may run
 at once and how many of them on STRONG, how far direct mode reaches, whether EXPERT
 runs without asking, and a token figure per tier) and the preferred runtime per
-workflow. `max20.json` is `max.json` with larger budgets. The installer writes the
+workflow. `max20.json` is `max.json` with larger budgets; `balanced-max.json` is `max.json`
+with the session pinned to Opus 5.5, no Fable and EXPERT at `high` — only the
+session runs the strong model, every agent keeps its cheap tier. The installer writes the
 resolved object to `<home>/claude-agentic/profile.json`; `runtime-gate` enforces the
 fan-out and EXPERT budgets by asking, `state.py profile --tier <TIER>` prints a
 tier's model, and `/usage-report --task <id>` compares a task's tokens with its
@@ -410,7 +423,7 @@ plan's figure — reported, never enforced. The prompts themselves name tiers on
 |---|---|---|---|
 | FAST | `haiku`, low | Terra, low | reading and running: file search, inventories, logs, test output (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
 | BALANCED | `sonnet` | Terra, medium | discovery, context, planning up to T2, mechanical edits, release, the T2 review (`ai-discovery`, `ai-context`, `ai-implementer`, `ai-release`) |
-| STRONG | `opus`, high | Sol, high | adversarial and security review, T3/T4 risk and planning, root cause after a first diagnosis failed, reversible design (`ai-reviewer`, `ai-security`, `architect`) |
+| STRONG | `opus`, high | Sol, high | adversarial and security review (from T3), T4 risk and planning, root cause after a first diagnosis failed, reversible design (`ai-reviewer`, `ai-security`, `architect`) |
 | EXPERT | the session model (Opus 5) on Max, `opus` pinned on Pro; Fable 5.1 [1m] on `architect` only | Astra, `xhigh` | T5, irreversible design, what STRONG could not settle |
 
 The main session does the implementation itself. Every agent definition pins its
@@ -419,11 +432,10 @@ deliberately not set: before Claude Code v2.1.251 it overrides the frontmatter a
 the per-call model, which put every agent on Sonnet. A STRONG or EXPERT agent runs
 only when a named trigger fires; the triggers are listed in `.ai/policies/model-routing.md`.
 
-On a Max plan the session runs Opus 5 with the 200k window at `medium` effort,
-compacting near 167k tokens (`autoCompactWindow` 800 000, capped at the model's own
-window) — `opus[1m]` is for a task that genuinely needs it, and compacts near 767k
-because the same setting is no longer capped there, whether it was started with
-`claude-1m` or picked with `/model` — and escalates from there: `ai-expert` pins `opus` at `xhigh`, so a session switched to
+On a Max plan the session runs Opus 5.5 [1m] by default at `medium` effort,
+compacting near 767k tokens (`autoCompactWindow` 800 000, uncapped on a 1M model)
+— `/model opus` gives a 200k session that compacts near 167k, cheaper per turn for
+a small task — and escalates from there: `ai-expert` pins `opus` at `xhigh`, so a session switched to
 Sonnet (the JetBrains agent's Model setting, or `/model`) cannot weaken the last-resort tier. Fable 5.1 [1m] is pinned on `architect` alone, at
 `xhigh`, for design questions outside a task; nothing else ever runs on it, and
 `runtime-gate` sends it to Opus while Fable is rate-limited or its weekly limit is
@@ -707,7 +719,7 @@ one; nothing references it any more.
 bash tests/run-all.sh
 ```
 
-Twenty-five suites, 2,163 assertions. The guards against JSON fixtures in both runtimes (including
+Twenty-five suites, 2,179 assertions. The guards against JSON fixtures in both runtimes (including
 `apply_patch` payloads that touch several files at once); the state machine and
 its `triage` call; scaffold idempotency for one runtime, the other, and both
 over a single `.ai/` tree; installer rendering for every plan combination and
@@ -737,3 +749,10 @@ No suite reads or writes the developer's real `~/.claude` or `~/.codex`.
 | `docs/workflows.md` | the five workflows and how one is chosen |
 | `docs/faq.md` | why something was blocked, and how to change it |
 | `docs/sdlc/plans/dual-runtime-agentic-routing.md` | the approved plan this dual-runtime support was built from |
+
+## Contributing, security and license
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): setup, tests, and how a change gets merged
+- [SECURITY.md](SECURITY.md): what counts as a vulnerability and how to report
+  one privately
+- [LICENSE](LICENSE): MIT

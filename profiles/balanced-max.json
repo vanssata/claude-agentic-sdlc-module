@@ -1,0 +1,14 @@
+{
+  "model": "claude-opus-5-5",
+  "availableModels": ["claude-opus-5-5", "opus", "opus[1m]", "sonnet", "haiku"],
+  "claude_agentic": {
+    "inherits": "max",
+    "plan": "balanced-max",
+    "label": "BalancedMax",
+    "tiers": {
+      "EXPERT": {
+        "effort": "high"
+      }
+    }
+  }
+}
