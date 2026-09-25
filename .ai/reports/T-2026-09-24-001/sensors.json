@@ -1,0 +1,78 @@
+{
+  "checked_at": "2026-09-25T17:55:44Z",
+  "declared_tier": "T3",
+  "rescored_tier": "T3",
+  "schema": 1,
+  "sensors": {
+    "bite": {
+      "detail": "the suite is not green on this tree \u2014 nothing to ask yet",
+      "status": "unavailable",
+      "tree": "3f3e19814f8d48dddfac0c0de61771aae1f49ae1"
+    },
+    "diff": {
+      "detail": "4 files / 642 lines (T3 task budget 30 / 800)",
+      "files": 4,
+      "lines": 642,
+      "status": "green",
+      "tree": "3f3e19814f8d48dddfac0c0de61771aae1f49ae1",
+      "unscoped": []
+    },
+    "duplicates": {
+      "detail": "0 blocks >= 8 lines repeat",
+      "status": "green",
+      "tree": "3f3e19814f8d48dddfac0c0de61771aae1f49ae1"
+    },
+    "lint": {
+      "detail": "lint_command missing \u2014 detected .pylintrc",
+      "proposal": "lint_command: python3 -m pylint $(git ls-files '*.py')",
+      "status": "unavailable",
+      "tree": "3f3e19814f8d48dddfac0c0de61771aae1f49ae1"
+    },
+    "plan_sections": {
+      "detail": "inline plan",
+      "status": "not_applicable",
+      "tree": "3f3e19814f8d48dddfac0c0de61771aae1f49ae1"
+    },
+    "rescore": {
+      "detail": "T3 \u2014 scopes: source, docs, tests",
+      "reasons": [],
+      "status": "green",
+      "tier": "T3",
+      "tree": "3f3e19814f8d48dddfac0c0de61771aae1f49ae1"
+    },
+    "tests": {
+      "detail": "verify_command is not in testing.md",
+      "status": "unavailable",
+      "tree": "3f3e19814f8d48dddfac0c0de61771aae1f49ae1"
+    },
+    "traceability": {
+      "detail": "steps with no test named: 1, 1.3",
+      "status": "red",
+      "tree": "3f3e19814f8d48dddfac0c0de61771aae1f49ae1",
+      "untraced": [
+        "1",
+        "1.3"
+      ]
+    },
+    "typecheck": {
+      "detail": "typecheck_command missing \u2014 write it, or `typecheck_command: none`, in .ai/policies/testing.md",
+      "status": "unavailable",
+      "tree": "3f3e19814f8d48dddfac0c0de61771aae1f49ae1"
+    }
+  },
+  "task": "T-2026-09-24-001",
+  "tree": "3f3e19814f8d48dddfac0c0de61771aae1f49ae1",
+  "verdict": {
+    "all_green": false,
+    "blocking": [
+      "tests: unavailable",
+      "lint: unavailable",
+      "typecheck: unavailable",
+      "traceability: red",
+      "bite: unavailable",
+      "tier T3 is above T2",
+      "the diff re-scores to T3"
+    ],
+    "review": "required"
+  }
+}

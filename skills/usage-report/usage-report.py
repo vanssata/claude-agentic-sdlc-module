@@ -29,11 +29,14 @@ the task's journal is only read.
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
 import glob
+import hashlib
 import json
 import os
 import re
+import tempfile
 from collections import defaultdict
 
 CLAUDE_ROOT = os.path.expanduser(
@@ -105,6 +108,207 @@ class Call:
         self.label = label
 
 
+# ----------------------------------------------------------------- parse cache
+
+CACHE_VERSION = 2
+
+
+_CACHE_PATH: str | None = None
+
+
+def cache_path() -> str:
+    """Where the incremental parse cache lives. USAGE_REPORT_CACHE overrides it;
+    setting that to an empty string turns the cache off altogether.
+
+    Resolved once and remembered. `--task` chdirs into the project while the
+    parsers run and back again before the flush, so resolving a relative path
+    per call would read one file and write another. Resolving it once, from the
+    directory the command was run in, is the answer a relative path deserves."""
+    global _CACHE_PATH                  # pylint: disable=global-statement
+    if _CACHE_PATH is None:
+        env = os.environ.get("USAGE_REPORT_CACHE")
+        if env is not None:
+            _CACHE_PATH = os.path.abspath(os.path.expanduser(env)) if env else ""
+        else:
+            base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+            _CACHE_PATH = os.path.join(base, "claude-agentic", "usage-report.json")
+    return _CACHE_PATH
+
+
+_CACHE: dict | None = None
+
+
+def cache_open(args) -> dict | None:
+    """The cache for this run, read from disk once. None means "do not cache":
+    --no-cache, an empty USAGE_REPORT_CACHE, or a file this version cannot read.
+    A miss is never an error — the parsers simply read every line."""
+    global _CACHE                       # pylint: disable=global-statement
+    if getattr(args, "no_cache", False) or not cache_path():
+        return None
+    if _CACHE is None:
+        _CACHE = {"version": CACHE_VERSION, "files": {}}
+        try:
+            with open(cache_path(), encoding="utf-8") as fh:
+                disk = json.load(fh)
+            if disk.get("version") == CACHE_VERSION and isinstance(disk.get("files"), dict):
+                _CACHE["files"] = disk["files"]
+        except (OSError, ValueError):
+            pass
+    return _CACHE
+
+
+def cache_flush() -> None:
+    """Write the cache back, atomically, dropping the transcripts that are gone.
+    A cache that cannot be written is not worth failing a report over."""
+    if _CACHE is None:
+        return
+    _CACHE["files"] = {k: v for k, v in _CACHE["files"].items() if os.path.exists(k)}
+    path = cache_path()
+    tmp = ""
+    try:
+        d = os.path.dirname(path) or "."
+        os.makedirs(d, mode=0o700, exist_ok=True)
+        # The entries hold project paths, session ids and token counts derived
+        # from transcripts the runtimes keep at 0600; the cache stays as narrow.
+        # mkstemp is O_EXCL with an unguessable name and mode 0600, so a
+        # predictable path in a shared directory cannot be pre-created or
+        # pointed somewhere else by a symlink.
+        fd, tmp = tempfile.mkstemp(dir=d, prefix=os.path.basename(path) + ".",
+                                   suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(_CACHE, fh)
+        os.replace(tmp, path)
+        tmp = ""
+    except OSError:
+        pass
+    finally:
+        # A unique temp name means an interrupted flush would otherwise leave a
+        # full copy of the cache behind, every time, with nothing to overwrite
+        # it. It goes on any exception, not only the one we expect.
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+
+def _head_sig(path: str, n: int = 256) -> str:
+    """A fingerprint of the file's first bytes, so a transcript that was
+    rewritten rather than appended to is not resumed from a stale offset."""
+    try:
+        with open(path, "rb") as fh:
+            return hashlib.sha256(fh.read(n)).hexdigest()[:16]
+    except OSError:
+        return ""
+
+
+def _row_ok(row, spec) -> bool:
+    return (isinstance(row, list) and len(row) == len(spec)
+            and all(isinstance(v, t) for v, t in zip(row, spec)))
+
+
+def _state_ok(state, template: dict) -> bool:
+    """Whether a state off the disk is the shape this fold works on. The
+    template is an empty state from the same fold, so the check follows the fold
+    rather than restating it."""
+    return (isinstance(state, dict) and set(state) == set(template)
+            and all(type(state[k]) is type(template[k]) for k in template))
+
+
+def claude_valid(state: dict) -> bool:
+    """Whether the records inside a claude state are the rows the parser reads
+    back out of it. The fold only ever touches the records it is folding, so a
+    state is checked here, on load, or its untouched half reaches the report
+    unchecked — and `--today` and the merge read every row, not only the new."""
+    return all(isinstance(bucket, dict)
+               and all(_row_ok(r, (str, str, str, int, int, int, int))
+                       for r in bucket.values())
+               for bucket in state["recs"].values())
+
+
+def codex_valid(state: dict) -> bool:
+    """The same, for a codex state: a model row per turn, the fallback row, and
+    one pending row per usage record."""
+    return (all(_row_ok(r, (str, str)) for r in state["turn_model"].values())
+            and _row_ok(state["last_model"], (str, str))
+            and all(_row_ok(r, (str, str, str, str, int, int, int, int))
+                    for r in state["pending"]))
+
+
+def _fold_lines(state: dict, fold, blob: bytes) -> int:
+    """Fold the complete lines in `blob`; return how many bytes they occupy.
+    A trailing fragment is left for the caller: a transcript caught mid-write
+    must not be folded half a record."""
+    cut = blob.rfind(b"\n") + 1
+    for raw in blob[:cut].split(b"\n")[:-1]:
+        fold(state, raw.decode("utf-8", "replace"))
+    return cut
+
+
+def fold_file(path: str, kind: str, empty, fold, valid, cache: dict | None) -> dict:
+    """Fold one transcript into its state, reading only what has not been read.
+
+    The entry keeps the file's mtime and size, how many bytes were folded into
+    the state, and the state itself — which is why the fold states are plain
+    JSON. Same mtime and size: nothing is read at all. Grown since: only the
+    bytes past the offset, and only up to the last complete line. Anything else
+    — shrunk, a different first block, or a state some other fold wrote — is
+    parsed from zero.
+
+    A directory can be read as either runtime (`--root` with an explicit
+    `--provider`, or a sniff that changes its answer as files arrive), so a
+    state from the other fold must never be handed to this one. The load-bearing
+    check is the shape check, which compares the state against an empty one from
+    this fold: the two runtimes' states have disjoint key sets. `kind` is the
+    cheap first cut in front of it, for a third fold that might not be so
+    different. `valid` is then that fold's own check on the records inside the
+    state. All three run before anything is read or folded: the cache costs a
+    reparse when it is wrong, never a wrong report.
+    """
+    try:
+        st = os.stat(path)
+    except OSError:
+        return empty()
+
+    key = os.path.abspath(path)
+    entry = (cache or {}).get("files", {}).get(key)
+    state, start, head = None, 0, ""
+    if (isinstance(entry, dict) and entry.get("kind") == kind
+            and isinstance(entry.get("offset"), int)
+            and 0 <= entry["offset"] <= st.st_size):
+        if entry.get("mtime") == st.st_mtime and entry.get("size") == st.st_size:
+            state, start, head = entry.get("state"), entry["offset"], entry.get("head", "")
+        elif entry.get("head") and entry["head"] == _head_sig(path):
+            state, start, head = entry.get("state"), entry["offset"], entry["head"]
+    if not (_state_ok(state, empty()) and valid(state)):
+        state, start, head = empty(), 0, ""
+
+    tail = b""
+    if start < st.st_size:
+        with open(path, "rb") as fh:
+            fh.seek(start)
+            blob = fh.read()
+        used = _fold_lines(state, fold, blob)
+        start += used
+        tail = blob[used:]
+        head = _head_sig(path)
+
+    if cache is not None:
+        cache["files"][key] = {"kind": kind, "mtime": st.st_mtime,
+                               "size": st.st_size, "offset": start,
+                               "head": head, "state": state}
+
+    if tail.strip():
+        # A last line with no newline after it: a file still being written, or
+        # one that simply ends that way. It is not folded into the state the
+        # cache keeps — the next run will see it again, completed or not — but
+        # it is folded into what this run reports, so ending a file without a
+        # newline does not lose its last record.
+        state = copy.deepcopy(state)
+        fold(state, tail.decode("utf-8", "replace"))
+    return state
+
+
 # ------------------------------------------------------------- Claude Code
 
 def claude_project_root(path: str) -> str:
@@ -114,51 +318,102 @@ def claude_project_root(path: str) -> str:
     return os.path.join(CLAUDE_ROOT, mangled)
 
 
+def claude_empty() -> dict:
+    """The fold's state for one transcript: a line counter and the responses
+    seen so far. Plain JSON types throughout, so it can be handed to something
+    that stores it between runs."""
+    return {"n": 0, "recs": {}}
+
+
+def _num(value) -> int:
+    """A token count as the state stores it. A transcript that writes one as a
+    float or a string still folds, and the stored row still matches what the
+    validator and the parser expect to read back."""
+    try:
+        return int(value or 0)
+    except (OverflowError, TypeError, ValueError):
+        return 0
+
+
+def claude_fold(state: dict, line: str) -> None:
+    """Add one transcript line to the state.
+
+    One API response is written as several transcript lines — one per content
+    block (thinking, text, tool_use) — each repeating the same message id and
+    usage. Keep the line with the final (largest) output_tokens, or every
+    response is billed two or three times over.
+
+    Those lines are written as the blocks stream, so they do not all carry the
+    same timestamp and a response can straddle a UTC midnight. `--today` used to
+    be applied before this choice was made, which is not the same as applying it
+    after: the winner among *today's* lines is not always the winner overall. So
+    each response keeps a winner per day as well as one overall, under "*", and
+    the filter picks the slot it needs. Days are "YYYY-MM-DD" and never collide
+    with it.
+    """
+    n = state["n"]
+    state["n"] = n + 1
+    try:
+        rec = json.loads(line)
+    except json.JSONDecodeError:
+        return
+    msg = rec.get("message") or {}
+    usage = msg.get("usage") or {}
+    if not usage:
+        return
+    ts = rec.get("timestamp") or ""
+    # A line with no id of its own is keyed by its position in the file; the
+    # counter lives in the state so the key does not depend on where a read
+    # happened to start.
+    key = str(msg.get("id") or rec.get("requestId") or f"#{n}")
+    row = [ts[:10], ts, str(msg.get("model") or "unknown"),
+           _num(usage.get("input_tokens")),
+           _num(usage.get("output_tokens")),
+           _num(usage.get("cache_creation_input_tokens")),
+           _num(usage.get("cache_read_input_tokens"))]
+    bucket = state["recs"].setdefault(key, {})
+    for slot in ("*", row[0]):
+        prev = bucket.get(slot)
+        if prev is None or row[4] > prev[4]:
+            bucket[slot] = row
+
+
 def parse_claude(root: str, args) -> list[Call]:
+    cache = cache_open(args)
     files = glob.glob(os.path.join(root, "**", "*.jsonl"), recursive=True)
     today = dt.datetime.now(dt.timezone.utc).date().isoformat()
 
-    # One API response is written as several transcript lines — one per content
-    # block (thinking, text, tool_use) — each repeating the same message id and
-    # usage. Count each response once, keeping the line with the final (largest)
-    # output_tokens, or every response is billed two or three times over.
-    calls: dict[str, tuple] = {}
+    merged: dict[str, dict[str, list]] = {}
+    owner: dict[tuple[str, str], tuple[str, str]] = {}
     for path in files:
         session = os.path.basename(path).removesuffix(".jsonl")
         if args.session and not session.startswith(args.session):
             continue
         project = (os.path.relpath(path, CLAUDE_ROOT).split(os.sep)[0]
                    if path.startswith(CLAUDE_ROOT) else root)
-        with open(path, encoding="utf-8", errors="replace") as fh:
-            for n, line in enumerate(fh):
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                msg = rec.get("message") or {}
-                usage = msg.get("usage") or {}
-                if not usage:
-                    continue
-                stamp = (rec.get("timestamp") or "")[:10]
-                if args.today and stamp != today:
-                    continue
-                key = msg.get("id") or rec.get("requestId") or f"{path}:{n}"
-                out = usage.get("output_tokens", 0) or 0
-                prev = calls.get(key)
-                if prev is None or out > (prev[5].get("output_tokens", 0) or 0):
-                    calls[key] = (session, project, stamp, rec.get("timestamp") or "",
-                                  msg.get("model") or "unknown", usage)
+        state = fold_file(path, "claude", claude_empty, claude_fold,
+                          claude_valid, cache)
+        for key, bucket in state["recs"].items():
+            # A positional key is only unique inside its own file.
+            gkey = f"{path}:{key}" if key.startswith("#") else key
+            dst = merged.setdefault(gkey, {})
+            for slot, row in bucket.items():
+                prev = dst.get(slot)
+                if prev is None or row[4] > prev[4]:
+                    dst[slot] = row
+                    owner[(gkey, slot)] = (session, project)
 
+    slot = today if args.today else "*"
     out_calls = []
-    for session, project, stamp, ts, model, usage in calls.values():
-        out_calls.append(Call(
-            "claude", session, project, stamp, ts, model,
-            usage.get("input_tokens", 0) or 0,
-            usage.get("output_tokens", 0) or 0,
-            usage.get("cache_creation_input_tokens", 0) or 0,
-            usage.get("cache_read_input_tokens", 0) or 0,
-            is_subagent=session.startswith("agent-"),
-        ))
+    for gkey, bucket in merged.items():
+        row = bucket.get(slot)
+        if row is None:
+            continue
+        day, ts, model, inp, out, cw, cr = row
+        session, project = owner[(gkey, slot)]
+        out_calls.append(Call("claude", session, project, day, ts, model,
+                              inp, out, cw, cr,
+                              is_subagent=session.startswith("agent-")))
     return out_calls
 
 
@@ -180,97 +435,108 @@ def _subagent_name(source) -> str:
     return ""
 
 
-def parse_codex(root: str, args) -> list[Call]:
-    """Codex writes one rollout file per thread, and a subagent gets its own file.
+def codex_empty(thread: str) -> dict:
+    """The fold's state for one rollout file. Plain JSON types, like the Claude
+    one: the thread's identity, the model seen per turn, and the usage records.
+
+    No per-day slots here, unlike claude_empty(): a response is one record, not
+    several lines that can straddle a midnight, so `--today` stays where it was."""
+    return {"thread": thread, "cwd": "", "sub": "", "is_sub": False,
+            "turn_model": {}, "last_model": ["unknown", ""], "pending": []}
+
+
+def codex_fold(state: dict, line: str) -> None:
+    """Add one rollout line to the state.
 
     Unlike Claude Code there is no per-content-block repetition: each response is
-    one `token_usage_record` whose `usage` is that response alone (`turn_token_usage`
-    and `thread_token_usage` in the same record are running totals — summing those
-    would count every earlier response again). `response_id` is still used as the
-    dedup key, because a resumed thread can replay records into a second file.
+    one `token_usage_record` whose `usage` is that response alone
+    (`turn_token_usage` and `thread_token_usage` in the same record are running
+    totals — summing those would count every earlier response again).
 
     The model is not on the usage record. It is on the `turn_context` record for
     the same `turn_id`, which is written before the turn runs; the last one seen
     is the fallback for a usage record whose turn was not announced in this file.
     """
+    try:
+        rec = json.loads(line)
+    except json.JSONDecodeError:
+        return
+    kind = rec.get("type")
+    payload = rec.get("payload") or {}
+
+    if kind == "session_meta":
+        state["cwd"] = str(payload.get("cwd") or "")
+        state["thread"] = str(payload.get("id") or state["thread"])
+        state["sub"] = _subagent_name(payload.get("source"))
+        # A spawned thread carries its parent's session_id; a top-level
+        # thread's session_id is its own id.
+        state["is_sub"] = bool(state["sub"]) or (
+            bool(payload.get("session_id"))
+            and payload.get("session_id") != state["thread"]
+        )
+    elif kind == "turn_context":
+        model = payload.get("model") or "unknown"
+        effort = payload.get("effort") or ""
+        model, effort = str(model), str(effort)
+        if payload.get("turn_id"):
+            state["turn_model"][str(payload["turn_id"])] = [model, effort]
+        state["last_model"] = [model, effort]
+        state["cwd"] = str(payload.get("cwd") or state["cwd"])
+    elif kind == "token_usage_record":
+        usage = payload.get("usage") or {}
+        if not usage:
+            return
+        state["pending"].append([
+            str(payload.get("response_id") or f"#{len(state['pending'])}"),
+            str(payload.get("turn_id") or ""),
+            (rec.get("timestamp") or "")[:10],
+            rec.get("timestamp") or "",
+            _num(usage.get("input_tokens")),
+            _num(usage.get("cached_input_tokens")),
+            _num(usage.get("cache_write_input_tokens")),
+            _num(usage.get("output_tokens")),
+        ])
+
+
+def parse_codex(root: str, args) -> list[Call]:
+    """Codex writes one rollout file per thread, and a subagent gets its own file.
+    `response_id` is the dedup key, because a resumed thread can replay records
+    into a second file."""
+    cache = cache_open(args)
     files = glob.glob(os.path.join(root, "**", "*.jsonl"), recursive=True)
     today = dt.datetime.now(dt.timezone.utc).date().isoformat()
     cwd = os.path.abspath(os.getcwd())
 
     seen: dict[str, Call] = {}
     for path in files:
-        turn_model: dict[str, tuple[str, str]] = {}
-        last_model = ("unknown", "")
-        meta_cwd = ""
-        thread_id = os.path.basename(path).removesuffix(".jsonl")
-        sub_name = ""
-        is_sub = False
-        pending: list[tuple] = []
+        default_thread = os.path.basename(path).removesuffix(".jsonl")
+        state = fold_file(path, "codex", lambda t=default_thread: codex_empty(t),
+                          codex_fold, codex_valid, cache)
 
-        with open(path, encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                kind = rec.get("type")
-                payload = rec.get("payload") or {}
-
-                if kind == "session_meta":
-                    meta_cwd = payload.get("cwd") or ""
-                    thread_id = payload.get("id") or thread_id
-                    sub_name = _subagent_name(payload.get("source"))
-                    # A spawned thread carries its parent's session_id; a
-                    # top-level thread's session_id is its own id.
-                    is_sub = bool(sub_name) or (
-                        bool(payload.get("session_id"))
-                        and payload.get("session_id") != thread_id
-                    )
-                elif kind == "turn_context":
-                    model = payload.get("model") or "unknown"
-                    effort = payload.get("effort") or ""
-                    if payload.get("turn_id"):
-                        turn_model[payload["turn_id"]] = (model, effort)
-                    last_model = (model, effort)
-                    meta_cwd = payload.get("cwd") or meta_cwd
-                elif kind == "token_usage_record":
-                    usage = payload.get("usage") or {}
-                    if not usage:
-                        continue
-                    pending.append((
-                        payload.get("response_id") or f"{path}:{len(pending)}",
-                        payload.get("turn_id") or "",
-                        (rec.get("timestamp") or "")[:10],
-                        rec.get("timestamp") or "",
-                        usage,
-                    ))
-
+        thread_id = state["thread"] or default_thread
         if args.session and not thread_id.startswith(args.session):
             continue
-        project = meta_cwd or root
+        project = state["cwd"] or root
         if not args.all and not args.root and os.path.abspath(project) != cwd:
             continue
 
-        for rid, turn, stamp, ts, usage in pending:
+        for rid, turn, stamp, ts, total_in, cached, cw, out in state["pending"]:
             if args.today and stamp != today:
                 continue
-            if rid in seen:
+            gkey = f"{path}:{rid}" if str(rid).startswith("#") else rid
+            if gkey in seen:
                 continue
-            model, effort = turn_model.get(turn, last_model)
-            total_in = usage.get("input_tokens", 0) or 0
-            cached = usage.get("cached_input_tokens", 0) or 0
-            seen[rid] = Call(
+            model, effort = state["turn_model"].get(turn, state["last_model"])
+            seen[gkey] = Call(
                 "codex", thread_id, project, stamp, ts,
                 model + (f" ({effort})" if effort else ""),
                 # input_tokens is the whole prompt including the cached part;
                 # billing the cached tokens at the full rate as well would
                 # double-count them.
                 max(total_in - cached, 0),
-                usage.get("output_tokens", 0) or 0,
-                usage.get("cache_write_input_tokens", 0) or 0,
-                cached,
-                is_subagent=is_sub,
-                label=sub_name,
+                out, cw, cached,
+                is_subagent=state["is_sub"],
+                label=state["sub"],
             )
     return list(seen.values())
 
@@ -387,6 +653,7 @@ def task_report(args) -> int:
             calls += parse_claude(root, args) if rt == "claude" else parse_codex(root, args)
     finally:
         os.chdir(here)
+    cache_flush()
 
     used: dict[str, list] = {rt: [0, 0, 0] for rt in involved}
     for c in calls:
@@ -455,9 +722,12 @@ def main() -> int:
                     help="which runtime's transcripts to read (default: auto — whichever are present)")
     ap.add_argument("--task", metavar="ID", help="one /ai-task task: window, tokens per runtime, budget")
     ap.add_argument("--project", metavar="DIR", help="the project holding .ai/ (default: search upwards)")
+    ap.add_argument("--no-cache", action="store_true",
+                    help="ignore and do not write the incremental parse cache")
     ap.add_argument("--budgets", action="store_true", help="print the installed plans' budget tables")
     args = ap.parse_args()
 
+    cache_path()        # resolved from the directory the command was run in
     if args.budgets:
         return print_budgets()
     if args.task:
@@ -504,6 +774,7 @@ def main() -> int:
             calls += parse_claude(root, args)
         else:
             calls += parse_codex(roots["codex"], args)
+    cache_flush()
 
     if not calls:
         print("no usage records matched")

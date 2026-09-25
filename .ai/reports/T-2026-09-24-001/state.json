@@ -1,0 +1,514 @@
+{
+  "task_id": "T-2026-09-24-001",
+  "goal": "usage-report: on-disk incremental parse cache keyed by path+mtime+size, so a rescan reads only the new lines; bump the project version to 2.0.2",
+  "workflow": "feature",
+  "risk_tier": "T3",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "usage-report: on-disk incremental parse cache keyed by path+mtime+size, so a rescan reads only the new lines; bump the project version to 2.0.2",
+        "allowed_files": [
+          "skills/usage-report/usage-report.py"
+        ],
+        "forbidden_files": [
+          "tests/test-usage-report.sh",
+          "tests/test-codex-usage-report.sh",
+          "skills/usage-report/SKILL.md",
+          "README.md",
+          ".codex-plugin/plugin.json"
+        ],
+        "forbidden_reason": "moved to step 1.3",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": "67f1cace945b3a7815231cfbd1719c7d01e80aff",
+        "diff": {
+          "tree_after": "db5520e7fbd9dcd46757f55061af59d0e2c772c1",
+          "paths": [
+            "skills/usage-report/usage-report.py"
+          ],
+          "files": 1,
+          "added": 117,
+          "deleted": 8,
+          "lines": 125,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "1.3",
+        "description": "docs, the accepted-risk entry and the version bump: their own step, 84 lines",
+        "allowed_files": [
+          "skills/usage-report/SKILL.md",
+          "README.md",
+          ".codex-plugin/plugin.json"
+        ],
+        "forbidden_files": [
+          "tests/test-usage-report.sh",
+          "tests/test-codex-usage-report.sh"
+        ],
+        "forbidden_reason": "moved to step 1.2",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": "4124c724f20fd9af40a06aaef294e8578ab59ae9",
+        "diff": {
+          "tree_after": "70abb89b8210c42a3d573b684290c2eb59e4ec99",
+          "paths": [
+            ".codex-plugin/plugin.json"
+          ],
+          "files": 1,
+          "added": 1,
+          "deleted": 1,
+          "lines": 2,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "1.2",
+        "description": "the cache's tests: their own step, 111 lines",
+        "allowed_files": [
+          "tests/test-usage-report.sh",
+          "tests/test-codex-usage-report.sh"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": "db5520e7fbd9dcd46757f55061af59d0e2c772c1",
+        "diff": {
+          "tree_after": "4124c724f20fd9af40a06aaef294e8578ab59ae9",
+          "paths": [
+            "tests/test-codex-usage-report.sh",
+            "tests/test-usage-report.sh"
+          ],
+          "files": 2,
+          "added": 63,
+          "deleted": 0,
+          "lines": 63,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "STRONG review: 1 BLOCKER (a cache entry is handed to the other runtime's fold), 1 HIGH (the head guard and the per-day slots survive mutation with a green suite), 3 MEDIUM (the suites run uncached; an unterminated last line is dropped; the cache file is world-readable), 2 LOW (type-confused cache aborts the report; leftover tmp files; SKILL.md overclaims)",
+        "allowed_files": [
+          "skills/usage-report/usage-report.py",
+          "skills/usage-report/SKILL.md",
+          ".codex-plugin/plugin.json"
+        ],
+        "forbidden_files": [
+          "tests/test-usage-report.sh",
+          "tests/test-codex-usage-report.sh",
+          "README.md"
+        ],
+        "forbidden_reason": "moved to step R1.2",
+        "required_tests": [],
+        "status": "done",
+        "kind": "remediation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "4255ad7ffdbcf18e766b0b615b89a32fa7823452",
+          "paths": [
+            ".codex-plugin/plugin.json",
+            "skills/usage-report/usage-report.py"
+          ],
+          "files": 2,
+          "added": 302,
+          "deleted": 98,
+          "lines": 400,
+          "unscoped": [],
+          "binary": [],
+          "status": "red"
+        }
+      },
+      {
+        "step_id": "R1.2",
+        "description": "the review's test gaps and the assertion count: their own step",
+        "allowed_files": [
+          "tests/test-usage-report.sh",
+          "tests/test-codex-usage-report.sh",
+          "README.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "remediation",
+        "tree_before": "4255ad7ffdbcf18e766b0b615b89a32fa7823452",
+        "diff": {
+          "tree_after": "4255ad7ffdbcf18e766b0b615b89a32fa7823452",
+          "paths": [],
+          "files": 0,
+          "added": 0,
+          "deleted": 0,
+          "lines": 0,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R3",
+        "description": "remediation batch 3",
+        "allowed_files": [
+          "skills/usage-report/usage-report.py",
+          "skills/usage-report/SKILL.md",
+          "README.md",
+          ".codex-plugin/plugin.json",
+          "tests/test-usage-report.sh",
+          "tests/test-codex-usage-report.sh"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "remediation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "3f3e19814f8d48dddfac0c0de61771aae1f49ae1",
+          "paths": [
+            ".codex-plugin/plugin.json",
+            "skills/usage-report/usage-report.py",
+            "tests/test-codex-usage-report.sh",
+            "tests/test-usage-report.sh"
+          ],
+          "files": 4,
+          "added": 544,
+          "deleted": 98,
+          "lines": 642,
+          "unscoped": [],
+          "binary": [],
+          "status": "red"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "1.2",
+    "1.3",
+    "R1",
+    "R1.2",
+    "R3"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "passed",
+  "security_status": "not_applicable",
+  "open_risks": [
+    "the usage-report cache is trusted before it is proven foldable, and the cache tests assert cached-vs-uncached agreement rather than absolute expected values: a defect that degrades both runs identically is invisible to the suite (re-review HIGH x2, MEDIUM x2)"
+  ],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "Ivan",
+    "granted_at": "2026-09-25T20:06:07Z",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "terminal",
+    "unattended": false
+  },
+  "created_at": "2026-09-24T00:26:34Z",
+  "updated_at": "2026-09-25T20:06:43Z",
+  "history": [
+    {
+      "at": "2026-09-24T00:26:34Z",
+      "event": "task_started",
+      "detail": "usage-report: on-disk incremental parse cache keyed by path+mtime+size, so a rescan reads only the new lines; bump the project version to 2.0.2 (feature)"
+    },
+    {
+      "at": "2026-09-24T00:26:34Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-09-24T00:26:34Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-09-24T00:26:34Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-09-24T00:26:34Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-09-24T00:26:34Z",
+      "event": "risk_classified",
+      "detail": "T2: T2: one reporting script plus docs and version strings; the cache is the only correctness-sensitive part"
+    },
+    {
+      "at": "2026-09-24T00:26:34Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-09-24T00:26:34Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-09-24T00:26:34Z",
+      "event": "step_started",
+      "detail": "1: usage-report: on-disk incremental parse cache keyed by path+mtime+size, so a rescan reads only the new lines; bump the project version to 2.0.2"
+    },
+    {
+      "at": "2026-09-24T00:38:12Z",
+      "event": "set",
+      "detail": "e2e_status = passing"
+    },
+    {
+      "at": "2026-09-24T00:38:59Z",
+      "event": "scope_change",
+      "detail": "1 -> 1.2: tests/test-usage-report.sh, tests/test-codex-usage-report.sh"
+    },
+    {
+      "at": "2026-09-24T00:39:00Z",
+      "event": "scope_change",
+      "detail": "1 -> 1.3: skills/usage-report/SKILL.md, README.md, .codex-plugin/plugin.json"
+    },
+    {
+      "at": "2026-09-24T20:41:40Z",
+      "event": "step_started",
+      "detail": "1: usage-report: on-disk incremental parse cache keyed by path+mtime+size, so a rescan reads only the new lines; bump the project version to 2.0.2"
+    },
+    {
+      "at": "2026-09-24T20:44:28Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-09-24T20:57:23Z",
+      "event": "step_started",
+      "detail": "1.2: the cache's tests: their own step, 111 lines"
+    },
+    {
+      "at": "2026-09-24T20:58:56Z",
+      "event": "step_completed",
+      "detail": "1.2"
+    },
+    {
+      "at": "2026-09-24T20:58:56Z",
+      "event": "risk_classified",
+      "detail": "T3: rescored from the real diff: over the task budget: 419 lines > 400"
+    },
+    {
+      "at": "2026-09-24T20:58:56Z",
+      "event": "plan_review",
+      "detail": "superseded by the review of the real diff"
+    },
+    {
+      "at": "2026-09-24T21:01:41Z",
+      "event": "step_started",
+      "detail": "1.3: docs, the accepted-risk entry and the version bump: their own step, 84 lines"
+    },
+    {
+      "at": "2026-09-24T21:11:54Z",
+      "event": "step_started",
+      "detail": "1.3: docs, the accepted-risk entry and the version bump: their own step, 84 lines"
+    },
+    {
+      "at": "2026-09-24T21:15:00Z",
+      "event": "step_completed",
+      "detail": "1.3"
+    },
+    {
+      "at": "2026-09-24T21:15:18Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-09-24T21:19:45Z",
+      "event": "step_completed",
+      "detail": "1.3"
+    },
+    {
+      "at": "2026-09-24T21:20:12Z",
+      "event": "set",
+      "detail": "test_status = passing"
+    },
+    {
+      "at": "2026-09-24T21:20:21Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-09-24T21:27:08Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-09-24T21:27:08Z",
+      "event": "remediation",
+      "detail": "R1: STRONG review: 1 BLOCKER (a cache entry is handed to the other runtime's fold), 1 HIGH (the head guard and the per-day slots survive mutation with a green suite), 3 MEDIUM (the suites run uncached; an unterminated last line is dropped; the cache file is world-readable), 2 LOW (type-confused cache aborts the report; leftover tmp files; SKILL.md overclaims)"
+    },
+    {
+      "at": "2026-09-24T21:27:08Z",
+      "event": "step_started",
+      "detail": "R1: STRONG review: 1 BLOCKER (a cache entry is handed to the other runtime's fold), 1 HIGH (the head guard and the per-day slots survive mutation with a green suite), 3 MEDIUM (the suites run uncached; an unterminated last line is dropped; the cache file is world-readable), 2 LOW (type-confused cache aborts the report; leftover tmp files; SKILL.md overclaims)"
+    },
+    {
+      "at": "2026-09-24T21:36:42Z",
+      "event": "set",
+      "detail": "test_status = passing"
+    },
+    {
+      "at": "2026-09-24T21:36:53Z",
+      "event": "scope_change",
+      "detail": "R1 -> R1.2: tests/test-usage-report.sh, tests/test-codex-usage-report.sh, README.md"
+    },
+    {
+      "at": "2026-09-24T21:37:24Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-09-24T21:37:24Z",
+      "event": "step_started",
+      "detail": "R1.2: the review's test gaps and the assertion count: their own step"
+    },
+    {
+      "at": "2026-09-24T21:37:24Z",
+      "event": "step_completed",
+      "detail": "R1.2"
+    },
+    {
+      "at": "2026-09-24T21:48:15Z",
+      "event": "risk_added",
+      "detail": "the usage-report cache is trusted before it is proven foldable, and the cache tests assert cached-vs-uncached agreement rather than absolute expected values: a defect that degrades both runs identically is invisible to the suite (re-review HIGH x2, MEDIUM x2)"
+    },
+    {
+      "at": "2026-09-25T17:21:15Z",
+      "event": "remediation",
+      "detail": "R3: remediation batch 3"
+    },
+    {
+      "at": "2026-09-25T17:21:15Z",
+      "event": "step_started",
+      "detail": "R3: remediation batch 3"
+    },
+    {
+      "at": "2026-09-25T17:55:44Z",
+      "event": "step_completed",
+      "detail": "R3"
+    },
+    {
+      "at": "2026-09-25T17:55:44Z",
+      "event": "set",
+      "detail": "test_status = passing"
+    },
+    {
+      "at": "2026-09-25T17:55:44Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-09-25T18:38:27Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-09-25T18:38:27Z",
+      "event": "set",
+      "detail": "e2e_status = passing"
+    },
+    {
+      "at": "2026-09-25T18:38:34Z",
+      "event": "set",
+      "detail": "security_status = not_applicable"
+    },
+    {
+      "at": "2026-09-25T18:39:10Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval"
+    },
+    {
+      "at": "2026-09-25T18:39:10Z",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "2026-09-25T20:06:07Z",
+      "event": "human_approval",
+      "detail": "granted by Ivan via terminal"
+    },
+    {
+      "at": "2026-09-25T20:06:43Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-09-25T20:06:43Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-09-24-001/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-09-25T20:06:43Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "6ca0369533f63c7058816b4c341cb58be49f20d0",
+    "base_tree": "381a1afe097873e30c93c50b2b5e5c01c9ea3fb7",
+    "task": {
+      "files": 4,
+      "added": 544,
+      "deleted": 98,
+      "lines": 642,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 69,
+      "tree": "3f3e19814f8d48dddfac0c0de61771aae1f49ae1",
+      "measured_at": "2026-09-25T17:55:44Z",
+      "status": "green"
+    },
+    "rescored_tier": "T3",
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-09-24-001/sensors.json",
+    "tree": "3f3e19814f8d48dddfac0c0de61771aae1f49ae1",
+    "verdict": "required",
+    "checked_at": "2026-09-25T17:55:44Z"
+  },
+  "tests": {
+    "runs": [],
+    "suite_runs": 0
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}
