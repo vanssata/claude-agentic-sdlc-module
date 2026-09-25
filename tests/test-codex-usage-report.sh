@@ -10,6 +10,7 @@ set -uo pipefail
 SCRIPT="$PLUGIN_ROOT/skills/usage-report/usage-report.py"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 S="$TMP/sessions"; mkdir -p "$S/2026/09/01"
+export USAGE_REPORT_CACHE="$TMP/suite-cache.json"   # the corpus runs cached
 
 meta() {  # meta <thread-id> <cwd> <session-id> <source-json>
     jq -nc --arg id "$1" --arg cwd "$2" --arg sid "$3" --argjson src "$4" \
@@ -163,5 +164,35 @@ printf '{"timestamp":"2026-09-01T10:00:00Z","message":{"id":"m1","model":"claude
 out=$(python3 "$SCRIPT" --root "$CL" --all 2>&1)
 printf '%s' "$out" | grep -q '^claude ' && pass "a Claude directory is sniffed as Claude" || fail "claude sniff failed" "$out"
 printf '%s' "$out" | grep -q '^codex ' && fail "Claude records must not be attributed to codex" || pass "and produces no codex rows"
+
+echo "== the incremental parse cache, on a rollout file"
+# A rollout file is appended to for as long as the thread lives, so the cache
+# earns its keep here — and must report exactly what an uncached run reports.
+C="$TMP/cache.json"; R="$S/2026/09/01/rollout-2026-09-01T18-00-00-t11.jsonl"
+{ meta t11 /work t11 '"cli"'; turn turnC gpt-5.6-sol high /work
+  usage rc1 turnC 1000000 0 0 0; } > "$R"
+ccached() { USAGE_REPORT_CACHE="$C" python3 "$SCRIPT" --provider codex --root "$S" --all 2>&1; }
+cplain()  { USAGE_REPORT_CACHE="" python3 "$SCRIPT" --provider codex --root "$S" --all 2>&1; }
+
+cold=$(ccached)
+[ "$cold" = "$(cplain)" ] && pass "a cold run reports what an uncached run reports" || fail "cold run differs" "$cold"
+chmod 000 "$R"
+[ "$(ccached)" = "$cold" ] && pass "an unchanged rollout file is not read again at all" || fail "an unchanged rollout was re-read"
+chmod 644 "$R"
+usage rc2 turnC 2000000 0 0 0 >> "$R"
+[ "$(ccached)" = "$(cplain)" ] && pass "an appended rollout file is folded from the offset, not from zero" || fail "append" "$(ccached)"
+
+# A rollout file whose last record has no newline after it, and no response_id:
+# the record is keyed by its position, so a state that folded the tail into
+# itself would append a new key on every rescan and the bill would grow.
+NL="$TMP/nonl"; mkdir -p "$NL"; NC="$TMP/nonl-cache.json"
+{ meta t12 /work t12 '"cli"'; turn turnD gpt-5.6-sol high /work
+  usage rd1 turnD 1000000 0 0 0; } > "$NL/rollout-nonl.jsonl"
+usage "" turnD 1000000 0 0 0 | tr -d '\n' | sed 's/"response_id":"",//' >> "$NL/rollout-nonl.jsonl"
+ncached() { USAGE_REPORT_CACHE="$NC" python3 "$SCRIPT" --provider codex --root "$NL" --all 2>&1; }
+one=$(ncached); two=$(ncached); three=$(ncached)
+ref=$(USAGE_REPORT_CACHE="" python3 "$SCRIPT" --provider codex --root "$NL" --all 2>&1)
+[ "$one" = "$ref" ] && pass "an unterminated last record is reported, cached or not" || fail "unterminated record" "$one"
+[ "$two" = "$one" ] && [ "$three" = "$one" ] && pass "and it is not folded into the stored state: three rescans, one bill" || fail "unterminated record grew on a rescan" "$three"
 
 summary "codex usage-report"

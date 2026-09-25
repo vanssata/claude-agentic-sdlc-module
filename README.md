@@ -1,10 +1,10 @@
 # claude-agentic
 
-[![Version](https://img.shields.io/badge/version-2.0.0-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v2.0.0)
+[![Version](https://img.shields.io/badge/version-2.0.2-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v2.0.2)
 [![Runtimes](https://img.shields.io/badge/runtimes-Claude%20Code%20%7C%20Codex-d2f878?labelColor=101210)](#one-module-two-runtimes)
 [![Known risks](https://img.shields.io/badge/known%20risks-documented-d2f878?labelColor=101210)](#known-risks)
 
-**Version 2.0.0**, the version `.codex-plugin/plugin.json` carries. Read
+**Version 2.0.2**, the version `.codex-plugin/plugin.json` carries. Read
 [Known risks](#known-risks) before relying on the guards.
 
 Host-wide model, effort and context routing for **Claude Code and Codex**, plus
@@ -499,7 +499,7 @@ and server-side branch protection.
 
 ## Known risks
 
-What version 2.0.0 knowingly does **not** protect against. Each entry says what
+What version 2.0.2 knowingly does **not** protect against. Each entry says what
 can happen, why it was left that way, what limits the damage, and what you should
 do. None is a secret. Each was found in a review or a spec, then accepted or
 deferred with a written reason in the file named under **Source**.
@@ -648,6 +648,29 @@ Cursor project (the tests use fixtures), and a cleanup run in a real terminal.
 first, and keep `original/` until you have checked the result.
 **Source.** `.ai/reports/T-2026-09-21-001/review.md`, the LOW rows.
 
+### The usage report's parse cache trusts mtime and size
+
+**Risk.** `usage-report.py` keeps each transcript's parse state on disk, keyed by
+path, mtime and size, and folds only the bytes past the offset it stopped at. A
+file that was rewritten rather than appended to — same path, larger, and the
+same first 256 bytes — would be resumed from a stale offset, and the report
+would count the old records together with the new ones.
+**Why it stays.** The alternative is hashing every transcript on every run,
+which is the work the cache exists to avoid. Transcripts are append-only in both
+runtimes; a rewrite that also preserves the opening bytes is not a case either
+runtime produces.
+**Limits.** A shrunk file, one whose first block changed, or one whose stored
+state is not the shape and contents this version folds, is parsed from zero.
+Same mtime and size means the file is not read again — unless its last line had
+no newline after it, which is re-read until it is complete — so an in-place
+rewrite of exactly the same length is the other side of the same assumption.
+The cache is a report's cache: nothing else reads it, and a wrong number is a
+wrong number in a report, not a wrong change to a repository.
+**What to do.** `--no-cache` reports without it, and tells you within one run
+whether a surprising number came from the cache. Deleting
+`~/.cache/claude-agentic/usage-report.json` rebuilds it from scratch.
+**Source.** This entry; `skills/usage-report/SKILL.md`, "The parse cache".
+
 ## Migrating from claude-routing
 
 This plugin absorbed `claude-routing`. Run `./install.sh` once and it:
@@ -684,7 +707,7 @@ one; nothing references it any more.
 bash tests/run-all.sh
 ```
 
-Twenty-five suites, 2,129 assertions. The guards against JSON fixtures in both runtimes (including
+Twenty-five suites, 2,163 assertions. The guards against JSON fixtures in both runtimes (including
 `apply_patch` payloads that touch several files at once); the state machine and
 its `triage` call; scaffold idempotency for one runtime, the other, and both
 over a single `.ai/` tree; installer rendering for every plan combination and
@@ -696,7 +719,8 @@ shipped templates and edited by hand, for a Claude and for a Codex project; an
 end-to-end run that installs both runtimes into scratch directories, scaffolds a
 throwaway repository, drives a T4 task through the guards from Claude and then
 from Codex, and proves both see the same state; the usage report for both
-runtimes; and both escalation gates through every event.
+runtimes, including its incremental parse cache against the same run with the
+cache off; and both escalation gates through every event.
 
 No suite reads or writes the developer's real `~/.claude` or `~/.codex`.
 

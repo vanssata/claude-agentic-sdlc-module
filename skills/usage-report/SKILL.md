@@ -22,6 +22,7 @@ $R --provider codex       # one runtime only: auto | claude | codex | both
 $R --provider claude --root <dir>
 $R --task <task-id> [--project DIR]   # one /ai-task task against its plan budget
 $R --budgets              # the installed plans' budget tables
+$R --no-cache             # ignore the parse cache for this run
 ```
 
 It prints per-model token counts (input / output / cache write / cache read),
@@ -46,6 +47,41 @@ falls back to Claude, which is what a bare `--root` meant before.
 | subagents | `agent-*` sessions | a thread whose `session_meta.source` is a `subagent`, reported by name |
 
 Local transcripts only; sessions from other machines are not visible.
+
+### The parse cache
+
+Transcripts are append-only and they grow: re-reading every line of every
+session on each report is most of what the script does. So each file's parse
+state is kept on disk, keyed by its path, mtime and size, and a rescan folds
+only the bytes past the offset it stopped at.
+
+`~/.cache/claude-agentic/usage-report.json` (or `$XDG_CACHE_HOME`).
+`USAGE_REPORT_CACHE=<path>` moves it; `USAGE_REPORT_CACHE=` turns it off;
+`--no-cache` skips it for one run without touching the file.
+
+Same mtime, size and fold as the entry, and the file is not read again unless
+its last line was unterminated when it was folded; grown, and
+only the new bytes are read, up to the last complete line. A last line with no
+newline after it is reported but not stored, so the next run reads it again —
+completed or not — instead of folding half a record. Shrunk, a different first
+block, or a state the other runtime's fold wrote, and the file is parsed from
+zero. A cache that cannot be read, was written by another version, or holds
+something this version cannot fold into is dropped rather than trusted: when the
+cache is wrong it costs a reparse, not a wrong number.
+
+Transcripts that no longer exist are dropped on each write; nothing else prunes
+it, so the file grows with the history on the machine — roughly 230 bytes per
+recorded response — a claude response stores two rows, one for its day and one
+overall, so tens of MB for a long, busy history. The warm run pays for
+reading and re-writing all of it whichever transcript changed, which is why the
+cache wins on fat transcripts and can be a small loss on lean ones; `--no-cache`
+is the measurement, not a guess. It is written 0600, in a directory it creates 0700 —
+it holds project paths, session ids and token counts taken from transcripts the
+runtimes themselves keep private. A directory that already exists keeps the
+permissions it has; only the file's own mode is guaranteed.
+
+Delete the file if you ever suspect it: the next run rebuilds it, and
+`--no-cache` tells you within one run whether it was the cache talking.
 
 ### The task journal, when the question is "what did *this task* cost"
 
