@@ -15,8 +15,8 @@ Facts are collected cheaply; thinking is paid for. Session model {{SESSION_MODEL
 | Tier | Model / effort | Used for |
 |---|---|---|
 | FAST | `{{FAST_MODEL}}` / `{{FAST_EFFORT}}` | reading and running: file search, listings, counting, logs and test output, running a command and reporting it (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
-| BALANCED | `{{BALANCED_MODEL}}` / `low`–`{{BALANCED_EFFORT}}` | discovery with judgement, context compression, mechanical edits, release assembly, the T2 review (`ai-discovery`, `ai-context`, `ai-implementer`, `ai-release`, `ai-reviewer` at T2) |
-| STRONG | `{{STRONG_MODEL}}` / `{{STRONG_EFFORT}}` | delegated planning and plan review at T4+, the diff review from T3, adversarial review, security review (`ai-planner`, `ai-reviewer`, `ai-security`) |
+| BALANCED | `{{BALANCED_MODEL}}` / `low`–`{{BALANCED_EFFORT}}` | discovery with judgement, context compression, mechanical edits, release assembly, the T2/T3 review when a sensor is red (`ai-discovery`, `ai-context`, `ai-implementer`, `ai-release`, `ai-reviewer` at T2/T3) |
+| STRONG | `{{STRONG_MODEL}}` / `{{STRONG_EFFORT}}` | delegated planning and plan review at T5+, the diff review from T4, adversarial review, security review (`ai-planner`, `ai-reviewer`, `ai-security`) |
 | EXPERT | {{EXPERT_ROW}} | design (`architect`) and `ai-expert`, only when STRONG said it cannot settle the question |
 
 <!-- stub: runtime=claude -->
@@ -24,7 +24,7 @@ Facts are collected cheaply; thinking is paid for. Session model {{SESSION_MODEL
 - Every agent definition and Workflow `agent()` call declares `model:` and `effort:`. Readers and runners never go above `low`. Forks inherit the session and take no `model`.
 - Five or more parallel agents never run on `{{STRONG_MODEL}}`. Escalate one task at a time on a stated trigger, never the whole fleet; never retry a failed thinking task on a cheaper model.
 - {{EFFORT_RULE}}
-- Implement in the main session. Delegate reading: logs and test output to `log-reader`, wide searches to `Explore` — both on `{{FAST_MODEL}}`. Nothing below T3 runs on `{{STRONG_MODEL}}`. The conclusion a human reads is written here, never delegated.
+- Implement in the main session. Delegate reading: logs and test output to `log-reader`, wide searches to `Explore` — both on `{{FAST_MODEL}}`. Nothing below T4 runs on `{{STRONG_MODEL}}`. The conclusion a human reads is written here, never delegated.
 - Split code reading by how many hops it needs. A lookup — where X is, one route, service id, config key or template — goes to `Explore` on `{{FAST_MODEL}}`. A trace of how the *installed* third-party code behaves (`vendor/`, `node_modules/`: decorators, compiler passes, service or template overrides, event subscribers) goes to a BALANCED reader at `low` — `ai-discovery`, or `Explore` spawned with `model: {{BALANCED_MODEL}}` where there is no `.ai/` — because a FAST reader stops at the first plausible match, and there a wrong answer reads like a right one.
 
 <!-- stub: runtime=claude -->
@@ -58,7 +58,7 @@ Applies everywhere a model can be chosen: an explicit spawn request, a custom ag
 | Tier | Model | Effort | Role |
 |---|---|---|---|
 | FAST | `{{FAST_MODEL_ID}}` | `{{FAST_EFFORT}}` | verbatim extraction, file and symbol inventories, listings, counting, logs and test output, running a command and reporting it (`ai-indexer`, `Explore`, `log-reader`, `ai-tester`) |
-| BALANCED — default for agents | `{{BALANCED_MODEL_ID}}` | `{{BALANCED_EFFORT}}` | discovery with judgement (at `low`), context compression, planning up to T2, release assembly, mechanical edits (`ai-discovery`, `ai-context`, `ai-risk`, `ai-planner`, `ai-release`, `ai-implementer`) |
+| BALANCED — default for agents | `{{BALANCED_MODEL_ID}}` | `{{BALANCED_EFFORT}}` | discovery with judgement (at `low`), context compression, planning up to T3, release assembly, mechanical edits (`ai-discovery`, `ai-context`, `ai-risk`, `ai-planner`, `ai-release`, `ai-implementer`) |
 | STRONG | `{{STRONG_MODEL_ID}}` | `{{STRONG_EFFORT}}` | the {{STRONG_MODEL}} triggers below (`ai-reviewer`, `ai-security`, `architect`, `ai-risk-strong`, `ai-planner-strong`) |
 | EXPERT | `{{EXPERT_MODEL_ID}}` | `{{EXPERT_EFFORT}}` | the EXPERT triggers below (`ai-expert`) |
 
@@ -69,8 +69,8 @@ The main session itself runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}` and does 
 ## {{STRONG_MODEL}} (STRONG) — only on one of these triggers
 
 <!-- stub: runtime=codex -->
-1. **Review** of a finished change before a commit is proposed: `ai-reviewer`. Add `ai-security` for authentication, authorization, secrets, payments, personal data, webhooks, and any T4/T5 change.
-2. **Risk and plan**: `ai-risk` on {{BALANCED_MODEL}} answered T3+ or `confidence: uncertain` — re-run it as `ai-risk-strong`; use `ai-planner-strong` at T4 (at T3 the session plans in plan mode; `ai-planner-strong` only on the T3 trigger in `delegate_anyway_when`).
+1. **Review** of a finished change before a commit is proposed: `ai-reviewer`. Add `ai-security` for authentication, authorization, secrets, payments, personal data, webhooks, and any T5/T6 change.
+2. **Risk and plan**: `ai-risk` on {{BALANCED_MODEL}} answered T4+ or `confidence: uncertain` — re-run it as `ai-risk-strong`; use `ai-planner-strong` at T5 (at T4 the session plans in plan mode; `ai-planner-strong` only on the T4 trigger in `delegate_anyway_when`).
 3. **Root cause** after a first diagnosis in the session already failed once (the fix did not hold, or competing hypotheses remain), or a bug in concurrency, retries/idempotency, caching or data integrity.
 4. **Reversible design** with two or more viable options that are costly to change later — module structure, service boundaries, a library choice: `architect`.
 
@@ -78,10 +78,10 @@ The main session itself runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}` and does 
 ## {{EXPERT_MODEL}} (EXPERT) — only on one of these triggers
 
 <!-- stub: runtime=codex -->
-1. **T5**: a migration, infrastructure or production-architecture decision — `ai-expert` plans it.
+1. **T6**: a migration, infrastructure or production-architecture decision — `ai-expert` plans it.
 2. **STRONG could not settle it**: {{STRONG_MODEL}} answered `confidence: uncertain`, or two STRONG results contradict each other (plan against review).
 3. **Irreversible design** with several viable options — core data model, public API or event contract, service split: `ai-expert`.
-4. **Final check** of a T5 plan, or of a production-incident root cause, before a human acts on it.
+4. **Final check** of a T6 plan, or of a production-incident root cause, before a human acts on it.
 
 <!-- stub: runtime=codex -->
 ## Rules for the expensive tiers

@@ -67,10 +67,14 @@ grep -q 'custom' "$ROOT/CLAUDE.md" && pass "hand-edited CLAUDE.md content surviv
 echo "== the shipped risk-tier mirror matches its JSON"
 want=$(sha256sum "$CLAUDE_AGENTIC_TEMPLATES/.ai/policies/risk-tiers.json" | cut -d' ' -f1)
 grep -q "sha256:$want" "$CLAUDE_AGENTIC_TEMPLATES/.ai/policies/risk-tiers.md" \
-    && pass "risk-tiers.md carries the sha256 of the shipped risk-tiers.json" || fail "risk-tiers.md hash is stale — regenerate it"
+    && pass "risk-tiers.md carries the sha256 of the shipped risk-tiers.json" || fail "risk-tiers.md hash is stale — regenerate it" "expected sha256:$want"
 [ "$(jq -r .pipeline_profile "$ROOT/.ai/policies/risk-tiers.json")" = solo ] && pass "the scaffolded profile is solo" || fail "pipeline_profile should default to solo"
-jq -e '.pipeline_profiles.solo.delegated_stages.T4 | index("security_review")' "$ROOT/.ai/policies/risk-tiers.json" >/dev/null \
-    && pass "solo still delegates the security review at T4" || fail "solo T4 must delegate security_review"
+jq -e '.pipeline_profiles.solo.delegated_stages.T5 | index("security_review")' "$ROOT/.ai/policies/risk-tiers.json" >/dev/null \
+    && pass "solo still delegates the security review at T5" || fail "solo T5 must delegate security_review"
+[ "$(jq -r '.tiers | keys | length' "$ROOT/.ai/policies/risk-tiers.json")" -ge 7 ] \
+    && pass "the shipped table has seven tiers, T0 to T6" || fail "risk-tiers.json should ship T0–T6"
+[ "$(jq -r '.diff_budget.enforce' "$ROOT/.ai/policies/risk-tiers.json")" = false ] \
+    && pass "the shipped diff budget is advisory (enforce: false)" || fail "diff_budget.enforce should ship as false"
 
 echo "== an existing CLAUDE.md is extended, not replaced"
 ROOT2="$TMP/project2"; mkdir -p "$ROOT2"

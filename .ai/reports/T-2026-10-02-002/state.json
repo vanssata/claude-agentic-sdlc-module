@@ -1,0 +1,283 @@
+{
+  "task_id": "T-2026-10-02-002",
+  "goal": "install.sh --target auto installs a runtime only when its executable is on PATH; a directory alone is skipped with a note and no plan prompt",
+  "workflow": "bugfix",
+  "risk_tier": "T2",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "install.sh --target auto installs a runtime only when its executable is on PATH; a directory alone is skipped with a note and no plan prompt",
+        "allowed_files": [
+          "install.sh",
+          "tests/test-dual-runtime-install.sh",
+          "README.md",
+          "docs/faq.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "116adac4714bca8896880e1fb26f77a9ca285412",
+          "paths": [
+            "install.sh",
+            "tests/test-dual-runtime-install.sh"
+          ],
+          "files": 2,
+          "added": 37,
+          "deleted": 16,
+          "lines": 53,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "review: skip note word-splits on spaces (HIGH); hint wording (MEDIUM)",
+        "allowed_files": [
+          "install.sh",
+          "tests/test-dual-runtime-install.sh",
+          "README.md",
+          "docs/faq.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "remediation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "1c85eb9105fc352abc643cfa2064f7af6ef58da1",
+          "paths": [
+            "install.sh",
+            "tests/test-dual-runtime-install.sh"
+          ],
+          "files": 2,
+          "added": 43,
+          "deleted": 15,
+          "lines": 58,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "R1"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "passed",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": false,
+    "granted_by": null,
+    "granted_at": null,
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": null,
+    "unattended": false
+  },
+  "created_at": "2026-10-02T14:53:58Z",
+  "updated_at": "2026-10-02T15:07:12Z",
+  "history": [
+    {
+      "at": "2026-10-02T14:53:58Z",
+      "event": "task_started",
+      "detail": "install.sh --target auto installs a runtime only when its executable is on PATH; a directory alone is skipped with a note and no plan prompt (bugfix)"
+    },
+    {
+      "at": "2026-10-02T14:53:58Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-02T14:53:58Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-02T14:53:58Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-02T14:53:58Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-02T14:53:58Z",
+      "event": "risk_classified",
+      "detail": "T2: installer runtime detection; user chose binary-only"
+    },
+    {
+      "at": "2026-10-02T14:53:58Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-02T14:53:58Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-02T14:53:58Z",
+      "event": "step_started",
+      "detail": "1: install.sh --target auto installs a runtime only when its executable is on PATH; a directory alone is skipped with a note and no plan prompt"
+    },
+    {
+      "at": "2026-10-02T14:55:14Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-02T15:00:33Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-02T15:00:42Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-02T15:00:42Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-02T15:01:37Z",
+      "event": "remediation",
+      "detail": "R1: review: skip note word-splits on spaces (HIGH); hint wording (MEDIUM)"
+    },
+    {
+      "at": "2026-10-02T15:01:37Z",
+      "event": "step_started",
+      "detail": "R1: review: skip note word-splits on spaces (HIGH); hint wording (MEDIUM)"
+    },
+    {
+      "at": "2026-10-02T15:01:50Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-10-02T15:07:08Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-02T15:07:12Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-10-02T15:07:12Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-02T15:07:12Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-02-002/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-02T15:07:12Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "71997a19548d6ae969e1b9e3e358fb7281d2264b",
+    "base_tree": "223d458c84baa36f3129b8946d9ef68744490efc",
+    "task": {
+      "files": 2,
+      "added": 43,
+      "deleted": 15,
+      "lines": 58,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 14,
+      "tree": "1c85eb9105fc352abc643cfa2064f7af6ef58da1",
+      "measured_at": "2026-10-02T15:01:50Z",
+      "status": "green"
+    },
+    "rescored_tier": "T2",
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-02-002/sensors.json",
+    "tree": "116adac4714bca8896880e1fb26f77a9ca285412",
+    "verdict": "required",
+    "checked_at": "2026-10-02T15:00:42Z"
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "116adac4714bca8896880e1fb26f77a9ca285412",
+        "exit": 0,
+        "duration_s": 319,
+        "log": ".ai/reports/T-2026-10-02-002/tests-suite-1.log",
+        "at": "2026-10-02T15:00:33Z",
+        "env_retry": false
+      },
+      {
+        "n": 1,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "116adac4714bca8896880e1fb26f77a9ca285412",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-02-002/tests-e2e-1.log",
+        "at": "2026-10-02T15:00:42Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "1c85eb9105fc352abc643cfa2064f7af6ef58da1",
+        "exit": 0,
+        "duration_s": 318,
+        "log": ".ai/reports/T-2026-10-02-002/tests-suite-2.log",
+        "at": "2026-10-02T15:07:08Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 2
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}

@@ -15,11 +15,12 @@ work there. Under Claude Code the same escalation is `model: opus` on the
 ordinary agent.
 
 Which of them a task actually spawns depends on `pipeline_profile` in
-`.ai/policies/risk-tiers.json`. In the default `solo` profile T0–T3 run in
-direct mode: a T1 task spawns none, a T2 task spawns one (`ai-reviewer` on
-`sonnet`), a T3 task one `ai-reviewer` on `opus` (its plan is approved by the
-human in plan mode), plus cheap readers on `haiku` when a search or a test run
-is long. The full pipeline starts at T4. See `docs/risk-tiers.md`.
+`.ai/policies/risk-tiers.json`. In the default `solo` profile T0–T4 run in
+direct mode: a T1 task spawns none, a T2 or T3 task at most one (`ai-reviewer`
+on `sonnet`, only when a sensor is red — all green is the review), a T4 task
+one `ai-reviewer` on `opus` (its plan is approved by the human in plan mode),
+plus cheap readers on `haiku` when a search or a test run is long. The full
+pipeline starts at T5. See `docs/risk-tiers.md`.
 
 | Agent | Claude | Codex | Effort | Writes? | Runs at |
 |---|---|---|---|---|---|
@@ -27,12 +28,12 @@ is long. The full pipeline starts at T4. See `docs/risk-tiers.md`.
 | `ai-discovery` | sonnet | Terra | low | no | discovery, impact analysis |
 | `ai-context` | sonnet | Terra | medium | no | context |
 | `ai-risk` | sonnet (opus on re-run) | Terra (`ai-risk-strong` on Sol for the re-run) | medium | no | risk classification |
-| `ai-planner` | sonnet (opus at T3/T4) | Terra (`ai-planner-strong` on Sol at T3/T4) | medium | no | plan |
+| `ai-planner` | sonnet (opus at T5, and at T4 on a `delegate_anyway_when` trigger) | Terra (`ai-planner-strong` on Sol at T4/T5) | medium | no | plan |
 | `ai-implementer` | sonnet | Terra | medium | **yes** | mechanical steps only |
 | `ai-tester` | sonnet | Terra | low | no | one named scope at a time: a step's own tests, the suite after the last step, e2e once at the end (team profile, or an unfamiliar test setup) |
 | `ai-reviewer` | opus | Sol | high | no | plan review, adversarial review |
-| `ai-security` | opus | Sol | high | no | T4, T5, auth or personal data |
-| `ai-release` | sonnet | Terra | low | the report | release report at T4/T5 (solo) or from T2 (team) |
+| `ai-security` | opus | Sol | high | no | T5, T6, auth or personal data |
+| `ai-release` | sonnet | Terra | low | the report | release report at T5/T6 (solo) or from T2 (team) |
 | `ai-expert` | `opus`, pinned on every plan | Astra, xhigh on Pro, high on Plus | xhigh on Max and Team Max, high on Pro and Team Pro | no | escalation only |
 
 Three more come from the routing half, and are not part of the pipeline:

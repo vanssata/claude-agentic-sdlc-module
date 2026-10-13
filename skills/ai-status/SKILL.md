@@ -139,7 +139,7 @@ done
    ```
 
 5. **The sensors.** One line, from the report `state.py review-gate` wrote —
-   this is what decides whether a T2 review runs at all, so a reader must see
+   this is what decides whether a T2 or T3 review runs at all, so a reader must see
    it without asking:
 
    ```bash

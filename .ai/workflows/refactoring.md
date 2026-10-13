@@ -5,16 +5,17 @@ workflow in a legacy codebase, because success is invisible.
 
 > Who runs a stage is set by `pipeline_profile` in `policies/risk-tiers.json`.
 > The table names the agent for when a stage is delegated. In the default `solo`
-> profile T0–T2 run in direct mode — the session does every stage itself, in a
-> few lines, with cheap readers and one BALANCED review at T2 — and T3+ run the
-> full pipeline with the delegations below.
+> profile T0–T4 run in direct mode — the session does every stage itself, in a
+> few lines, with cheap readers and one review (BALANCED at T2/T3, and only
+> when a sensor is red; STRONG at T4, whose plan the human approves in plan
+> mode) — and T5+ run the full pipeline with the delegations below.
 
 | Stage | Who | Notes |
 |---|---|---|
 | DISCOVERY | `ai-discovery` | every caller, every test, every dynamic reference |
 | CONTEXT | `ai-context` | with `legacy_constraints` filled properly |
 | IMPACT ANALYSIS | `ai-discovery` | serialized data, cache keys, service ids, event names |
-| RISK CLASSIFICATION | `ai-risk` | shared code is T3 minimum |
+| RISK CLASSIFICATION | `ai-risk` | shared code is T4 minimum |
 | PLAN | `ai-planner` | characterization tests as their own steps, before anything moves |
 | PLAN REVIEW | `ai-reviewer` | always, whatever the tier |
 | IMPLEMENTATION | the session | one mechanical transformation per step |

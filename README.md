@@ -27,9 +27,10 @@ change.
 - **Guards, not guidelines.** Hooks refuse edits outside the approved step,
   reads of production secrets, force-pushes and deploys. No agent commits,
   merges or deploys: every task ends at your approval.
-- **Risk-tiered pipeline.** Each change gets a tier from T0 to T5. A typo fix
-  stays a one-line edit. A payment change gets a plan, tests, an adversarial
-  review and a security review.
+- **Risk-tiered pipeline.** Each change gets a tier from T0 to T6, by what it
+  reaches, never by how many files it touches. A typo fix stays a one-line
+  edit. A new resource with its screens gets the sensors. A payment change gets
+  a plan, tests, an adversarial review and a security review.
 - **Cheap by default.** Routing puts readers on the cheapest model, keeps the
   session on the one that does the thinking, and uses the top tier only when a
   named trigger calls for it. `/usage-report` shows where the tokens went.
@@ -87,7 +88,7 @@ Five files make that resume real, and every one of them is provider-neutral:
 A task also moves on purpose: `state.py handoff --to codex` (or `--to claude`)
 hands it over, prints the command to resume it there and runs nothing; until the
 other runtime resumes it, a state change (and `init --force`) from anywhere else
-exits 7. `--for review` asks the other vendor for a T4+ review; its verdict never
+exits 7. `--for review` asks the other vendor for a T5+ review; its verdict never
 clears the owner's own `blockers_open`, and moving the task again cancels an
 open request. `init`, `quick` and `risk` print a
 `preferred runtime:` line when the plan's table (refactoring → Codex on Claude
@@ -347,16 +348,19 @@ logs — which hands back the matching ranges with `file:line`, never the file.
 ## Risk tiers
 
 Every task is classified before it is planned. The tier decides who plans it, who
-reviews it, and whether a human signs it off. It does not depend on the runtime.
+reviews it, and whether a human signs it off. It does not depend on the runtime,
+and it comes from the **scope** of the change — a process, a migration, money,
+identity, infrastructure — never from how many files or lines it touches.
 
 | Tier | Covers | Plan review | Adversarial review | Security review | Human approval |
 |---|---|---|---|---|---|
 | T0 | documentation, comments | no | no | no | no |
-| T1 | formatting, an isolated admin screen | no | no | no | no |
-| T2 | a normal isolated feature | no | yes | no | no |
-| T3 | shared domain behaviour, orders, workflows, async | the human, in plan mode | yes | when auth or personal data | yes |
-| T4 | payments, accounting, tax, fiscal, auth, order state, customer data | yes | yes | yes | yes |
-| T5 | migrations, infrastructure, production architecture | yes | yes | yes | yes |
+| T1 | formatting, a label, a template tweak | no | no | no | no |
+| T2 | an isolated screen or form, a new field, a small feature that changes no process | no | the sensors; a model only when one is red | no | no |
+| T3 | CRUD and presentation: a new resource with its screens, a non-critical API extension | no | the sensors; a model only when one is red | no | no |
+| T4 | shared domain behaviour and processes: orders, workflows, async, integrations, an additive migration, config | the human, in plan mode | yes, STRONG | when auth or personal data | yes |
+| T5 | payments, accounting, tax, fiscal, auth, order state, customer data | yes | yes | yes | yes |
+| T6 | migration strategy, infrastructure, production architecture, destructive or data migrations | yes | yes | yes | yes |
 
 The machine-readable source of truth is `.ai/policies/risk-tiers.json`, which
 `/ai-init` copies into each project so the tiers can be tuned to that codebase.
@@ -365,36 +369,42 @@ The machine-readable source of truth is `.ai/policies/risk-tiers.json`, which
 
 The tier decides *whether* a stage runs; `pipeline_profile` in the same file
 decides *who* runs it. The default is `solo`, which has two modes: **direct**
-for T0–T3 — no pipeline ceremony, cheap readers only, one `sonnet` review at T2,
-one `opus` review at T3 whose plan the human approves in plan mode — and
-**sdlc** for T4–T5, the full pipeline:
+for T0–T4 — no pipeline ceremony, cheap readers only, a `sonnet` review at T2
+or T3 only when a sensor is red, one `opus` review at T4 whose plan the human
+approves in plan mode — and **sdlc** for T5–T6, the full pipeline:
 
 | Tier | `solo` delegates to a subagent | `team` delegates |
 |---|---|---|
 | T0, T1 | nothing — direct mode, no state file: say which files, edit, verify (T1) | discovery, test |
-| T2 | the adversarial review, on `sonnet`; the plan is a few lines in the conversation, recorded by one `state.py quick` call | everything except implementation |
-| T3 | the adversarial review, on `opus`; the plan is written in plan mode and approved by the human, recorded by one `state.py quick` call | everything except implementation |
-| T4 | plus security review and the release report | everything except implementation |
-| T5 | plus discovery and impact; the plan goes to `ai-expert` | everything except implementation |
+| T2, T3 | the adversarial review, on `sonnet`, only when `review-gate` finds a red sensor; the plan is a few lines in the conversation, recorded by one `state.py quick` call | everything except implementation |
+| T4 | the adversarial review, on `opus`; the plan is written in plan mode and approved by the human, recorded by one `state.py quick` call | everything except implementation |
+| T5 | plus the plan, its review, the security review and the release report | everything except implementation |
+| T6 | plus discovery and impact; the plan goes to `ai-expert` | everything except implementation |
 
 Before any of those reviews, the deterministic gates measure the change itself.
 `state.py step-done` counts what a step actually changed, between the tree the
-step began with and the tree now: over the tier's diff budget or outside the
-step's own files it exits 6 and asks for `state.py step-split`, never for the
-work to be abandoned. The tier is then re-scored from the real diff — a change
-that reached `**/Payment/**` is T4 from then on, and only a human, in their own
-terminal, ever lowers a tier. `state.py test-run` owns the test runs, keeps
-their output in a file and caps how many there may be. `state.py review-gate`
-runs the sensor set — the recorded suite result, the project's own linter and
-type checker, the diff, the re-score, step-to-test traceability, repeated
-blocks, and whether the named tests **fail without the change** — and at T2,
-with every one of them green, records `review_status: skipped_green`: the
-sensors are the review. A tool nobody wrote down is `unavailable`, not green,
-and keeps the review. From T3 the review always runs, with the sensor rows
-already in the ledger so the reviewer does not re-derive them.
+step began with and the tree now: outside the step's own files it exits 6 and
+asks for `state.py step-split`, never for the work to be abandoned; over the
+tier's diff budget it finishes the step and warns, naming `step-split` — the
+budget is advisory, and only a project that writes `diff_budget.enforce: true`
+makes it a gate again. The tier is then re-scored from the real diff by
+**scope**, never by size — a change that reached `**/Payment/**` is T5 from
+then on, and only a human, in their own terminal, ever lowers a tier.
+`state.py test-run` owns the test runs, keeps their output in a file and caps
+how many there may be. `state.py review-gate` runs the sensor set — the
+recorded suite result, the project's own linter and type checker, the diff, the
+re-score, step-to-test traceability, repeated blocks, and whether the named
+tests **fail without the change** — and up to T3, with every one of them
+green, records `review_status: skipped_green`: the sensors are the review. A
+tool nobody wrote down is `unavailable`, not green, and keeps the review; so
+does a task over its diff budget, and so does a change into `config/`, a
+dependency manifest or a migration, whose floor is T4. From T4 the review
+always runs, with the sensor rows already in the ledger so the reviewer does
+not re-derive them. A project still on the six-tier table is read on its own
+scale until `/project-update` renumbers it.
 
 In `solo`, discovery, context, impact and risk come from the request plus
-`grep -n`; up to T3 they are a few lines in the conversation, from T4 they are
+`grep -n`; up to T4 they are a few lines in the conversation, from T5 they are
 recorded stage by stage. Tests run in three scopes: a step runs **only the
 tests it names**, the verification command runs **once, after the last step, to
 the end** (no fail-fast flag; the failing test first for a bugfix), and the
@@ -402,9 +412,9 @@ the end** (no fail-fast flag; the failing test first for a bugfix), and the
 Every failure of the two end-of-task runs is then fixed as **one batch** in a
 `state.py remediate` step before one more run — at most two rounds, then the
 human decides. Review
-findings are handled the same way. Up to T3 the release report is the commit
+findings are handled the same way. Up to T4 the release report is the commit
 message. A subagent is still sent on a stated trigger: an unfamiliar
-area, an `UNKNOWN` the plan depends on, a non-obvious T3+ classification, or
+area, an `UNKNOWN` the plan depends on, a non-obvious T4+ classification, or
 verification output too long to read inline. Switch to `team` by editing the
 key. No stage is ever skipped; the profile only changes who does it.
 
@@ -427,9 +437,9 @@ plan's figure — reported, never enforced. The prompts themselves name tiers on
 | Tier | Claude Code | Codex | Does |
 |---|---|---|---|
 | FAST | `haiku`, low | Terra, low | reading and running: file search, inventories, logs, test output (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
-| BALANCED | `sonnet` | Terra, medium | discovery, context, planning up to T2, mechanical edits, release, the T2 review (`ai-discovery`, `ai-context`, `ai-implementer`, `ai-release`) |
-| STRONG | `opus`, high | Sol, high | adversarial and security review (from T3), T4 risk and planning, root cause after a first diagnosis failed, reversible design (`ai-reviewer`, `ai-security`, `architect`) |
-| EXPERT | the session model (Opus 5) on Max, `opus` pinned on Pro; Fable 5.1 [1m] on `architect` only | Astra, `xhigh` | T5, irreversible design, what STRONG could not settle |
+| BALANCED | `sonnet` | Terra, medium | discovery, context, planning up to T3, mechanical edits, release, the T2/T3 review (`ai-discovery`, `ai-context`, `ai-implementer`, `ai-release`) |
+| STRONG | `opus`, high | Sol, high | adversarial and security review (from T4), T5 risk and planning, root cause after a first diagnosis failed, reversible design (`ai-reviewer`, `ai-security`, `architect`) |
+| EXPERT | the session model (Opus 5) on Max, `opus` pinned on Pro; Fable 5.1 [1m] on `architect` only | Astra, `xhigh` | T6, irreversible design, what STRONG could not settle |
 
 The main session does the implementation itself. Every agent definition pins its
 own `model:` — most of them the BALANCED tier — and `CLAUDE_CODE_SUBAGENT_MODEL` is
@@ -550,7 +560,7 @@ make self-approval deliberate and visible, not impossible.
 (`gate_requested` in the journal). Every approval is journalled with who, when
 and how (`via: terminal`).
 **What to do.** Read `state.py events` for the approval before you merge a
-T3–T5 change. An approval you do not remember giving is a finding.
+T4–T6 change. An approval you do not remember giving is a finding.
 **Source.** WP2 security review. `hooks/ai-path-guard.sh`, `docs/hooks.md`.
 
 ### The deletion gate stops an agent's command, not an agent's script
@@ -766,7 +776,7 @@ settings, and its refusal on a malformed file; the migration off
 `claude-routing`; `/project-update` against a project scaffolded from the oldest
 shipped templates and edited by hand, for a Claude and for a Codex project; an
 end-to-end run that installs both runtimes into scratch directories, scaffolds a
-throwaway repository, drives a T4 task through the guards from Claude and then
+throwaway repository, drives a T5 task through the guards from Claude and then
 from Codex, and proves both see the same state; the usage report for both
 runtimes, including its incremental parse cache against the same run with the
 cache off; and both escalation gates through every event.

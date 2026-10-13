@@ -96,10 +96,24 @@ with open(root + "/.ai/policies/risk-tiers.json", "w") as fh:
     json.dump(policy, fh)
 PY
 OUT=$(N diff --from "$BASE" --to "$AFTER" --tier T2 --scope step); RC=$?
-[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'over: ' \
-    && pass "over the per-step budget is red and says by how much" || fail "should be red" "$OUT($RC)"
+[ $RC -eq 0 ] && printf '%s' "$OUT" | grep -q 'budget: over — ' \
+    && pass "over the per-step budget is reported, by how much, and stays green: size is advisory" \
+    || fail "should be green and say by how much" "$OUT($RC)"
+printf '%s' "$OUT" | grep -q '(advisory' \
+    && pass "and the line says it is advisory" || fail "should say advisory" "$OUT"
 printf '%s' "$OUT" | grep -q 'budget 1 / 1' \
     && pass "the project's own numbers are used, not the defaults" || fail "should read the project policy"
+# Only a project that wrote `enforce: true` turns the measurement into a gate.
+python3 - "$ROOT" <<'PY'
+import json, sys
+root = sys.argv[1]
+p = root + "/.ai/policies/risk-tiers.json"
+policy = json.load(open(p)); policy["diff_budget"]["enforce"] = True
+json.dump(policy, open(p, "w"))
+PY
+OUT=$(N diff --from "$BASE" --to "$AFTER" --tier T2 --scope step); RC=$?
+[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'budget: over — ' && ! printf '%s' "$OUT" | grep -q '(advisory' \
+    && pass "with diff_budget.enforce true the same diff is red" || fail "should be red under enforce" "$OUT($RC)"
 rm -f "$ROOT/.ai/policies/risk-tiers.json"
 
 echo "== section 2c: unavailable is never a refusal"
@@ -117,12 +131,40 @@ OUT=$(N rescore --from "$BASE" --to "$AFTER" --declared T2); RC=$?
     && pass "a source-only diff keeps its declared tier" || fail "should stay T2" "$OUT($RC)"
 
 OUT=$(N rescore --from "$BASE" --to "$DEEP" --declared T2); RC=$?
-[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'T2 -> T4' \
-    && pass "a diff reaching **/Payment/** re-scores to T4" || fail "should raise to T4" "$OUT($RC)"
+[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'T2 -> T5' \
+    && pass "a diff reaching **/Payment/** re-scores to T5" || fail "should raise to T5" "$OUT($RC)"
 
-OUT=$(N rescore --from "$BASE" --to "$DEEP" --declared T5)
-printf '%s' "$OUT" | grep -q 'T5' \
+OUT=$(N rescore --from "$BASE" --to "$DEEP" --declared T6)
+printf '%s' "$OUT" | grep -q 'T6' \
     && pass "re-scoring never lowers a declared tier (downgrade_rule)" || fail "must not lower" "$OUT"
+
+# Size never re-scores a tier on its own: a task over its budget is recorded
+# as over_budget and keeps its tier unless the project wrote enforce: true.
+python3 - "$ROOT" <<'PY'
+import json, sys
+root = sys.argv[1]
+policy = {"version": 4,
+          "diff_budget": {"per_step": {"T2": {"max_lines": 1, "max_files": 1}},
+                          "per_task": {"T2": {"max_lines": 1, "max_files": 1}},
+                          "exclude": [], "unbudgeted_scopes": []},
+          "path_scopes": [{"scope": "tests", "min_tier": "T1", "paths": ["tests/**"]}]}
+with open(root + "/.ai/policies/risk-tiers.json", "w") as fh:
+    json.dump(policy, fh)
+PY
+OUT=$(N rescore --from "$BASE" --to "$AFTER" --declared T2); RC=$?
+[ $RC -eq 0 ] && printf '%s' "$OUT" | grep -q 'green' \
+    && pass "a task over its budget keeps its tier: the budget is advisory" || fail "size must not raise the tier" "$OUT($RC)"
+python3 - "$ROOT" <<'PY'
+import json, sys
+p = sys.argv[1] + "/.ai/policies/risk-tiers.json"
+policy = json.load(open(p)); policy["diff_budget"]["enforce"] = True
+json.dump(policy, open(p, "w"))
+PY
+OUT=$(N rescore --from "$BASE" --to "$AFTER" --declared T2); RC=$?
+[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'T2 -> T3' \
+    && pass "with enforce true, over the task budget raises one tier (the old behaviour)" \
+    || fail "enforce should raise to T3" "$OUT($RC)"
+rm -f "$ROOT/.ai/policies/risk-tiers.json"
 
 printf '{"scripts": {"lint": "eslint ."}}\n' > "$ROOT/package.json"
 OUT=$(N detect)
@@ -146,9 +188,11 @@ git init -q "$GATE"; git -C "$GATE" config user.email t@example.com
 git -C "$GATE" config user.name Test
 printf 'one\n' > "$GATE/src/app.php"; git -C "$GATE" add -A
 git -C "$GATE" commit -qm base
+# This project wrote `enforce: true`: here the budget is a gate, not a warning.
 cat > "$GATE/.ai/policies/risk-tiers.json" <<'JSON'
-{"version": 3,
- "diff_budget": {"per_step": {"T2": {"max_lines": 5, "max_files": 5}},
+{"version": 4,
+ "diff_budget": {"enforce": true,
+                 "per_step": {"T2": {"max_lines": 5, "max_files": 5}},
                  "per_task": {"T2": {"max_lines": 400, "max_files": 15},
                               "T4": {"max_lines": 400, "max_files": 15}},
                  "exclude": [], "unbudgeted_scopes": ["docs"]},
@@ -174,7 +218,7 @@ S step 1 >/dev/null
 printf 'one\ntwo\nthree\nfour\nfive\nsix\nseven\n' > "$GATE/src/app.php"
 OUT=$(S step-done 1 2>&1); RC=$?
 [ $RC -eq 6 ] && printf '%s' "$OUT" | grep -q DIFF_BUDGET_EXCEEDED \
-    && pass "a step over its tier's budget exits 6" || fail "should exit 6" "$OUT($RC)"
+    && pass "a step over its tier's budget exits 6 when the project enforces the budget" || fail "should exit 6" "$OUT($RC)"
 printf '%s' "$OUT" | grep -q 'step-split' \
     && pass "the refusal names the way out" || fail "should suggest step-split" "$OUT"
 [ "$(S get --field approved_plan.current_step_id)" = 1 ] \
@@ -232,6 +276,82 @@ OUT=$(S remediate --files "tests/**" --note "third batch" 2>&1 </dev/null); RC=$
 [ $RC -eq 5 ] && printf '%s' "$OUT" | grep -q 'round 3' \
     && pass "a third remediation round needs the human (remediation_rule)" \
     || fail "should refuse round 3" "$OUT($RC)"
+
+echo "== section 6b: without enforce, the budget warns and the tier comes from the scope"
+ADV="$TMP/with space/advisory"
+mkdir -p "$ADV/.ai/state" "$ADV/.ai/reports" "$ADV/.ai/policies" "$ADV/src"
+A() { python3 "$STATE_PY" --root "$ADV" "$@"; }
+git init -q "$ADV"; git -C "$ADV" config user.email t@example.com; git -C "$ADV" config user.name Test
+printf 'one\n' > "$ADV/src/app.php"; git -C "$ADV" add -A; git -C "$ADV" commit -qm base
+cat > "$ADV/.ai/policies/risk-tiers.json" <<'JSON'
+{"version": 4,
+ "diff_budget": {"per_step": {"T2": {"max_lines": 2, "max_files": 5}},
+                 "per_task": {"T2": {"max_lines": 2, "max_files": 5}},
+                 "exclude": [], "unbudgeted_scopes": []},
+ "path_scopes": [{"scope": "tests", "min_tier": "T1", "paths": ["tests/**"]}],
+ "remediation_rounds": 2}
+JSON
+A quick --goal "a wide but harmless step" --workflow feature --tier T2 --files "src/**" >/dev/null
+printf 'one\ntwo\nthree\nfour\nfive\nsix\nseven\n' > "$ADV/src/app.php"
+OUT=$(A step-done 1 2>&1); RC=$?
+[ $RC -eq 0 ] && pass "a step over its budget is finished, not refused" || fail "should exit 0" "$OUT($RC)"
+printf '%s' "$OUT" | grep -q 'budget: over' && printf '%s' "$OUT" | grep -q '(advisory)' \
+    && pass "and the warning says by how much, and that it is advisory" || fail "should warn" "$OUT"
+printf '%s' "$OUT" | grep -q 'step-split' \
+    && pass "and still names step-split as the way to a smaller review" || fail "should name step-split" "$OUT"
+[ "$(A get --field approved_plan.steps | jq -r '.[0].status')" = done ] \
+    && pass "the step is done" || fail "step should be done"
+[ "$(A get --field risk_tier)" = T2 ] \
+    && pass "the task keeps its tier: size never re-scores it" || fail "size must not raise the tier" "$(A get --field risk_tier)"
+[ "$(A get --field diff.over_budget)" = True ] \
+    && pass "over_budget is recorded for the reviewer to see" || fail "over_budget should be recorded"
+# Advisory never means unread: a task past its budget cannot close on skipped_green.
+OUT=$(A review-gate 2>&1); RC=$?
+[ $RC -ne 0 ] && jq -e '.verdict.blocking | map(select(test("over the task budget"))) | length == 1' "$ADV/$(A get --field sensors.file)" >/dev/null \
+    && pass "and a task over its budget keeps its reviewer: the gate records the size as a reason" \
+    || fail "over budget should block skipped_green" "$OUT($RC)"
+rm -rf "$ADV"
+
+echo "== section 6d: the default floors that change a process sit above the skip ceiling"
+FLOOR="$TMP/with space/floors"; mkdir -p "$FLOOR/.ai/state"
+git init -q "$FLOOR"; git -C "$FLOOR" config user.email t@example.com; git -C "$FLOOR" config user.name Test
+printf 'base\n' > "$FLOOR/README.md"; git -C "$FLOOR" add -A; git -C "$FLOOR" commit -qm base
+F() { python3 "$SENSORS" --root "$FLOOR" "$@"; }
+FBASE=$(F snapshot)
+for spec in "requirements.txt:dependencies" "requirements-dev.txt:dependencies" "composer.json:dependencies" \
+            "config/packages/security.yaml:config" ".env.local:config" "migrations/Version1.php:migrations" \
+            "src/Migrations/Version2.php:migrations" ".ai/policies/testing.md:pipeline" "CLAUDE.md:pipeline"; do
+    path=${spec%%:*}; want=${spec##*:}
+    mkdir -p "$FLOOR/$(dirname "$path")"; printf 'x\n' > "$FLOOR/$path"
+    FTREE=$(F snapshot)
+    OUT=$(F rescore --from "$FBASE" --to "$FTREE" --declared T3); RC=$?
+    [ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q "T3 -> T4: $want" \
+        && pass "$path is $want and floors at T4, above the T3 ceiling" \
+        || fail "$path should re-score T3 -> T4 ($want)" "$OUT($RC)"
+    rm -f "$FLOOR/$path"
+done
+printf 'x\n' > "$FLOOR/docs/notes.txt" 2>/dev/null || { mkdir -p "$FLOOR/docs"; printf 'x\n' > "$FLOOR/docs/notes.txt"; }
+FTREE=$(F snapshot)
+OUT=$(F rescore --from "$FBASE" --to "$FTREE" --declared T2); RC=$?
+[ $RC -eq 0 ] && pass "a real text file is still docs" || fail "docs/notes.txt should stay T2" "$OUT($RC)"
+rm -rf "$FLOOR"
+
+echo "== section 6c: a six-tier policy is read on its own scale"
+LEG="$TMP/with space/legacy"; mkdir -p "$LEG/.ai/policies"
+printf '{"version": 3, "tiers": {"T0": {}, "T1": {}, "T2": {}, "T3": {}, "T4": {}, "T5": {}}}' > "$LEG/.ai/policies/risk-tiers.json"
+OUT=$(cd "$PLUGIN_ROOT/skills/ai-task" && python3 -c 'import sys, sensors
+p = sensors.load_policy(sys.argv[1])
+print(p["legacy_tiers"], p["sensors"]["skip_review_at_or_below"], p["sensors"]["bite"]["required_from"])' "$LEG")
+[ "$OUT" = "True T2 T2" ] && pass "no T6 in the table: the skip ceiling and bite stay at T2 for that project" || fail "legacy defaults" "$OUT"
+printf '{"version": 3, "tiers": {"T0": {}, "T5": {}}, "sensors": {"skip_review_at_or_below": "T1"}}' > "$LEG/.ai/policies/risk-tiers.json"
+OUT=$(cd "$PLUGIN_ROOT/skills/ai-task" && python3 -c 'import sys, sensors
+p = sensors.load_policy(sys.argv[1]); print(p["sensors"]["skip_review_at_or_below"])' "$LEG")
+[ "$OUT" = "T1" ] && pass "a ceiling the project wrote is kept as written" || fail "written ceiling" "$OUT"
+printf '{"version": 4, "tiers": {"T0": {}, "T6": {}}}' > "$LEG/.ai/policies/risk-tiers.json"
+OUT=$(cd "$PLUGIN_ROOT/skills/ai-task" && python3 -c 'import sys, sensors
+p = sensors.load_policy(sys.argv[1]); print(p["legacy_tiers"], p["sensors"]["skip_review_at_or_below"])' "$LEG")
+[ "$OUT" = "False T3" ] && pass "a seven-tier policy gets the T3 ceiling" || fail "v2 defaults" "$OUT"
+rm -rf "$LEG"
 
 echo "== section 7: running the tests is the state's job, not an agent's"
 cat > "$GATE/.ai/policies/testing.md" <<'MD'

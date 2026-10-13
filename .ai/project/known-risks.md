@@ -59,3 +59,10 @@
 - **How likely / how bad**: deliberate padding only.
 - **Suggested fix**: deny or skip the ERE for a line over a fixed length that contains both `update` and `--co`.
 - **Status**: open
+
+## tests/test-project-update.sh is red on the uncommitted tier-model v2 tree (found 2026-10-13, outside T1 task on test-runtime-gate.sh)
+- **Where**: `tests/test-project-update.sh:79,90,109,114` against `skills/ai-init/templates/.ai/policies/risk-tiers.json` as delivered after T-2026-10-13-002 closed (post-close JSON hand-over at 17:58, after its last suite run at 17:40).
+- **What could go wrong**: KNOWN FACT — at HEAD the file passes 179/0; on the working tree it fails 4: the fixture's edit to `tiers.T4.examples` now collides with the template's new T4 examples, so `--check` reports `2 need a manual merge` where the test pins `1`, the second `--apply` is not clean, and the mirror hash is not carried forward. INFERENCE — the fixture was written for the old tier table and needs the v2 shape, or the template's T4 examples should not overlap the fixture's edit.
+- **How likely / how bad**: certain; blocks a green `bash tests/run-all.sh` until fixed.
+- **Suggested fix**: update the fixture in `test-project-update.sh` (and the expected counts) to the seven-tier template; verify with the full suite once before committing the tier-model v2 work.
+- **Status**: open

@@ -11,6 +11,9 @@ FIX="$PLUGIN_ROOT/tests/fixtures/codex-hooks"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 unset CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_PROJECT_DIR CLAUDE_CODE_SUBAGENT_MODEL
+# A background or `-p` session exports CLAUDE_CODE_SESSION_ATTENDED=0 and a CI launcher AI_UNATTENDED=1;
+# the gate then never asks, and the "should ask" assertions below would fail for the wrong reason.
+unset CLAUDE_CODE_SESSION_ATTENDED AI_UNATTENDED
 for v in $(env | sed -n 's/^\(\(AI_RUNTIME_GATE\|CLAUDE_FABLE_GATE\|CODEX_MODEL_GATE\)[A-Z_]*\)=.*/\1/p'); do unset "$v"; done
 
 # One installed copy per runtime, where install.sh puts them.

@@ -1,6 +1,6 @@
 ---
 name: ai-task
-description: Run one task through the agentic pipeline with the gates its risk tier requires. In the default solo profile T0–T3 run in direct mode (name the files, edit, one verification run at the end, failures fixed as one batch, one BALANCED-tier review at T2; at T3 the plan is written in plan mode and approved by the human, and the one review is STRONG) and T4–T5 run the full SDLC pipeline — discovery, context, impact, risk tier, plan, plan review, implementation, test, adversarial review, security review, release report, human approval. Resumes an interrupted task from .ai/state/current.json. Use for any change in a repository that has .ai/.
+description: Run one task through the agentic pipeline with the gates its risk tier requires. In the default solo profile T0–T4 run in direct mode (name the files, edit, one verification run at the end, failures fixed as one batch; at T2/T3 the sensors are the review and a BALANCED-tier reviewer runs only when one is red; at T4 the plan is written in plan mode and approved by the human, and the one review is STRONG) and T5–T6 run the full SDLC pipeline — discovery, context, impact, risk tier, plan, plan review, implementation, test, adversarial review, security review, release report, human approval. Resumes an interrupted task from .ai/state/current.json. Use for any change in a repository that has .ai/.
 argument-hint: <what you want done> | --resume | --abandon
 ---
 
@@ -80,7 +80,7 @@ of work.
 on stderr — the plan's table or the quota rule names the other runtime. It is
 advice: say it to the user, and move the task only when they agree, with
 `$STATE handoff --to <runtime> --why "<reason>"` (`--for review` to ask the
-other vendor for the T4+ review). It prints the command to resume there; it
+other vendor for the T5+ review). It prints the command to resume there; it
 never runs it.
 
 Then read the profile:
@@ -93,36 +93,42 @@ The stages are the same in every profile; the profile decides **who does each
 one**. `pipeline_profiles.<profile>.delegated_stages[<tier>]` in that file lists
 the stages that go to a subagent. `solo`, the default, has two modes:
 
-- **direct** (T0–T3): no ceremony. You name the files, edit, run each step's
+- **direct** (T0–T4): no ceremony. You name the files, edit, run each step's
   own scoped tests, then the verification command once at the end and the e2e
   suite once after it, and fix every failure as one batch.
-  The only subagents are cheap readers (`Explore`, `log-reader`) and, at T2,
-  one review on the BALANCED tier (`ai-reviewer` with
+  The only subagents are cheap readers (`Explore`, `log-reader`) and, at T2
+  and T3, one review on the BALANCED tier (`ai-reviewer` with
   `model: $($STATE profile --tier BALANCED)` on Claude Code,
-  `ai-reviewer-balanced` on Codex). Nothing runs on STRONG below T3. At T3 the
+  `ai-reviewer-balanced` on Codex) — and only when `review-gate` says a sensor
+  is red; all green is the review. Nothing runs on STRONG below T4. At T4 the
   same path gains three things, and only three: the plan is written in plan
   mode and the human approves it before any edit, characterization tests come
   first where legacy behaviour changes, and the one review runs on STRONG.
   No `ai-planner`, no plan-review agent, no `ai-release`. `quick` exits 8
-  `DIRECT_MODE_CAP` when the plan caps direct mode below the tier: then use
-  `init` and the pipeline.
-- **sdlc** (T4–T5): the full pipeline below, recorded stage by stage, with the
+  `DIRECT_MODE_CAP` when the project's `direct_mode_cap` in `risk-tiers.json`
+  sits below the tier: then use `init` and the pipeline.
+- **sdlc** (T5–T6): the full pipeline below, recorded stage by stage, with the
   delegations the profile lists.
 
-Decide the tier **first**, from the trigger table, before anything else; when
-two tiers are arguable take the higher. Until it is known, act as for T2.
+Decide the tier **first**, from the trigger table, before anything else. The
+tier is the **scope** of the change — what it reaches: a process other code
+runs through, a migration, money, identity, infrastructure — never how many
+files or lines it touches; adding a resource and its screens without changing
+an existing process is T3, a change to a process is T4, money and identity
+are T5, the irreversible is T6. When two tiers are arguable take the higher.
+Until it is known, act as for T2.
 
-## 1a. Direct mode — T0, T1, T2, T3
+## 1a. Direct mode — T0, T1, T2, T3, T4
 
-Skip `$STATE init` above for T0–T3; direct mode has its own single call.
+Skip `$STATE init` above for T0–T4; direct mode has its own single call.
 
 1. **Tier and files.** Take the entry points from the request; confirm them with
    `grep -n`. Say the tier, the trigger and the files you will touch, in one to
-   five lines. At T2 that is the plan. **At T3** write it in plan mode: a
+   five lines. At T2 and T3 that is the plan. **At T4** write it in plan mode: a
    numbered list of steps with their files, the characterization tests as the
    first step when legacy behaviour changes, and a one-line rollback (usually
    `git revert`). The human accepting plan mode is the plan approval — no
-   agent reviews the plan. Call `ai-planner` on STRONG only on the T3 trigger
+   agent reviews the plan. Call `ai-planner` on STRONG only on the T4 trigger
    in `delegate_anyway_when`. Use `Explore` (FAST) when a file is not
    found in a few `grep` calls, never a six-agent fan-out — and when a file is
    too large to open, that reader brings back the excerpt, not the file.
@@ -134,14 +140,14 @@ Skip `$STATE init` above for T0–T3; direct mode has its own single call.
    ```
 
    Most tasks need none. See `.ai/policies/tooling.md`.
-2. **Record — T2 and T3.** One call arms the scope guard and writes the audit
-   trail; T0 and T1 keep no state file at all, the commit is the record. At T3
+2. **Record — T2, T3 and T4.** One call arms the scope guard and writes the audit
+   trail; T0 and T1 keep no state file at all, the commit is the record. At T4
    run it only after the human accepted the plan, list every file of every
    step, and say so in the note:
 
    ```bash
-   $STATE quick --goal "<one sentence>" --workflow <workflow> --tier T2 --files "<a>,<b>" --note "<trigger>"
-   $STATE quick --goal "<one sentence>" --workflow <workflow> --tier T3 --files "<a>,<b>,<c>" --note "<trigger>; plan approved in plan mode"
+   $STATE quick --goal "<one sentence>" --workflow <workflow> --tier T3 --files "<a>,<b>" --note "<trigger>"
+   $STATE quick --goal "<one sentence>" --workflow <workflow> --tier T4 --files "<a>,<b>,<c>" --note "<trigger>; plan approved in plan mode"
    ```
 
 3. **Implement**, yourself, in this session. `ai-implementer` (BALANCED, low) only
@@ -157,37 +163,38 @@ Skip `$STATE init` above for T0–T3; direct mode has its own single call.
    then fix all new regressions in **one** remediation step and run once more:
 
    ```bash
-   $STATE step-done 1 && $STATE remediate --files "<failing tests>" --note "<n> regressions"   # T2, T3
+   $STATE step-done 1 && $STATE remediate --files "<failing tests>" --note "<n> regressions"   # T2–T4
    ```
 
    At T0/T1 there is no state: just fix the batch and re-run. Two rounds at
    most; a third means the human decides. One failure never restarts the task.
 
    Then, **once**, after the fast suite is green: `e2e_command`. T0 and T1 skip
-   it. At T2 and T3 run it when the change can reach a flow the e2e suite
+   it. From T2 to T4 run it when the change can reach a flow the e2e suite
    covers; when it cannot, say so in one line instead. It never runs inside
    step 3.
 
    ```bash
-   $STATE set e2e_status <passing|failing|not_applicable>   # T2, T3
+   $STATE set e2e_status <passing|failing|not_applicable>   # T2–T4
    ```
-5. **Review — T2 and T3.** After the tests pass, one review over `git diff`.
-   T2: the BALANCED tier — `ai-reviewer` with `model: $($STATE profile --tier
-   BALANCED)` on Claude Code, `ai-reviewer-balanced` on Codex — no ledger and
-   no probe. T3: `ai-reviewer` on STRONG (`model: $($STATE profile --tier
-   STRONG)`, `ai-reviewer` under Codex), after `$STATE review-gate`; add
-   `ai-security` only when the diff touches authentication, authorization or
-   personal data. Fix BLOCKER and
+5. **Review — T2, T3 and T4.** After the tests pass, `$STATE review-gate`
+   first. T2 and T3: all green is the review (`skipped_green`); a red sensor
+   costs one review over `git diff` on the BALANCED tier — `ai-reviewer` with
+   `model: $($STATE profile --tier BALANCED)` on Claude Code,
+   `ai-reviewer-balanced` on Codex — no ledger and no probe. T4: `ai-reviewer`
+   on STRONG (`model: $($STATE profile --tier STRONG)`, `ai-reviewer` under
+   Codex), always; add `ai-security` only when the diff touches authentication,
+   authorization or personal data. Fix BLOCKER and
    HIGH findings as one batch (`$STATE remediate`), re-run the verification
    command, and ask for one scoped re-review only when a BLOCKER was fixed.
 6. **Close.** Print what changed, the verification command and its result, the
    review verdict and the rollback (`git revert`), as the commit message body.
-   Then stop for the human. At T2: `$STATE close`. At T3 the human approves the
+   Then stop for the human. At T2 and T3: `$STATE close`. At T4 the human approves the
    result as well: `$STATE stage human_approval` after the summary is shown,
    and the task closes once they have.
 
-That is the whole path. The sections below are for T4 and above, and for the
-`team` profile. A T3 whose diff is re-scored to T4 by the sensors leaves direct
+That is the whole path. The sections below are for T5 and above, and for the
+`team` profile. A T4 whose diff is re-scored to T5 by the sensors leaves direct
 mode here: say so and continue with the sections below from ADVERSARIAL REVIEW.
 
 ## 1. Walk the pipeline
@@ -201,13 +208,13 @@ REQUEST
   → DISCOVERY            what exists, where, who calls it
   → CONTEXT              the compressed, structured summary
   → IMPACT ANALYSIS      what this change reaches
-  → RISK CLASSIFICATION  T0 … T5, from .ai/policies/risk-tiers.json
+  → RISK CLASSIFICATION  T0 … T6, from .ai/policies/risk-tiers.json
   → PLAN                 steps, each with the files it may touch
-  → PLAN REVIEW          T3 and above
+  → PLAN REVIEW          T5 and above (at T4 the human, in plan mode)
   → IMPLEMENTATION       one approved step at a time
   → TEST                 the step's own tests, then the suite once, then e2e once
   → ADVERSARIAL REVIEW   assumes the implementation is wrong
-  → SECURITY REVIEW      mandatory at T4 and T5
+  → SECURITY REVIEW      mandatory at T5 and T6
   → RELEASE REPORT
   → HUMAN APPROVAL
 ```
@@ -225,29 +232,29 @@ $STATE stage <stage> --note "<what happened>"
 
 ### TRIAGE — discovery, context, impact and risk
 
-**solo, T0–T3:** direct mode, section 1a. If a task that started as T3 or below
-turns out to be T4+, say so, `$STATE close` the quick record and start it here.
+**solo, T0–T4:** direct mode, section 1a. If a task that started as T4 or below
+turns out to be T5+, say so, `$STATE close` the quick record and start it here.
 
-**`team` below T3:** record the four stages in one call and go on to PLAN:
+**`team` below T4:** record the four stages in one call and go on to PLAN:
 
 ```bash
 $STATE triage T<n> --note "<the trigger>" --context "<entry points, callers, what must stay unaffected — a few lines>"
 ```
 
-**T4 and above, or `team` from T3:** the stages run one at a time and are recorded one
+**T5 and above, or `team` from T4:** the stages run one at a time and are recorded one
 at a time. `ai-discovery` — one agent per area in parallel, after `ai-indexer`
 when the area is large — into `discovery.md`; `ai-context` for the summary; a
 second `ai-discovery` pass for `.ai/templates/impact-report.md`; `ai-risk` on
 STRONG — `model: $($STATE profile --tier STRONG)` — for the tier (`ai-risk-strong` under Codex, whose agent files
 outrank a spawn-time model), re-run when it says `confidence: uncertain`.
-In `solo` you may still write context and impact yourself at T4 when the area
+In `solo` you may still write context and impact yourself at T5 when the area
 is one you know; the risk call at STRONG is not optional there.
 
 ```bash
 $STATE risk T<n> --note "<the trigger that decided it>"
 ```
 
-Delegate below T4 only on a trigger from `delegate_anyway_when`: one
+Delegate below T5 only on a trigger from `delegate_anyway_when`: one
 `ai-discovery` for an area the developer says is unfamiliar, or for an
 `UNKNOWN` the plan depends on. Never the six-agent fan-out — that is
 `/ai-init`'s job, once.
@@ -264,15 +271,15 @@ impression of how big the task feels.
 
 ### PLAN — only when the tier needs one
 
-**T0–T3 in solo:** handled in direct mode (1a). **`team` below T3:** a short
+**T0–T4 in solo:** handled in direct mode (1a). **`team` below T4:** a short
 numbered list of steps, each with its files, registered with:
 
 ```bash
 $STATE plan --ref ".ai/reports/<task-id>/task.md" --steps /tmp/steps.json
 ```
 
-**T4, and T3 in `team`:** `ai-planner` on STRONG — `model: $($STATE profile --tier STRONG)` — (`ai-planner-strong` under
-Codex), in plan mode. **T5:** `ai-expert`. Save to `.ai/reports/<task-id>/implementation-plan.md` following
+**T5, and T4 in `team`:** `ai-planner` on STRONG — `model: $($STATE profile --tier STRONG)` — (`ai-planner-strong` under
+Codex), in plan mode. **T6:** `ai-expert`. Save to `.ai/reports/<task-id>/implementation-plan.md` following
 `.ai/templates/implementation-plan.md`, register the steps as above.
 
 `allowed_files` is enforced by a hook from T2 up, so it must be accurate. A
@@ -288,9 +295,9 @@ $STATE questions --pending --format md     # render for the human, then stop
 A plan registered with its blocking questions still open is a plan that was
 approved on an assumption. See **Questions** below.
 
-### PLAN REVIEW (T4 and above; T3 in `team`)
+### PLAN REVIEW (T5 and above; T4 in `team`)
 
-In `solo` a T3 plan is reviewed by the human in plan mode (1a) — no agent.
+In `solo` a T4 plan is reviewed by the human in plan mode (1a) — no agent.
 
 `ai-reviewer` on the plan itself, before any code exists. Then show the human the
 plan and the review — both, in the conversation — and only **after** they have
@@ -303,7 +310,7 @@ $STATE stage human_approval
 That command is what opens the gate: it appends gate question `G1`, stamps
 `requested_at` and emits `gate_requested`. Running it before the human has seen
 what they are approving asks them to sign a blank page, and the journal records
-that it happened in that order. For T4+ this approval is required, not optional.
+that it happened in that order. For T5+ this approval is required, not optional.
 
 ### IMPLEMENTATION
 
@@ -348,7 +355,7 @@ $STATE step-split <step_id> --files "<the part that is its own step>" --note "<w
 
 The moved files leave the original step and become a sibling that inherits the
 tree it started from. After every step the task's diff is re-scored from
-`path_scopes`: a change that reached `**/Payment/**` is T4 from then on,
+`path_scopes`: a change that reached `**/Payment/**` is T5 from then on,
 whatever it was called at the start. A re-score only ever raises — lowering a
 tier needs a human, in their own terminal, with `--by`.
 
@@ -400,7 +407,7 @@ let a test be edited to make it pass.
 before the adversarial review, run `e2e_command` from `testing.md`, once, to
 the end, output through `tail -40` or `log-reader`. It never runs inside a step
 and never twice. Skip it when the change cannot reach a flow it covers and say
-which, in one line; at T4/T5 it is not skipped, and its result goes into the
+which, in one line; at T5/T6 it is not skipped, and its result goes into the
 release report. Its failures are classified and fixed as one batch, like the
 suite's.
 
@@ -421,12 +428,13 @@ linter and type checker the project wrote down, the diff against the budget,
 the tier re-scored from the real diff, step-to-test traceability, repeated
 blocks, and whether the named tests **fail without the change** — writes
 `.ai/reports/<task-id>/sensors.json` and one ledger row per settled sensor, and
-answers one of two things. At T2 and below, all green records
+answers one of two things. At T3 and below, all green records
 `review_status: skipped_green` and the review is done: the sensors are the
 review (decision 6, `review-economy.md` §8). Anything else — a red sensor, a
-tool nobody wrote down, a result from an older tree, a tier above T2 — prints
+tool nobody wrote down, a result from an older tree, a task over its diff
+budget, a tier above T3 — prints
 `review: required` with the reason, and you delegate exactly as before. From
-T3 it always says required.
+T4 it always says required.
 
 Nothing here weakens a review: `unavailable` is not green, and
 `set review_status skipped_green` is refused — only the gate writes it, from
@@ -434,7 +442,7 @@ measurements.
 
 Then, when it is required: one `ai-reviewer` on the diff — a fresh context that did not write the code —
 on the tier from `pipeline_profiles.<profile>.review_model[<tier>]`: BALANCED
-at T2 in solo (`ai-reviewer` with `model: $($STATE profile --tier BALANCED)`
+at T2 and T3 in solo (`ai-reviewer` with `model: $($STATE profile --tier BALANCED)`
 on Claude Code, `ai-reviewer-balanced` on Codex), STRONG above. Save findings to
 `.ai/reports/<task-id>/review-report.md`.
 
@@ -445,7 +453,7 @@ inputs its own threat model makes interesting, run through the real code in the
 scratchpad, outcomes noted in `.ai/reports/<task-id>/review-ledger.md`. The
 reviewer starts where you stopped. A re-review after a remediation is scoped —
 do the named findings close, and what did the remediation introduce — never a
-second full pass. One reviewer per pass; fan out narrow reviewers only at T4/T5
+second full pass. One reviewer per pass; fan out narrow reviewers only at T5/T6
 when the change is wide. Full rules: `.ai/policies/review-economy.md`.
 
 ```bash
@@ -460,7 +468,7 @@ When a finding is a mistake this repository has seen before, add one line to the
 project `CLAUDE.md` in this task: the second occurrence is when a correction
 belongs there.
 
-### SECURITY REVIEW (T4, T5, and anything touching auth or personal data)
+### SECURITY REVIEW (T5, T6, and anything touching auth or personal data)
 
 `ai-security`. Save to `.ai/reports/<task-id>/security-report.md`.
 
@@ -472,10 +480,10 @@ When it is not applicable, say why in the note. Silence is not a verdict.
 
 ### RELEASE REPORT
 
-**solo, T0–T3:** the short form written in direct mode, step 6 — what changed,
+**solo, T0–T4:** the short form written in direct mode, step 6 — what changed,
 what was deliberately preserved, the verification command and its result, the
 review verdict, the rollback (usually one `git revert`), open risks. It becomes
-the commit message body; at T3 it is also appended to `task.md`. **T4, T5, and
+the commit message body; at T4 it is also appended to `task.md`. **T5, T6, and
 `team` from T2 up:** `ai-release` fills the full template into
 `.ai/reports/<task-id>/release-report.md`.
 
@@ -585,8 +593,8 @@ repository with no `.ai/` at all.
 ## Keeping context small
 
 - Inline does not mean verbose: a stage you do yourself is a few lines, and
-  below T2 not even a file — the state archive is the record.
-- One tool call where one will do: `quick` up to T3, `triage` instead of four
+  below T4 not even a file — the state archive is the record.
+- One tool call where one will do: `quick` up to T4, `triage` instead of four
   `stage` calls, one `task.md` instead of four report files, one verification
   run and one e2e run instead of one per step, one `remediate` step instead of
   one per failure.
@@ -615,8 +623,9 @@ repository with no `.ai/` at all.
   step's own scoped tests are the exception: they are fixed in that step.
 - A step runs its own tests, and only those. The full suite runs once after the
   last step; the e2e suite runs once after that. Never per step.
-- Nothing below T3 runs on STRONG. Readers and runners are FAST; the T2
-  review is BALANCED; STRONG is paid for from T3. Large files are read by the
+- Nothing below T4 runs on STRONG. Readers and runners are FAST; the T2/T3
+  review is BALANCED, and only when a sensor is red; STRONG is paid for from
+  T4. Large files are read by the
   cheapest model, and only the relevant part comes back.
 - Tools and MCP servers are off unless the task named them, and go off again
   when it closes.

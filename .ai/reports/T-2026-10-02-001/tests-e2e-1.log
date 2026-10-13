@@ -1,0 +1,54 @@
+== install
+  ok    installed into a scratch CLAUDE_DIR
+== scaffold a project
+  ok    .ai/ scaffolded into the project
+  ok    the risk tiers are in place
+== the path guard is now live in this project
+  ok    reading .env is refused once the project has .ai/
+  ok    reading source is unaffected
+== a task through the pipeline
+  ok    task T-2026-10-02-001 started at discovery
+  ok    classified T4
+  ok    the tier table demands a security review for T4
+  ok    and human approval
+  ok    plan registered and step 1 armed
+== the scope guard enforces the step
+  ok    editing an allowed file is permitted
+  ok    writing the required test is permitted
+  ok    editing an out-of-scope file is refused
+  ok    editing a forbidden file is refused
+  ok    the refusal carries the SCOPE_CHANGE_REQUIRED signal
+== the same task, from Codex
+  ok    installed into a scratch CODEX_DIR
+  ok    the Codex agent roster is rendered
+  ok    no Claude-only hook is installed into Codex
+  ok    the context guard is installed into Codex too
+  ok    and registered on its three events there
+  ok    Codex reads the step the Claude session armed
+  ok    and the same risk tier
+  ok    an in-scope apply_patch is permitted
+  ok    an out-of-scope apply_patch is refused
+  ok    one out-of-scope file rejects the whole patch
+  ok    a forbidden file is refused through apply_patch too
+  ok    and the Codex refusal carries the same signal
+  ok    the path guard refuses a patch that touches .env
+  ok    the git guard refuses a force push from Codex as well
+== finishing the task
+  ok    approval is refused to a session whose stdin is a pipe
+  ok    the task reached done
+== the scope guard disarms when no step is current
+  ok    out-of-scope edits are free again once the task closes
+== the git guard still refuses the dangerous half
+  ok    force push is refused
+  ok    pushing to main is refused
+  ok    'git add .' with an untracked .env is refused
+  ok    ordinary git commands are unaffected
+== the audit trail survives
+  ok    the closed task is archived under .ai/reports/
+  ok    its history records every stage
+  ok    and who approved it
+  ok    and that no human was at a terminal for it
+== no application code was touched by any of this
+  ok    src/ is untouched
+
+end-to-end: 41 passed, 0 failed

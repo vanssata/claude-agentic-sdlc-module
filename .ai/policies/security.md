@@ -1,7 +1,7 @@
 # Security policy
 
-A security review is mandatory for T4 and T5, and is requested for any change
-that touches authentication, authorization or personal data.
+A security review is mandatory for T5 and T6, and is requested for any change
+that touches authentication, authorization or personal data, whatever its tier.
 
 ## Review checklist
 

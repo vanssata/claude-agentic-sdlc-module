@@ -66,13 +66,13 @@ REQUEST
   → CONTEXT              ai-context, one structured summary
   → IMPACT ANALYSIS      ai-discovery again, this time on blast radius
   → RISK CLASSIFICATION  ai-risk, one tier from risk-tiers.json
-  → PLAN                 ai-planner (STRONG at T3/T4, ai-expert at T5)
-  → PLAN REVIEW          ai-reviewer, T3 and above
+  → PLAN                 ai-planner (STRONG at T5, ai-expert at T6)
+  → PLAN REVIEW          ai-reviewer, T5 and above (the human, in plan mode, at T4)
   → IMPLEMENTATION       the session itself, one step at a time
   → TEST                 step tests in each step; the suite once after the last
                          step, then e2e once (ai-tester in team)
-  → ADVERSARIAL REVIEW   ai-reviewer, T2 and above
-  → SECURITY REVIEW      ai-security, T4 and T5
+  → ADVERSARIAL REVIEW   ai-reviewer, T2 and above (up to T3, all sensors green is the review)
+  → SECURITY REVIEW      ai-security, T5 and T6
   → RELEASE REPORT       ai-release
   → HUMAN APPROVAL       the pipeline stops here, always
 ```
@@ -83,7 +83,7 @@ worse than none. What keeps the session's context small is that reading is
 delegated or bounded, and every artifact is written to a file and referred to by
 path.
 
-Stages are lightweight for a T0 change and heavy for a T5 one. None is skipped —
+Stages are lightweight for a T0 change and heavy for a T6 one. None is skipped —
 that judgement is exactly what risk classification exists to replace.
 
 ## Who does a stage: the pipeline profile
@@ -92,25 +92,29 @@ that judgement is exactly what risk classification exists to replace.
 stage, never whether it runs. The default, `solo`, is for one developer who
 knows the codebase — the setting the playbook describes for a team of one to
 five: CLAUDE.md, plan mode and a feedback loop, with light review. It runs
-T0–T3 in direct mode (no ceremony, cheap readers, one `sonnet` review at T2,
-one `opus` review and a plan-mode plan the human approves at T3) and the full
-pipeline from T4.
+T0–T4 in direct mode (no ceremony, cheap readers, one `sonnet` review at T2 or
+T3 only when a sensor is red, one `opus` review and a plan-mode plan the human
+approves at T4) and the full pipeline from T5. The tier is the scope of the
+change — a process, money, the irreversible — never its size: the diff budget
+is measured and reported, and raises nothing unless the project asks it to.
 
 - Discovery, context, impact and risk come from the request plus `grep -n`,
-  and up to T2 are recorded in one `state.py triage` call — four audit-trail
-  entries, one round trip. `ai-risk` on `opus` only when a T3+ answer is not
+  and up to T4 are recorded in one `state.py quick` call — four audit-trail
+  entries, one round trip. `ai-risk` on `opus` only when a T4+ answer is not
   obvious.
 - T0 and T1 have no plan stage: the session says which files it will touch and
-  edits. T2 gets a short inline step list in a single `task.md`; `ai-planner`
-  on `opus` from T3, `ai-expert` at T5.
+  edits. T2 and T3 get a short inline step list; at T4 the session writes the
+  plan in plan mode and the human approves it; `ai-planner` on `opus` from T5,
+  `ai-expert` at T6.
 - Tests come in three scopes: a step runs only the tests its plan step names
   (`step_test_command`, scoped to its files), the project's verification
   command runs once after the last step, and the e2e suite runs once after
   that, at the end of the task. Output piped through `tail`; `log-reader` when
   it is long.
-- The adversarial review is always a subagent from T2 up — a context that did
-  not write the code — on `sonnet` at T2 and `opus` above.
-- Security review at T4/T5 is unchanged. The release report is inline up to T3
+- The adversarial review is always a subagent — a context that did not write
+  the code — on `sonnet` at T2 and T3, where it runs only when `review-gate`
+  finds a red sensor, and on `opus` from T4, where it always runs.
+- Security review at T5/T6 is unchanged. The release report is inline up to T4
   and becomes the commit message body.
 
 Each subagent costs its own context window and a system prompt; in `solo` the
@@ -200,7 +204,7 @@ picking an answer for itself.
 derived, nothing about it may fail a task: a handoff that cannot be rendered is
 a missing convenience, not a broken run.
 
-**Approval is the one thing none of this can grant.** At T3+ the pipeline stops
+**Approval is the one thing none of this can grant.** At T4+ the pipeline stops
 at a gate that only a human closes — from their own terminal, where `approve`
 checks for a TTY, or by answering the gate's question in `questions.md`, which
 is accepted only behind a human turn recorded in `session.json` by a hook the
@@ -264,7 +268,7 @@ Context length, not model choice, dominates the cost of a session, so:
   plan and Sonnet for the implementation; on Max and Team Max the session is
   Opus 5 and Fable is spent only on `architect`; under Codex the Plus profile
   keeps the session at `medium`, three threads and no `xhigh`;
-- below T2 a task writes no report files and runs the test suite once;
+- below T4 a task writes no report files and runs the test suite once;
 - a file too large to open is read by the cheapest model, which returns the
   matching ranges with `file:line` rather than the file;
 - tools and MCP servers are off by default — they sit in the system prompt of
@@ -296,7 +300,7 @@ file *ahead* of the value passed when it is spawned. Asking for a stronger model
 at spawn time therefore does nothing there. The renderer handles this by writing
 an explicit `model` and `model_reasoning_effort` into every agent — an omitted
 `model` would fall back to the Terra `[agents]` default — and by emitting
-`ai-risk-strong` and `ai-planner-strong`, which pin Sol, for the T3/T4 re-runs
+`ai-risk-strong` and `ai-planner-strong`, which pin Sol, for the T4/T5 re-runs
 that Claude Code does with `model: opus` — and `ai-expert-strong`, which the
 runtime gate reroutes `ai-expert` to, by `agent_type`, while the EXPERT model
 is unavailable. `tests/test-codex-agent-render.sh`

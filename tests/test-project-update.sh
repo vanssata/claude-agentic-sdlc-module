@@ -56,7 +56,8 @@ jq -e 'has("pipeline_profile") | not' "$P/.ai/policies/risk-tiers.json" >/dev/nu
 
 # Hand edits a real project would have.
 printf '\nphpunit: vendor/bin/phpunit\n' >> "$P/.ai/policies/testing.md"
-jq '.tiers.T4.examples += ["Fiscal printer bridge"]' "$P/.ai/policies/risk-tiers.json" > "$TMP/rt" && mv "$TMP/rt" "$P/.ai/policies/risk-tiers.json"
+# T0.examples is the one tier key identical in the oldest template and the current one, so this edit merges cleanly instead of conflicting.
+jq '.tiers.T0.examples += ["Fiscal printer bridge"]' "$P/.ai/policies/risk-tiers.json" > "$TMP/rt" && mv "$TMP/rt" "$P/.ai/policies/risk-tiers.json"
 sha=$(sha256sum "$P/.ai/policies/risk-tiers.json" | cut -d' ' -f1)
 sed -i "1s/sha256:[0-9a-f]*/sha256:$sha/" "$P/.ai/policies/risk-tiers.md"   # the human kept the mirror in sync
 row=$(grep -n '^| TEST |' "$P/.ai/workflows/feature.md" | cut -d: -f1)
@@ -84,8 +85,8 @@ RT="$P/.ai/policies/risk-tiers.json"
 [ "$(jq -r .pipeline_profile "$RT")" = solo ] && pass "new policy keys are added" || fail "pipeline_profile missing"
 [ "$(jq -c .tiers.T0.stages_required "$RT")" = '["discovery","context","implementation"]' ] \
     && pass "an untouched policy value takes the plugin's new value" || fail "T0 stages not updated"
-jq -e '.tiers.T4.examples | index("Fiscal printer bridge")' "$RT" >/dev/null \
-    && pass "a project edit to the same JSON is kept" || fail "the project's T4 example was lost"
+jq -e '.tiers.T0.examples | index("Fiscal printer bridge")' "$RT" >/dev/null \
+    && pass "a project edit to the same JSON is kept" || fail "the project's T0 example was lost"
 [ "$(sha256sum "$RT" | cut -d' ' -f1)" = "$(grep -o 'sha256:[0-9a-f]*' "$P/.ai/policies/risk-tiers.md" | cut -d: -f2)" ] \
     && pass "a mirror that was in sync stays in sync with the merged JSON" || fail "risk-tiers.md hash not carried forward"
 grep -q '^## Verification' "$P/.ai/policies/testing.md" && grep -q 'phpunit: vendor/bin/phpunit' "$P/.ai/policies/testing.md" \
@@ -116,7 +117,7 @@ out=$(python3 "$UPDATE" "$P" --check) && pass "--check exits 0 once only a hand-
 echo "== a stale mirror stays stale"
 P2="$TMP/proj2"; mkdir -p "$P2"
 CLAUDE_AGENTIC_TEMPLATES="$OLD/ai-init/templates" bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$P2" >/dev/null
-jq '.tiers.T4.examples += ["x"]' "$P2/.ai/policies/risk-tiers.json" > "$TMP/rt" && mv "$TMP/rt" "$P2/.ai/policies/risk-tiers.json"
+jq '.tiers.T0.examples += ["x"]' "$P2/.ai/policies/risk-tiers.json" > "$TMP/rt" && mv "$TMP/rt" "$P2/.ai/policies/risk-tiers.json"
 python3 "$UPDATE" "$P2" --apply >/dev/null
 [ "$(sha256sum "$P2/.ai/policies/risk-tiers.json" | cut -d' ' -f1)" != "$(grep -o 'sha256:[0-9a-f]*' "$P2/.ai/policies/risk-tiers.md" | cut -d: -f2)" ] \
     && pass "a mirror that was already stale is not silently marked in sync" || fail "stale mirror was hidden"

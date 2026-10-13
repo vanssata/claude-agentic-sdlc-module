@@ -5,21 +5,21 @@ changing anything else.
 
 > Who runs a stage is set by `pipeline_profile` in `policies/risk-tiers.json`.
 > The table names the agent for when a stage is delegated. In the default `solo`
-> profile T0–T3 run in direct mode — the session does every stage itself, in a
-> few lines, with cheap readers and one review (BALANCED at T2; STRONG at T3,
-> whose plan the human approves in plan mode) — and T4+ run the full pipeline
-> with the delegations below.
+> profile T0–T4 run in direct mode — the session does every stage itself, in a
+> few lines, with cheap readers and one review (BALANCED at T2/T3, and only
+> when a sensor is red; STRONG at T4, whose plan the human approves in plan
+> mode) — and T5+ run the full pipeline with the delegations below.
 
 | Stage | Who | Notes |
 |---|---|---|
 | DISCOVERY | `ai-discovery` | reproduce first: find the exact path that produces the symptom |
 | CONTEXT | `ai-context` | include the *correct* behaviour and where it is defined |
 | IMPACT ANALYSIS | `ai-discovery` | who else depends on the current, wrong behaviour |
-| RISK CLASSIFICATION | `ai-risk` | a bug in a payment path is still T4 |
+| RISK CLASSIFICATION | `ai-risk` | a bug in a payment path is still T5 |
 | PLAN | `ai-planner` | failing test first, then the fix |
 | IMPLEMENTATION | the session | the failing test is its own step |
 | TEST | the session (`ai-tester` in `team`) | the new test is shown failing before the fix; each step runs only its own scoped tests; the full verification command runs once after the last step, to the end, then the e2e suite once; every failure fixed as one batch |
-| ADVERSARIAL REVIEW | `ai-reviewer` | T2 and above |
+| ADVERSARIAL REVIEW | `ai-reviewer` | T2 and above; up to T3 the sensors stand in when all are green |
 | SECURITY REVIEW | `ai-security` | if the bug was a security bug, always |
 | RELEASE REPORT | `ai-release` | |
 | HUMAN APPROVAL | the human | |

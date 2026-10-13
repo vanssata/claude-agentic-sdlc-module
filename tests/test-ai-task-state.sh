@@ -101,8 +101,11 @@ S get --field context_summary_ref | grep -q '^inline: template' && pass "the inl
 out=$(S triage T9 2>&1 || true)
 printf '%s' "$out" | grep -q "risk tier must be one of" && pass "triage rejects an unknown tier" || fail "triage should reject T9" "$out"
 
-echo "== quick: the direct path up to T3 in one call"
+echo "== quick: the direct path up to T4 in one call"
 S init --goal "quick base" --workflow feature --force >/dev/null; S done >/dev/null; S archive >/dev/null
+S quick --goal "shared behaviour" --workflow feature --tier T4 --files "src/Order/*.php" >/dev/null 2>&1 && [ "$(S get --field risk_tier)" = T4 ] \
+  && pass "quick accepts T4: shared behaviour runs in direct mode" || fail "quick should accept T4"
+S done >/dev/null; S archive >/dev/null
 out=$(S quick --goal "rename a label" --workflow feature --tier T1 --files "templates/admin/*.twig,translations/messages.en.yaml" --note "isolated label" 2>&1)
 printf '%s' "$out" | grep -q "step 1 armed" && pass "quick records the task and arms step 1" || fail "quick should arm step 1" "$out"
 [ "$(S get --field risk_tier)" = T1 ] && pass "quick sets the tier" || fail "quick should set the tier"
@@ -112,8 +115,8 @@ S get --field approved_plan.steps | jq -e '.[0].allowed_files | index("translati
   && pass "quick keeps the named files as the step scope" || fail "allowed files missing"
 n=$(S get --field history | jq '[.[] | select(.event=="stage" and (.detail|test("inline")))] | length')
 [ "$n" = 4 ] && pass "quick still writes the four triage stages to the audit trail" || fail "expected 4 inline stage records, got $n"
-out=$(S quick --goal "x" --workflow feature --tier T4 --files a --force 2>&1); rc=$?
-[ $rc = 1 ] && printf '%s' "$out" | grep -q "quick is for T0 to T3" && pass "quick refuses T4 and above" || fail "quick should refuse T4 with exit 1" "rc=$rc $out"
+out=$(S quick --goal "x" --workflow feature --tier T5 --files a --force 2>&1); rc=$?
+[ $rc = 1 ] && printf '%s' "$out" | grep -q "quick is for T0 to T4" && pass "quick refuses T5 and above" || fail "quick should refuse T5 with exit 1" "rc=$rc $out"
 out=$(S quick --goal "x" --workflow feature --tier T1 --files "" --force 2>&1 || true)
 printf '%s' "$out" | grep -q "at least one file" && pass "quick refuses an empty scope" || fail "quick should refuse empty --files" "$out"
 
@@ -1292,19 +1295,58 @@ err=$(S5 --runtime claude init --goal g --workflow feature 2>&1 >/dev/null)
 rm -rf "$CLH/state"
 
 echo "== WP5: the direct-mode cap (R13) and profile"
+# The cap is the project's, in risk-tiers.json (pipeline_profiles.<profile>.direct_mode_cap),
+# not the plan's: the tier comes from the scope of a change, and so does its mode.
 python3 "$RP" pro --print agentic > "$CLH/claude-agentic/profile.json"
 fresh5 cap
+mkdir -p "$R5/.ai/policies"
+printf '{"pipeline_profile": "solo", "pipeline_profiles": {"solo": {"direct_mode_cap": "T3"}}}' > "$R5/.ai/policies/risk-tiers.json"
 out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T4 --files a.py 2>&1); rc=$?
-[ $rc = 8 ] && printf '%s' "$out" | grep -q '^state.py: DIRECT_MODE_CAP T3 (plan pro)' && pass "quick T4 under solo on pro exits 8 DIRECT_MODE_CAP" || fail "cap" "rc=$rc $out"
+[ $rc = 8 ] && printf '%s' "$out" | grep -q '^state.py: DIRECT_MODE_CAP T3 (profile solo)' && pass "quick T4 above a project cap of T3 exits 8 DIRECT_MODE_CAP" || fail "cap" "rc=$rc $out"
 fresh5 cap-ok
 S5 --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py >/dev/null 2>&1 && pass "quick T2 is within the cap" || fail "T2 refused"
-fresh5 cap-ok-t3
-S5 --runtime claude quick --goal g --workflow bugfix --tier T3 --files a.py >/dev/null 2>&1 && pass "quick T3 is within the cap (T3 runs in direct mode)" || fail "T3 refused"
+fresh5 cap-ok-t4
+S5 --runtime claude quick --goal g --workflow bugfix --tier T4 --files a.py >/dev/null 2>&1 && pass "quick T4 is within the default cap (T4 runs in direct mode)" || fail "T4 refused"
+fresh5 cap-team
+mkdir -p "$R5/.ai/policies"
+printf '{"pipeline_profile": "team", "pipeline_profiles": {"solo": {"direct_mode_cap": "T1"}, "team": {"direct_mode_cap": "T2"}}}' > "$R5/.ai/policies/risk-tiers.json"
+out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T3 --files a.py 2>&1); rc=$?
+[ $rc = 8 ] && printf '%s' "$out" | grep -q 'DIRECT_MODE_CAP T2 (profile team)' && pass "the cap is read for the active profile" || fail "team cap" "rc=$rc $out"
+fresh5 cap-mode
+mkdir -p "$R5/.ai/policies"
+printf '{"pipeline_profile": "solo", "pipeline_profiles": {"solo": {"mode": {"T0": "direct", "T1": "direct", "T2": "direct", "T3": "sdlc"}}}}' > "$R5/.ai/policies/risk-tiers.json"
+out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T3 --files a.py 2>&1); rc=$?
+[ $rc = 8 ] && printf '%s' "$out" | grep -q 'DIRECT_MODE_CAP T2 (profile solo)' && pass "without the key, the cap is the highest tier whose mode is direct" || fail "mode-derived cap" "rc=$rc $out"
+fresh5 cap-legacy
+mkdir -p "$R5/.ai/policies"
+printf '{"pipeline_profile": "solo", "tiers": {"T0": {}, "T1": {}, "T2": {}, "T3": {}, "T4": {}, "T5": {}}}' > "$R5/.ai/policies/risk-tiers.json"
+out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T4 --files a.py 2>&1); rc=$?
+[ $rc = 8 ] && printf '%s' "$out" | grep -q 'DIRECT_MODE_CAP T3 (profile solo)' && pass "a six-tier policy keeps its old cap of T3: an un-updated project is not widened" || fail "legacy cap" "rc=$rc $out"
+fresh5 cap-legacy-team
+mkdir -p "$R5/.ai/policies"
+printf '{"pipeline_profile": "team", "tiers": {"T0": {}, "T1": {}, "T2": {}, "T3": {}, "T4": {}, "T5": {}}}' > "$R5/.ai/policies/risk-tiers.json"
+out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T4 --files a.py 2>&1); rc=$?
+[ $rc = 8 ] && printf '%s' "$out" | grep -q 'DIRECT_MODE_CAP T3 (profile team)' && pass "a six-tier policy caps quick at T3 for every profile, team included" || fail "legacy team cap" "rc=$rc $out"
+fresh5 cap-gap
+mkdir -p "$R5/.ai/policies"
+printf '{"pipeline_profile": "solo", "pipeline_profiles": {"solo": {"mode": {"T0": "direct", "T1": "sdlc", "T2": "sdlc", "T3": "direct"}}}}' > "$R5/.ai/policies/risk-tiers.json"
+out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py 2>&1); rc=$?
+[ $rc = 8 ] && printf '%s' "$out" | grep -q 'DIRECT_MODE_CAP T0 (profile solo)' && pass "a gap in the mode map ends the direct run: the cap is the unbroken run from T0" || fail "mode gap" "rc=$rc $out"
+fresh5 cap-malformed
+mkdir -p "$R5/.ai/policies"
+printf '{"pipeline_profile": "solo", "pipeline_profiles": ["solo"]}' > "$R5/.ai/policies/risk-tiers.json"
+out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py 2>&1); rc=$?
+[ $rc = 1 ] && printf '%s' "$out" | grep -q 'malformed' && ! printf '%s' "$out" | grep -q Traceback && pass "a malformed policy is a one-line error, not a traceback and not an open gate" || fail "malformed policy" "rc=$rc $out"
+fresh5 cap-typo
+mkdir -p "$R5/.ai/policies"
+printf '{"pipeline_profile": "solo", "pipeline_profiles": {"solo": {"direct_mode_cap": "t3"}}}' > "$R5/.ai/policies/risk-tiers.json"
+out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py 2>&1); rc=$?
+[ $rc = 1 ] && printf '%s' "$out" | grep -q 'not a tier' && pass "a cap that is not a tier is an error, not an open gate" || fail "typo cap" "rc=$rc $out"
 fresh5 cap-none
 out=$(CLAUDE_CONFIG_DIR="$W5/nowhere" CODEX_HOME="$W5/nowhere" python3 "$STATE" --root "$R5" --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py 2>&1); rc=$?
-[ $rc = 0 ] && pass "no profile file: no cap" || fail "no-profile quick" "rc=$rc $out"
-out=$(CLAUDE_CONFIG_DIR="$W5/nowhere" python3 "$STATE" --root "$R5" --runtime claude quick --goal g --workflow bugfix --tier T4 --files a.py --force 2>&1); rc=$?
-[ $rc = 1 ] && pass "and quick still refuses T4 on its own (exit 1)" || fail "T4 without profile" "rc=$rc"
+[ $rc = 0 ] && pass "no profile file, no policy: the solo default cap of T4, T2 is within it" || fail "no-profile quick" "rc=$rc $out"
+out=$(CLAUDE_CONFIG_DIR="$W5/nowhere" python3 "$STATE" --root "$R5" --runtime claude quick --goal g --workflow bugfix --tier T5 --files a.py --force 2>&1); rc=$?
+[ $rc = 1 ] && pass "and quick still refuses T5 on its own (exit 1)" || fail "T5 without profile" "rc=$rc"
 python3 "$RP" max --fable yes --print agentic > "$CLH/claude-agentic/profile.json"
 [ "$(cd "$W5" && S5 --runtime claude profile --tier STRONG)" = opus ] && pass "profile --tier STRONG prints this runtime's model" || fail "profile --tier claude"
 [ "$(cd "$W5" && S5 --runtime codex profile --tier STRONG)" = gpt-5.6-sol ] && pass "and Codex's under codex" || fail "profile --tier codex"

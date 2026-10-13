@@ -19,18 +19,19 @@ Usage:
   state.py init   --goal G --workflow W [--task-id ID] [--root DIR]
   state.py get    [--field current_stage] [--root DIR]
   state.py stage  <stage> [--note TEXT]
-  state.py risk   <T0..T5> [--note TEXT] [--by NAME]   # --by, outside the agent, to LOWER one
-  state.py triage <T0..T5> [--note TEXT] [--context TEXT]   discovery+context+impact+risk in one call
-  state.py quick  --goal G --workflow W --tier <T0..T3> --files a,b [--note TEXT] [--context TEXT]
-                                         init+triage+one-step plan in one call: the direct path below T4
+  state.py risk   <T0..T6> [--note TEXT] [--by NAME]   # --by, outside the agent, to LOWER one
+  state.py triage <T0..T6> [--note TEXT] [--context TEXT]   discovery+context+impact+risk in one call
+  state.py quick  --goal G --workflow W --tier <T0..T4> --files a,b [--note TEXT] [--context TEXT]
+                                         init+triage+one-step plan in one call: the direct path below T5
   state.py plan   --ref PATH --steps STEPS.json
   state.py remediate --files a,b [--note TEXT]   one extra step R<n> for the batch of test/review fixes;
                                          allowed = every finished step's files + the ones named
   state.py step   <step_id>
-  state.py step-done <step_id> [--force]    measures the step's diff against the tier's budget
-                                         and its allowed files; exit 6 asks for a split
+  state.py step-done <step_id> [--force]    measures the step's diff against its allowed files
+                                         (exit 6 asks for a split) and against the tier's budget,
+                                         a warning unless diff_budget.enforce is true
   state.py step-split <step_id> --files a,b [--note TEXT]   move part of a step into its own
-  state.py review-gate                   # all sensors green at T2 -> review_status=skipped_green
+  state.py review-gate                   # all sensors green at or below T3 -> review_status=skipped_green
   state.py test-run --scope step|suite|e2e [--files a,b] [--env-retry]
                                          runs the project's own command to the end, records it,
                                          and puts the output in a file instead of the context
@@ -81,7 +82,7 @@ STAGES = [
     "plan", "plan_review", "implementation", "test", "adversarial_review",
     "security_review", "release_report", "human_approval", "done",
 ]
-TIERS = ["T0", "T1", "T2", "T3", "T4", "T5"]
+TIERS = ["T0", "T1", "T2", "T3", "T4", "T5", "T6"]
 WORKFLOWS = ["feature", "bugfix", "refactoring", "hotfix", "investigation"]
 TEST_STATUS = ["not_run", "passing", "existing_failure", "new_regression", "env_failure", "unknown"]
 E2E_STATUS = ["not_run", "passing", "failing", "not_applicable"]
@@ -560,19 +561,65 @@ def cmd_profile(args, _root):
         print(value)
 
 
+DIRECT_MODE_CAP = "T4"
+
+
 def direct_mode_cap(root, tier):
-    """quick under the solo profile reaches only as far as the plan allows."""
-    cap = ((read_profile().get("budgets") or {}).get("direct_mode") or {}).get("max_tier")
-    if cap not in TIERS or tier not in TIERS:
-        return
+    """quick reaches only as far as the active pipeline profile allows. The cap
+    is the project's, not the plan's — the tier comes from the scope of a
+    change, and so does the mode it runs in — and it is read in this order:
+    `pipeline_profiles.<profile>.direct_mode_cap` when written (a value that is
+    not a tier is an error, never an open gate); else the highest tier whose
+    `mode` is "direct" in that profile, counted as the unbroken run from T0;
+    else T4 for `solo` and no cap for a profile that declares no direct mode
+    at all, as before. A file that still describes the six-tier table caps
+    every profile at T3, which was quick's limit when that table was written.
+    A malformed file is an error, never an open gate."""
+    profile_name, cap = "solo", None
     try:
         with open(os.path.join(root, ".ai", "policies", "risk-tiers.json"), encoding="utf-8") as fh:
-            profile_name = json.load(fh).get("pipeline_profile", "solo")
-    except (OSError, ValueError, AttributeError):
-        profile_name = "solo"
-    if profile_name == "solo" and TIERS.index(tier) > TIERS.index(cap):
-        die("DIRECT_MODE_CAP %s (plan %s): use init, triage and a reviewed plan"
-            % (cap, read_profile().get("plan") or "?"), 8)
+            policy = json.load(fh)
+    except OSError:
+        policy = None
+    except ValueError as exc:
+        die("risk-tiers.json is not valid JSON: %s" % exc)
+    if policy is None:
+        cap = DIRECT_MODE_CAP
+    else:
+        try:
+            if not isinstance(policy, dict):
+                raise TypeError("the policy is not an object")
+            profile_name = policy.get("pipeline_profile") or "solo"
+            profiles = policy.get("pipeline_profiles") or {}
+            profile = profiles.get(profile_name) or {}
+            if not isinstance(profile, dict):
+                raise TypeError("pipeline_profiles.%s is not an object" % profile_name)
+            legacy = (sensors.legacy_six_tier(policy) if sensors is not None
+                      else isinstance(policy.get("tiers"), dict) and "T6" not in policy["tiers"])
+            explicit = profile.get("direct_mode_cap")
+            modes = profile.get("mode") if isinstance(profile.get("mode"), dict) else {}
+            if explicit is not None:
+                if explicit not in TIERS:
+                    die("direct_mode_cap %r in risk-tiers.json (profile %s) is not a tier T0..T6"
+                        % (explicit, profile_name))
+                cap = explicit
+            elif legacy:
+                cap = "T3"
+            elif modes:
+                for t in TIERS:                 # the unbroken direct run from T0
+                    if modes.get(t) != "direct":
+                        break
+                    cap = t
+                cap = cap or "T0"
+            elif profile_name == "solo":
+                cap = DIRECT_MODE_CAP
+        except (AttributeError, TypeError) as exc:
+            die("risk-tiers.json is malformed (%s): fix it before quick" % exc)
+    if cap is None or tier not in TIERS:
+        return
+    if TIERS.index(tier) > TIERS.index(cap):
+        die("DIRECT_MODE_CAP %s (profile %s): use init, triage and a reviewed plan"
+            % (cap, profile_name), 8)
 
 
 def cmd_init(args, root):
@@ -853,7 +900,7 @@ def rescore_task(root, state, to_tree):
                  "tree": to_tree, "measured_at": now(),
                  "status": measurement["status"]})
     state["diff"]["over_budget"] = bool(measurement.get("over"))
-    scored = safe_sensor(sensors.rescore, declared, measurement)
+    scored = safe_sensor(sensors.rescore, declared, measurement, _policy)
     if not scored or scored.get("status") == "unavailable":
         state["diff"]["rescored_tier"] = None
         state["diff"]["rescore_reasons"] = []
@@ -939,11 +986,17 @@ def cmd_step_done(args, root):
             "move them with:\n  state.py step-split %s --files %s"
             % (args.step_id, ", ".join(measured["unscoped"][:5]), args.step_id,
                shlex.quote(",".join(measured["unscoped"][:5]))), 6)
-    if measured["status"] == "red" and measured["over"] and not args.force:
-        die("DIFF_BUDGET_EXCEEDED step %s: %s. A step this size is reviewed as one thing and "
-            "should not be — split it:\n  state.py step-split %s --files \"<the part that is "
-            "its own step>\""
-            % (args.step_id, "; ".join(measured["over"]), args.step_id), 6)
+    if measured["over"] and not args.force:
+        if measured.get("enforced"):
+            die("DIFF_BUDGET_EXCEEDED step %s: %s. A step this size is reviewed as one thing and "
+                "should not be — split it:\n  state.py step-split %s --files \"<the part that is "
+                "its own step>\""
+                % (args.step_id, "; ".join(measured["over"]), args.step_id), 6)
+        # Advisory by default: the size of a change is a warning, never its
+        # tier and never a refusal — the scope decides both (SCOPE_CHANGE_REQUIRED above).
+        print("budget: over — step %s: %s (advisory). Split it when that helps the review:\n"
+              "  state.py step-split %s --files \"<the part that is its own step>\""
+              % (args.step_id, "; ".join(measured["over"]), args.step_id), file=sys.stderr)
     seq = 1 + max([_seq(s.get("diff")) for s in steps] or [0])
     step["diff"] = {"tree_after": after, "seq": seq,
                     "paths": [path for path, _l, _n, _t in measured.get("per_file", [])],
@@ -970,7 +1023,9 @@ def cmd_step_done(args, root):
               % (args.step_id, measured.get("detail") or "not measured"))
     else:
         print(budget_line("step %s diff" % args.step_id, measured)
-              + (" — over: %s" % "; ".join(measured["over"]) if measured["over"] else " — ok"))
+              + (" — budget: over — %s%s" % ("; ".join(measured["over"]),
+                                             "" if measured.get("enforced") else " (advisory)")
+                 if measured["over"] else " — ok"))
     if from_base and measured["status"] != "unavailable" and completed_before(state, step):
         print("step %s measured from the task's base tree: it has no tree_before and no "
               "finished step recorded where the tree stood" % args.step_id)
@@ -1074,13 +1129,13 @@ def cmd_step_split(args, root):
 
 
 def cmd_quick(args, root):
-    """The direct path for T0–T3 (T3 after the human approved the plan in plan
+    """The direct path for T0–T4 (T4 after the human approved the plan in plan
     mode): one call records the task, the four inline
     triage stages and a single step whose allowed files are the ones named, so
     the scope guard is armed without a plan file, a task.md or four round trips."""
+    if args.tier not in ("T0", "T1", "T2", "T3", "T4"):
+        die("quick is for T0 to T4; from T5 the task needs init, triage and a reviewed plan")
     direct_mode_cap(root, args.tier)
-    if args.tier not in ("T0", "T1", "T2", "T3"):
-        die("quick is for T0 to T3; from T4 the task needs init, triage and a reviewed plan")
     files = _split_files(args.files)
     if not files:
         die("--files must name at least one file or glob the step may touch")
@@ -2187,7 +2242,7 @@ def handoff_to(args, root):
     data = {"from": source, "to": args.to, "via": via, "reason": args.why or "", "tier": tier,
             "tty": bool(os.isatty(0) and os.isatty(1))}
     if via == "review":
-        threshold = (read_profile().get("preferred_runtime") or {}).get("cross_vendor_review_from") or "T4"
+        threshold = (read_profile().get("preferred_runtime") or {}).get("cross_vendor_review_from") or "T5"
         if tier in TIERS and threshold in TIERS and TIERS.index(tier) >= TIERS.index(threshold):
             state["cross_vendor_review"] = {"from": source, "to": args.to, "tier": tier,
                                             "requested_at": now(), "status": "requested",

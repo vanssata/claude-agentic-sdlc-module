@@ -179,8 +179,8 @@ in one line does not belong there. Check `.claude/settings.json` keeps
 `disabledMcpjsonServers` otherwise.
 
 Set `pipeline_profile` in `risk-tiers.json`: `solo` (the default) when one
-developer who knows the codebase will run the tasks — T0–T2 directly, the full
-pipeline from T3 — `team` when several people or an unfamiliar codebase need
+developer who knows the codebase will run the tasks — T0–T4 directly, the full
+pipeline from T5 — `team` when several people or an unfamiliar codebase need
 every stage delegated.
 
 Adjust `.ai/policies/risk-tiers.json` to this project — the tier examples should

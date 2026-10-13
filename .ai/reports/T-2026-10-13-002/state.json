@@ -1,0 +1,603 @@
+{
+  "task_id": "T-2026-10-13-002",
+  "goal": "Tier model v2: seven scope-driven tiers, gates shifted by two, diff budget advisory",
+  "workflow": "feature",
+  "risk_tier": "T3",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "Tier model v2: seven scope-driven tiers, gates shifted by two, diff budget advisory",
+        "allowed_files": [
+          "skills/ai-task/sensors.py",
+          "skills/ai-task/state.py",
+          "tests/test-ai-task-sensors.sh",
+          "tests/test-ai-task-state.sh",
+          ".ai/policies/risk-tiers.json",
+          "skills/ai-init/templates/.ai/policies/risk-tiers.json",
+          ".ai/policies/risk-tiers.md",
+          "skills/ai-init/templates/.ai/policies/risk-tiers.md",
+          "skills/ai-task/SKILL.md",
+          "skills/ai-status/SKILL.md",
+          "skills/ai-init/SKILL.md",
+          "agents/ai-risk.md.tmpl",
+          "agents/ai-planner.md.tmpl",
+          "agents/ai-expert.md.tmpl",
+          "agents/ai-security.md.tmpl",
+          ".ai/policies/model-routing.md",
+          ".ai/policies/security.md",
+          ".ai/policies/review-economy.md",
+          ".ai/workflows/feature.md",
+          ".ai/workflows/bugfix.md",
+          ".ai/workflows/hotfix.md",
+          ".ai/workflows/refactoring.md",
+          ".ai/workflows/investigation.md",
+          "skills/ai-init/templates/.ai/policies/model-routing.md",
+          "skills/ai-init/templates/.ai/policies/security.md",
+          "skills/ai-init/templates/.ai/policies/review-economy.md",
+          "skills/ai-init/templates/.ai/workflows/feature.md",
+          "skills/ai-init/templates/.ai/workflows/bugfix.md",
+          "skills/ai-init/templates/.ai/workflows/hotfix.md",
+          "skills/ai-init/templates/.ai/workflows/refactoring.md",
+          "skills/ai-init/templates/.ai/workflows/investigation.md",
+          "docs/risk-tiers.md",
+          "docs/architecture.md",
+          "docs/agents.md",
+          "README.md",
+          "instructions/routing.md",
+          "tests/test-end-to-end.sh",
+          "tests/test-profiles.sh",
+          "tests/test-scaffold-idempotency.sh",
+          "tests/test-project-update.sh",
+          "tests/test-context-guard.sh",
+          "tests/test-usage-report.sh",
+          "tests/test-codex-agent-render.sh",
+          "tests/test-ai-scope-guard.sh"
+        ],
+        "forbidden_files": [
+          "tests/**"
+        ],
+        "forbidden_reason": "moved to step 1.2",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "53682ef0b97b340d4735d4102a004d2245f86255",
+          "seq": 1,
+          "paths": [
+            "agents/ai-expert.md.tmpl",
+            "agents/ai-planner.md.tmpl",
+            "agents/ai-risk.md.tmpl",
+            "agents/ai-security.md.tmpl",
+            "skills/ai-task/sensors.py",
+            "skills/ai-task/state.py"
+          ],
+          "files": 6,
+          "added": 114,
+          "deleted": 63,
+          "lines": 177,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "1.2",
+        "description": "the test suites are their own step; the installed state.py still enforces the per-step budget this task makes advisory",
+        "allowed_files": [
+          "tests/**"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": "53682ef0b97b340d4735d4102a004d2245f86255",
+        "diff": {
+          "tree_after": "53682ef0b97b340d4735d4102a004d2245f86255",
+          "seq": 2,
+          "paths": [],
+          "files": 0,
+          "added": 0,
+          "deleted": 0,
+          "lines": 0,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "1 blocker, 4 high: config/dependencies/pipeline floors below the skip ceiling; migrations floor T5 vs prose T4; six-tier projects silently weakened; bite not required at T2; direct_mode_cap ignores the mode map and applies to team",
+        "allowed_files": [
+          "skills/ai-task/sensors.py",
+          "skills/ai-task/state.py",
+          "tests/test-ai-task-sensors.sh",
+          "tests/test-ai-task-state.sh",
+          ".ai/policies/risk-tiers.json",
+          "skills/ai-init/templates/.ai/policies/risk-tiers.json",
+          ".ai/policies/risk-tiers.md",
+          "skills/ai-init/templates/.ai/policies/risk-tiers.md",
+          "skills/ai-task/SKILL.md",
+          "skills/ai-status/SKILL.md",
+          "skills/ai-init/SKILL.md",
+          "agents/ai-risk.md.tmpl",
+          "agents/ai-planner.md.tmpl",
+          "agents/ai-expert.md.tmpl",
+          "agents/ai-security.md.tmpl",
+          ".ai/policies/model-routing.md",
+          ".ai/policies/security.md",
+          ".ai/policies/review-economy.md",
+          ".ai/workflows/feature.md",
+          ".ai/workflows/bugfix.md",
+          ".ai/workflows/hotfix.md",
+          ".ai/workflows/refactoring.md",
+          ".ai/workflows/investigation.md",
+          "skills/ai-init/templates/.ai/policies/model-routing.md",
+          "skills/ai-init/templates/.ai/policies/security.md",
+          "skills/ai-init/templates/.ai/policies/review-economy.md",
+          "skills/ai-init/templates/.ai/workflows/feature.md",
+          "skills/ai-init/templates/.ai/workflows/bugfix.md",
+          "skills/ai-init/templates/.ai/workflows/hotfix.md",
+          "skills/ai-init/templates/.ai/workflows/refactoring.md",
+          "skills/ai-init/templates/.ai/workflows/investigation.md",
+          "docs/risk-tiers.md",
+          "docs/architecture.md",
+          "docs/agents.md",
+          "README.md",
+          "instructions/routing.md",
+          "tests/test-end-to-end.sh",
+          "tests/test-profiles.sh",
+          "tests/test-scaffold-idempotency.sh",
+          "tests/test-project-update.sh",
+          "tests/test-context-guard.sh",
+          "tests/test-usage-report.sh",
+          "tests/test-codex-agent-render.sh",
+          "tests/test-ai-scope-guard.sh",
+          "tests/**"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "53682ef0b97b340d4735d4102a004d2245f86255",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "4dd6225875e793c2b71274a896682194928f6b4c",
+          "seq": 3,
+          "paths": [
+            "skills/ai-task/sensors.py",
+            "skills/ai-task/state.py",
+            "tests/test-ai-task-sensors.sh",
+            "tests/test-ai-task-state.sh"
+          ],
+          "files": 4,
+          "added": 102,
+          "deleted": 17,
+          "lines": 119,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R2",
+        "description": "re-review: requirements*.txt scored docs T0 (first-match order); six-tier policy on a non-solo profile lets quick T4 through; malformed policy tracebacks; non-mapping bite; gaps in the mode map; no test pins the T4 floors",
+        "allowed_files": [
+          "skills/ai-task/sensors.py",
+          "skills/ai-task/state.py",
+          "tests/test-ai-task-sensors.sh",
+          "tests/test-ai-task-state.sh",
+          ".ai/policies/risk-tiers.json",
+          "skills/ai-init/templates/.ai/policies/risk-tiers.json",
+          ".ai/policies/risk-tiers.md",
+          "skills/ai-init/templates/.ai/policies/risk-tiers.md",
+          "skills/ai-task/SKILL.md",
+          "skills/ai-status/SKILL.md",
+          "skills/ai-init/SKILL.md",
+          "agents/ai-risk.md.tmpl",
+          "agents/ai-planner.md.tmpl",
+          "agents/ai-expert.md.tmpl",
+          "agents/ai-security.md.tmpl",
+          ".ai/policies/model-routing.md",
+          ".ai/policies/security.md",
+          ".ai/policies/review-economy.md",
+          ".ai/workflows/feature.md",
+          ".ai/workflows/bugfix.md",
+          ".ai/workflows/hotfix.md",
+          ".ai/workflows/refactoring.md",
+          ".ai/workflows/investigation.md",
+          "skills/ai-init/templates/.ai/policies/model-routing.md",
+          "skills/ai-init/templates/.ai/policies/security.md",
+          "skills/ai-init/templates/.ai/policies/review-economy.md",
+          "skills/ai-init/templates/.ai/workflows/feature.md",
+          "skills/ai-init/templates/.ai/workflows/bugfix.md",
+          "skills/ai-init/templates/.ai/workflows/hotfix.md",
+          "skills/ai-init/templates/.ai/workflows/refactoring.md",
+          "skills/ai-init/templates/.ai/workflows/investigation.md",
+          "docs/risk-tiers.md",
+          "docs/architecture.md",
+          "docs/agents.md",
+          "README.md",
+          "instructions/routing.md",
+          "tests/test-end-to-end.sh",
+          "tests/test-profiles.sh",
+          "tests/test-scaffold-idempotency.sh",
+          "tests/test-project-update.sh",
+          "tests/test-context-guard.sh",
+          "tests/test-usage-report.sh",
+          "tests/test-codex-agent-render.sh",
+          "tests/test-ai-scope-guard.sh",
+          "tests/**"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "4dd6225875e793c2b71274a896682194928f6b4c",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc",
+          "seq": 4,
+          "paths": [
+            "skills/ai-task/sensors.py",
+            "skills/ai-task/state.py",
+            "tests/test-ai-task-sensors.sh",
+            "tests/test-ai-task-state.sh"
+          ],
+          "files": 4,
+          "added": 88,
+          "deleted": 29,
+          "lines": 117,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "1.2",
+    "R1",
+    "R2"
+  ],
+  "test_status": "existing_failure",
+  "e2e_status": "passing",
+  "review_status": "passed",
+  "security_status": "not_applicable",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "ikakarov",
+    "granted_at": "2026-10-13T14:55:48Z",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "terminal",
+    "unattended": false
+  },
+  "created_at": "2026-10-13T13:32:50Z",
+  "updated_at": "2026-10-13T14:56:07Z",
+  "history": [
+    {
+      "at": "2026-10-13T13:32:51Z",
+      "event": "task_started",
+      "detail": "Tier model v2: seven scope-driven tiers, gates shifted by two, diff budget advisory (feature)"
+    },
+    {
+      "at": "2026-10-13T13:32:51Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-13T13:32:51Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-13T13:32:51Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-13T13:32:51Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-13T13:32:51Z",
+      "event": "risk_classified",
+      "detail": "T3: pipeline path scope; plan approved in plan mode"
+    },
+    {
+      "at": "2026-10-13T13:32:51Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-13T13:32:51Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-13T13:32:51Z",
+      "event": "step_started",
+      "detail": "1: Tier model v2: seven scope-driven tiers, gates shifted by two, diff budget advisory"
+    },
+    {
+      "at": "2026-10-13T14:06:02Z",
+      "event": "scope_change",
+      "detail": "1 -> 1.2: tests/**"
+    },
+    {
+      "at": "2026-10-13T14:06:02Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-13T14:06:02Z",
+      "event": "step_started",
+      "detail": "1.2: the test suites are their own step; the installed state.py still enforces the per-step budget this task makes advisory"
+    },
+    {
+      "at": "2026-10-13T14:06:02Z",
+      "event": "step_completed",
+      "detail": "1.2"
+    },
+    {
+      "at": "2026-10-13T14:11:46Z",
+      "event": "field_set",
+      "detail": "test_status = unknown (suite run 1, exit 1)"
+    },
+    {
+      "at": "2026-10-13T14:12:17Z",
+      "event": "set",
+      "detail": "test_status = existing_failure"
+    },
+    {
+      "at": "2026-10-13T14:12:21Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-13T14:12:21Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-13T14:19:09Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-13T14:19:09Z",
+      "event": "remediation",
+      "detail": "R1: 1 blocker, 4 high: config/dependencies/pipeline floors below the skip ceiling; migrations floor T5 vs prose T4; six-tier projects silently weakened; bite not required at T2; direct_mode_cap ignores the mode map and applies to team"
+    },
+    {
+      "at": "2026-10-13T14:19:09Z",
+      "event": "step_started",
+      "detail": "R1: 1 blocker, 4 high: config/dependencies/pipeline floors below the skip ceiling; migrations floor T5 vs prose T4; six-tier projects silently weakened; bite not required at T2; direct_mode_cap ignores the mode map and applies to team"
+    },
+    {
+      "at": "2026-10-13T14:22:22Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-10-13T14:27:56Z",
+      "event": "field_set",
+      "detail": "test_status = existing_failure (suite run 2, exit 1)"
+    },
+    {
+      "at": "2026-10-13T14:28:01Z",
+      "event": "set",
+      "detail": "test_status = existing_failure"
+    },
+    {
+      "at": "2026-10-13T14:28:06Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-13T14:28:06Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-13T14:33:40Z",
+      "event": "remediation",
+      "detail": "R2: re-review: requirements*.txt scored docs T0 (first-match order); six-tier policy on a non-solo profile lets quick T4 through; malformed policy tracebacks; non-mapping bite; gaps in the mode map; no test pins the T4 floors"
+    },
+    {
+      "at": "2026-10-13T14:33:40Z",
+      "event": "step_started",
+      "detail": "R2: re-review: requirements*.txt scored docs T0 (first-match order); six-tier policy on a non-solo profile lets quick T4 through; malformed policy tracebacks; non-mapping bite; gaps in the mode map; no test pins the T4 floors"
+    },
+    {
+      "at": "2026-10-13T14:35:14Z",
+      "event": "step_completed",
+      "detail": "R2"
+    },
+    {
+      "at": "2026-10-13T14:40:46Z",
+      "event": "field_set",
+      "detail": "test_status = existing_failure (suite run 3, exit 1)"
+    },
+    {
+      "at": "2026-10-13T14:40:46Z",
+      "event": "set",
+      "detail": "test_status = existing_failure"
+    },
+    {
+      "at": "2026-10-13T14:40:51Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 3, exit 0)"
+    },
+    {
+      "at": "2026-10-13T14:40:51Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-13T14:45:49Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-10-13T14:45:49Z",
+      "event": "set",
+      "detail": "security_status = not_applicable"
+    },
+    {
+      "at": "2026-10-13T14:45:49Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval: summary shown; frozen policy/workflow files and both risk-tiers.json are delivered after close"
+    },
+    {
+      "at": "2026-10-13T14:45:49Z",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "2026-10-13T14:55:48Z",
+      "event": "human_approval",
+      "detail": "granted by ikakarov via terminal"
+    },
+    {
+      "at": "2026-10-13T14:56:07Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-13T14:56:07Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-13-002/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-13T14:56:07Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "bed4d113b142cda49eab90460a7badd8820d58cb",
+    "base_tree": "797c604926f089a365a44ac8accb72f09f275196",
+    "task": {
+      "files": 10,
+      "added": 382,
+      "deleted": 97,
+      "lines": 479,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 353,
+      "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc",
+      "measured_at": "2026-10-13T14:35:14Z",
+      "status": "green"
+    },
+    "rescored_tier": "T3",
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-13-002/sensors.json",
+    "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc",
+    "verdict": "required",
+    "checked_at": "2026-10-13T14:40:51Z"
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "53682ef0b97b340d4735d4102a004d2245f86255",
+        "exit": 1,
+        "duration_s": 337,
+        "log": ".ai/reports/T-2026-10-13-002/tests-suite-1.log",
+        "at": "2026-10-13T14:11:46Z",
+        "env_retry": false
+      },
+      {
+        "n": 1,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "53682ef0b97b340d4735d4102a004d2245f86255",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-13-002/tests-e2e-1.log",
+        "at": "2026-10-13T14:12:21Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "4dd6225875e793c2b71274a896682194928f6b4c",
+        "exit": 1,
+        "duration_s": 329,
+        "log": ".ai/reports/T-2026-10-13-002/tests-suite-2.log",
+        "at": "2026-10-13T14:27:56Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "4dd6225875e793c2b71274a896682194928f6b4c",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-13-002/tests-e2e-2.log",
+        "at": "2026-10-13T14:28:06Z",
+        "env_retry": false
+      },
+      {
+        "n": 3,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc",
+        "exit": 1,
+        "duration_s": 332,
+        "log": ".ai/reports/T-2026-10-13-002/tests-suite-3.log",
+        "at": "2026-10-13T14:40:46Z",
+        "env_retry": false
+      },
+      {
+        "n": 3,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-13-002/tests-e2e-3.log",
+        "at": "2026-10-13T14:40:51Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 3
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}

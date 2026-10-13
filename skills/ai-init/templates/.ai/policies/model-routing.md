@@ -13,7 +13,7 @@ not settle — never for fact collection.
 |---|---|---|
 | **LOCAL** | *not available* | see the note below |
 | **FAST** | the plan's FAST model, effort `low` | reading and running: file search, inventories, counting, logs and test output, running a command and reporting it (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
-| **BALANCED** — default for agents | the plan's BALANCED model, effort `low`–`medium` | discovery with judgment, context compression, planning up to T2, mechanical edits, release assembly, the T2 review |
+| **BALANCED** — default for agents | the plan's BALANCED model, effort `low`–`medium` | discovery with judgment, context compression, planning up to T3, mechanical edits, release assembly, the T2/T3 review when a sensor is red |
 | **STRONG** | the plan's STRONG model, effort `high` | the STRONG triggers below |
 | **EXPERT** | `ai-expert`, pinned to the plan's EXPERT model — `xhigh` where the plan allows it, `high` elsewhere; `architect` may pin a model of its own | the EXPERT triggers below |
 
@@ -24,8 +24,9 @@ every plan.
 
 The main session runs the model the installed profile sets and does the
 implementation itself. Which stages spawn an agent at all
-is decided by `pipeline_profile` in `risk-tiers.json`: in `solo`, T0–T2 run in
-direct mode — nothing on STRONG, one BALANCED review at T2 — and tests run once
+is decided by `pipeline_profile` in `risk-tiers.json`: in `solo`, T0–T4 run in
+direct mode — nothing on STRONG below T4, a BALANCED review at T2/T3 only when
+a sensor is red, one STRONG review at T4 — and tests run once
 after the last step, to the end, with every failure fixed as one batch.
 
 **Reading by difficulty.** A lookup — where X is, one route, service id, config
@@ -52,9 +53,10 @@ depends on a local model; if one becomes available it slots in at the FAST tier.
 
 1. Review of a finished change before a commit is proposed (`ai-reviewer`), and
    `ai-security` for authentication, authorization, secrets, payments, personal
-   data, webhooks and any T4/T5 change.
-2. `ai-risk` on the BALANCED tier answered T3+ or `confidence: uncertain` — re-run
-   it at STRONG; `ai-planner` at STRONG for T3/T4.
+   data, webhooks and any T5/T6 change.
+2. `ai-risk` on the BALANCED tier answered T4+ or `confidence: uncertain` — re-run
+   it at STRONG; `ai-planner` at STRONG for T5, and for a T4 plan only on a
+   `delegate_anyway_when` trigger.
 3. Root cause after a BALANCED diagnosis already failed once, or a bug in
    concurrency, retries/idempotency, caching or data integrity.
 4. A reversible but costly design choice with two or more viable options
@@ -62,12 +64,12 @@ depends on a local model; if one becomes available it slots in at the FAST tier.
 
 ## EXPERT triggers
 
-1. The task is T5: migration, infrastructure, production architecture.
+1. The task is T6: migration, infrastructure, production architecture.
 2. STRONG could not settle it: `confidence: uncertain`, or two STRONG results
    contradict each other.
 3. An irreversible design with several viable options — core data model, public
    API or event contract, service split.
-4. The final check of a T5 plan or of a production-incident root cause before a
+4. The final check of a T6 plan or of a production-incident root cause before a
    human acts on it.
 
 ## Escalation

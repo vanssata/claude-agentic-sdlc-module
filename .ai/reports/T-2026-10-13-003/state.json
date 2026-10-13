@@ -1,0 +1,207 @@
+{
+  "task_id": "T-2026-10-13-003",
+  "goal": "Adapt the test-project-update.sh fixture to the seven-tier risk-tiers.json template",
+  "workflow": "bugfix",
+  "risk_tier": "T2",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "Adapt the test-project-update.sh fixture to the seven-tier risk-tiers.json template",
+        "allowed_files": [
+          "tests/test-project-update.sh"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "39c7909a731652a71b4a42af2f99ab0de96c388b",
+          "seq": 1,
+          "paths": [
+            "tests/test-project-update.sh"
+          ],
+          "files": 1,
+          "added": 4,
+          "deleted": 4,
+          "lines": 8,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1"
+  ],
+  "test_status": "passing",
+  "e2e_status": "not_applicable",
+  "review_status": "passed",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": false,
+    "granted_by": null,
+    "granted_at": null,
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": null,
+    "unattended": false
+  },
+  "created_at": "2026-10-13T15:44:54Z",
+  "updated_at": "2026-10-13T15:58:11Z",
+  "history": [
+    {
+      "at": "2026-10-13T15:44:54Z",
+      "event": "task_started",
+      "detail": "Adapt the test-project-update.sh fixture to the seven-tier risk-tiers.json template (bugfix)"
+    },
+    {
+      "at": "2026-10-13T15:44:54Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-13T15:44:54Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-13T15:44:54Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-13T15:44:54Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-13T15:44:54Z",
+      "event": "risk_classified",
+      "detail": "T2: test-only; fixture edit collided with the template's new T4 examples"
+    },
+    {
+      "at": "2026-10-13T15:44:54Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-13T15:44:54Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-13T15:44:54Z",
+      "event": "step_started",
+      "detail": "1: Adapt the test-project-update.sh fixture to the seven-tier risk-tiers.json template"
+    },
+    {
+      "at": "2026-10-13T15:50:59Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-13T15:51:00Z",
+      "event": "set",
+      "detail": "e2e_status = not_applicable"
+    },
+    {
+      "at": "2026-10-13T15:56:42Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-13T15:56:42Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-13T15:58:11Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-10-13T15:58:11Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-13T15:58:11Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-13-003/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-13T15:58:11Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "bed4d113b142cda49eab90460a7badd8820d58cb",
+    "base_tree": "b8aa9c4f76c0b9fb3049103267c6db50a55e5c76",
+    "task": {
+      "files": 1,
+      "added": 4,
+      "deleted": 4,
+      "lines": 8,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 0,
+      "tree": "39c7909a731652a71b4a42af2f99ab0de96c388b",
+      "measured_at": "2026-10-13T15:50:59Z",
+      "status": "green"
+    },
+    "rescored_tier": "T2",
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-13-003/sensors.json",
+    "tree": "39c7909a731652a71b4a42af2f99ab0de96c388b",
+    "verdict": "required",
+    "checked_at": "2026-10-13T15:56:42Z"
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "39c7909a731652a71b4a42af2f99ab0de96c388b",
+        "exit": 0,
+        "duration_s": 342,
+        "log": ".ai/reports/T-2026-10-13-003/tests-suite-1.log",
+        "at": "2026-10-13T15:56:42Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 1
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}

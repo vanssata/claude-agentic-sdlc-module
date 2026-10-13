@@ -140,13 +140,13 @@ script, or run it yourself:
 A review pass spent on a self-contradictory risk register is a pass not spent on
 the code. When a task closes a gap that a register entry calls open, the entry is
 corrected **in the same step as the fix**, not later. When the plan gains a
-remediation, the plan gains a section — at T3 and above the artefact a human
+remediation, the plan gains a section — at T4 and above the artefact a human
 approves must describe the change that exists, and a diff wider than the plan is
 invisible to the path guard, because the file set never changed.
 
 ## 8. The one thing the sensors may replace
 
-At T2 and below, when every sensor in `risk-tiers.json` `required_for_skip` is
+At T3 and below, when every sensor in `risk-tiers.json` `required_for_skip` is
 green or explicitly not applicable **on the tree as it is now**, the model
 review is replaced by the sensor set and `state.py review-gate` records
 `review_status: skipped_green`. This is the intent's decision 6, and it is an
@@ -156,20 +156,21 @@ other.
 It is narrow on purpose. The skip requires that the suite passed on this exact
 tree, that the tests the plan named **fail without the change** (`bite` — a
 green suite that never reaches the diff is not evidence), that the diff is
-inside its budget, and that the tier re-scored from the real diff is still T2
-or lower. A missing linter is not green: `unavailable` keeps the review, and
-only a human writing `lint_command: none` says the project has no linter. No
+inside its budget — the budget is advisory for the tier, never for the skip —
+and that the tier re-scored from the real diff is still T3 or lower. A missing
+linter is not green: `unavailable` keeps the review, and only a human writing
+`lint_command: none` says the project has no linter. No
 sensor writes `skipped_green` by asserting it — `review-gate` reaches it from
 measurements, and `state.py set review_status skipped_green` is refused.
 
-From T3 the review always runs. What the sensors change there is where it
+From T4 the review always runs. What the sensors change there is where it
 starts: their rows are in the ledger, CONFIRMED, before the reviewer plans its
 work.
 
 ## What this policy will not trade away
 
 - No review stage the tier requires is skipped, shortened, or merged — except
-  the T2 model review, and only under §8's measured conditions.
+  the T2/T3 model review, and only under §8's measured conditions.
 - No reviewer is moved to a cheaper model to go faster. Narrow the surface, never
   the mind.
 - A blocker still returns to implementation, however late it arrives and however

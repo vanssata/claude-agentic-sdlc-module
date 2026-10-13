@@ -1,0 +1,76 @@
+{
+  "checked_at": "2026-10-02T14:46:39Z",
+  "declared_tier": "T2",
+  "rescored_tier": "T2",
+  "schema": 1,
+  "sensors": {
+    "bite": {
+      "detail": "no finished step named a test \u2014 traceability says the same",
+      "must_fail": null,
+      "must_pass": null,
+      "restored": null,
+      "status": "unavailable",
+      "tree": "223d458c84baa36f3129b8946d9ef68744490efc"
+    },
+    "diff": {
+      "detail": "2 files / 82 lines (T2 task budget 15 / 400)",
+      "files": 2,
+      "lines": 82,
+      "status": "green",
+      "tree": "223d458c84baa36f3129b8946d9ef68744490efc",
+      "unscoped": []
+    },
+    "duplicates": {
+      "detail": "0 blocks >= 8 lines repeat",
+      "status": "green",
+      "tree": "223d458c84baa36f3129b8946d9ef68744490efc"
+    },
+    "lint": {
+      "detail": "pylint $(git ls-files '*.py'): command not found",
+      "status": "unavailable",
+      "tree": "223d458c84baa36f3129b8946d9ef68744490efc"
+    },
+    "plan_sections": {
+      "detail": "inline plan",
+      "status": "not_applicable",
+      "tree": "223d458c84baa36f3129b8946d9ef68744490efc"
+    },
+    "rescore": {
+      "detail": "T2 \u2014 scopes: source, tests",
+      "reasons": [],
+      "status": "green",
+      "tier": "T2",
+      "tree": "223d458c84baa36f3129b8946d9ef68744490efc"
+    },
+    "tests": {
+      "detail": "verify_command exit 0 in 309s, run 1, log .ai/reports/T-2026-10-02-001/tests-suite-1.log",
+      "log": ".ai/reports/T-2026-10-02-001/tests-suite-1.log",
+      "status": "green",
+      "tree": "223d458c84baa36f3129b8946d9ef68744490efc"
+    },
+    "traceability": {
+      "detail": "steps with no test named: 1",
+      "status": "red",
+      "tree": "223d458c84baa36f3129b8946d9ef68744490efc",
+      "untraced": [
+        "1"
+      ]
+    },
+    "typecheck": {
+      "detail": "typecheck_command: none (testing.md)",
+      "status": "not_applicable",
+      "tree": "223d458c84baa36f3129b8946d9ef68744490efc"
+    }
+  },
+  "task": "T-2026-10-02-001",
+  "tree": "223d458c84baa36f3129b8946d9ef68744490efc",
+  "verdict": {
+    "all_green": false,
+    "blocking": [
+      "lint: unavailable",
+      "traceability: red",
+      "bite: unavailable"
+    ],
+    "review": "required"
+  }
+}

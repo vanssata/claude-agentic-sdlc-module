@@ -1,0 +1,165 @@
+{
+  "task_id": "T-2026-10-13-001",
+  "goal": "Simplify the plugin: policies load from the plugin root, ai-task split into direct and sdlc skills, profiles collapse to solo/team, Codex render-only, one canonical rules file, shared definition-of-done, skill anatomy + lint + trigger evals, docs archive",
+  "workflow": "feature",
+  "risk_tier": "T5",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": null,
+    "current_step_id": null,
+    "steps": []
+  },
+  "completed_steps": [],
+  "test_status": "not_run",
+  "e2e_status": "not_run",
+  "review_status": "not_started",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "none — task abandoned",
+  "human_approval": {
+    "required": true,
+    "granted": false,
+    "granted_by": null,
+    "granted_at": null,
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": null,
+    "unattended": false
+  },
+  "created_at": "2026-10-13T12:47:14Z",
+  "updated_at": "2026-10-13T13:24:19Z",
+  "history": [
+    {
+      "at": "2026-10-13T12:47:14Z",
+      "event": "task_started",
+      "detail": "Simplify the plugin: policies load from the plugin root, ai-task split into direct and sdlc skills, profiles collapse to solo/team, Codex render-only, one canonical rules file, shared definition-of-done, skill anatomy + lint + trigger evals, docs archive (feature)"
+    },
+    {
+      "at": "2026-10-13T12:53:14Z",
+      "event": "stage",
+      "detail": "discovery -> context: discovery-A/B/C.md written by three ai-discovery agents (BALANCED, low); context written by the session"
+    },
+    {
+      "at": "2026-10-13T12:53:14Z",
+      "event": "question_asked",
+      "detail": "Q1: Point 3, plan profiles: the 7 profiles/*.json also carry budgets (fan-out, EXPERT per task, direct-mode cap, tokens) and preferred_runtime, which have no frontmatter equivalent and which runtime-gate.py enforces. What replaces them?"
+    },
+    {
+      "at": "2026-10-13T12:53:14Z",
+      "event": "question_asked",
+      "detail": "Q2: Point 1, which .ai/ files stay in the project when shared policies move to the plugin root?"
+    },
+    {
+      "at": "2026-10-13T12:53:14Z",
+      "event": "question_asked",
+      "detail": "Q3: Point 1, existing projects that already hold copies of the moved files: what does /project-update do with them?"
+    },
+    {
+      "at": "2026-10-13T12:53:14Z",
+      "event": "question_asked",
+      "detail": "Q4: Point 4, Codex config.toml: merge-codex-config.py manages six keys (model, model_reasoning_effort, agents.*). Without it, where do they come from?"
+    },
+    {
+      "at": "2026-10-13T13:14:24Z",
+      "event": "question_answered",
+      "detail": "Q1 = A"
+    },
+    {
+      "at": "2026-10-13T13:14:24Z",
+      "event": "question_answered",
+      "detail": "Q2 = A"
+    },
+    {
+      "at": "2026-10-13T13:14:24Z",
+      "event": "question_answered",
+      "detail": "Q3 = A"
+    },
+    {
+      "at": "2026-10-13T13:16:27Z",
+      "event": "question_answered",
+      "detail": "Q4 = A"
+    },
+    {
+      "at": "2026-10-13T13:16:27Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: impact written by the session from discovery-A/B/C; see impact-report.md"
+    },
+    {
+      "at": "2026-10-13T13:17:37Z",
+      "event": "risk_classified",
+      "detail": "T5: ai-risk (STRONG, opus): skills/project-update/migrations/0006_* matches path_scope migrations (**/migrations/**, min T5); downstream deletion of project copies is a data migration; confidence high"
+    },
+    {
+      "at": "2026-10-13T13:17:37Z",
+      "event": "question_asked",
+      "detail": "Q5: The T5 diff budget is 400 lines / 15 files per task and 150 / 6 per step (risk-tiers.json diff_budget), and step-done refuses a step over it. This work package removes ~6000 lines and 190+ files; no split into steps fits. How do we proceed?"
+    },
+    {
+      "at": "2026-10-13T13:23:11Z",
+      "event": "question_answered",
+      "detail": "Q5 = A"
+    },
+    {
+      "at": "2026-10-13T13:24:19Z",
+      "event": "task_closed",
+      "detail": "abandoned"
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task abandoned",
+    "at": "2026-10-13T13:24:19Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-13-001/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-13T13:24:19Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "bed4d113b142cda49eab90460a7badd8820d58cb",
+    "base_tree": "797c604926f089a365a44ac8accb72f09f275196",
+    "task": {
+      "files": 0,
+      "added": 0,
+      "deleted": 0,
+      "lines": 0,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 0,
+      "tree": null,
+      "measured_at": null,
+      "status": "not_measured"
+    },
+    "rescored_tier": null,
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-13-001/sensors.json",
+    "tree": null,
+    "verdict": null,
+    "checked_at": null
+  },
+  "tests": {
+    "runs": [],
+    "suite_runs": 0
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}

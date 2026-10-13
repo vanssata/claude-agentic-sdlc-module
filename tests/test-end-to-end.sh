@@ -53,14 +53,14 @@ case "$TASK" in T-*) pass "task $TASK started at discovery";; *) fail "init fail
 S stage context --note "context summary written" >/dev/null
 S stage impact_analysis >/dev/null
 S stage risk_classification >/dev/null
-S risk T4 --note "payments: T4 by default" >/dev/null
-[ "$(S get --field risk_tier)" = T4 ] && pass "classified T4" || fail "tier should be T4"
+S risk T5 --note "payments: T5 by default" >/dev/null
+[ "$(S get --field risk_tier)" = T5 ] && pass "classified T5" || fail "tier should be T5"
 
 TIERS="$REPO/.ai/policies/risk-tiers.json"
-[ "$(jq -r '.tiers.T4.security_review' "$TIERS")" = true ] \
-    && pass "the tier table demands a security review for T4" || fail "T4 should require security review"
-[ "$(jq -r '.tiers.T4.human_approval' "$TIERS")" = true ] \
-    && pass "and human approval" || fail "T4 should require human approval"
+[ "$(jq -r '.tiers.T5.security_review' "$TIERS")" = true ] \
+    && pass "the tier table demands a security review for T5" || fail "T5 should require security review"
+[ "$(jq -r '.tiers.T5.human_approval' "$TIERS")" = true ] \
+    && pass "and human approval" || fail "T5 should require human approval"
 
 S stage plan >/dev/null
 cat > "$TMP/steps.json" <<'JSON'
@@ -116,7 +116,7 @@ CODEX_GIT="$CDIR/hooks/ai-git-guard.sh"
 # The state the Claude half of this test wrote is the state Codex reads.
 [ "$(python3 "$CDIR/skills/ai-task/state.py" --root "$REPO" get | jq -r '.approved_plan.current_step_id')" = 1 ] \
     && pass "Codex reads the step the Claude session armed" || fail "state is not shared between runtimes"
-[ "$(python3 "$CDIR/skills/ai-task/state.py" --root "$REPO" get --field risk_tier)" = T4 ] \
+[ "$(python3 "$CDIR/skills/ai-task/state.py" --root "$REPO" get --field risk_tier)" = T5 ] \
     && pass "and the same risk tier" || fail "tier should be shared"
 
 mkpatch() {  # mkpatch <path> [second-path] -> one apply_patch payload, one or two files

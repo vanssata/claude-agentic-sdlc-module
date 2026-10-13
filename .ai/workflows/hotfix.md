@@ -4,9 +4,10 @@ Production is broken now. Stages get shorter; none of them disappears.
 
 > Who runs a stage is set by `pipeline_profile` in `policies/risk-tiers.json`.
 > The table names the agent for when a stage is delegated. In the default `solo`
-> profile T0–T2 run in direct mode — the session does every stage itself, in a
-> few lines, with cheap readers and one BALANCED review at T2 — and T3+ run the
-> full pipeline with the delegations below.
+> profile T0–T4 run in direct mode — the session does every stage itself, in a
+> few lines, with cheap readers and one review (BALANCED at T2/T3, and only
+> when a sensor is red; STRONG at T4, whose plan the human approves in plan
+> mode) — and T5+ run the full pipeline with the delegations below.
 
 | Stage | Who | Notes |
 |---|---|---|

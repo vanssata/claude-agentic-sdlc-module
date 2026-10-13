@@ -1,0 +1,95 @@
+{
+  "checked_at": "2026-10-13T14:40:51Z",
+  "declared_tier": "T3",
+  "rescored_tier": "T3",
+  "schema": 1,
+  "sensors": {
+    "bite": {
+      "detail": "the suite is not green on this tree \u2014 nothing to ask yet",
+      "status": "unavailable",
+      "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc"
+    },
+    "diff": {
+      "detail": "10 files / 479 lines (T3 task budget 30 / 800)",
+      "files": 10,
+      "lines": 479,
+      "status": "green",
+      "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc",
+      "unscoped": []
+    },
+    "duplicates": {
+      "blocks": [
+        [
+          "agents/ai-planner.md.tmpl:68",
+          "agents/ai-risk.md.tmpl:47"
+        ],
+        [
+          "agents/ai-planner.md.tmpl:70",
+          "agents/ai-risk.md.tmpl:49"
+        ],
+        [
+          "agents/ai-planner.md.tmpl:71",
+          "agents/ai-risk.md.tmpl:50"
+        ],
+        [
+          "agents/ai-planner.md.tmpl:72",
+          "agents/ai-risk.md.tmpl:51"
+        ]
+      ],
+      "detail": "4 block(s) of >= 8 lines appear twice: agents/ai-planner.md.tmpl:68 ~ agents/ai-risk.md.tmpl:47",
+      "status": "red",
+      "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc"
+    },
+    "lint": {
+      "detail": "pylint $(git ls-files '*.py'): command not found",
+      "status": "unavailable",
+      "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc"
+    },
+    "plan_sections": {
+      "detail": "inline plan",
+      "status": "not_applicable",
+      "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc"
+    },
+    "rescore": {
+      "detail": "T3 \u2014 scopes: docs, source, tests",
+      "reasons": [],
+      "status": "green",
+      "tier": "T3",
+      "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc"
+    },
+    "tests": {
+      "detail": "suite run 3 exited 1, log .ai/reports/T-2026-10-13-002/tests-suite-3.log",
+      "log": ".ai/reports/T-2026-10-13-002/tests-suite-3.log",
+      "status": "red",
+      "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc"
+    },
+    "traceability": {
+      "detail": "steps with no test named: 1",
+      "status": "red",
+      "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc",
+      "untraced": [
+        "1"
+      ]
+    },
+    "typecheck": {
+      "detail": "typecheck_command: none (testing.md)",
+      "status": "not_applicable",
+      "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc"
+    }
+  },
+  "task": "T-2026-10-13-002",
+  "tree": "d43dc6bf3fb9ec2809f20c3f31d63a6055252ffc",
+  "verdict": {
+    "all_green": false,
+    "blocking": [
+      "tests: red",
+      "lint: unavailable",
+      "traceability: red",
+      "duplicates: red",
+      "bite: unavailable",
+      "tier T3 is above T2",
+      "the diff re-scores to T3"
+    ],
+    "review": "required"
+  }
+}

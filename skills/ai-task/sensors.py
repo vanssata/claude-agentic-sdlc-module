@@ -51,24 +51,30 @@ GREEN, RED, UNAVAILABLE, NOT_APPLICABLE, STALE = (
 
 OK, ERROR, REDCODE, UNKNOWNCODE = 0, 1, 2, 3
 
-TIERS = ["T0", "T1", "T2", "T3", "T4", "T5"]
+TIERS = ["T0", "T1", "T2", "T3", "T4", "T5", "T6"]
 
 # Defaults for a project whose risk-tiers.json predates WP4. They are the same
 # numbers the template ships, so a project that never updates still gets a
-# measurement — it simply never gets a gate it did not ask for.
+# measurement — it simply never gets a gate it did not ask for. The budget is
+# advisory unless the policy sets `enforce: true`: over it, step-done warns and
+# rescore records it, but neither refuses the step nor raises the tier. The
+# tier comes from the scope of a change, never from how many files it touches.
 DEFAULT_DIFF_BUDGET = {
+    "enforce": False,
     "per_step": {"T0": {"max_lines": 300, "max_files": 15},
                  "T1": {"max_lines": 120, "max_files": 5},
                  "T2": {"max_lines": 200, "max_files": 8},
                  "T3": {"max_lines": 250, "max_files": 10},
-                 "T4": {"max_lines": 150, "max_files": 6},
-                 "T5": {"max_lines": 150, "max_files": 6}},
+                 "T4": {"max_lines": 250, "max_files": 10},
+                 "T5": {"max_lines": 150, "max_files": 6},
+                 "T6": {"max_lines": 150, "max_files": 6}},
     "per_task": {"T0": {"max_lines": 600, "max_files": 30},
                  "T1": {"max_lines": 300, "max_files": 10},
                  "T2": {"max_lines": 400, "max_files": 15},
                  "T3": {"max_lines": 800, "max_files": 30},
-                 "T4": {"max_lines": 400, "max_files": 15},
-                 "T5": {"max_lines": 400, "max_files": 15}},
+                 "T4": {"max_lines": 800, "max_files": 30},
+                 "T5": {"max_lines": 400, "max_files": 15},
+                 "T6": {"max_lines": 400, "max_files": 15}},
     "exclude": ["**/*.lock", "package-lock.json", "composer.lock",
                 "**/__snapshots__/**", "**/*.snap", "**/*.min.*", "**/*.map",
                 "**/generated/**", "**/*.generated.*",
@@ -77,27 +83,31 @@ DEFAULT_DIFF_BUDGET = {
 }
 
 DEFAULT_PATH_SCOPES = [
-    {"scope": "pipeline", "min_tier": "T3",
+    {"scope": "pipeline", "min_tier": "T4",
      "paths": [".ai/policies/**", ".ai/workflows/**", ".claude/**", ".codex/**",
                "CLAUDE.md", "AGENTS.md"]},
     {"scope": "tests", "min_tier": "T1",
      "paths": ["tests/**", "spec/**", "**/*Test.php", "**/*.test.*",
                "**/*.spec.*", "**/test_*.py"]},
-    {"scope": "docs", "min_tier": "T0",
-     "paths": ["docs/**", "**/*.md", "**/*.rst", "**/*.txt"]},
-    {"scope": "migrations", "min_tier": "T5",
-     "paths": ["**/migrations/**", "**/Migrations/**", "db/migrate/**"]},
-    {"scope": "infra", "min_tier": "T5",
-     "paths": ["Dockerfile*", "docker-compose*", "k8s/**", "helm/**",
-               "terraform/**", ".github/workflows/**"]},
-    {"scope": "auth", "min_tier": "T4",
-     "paths": ["**/Security/**", "**/Auth/**", "**/auth/**"]},
-    {"scope": "payments", "min_tier": "T4",
-     "paths": ["**/Payment/**", "**/Billing/**", "**/Tax/**", "**/Invoice/**"]},
-    {"scope": "config", "min_tier": "T3", "paths": ["config/**", ".env*"]},
-    {"scope": "dependencies", "min_tier": "T3",
+    # Manifests stand above `docs`: requirements*.txt is a dependency list,
+    # not a text file, and first match wins.
+    {"scope": "dependencies", "min_tier": "T4",
      "paths": ["composer.json", "package.json", "pyproject.toml",
                "requirements*.txt", "go.mod"]},
+    {"scope": "docs", "min_tier": "T0",
+     "paths": ["docs/**", "**/*.md", "**/*.rst", "**/*.txt"]},
+    {"scope": "migrations", "min_tier": "T4",
+     "paths": ["**/migrations/**", "**/Migrations/**", "db/migrate/**"]},
+    {"scope": "infra", "min_tier": "T6",
+     "paths": ["Dockerfile*", "docker-compose*", "k8s/**", "helm/**",
+               "terraform/**", ".github/workflows/**"]},
+    {"scope": "auth", "min_tier": "T5",
+     "paths": ["**/Security/**", "**/Auth/**", "**/auth/**"]},
+    {"scope": "payments", "min_tier": "T5",
+     "paths": ["**/Payment/**", "**/Billing/**", "**/Tax/**", "**/Invoice/**"]},
+    # Every floor that changes a process sits ABOVE skip_review_at_or_below: a
+    # dependency bump or a security.yaml edit always gets a reader.
+    {"scope": "config", "min_tier": "T4", "paths": ["config/**", ".env*"]},
 ]
 
 # The sensor set a project gets when its risk-tiers.json predates WP4. It is the
@@ -105,7 +115,7 @@ DEFAULT_PATH_SCOPES = [
 # at all must not turn out to be the one project where every sensor is optional
 # and therefore every review is skippable.
 DEFAULT_SENSORS = {
-    "skip_review_at_or_below": "T2",
+    "skip_review_at_or_below": "T3",
     "required_for_skip": ["tests", "lint", "typecheck", "diff", "rescore",
                           "traceability", "duplicates", "bite"],
     "tests": {"timeout_seconds": 1800, "env_retries": 1, "max_suite_runs": 5,
@@ -387,10 +397,32 @@ def load_policy(root):
     if isinstance(data.get("sensors"), dict):
         sensor_config.update({k: v for k, v in data["sensors"].items()
                               if not k.startswith("_")})
+    # A policy written for the six-tier table (no T6) still means "T3 = shared
+    # behaviour, T5 = the top". Its own numbers are kept; only the defaults it
+    # never wrote are read on its scale, so an un-updated project is not
+    # quietly given a wider review skip. /project-update renumbers it.
+    legacy = legacy_six_tier(data)
+    if legacy:
+        written = data.get("sensors") if isinstance(data.get("sensors"), dict) else {}
+        if "skip_review_at_or_below" not in written:
+            sensor_config["skip_review_at_or_below"] = "T2"
+        bite = sensor_config.get("bite")
+        bite = dict(bite) if isinstance(bite, dict) else {}
+        written_bite = written.get("bite")
+        if not isinstance(written_bite, dict) or "required_from" not in written_bite:
+            bite["required_from"] = "T2"
+        sensor_config["bite"] = bite
     return {"diff_budget": merged_budget, "path_scopes": scopes,
-            "sensors": sensor_config,
+            "sensors": sensor_config, "legacy_tiers": legacy,
             "remediation_rounds": data.get("remediation_rounds", 2),
             "source": policy_path(root) if data else "defaults"}
+
+
+def legacy_six_tier(data):
+    """True for a risk-tiers.json that still describes the six-tier table:
+    it has a `tiers` map and no T6 in it."""
+    tiers = data.get("tiers") if isinstance(data, dict) else None
+    return isinstance(tiers, dict) and "T6" not in tiers
 
 
 def tier_index(tier):
@@ -399,6 +431,14 @@ def tier_index(tier):
 
 def tier_max(a, b):
     return a if tier_index(a) >= tier_index(b) else b
+
+
+def budget_enforced(policy):
+    """`diff_budget.enforce` — false unless the project wrote true: the budget
+    is a measurement that is reported, not a gate, unless asked for."""
+    if not isinstance(policy, dict):
+        return False
+    return bool((policy.get("diff_budget") or {}).get("enforce"))
 
 
 def budget_for(policy, scope, tier):
@@ -494,14 +534,19 @@ def measure(root, from_tree, to_tree, policy, tier="T2", allowed=None, scope="st
         result["over"].append("%d lines > %d" % (result["lines"], budget["max_lines"]))
     if budget.get("max_files") is not None and result["files"] > budget["max_files"]:
         result["over"].append("%d files > %d" % (result["files"], budget["max_files"]))
-    result["status"] = RED if (result["over"] or result["unscoped"]) else GREEN
+    # A file outside the step is always red. Size is red only when the project
+    # wrote `diff_budget.enforce: true`; otherwise it is measured and reported.
+    result["enforced"] = budget_enforced(policy)
+    result["status"] = RED if (result["unscoped"] or (result["over"] and result["enforced"])) else GREEN
     return result
 
 
-def rescore(declared, measurement):
-    """max(declared, the tier every touched scope demands, declared+1 when the
-    task is over its budget). It never returns anything lower than `declared`:
-    downgrade_rule says only a human lowers a tier, in writing."""
+def rescore(declared, measurement, policy=None):
+    """max(declared, the tier every touched scope demands). The tier comes from
+    the scope of a change, never from its size: an over-budget task is recorded
+    (`over_budget`) and raised one tier only when the policy says
+    `diff_budget.enforce: true`. It never returns anything lower than
+    `declared`: downgrade_rule says only a human lowers a tier, in writing."""
     out = {"status": UNAVAILABLE, "tier": declared, "reasons": [],
            "declared": declared, "over_budget": False}
     if measurement["status"] == UNAVAILABLE:
@@ -514,10 +559,11 @@ def rescore(declared, measurement):
             out["reasons"].append("%s (%s)" % (name, path))
     if measurement["over"] and measurement["scope"] == "task":
         out["over_budget"] = True
-        raised = TIERS[min(tier_index(tier) + 1, len(TIERS) - 1)]
-        if raised != tier:
-            out["reasons"].append("over the task budget: %s" % "; ".join(measurement["over"]))
-            tier = raised
+        if budget_enforced(policy):
+            raised = TIERS[min(tier_index(tier) + 1, len(TIERS) - 1)]
+            if raised != tier:
+                out["reasons"].append("over the task budget: %s" % "; ".join(measurement["over"]))
+                tier = raised
     out["tier"] = tier
     out["status"] = RED if tier_index(tier) > tier_index(declared) else GREEN
     return out
@@ -1172,7 +1218,7 @@ def check(root, state, policy, skip_bite=False, only=None):
     task_id = state.get("task_id") or ""
     base = (state.get("diff") or {}).get("base_tree")
     measurement = measure(root, base, tree, policy, tier=declared, scope="task")
-    scored = rescore(declared, measurement)
+    scored = rescore(declared, measurement, policy)
 
     results = {}
     wanted = only or SENSOR_ORDER
@@ -1186,11 +1232,16 @@ def check(root, state, policy, skip_bite=False, only=None):
         results["diff"] = {
             "status": measurement["status"],
             "detail": measurement.get("detail") or
-                      ("%d files / %d lines (%s task budget %s / %s)"
+                      ("%d files / %d lines (%s task budget %s / %s)%s"
                        % (measurement["files"], measurement["lines"], declared,
                           (measurement["budget"] or {}).get("max_files"),
-                          (measurement["budget"] or {}).get("max_lines"))),
+                          (measurement["budget"] or {}).get("max_lines"),
+                          (" — budget: over — %s%s"
+                           % ("; ".join(measurement["over"]),
+                              "" if measurement.get("enforced") else " (advisory)"))
+                          if measurement["over"] else "")),
             "files": measurement["files"], "lines": measurement["lines"],
+            "over": measurement["over"], "enforced": measurement.get("enforced", False),
             "unscoped": measurement["unscoped"]}
     if "rescore" in wanted:
         results["rescore"] = {
@@ -1211,7 +1262,7 @@ def check(root, state, policy, skip_bite=False, only=None):
 
     config = policy.get("sensors") or {}
     required = config.get("required_for_skip") or []
-    ceiling = config.get("skip_review_at_or_below", "T2")
+    ceiling = config.get("skip_review_at_or_below", "T3")
     blocking = []
     if not task_id:
         blocking.append("no task in flight: there is nothing to skip a review of")
@@ -1223,6 +1274,11 @@ def check(root, state, policy, skip_bite=False, only=None):
         blocking.append("tier %s is above %s" % (declared, ceiling))
     if scored["status"] != UNAVAILABLE and tier_index(scored["tier"]) > tier_index(ceiling):
         blocking.append("the diff re-scores to %s" % scored["tier"])
+    # Advisory means the budget never classifies; it still decides whether the
+    # sensors may stand in for a reader. A task past its budget keeps its review.
+    if measurement["status"] != UNAVAILABLE and measurement["over"]:
+        blocking.append("over the task budget (%s): a reviewer reads it"
+                        % "; ".join(measurement["over"]))
     report = {"schema": 1, "task": task_id, "tree": tree, "declared_tier": declared,
               "rescored_tier": scored.get("tier"), "checked_at": now(),
               "sensors": results,
@@ -1292,7 +1348,8 @@ def print_diff(result):
     if result["deferred"]:
         print("              deferred to another step: %d file(s)" % len(result["deferred"]))
     for line in result["over"]:
-        print("              over: %s" % line)
+        print("              budget: over — %s%s"
+              % (line, "" if result.get("enforced") else " (advisory: split when that helps the review)"))
     for path in result["unscoped"][:10]:
         print("              unscoped: %s" % path)
     if len(result["unscoped"]) > 10:
@@ -1344,13 +1401,15 @@ def cmd_rescore(args, root):
     from_tree, to_tree = resolve_trees(root, args)
     measurement = measure(root, from_tree, to_tree, policy, tier=args.declared,
                           scope="task")
-    result = rescore(args.declared, measurement)
+    result = rescore(args.declared, measurement, policy)
     if result["status"] == UNAVAILABLE:
         print("rescore       UNAVAIL  %s" % result.get("detail", "diff unavailable"))
         return UNKNOWNCODE
     if result["status"] == GREEN:
-        print("rescore       green    %s — scopes: %s"
-              % (result["tier"], ", ".join(measurement["scopes"]) or "none"))
+        budget = (" — budget: over — %s" % "; ".join(measurement["over"])
+                  if result["over_budget"] else "")
+        print("rescore       green    %s — scopes: %s%s"
+              % (result["tier"], ", ".join(measurement["scopes"]) or "none", budget))
         return OK
     print("rescore       RED      %s -> %s: %s"
           % (args.declared, result["tier"], "; ".join(result["reasons"][:3])))

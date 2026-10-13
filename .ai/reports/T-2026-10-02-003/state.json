@@ -1,0 +1,273 @@
+{
+  "task_id": "T-2026-10-02-003",
+  "goal": "step-done fallback picks the most recently finished step and says when it measures from base_tree",
+  "workflow": "bugfix",
+  "risk_tier": "T2",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "step-done fallback picks the most recently finished step and says when it measures from base_tree",
+        "allowed_files": [
+          "skills/ai-task/state.py",
+          "tests/test-ai-task-sensors.sh"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "c9e5dd1f556db6c445e4dd07b84365528cf6d997",
+          "paths": [
+            "skills/ai-task/state.py",
+            "tests/test-ai-task-sensors.sh"
+          ],
+          "files": 2,
+          "added": 92,
+          "deleted": 10,
+          "lines": 102,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "review LOWs: base-tree note when unmeasured; non-int seq",
+        "allowed_files": [
+          "skills/ai-task/state.py",
+          "tests/test-ai-task-sensors.sh"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "c9e5dd1f556db6c445e4dd07b84365528cf6d997",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "8e0d2bdd2c2b34610c10a460d4722a446d2c1ab4",
+          "paths": [
+            "skills/ai-task/state.py"
+          ],
+          "files": 1,
+          "added": 9,
+          "deleted": 3,
+          "lines": 12,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "R1"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "passed",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": false,
+    "granted_by": null,
+    "granted_at": null,
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": null,
+    "unattended": false
+  },
+  "created_at": "2026-10-02T15:28:40Z",
+  "updated_at": "2026-10-02T15:41:41Z",
+  "history": [
+    {
+      "at": "2026-10-02T15:28:40Z",
+      "event": "task_started",
+      "detail": "step-done fallback picks the most recently finished step and says when it measures from base_tree (bugfix)"
+    },
+    {
+      "at": "2026-10-02T15:28:40Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-02T15:28:40Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-02T15:28:40Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-02T15:28:40Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-02T15:28:40Z",
+      "event": "risk_classified",
+      "detail": "T2: review follow-ups to 71997a1 (MEDIUM order, LOW silent base_tree)"
+    },
+    {
+      "at": "2026-10-02T15:28:40Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-02T15:28:40Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-02T15:28:40Z",
+      "event": "step_started",
+      "detail": "1: step-done fallback picks the most recently finished step and says when it measures from base_tree"
+    },
+    {
+      "at": "2026-10-02T15:30:03Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-02T15:35:11Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-02T15:35:16Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-02T15:36:20Z",
+      "event": "remediation",
+      "detail": "R1: review LOWs: base-tree note when unmeasured; non-int seq"
+    },
+    {
+      "at": "2026-10-02T15:36:20Z",
+      "event": "step_started",
+      "detail": "R1: review LOWs: base-tree note when unmeasured; non-int seq"
+    },
+    {
+      "at": "2026-10-02T15:36:28Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-10-02T15:41:38Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-02T15:41:41Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-10-02T15:41:41Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-02T15:41:41Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-02-003/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-02T15:41:41Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "dd27e6c1aab66199d63debd8f9ea4fb430e9b35a",
+    "base_tree": "1c85eb9105fc352abc643cfa2064f7af6ef58da1",
+    "task": {
+      "files": 2,
+      "added": 98,
+      "deleted": 10,
+      "lines": 108,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 0,
+      "tree": "8e0d2bdd2c2b34610c10a460d4722a446d2c1ab4",
+      "measured_at": "2026-10-02T15:36:28Z",
+      "status": "green"
+    },
+    "rescored_tier": "T2",
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-02-003/sensors.json",
+    "tree": null,
+    "verdict": null,
+    "checked_at": null
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "c9e5dd1f556db6c445e4dd07b84365528cf6d997",
+        "exit": 0,
+        "duration_s": 308,
+        "log": ".ai/reports/T-2026-10-02-003/tests-suite-1.log",
+        "at": "2026-10-02T15:35:11Z",
+        "env_retry": false
+      },
+      {
+        "n": 1,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "c9e5dd1f556db6c445e4dd07b84365528cf6d997",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-02-003/tests-e2e-1.log",
+        "at": "2026-10-02T15:35:16Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "8e0d2bdd2c2b34610c10a460d4722a446d2c1ab4",
+        "exit": 0,
+        "duration_s": 309,
+        "log": ".ai/reports/T-2026-10-02-003/tests-suite-2.log",
+        "at": "2026-10-02T15:41:38Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 2
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}
