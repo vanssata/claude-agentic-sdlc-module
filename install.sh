@@ -420,7 +420,7 @@ render_claude_files() {
     render "$f" "$TMP/agents/$(basename "$f" .tmpl)"
   done
   render_stub global claude "$TMP/CLAUDE.block.md"
-  render_stub global claude "$TMP/routing.md" routing
+  render_stub global claude "$TMP/claude-routing.md" routing
 }
 
 pretty() {  # model id -> human name
@@ -502,7 +502,7 @@ claude_dry_run() {
   echo "== CLAUDE.md managed block:"
   cat "$TMP/CLAUDE.block.md"
   echo "== routing.md (on demand): $CLAUDE_DIR/claude-agentic/routing.md"
-  cat "$TMP/routing.md"
+  cat "$TMP/claude-routing.md"
   echo "== profile.json (plan tables): $CLAUDE_DIR/claude-agentic/profile.json"
   jq . "$TMP/claude-profile.json"
   echo "== would install:"
@@ -727,7 +727,7 @@ statusline_gate "$SETTINGS" on apply
 GLOBAL_MD="$CLAUDE_DIR/CLAUDE.md"
 managed_block "$GLOBAL_MD" "$TMP/CLAUDE.block.md" "CLAUDE.md"
 mkdir -p "$CLAUDE_DIR/claude-agentic"
-install_file "$TMP/routing.md" "$CLAUDE_DIR/claude-agentic/routing.md"
+install_file "$TMP/claude-routing.md" "$CLAUDE_DIR/claude-agentic/routing.md"
 write_profile "$CLAUDE_DIR" "$TMP/claude-profile.json"
 block_size "$GLOBAL_MD" 2560
 
@@ -929,7 +929,7 @@ codex_render() {
 
 codex_render_files() {
   render_stub global codex "$TMP/AGENTS.block.md"
-  render_stub global codex "$TMP/routing.md" routing
+  render_stub global codex "$TMP/codex-routing.md" routing
 }
 
 codex_dry_run() {
@@ -940,7 +940,7 @@ codex_dry_run() {
   echo "== AGENTS.md managed block:"
   cat "$TMP/AGENTS.block.md"
   echo "== routing.md (on demand): $CODEX_DIR/claude-agentic/routing.md"
-  cat "$TMP/routing.md"
+  cat "$TMP/codex-routing.md"
   echo "== profile.json (plan tables): $CODEX_DIR/claude-agentic/profile.json"
   jq . "$TMP/codex-profile.json"
   echo "== would install:"
@@ -1050,7 +1050,7 @@ codex_apply() {
   # -------------------------------------------------------------- 6. AGENTS.md
   managed_block "$CODEX_DIR/AGENTS.md" "$TMP/AGENTS.block.md" "AGENTS.md"
   mkdir -p "$CODEX_DIR/claude-agentic"
-  install_file "$TMP/routing.md" "$CODEX_DIR/claude-agentic/routing.md" "$CODEX_DIR"
+  install_file "$TMP/codex-routing.md" "$CODEX_DIR/claude-agentic/routing.md" "$CODEX_DIR"
   write_profile "$CODEX_DIR" "$TMP/codex-profile.json"
   block_size "$CODEX_DIR/AGENTS.md" 2560
   codex_doc_advisory "$CODEX_DIR/AGENTS.md"

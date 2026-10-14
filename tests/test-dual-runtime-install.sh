@@ -109,6 +109,17 @@ out=$(run explicit-both --target both --plan pro)
 wrote "$TMP/explicit-both/claude" && pass "--target both installs Claude without detection" || fail "should install Claude" "$out"
 wrote "$TMP/explicit-both/codex" && pass "--target both installs Codex without detection" || fail "should install Codex" "$out"
 
+# Each runtime renders its own routing.md; one shared temp file meant the
+# second render (Codex) overwrote the first before Claude's was installed.
+CR="$TMP/explicit-both/claude/claude-agentic/routing.md"
+XR="$TMP/explicit-both/codex/claude-agentic/routing.md"
+has() { grep -q "$2" "$1" 2>/dev/null; }
+CLAUDE_MARK='^# Model routing (.* plan)$' CODEX_MARK='^# Model allocation by task'
+if has "$CR" "$CLAUDE_MARK" && ! has "$CR" "$CODEX_MARK"; then pass "Claude's routing.md is the Claude text"
+else fail "Claude's routing.md is not the Claude text" "$(grep -n '^# ' "$CR" 2>&1)"; fi
+if has "$XR" "$CODEX_MARK" && ! has "$XR" "$CLAUDE_MARK"; then pass "Codex's routing.md is the Codex text"
+else fail "Codex's routing.md is not the Codex text" "$(grep -n '^# ' "$XR" 2>&1)"; fi
+
 echo "== an unknown target is rejected"
 stub claude codex
 out=$(run bad-target --target everything); rc=$?
