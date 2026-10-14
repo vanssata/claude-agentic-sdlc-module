@@ -54,8 +54,21 @@ and `scaffold-ai.sh --runtime both` creates both over the same tree.
 
 The split matters: the installed agent definitions (`~/.claude/agents/*.md`,
 `~/.codex/agents/*.toml`) are **static** and identical in every project, so their
-prompts stay cache-friendly; `.ai/agents/*.md` and `.ai/policies/*.md` are the
-**project layer** they read at the start of a run. Nothing dynamic — a ticket, a
+prompts stay cache-friendly; the policies and agent contracts are the layer they
+read at the start of a run.
+
+That layer has two homes. The **shared tree**, `<home>/claude-agentic/ai/`
+(`policies/`, `agents/`, `workflows/`, `templates/` — 29 files), ships with the
+plugin, is installed by `install.sh` and is the same in every project. The
+**project tree**, `.ai/`, holds what is the project's own: `project/`, `rules/`,
+`state/`, `reports/`, `AGENTS.md`, `VERSION` and the policies `risk-tiers.json`,
+`risk-tiers.md`, `path-guard.json`, `testing.md`, `coding.md`, `safety.md` and
+`security.md`. For a shared path the project's file wins when it exists — an
+override — else the shared one is read; `<home>/claude-agentic/ai-path <path>`
+prints which, and `ai-path --tree-hash` fingerprints the installed tree. An
+override no longer receives the plugin's changes; `/project-update` says so
+every time it runs. Migration 0006 moves an existing project to this layout
+(README, "Updating a project"). Nothing dynamic — a ticket, a
 diff, test output — is ever read from disk by an agent; it arrives in the prompt.
 
 ## The pipeline
@@ -274,7 +287,7 @@ Context length, not model choice, dominates the cost of a session, so:
 - tools and MCP servers are off by default — they sit in the system prompt of
   every turn whether a task calls them or not — and are enabled per project
   only when nearly every task needs them, per task otherwise
-  (`.ai/policies/tooling.md`);
+  (`policies/tooling.md`);
 - artifacts live on disk and are referenced by path between stages.
 
 The expensive tier is reserved for design, adversarial review and the conclusions

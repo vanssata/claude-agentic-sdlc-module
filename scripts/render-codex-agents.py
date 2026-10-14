@@ -77,7 +77,7 @@ def toml_multiline(value):
     return '"""\n' + escaped + '\n"""'
 
 
-def render(name, spec, profile, src):
+def render(name, spec, profile, src, ai_shared):
     tier = spec.get("tier")
     if tier not in profile["tiers"]:
         die(f"role {name} has unknown tier {tier!r}")
@@ -107,6 +107,11 @@ def render(name, spec, profile, src):
     if note:
         body = f"{note}\n\n{body}"
 
+    # The one placeholder a Codex body may carry: where the shared .ai/ tree is
+    # installed.
+    body = body.replace("{{AI_SHARED}}", ai_shared)
+    description = description.replace("{{AI_SHARED}}", ai_shared)
+
     if "{{" in body or "{{" in description:
         die(f"role {name} still has an unrendered placeholder")
 
@@ -129,7 +134,12 @@ def main():
     parser.add_argument("--src", required=True, help="repository root")
     parser.add_argument("--out", required=True, help="directory to write TOML into")
     parser.add_argument("--profile", help="defaults to <src>/profiles/codex-pro.json")
+    parser.add_argument("--ai-shared",
+                        help="the installed shared .ai/ tree, substituted for {{AI_SHARED}}; "
+                             "defaults to ${CODEX_HOME:-~/.codex}/claude-agentic/ai")
     args = parser.parse_args()
+    ai_shared = args.ai_shared or os.path.join(
+        os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex"), "claude-agentic", "ai")
 
     profile_path = args.profile or os.path.join(args.src, "profiles", "codex-pro.json")
     try:
@@ -141,7 +151,7 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     written = []
     for name, spec in profile["roles"].items():
-        text = render(name, spec, profile, args.src)
+        text = render(name, spec, profile, args.src, ai_shared)
         path = os.path.join(args.out, f"{name}.toml")
         tmp = f"{path}.tmp"
         with open(tmp, "w", encoding="utf-8") as fh:

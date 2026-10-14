@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""Resolve a shared .ai/ file: the project's copy when it has one, else the plugin's.
+
+    ai-path [--root DIR] <path>     e.g. ai-path policies/git.md
+    ai-path --tree-hash             sha256 over the shared tree
+
+The policies, agent contracts, workflows and templates every project shares are
+installed once, beside this script, as <home>/claude-agentic/ai/. A project
+overrides one of them by keeping its own regular file at the same path under
+.ai/. A directory there is never an override.
+
+Exit 0 prints the path to read. Exit 1: no project, or neither copy exists (the
+reason goes to stderr, nothing to stdout). Exit 2: an absolute path or a `..`
+component — usage errors, never resolved.
+"""
+
+import hashlib
+import os
+import sys
+
+
+def shared_root():
+    env = os.environ.get("CLAUDE_AGENTIC_SHARED")
+    if env:
+        return env
+    here = os.path.dirname(os.path.realpath(__file__))
+    for candidate in (os.path.join(here, "ai"), os.path.join(here, os.pardir, "ai")):
+        if os.path.isdir(candidate):
+            return os.path.normpath(candidate)
+    return os.path.join(here, "ai")
+
+
+def project_root(start):
+    """The nearest directory, from start upward, that holds .ai/."""
+    current = os.path.abspath(start)
+    while True:
+        if os.path.isdir(os.path.join(current, ".ai")):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+
+
+def tree_hash(root):
+    if not os.path.isdir(root):
+        sys.stderr.write("ai-path: no shared tree at %s\n" % root)
+        return 1
+    lines = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames.sort()
+        for name in filenames:
+            full = os.path.join(dirpath, name)
+            rel = os.path.relpath(full, root).replace(os.sep, "/")
+            with open(full, "rb") as fh:
+                lines.append("%s  %s" % (hashlib.sha256(fh.read()).hexdigest(), rel))
+    lines.sort()
+    print(hashlib.sha256(("\n".join(lines) + "\n").encode("utf-8")).hexdigest())
+    return 0
+
+
+def usage(message):
+    sys.stderr.write("ai-path: %s\nusage: ai-path [--root DIR] <path> | ai-path --tree-hash\n" % message)
+    return 2
+
+
+def main(argv):
+    root = None
+    args = list(argv)
+    if args == ["--tree-hash"]:
+        return tree_hash(shared_root())
+    if len(args) >= 2 and args[0] == "--root":
+        root, args = args[1], args[2:]
+    if len(args) != 1 or args[0].startswith("-"):
+        return usage("expected one path")
+
+    path = args[0]
+    if path.startswith(".ai/"):
+        path = path[len(".ai/"):]
+    if not path or os.path.isabs(path) or path.startswith("~"):
+        return usage("the path must be relative to .ai/: %s" % args[0])
+    if ".." in path.replace("\\", "/").split("/"):
+        return usage("a '..' component is not allowed: %s" % args[0])
+
+    if root is None:
+        root = project_root(os.getcwd())
+        if root is None:
+            sys.stderr.write("ai-path: no .ai/ in %s or any parent\n" % os.getcwd())
+            return 1
+
+    override = os.path.join(root, ".ai", path)
+    if os.path.isfile(override):
+        print(override)
+        return 0
+    shared = os.path.join(shared_root(), path)
+    if os.path.isfile(shared):
+        print(shared)
+        return 0
+    sys.stderr.write("ai-path: %s is neither in %s/.ai nor in %s\n" % (path, root, shared_root()))
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

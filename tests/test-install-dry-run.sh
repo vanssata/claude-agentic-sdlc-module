@@ -23,6 +23,17 @@ done
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable no --dry-run 2>&1)
 printf '%s' "$out" | sed -n '/^== settings snippet/,/^== agents/p' | grep -q '"fable' && fail "--fable no must drop fable from the settings" "$out" || pass "--fable no drops fable from the settings"
 
+echo "== dry run: the shared tree"
+for target in claude codex; do
+    out=$(HOME="$TMP/h-$target" CLAUDE_DIR="$TMP/none" CODEX_DIR="$TMP/none-x" bash "$INSTALL" --target "$target" --plan max --codex-plan plus --dry-run 2>&1)
+    n=$(printf '%s\n' "$out" | grep -c '^   shared:  claude-agentic/ai (29 files), claude-agentic/ai-path$')
+    [ "$n" -eq 1 ] && pass "$target: the would-install list names the shared tree once" || fail "$target: shared line count $n" "$out"
+    span=$(printf '%s\n' "$out" | sed -n '/^== \(CLAUDE\|AGENTS\)\.md managed block:/,/^== profile\.json/p')
+    printf '%s' "$span" | grep -q '^   shared:' && fail "$target: the shared line is inside the block/routing span" || pass "$target: the shared line is outside the block/routing span"
+    printf '%s' "$span" | grep -qF 'claude-agentic/ai-path <path>' && pass "$target: routing.md renders the shared-files line" || fail "$target: routing.md lacks the shared-files line" "$span"
+    printf '%s' "$out" | grep -q '{{' && fail "$target: an unrendered placeholder" || pass "$target: every placeholder is rendered"
+done
+
 echo "== pro: opusplan session, EXPERT tier pinned to opus"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan pro --dry-run 2>&1)
 printf '%s' "$out" | grep -q '"model": "opusplan"' && pass "pro sets the session model to opusplan" || fail "pro should set opusplan" "$out"
@@ -174,11 +185,18 @@ for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Ex
          skills/project-update/SKILL.md skills/project-update/update.py skills/project-update/history/index.json \
          skills/project-update/migrations/__init__.py skills/project-update/migrations/0001_schema_version.py \
          skills/usage-report/SKILL.md skills/usage-report/usage-report.py hooks/fable-gate.py \
-         hooks/context-guard.py claude-agentic/routing.md \
+         hooks/context-guard.py claude-agentic/routing.md claude-agentic/ai-path \
+         claude-agentic/ai/policies/git.md claude-agentic/ai/workflows/feature.md \
          skills/project-update/render_instructions.py; do
     [ -e "$DIR/$f" ] && pass "$f installed" || fail "$f missing"
 done
 [ -x "$DIR/hooks/ai-git-guard.sh" ] && pass "hooks are executable" || fail "hooks should be executable"
+[ -x "$DIR/claude-agentic/ai-path" ] && pass "ai-path is executable" || fail "ai-path should be executable"
+grep -qF "$DIR/claude-agentic/ai/" "$DIR/claude-agentic/routing.md" && pass "routing.md names the installed shared tree" || fail "routing.md should name $DIR/claude-agentic/ai/"
+grep -qF "$DIR/claude-agentic/ai-path <path>" "$DIR/claude-agentic/routing.md" && pass "routing.md names the resolver" || fail "routing.md should name the resolver"
+for a in ai-context ai-discovery ai-expert ai-implementer ai-planner ai-release ai-reviewer ai-risk ai-security ai-tester; do
+    grep -qF "$DIR/claude-agentic/ai/<path>" "$DIR/agents/$a.md" && pass "$a names the installed shared tree" || fail "$a should name $DIR/claude-agentic/ai/<path>"
+done
 [ -x "$DIR/skills/ai-init/scaffold-ai.sh" ] && pass "scaffold-ai.sh is executable" || fail "scaffold should be executable"
 grep -qx 'effort: xhigh' "$DIR/agents/ai-expert.md" && pass "ai-expert renders at xhigh on max" || fail "expert effort wrong"
 grep -qx 'model: opus' "$DIR/agents/ai-expert.md" && pass "ai-expert pins opus so a Sonnet session cannot weaken it" || fail "ai-expert should pin model: opus on max"

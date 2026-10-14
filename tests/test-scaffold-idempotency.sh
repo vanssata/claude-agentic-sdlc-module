@@ -18,11 +18,15 @@ EXPECTED=$(find "$CLAUDE_AGENTIC_TEMPLATES/.ai" -type f | wc -l)
 ACTUAL=$(find "$ROOT/.ai" -type f | wc -l)
 [ "$EXPECTED" = "$ACTUAL" ] && pass "every template file was copied ($ACTUAL)" || fail "file count mismatch" "expected $EXPECTED, got $ACTUAL"
 
-for f in AGENTS.md policies/risk-tiers.json policies/safety.md project/overview.md \
-         agents/manager.md workflows/feature.md templates/release-report.md state/README.md \
-         rules/README.md VERSION; do
+for f in AGENTS.md policies/risk-tiers.json policies/safety.md policies/security.md project/overview.md \
+         state/README.md rules/README.md VERSION; do
     [ -f "$ROOT/.ai/$f" ] && pass ".ai/$f exists" || fail ".ai/$f missing"
 done
+# The shared files are read from the plugin (0006): a scaffold carries none of them.
+shared=$(cd "$PLUGIN_ROOT/ai" && find . -type f | sed 's|^\./||')
+copied=""; for f in $shared; do [ -e "$ROOT/.ai/$f" ] && copied="$copied $f"; done
+[ -n "$shared" ] && [ -z "$copied" ] && pass "none of the $(printf '%s\n' "$shared" | wc -l) shared files is scaffolded" \
+    || fail "a shared file was scaffolded" "$copied"
 grep -qE '^[0-9]+$' "$ROOT/.ai/VERSION" && pass "a fresh scaffold starts at the shipped schema" || fail ".ai/VERSION should hold a number"
 
 grep -q '.ai/state/\*.json' "$ROOT/.gitignore" && pass ".gitignore excludes the state file" || fail ".gitignore should exclude state"

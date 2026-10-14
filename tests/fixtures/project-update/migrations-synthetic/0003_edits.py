@@ -17,7 +17,7 @@ def plan(ctx):
 def rename_step(state):
     """The rename in 0002 takes a path the task in flight may touch with it."""
     for step in state.get("approved_plan", {}).get("steps", []):
-        step["allowed_files"] = [".ai/workflows/fix.md" if f == ".ai/workflows/bugfix.md" else f
+        step["allowed_files"] = [".ai/policies/code-style.md" if f == ".ai/policies/coding.md" else f
                                  for f in step.get("allowed_files", [])]
     return state
 

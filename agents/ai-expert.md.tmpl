@@ -17,6 +17,10 @@ and every relevant file in `.ai/policies/`. Ask for a specific file rather than
 exploring broadly — you are given decision-critical information on purpose, and
 the reason is cost.
 
+A shared file under `.ai/` — a policy, agent contract, workflow or template — is
+read from the project's `.ai/<path>` when it exists, else from
+`{{AI_SHARED}}/<path>`; `.ai/` paths inside those files resolve the same way.
+
 Before answering, check your memory for prior decisions on this codebase or
 stack, so an escalation does not contradict one that was already made.
 

@@ -131,3 +131,6 @@ The main session re-reads its whole context every turn, so context length — mo
 <!-- stub: runtime=codex -->
 - `ai-git-guard` runs in every repository: no force push, history rewrite, push or merge to a protected branch, `--no-verify`, staged secret or production deploy. `ai-path-guard` and `ai-scope-guard` arm only where `.ai/` exists. All three see `Bash` and `apply_patch`; run `/hooks` once after installing to review and trust them, or they are skipped. No agent commits, merges or deploys on its own; the pipeline ends at human approval.
 - `architect` is for design questions outside a task, or in a repository without `.ai/`. Inside a task, `ai-planner`/`ai-planner-strong` plans and `ai-expert` is the escalation.
+
+<!-- stub: runtime=claude,codex -->
+- Shared `.ai/` files — policies, agent contracts, workflows, templates — are installed once in `{{AI_SHARED}}/`. A project's own regular file at the same path under `.ai/` overrides it; `{{AI_RESOLVER}} <path>` prints the one to read.

@@ -13,11 +13,14 @@ only for those. If it finds neither it stops and tells you to name one with
 
 **Claude Code.** It detects your plan from `~/.claude.json`, writes the model,
 effort and context settings for it, renders the EXPERT tier accordingly, copies
-the agents, hooks and skills into `~/.claude/`, registers the hooks in
+the agents, hooks and skills into `~/.claude/`, installs the shared tree
+(`claude-agentic/ai/`, the 29 policies, agent contracts, workflows and
+templates every project reads) and its resolver `claude-agentic/ai-path`,
+registers the hooks in
 `settings.json` and writes one managed block into `~/.claude/CLAUDE.md`.
 
 **Codex.** It renders the agent roster to `~/.codex/agents/*.toml`, copies the
-hooks and skills, merges `hooks.json`, writes one managed block into
+hooks, skills and the same shared tree, merges `hooks.json`, writes one managed block into
 `~/.codex/AGENTS.md`, and sets six keys in `config.toml`: the session to Sol at
 `high`, and the `[agents]` defaults to Terra at `medium`. Everything else in that
 file — your comments, projects, MCP servers, marketplaces — is preserved, and the

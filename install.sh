@@ -409,6 +409,8 @@ RENDER_BALANCED_MODEL="$(tier_field BALANCED model)" \
 RENDER_BALANCED_EFFORT="$(tier_field BALANCED effort)" \
 RENDER_STRONG_MODEL="$(tier_field STRONG model)" \
 RENDER_STRONG_EFFORT="$(tier_field STRONG effort)" \
+RENDER_AI_SHARED="$CLAUDE_DIR/claude-agentic/ai" \
+RENDER_AI_RESOLVER="$CLAUDE_DIR/claude-agentic/ai-path" \
   render_claude_files
 }
 
@@ -510,6 +512,7 @@ claude_dry_run() {
   echo "   hooks:   $(ls "$SRC/hooks" | paste -sd,)"
   [ "$TIER" = max ] && echo "   bin:     claude-1m (opus[1m]$( [ "$FABLE" = yes ] && echo " / fable[1m]" ), pins the model at launch; compacts near $ONE_M_AT)"
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
+  shared_line
   echo "   config:  ai-git-guard.json (only if absent)"
   echo "   routing: claude-agentic/routing.md"
   echo "   profile: claude-agentic/profile.json"
@@ -556,6 +559,36 @@ install_skills() {
   done
   chmod +x "$root/skills/ai-init/scaffold-ai.sh" "$root/skills/ai-task/state.py" \
            "$root/skills/ai-task/sensors.py" "$root/skills/project-update/update.py"
+}
+
+# install_shared <destination-root> — the .ai/ files every project shares, at
+# <root>/claude-agentic/ai, and the resolver beside them. Runs before
+# install_skills, so a new update.py never exists without its tree. The new tree
+# is copied next to the old one and renamed into place, so there is no moment
+# without a tree; a tree that differs from ai/ is backed up first.
+install_shared() {
+  local root="$1" home="$1/claude-agentic" backups="$1/backups/claude-agentic-ai"
+  mkdir -p "$home"
+  rm -rf "$home/ai.new" "$home/ai.old"
+  cp -r "$SRC/ai" "$home/ai.new"
+  if [ -d "$home/ai" ]; then
+    if ! diff -rq "$SRC/ai" "$home/ai" >/dev/null 2>&1; then
+      mkdir -p "$backups"
+      rm -rf "$backups/ai"; cp -r "$home/ai" "$backups/ai"
+      echo "backup: claude-agentic/ai -> backups/claude-agentic-ai/ai"
+    fi
+    mv "$home/ai" "$home/ai.old"
+  fi
+  mv "$home/ai.new" "$home/ai"
+  rm -rf "$home/ai.old"
+  echo "installed: claude-agentic/ai ($(find "$home/ai" -type f | wc -l | tr -d ' ') files)"
+  install_file "$SRC/scripts/ai-path" "$home/ai-path" "$root"
+  chmod +x "$home/ai-path"
+}
+
+# shared_line — the dry run's line for install_shared.
+shared_line() {
+  echo "   shared:  claude-agentic/ai ($(find "$SRC/ai" -type f | wc -l | tr -d ' ') files), claude-agentic/ai-path"
 }
 
 # managed_block <target.md> <block-file> <label> — replace the one managed block,
@@ -663,6 +696,7 @@ if [ "$TIER" = max ]; then
 fi
 
 # ---------------------------------------------------------------- 3. skills
+install_shared "$CLAUDE_DIR"
 install_skills "$CLAUDE_DIR"
 
 # ---------------------------------------------------------------- 4. settings.json
@@ -901,7 +935,8 @@ codex_render() {
   CODEX_PLAN_RULE=$(jq -r '.plan_rule // empty' "$CODEX_PROFILE")
   CODEX_PLAN_RULE=${CODEX_PLAN_RULE//\{\{EXPERT_MODEL\}\}/$(codex_label "$CODEX_EXPERT")}
 
-  python3 "$SRC/scripts/render-codex-agents.py" --src "$SRC" --out "$TMP/codex-agents" --profile "$CODEX_PROFILE" >/dev/null
+  python3 "$SRC/scripts/render-codex-agents.py" --src "$SRC" --out "$TMP/codex-agents" --profile "$CODEX_PROFILE" \
+          --ai-shared "$CODEX_DIR/claude-agentic/ai" >/dev/null
 
   RENDER_CODEX_PLAN="$CODEX_PLAN_LABEL" \
   RENDER_CODEX_PLAN_RULE="$CODEX_PLAN_RULE" \
@@ -924,6 +959,8 @@ codex_render() {
   RENDER_MAX_THREADS="$CODEX_MAX_THREADS" \
   RENDER_PLAN_LABEL="ChatGPT $CODEX_PLAN_LABEL" \
   RENDER_READ_LINES="$(jq -r '.env.CLAUDE_READ_MAX_LINES' "$SRC/settings.common.json")" \
+  RENDER_AI_SHARED="$CODEX_DIR/claude-agentic/ai" \
+  RENDER_AI_RESOLVER="$CODEX_DIR/claude-agentic/ai-path" \
     codex_render_files
 }
 
@@ -947,6 +984,7 @@ codex_dry_run() {
   echo "   agents:  $(ls "$TMP/codex-agents" | sed 's/\.toml$//' | paste -sd,)"
   echo "   hooks:   $(codex_hook_files | xargs -n1 basename | paste -sd,)"
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
+  shared_line
   echo "   config:  ai-git-guard.json (only if absent)"
   echo "   routing: claude-agentic/routing.md"
   echo "   profile: claude-agentic/profile.json"
@@ -998,6 +1036,7 @@ codex_apply() {
   fi
 
   # -------------------------------------------------------------- 3. skills
+  install_shared "$CODEX_DIR"
   install_skills "$CODEX_DIR"
 
   # -------------------------------------------------------------- 4. hooks.json

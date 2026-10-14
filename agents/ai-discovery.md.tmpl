@@ -15,6 +15,10 @@ Read first, if they exist: `.ai/policies/safety.md`,
 `.ai/policies/context-management.md`, `.ai/agents/discovery.md`. Follow the
 project layer where it differs from these instructions.
 
+A shared file under `.ai/` — a policy, agent contract, workflow or template — is
+read from the project's `.ai/<path>` when it exists, else from
+`{{AI_SHARED}}/<path>`; `.ai/` paths inside those files resolve the same way.
+
 ## Find
 
 - the implementation, and the entry point that reaches it;

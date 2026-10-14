@@ -119,4 +119,19 @@ OUT2="$TMP/agents2"
 python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$OUT2" >/dev/null 2>&1
 diff -rq "$OUT" "$OUT2" >/dev/null && pass "the renderer is deterministic" || fail "two renders differ"
 
+echo "== --ai-shared fills {{AI_SHARED}}"
+READERS="ai-context ai-discovery ai-expert ai-implementer ai-planner ai-release ai-reviewer ai-risk ai-security ai-tester"
+python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$TMP/ai1" --ai-shared /opt/x/ai >/dev/null 2>&1 \
+    || fail "render with --ai-shared should exit 0"
+for a in $READERS; do
+    grep -qF '/opt/x/ai/<path>' "$TMP/ai1/$a.toml" && pass "$a names the shared tree" || fail "$a does not name /opt/x/ai/<path>"
+done
+CODEX_HOME="$TMP/ch" python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$TMP/ai2" >/dev/null 2>&1 \
+    && grep -qF "$TMP/ch/claude-agentic/ai/<path>" "$TMP/ai2/ai-reviewer.toml" \
+    && pass "the default is \$CODEX_HOME/claude-agentic/ai" || fail "the --ai-shared default is wrong"
+env -u CODEX_HOME HOME="$TMP/h" python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$TMP/ai3" >/dev/null 2>&1 \
+    && grep -qF "$TMP/h/.codex/claude-agentic/ai/<path>" "$TMP/ai3/ai-reviewer.toml" \
+    && pass "without CODEX_HOME the default is ~/.codex/claude-agentic/ai" || fail "the --ai-shared fallback is wrong"
+grep -rq '{{' "$TMP/ai1" && fail "a placeholder survived" || pass "no placeholder survives"
+
 summary "render-codex-agents.py"

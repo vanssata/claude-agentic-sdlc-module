@@ -1,0 +1,1562 @@
+{
+  "task_id": "T-2026-10-13-004",
+  "goal": "Shared .ai/ policies, agent contracts, workflows and templates load from the plugin root (project copy = override); project keeps risk-tiers.json, path-guard.json, testing.md, coding.md, project/, rules/, state/, reports/; migration 0006 deletes unedited shared copies behind --confirm-delete; history/blobs removed; ai-init copies only project files",
+  "workflow": "feature",
+  "risk_tier": "T6",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": ".ai/reports/T-2026-10-13-004/implementation-plan.rev2.md",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "kind": "characterization",
+        "description": "Characterization (test-only): test-project-update.sh hand edits move to project-owned keys (conflict -> .ai/state/README.md line 4; untouched-replaced -> .ai/policies/safety.md; missing-recreated -> rm .ai/policies/security.md); synthetic move becomes .ai/policies/coding.md -> code-style.md; new fixture tests/fixtures/project-update/shared-old/ (oldest feature.md, manager.md, most-versioned shared policy, AGENTS.v5.md, SOURCES.txt; no .ai/ in paths). Counts at :79, :110, :114 unchanged.",
+        "allowed_files": [
+          "tests/test-project-update.sh",
+          "tests/fixtures/project-update/migrations-synthetic/0002_move.py",
+          "tests/fixtures/project-update/migrations-synthetic/0003_edits.py",
+          "tests/fixtures/project-update/shared-old/"
+        ],
+        "forbidden_files": [
+          "hooks/",
+          ".github/",
+          "instructions/stub.md",
+          "skills/ai-init/templates/*.block.md",
+          "skills/ai-init/templates/*.minimal.md",
+          "skills/ai-init/templates/gitignore.snippet",
+          "skills/ai-init/templates/.ai/policies/safety.md",
+          "skills/ai-init/templates/.ai/policies/security.md",
+          "skills/ai-init/scaffold-ai.sh",
+          "skills/project-init/",
+          "skills/ai-task/state.py",
+          "skills/ai-task/sensors.py",
+          "skills/project-update/migrations/__init__.py",
+          "skills/project-update/migrations/000[1-5]_*.py",
+          "skills/project-update/render_instructions.py",
+          "skills/project-update/adopt.py",
+          "profiles/",
+          "scripts/resolve-profile.py",
+          "scripts/merge-codex-config.py",
+          "settings.common.json",
+          "docs/sdlc/",
+          "tests/fixtures/guard-characterization/",
+          ".ai/policies/",
+          ".ai/agents/",
+          ".ai/workflows/",
+          ".ai/templates/",
+          ".ai/AGENTS.md"
+        ],
+        "forbidden_reason": "G list of plan rev 2: frozen, owned by tasks B/C, or out of task; this repo's .ai/ is migrated by a human after close",
+        "required_tests": [
+          "tests/test-project-update.sh"
+        ],
+        "rollback": "git revert (test-only)",
+        "status": "done",
+        "tree_before": "60974455eaf1d9096a06e1ef17ef5b6c85b938c8",
+        "diff": {
+          "tree_after": "eda34327f51542800b38f2557510e933aa62f98b",
+          "seq": 1,
+          "paths": [
+            "tests/fixtures/project-update/migrations-synthetic/0002_move.py",
+            "tests/fixtures/project-update/migrations-synthetic/0003_edits.py",
+            "tests/fixtures/project-update/shared-old/AGENTS.v5.md",
+            "tests/fixtures/project-update/shared-old/SOURCES.txt",
+            "tests/fixtures/project-update/shared-old/agents/manager.md",
+            "tests/fixtures/project-update/shared-old/policies/model-routing.md",
+            "tests/fixtures/project-update/shared-old/workflows/feature.md",
+            "tests/test-project-update.sh"
+          ],
+          "files": 8,
+          "added": 187,
+          "deleted": 25,
+          "lines": 212,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "2",
+        "kind": "implementation",
+        "description": "Shared tree, byte-identical copy (additive): ai/ gets 8 policies (production, database, git, release, context-management, tooling, model-routing, review-economy), agents/10, workflows/5, templates/6 = 29, copied with cp; never safety.md/security.md (Q5=A). New tests/test-shared-tree.sh (file set = literal 29, byte-identical to template copies, no .json); model-free scope adds ai/; run-all lists the suite.",
+        "allowed_files": [
+          "ai/",
+          "tests/test-shared-tree.sh",
+          "tests/test-shared-prompts-model-free.sh",
+          "tests/run-all.sh"
+        ],
+        "forbidden_files": [
+          "hooks/",
+          ".github/",
+          "instructions/stub.md",
+          "skills/ai-init/templates/*.block.md",
+          "skills/ai-init/templates/*.minimal.md",
+          "skills/ai-init/templates/gitignore.snippet",
+          "skills/ai-init/templates/.ai/policies/safety.md",
+          "skills/ai-init/templates/.ai/policies/security.md",
+          "skills/ai-init/scaffold-ai.sh",
+          "skills/project-init/",
+          "skills/ai-task/state.py",
+          "skills/ai-task/sensors.py",
+          "skills/project-update/migrations/__init__.py",
+          "skills/project-update/migrations/000[1-5]_*.py",
+          "skills/project-update/render_instructions.py",
+          "skills/project-update/adopt.py",
+          "profiles/",
+          "scripts/resolve-profile.py",
+          "scripts/merge-codex-config.py",
+          "settings.common.json",
+          "docs/sdlc/",
+          "tests/fixtures/guard-characterization/",
+          ".ai/policies/",
+          ".ai/agents/",
+          ".ai/workflows/",
+          ".ai/templates/",
+          ".ai/AGENTS.md"
+        ],
+        "forbidden_reason": "G list of plan rev 2",
+        "required_tests": [
+          "tests/test-shared-tree.sh",
+          "tests/test-shared-prompts-model-free.sh"
+        ],
+        "rollback": "git revert",
+        "status": "done",
+        "tree_before": "eda34327f51542800b38f2557510e933aa62f98b",
+        "diff": {
+          "tree_after": "033e242a0fb406dbd290b8ccd982d9db6c7308fd",
+          "seq": 2,
+          "paths": [
+            "tests/run-all.sh",
+            "tests/test-shared-prompts-model-free.sh",
+            "tests/test-shared-tree.sh"
+          ],
+          "files": 3,
+          "added": 62,
+          "deleted": 1,
+          "lines": 63,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "3",
+        "kind": "implementation",
+        "description": "REQUIRES P2 (H3 bugfix merged). Install tree, resolver, rendered path, guard data (additive): install.sh installs ai/ to <home>/claude-agentic/ai before install_skills via sibling temp + rename (L3), backup of a differing tree, ai-path +x; dry-run shared line outside block/routing span; RENDER_AI_SHARED/RENDER_AI_RESOLVER; render-codex-agents.py --ai-shared; routing.md line; scripts/ai-path (upward .ai/ search M5, directory is not an override L5, --tree-hash M7); Q4=A pattern in task_protected_patterns. Tests incl. --target both per-home routing.md and guard in-task Read/ai-path allowed, Write denied; guard characterization byte-identical (L7).",
+        "allowed_files": [
+          "install.sh",
+          "scripts/ai-path",
+          "scripts/render-codex-agents.py",
+          "instructions/routing.md",
+          "hooks/ai-path-guard-defaults.json",
+          "tests/test-shared-tree.sh",
+          "tests/test-install-dry-run.sh",
+          "tests/test-codex-agent-render.sh",
+          "tests/test-dual-runtime-install.sh",
+          "tests/test-codex-install.sh",
+          "tests/test-ai-path-guard.sh"
+        ],
+        "forbidden_files": [
+          "hooks/*.sh",
+          "hooks/*.py",
+          "hooks/lib/",
+          "hooks/ai-git-guard-defaults.json",
+          ".github/",
+          "instructions/stub.md",
+          "skills/ai-init/templates/*.block.md",
+          "skills/ai-init/templates/*.minimal.md",
+          "skills/ai-init/templates/gitignore.snippet",
+          "skills/ai-init/templates/.ai/policies/safety.md",
+          "skills/ai-init/templates/.ai/policies/security.md",
+          "skills/ai-init/scaffold-ai.sh",
+          "skills/project-init/",
+          "skills/ai-task/state.py",
+          "skills/ai-task/sensors.py",
+          "skills/project-update/migrations/__init__.py",
+          "skills/project-update/migrations/000[1-5]_*.py",
+          "skills/project-update/render_instructions.py",
+          "skills/project-update/adopt.py",
+          "profiles/",
+          "scripts/resolve-profile.py",
+          "scripts/merge-codex-config.py",
+          "settings.common.json",
+          "docs/sdlc/",
+          "tests/fixtures/guard-characterization/",
+          ".ai/policies/",
+          ".ai/agents/",
+          ".ai/workflows/",
+          ".ai/templates/",
+          ".ai/AGENTS.md"
+        ],
+        "forbidden_reason": "G list of plan rev 2; hook code and deny texts stay unchanged (only guard data changes)",
+        "required_tests": [
+          "tests/test-shared-tree.sh",
+          "tests/test-install-dry-run.sh",
+          "tests/test-codex-agent-render.sh",
+          "tests/test-dual-runtime-install.sh",
+          "tests/test-codex-install.sh",
+          "tests/test-ai-path-guard.sh",
+          "tests/test-guard-characterization.sh",
+          "tests/test-shared-prompts-model-free.sh",
+          "tests/test-instruction-budget.sh",
+          "tests/test-profiles.sh"
+        ],
+        "rollback": "git revert; reinstall previous build; leftover <home>/claude-agentic/ai and ai-path harmless",
+        "status": "done",
+        "tree_before": "be5011c83602637eed93ea295c8629b0c601e445",
+        "diff": {
+          "tree_after": "3aef701f130a72faeedaa01ee654346a7154b62d",
+          "seq": 3,
+          "paths": [
+            "hooks/ai-path-guard-defaults.json",
+            "install.sh",
+            "scripts/ai-path",
+            "scripts/render-codex-agents.py",
+            "tests/test-ai-path-guard.sh",
+            "tests/test-codex-agent-render.sh",
+            "tests/test-dual-runtime-install.sh",
+            "tests/test-install-dry-run.sh",
+            "tests/test-shared-tree.sh"
+          ],
+          "files": 9,
+          "added": 269,
+          "deleted": 5,
+          "lines": 274,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "4",
+        "kind": "implementation",
+        "description": "Consumers resolve shared paths (prompt, compatible): 10 agent templates state the rule 'project .ai/<path> when it exists, else {{AI_SHARED}}/<path>'; ai-task SKILL.md rule paragraph using $AI_HOME/claude-agentic/ai-path; no model names; ADVERSARIAL REVIEW stays. Writes the G-M8 read-probe checklist; the human fills it before Step 7 (prompted/refused -> SCOPE_CHANGE_REQUIRED for a settings step).",
+        "allowed_files": [
+          "agents/ai-context.md.tmpl",
+          "agents/ai-discovery.md.tmpl",
+          "agents/ai-expert.md.tmpl",
+          "agents/ai-implementer.md.tmpl",
+          "agents/ai-planner.md.tmpl",
+          "agents/ai-release.md.tmpl",
+          "agents/ai-reviewer.md.tmpl",
+          "agents/ai-risk.md.tmpl",
+          "agents/ai-security.md.tmpl",
+          "agents/ai-tester.md.tmpl",
+          "skills/ai-task/SKILL.md",
+          "tests/test-install-dry-run.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test-codex-agent-render.sh",
+          ".ai/reports/T-2026-10-13-004/m8-read-probe.md"
+        ],
+        "forbidden_files": [
+          "hooks/",
+          ".github/",
+          "instructions/stub.md",
+          "skills/ai-init/templates/*.block.md",
+          "skills/ai-init/templates/*.minimal.md",
+          "skills/ai-init/templates/gitignore.snippet",
+          "skills/ai-init/templates/.ai/policies/safety.md",
+          "skills/ai-init/templates/.ai/policies/security.md",
+          "skills/ai-init/scaffold-ai.sh",
+          "skills/project-init/",
+          "skills/ai-task/state.py",
+          "skills/ai-task/sensors.py",
+          "skills/project-update/migrations/__init__.py",
+          "skills/project-update/migrations/000[1-5]_*.py",
+          "skills/project-update/render_instructions.py",
+          "skills/project-update/adopt.py",
+          "profiles/",
+          "scripts/resolve-profile.py",
+          "scripts/merge-codex-config.py",
+          "settings.common.json",
+          "docs/sdlc/",
+          "tests/fixtures/guard-characterization/",
+          ".ai/policies/",
+          ".ai/agents/",
+          ".ai/workflows/",
+          ".ai/templates/",
+          ".ai/AGENTS.md"
+        ],
+        "forbidden_reason": "G list of plan rev 2; settings.common.json only through an amended step if G-M8 fails",
+        "required_tests": [
+          "tests/test-codex-agent-render.sh",
+          "tests/test-install-dry-run.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test-shared-prompts-model-free.sh",
+          "tests/test-instruction-budget.sh"
+        ],
+        "rollback": "git revert; reinstall",
+        "status": "done",
+        "tree_before": "3aef701f130a72faeedaa01ee654346a7154b62d",
+        "diff": {
+          "tree_after": "a4be01a6f9e7ca1d5a588076f7c8238325b88550",
+          "seq": 4,
+          "paths": [
+            "agents/ai-context.md.tmpl",
+            "agents/ai-discovery.md.tmpl",
+            "agents/ai-expert.md.tmpl",
+            "agents/ai-implementer.md.tmpl",
+            "agents/ai-planner.md.tmpl",
+            "agents/ai-release.md.tmpl",
+            "agents/ai-reviewer.md.tmpl",
+            "agents/ai-risk.md.tmpl",
+            "agents/ai-security.md.tmpl",
+            "agents/ai-tester.md.tmpl",
+            "tests/test-codex-agent-render.sh",
+            "tests/test-install-dry-run.sh",
+            "tests/test-shared-tree.sh"
+          ],
+          "files": 13,
+          "added": 60,
+          "deleted": 10,
+          "lines": 70,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "5",
+        "kind": "implementation",
+        "description": "update.py helpers, added not wired: SHARED resolution, shared_files(), History.hashes(), MigrationContext.template/is_shipped (CRLF-normalised, L4)/require_shared (per file, other installed declared homes, SchemaError exit 2, M2)/unsafe_target (symlink or outside root, M9)/override_note (M6), git_dirty_ai (M4). Runtime wording lives here, never in 0006. build_plan output unchanged.",
+        "allowed_files": [
+          "skills/project-update/update.py",
+          "tests/test-shared-tree.sh"
+        ],
+        "forbidden_files": [
+          "hooks/",
+          ".github/",
+          "instructions/stub.md",
+          "skills/ai-init/templates/*.block.md",
+          "skills/ai-init/templates/*.minimal.md",
+          "skills/ai-init/templates/gitignore.snippet",
+          "skills/ai-init/templates/.ai/policies/safety.md",
+          "skills/ai-init/templates/.ai/policies/security.md",
+          "skills/ai-init/scaffold-ai.sh",
+          "skills/project-init/",
+          "skills/ai-task/state.py",
+          "skills/ai-task/sensors.py",
+          "skills/project-update/migrations/__init__.py",
+          "skills/project-update/migrations/000[1-5]_*.py",
+          "skills/project-update/render_instructions.py",
+          "skills/project-update/adopt.py",
+          "profiles/",
+          "scripts/resolve-profile.py",
+          "scripts/merge-codex-config.py",
+          "settings.common.json",
+          "docs/sdlc/",
+          "tests/fixtures/guard-characterization/",
+          ".ai/policies/",
+          ".ai/agents/",
+          ".ai/workflows/",
+          ".ai/templates/",
+          ".ai/AGENTS.md"
+        ],
+        "forbidden_reason": "G list of plan rev 2",
+        "required_tests": [
+          "tests/test-shared-tree.sh",
+          "tests/test-project-update.sh",
+          "tests/test-merge-migration.sh",
+          "tests/test-project-adopt.sh",
+          "tests/test-scaffold-idempotency.sh"
+        ],
+        "rollback": "git revert",
+        "status": "done",
+        "tree_before": "c08c78290fe71d1818321d93a9f86ae285a9b7df",
+        "diff": {
+          "tree_after": "74fbf637547ca4805a9983f18593e5eededcf527",
+          "seq": 5,
+          "paths": [
+            "skills/project-update/update.py",
+            "tests/test-shared-tree.sh"
+          ],
+          "files": 2,
+          "added": 216,
+          "deleted": 0,
+          "lines": 216,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "6",
+        "kind": "implementation",
+        "description": "HUMAN HAND-OVER HO1. Router gains a prose '## Shared files' section immediately before '## Doing X -> read Y'; heading line, every table row, non-negotiables and the last section are byte-identical (insertion, not rewrite: H1 root cause); no '|' line in the section; <=4096 B. Agent writes handover/router.md and install-router.sh; the human runs it; the agent rebuilds history (adds one blob). Tests: section once and placed, adopt rows land in the routing table.",
+        "allowed_files": [
+          ".ai/reports/T-2026-10-13-004/handover/router.md",
+          ".ai/reports/T-2026-10-13-004/handover/install-router.sh",
+          "skills/ai-init/templates/.ai/AGENTS.md",
+          "skills/project-update/history/index.json",
+          "skills/project-update/history/blobs/",
+          "tests/test-instruction-budget.sh",
+          "tests/test-shared-tree.sh"
+        ],
+        "forbidden_files": [
+          "hooks/",
+          ".github/",
+          "instructions/stub.md",
+          "skills/ai-init/templates/*.block.md",
+          "skills/ai-init/templates/*.minimal.md",
+          "skills/ai-init/templates/gitignore.snippet",
+          "skills/ai-init/templates/.ai/policies/safety.md",
+          "skills/ai-init/templates/.ai/policies/security.md",
+          "skills/ai-init/scaffold-ai.sh",
+          "skills/project-init/",
+          "skills/ai-task/state.py",
+          "skills/ai-task/sensors.py",
+          "skills/project-update/migrations/__init__.py",
+          "skills/project-update/migrations/000[1-5]_*.py",
+          "skills/project-update/render_instructions.py",
+          "skills/project-update/adopt.py",
+          "profiles/",
+          "scripts/resolve-profile.py",
+          "scripts/merge-codex-config.py",
+          "settings.common.json",
+          "docs/sdlc/",
+          "tests/fixtures/guard-characterization/",
+          ".ai/policies/",
+          ".ai/agents/",
+          ".ai/workflows/",
+          ".ai/templates/",
+          ".ai/AGENTS.md"
+        ],
+        "forbidden_reason": "G list of plan rev 2; the router template is frozen for the agent and written by the human hand-over",
+        "required_tests": [
+          "tests/test-instruction-budget.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test-project-update.sh",
+          "tests/test-project-adopt.sh",
+          "tests/test-merge-migration.sh",
+          "tests/test-scaffold-idempotency.sh"
+        ],
+        "rollback": "git revert (template, blob, index); projects that merged the section keep a rule that stays true",
+        "status": "done",
+        "tree_before": "74fbf637547ca4805a9983f18593e5eededcf527",
+        "diff": {
+          "tree_after": "cb604b7bb921cfe75e1d05624e4e17ad61b65426",
+          "seq": 6,
+          "paths": [
+            "skills/project-update/history/blobs/a13cb0db5372c3ce3e71470165c17a2db76e7a2415717ba27fccd1b0593c61c4",
+            "skills/project-update/history/index.json",
+            "tests/test-instruction-budget.sh",
+            "tests/test-shared-tree.sh"
+          ],
+          "files": 4,
+          "added": 97,
+          "deleted": 2,
+          "lines": 99,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "7",
+        "kind": "implementation",
+        "description": "BREAKING. REQUIRES G-M8. DESTRUCTIVE D3 (human runs handover/cutover.sh: compares all 29 before removing any, L2). Defines D1. Migration 0006 (VERSION 6, literal SHARED of 29, M1; no lowercase runtime words, L1): router operation first (create / keep / replace-if-shipped / insert-before-anchor / append), then per copy unsafe->hint (M9), edited->override hint, shipped->require_shared (M2)->delete (gated). update.py: three_way router guard (section exactly once), plain-update delete? [shared] + aggregated override hint (M6), commit-first hint (M4), shipped_ai_files maps ai/, docstring. VERSION 5->6, history SETS maps ai/ (adds, deletes none). SKILL.md docs. New test-migration-0006.sh: router fixtures R1-R6 incl. adopted + edited last row, invariants, gate, Gemini (Q5), M2, M9, L4, L5, M6, M4, M3 byte sweep -> m3-byte-sweep.log, git-route rollback rehearsal. Over the advisory diff budget, not splittable.",
+        "allowed_files": [
+          "skills/ai-init/templates/.ai/policies/production.md",
+          "skills/ai-init/templates/.ai/policies/database.md",
+          "skills/ai-init/templates/.ai/policies/git.md",
+          "skills/ai-init/templates/.ai/policies/release.md",
+          "skills/ai-init/templates/.ai/policies/context-management.md",
+          "skills/ai-init/templates/.ai/policies/tooling.md",
+          "skills/ai-init/templates/.ai/policies/model-routing.md",
+          "skills/ai-init/templates/.ai/policies/review-economy.md",
+          "skills/ai-init/templates/.ai/agents/context.md",
+          "skills/ai-init/templates/.ai/agents/discovery.md",
+          "skills/ai-init/templates/.ai/agents/implementer.md",
+          "skills/ai-init/templates/.ai/agents/manager.md",
+          "skills/ai-init/templates/.ai/agents/planner.md",
+          "skills/ai-init/templates/.ai/agents/release.md",
+          "skills/ai-init/templates/.ai/agents/reviewer.md",
+          "skills/ai-init/templates/.ai/agents/risk.md",
+          "skills/ai-init/templates/.ai/agents/security.md",
+          "skills/ai-init/templates/.ai/agents/tester.md",
+          "skills/ai-init/templates/.ai/workflows/feature.md",
+          "skills/ai-init/templates/.ai/workflows/bugfix.md",
+          "skills/ai-init/templates/.ai/workflows/hotfix.md",
+          "skills/ai-init/templates/.ai/workflows/investigation.md",
+          "skills/ai-init/templates/.ai/workflows/refactoring.md",
+          "skills/ai-init/templates/.ai/templates/task-context.md",
+          "skills/ai-init/templates/.ai/templates/impact-report.md",
+          "skills/ai-init/templates/.ai/templates/review-report.md",
+          "skills/ai-init/templates/.ai/templates/release-report.md",
+          "skills/ai-init/templates/.ai/templates/architecture-decision.md",
+          "skills/ai-init/templates/.ai/templates/implementation-plan.md",
+          ".ai/reports/T-2026-10-13-004/handover/cutover.sh",
+          ".ai/reports/T-2026-10-13-004/m3-byte-sweep.log",
+          "skills/ai-init/templates/.ai/VERSION",
+          "skills/project-update/migrations/0006_shared_files.py",
+          "skills/project-update/update.py",
+          "skills/project-update/SKILL.md",
+          "skills/ai-init/SKILL.md",
+          "tools/build-template-history.py",
+          "skills/project-update/history/index.json",
+          "skills/project-update/history/blobs/",
+          "tests/test-project-update.sh",
+          "tests/test-scaffold-idempotency.sh",
+          "tests/test-instruction-budget.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test-migration-0006.sh",
+          "tests/run-all.sh",
+          "tests/fixtures/project-update/schema-v5/"
+        ],
+        "forbidden_files": [
+          "hooks/",
+          ".github/",
+          "instructions/stub.md",
+          "skills/ai-init/templates/*.block.md",
+          "skills/ai-init/templates/*.minimal.md",
+          "skills/ai-init/templates/gitignore.snippet",
+          "skills/ai-init/templates/.ai/policies/safety.md",
+          "skills/ai-init/templates/.ai/policies/security.md",
+          "skills/ai-init/scaffold-ai.sh",
+          "skills/project-init/",
+          "skills/ai-task/state.py",
+          "skills/ai-task/sensors.py",
+          "skills/project-update/migrations/__init__.py",
+          "skills/project-update/migrations/000[1-5]_*.py",
+          "skills/project-update/render_instructions.py",
+          "skills/project-update/adopt.py",
+          "profiles/",
+          "scripts/resolve-profile.py",
+          "scripts/merge-codex-config.py",
+          "settings.common.json",
+          "docs/sdlc/",
+          "tests/fixtures/guard-characterization/",
+          ".ai/policies/",
+          ".ai/agents/",
+          ".ai/workflows/",
+          ".ai/templates/",
+          ".ai/AGENTS.md"
+        ],
+        "forbidden_reason": "G list of plan rev 2; the 29 template paths are removed only by the human-run cutover.sh (D3)",
+        "required_tests": [
+          "tests/test-migration-0006.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test-project-update.sh",
+          "tests/test-scaffold-idempotency.sh",
+          "tests/test-instruction-budget.sh",
+          "tests/test-project-adopt.sh",
+          "tests/test-merge-migration.sh"
+        ],
+        "rollback": "single git revert; roll projects at schema 6 back first through the git route",
+        "status": "done",
+        "tree_before": "cb604b7bb921cfe75e1d05624e4e17ad61b65426",
+        "diff": {
+          "tree_after": "c72f2565382ef92091208d5c66b454460902e54d",
+          "seq": 7,
+          "paths": [
+            "skills/ai-init/templates/.ai/VERSION",
+            "skills/project-update/history/blobs/06e9d52c1720fca412803e3b07c4b228ff113e303f4c7ab94665319d832bbfb7",
+            "skills/project-update/history/index.json",
+            "skills/project-update/migrations/0006_shared_files.py",
+            "skills/project-update/update.py",
+            "tests/fixtures/project-update/schema-v5/.ai/VERSION",
+            "tests/fixtures/project-update/schema-v5/README.md",
+            "tests/run-all.sh",
+            "tests/test-migration-0006.sh",
+            "tests/test-project-update.sh",
+            "tests/test-scaffold-idempotency.sh",
+            "tests/test-shared-tree.sh",
+            "tools/build-template-history.py"
+          ],
+          "files": 13,
+          "added": 643,
+          "deleted": 25,
+          "lines": 668,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "8",
+        "kind": "implementation",
+        "description": "DESTRUCTIVE D2. Precondition: m3-byte-sweep.log from Step 7. build-template-history.py keep rule made permanent: a blob is written only if a non-shared key references it; index.json byte-identical (not in allowed_files); --dry-run list -> d2-blobs.txt; the human approves 'delete these N blobs' before the real run. Byte sweep replaced by a hash sweep; staleness: shared keys hash only; rehearsal against git HEAD.",
+        "allowed_files": [
+          "tools/build-template-history.py",
+          "skills/project-update/history/blobs/",
+          "tests/test-project-update.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test-migration-0006.sh",
+          ".ai/reports/T-2026-10-13-004/d2-blobs.txt"
+        ],
+        "forbidden_files": [
+          "skills/project-update/history/index.json",
+          "hooks/",
+          ".github/",
+          "instructions/stub.md",
+          "skills/ai-init/templates/*.block.md",
+          "skills/ai-init/templates/*.minimal.md",
+          "skills/ai-init/templates/gitignore.snippet",
+          "skills/ai-init/templates/.ai/policies/safety.md",
+          "skills/ai-init/templates/.ai/policies/security.md",
+          "skills/ai-init/scaffold-ai.sh",
+          "skills/project-init/",
+          "skills/ai-task/state.py",
+          "skills/ai-task/sensors.py",
+          "skills/project-update/migrations/__init__.py",
+          "skills/project-update/migrations/000[1-5]_*.py",
+          "skills/project-update/render_instructions.py",
+          "skills/project-update/adopt.py",
+          "profiles/",
+          "scripts/resolve-profile.py",
+          "scripts/merge-codex-config.py",
+          "settings.common.json",
+          "docs/sdlc/",
+          "tests/fixtures/guard-characterization/",
+          ".ai/policies/",
+          ".ai/agents/",
+          ".ai/workflows/",
+          ".ai/templates/",
+          ".ai/AGENTS.md"
+        ],
+        "forbidden_reason": "G list of plan rev 2; index.json must stay byte-identical",
+        "required_tests": [
+          "tests/test-project-update.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test-migration-0006.sh",
+          "tests/test-merge-migration.sh",
+          "tests/test-project-adopt.sh"
+        ],
+        "rollback": "git revert restores the blobs",
+        "status": "done",
+        "tree_before": "c72f2565382ef92091208d5c66b454460902e54d",
+        "diff": {
+          "tree_after": "47b8097018d95bc5273d57d2d456589b18509589",
+          "seq": 8,
+          "paths": [
+            "skills/project-update/history/blobs/00f5e27ce2d66e3a1d8b222b013ae8fa1fed32612d91a551e0c661cee3ef9c2d",
+            "skills/project-update/history/blobs/0a24844d90640f49ce86faca53c89e9d39fa3a20f1377646534afc598f42c7b7",
+            "skills/project-update/history/blobs/0a6b1b6dd06a35582b2e9989a1f41c40abc29254b8e482714fcc6f0a7b16c406",
+            "skills/project-update/history/blobs/0aeb04b04262683cac6513545683486a73dc473b447bba43b5aaab18403957a6",
+            "skills/project-update/history/blobs/0ce913a28996f546f72d570b0e5a376362e993ce4d805bc4aae57d38caa44212",
+            "skills/project-update/history/blobs/0ea9e36446b624b73b2a821231b2ee66a357b43d584a5b23da48b3c800855e65",
+            "skills/project-update/history/blobs/0fb1d68678a1349195b2e79433bb20174d25874e3bfd0b70410bb4e428b4e4b8",
+            "skills/project-update/history/blobs/119b2b9d0f9c647a243540724edac6b29afa020c69aa205797bcfa9eb06bc021",
+            "skills/project-update/history/blobs/13340bdd5d85314a2f7a9bac1776951178f9840cb8b75479d762a8082ab45d3a",
+            "skills/project-update/history/blobs/14f19a6745af0196f9be0ed8fe854e882bf90157b20b2bf680de909222f87138",
+            "skills/project-update/history/blobs/1d0fe3ee5fb8260ba610942d4bbdfff7410fbe80ed826ac07f32985031dc2b3f",
+            "skills/project-update/history/blobs/1de9a37ed6402893dcab6e61ddbf15ffd35f15a6d84b18e675a0c5bf4e981f85",
+            "skills/project-update/history/blobs/1f824645299579cbdd8141642ddbb4bca9fd5fe9d3112f036d8221f0811e0abf",
+            "skills/project-update/history/blobs/2284d0d36d04d717c45f895e56a6a67f0bfb1d3f84941cf43cc6999eb9a42836",
+            "skills/project-update/history/blobs/230df2220e9c73c563c3c926d26f5c6dbe249df26a56fa43b7b321cdee2d5783",
+            "skills/project-update/history/blobs/235fb88393cfe20dd58b35fe9785cc45baf5ffe21a13d926652d76ec68cea8b7",
+            "skills/project-update/history/blobs/2c6afb3518714d35eaf0119bf2ae2154782bbece632dfdbd68988351abde61f5",
+            "skills/project-update/history/blobs/38b7363f9cd84c3bd0a82e48aa6dd19f9911fd212a08a5a8084706e45295be89",
+            "skills/project-update/history/blobs/40c0f81e7a110e3bc5094211e67cb6681dcc2953e81f81d7f07f0ab740640c53",
+            "skills/project-update/history/blobs/478efa93d2bd83c7c88ece72ce75cb8724ba77eccf3092541cbdbe0073be35d0",
+            "skills/project-update/history/blobs/4dd3fa12bc45acc8c836ab65d790248ca7504a021bca6677499d17bb3d798ed9",
+            "skills/project-update/history/blobs/51e3f15095d7123ea8566b512479ee10a6cb2f336b7352a259a083a887bd7116",
+            "skills/project-update/history/blobs/5497a204967bea7dab29079a6e1dfa3d8713b2d2cb294c2779378039f03a55fc",
+            "skills/project-update/history/blobs/60c4d7e7fde7049d92d84295fc13ca9a91eb2de423be08f093b3ee5d5e817ff8",
+            "skills/project-update/history/blobs/637971cfb844ef4285e2886a4b1c834fb2ed5c46e773adb88c2c147fea626ad3",
+            "skills/project-update/history/blobs/648f76c1adbbe8e1307bd31f81d9bc6f5e10ed54274d33fc8f8d2173d8875259",
+            "skills/project-update/history/blobs/65af2282eea2a51fcc27a4acf2c26c727b0961c30e1be13176369200c460c219",
+            "skills/project-update/history/blobs/66ecd73e303e7bbc1aa8ee72435d0d10812ff7b2eff0adac59bbf0a303e2cc01",
+            "skills/project-update/history/blobs/6a43bf32461b22b87fafe2865529dc04fa66cd00182a2a7598aa071667ca255a",
+            "skills/project-update/history/blobs/6aa8fb39b370b2ba6873b45efe31898c07c2cba99583007932ce717da87c448c",
+            "skills/project-update/history/blobs/6bbcb8ea55726cdd49e0544725d224ac6d728cd1db757a269399342da92677ca",
+            "skills/project-update/history/blobs/739d9252de9dbd013586ee0d373158cf21dc2821547a3eacd253df7e73a244fb",
+            "skills/project-update/history/blobs/765a39a202617096c232017822ae738d37e4405430c71700dc7bc14bf1ba794e",
+            "skills/project-update/history/blobs/77577440a933d1cabd8c6f4a6401cf361a784aa09a25500a6f7b44ead8ab5e55",
+            "skills/project-update/history/blobs/78619b522826ba8f5f0422e9deb7359c8002553d1aeb29a3719da5ab11ff13a1",
+            "skills/project-update/history/blobs/7afd6c68d910439c19c1c190868be7596f487d30f867a1593d2084da6feea3bf",
+            "skills/project-update/history/blobs/7bcdf9a0e6b85277b9b60669150224b9414d2e32821ff06f4d148eb1d18785bb",
+            "skills/project-update/history/blobs/7e5c824bb71fe5353ec8a67827145b8fbc22ecd902ade1ad3005fafeed4ffb71",
+            "skills/project-update/history/blobs/7ea8030588599b173150b9844a578a46b2669f3f8531cfd1d3843c6c1dd3c9ec",
+            "skills/project-update/history/blobs/7f713c6ecd00bc2379deda511d8bda786341dbe5f5187f3b899302d904fed6bc",
+            "skills/project-update/history/blobs/7fb3acb0211818efebc2234863db0b8c846022a7280a6d2d69f267dbf63db48c",
+            "skills/project-update/history/blobs/871d3d7dbeef4d7d438e9357c9bbd135f15c92c54d32e98d85aeef444e47acc0",
+            "skills/project-update/history/blobs/87f0855859ff68cc6c988cc0b631ee7f56af7fbba062172bf80e01f4982cc054",
+            "skills/project-update/history/blobs/894a37936b769203bbb880ff842cc0a04e62d53e01deb07af83179f6b1359cf4",
+            "skills/project-update/history/blobs/8abab74759766d02b5cb7b0c3e59a3d440b25a454216cd8fea325c23fd822d36",
+            "skills/project-update/history/blobs/94da08ac6945d5614cc7918d450aab94f3aa8a929a1c8f9fa9a0a9ac51176287",
+            "skills/project-update/history/blobs/95093beb120fc6c8de08af38bed4bea5fcbc9f13e3a79782ee9cec6487c75d3f",
+            "skills/project-update/history/blobs/9984ac1e1b1edb7217df58e256002ae09913fdc598da6f7773f1c01e5a3e55e2",
+            "skills/project-update/history/blobs/9a16ec8f5762032e4dc009974dfca5ed1dd0eae6d84391cbed872c83d7a4e75f",
+            "skills/project-update/history/blobs/9fa7a0904f61f2519ba4d38c3645c722efc5c08ba871ad215c5b3ae298c60134",
+            "skills/project-update/history/blobs/a09b8d9154feeabaefced51d8b06b9cb794b3e41501c8b326771771b9a70a3ff",
+            "skills/project-update/history/blobs/a15a7adc9ff92c2fe8a877d1f18f5e182faa453c92fa301bdf32b9c2a191a65c",
+            "skills/project-update/history/blobs/a213099429aff491b00e885c8d556465be2405072efbb9a3a297890a15a5b4ca",
+            "skills/project-update/history/blobs/a3df7268feb0780be0d2cf9acced6ed81780a7790f36fe024b6ea0b1bd6eb7a6",
+            "skills/project-update/history/blobs/aefa7343db8832e4e778d70de433d4aa7348b20f80a87a3e78c8f3331527570c",
+            "skills/project-update/history/blobs/af850b579029a6f5ce392ac29693ede8f9ae4753c08c06b241c991e9f5ca0052",
+            "skills/project-update/history/blobs/b28721136482dafb9fd2801af340364cb97e9f6eaa987908606c786045b8d334",
+            "skills/project-update/history/blobs/b3726422d767f9219fea633bea77f0c99ad9af843c591e6e928e1ccd2a47f374",
+            "skills/project-update/history/blobs/b3839425f9d0ab2efa42a6f5e9488ec2d26ca5fb8dcd694b8ab098e10743ca46",
+            "skills/project-update/history/blobs/b64c4cd4bb10c44458ac83b95c8ed247f95bbf834f3a15687b9dba55bd21928c",
+            "skills/project-update/history/blobs/bcc34c501b4f88e2d02d2c458b3f13375fe563e37fd86e19fd77fc61a810734e",
+            "skills/project-update/history/blobs/bceb7189444bb6291b262ca08e34db01010dda2f6e64d696231ec3c343c95c66",
+            "skills/project-update/history/blobs/bf82a2bb4fce1bd349ff66118930a01d61a7af8e2bd8d200c721d43afc58c713",
+            "skills/project-update/history/blobs/c392fd585241389355958099a95bd85358a80d9a10310301a430219f83c8962e",
+            "skills/project-update/history/blobs/c51cfbdea69f184f4905f351b3fd29d02429691335b71d34349a3dce829e5026",
+            "skills/project-update/history/blobs/c56893649e7cd9411e7ec7871467a7fa907f39d93769d2265f8744eb15488333",
+            "skills/project-update/history/blobs/c576bc19470f68c4d65ea9c32183cc5285b55778890ff3d79875a84bf37cc2cf",
+            "skills/project-update/history/blobs/c5c690bf89310358ec7f110fcdcfe1a32fe0b1d5ecf207bc77977b698c42ae1f",
+            "skills/project-update/history/blobs/c62c6150c945f44b07ec7741e500b65bf32008929c83f2254a2712011e48bd66",
+            "skills/project-update/history/blobs/c644838866df2001a42501a988dd7b77aacf862bf09d22b465f3cd8a22c6b6eb",
+            "skills/project-update/history/blobs/c980d74f76a4bdfb38c94b573ac10a54eb50b850b052e15fa6f2442889b36ccb",
+            "skills/project-update/history/blobs/ceed2f3bd937f862d0e6ca59ce1b1e3603e19a0d7f85d90d6dfeb7bf690153be",
+            "skills/project-update/history/blobs/d03d201fa398ed152e7bd9c8d2be71538c4540a870bedb4b1a8f9308345524c9",
+            "skills/project-update/history/blobs/d51ea2e893482a20c5882056cf8043327ca1dc1c957927f6746929a47ee8368e",
+            "skills/project-update/history/blobs/d7146a591898984115124c83174a2c93cc080ad594f132f3d89c8b41b006c805",
+            "skills/project-update/history/blobs/d78f5e0bb1380259fce2cce009785a9a11f6de8b87a160080b9872c059f95060",
+            "skills/project-update/history/blobs/da3ecd4c4c414c93d04488685931df39a56bf959bfeb9c45cb1aea2c13bd991b",
+            "skills/project-update/history/blobs/dffebeddd6403222f575dc224b15ad5d735e8d6ec554994583ace0b501bdf326",
+            "skills/project-update/history/blobs/e129bf71a5a922e24b2c1bc8daa8a5d2b5589b0069770e17ce17e7db5ed4e7a4",
+            "skills/project-update/history/blobs/e1765d5260a1a87a7fba94c55d225578b7851c5c5f9531c421029e83980097f8",
+            "skills/project-update/history/blobs/e54d4d405319214fc3b04437e8dbec979427d62bb2ac442f48e8406e037f4265",
+            "skills/project-update/history/blobs/e5584d43d04190f740aee47470982969381d5473f41eb45e7c0b556b8caf9c91",
+            "skills/project-update/history/blobs/e71abd1823fbbe6e635b141f04a301c3d24c2cdd56c7a5c2b25c7ea1898be54f",
+            "skills/project-update/history/blobs/e9e62d03ca70b3dffccef8dceeb214173352cfef005145e519f0e037993f1c03",
+            "skills/project-update/history/blobs/edecd502e22395300781a3c653b56c3587b1b894ce4b96f60e19c601a5cdae46",
+            "skills/project-update/history/blobs/effefbaaf4beb8f1ba55081d6b7e74bf25ebb91045dd10613418f17b95fa7182",
+            "skills/project-update/history/blobs/f6af4581bafbf62b257d57e06c3ae2c5998aeca608ee7df037fcc3c3e4b563a9",
+            "skills/project-update/history/blobs/fc35045777d29630303430752a651b3e553580a581036a02cc103eb96a46f4b0",
+            "skills/project-update/history/blobs/fc772619f999c169a0cade4c6e4af9e403821eb745cc28c129216cb148214d55",
+            "skills/project-update/history/blobs/fdc21345c77f92a42d244aa104f393f439a0ff9981a9fd462bd837e8a47931bb",
+            "tests/test-migration-0006.sh",
+            "tests/test-project-update.sh",
+            "tests/test-shared-tree.sh",
+            "tools/build-template-history.py"
+          ],
+          "files": 94,
+          "added": 85,
+          "deleted": 4834,
+          "lines": 4919,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "9",
+        "kind": "implementation",
+        "description": "Docs and known risks: README :249-294, :366 (shared tree, overrides stop merging, git-first rollback), CONTRIBUTING, docs; known-risks entries (a)-(l) of plan rev 2. README assertion count taken from the end-of-task verify log as a one-line change after the green run. step_tests: none.",
+        "allowed_files": [
+          "README.md",
+          "CONTRIBUTING.md",
+          "docs/agents.md",
+          "docs/architecture.md",
+          "docs/faq.md",
+          "docs/getting-started.md",
+          "docs/hooks.md",
+          "docs/workflows.md",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [
+          "hooks/",
+          ".github/",
+          "instructions/stub.md",
+          "skills/ai-init/templates/*.block.md",
+          "skills/ai-init/templates/*.minimal.md",
+          "skills/ai-init/templates/gitignore.snippet",
+          "skills/ai-init/templates/.ai/policies/safety.md",
+          "skills/ai-init/templates/.ai/policies/security.md",
+          "skills/ai-init/scaffold-ai.sh",
+          "skills/project-init/",
+          "skills/ai-task/state.py",
+          "skills/ai-task/sensors.py",
+          "skills/project-update/migrations/__init__.py",
+          "skills/project-update/migrations/000[1-5]_*.py",
+          "skills/project-update/render_instructions.py",
+          "skills/project-update/adopt.py",
+          "profiles/",
+          "scripts/resolve-profile.py",
+          "scripts/merge-codex-config.py",
+          "settings.common.json",
+          "docs/sdlc/",
+          "tests/fixtures/guard-characterization/",
+          ".ai/policies/",
+          ".ai/agents/",
+          ".ai/workflows/",
+          ".ai/templates/",
+          ".ai/AGENTS.md"
+        ],
+        "forbidden_reason": "G list of plan rev 2",
+        "required_tests": [],
+        "rollback": "git revert",
+        "status": "done",
+        "tree_before": "47b8097018d95bc5273d57d2d456589b18509589",
+        "diff": {
+          "tree_after": "9724f08fff2f3cba2ccf87d61b4f6c4fc3439ba3",
+          "seq": 9,
+          "paths": [],
+          "files": 0,
+          "added": 0,
+          "deleted": 0,
+          "lines": 0,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "review R1 (Q7=B): BLOCKER ai-init project specifics; MEDIUM shared set=29; MEDIUM router recurring conflict; MEDIUM rollback text; LOW CRLF anchor; known-risks (c)(e)(j)(m)+new",
+        "allowed_files": [
+          "tests/test-project-update.sh",
+          "tests/fixtures/project-update/migrations-synthetic/0002_move.py",
+          "tests/fixtures/project-update/migrations-synthetic/0003_edits.py",
+          "tests/fixtures/project-update/shared-old/",
+          "ai/",
+          "tests/test-shared-tree.sh",
+          "tests/test-shared-prompts-model-free.sh",
+          "tests/run-all.sh",
+          "install.sh",
+          "scripts/ai-path",
+          "scripts/render-codex-agents.py",
+          "instructions/routing.md",
+          "hooks/ai-path-guard-defaults.json",
+          "tests/test-install-dry-run.sh",
+          "tests/test-codex-agent-render.sh",
+          "tests/test-dual-runtime-install.sh",
+          "tests/test-codex-install.sh",
+          "tests/test-ai-path-guard.sh",
+          "agents/ai-context.md.tmpl",
+          "agents/ai-discovery.md.tmpl",
+          "agents/ai-expert.md.tmpl",
+          "agents/ai-implementer.md.tmpl",
+          "agents/ai-planner.md.tmpl",
+          "agents/ai-release.md.tmpl",
+          "agents/ai-reviewer.md.tmpl",
+          "agents/ai-risk.md.tmpl",
+          "agents/ai-security.md.tmpl",
+          "agents/ai-tester.md.tmpl",
+          "skills/ai-task/SKILL.md",
+          ".ai/reports/T-2026-10-13-004/m8-read-probe.md",
+          "skills/project-update/update.py",
+          ".ai/reports/T-2026-10-13-004/handover/router.md",
+          ".ai/reports/T-2026-10-13-004/handover/install-router.sh",
+          "skills/ai-init/templates/.ai/AGENTS.md",
+          "skills/project-update/history/index.json",
+          "skills/project-update/history/blobs/",
+          "tests/test-instruction-budget.sh",
+          "skills/ai-init/templates/.ai/policies/production.md",
+          "skills/ai-init/templates/.ai/policies/database.md",
+          "skills/ai-init/templates/.ai/policies/git.md",
+          "skills/ai-init/templates/.ai/policies/release.md",
+          "skills/ai-init/templates/.ai/policies/context-management.md",
+          "skills/ai-init/templates/.ai/policies/tooling.md",
+          "skills/ai-init/templates/.ai/policies/model-routing.md",
+          "skills/ai-init/templates/.ai/policies/review-economy.md",
+          "skills/ai-init/templates/.ai/agents/context.md",
+          "skills/ai-init/templates/.ai/agents/discovery.md",
+          "skills/ai-init/templates/.ai/agents/implementer.md",
+          "skills/ai-init/templates/.ai/agents/manager.md",
+          "skills/ai-init/templates/.ai/agents/planner.md",
+          "skills/ai-init/templates/.ai/agents/release.md",
+          "skills/ai-init/templates/.ai/agents/reviewer.md",
+          "skills/ai-init/templates/.ai/agents/risk.md",
+          "skills/ai-init/templates/.ai/agents/security.md",
+          "skills/ai-init/templates/.ai/agents/tester.md",
+          "skills/ai-init/templates/.ai/workflows/feature.md",
+          "skills/ai-init/templates/.ai/workflows/bugfix.md",
+          "skills/ai-init/templates/.ai/workflows/hotfix.md",
+          "skills/ai-init/templates/.ai/workflows/investigation.md",
+          "skills/ai-init/templates/.ai/workflows/refactoring.md",
+          "skills/ai-init/templates/.ai/templates/task-context.md",
+          "skills/ai-init/templates/.ai/templates/impact-report.md",
+          "skills/ai-init/templates/.ai/templates/review-report.md",
+          "skills/ai-init/templates/.ai/templates/release-report.md",
+          "skills/ai-init/templates/.ai/templates/architecture-decision.md",
+          "skills/ai-init/templates/.ai/templates/implementation-plan.md",
+          ".ai/reports/T-2026-10-13-004/handover/cutover.sh",
+          ".ai/reports/T-2026-10-13-004/m3-byte-sweep.log",
+          "skills/ai-init/templates/.ai/VERSION",
+          "skills/project-update/migrations/0006_shared_files.py",
+          "skills/project-update/SKILL.md",
+          "skills/ai-init/SKILL.md",
+          "tools/build-template-history.py",
+          "tests/test-scaffold-idempotency.sh",
+          "tests/test-migration-0006.sh",
+          "tests/fixtures/project-update/schema-v5/",
+          ".ai/reports/T-2026-10-13-004/d2-blobs.txt",
+          "README.md",
+          "CONTRIBUTING.md",
+          "docs/agents.md",
+          "docs/architecture.md",
+          "docs/faq.md",
+          "docs/getting-started.md",
+          "docs/hooks.md",
+          "docs/workflows.md",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "a9029181fbba8f5acf4134e5ddf14622ca752f04",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "b5f346eb1da8cdd8c29ac9531157ec143e24d327",
+          "seq": 10,
+          "paths": [
+            "skills/project-update/migrations/0006_shared_files.py",
+            "skills/project-update/update.py",
+            "tests/test-migration-0006.sh",
+            "tests/test-project-update.sh"
+          ],
+          "files": 4,
+          "added": 166,
+          "deleted": 17,
+          "lines": 183,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R2",
+        "description": "re-review R2: BLOCKER router_merge early return over-broad (+S8 test restored); LOW follow-heading fallback, CRLF merge path, rollback warning, known-risks (i)(m)",
+        "allowed_files": [
+          "tests/test-project-update.sh",
+          "tests/fixtures/project-update/migrations-synthetic/0002_move.py",
+          "tests/fixtures/project-update/migrations-synthetic/0003_edits.py",
+          "tests/fixtures/project-update/shared-old/",
+          "ai/",
+          "tests/test-shared-tree.sh",
+          "tests/test-shared-prompts-model-free.sh",
+          "tests/run-all.sh",
+          "install.sh",
+          "scripts/ai-path",
+          "scripts/render-codex-agents.py",
+          "instructions/routing.md",
+          "hooks/ai-path-guard-defaults.json",
+          "tests/test-install-dry-run.sh",
+          "tests/test-codex-agent-render.sh",
+          "tests/test-dual-runtime-install.sh",
+          "tests/test-codex-install.sh",
+          "tests/test-ai-path-guard.sh",
+          "agents/ai-context.md.tmpl",
+          "agents/ai-discovery.md.tmpl",
+          "agents/ai-expert.md.tmpl",
+          "agents/ai-implementer.md.tmpl",
+          "agents/ai-planner.md.tmpl",
+          "agents/ai-release.md.tmpl",
+          "agents/ai-reviewer.md.tmpl",
+          "agents/ai-risk.md.tmpl",
+          "agents/ai-security.md.tmpl",
+          "agents/ai-tester.md.tmpl",
+          "skills/ai-task/SKILL.md",
+          ".ai/reports/T-2026-10-13-004/m8-read-probe.md",
+          "skills/project-update/update.py",
+          ".ai/reports/T-2026-10-13-004/handover/router.md",
+          ".ai/reports/T-2026-10-13-004/handover/install-router.sh",
+          "skills/ai-init/templates/.ai/AGENTS.md",
+          "skills/project-update/history/index.json",
+          "skills/project-update/history/blobs/",
+          "tests/test-instruction-budget.sh",
+          "skills/ai-init/templates/.ai/policies/production.md",
+          "skills/ai-init/templates/.ai/policies/database.md",
+          "skills/ai-init/templates/.ai/policies/git.md",
+          "skills/ai-init/templates/.ai/policies/release.md",
+          "skills/ai-init/templates/.ai/policies/context-management.md",
+          "skills/ai-init/templates/.ai/policies/tooling.md",
+          "skills/ai-init/templates/.ai/policies/model-routing.md",
+          "skills/ai-init/templates/.ai/policies/review-economy.md",
+          "skills/ai-init/templates/.ai/agents/context.md",
+          "skills/ai-init/templates/.ai/agents/discovery.md",
+          "skills/ai-init/templates/.ai/agents/implementer.md",
+          "skills/ai-init/templates/.ai/agents/manager.md",
+          "skills/ai-init/templates/.ai/agents/planner.md",
+          "skills/ai-init/templates/.ai/agents/release.md",
+          "skills/ai-init/templates/.ai/agents/reviewer.md",
+          "skills/ai-init/templates/.ai/agents/risk.md",
+          "skills/ai-init/templates/.ai/agents/security.md",
+          "skills/ai-init/templates/.ai/agents/tester.md",
+          "skills/ai-init/templates/.ai/workflows/feature.md",
+          "skills/ai-init/templates/.ai/workflows/bugfix.md",
+          "skills/ai-init/templates/.ai/workflows/hotfix.md",
+          "skills/ai-init/templates/.ai/workflows/investigation.md",
+          "skills/ai-init/templates/.ai/workflows/refactoring.md",
+          "skills/ai-init/templates/.ai/templates/task-context.md",
+          "skills/ai-init/templates/.ai/templates/impact-report.md",
+          "skills/ai-init/templates/.ai/templates/review-report.md",
+          "skills/ai-init/templates/.ai/templates/release-report.md",
+          "skills/ai-init/templates/.ai/templates/architecture-decision.md",
+          "skills/ai-init/templates/.ai/templates/implementation-plan.md",
+          ".ai/reports/T-2026-10-13-004/handover/cutover.sh",
+          ".ai/reports/T-2026-10-13-004/m3-byte-sweep.log",
+          "skills/ai-init/templates/.ai/VERSION",
+          "skills/project-update/migrations/0006_shared_files.py",
+          "skills/project-update/SKILL.md",
+          "skills/ai-init/SKILL.md",
+          "tools/build-template-history.py",
+          "tests/test-scaffold-idempotency.sh",
+          "tests/test-migration-0006.sh",
+          "tests/fixtures/project-update/schema-v5/",
+          ".ai/reports/T-2026-10-13-004/d2-blobs.txt",
+          "README.md",
+          "CONTRIBUTING.md",
+          "docs/agents.md",
+          "docs/architecture.md",
+          "docs/faq.md",
+          "docs/getting-started.md",
+          "docs/hooks.md",
+          "docs/workflows.md",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "4e74539c6c48ea9299cd282c4c49418ef5bb84e9",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "580958ff3e41999ef4e9ebcfcec0299e0c3c25ba",
+          "seq": 11,
+          "paths": [
+            "skills/project-update/update.py",
+            "tests/test-migration-0006.sh",
+            "tests/test-project-update.sh"
+          ],
+          "files": 3,
+          "added": 56,
+          "deleted": 20,
+          "lines": 76,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "R1",
+    "R2"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "passed",
+  "security_status": "passed",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "ikakarov",
+    "granted_at": "2026-10-14T13:54:47Z",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "terminal",
+    "unattended": false
+  },
+  "created_at": "2026-10-13T16:12:16Z",
+  "updated_at": "2026-10-14T13:55:17Z",
+  "history": [
+    {
+      "at": "2026-10-13T16:12:16Z",
+      "event": "task_started",
+      "detail": "Shared .ai/ policies, agent contracts, workflows and templates load from the plugin root (project copy = override); project keeps risk-tiers.json, path-guard.json, testing.md, coding.md, project/, rules/, state/, reports/; migration 0006 deletes unedited shared copies behind --confirm-delete; history/blobs removed; ai-init copies only project files (feature)"
+    },
+    {
+      "at": "2026-10-13T16:12:49Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: reused discovery-A/B/C of T-2026-10-13-001; history usage re-checked at HEAD (update.py:58,152,574,652,858,902,922)"
+    },
+    {
+      "at": "2026-10-13T16:12:49Z",
+      "event": "stage",
+      "detail": "discovery -> context: task-context.md written"
+    },
+    {
+      "at": "2026-10-13T16:13:00Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: impact-report.md (subset of T-2026-10-13-001)"
+    },
+    {
+      "at": "2026-10-13T16:13:25Z",
+      "event": "risk_classified",
+      "detail": "T6: ai-risk (STRONG/opus): T6 examples 'data migration' — migration 0006 deletes files in users' .ai/ trees, history blobs (merge base) removed; deletion needs separate named human approval"
+    },
+    {
+      "at": "2026-10-13T16:13:39Z",
+      "event": "question_asked",
+      "detail": "Q1: History blobs are the merge base for three_way (update.py:574) and block_update (update.py:652). Files still merged in a project after this task: risk-tiers.json, risk-tiers.md, path-guard.json, testing.md, coding.md, the managed instruction block, docs/sdlc/*/TEMPLATE.md. What replaces the removed blobs?"
+    },
+    {
+      "at": "2026-10-13T16:13:39Z",
+      "event": "question_asked",
+      "detail": "Q2: The global and project instruction blocks say 'read .ai/AGENTS.md first'. Where does the .ai/AGENTS.md router live after the move?"
+    },
+    {
+      "at": "2026-10-13T16:13:39Z",
+      "event": "question_asked",
+      "detail": "Q3: How do skills and subagents find a shared file (e.g. policies/safety.md) once it lives in the plugin?"
+    },
+    {
+      "at": "2026-10-13T16:15:39Z",
+      "event": "question_answered",
+      "detail": "Q1 = A"
+    },
+    {
+      "at": "2026-10-13T16:15:39Z",
+      "event": "question_answered",
+      "detail": "Q2 = A"
+    },
+    {
+      "at": "2026-10-13T16:15:39Z",
+      "event": "question_answered",
+      "detail": "Q3 = B"
+    },
+    {
+      "at": "2026-10-13T16:15:39Z",
+      "event": "stage",
+      "detail": "impact_analysis -> plan: Q1=A Q2=A Q3=B; plan delegated to ai-expert (T6)"
+    },
+    {
+      "at": "2026-10-13T16:35:52Z",
+      "event": "question_asked",
+      "detail": "Q4: OQ1 (plan): should Step 3 add (^|/)\\.(claude|codex)/claude-agentic/(ai/|ai-path$) to task_protected_patterns in hooks/ai-path-guard-defaults.json? Guard code and deny texts stay unchanged; only guard data changes."
+    },
+    {
+      "at": "2026-10-14T07:10:18Z",
+      "event": "question_answered",
+      "detail": "Q4 = A"
+    },
+    {
+      "at": "2026-10-14T07:26:55Z",
+      "event": "question_asked",
+      "detail": "Q5: OQ3 (plan review H2): Gemini/Junie instruction stub (instructions/stub.md:46, frozen) says 'follow .ai/policies/safety.md'; 0006 would delete it. What happens to those runtimes?"
+    },
+    {
+      "at": "2026-10-14T07:26:55Z",
+      "event": "question_asked",
+      "detail": "Q6: install.sh --target both writes the Codex routing.md into ~/.claude (install.sh:423,:932,:730; live on this machine). Step 3 renders the shared path into that file. How to handle it?"
+    },
+    {
+      "at": "2026-10-14T07:28:06Z",
+      "event": "question_answered",
+      "detail": "Q5 = A"
+    },
+    {
+      "at": "2026-10-14T07:28:06Z",
+      "event": "question_answered",
+      "detail": "Q6 = A"
+    },
+    {
+      "at": "2026-10-14T08:09:17Z",
+      "event": "plan_approved",
+      "detail": "9 steps, .ai/reports/T-2026-10-13-004/implementation-plan.rev2.md"
+    },
+    {
+      "at": "2026-10-14T08:09:30Z",
+      "event": "stage",
+      "detail": "plan -> human_approval: plan rev 2 (9 steps) and plan-review.md shown; P2 not yet merged, gates Step 3 only"
+    },
+    {
+      "at": "2026-10-14T08:09:30Z",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "2026-10-14T08:10:32Z",
+      "event": "human_approval",
+      "detail": "granted by ikakarov via terminal"
+    },
+    {
+      "at": "2026-10-14T08:10:54Z",
+      "event": "stage",
+      "detail": "human_approval -> implementation: plan rev 2 approved by ikakarov"
+    },
+    {
+      "at": "2026-10-14T08:10:54Z",
+      "event": "step_started",
+      "detail": "1: Characterization (test-only): test-project-update.sh hand edits move to project-owned keys (conflict -> .ai/state/README.md line 4; untouched-replaced -> .ai/policies/safety.md; missing-recreated -> rm .ai/policies/security.md); synthetic move becomes .ai/policies/coding.md -> code-style.md; new fixture tests/fixtures/project-update/shared-old/ (oldest feature.md, manager.md, most-versioned shared policy, AGENTS.v5.md, SOURCES.txt; no .ai/ in paths). Counts at :79, :110, :114 unchanged."
+    },
+    {
+      "at": "2026-10-14T08:13:07Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-14T08:13:11Z",
+      "event": "step_started",
+      "detail": "2: Shared tree, byte-identical copy (additive): ai/ gets 8 policies (production, database, git, release, context-management, tooling, model-routing, review-economy), agents/10, workflows/5, templates/6 = 29, copied with cp; never safety.md/security.md (Q5=A). New tests/test-shared-tree.sh (file set = literal 29, byte-identical to template copies, no .json); model-free scope adds ai/; run-all lists the suite."
+    },
+    {
+      "at": "2026-10-14T08:13:41Z",
+      "event": "step_completed",
+      "detail": "2"
+    },
+    {
+      "at": "2026-10-14T08:13:51Z",
+      "event": "set",
+      "detail": "next_action = P2: land the install.sh routing.md bugfix as a separate task, then step 3"
+    },
+    {
+      "at": "2026-10-14T09:10:41Z",
+      "event": "step_started",
+      "detail": "3: REQUIRES P2 (H3 bugfix merged). Install tree, resolver, rendered path, guard data (additive): install.sh installs ai/ to <home>/claude-agentic/ai before install_skills via sibling temp + rename (L3), backup of a differing tree, ai-path +x; dry-run shared line outside block/routing span; RENDER_AI_SHARED/RENDER_AI_RESOLVER; render-codex-agents.py --ai-shared; routing.md line; scripts/ai-path (upward .ai/ search M5, directory is not an override L5, --tree-hash M7); Q4=A pattern in task_protected_patterns. Tests incl. --target both per-home routing.md and guard in-task Read/ai-path allowed, Write denied; guard characterization byte-identical (L7)."
+    },
+    {
+      "at": "2026-10-14T09:16:58Z",
+      "event": "step_completed",
+      "detail": "3"
+    },
+    {
+      "at": "2026-10-14T09:17:08Z",
+      "event": "step_started",
+      "detail": "4: Consumers resolve shared paths (prompt, compatible): 10 agent templates state the rule 'project .ai/<path> when it exists, else {{AI_SHARED}}/<path>'; ai-task SKILL.md rule paragraph using $AI_HOME/claude-agentic/ai-path; no model names; ADVERSARIAL REVIEW stays. Writes the G-M8 read-probe checklist; the human fills it before Step 7 (prompted/refused -> SCOPE_CHANGE_REQUIRED for a settings step)."
+    },
+    {
+      "at": "2026-10-14T09:19:15Z",
+      "event": "step_completed",
+      "detail": "4"
+    },
+    {
+      "at": "2026-10-14T09:19:24Z",
+      "event": "set",
+      "detail": "next_action = Step 5 (update.py helpers); human: install this build and fill m8-read-probe.md before Step 7"
+    },
+    {
+      "at": "2026-10-14T09:22:59Z",
+      "event": "step_started",
+      "detail": "5: update.py helpers, added not wired: SHARED resolution, shared_files(), History.hashes(), MigrationContext.template/is_shipped (CRLF-normalised, L4)/require_shared (per file, other installed declared homes, SchemaError exit 2, M2)/unsafe_target (symlink or outside root, M9)/override_note (M6), git_dirty_ai (M4). Runtime wording lives here, never in 0006. build_plan output unchanged."
+    },
+    {
+      "at": "2026-10-14T09:26:15Z",
+      "event": "step_completed",
+      "detail": "5"
+    },
+    {
+      "at": "2026-10-14T09:26:16Z",
+      "event": "set",
+      "detail": "next_action = Step 6 (HO1): agent writes handover/router.md + install-router.sh, human runs it; G-M8 probe still needed before Step 7"
+    },
+    {
+      "at": "2026-10-14T09:26:22Z",
+      "event": "step_started",
+      "detail": "6: HUMAN HAND-OVER HO1. Router gains a prose '## Shared files' section immediately before '## Doing X -> read Y'; heading line, every table row, non-negotiables and the last section are byte-identical (insertion, not rewrite: H1 root cause); no '|' line in the section; <=4096 B. Agent writes handover/router.md and install-router.sh; the human runs it; the agent rebuilds history (adds one blob). Tests: section once and placed, adopt rows land in the routing table."
+    },
+    {
+      "at": "2026-10-14T09:27:45Z",
+      "event": "set",
+      "detail": "next_action = HO1: human runs bash .ai/reports/T-2026-10-13-004/handover/install-router.sh; then agent rebuilds history and runs Step 6 tests"
+    },
+    {
+      "at": "2026-10-14T11:17:30Z",
+      "event": "step_completed",
+      "detail": "6"
+    },
+    {
+      "at": "2026-10-14T11:17:30Z",
+      "event": "set",
+      "detail": "next_action = G-M8: human installs this build and fills m8-read-probe.md; then Step 7 (cutover.sh D3 + migration 0006)"
+    },
+    {
+      "at": "2026-10-14T11:28:10Z",
+      "event": "set",
+      "detail": "next_action = Step 7: agent writes handover/cutover.sh; human runs it (D3); then 0006 + update.py wiring + tests"
+    },
+    {
+      "at": "2026-10-14T11:30:35Z",
+      "event": "step_started",
+      "detail": "7: BREAKING. REQUIRES G-M8. DESTRUCTIVE D3 (human runs handover/cutover.sh: compares all 29 before removing any, L2). Defines D1. Migration 0006 (VERSION 6, literal SHARED of 29, M1; no lowercase runtime words, L1): router operation first (create / keep / replace-if-shipped / insert-before-anchor / append), then per copy unsafe->hint (M9), edited->override hint, shipped->require_shared (M2)->delete (gated). update.py: three_way router guard (section exactly once), plain-update delete? [shared] + aggregated override hint (M6), commit-first hint (M4), shipped_ai_files maps ai/, docstring. VERSION 5->6, history SETS maps ai/ (adds, deletes none). SKILL.md docs. New test-migration-0006.sh: router fixtures R1-R6 incl. adopted + edited last row, invariants, gate, Gemini (Q5), M2, M9, L4, L5, M6, M4, M3 byte sweep -> m3-byte-sweep.log, git-route rollback rehearsal. Over the advisory diff budget, not splittable."
+    },
+    {
+      "at": "2026-10-14T11:30:56Z",
+      "event": "set",
+      "detail": "next_action = D3: human runs bash .ai/reports/T-2026-10-13-004/handover/cutover.sh; then agent writes 0006, update.py wiring, VERSION 6, history, tests"
+    },
+    {
+      "at": "2026-10-14T11:44:28Z",
+      "event": "step_completed",
+      "detail": "7"
+    },
+    {
+      "at": "2026-10-14T11:44:32Z",
+      "event": "set",
+      "detail": "next_action = Step 8 (D2): build-template-history keep rule + d2-blobs.txt dry-run list; human approves 'delete these N blobs' before the real run"
+    },
+    {
+      "at": "2026-10-14T11:53:40Z",
+      "event": "step_started",
+      "detail": "8: DESTRUCTIVE D2. Precondition: m3-byte-sweep.log from Step 7. build-template-history.py keep rule made permanent: a blob is written only if a non-shared key references it; index.json byte-identical (not in allowed_files); --dry-run list -> d2-blobs.txt; the human approves 'delete these N blobs' before the real run. Byte sweep replaced by a hash sweep; staleness: shared keys hash only; rehearsal against git HEAD."
+    },
+    {
+      "at": "2026-10-14T11:56:22Z",
+      "event": "set",
+      "detail": "next_action = D2: human approves deleting the 90 blobs in d2-blobs.txt; then tools/build-template-history.py (real run), step 8 tests, step-done 8"
+    },
+    {
+      "at": "2026-10-14T12:43:12Z",
+      "event": "step_completed",
+      "detail": "8"
+    },
+    {
+      "at": "2026-10-14T12:43:13Z",
+      "event": "set",
+      "detail": "next_action = Step 9: docs and known risks (README, CONTRIBUTING, docs/*, known-risks (a)-(l)); then suite once, e2e once, review"
+    },
+    {
+      "at": "2026-10-14T12:49:17Z",
+      "event": "step_started",
+      "detail": "9: Docs and known risks: README :249-294, :366 (shared tree, overrides stop merging, git-first rollback), CONTRIBUTING, docs; known-risks entries (a)-(l) of plan rev 2. README assertion count taken from the end-of-task verify log as a one-line change after the green run. step_tests: none."
+    },
+    {
+      "at": "2026-10-14T12:50:59Z",
+      "event": "step_completed",
+      "detail": "9"
+    },
+    {
+      "at": "2026-10-14T12:55:38Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-14T12:56:00Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-14T12:56:00Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-14T13:02:29Z",
+      "event": "set",
+      "detail": "security_status = passed"
+    },
+    {
+      "at": "2026-10-14T13:09:13Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-14T13:09:13Z",
+      "event": "question_asked",
+      "detail": "Q7: Remediation R1 scope: which review/security findings are fixed in this task (one batch), the rest going to known-risks?"
+    },
+    {
+      "at": "2026-10-14T13:19:04Z",
+      "event": "question_answered",
+      "detail": "Q7 = B"
+    },
+    {
+      "at": "2026-10-14T13:19:04Z",
+      "event": "remediation",
+      "detail": "R1: review R1 (Q7=B): BLOCKER ai-init project specifics; MEDIUM shared set=29; MEDIUM router recurring conflict; MEDIUM rollback text; LOW CRLF anchor; known-risks (c)(e)(j)(m)+new"
+    },
+    {
+      "at": "2026-10-14T13:19:04Z",
+      "event": "step_started",
+      "detail": "R1: review R1 (Q7=B): BLOCKER ai-init project specifics; MEDIUM shared set=29; MEDIUM router recurring conflict; MEDIUM rollback text; LOW CRLF anchor; known-risks (c)(e)(j)(m)+new"
+    },
+    {
+      "at": "2026-10-14T13:24:48Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-10-14T13:30:26Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-14T13:30:38Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-14T13:36:19Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-14T13:36:19Z",
+      "event": "remediation",
+      "detail": "R2: re-review R2: BLOCKER router_merge early return over-broad (+S8 test restored); LOW follow-heading fallback, CRLF merge path, rollback warning, known-risks (i)(m)"
+    },
+    {
+      "at": "2026-10-14T13:36:19Z",
+      "event": "step_started",
+      "detail": "R2: re-review R2: BLOCKER router_merge early return over-broad (+S8 test restored); LOW follow-heading fallback, CRLF merge path, rollback warning, known-risks (i)(m)"
+    },
+    {
+      "at": "2026-10-14T13:39:46Z",
+      "event": "step_completed",
+      "detail": "R2"
+    },
+    {
+      "at": "2026-10-14T13:45:00Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 3, exit 0)"
+    },
+    {
+      "at": "2026-10-14T13:45:11Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 3, exit 0)"
+    },
+    {
+      "at": "2026-10-14T13:48:57Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-10-14T13:48:57Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-14T13:50:02Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval: release report shown; review passed after R1+R2, security passed; suite run 3 green, e2e green; pylint unavailable"
+    },
+    {
+      "at": "2026-10-14T13:50:02Z",
+      "event": "gate_requested",
+      "detail": "G2: human_approval"
+    },
+    {
+      "at": "2026-10-14T13:54:47Z",
+      "event": "human_approval",
+      "detail": "granted by ikakarov via terminal"
+    },
+    {
+      "at": "2026-10-14T13:55:17Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-14T13:55:17Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-13-004/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-14T13:55:17Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "8c9cf1b1f31fd3aa3ed15086f16d4c8fbe8028af",
+    "base_tree": "60974455eaf1d9096a06e1ef17ef5b6c85b938c8",
+    "task": {
+      "files": 131,
+      "added": 1773,
+      "deleted": 4860,
+      "lines": 6633,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 3425,
+      "tree": "580958ff3e41999ef4e9ebcfcec0299e0c3c25ba",
+      "measured_at": "2026-10-14T13:39:46Z",
+      "status": "green"
+    },
+    "rescored_tier": "T6",
+    "rescore_reasons": [],
+    "over_budget": true
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-13-004/sensors.json",
+    "tree": "59045ed6b0bb62d1fe304b330bd7c1a2412acb09",
+    "verdict": "required",
+    "checked_at": "2026-10-14T13:48:57Z"
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "9724f08fff2f3cba2ccf87d61b4f6c4fc3439ba3",
+        "exit": 0,
+        "duration_s": 278,
+        "log": ".ai/reports/T-2026-10-13-004/tests-suite-1.log",
+        "at": "2026-10-14T12:55:38Z",
+        "env_retry": false
+      },
+      {
+        "n": 1,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "a9029181fbba8f5acf4134e5ddf14622ca752f04",
+        "exit": 0,
+        "duration_s": 3,
+        "log": ".ai/reports/T-2026-10-13-004/tests-e2e-1.log",
+        "at": "2026-10-14T12:56:00Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "b5f346eb1da8cdd8c29ac9531157ec143e24d327",
+        "exit": 0,
+        "duration_s": 338,
+        "log": ".ai/reports/T-2026-10-13-004/tests-suite-2.log",
+        "at": "2026-10-14T13:30:26Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "4e74539c6c48ea9299cd282c4c49418ef5bb84e9",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-13-004/tests-e2e-2.log",
+        "at": "2026-10-14T13:30:38Z",
+        "env_retry": false
+      },
+      {
+        "n": 3,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "580958ff3e41999ef4e9ebcfcec0299e0c3c25ba",
+        "exit": 0,
+        "duration_s": 314,
+        "log": ".ai/reports/T-2026-10-13-004/tests-suite-3.log",
+        "at": "2026-10-14T13:45:00Z",
+        "env_retry": false
+      },
+      {
+        "n": 3,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "af1e04d854692507efd3e263afe18668bd63716e",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-13-004/tests-e2e-3.log",
+        "at": "2026-10-14T13:45:11Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 3
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}

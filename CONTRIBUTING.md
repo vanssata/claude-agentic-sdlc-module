@@ -60,6 +60,13 @@ Run the suite to the end and fix every failure before you push.
 - If you accept a risk instead of fixing it, add it to
   [Known risks](README.md#known-risks) in the same shape as the other entries
   (risk, why it stays, limits, what to do, source).
+- A shared policy, agent contract, workflow or template lives once, in `ai/`;
+  `install.sh` puts it at `<home>/claude-agentic/ai/` and projects read it from
+  there. A project-owned one lives in `skills/ai-init/templates/.ai/`. Moving a
+  file from one side to the other is a migration under
+  `skills/project-update/migrations/`, never a plain move. After changing a
+  project-owned template, run `tools/build-template-history.py` and commit the
+  result; shared files keep only their hashes there.
 - Update the documentation in `docs/` that describes what you changed.
 
 ## Commits and pull requests

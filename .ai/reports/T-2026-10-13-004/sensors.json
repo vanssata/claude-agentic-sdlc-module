@@ -1,0 +1,97 @@
+{
+  "checked_at": "2026-10-14T13:48:57Z",
+  "declared_tier": "T6",
+  "rescored_tier": "T6",
+  "schema": 1,
+  "sensors": {
+    "bite": {
+      "detail": "the suite is not green on this tree \u2014 nothing to ask yet",
+      "status": "unavailable",
+      "tree": "59045ed6b0bb62d1fe304b330bd7c1a2412acb09"
+    },
+    "diff": {
+      "detail": "131 files / 6633 lines (T6 task budget 15 / 400) \u2014 budget: over \u2014 6633 lines > 400; 131 files > 15 (advisory)",
+      "enforced": false,
+      "files": 131,
+      "lines": 6633,
+      "over": [
+        "6633 lines > 400",
+        "131 files > 15"
+      ],
+      "status": "green",
+      "tree": "59045ed6b0bb62d1fe304b330bd7c1a2412acb09",
+      "unscoped": []
+    },
+    "duplicates": {
+      "blocks": [
+        [
+          "agents/ai-context.md.tmpl:52",
+          "agents/ai-discovery.md.tmpl:50"
+        ],
+        [
+          "agents/ai-context.md.tmpl:54",
+          "agents/ai-discovery.md.tmpl:52"
+        ],
+        [
+          "agents/ai-context.md.tmpl:55",
+          "agents/ai-discovery.md.tmpl:53"
+        ],
+        [
+          "agents/ai-context.md.tmpl:56",
+          "agents/ai-discovery.md.tmpl:54"
+        ]
+      ],
+      "detail": "4 block(s) of >= 8 lines appear twice: agents/ai-context.md.tmpl:52 ~ agents/ai-discovery.md.tmpl:50",
+      "status": "red",
+      "tree": "59045ed6b0bb62d1fe304b330bd7c1a2412acb09"
+    },
+    "lint": {
+      "detail": "pylint $(git ls-files '*.py'): command not found",
+      "status": "unavailable",
+      "tree": "59045ed6b0bb62d1fe304b330bd7c1a2412acb09"
+    },
+    "plan_sections": {
+      "detail": ".ai/reports/T-2026-10-13-004/implementation-plan.rev2.md is missing: ## Files that change, ## Order of work, ## Proof",
+      "status": "red",
+      "tree": "59045ed6b0bb62d1fe304b330bd7c1a2412acb09"
+    },
+    "rescore": {
+      "detail": "T6 \u2014 scopes: docs, source, migrations, tests",
+      "reasons": [],
+      "status": "green",
+      "tier": "T6",
+      "tree": "59045ed6b0bb62d1fe304b330bd7c1a2412acb09"
+    },
+    "tests": {
+      "detail": "the last green run was on 580958ff3, the worktree is at 59045ed6b",
+      "log": ".ai/reports/T-2026-10-13-004/tests-suite-3.log",
+      "status": "stale",
+      "tree": "59045ed6b0bb62d1fe304b330bd7c1a2412acb09"
+    },
+    "traceability": {
+      "detail": "11/11 finished steps name tests that exist",
+      "status": "green",
+      "tree": "59045ed6b0bb62d1fe304b330bd7c1a2412acb09"
+    },
+    "typecheck": {
+      "detail": "typecheck_command: none (testing.md)",
+      "status": "not_applicable",
+      "tree": "59045ed6b0bb62d1fe304b330bd7c1a2412acb09"
+    }
+  },
+  "task": "T-2026-10-13-004",
+  "tree": "59045ed6b0bb62d1fe304b330bd7c1a2412acb09",
+  "verdict": {
+    "all_green": false,
+    "blocking": [
+      "tests: stale",
+      "lint: unavailable",
+      "duplicates: red",
+      "bite: unavailable",
+      "tier T6 is above T3",
+      "the diff re-scores to T6",
+      "over the task budget (6633 lines > 400; 131 files > 15): a reviewer reads it"
+    ],
+    "review": "required"
+  }
+}

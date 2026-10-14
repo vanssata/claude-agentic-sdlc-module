@@ -18,6 +18,7 @@ scope() {
     ls agents/*.md.tmpl
     find skills -name '*.md' -not -path 'skills/project-update/history/*'
     find skills/ai-init/templates skills/project-init/templates -type f
+    find ai -type f
 }
 
 hits() {  # hits <file...> -> file:line:text for every I8 pattern

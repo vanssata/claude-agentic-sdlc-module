@@ -152,6 +152,26 @@ for c in "grep -n confirm-delete /home/u/.claude/skills/project-update/update.py
     [ -z "$out" ] && pass "allowed: $c" || fail "'$c' must not be refused" "$(printf '%s' "$out" | head -c 160)"
 done
 
+echo "== ai-path-guard (the installed shared tree is frozen during a task, readable always)"
+# T-2026-10-13-004, Q4=A: <home>/claude-agentic/ai/ and ai-path are the rules a
+# run is judged by, like the policies they replace.
+for home in .claude .codex; do
+    SH="$TMP/user/$home/claude-agentic"
+    tool() { jq -nc --arg r "$ROOT" --arg t "$1" --arg p "$2" '{hook_event_name:"PreToolUse",tool_name:$t,cwd:$r,tool_input:{file_path:$p}}'; }
+    bash_cmd() { jq -nc --arg r "$ROOT" --arg c "$1" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:$c}}'; }
+    printf '{"current_stage":"implementation","task_id":"T-1"}\n' > "$ROOT/.ai/state/current.json"
+    decide "$home in a task: Write to the shared tree is denied" deny "$(tool Write "$SH/ai/policies/git.md")"
+    decide "$home in a task: Edit of the shared tree is denied" deny "$(tool Edit "$SH/ai/policies/git.md")"
+    decide "$home in a task: Write to ai-path is denied" deny "$(tool Write "$SH/ai-path")"
+    decide "$home in a task: Read of the shared tree is allowed" allow "$(tool Read "$SH/ai/policies/git.md")"
+    decide "$home in a task: running ai-path is allowed" allow "$(bash_cmd "$SH/ai-path policies/git.md")"
+    decide "$home in a task: a sibling file is not frozen by this rule" allow "$(tool Write "$SH/ai-path.notes")"
+    rm -f "$ROOT/.ai/state/current.json"
+    decide "$home no task: Write to the shared tree is allowed" allow "$(tool Write "$SH/ai/policies/git.md")"
+    decide "$home no task: Write to ai-path is allowed" allow "$(tool Write "$SH/ai-path")"
+done
+printf '{}\n' > "$ROOT/.ai/state/current.json"
+
 echo "== ai-path-guard (project WITHOUT .ai/ — every guard must be inert)"
 BARE="$TMP/bare"; mkdir -p "$BARE"; printf 'SECRET=1\n' > "$BARE/.env"
 out=$(jq -nc --arg r "$BARE" '{hook_event_name:"PreToolUse",tool_name:"Read",cwd:$r,tool_input:{file_path:($r+"/.env")}}' | "$GUARD")

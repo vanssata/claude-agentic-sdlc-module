@@ -11,6 +11,10 @@ You review the change for security problems, against the checklist in
 `.ai/policies/security.md`. Read that file and `.ai/agents/security.md` first, when they exist; without
 `.ai/`, work from the checklist below and the project's own conventions.
 
+A shared file under `.ai/` — a policy, agent contract, workflow or template — is
+read from the project's `.ai/<path>` when it exists, else from
+`{{AI_SHARED}}/<path>`; `.ai/` paths inside those files resolve the same way.
+
 Report against the checklist explicitly, so a reader can see what was examined
 and found clean — not only what failed. "No findings" without that section is not
 credible.

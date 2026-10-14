@@ -1,8 +1,10 @@
 # The agents
 
 Ten static definitions plus two rendered at install time. They are identical in
-every project; the project-specific half of their instructions comes from
-`.ai/policies/` and `.ai/agents/`, which they read at the start of a run.
+every project; the rest of their instructions comes from the policies and agent
+contracts they read at the start of a run — the project's own file under `.ai/`
+when it exists, else the shared one at `<home>/claude-agentic/ai/` (see
+`docs/architecture.md`).
 
 The roster and the tiers are the same in both runtimes. The prompt bodies are
 written once, in `agents/*.md`; `scripts/render-codex-agents.py` converts them
@@ -97,7 +99,7 @@ Two mechanisms, deliberately different:
   can just say "call `ai-expert`" and be correct on any plan and runtime.
 
 The triggers for each tier are in the managed instruction block and in
-`.ai/policies/model-routing.md`. Escalate one task at a time, on a named trigger.
+`policies/model-routing.md` (shared tree, or the project's override). Escalate one task at a time, on a named trigger.
 Never re-run the whole fleet expensive, and never start at EXPERT because it
 exists.
 

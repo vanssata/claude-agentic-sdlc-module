@@ -120,6 +120,32 @@ else fail "Claude's routing.md is not the Claude text" "$(grep -n '^# ' "$CR" 2>
 if has "$XR" "$CODEX_MARK" && ! has "$XR" "$CLAUDE_MARK"; then pass "Codex's routing.md is the Codex text"
 else fail "Codex's routing.md is not the Codex text" "$(grep -n '^# ' "$XR" 2>&1)"; fi
 
+# The shared .ai/ tree (T-2026-10-13-004): each home gets its own copy and its
+# own resolver, and its routing.md names that home's tree, never the other's.
+for home in claude codex; do
+    H="$TMP/explicit-both/$home"
+    other=$([ "$home" = claude ] && echo codex || echo claude)
+    diff -r "$PLUGIN_ROOT/ai" "$H/claude-agentic/ai" >/dev/null 2>&1 \
+        && pass "$home: claude-agentic/ai equals ai/" || fail "$home: claude-agentic/ai differs from ai/" "$(diff -rq "$PLUGIN_ROOT/ai" "$H/claude-agentic/ai" 2>&1)"
+    [ -x "$H/claude-agentic/ai-path" ] && pass "$home: ai-path is executable" || fail "$home: ai-path is missing or not executable"
+    has "$H/claude-agentic/routing.md" "$H/claude-agentic/ai/" \
+        && pass "$home: routing.md names its own shared tree" || fail "$home: routing.md does not name $H/claude-agentic/ai/"
+    has "$H/claude-agentic/routing.md" "$TMP/explicit-both/$other/claude-agentic/ai" \
+        && fail "$home: routing.md names the $other tree" || pass "$home: routing.md does not name the $other tree"
+    out=$(cd "$TMP" && "$H/claude-agentic/ai-path" --root "$TMP" policies/git.md 2>&1)
+    [ "$out" = "$H/claude-agentic/ai/policies/git.md" ] && pass "$home: the installed resolver finds its own tree" || fail "$home: installed resolver" "$out"
+    ls "$H/claude-agentic" | grep -q '^ai\.\(new\|old\)$' && fail "$home: a temp tree was left behind" || pass "$home: no temp tree left behind"
+done
+
+# A reinstall over a tree someone edited backs that tree up, then replaces it.
+C="$TMP/explicit-both/claude"
+printf 'local edit\n' >> "$C/claude-agentic/ai/policies/git.md"
+out=$(run explicit-both --target both --plan pro)
+grep -q '^local edit$' "$C/backups/claude-agentic-ai/ai/policies/git.md" 2>/dev/null \
+    && pass "reinstall backs up an edited shared tree" || fail "no backup of the edited shared tree" "$out"
+diff -r "$PLUGIN_ROOT/ai" "$C/claude-agentic/ai" >/dev/null 2>&1 \
+    && pass "reinstall restores the shipped shared tree" || fail "reinstall left the edited tree"
+
 echo "== an unknown target is rejected"
 stub claude codex
 out=$(run bad-target --target everything); rc=$?

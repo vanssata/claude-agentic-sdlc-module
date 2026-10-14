@@ -54,6 +54,9 @@ both` when the repository is worked on from both, so one `.ai/` tree ends up wit
 two instruction files pointing at it.
 
 Both are idempotent and never overwrite. Note which files they report creating.
+The shared policies, agent contracts, workflows and templates are not copied:
+they are read from `<home>/claude-agentic/ai/`, and a file at the same path under
+`.ai/` overrides one.
 
 If `.ai/project/overview.md` was **not** created, this project was already
 initialised, and running `/ai-init` again means bringing it up to date: follow
@@ -152,9 +155,21 @@ Risk:
 
 Do not resolve the contradiction. Record it.
 
-Fill the "project specifics" sections of `.ai/policies/coding.md`,
-`testing.md`, `database.md`, `tooling.md` and `release.md` **only if those files
-were created in step 1**. If they already existed, someone has edited them: leave them alone.
+Fill the "project specifics" sections of `.ai/policies/coding.md` and
+`testing.md` **only if those files were created in step 1**. If they already
+existed, someone has edited them: leave them alone.
+
+`database.md`, `tooling.md` and `release.md` are shared: they live in
+`<home>/claude-agentic/ai/policies/` and every project on the machine reads
+them. **Never write there** — not even their "Project specifics" section. When
+this project has something to say in one of them, and `.ai/policies/<name>.md`
+does not exist yet, copy the whole shared file (the path
+`"$AI_HOME/claude-agentic/ai-path" policies/<name>.md` prints) to `.ai/policies/<name>.md` and fill the section in
+that copy. That copy is now an override: the project reads it instead of the
+shared file, and it no longer receives the plugin's changes, so make one only
+when there is a project specific to record — a fragment holding only the
+section would hide the rest of the policy. If `.ai/policies/<name>.md` already
+exists, leave it alone.
 
 In `testing.md`, fill the **Verification** section: the three commands, and
 two or three lines of what healthy output looks like.
@@ -170,10 +185,11 @@ Without them there is no feedback loop. Say which group, tag or directory marks
 the e2e tests and how `verify_command` excludes them. Put the same commands
 under `## Verification` in the project `CLAUDE.md`.
 
-In `tooling.md`, fill **Project specifics**: which MCP servers this repository
+For tooling, the project specifics are which MCP servers this repository
 enables for every task and why, which ones are deliberately off, and any tool a
 task must ask for explicitly. The default is none — a server nobody can justify
-in one line does not belong there. Check `.claude/settings.json` keeps
+in one line does not belong there, and with none there is nothing to record and
+no override to create (the rule above). Check `.claude/settings.json` keeps
 `"enableAllProjectMcpServers": false`, and that anything in a checked-in
 `.mcp.json` is listed in `enabledMcpjsonServers` only if it earned it, in
 `disabledMcpjsonServers` otherwise.

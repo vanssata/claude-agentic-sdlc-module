@@ -248,9 +248,16 @@ The same commands in both runtimes:
 
 ### Updating a project after the plugin changes
 
-`install.sh` updates `~/.claude/`; the rules a project carries in `.ai/`,
-`docs/sdlc/` and its `CLAUDE.md` block are copies, and stay as they were. Pull
-the new ones in with:
+`install.sh` updates `~/.claude/` (or `~/.codex/`), and with it the shared
+tree at `<home>/claude-agentic/ai/`: the 29 policies, agent contracts,
+workflows and templates that are the same in every project. A project does not
+copy them; it reads them from there, and a file at the same path under `.ai/`
+wins as an **override**. `<home>/claude-agentic/ai-path <path>` prints which one
+applies. What a project owns stays in the project — `.ai/project/`, `rules/`,
+`state/`, `reports/`, `VERSION`, `AGENTS.md`, and the policies `risk-tiers.json`,
+`risk-tiers.md`, `path-guard.json`, `testing.md`, `coding.md`, `safety.md` and
+`security.md` — together with `docs/sdlc/` and the `CLAUDE.md` block. Those are
+copies, and stay as they were. Pull the new ones in with:
 
 ```bash
 /project-update          # dry run, confirm the policy changes, apply, merge conflicts
@@ -259,9 +266,11 @@ the new ones in with:
 Running `/ai-init` or `/project-init` again in an initialised project does the
 same. `/ai-status` says when a project is behind.
 
-The plugin ships every version of every template it has ever installed
-(`skills/project-update/history/`, built from git by
-`tools/build-template-history.py`). That is how the update tells files apart:
+The plugin ships every version of every project-owned template it has ever
+installed (`skills/project-update/history/`, built from git by
+`tools/build-template-history.py`; the shared files keep only their hashes,
+since nothing is merged into them any more). That is how the update tells files
+apart:
 
 | The project file is | What happens |
 |---|---|
@@ -273,11 +282,18 @@ The plugin ships every version of every template it has ever installed
 | `.ai/project/**`, `CLAUDE.md` outside the block, `.claude/settings.json` | never touched |
 | moved by a migration | moved, with your edits merged at the new path; the original kept under `.ai/reports/project-update-<date>/` |
 | proposed for deletion by a migration | listed as `delete?` and left alone until a human passes `--apply --confirm-delete NAME` |
+| a shared file the plugin once shipped, unedited | `delete?` (`[0006]` during the migration, `[shared]` afterwards) — the project reads the shared tree instead, once a human confirms |
+| a shared file the project edited | kept as an override, with a hint: it no longer receives the plugin's changes, and nothing tells you when it falls behind |
 
 The tree also carries a schema version in `.ai/VERSION`; the current one is
-**3** (the context diet: the `## SDLC workflow` section the plugin used to write
-into the root instruction file is removed, the original kept), and a project
-initialised before the version existed is schema 0. Migrations under
+**6** (the shared files: `.ai/AGENTS.md` gains a `## Shared files` section
+first, then every unedited copy of a shared file is proposed for deletion,
+edited ones are reported as overrides), and a project initialised before the
+version existed is schema 0. Migration 0006 deletes nothing while any installed
+home (`~/.claude`, `~/.codex`) lacks the shared file it would fall back to — it
+exits 2 and asks for `install.sh` — and holds `.ai/VERSION` at 5 until the
+deletion is confirmed. Every machine of a team upgrades the plugin before a
+project at schema 6 is committed; an older plugin refuses it. Migrations under
 `skills/project-update/migrations/` run in order before anything is merged —
 they move, add, edit and propose deletions, all inside the same dry run — and
 the version is written last, only once they are finished.
@@ -292,6 +308,26 @@ merge conflict does not.
 
 Changed a template? Run `tools/build-template-history.py` and commit the result;
 the test suite fails until you do.
+
+**Rolling back 0006 is git first.** Commit `.ai/` before the run (the update
+says so when it is dirty), then:
+
+```bash
+git restore --source=<commit before the migration> --staged --worktree -- .ai
+```
+
+That also reverts everything else under `.ai/` committed since — reports,
+project notes. To keep them, restore only `.ai/VERSION`, `.ai/AGENTS.md` and the
+paths `migration.json` lists.
+
+and keep the project off `/project-update --apply` until the plugin is
+downgraded, because a new plugin plans 0006 again. Without a commit, the
+originals under `.ai/reports/project-update-<date>/original/` bring the deleted
+files back (`migration.json` lists them), and nothing else: write the schema
+back by hand with `printf '5\n' > .ai/VERSION`, or an older plugin refuses the
+project (exit 2). The router keeps its new section, which stays true while the
+copies exist. Roll projects back before installing a plugin older than the
+shared tree.
 
 A project that already carries another AI tool's structure — Spec Kit
 (`.specify/`, `specs/`), Kiro (`.kiro/`), Cursor (`.cursorrules`,
@@ -336,8 +372,8 @@ to you. Either way it ends with the test commands written into
 command, and the e2e suite — which every later task runs before reporting
 done.
 
-It also writes `.ai/policies/tooling.md`: which MCP servers this repository
-enables for every task and why, which stay off, and how a single task asks for
+The tooling policy, `policies/tooling.md` (shared; a project overrides it in
+`.ai/`), says which MCP servers this repository enables for every task and why, which stay off, and how a single task asks for
 one. The default is none. A connected server is in the system prompt of every
 turn whether a task calls it or not, so the scaffolded `.claude/settings.json`
 ships with `enableAllProjectMcpServers: false` and an empty
@@ -445,7 +481,7 @@ The main session does the implementation itself. Every agent definition pins its
 own `model:` — most of them the BALANCED tier — and `CLAUDE_CODE_SUBAGENT_MODEL` is
 deliberately not set: before Claude Code v2.1.251 it overrides the frontmatter and
 the per-call model, which put every agent on Sonnet. A STRONG or EXPERT agent runs
-only when a named trigger fires; the triggers are listed in `.ai/policies/model-routing.md`.
+only when a named trigger fires; the triggers are listed in `policies/model-routing.md` of the shared tree.
 
 On a Max plan the session runs Opus 5.5 [1m] by default at `medium` effort,
 compacting near 767k tokens (`autoCompactWindow` 800 000, uncapped on a 1M model)
@@ -766,7 +802,7 @@ one; nothing references it any more.
 bash tests/run-all.sh
 ```
 
-Twenty-five suites, 2,179 assertions. The guards against JSON fixtures in both runtimes (including
+Twenty-seven suites, 2,560 assertions. The guards against JSON fixtures in both runtimes (including
 `apply_patch` payloads that touch several files at once); the state machine and
 its `triage` call; scaffold idempotency for one runtime, the other, and both
 over a single `.ai/` tree; installer rendering for every plan combination and

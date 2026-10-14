@@ -20,7 +20,11 @@ Exit codes:
   5  refused: --confirm-delete without a human (ADOPT_REFUSED on stdout line 1)
 
 What it manages, and how:
-  .ai/** (policies, workflows, agents, templates)   three-way update
+  .ai/** the project owns (risk-tiers, path-guard,   three-way update
+    testing, coding, safety, security, AGENTS.md)
+  .ai/** the plugin shares (the other policies,      read from the plugin's shared tree; a project
+    agents, workflows, templates)                     copy is an override and is never merged — an
+                                                      unedited one is offered for deletion
   docs/sdlc/*/TEMPLATE.md                            three-way update
   .claude/memory/README.md, .codex/memory/README.md  three-way update, per runtime the project uses
   the managed block in CLAUDE.md and/or AGENTS.md    three-way update of the block only
@@ -39,8 +43,9 @@ version closest to it (git merge-file for text, per key for JSON), keeping every
 edit. A real conflict leaves the project file alone and puts the plugin's version
 in a git-ignored local directory for a human or /project-update to merge.
 """
-import argparse, contextlib, copy, difflib, hashlib, io, json, os, re, subprocess, sys, tempfile
+import argparse, contextlib, copy, difflib, hashlib, importlib.util, io, json, os, re, subprocess, sys, tempfile
 from collections import OrderedDict
+from types import SimpleNamespace
 from datetime import datetime, timezone
 
 sys.dont_write_bytecode = True  # never leave __pycache__ in an installed plugin
@@ -56,7 +61,18 @@ TEMPLATES = {
     "project-init": os.environ.get("CLAUDE_ROUTING_TEMPLATES", os.path.join(SKILLS, "project-init", "templates")),
 }
 HISTORY = os.environ.get("CLAUDE_AGENTIC_HISTORY", os.path.join(HERE, "history"))
+# The shared tree every project reads unless it keeps its own copy: installed
+# beside the skills as claude-agentic/ai, or ai/ at the root of a checkout.
+PLUGIN_HOME = os.path.dirname(SKILLS)
+SHARED = os.environ.get("CLAUDE_AGENTIC_SHARED") or next(
+    (p for p in (os.path.join(PLUGIN_HOME, "claude-agentic", "ai"), os.path.join(PLUGIN_HOME, "ai"))
+     if os.path.isdir(p)), os.path.join(PLUGIN_HOME, "claude-agentic", "ai"))
 VERSION_FILE = ".ai/VERSION"
+ROUTER_FILE = ".ai/AGENTS.md"
+# The router must name the shared tree exactly once: a merge that drops the
+# section, or doubles it, is a conflict for a human.
+SHARED_SECTION_RE = re.compile(rb"(?m)^## Shared files[ \t]*\r?$")
+SHARED_SCHEMA = 6  # the schema from which shared copies are overrides (0006)
 STATE_FILE = ".ai/state/current.json"
 RULES_DIR = ".ai/rules"
 # Directories a stale rule block is never hunted in: a dependency's instruction
@@ -188,6 +204,64 @@ class History:
                 except OSError:
                     pass
         return out
+
+    def hashes(self, key):
+        """The sha of every version shipped under this key or a name it had
+        before. index.json alone answers it: a version whose blob is gone still
+        counts as shipped."""
+        return {h for k in self.chain(key) for h in self.index.get(k, [])}
+
+
+_DECLARED = None
+
+
+def declared_shared():
+    """The shared set as 0006 declares it, literally — read from the migration
+    shipped beside this script, whatever registry CLAUDE_AGENTIC_MIGRATIONS
+    points at. What the installed tree holds never widens it: a file planted
+    there must not turn a project's own file into a deletion candidate."""
+    global _DECLARED  # pylint: disable=global-statement  # loaded once per run
+    if _DECLARED is None:
+        path = os.path.join(HERE, "migrations", "0006_shared_files.py")
+        spec = importlib.util.spec_from_file_location("claude_agentic_shared_set", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _DECLARED = frozenset(mod.SHARED)
+    return _DECLARED
+
+
+def shared_files():
+    """{".ai/<rel>": bytes} for every declared shared file the shared tree
+    holds; empty when the tree is not installed."""
+    out = {}
+    for path in sorted(declared_shared()):
+        full = os.path.join(SHARED, path[len(".ai/"):])
+        if os.path.isfile(full):
+            out[path] = read(full)
+    return out
+
+
+def undeclared_shared():
+    """Files in the shared tree outside the declared set, as .ai/ paths."""
+    out = []
+    for here, _dirs, files in os.walk(SHARED):
+        for name in files:
+            rel = ".ai/" + os.path.relpath(os.path.join(here, name), SHARED).replace(os.sep, "/")
+            if rel not in declared_shared():
+                out.append(rel)
+    return sorted(out)
+
+
+def git_dirty_ai(root):
+    """True when .ai/ has changes git does not hold yet: git is the rollback of
+    a migration that deletes, so it must hold them first. False outside a work
+    tree, where there is nothing to say."""
+    try:
+        res = subprocess.run(["git", "-C", root, "status", "--porcelain", "--", ".ai"],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return res.returncode == 0 and bool(res.stdout.strip())
 
 
 # ---------------------------------------------------------------- merging
@@ -347,6 +421,84 @@ class MigrationContext:
         if ours == tpl or ours in self.history.versions("ai-init/" + block_tpl):
             return "shipped"
         return "edited"
+
+    def template(self, path):
+        """The bytes this plugin ships today for a project path: the scaffold
+        template, or the shared tree's copy once the template is retired."""
+        self._check_path(path)
+        if path.startswith(".ai/"):
+            rel = path[len(".ai/"):]
+            candidates = [os.path.join(TEMPLATES["ai-init"], ".ai", rel), os.path.join(SHARED, rel)]
+        else:
+            key = template_targets().get(path)
+            candidates = [os.path.join(TEMPLATES["project-init"], key.split("/", 1)[1])] if key else []
+        for full in candidates:
+            if os.path.isfile(full):
+                return read(full)
+        raise SchemaError("%04d: the plugin ships no template for %s" % (self.module.VERSION, path))
+
+    def is_shipped(self, path, data):
+        """True when these bytes are a version the plugin shipped at this path,
+        also after a checkout turned its line endings into CRLF."""
+        key = migrations.template_key(path, template_targets())
+        if key is None or data is None:
+            return False
+        known = self.history.hashes(key)
+        return sha(data) in known or sha(data.replace(b"\r\n", b"\n")) in known
+
+    def require_shared(self, paths):
+        """Refuse, before anything is written, to drop a project copy whose
+        shared fallback is missing: in this plugin's tree, or in another
+        installed home of a runtime the project declares. A home this machine
+        does not have is not checked."""
+        undeclared = sorted(p for p in paths if (p if p.startswith(".ai/") else ".ai/" + p) not in declared_shared())
+        if undeclared:
+            raise SchemaError("%04d: not in the shared set, never deleted as a shared copy: %s"
+                              % (self.module.VERSION, ", ".join(undeclared)))
+        rels = sorted(p[len(".ai/"):] if p.startswith(".ai/") else p for p in paths)
+        missing = [r for r in rels if not os.path.isfile(os.path.join(SHARED, r))]
+        if missing:
+            raise SchemaError("%04d: the plugin's shared tree %s lacks %d file(s) a project copy would "
+                              "fall back to: %s — reinstall the plugin (install.sh), then run this again"
+                              % (self.module.VERSION, SHARED, len(missing), ", ".join(missing)))
+        homes = {"claude": os.path.join(os.path.expanduser("~"), ".claude"),
+                 "codex": os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")}
+        mine = os.path.realpath(PLUGIN_HOME)
+        for runtime in self.runtimes:
+            home = homes.get(runtime)
+            if (not home or os.path.realpath(home) == mine
+                    or not os.path.isdir(os.path.join(home, "skills", "project-update"))):
+                continue
+            tree = os.path.join(home, "claude-agentic", "ai")
+            missing = [r for r in rels if not os.path.isfile(os.path.join(tree, r))]
+            if missing:
+                raise SchemaError("%04d: %s has this plugin installed for %s, but %d of the %d shared "
+                                  "file(s) a project copy would fall back to are missing from %s — "
+                                  "run `install.sh --target %s` from this build, then run this again"
+                                  % (self.module.VERSION, home, runtime, len(missing), len(rels),
+                                     tree, runtime))
+
+    def unsafe_target(self, path):
+        """Why a file must not be deleted through this path, or None: it is a
+        symlink, it is reached through one, or it resolves outside the project."""
+        self._check_path(path)
+        root = os.path.realpath(self.root)
+        here = self.root
+        for part in path.split("/"):
+            here = os.path.join(here, part)
+            if os.path.islink(here):
+                return "%s is a symlink" % os.path.relpath(here, self.root).replace(os.sep, "/")
+        real = os.path.realpath(os.path.join(self.root, path))
+        if real != root and not real.startswith(root + os.sep):
+            return "%s resolves outside the project (%s)" % (path, real)
+        return None
+
+    def override_note(self, path):
+        """What an edited copy of a shared file now means."""
+        rel = path[len(".ai/"):] if path.startswith(".ai/") else path
+        return ("%s overrides the plugin's shared copy and no longer receives its changes — "
+                "diff against %s; `ai-path %s` shows which applies; delete it when it adds nothing"
+                % (path, os.path.join(SHARED, rel), rel))
 
     def hint(self, text):
         """Say something to the human that is not an operation on a file."""
@@ -620,12 +772,76 @@ def three_way(plan, history, key, target, theirs):
                     plan.hints.append(hint)
         return
 
+    if target == ROUTER_FILE and len(SHARED_SECTION_RE.findall(ours)) == 1:
+        router_merge(plan, ours, versions, theirs)
+        return
     base = closest(versions, norm(ours), lambda b, o: text_ratio(norm(b), o)) if versions else None
     merged = merge_text(norm(ours), norm(base), norm(theirs)) if base is not None else None
+    if merged is not None and target == ROUTER_FILE and len(SHARED_SECTION_RE.findall(merged)) != 1:
+        plan.add("conflict", target, "the merge would not name the shared files exactly once "
+                 "(## Shared files)", conflict_copy=theirs)
+        return
     if merged is None:
         plan.add("conflict", target, "edited here and changed in the plugin", conflict_copy=theirs)
     elif merged != norm(ours):
         plan.add("merge", target, "your edits kept", content=fix_mirror(plan, target, merged, ours))
+
+
+def split_shared_section(text):
+    """(text without its `## Shared files` section, the section, the heading
+    line that followed it) — the section runs from its heading to the next
+    `## ` heading or the end; None when it is not there exactly once."""
+    found = list(SHARED_SECTION_RE.finditer(text))
+    if len(found) != 1:
+        return None
+    start = found[0].start()
+    nxt = re.compile(rb"(?m)^## ").search(text, found[0].end())
+    if nxt is None:
+        return text[:start], text[start:], b""
+    end = nxt.start()
+    eol = text.find(b"\n", end)
+    follow = text[end:eol + 1] if eol >= 0 else text[end:]
+    return text[:start] + text[end:], text[start:end], follow
+
+
+def router_merge(plan, ours, versions, theirs):
+    """A router that already names the shared files once. 0006 put the section
+    in by insertion, so no shipped version is a fair base for it: merge the
+    rest of the router without the section, against the shipped version that
+    rest is closest to, then put the project's section back before the heading
+    it preceded (or where the plugin puts it, or at the end). Nothing to do
+    only when the plugin changed nothing but the section since that base."""
+    crlf = b"\r\n" in ours
+    lf = (lambda b: b.replace(b"\r\n", b"\n")) if crlf else (lambda b: b)
+    o_rest, o_sec, follow = split_shared_section(lf(ours))
+    t_split = split_shared_section(theirs)
+    t_rest = t_split[0] if t_split else theirs
+    rests = [(split_shared_section(v) or (v,))[0] for v in versions]
+    base = closest(rests, o_rest, text_ratio) if rests else None
+    if o_rest == t_rest or (base is not None and base == t_rest):
+        return
+    merged = merge_text(o_rest, base, t_rest) if base is not None else None
+    if merged is not None:
+        merged = put_section(merged, o_sec, [follow, t_split[2] if t_split else b""])
+    if merged is None or len(SHARED_SECTION_RE.findall(merged)) != 1:
+        plan.add("conflict", ROUTER_FILE, "edited here and changed in the plugin", conflict_copy=theirs)
+        return
+    if crlf:
+        merged = merged.replace(b"\n", b"\r\n")
+    if merged != ours:
+        plan.add("merge", ROUTER_FILE, "your edits kept", content=merged)
+
+
+def put_section(text, section, follows):
+    """The section inserted before the first of these heading lines that the
+    text has at the start of a line, else appended."""
+    for follow in follows:
+        if not follow:
+            continue
+        m = re.compile(rb"(?m)^" + re.escape(follow.rstrip(b"\n")) + rb"$").search(text)
+        if m:
+            return text[:m.start()] + section + text[m.start():]
+    return text + (b"" if text.endswith(b"\n") else b"\n") + section
 
 
 def fix_mirror(plan, target, content, ours):
@@ -682,6 +898,65 @@ def block_update(plan, history, runtime):
                  conflict_copy=tpl)
         return
     plan.add("update", name, note, content=text[:s] + new_block.rstrip(b"\n") + text[e:])
+
+
+def shared_update(plan, history, version):
+    """A shared copy in a project that is already at SHARED_SCHEMA: 0006 is not
+    pending, so this is where an unedited copy that came back (a restore, a
+    copy-paste, an old branch) is offered for deletion again, and where edited
+    copies are named once as overrides. Same gate as a migration's deletion."""
+    if version is None or version < SHARED_SCHEMA:
+        return
+    ctx = MigrationContext(plan, SimpleNamespace(VERSION=SHARED_SCHEMA, TITLE="shared", MOVES=[]),
+                           version, None, history)
+    router = plan.read(ROUTER_FILE)
+    named = router is not None and SHARED_SECTION_RE.search(router)
+    edited, candidates = [], []
+    extra = undeclared_shared()
+    if extra:
+        ctx.hint("the shared tree %s holds %d file(s) outside the shared set, ignored — reinstall the "
+                 "plugin (install.sh) if you did not put them there: %s" % (SHARED, len(extra), ", ".join(extra)))
+    for path in sorted(shared_files()):
+        data = plan.read(path)
+        if data is None:
+            continue
+        why = ctx.unsafe_target(path)
+        if why:
+            ctx.hint("%s: %s, so this update never deletes it — check by hand whether it is still "
+                     "needed" % (path, why))
+        elif not ctx.is_shipped(path, data):
+            edited.append(path)
+        elif not named:
+            ctx.hint("%s: unedited, but %s does not name the shared files (## Shared files), so the "
+                     "copy stays — restore that section, then run /project-update again"
+                     % (path, ROUTER_FILE))
+        else:
+            candidates.append(path)
+    if candidates:
+        try:
+            ctx.require_shared(candidates)
+        except SchemaError as exc:
+            ctx.hint("%s — the copies stay until then" % exc)
+            candidates = []
+    for path in candidates:
+        why = "[shared] identical to a shipped version"
+        if plan.confirm_delete:
+            plan.add("delete", path, why, reason=why)
+            plan.remove(path)
+        else:
+            plan.add("delete?", path, why, reason=why)
+    if edited:
+        ctx.hint("%d file(s) override the plugin's shared copy and no longer receive its changes: %s — "
+                 "diff each against %s/<path>; `ai-path <path>` shows which applies; delete one when it "
+                 "adds nothing" % (len(edited), ", ".join(edited), SHARED))
+
+
+def deletion_hint(plan):
+    """M4: git is the rollback of a deletion; it must hold .ai/ first."""
+    if any(i["action"] in ("delete?", "delete") and i["target"].startswith(".ai/") for i in plan.items) \
+            and git_dirty_ai(plan.root):
+        plan.hints.append("commit .ai/ first: git is this migration's rollback "
+                          "(`git status -- .ai` lists what it does not hold yet)")
 
 
 def rendered_rules(plan):
@@ -858,6 +1133,7 @@ def build_plan(root, confirm_delete=None, confirm_via=None):
     history = History(HISTORY, migrations.renames(template_targets()) if has_ai else {})
 
     runtimes = project_runtimes(root)
+    version = None
     if has_ai:
         version = detect_version(plan)
         migrations.load()  # CURRENT comes from the file names; this validates the registry
@@ -920,6 +1196,8 @@ def build_plan(root, confirm_delete=None, confirm_via=None):
                     plan.add("create", rel, content=content)
                 continue
             three_way(plan, history, "ai-init/" + rel, rel, content)
+        shared_update(plan, history, version)
+        deletion_hint(plan)
         for rt in runtimes:
             block_update(plan, history, rt)
         rules_update(plan, runtimes)
@@ -1139,6 +1417,8 @@ def shipped_ai_files():
             full = os.path.join(here, name)
             rel = ".ai/" + os.path.relpath(full, base).replace(os.sep, "/")
             out[rel] = read(full)
+    for rel, data in shared_files().items():  # read from the plugin, never scaffolded
+        out.setdefault(rel, data)
     for src, target, _kind in PROJECT_INIT_MAP:
         path = os.path.join(TEMPLATES["project-init"], src)
         if os.path.isfile(path):

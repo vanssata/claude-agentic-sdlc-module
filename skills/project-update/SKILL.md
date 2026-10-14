@@ -94,6 +94,37 @@ the deletion is settled — the update is not finished while it is pending, and
 delete the file by hand. There is no way to decline a proposal and move on; say
 so plainly rather than leaving them waiting for a third option.
 
+**Schema 6 — the shared files (0006).** The policies other than risk-tiers,
+path-guard, testing, coding, safety and security, and every file under
+`agents/`, `workflows/` and `templates/`, now ship once with the plugin at
+`<home>/claude-agentic/ai/` and are read from there. 0006 first adds a
+`## Shared files` section to `.ai/AGENTS.md`, then proposes deleting each copy
+that is byte-identical to a version the plugin shipped. An edited copy is an
+**override**: it wins over the shared file and **no longer merges** the plugin's
+changes — the hint names it, and `ai-path <path>` shows which copy applies. A
+copy reached through a symlink or outside the project is never deleted. The
+order for the human:
+
+1. run `install.sh` for every runtime they use — the run exits 2 while an
+   installed home lacks a shared file a copy would fall back to;
+2. commit `.ai/` — git is this migration's rollback;
+3. run the dry run and read the `delete?` list;
+4. in their own terminal, with no task in flight, run the `--confirm-delete`
+   command above.
+
+Rollback is git first: `git restore --source=<commit before the migration>
+--staged --worktree -- .ai` restores every copy, the router and `VERSION`, also
+after the migration was committed — and it also reverts everything else under
+`.ai/` committed since (reports, project notes): to keep those, restore only
+`.ai/VERSION`, `.ai/AGENTS.md` and the paths `migration.json` lists. It must happen **before** the plugin itself
+is rolled back, because a plugin without 0006 refuses a project at schema 6
+(exit 2), and the project stays off `--apply` until then, because this plugin
+plans 0006 again. Without a commit to return to, the originals under
+`.ai/reports/project-update-<date>/original/` (listed in `migration.json`)
+restore the deleted copies only; then write the schema back by hand,
+`printf '5\n' > .ai/VERSION`. The router keeps its `## Shared files` section,
+which stays true while the copies exist.
+
 ## 5. Merge the conflicts
 
 A `conflict` line means the file was edited here and changed in the plugin, and
@@ -132,6 +163,12 @@ move the principles that are really policy into `.ai/policies/`.
 `that rule is not rendered; the rest are`: a file under `.ai/rules/` did not
 parse. Name it and what it needs (a `paths:` list and a body); the other rules
 were rendered.
+
+`N file(s) override the plugin's shared copy` / `… overrides the plugin's
+shared copy`: those copies win over the shared tree and no longer receive its
+changes. Offer to diff each against the path the hint names and to delete the
+ones that add nothing. `commit .ai/ first`: a deletion is proposed while git
+does not hold `.ai/` — say so before anyone confirms it.
 
 `foreign structure detected: …` / `foreign files regenerated since the adopt
 of …`: another AI tool's files are in the project, or came back after an adopt.
@@ -276,6 +313,15 @@ own text instead of matching a pattern against the human's prose:
   else.
 - `ctx.hint(text)` — say something to the human that is not an operation on a
   file. The right answer whenever the text is no longer the plugin's.
+- `ctx.template(path)` — the bytes the plugin ships today at that path, from the
+  scaffold or the shared tree. `ctx.is_shipped(path, data)` — whether these bytes
+  are a version ever shipped there (CRLF counts; `index.json` alone answers).
+- `ctx.require_shared(paths)` — refuse (exit 2, nothing written) when a shared
+  file those copies fall back to is missing from an installed home.
+  `ctx.unsafe_target(path)` — why a path must not be deleted (a symlink, or
+  outside the project). `ctx.override_note(path)` — the wording for an edited
+  shared copy. Words that name a runtime live in `update.py`, never in a
+  migration.
 
 A migration that edits a file **outside `.ai/`** is editing the project's own
 file: `apply` copies the original to

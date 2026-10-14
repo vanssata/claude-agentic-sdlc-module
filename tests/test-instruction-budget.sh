@@ -174,7 +174,8 @@ if [ -f "$ROUTER" ]; then
         esac
         # shellcheck disable=SC2086
         if ! compgen -G "$SPACE/proj/.ai/$probe" >/dev/null \
-           && ! compgen -G "$SPACE/proj/$probe" >/dev/null; then
+           && ! compgen -G "$SPACE/proj/$probe" >/dev/null \
+           && ! compgen -G "$PLUGIN_ROOT/ai/$probe" >/dev/null; then
             missing="$missing $ref"
         fi
     done < <(grep -o '`[a-zA-Z0-9_./<>-]*`' "$ROUTER" | tr -d '`' | grep -E '\.(md|json)$' | sort -u)
@@ -188,6 +189,15 @@ if [ -f "$ROUTER" ]; then
     else
         pass "the router routes; the stage diagram lives in the /ai-task skill"
     fi
+    # The shared tree is named by an insertion before the routing table, never
+    # inside it, so adopt keeps appending rows to the table (H1).
+    [ "$(grep -c '^## Shared files$' "$ROUTER")" -eq 1 ] \
+        && pass "the router has one '## Shared files' section" || fail "the router needs '## Shared files' exactly once"
+    nexthead=$(awk '/^## Shared files$/{f=1;next} f&&/^## /{print;exit}' "$ROUTER")
+    [ "$nexthead" = "## Doing X → read Y" ] && pass "the section sits right before the routing table" \
+        || fail "the section must precede '## Doing X → read Y'" "next heading: $nexthead"
+    awk '/^## Shared files$/{f=1;next} f&&/^## /{exit} f' "$ROUTER" | grep -q '^|' \
+        && fail "the Shared files section has a table line" || pass "the Shared files section is prose only"
     size=$(wc -c < "$ROUTER")
     [ "$size" -le 4096 ] && pass "the router is $size B <= 4096 (advisory)" \
         || fail "the router is $size B, advisory cap 4096 B"

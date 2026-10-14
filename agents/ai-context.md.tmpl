@@ -14,6 +14,10 @@ or the repository.
 Read first, if they exist: `.ai/policies/context-management.md`,
 `.ai/project/architecture.md`, `.ai/agents/context.md`.
 
+A shared file under `.ai/` — a policy, agent contract, workflow or template — is
+read from the project's `.ai/<path>` when it exists, else from
+`{{AI_SHARED}}/<path>`; `.ai/` paths inside those files resolve the same way.
+
 Answer, compactly: what exists, how it works today, where it is implemented, what
 depends on it, what is uncertain, which legacy constraints apply, and which tests
 currently define the behaviour.

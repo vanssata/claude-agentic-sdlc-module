@@ -19,6 +19,11 @@ for AI_HOME in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CODEX_HOME:-$HOME/.codex
 done
 ```
 
+The policies, agent contracts, workflows and templates are shared: installed
+once under `$AI_HOME/claude-agentic/ai/`, overridden by a project's own file at
+the same path under `.ai/`. Every such path in this file — the two above
+included — is read from what `"$AI_HOME/claude-agentic/ai-path" <path>` prints.
+
 `STATE` below means:
 
 ```bash

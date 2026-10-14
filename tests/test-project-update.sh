@@ -20,15 +20,24 @@ stale=$(python3 - "$PLUGIN_ROOT" "$HISTORY" <<'PY'
 import hashlib, json, os, sys
 root, hist = sys.argv[1], sys.argv[2]
 index = json.load(open(os.path.join(hist, "index.json")))
-for name in ("ai-init", "project-init"):
-    base = os.path.join(root, "skills", name, "templates")
+# The shared tree ai/ is recorded under the ai-init/.ai/ keys it shipped under,
+# by hash only: a shared copy is classified, never merged, so it needs no blob.
+shared = set()
+for name, base in (("ai-init", os.path.join(root, "skills", "ai-init", "templates")),
+                   ("project-init", os.path.join(root, "skills", "project-init", "templates")),
+                   ("ai-init/.ai", os.path.join(root, "ai"))):
     for d, _, files in os.walk(base):
         for f in files:
             p = os.path.join(d, f)
             key = "%s/%s" % (name, os.path.relpath(p, base))
+            if name == "ai-init/.ai":
+                shared.add(key)
             h = hashlib.sha256(open(p, "rb").read()).hexdigest()
-            if h not in index.get(key, []) or not os.path.exists(os.path.join(hist, "blobs", h)):
+            if h not in index.get(key, []) or (name != "ai-init/.ai" and not os.path.exists(os.path.join(hist, "blobs", h))):
                 print(key)
+owned = {h for k, v in index.items() if k not in shared for h in v}
+for b in sorted(set(os.listdir(os.path.join(hist, "blobs"))) - owned):
+    print("blob only a shared key references: " + b)
 PY
 )
 [ -z "$stale" ] && pass "every template version is in history/ (else run tools/build-template-history.py)" \
@@ -36,12 +45,18 @@ PY
 
 echo "== build the oldest shipped templates from history"
 OLD="$TMP/old"
-python3 - "$HISTORY" "$OLD" <<'PY'
+# The shared keys come from the ai/ tree itself, not from a list: those files are
+# no longer scaffolded, and test-migration-0006.sh covers a project carrying them.
+SHARED_KEYS=$(cd "$PLUGIN_ROOT/ai" && find . -type f | sed 's|^\./|ai-init/.ai/|' | sort)
+[ "$(printf '%s\n' "$SHARED_KEYS" | wc -l)" -ge 29 ] && pass "the shared keys are read from ai/" || fail "ai/ yields too few shared keys" "$SHARED_KEYS"
+python3 - "$HISTORY" "$OLD" "$SHARED_KEYS" <<'PY'
 import json, os, sys
-hist, out = sys.argv[1], sys.argv[2]
+hist, out, shared = sys.argv[1], sys.argv[2], set(sys.argv[3].split())
 for key, versions in json.load(open(os.path.join(hist, "index.json"))).items():
     if key == "ai-init/.ai/VERSION":
         continue   # a project from before schema 1 has no VERSION: that is schema 0
+    if key in shared:
+        continue   # read from the plugin since 0006, never scaffolded
     name, rel = key.split("/", 1)
     dst = os.path.join(out, name, "templates", rel)
     os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -60,11 +75,11 @@ printf '\nphpunit: vendor/bin/phpunit\n' >> "$P/.ai/policies/testing.md"
 jq '.tiers.T0.examples += ["Fiscal printer bridge"]' "$P/.ai/policies/risk-tiers.json" > "$TMP/rt" && mv "$TMP/rt" "$P/.ai/policies/risk-tiers.json"
 sha=$(sha256sum "$P/.ai/policies/risk-tiers.json" | cut -d' ' -f1)
 sed -i "1s/sha256:[0-9a-f]*/sha256:$sha/" "$P/.ai/policies/risk-tiers.md"   # the human kept the mirror in sync
-row=$(grep -n '^| TEST |' "$P/.ai/workflows/feature.md" | cut -d: -f1)
-sed -i "${row}s/.*/| TEST | \`ai-tester\` | my own rule |/" "$P/.ai/workflows/feature.md"
+# Line 4 differs between the oldest state README and the current one, so this edit conflicts.
+sed -i "4s/.*/my own wording of who writes current.json/" "$P/.ai/state/README.md"
 printf 'the overview a human wrote\n' > "$P/.ai/project/overview.md"
 printf '\n# my notes\nkeep me\n' >> "$P/CLAUDE.md"
-rm "$P/.ai/templates/review-report.md"
+rm "$P/.ai/policies/security.md"
 
 echo "== dry run"
 before=$(cd "$P" && find . -path ./.git -prune -o -type f -print | sort | xargs md5sum | md5sum)
@@ -91,14 +106,14 @@ jq -e '.tiers.T0.examples | index("Fiscal printer bridge")' "$RT" >/dev/null \
     && pass "a mirror that was in sync stays in sync with the merged JSON" || fail "risk-tiers.md hash not carried forward"
 grep -q '^## Verification' "$P/.ai/policies/testing.md" && grep -q 'phpunit: vendor/bin/phpunit' "$P/.ai/policies/testing.md" \
     && pass "an edited markdown policy is merged: new section and the edit" || fail "testing.md merge wrong"
-grep -q 'my own rule' "$P/.ai/workflows/feature.md" && pass "a real conflict leaves the project file alone" || fail "feature.md was overwritten"
-cmp -s "$P/.ai/local/plugin-update/.ai/workflows/feature.md" "$PLUGIN_ROOT/skills/ai-init/templates/.ai/workflows/feature.md" \
+grep -q 'my own wording' "$P/.ai/state/README.md" && pass "a real conflict leaves the project file alone" || fail "state/README.md was overwritten"
+cmp -s "$P/.ai/local/plugin-update/.ai/state/README.md" "$PLUGIN_ROOT/skills/ai-init/templates/.ai/state/README.md" \
     && pass "and puts the plugin's version in the local copy" || fail "conflict copy missing"
-git -C "$P" check-ignore -q .ai/local/plugin-update/.ai/workflows/feature.md && pass "the conflict copy is git-ignored" || fail "conflict copy should be ignored"
-cmp -s "$P/.ai/workflows/bugfix.md" "$PLUGIN_ROOT/skills/ai-init/templates/.ai/workflows/bugfix.md" \
-    && pass "an untouched file is replaced" || fail "bugfix.md not updated"
+git -C "$P" check-ignore -q .ai/local/plugin-update/.ai/state/README.md && pass "the conflict copy is git-ignored" || fail "conflict copy should be ignored"
+cmp -s "$P/.ai/policies/safety.md" "$PLUGIN_ROOT/skills/ai-init/templates/.ai/policies/safety.md" \
+    && pass "an untouched file is replaced" || fail "safety.md not updated"
 [ "$(cat "$P/.ai/project/overview.md")" = "the overview a human wrote" ] && pass ".ai/project/ is never updated" || fail "the knowledge base was touched"
-[ -f "$P/.ai/templates/review-report.md" ] && pass "a missing template is created" || fail "missing file not created"
+[ -f "$P/.ai/policies/security.md" ] && pass "a missing template is created" || fail "missing file not created"
 grep -q 'keep me' "$P/CLAUDE.md" && grep -q '.ai/state/handoff.md' "$P/CLAUDE.md" \
     && pass "the CLAUDE.md block is updated and the rest of the file kept" || fail "CLAUDE.md update wrong"
 [ "$(grep -c 'claude-agentic:start' "$P/CLAUDE.md")" = 1 ] && pass "one managed block remains" || fail "block duplicated"
@@ -314,8 +329,14 @@ grep -q 'claude-agentic:start' "$S8/GEMINI.md" && grep -q 'my own instructions' 
 [ "$(cat "$S8/.ai/VERSION")" = "$CURRENT" ] && pass "the schema reaches $CURRENT: 0003 holds it for nothing" || fail "VERSION not written"
 
 out=$(python3 "$UPDATE" "$S8")
+# Two hand-merge choices: the edited managed block, and the router — edited on
+# the oldest shipped version, so the plugin's later router changes really
+# collide with the human's note (T-2026-10-13-004 re-review: not silenced).
 printf '%s' "$out" | grep -q '^0 automatic, 2 conflict' \
-    && pass "a second run has only the two hand-merge choices left" || fail "second run not clean" "$out"
+    && printf '%s' "$out" | grep -qE '^  conflict  *\.ai/AGENTS\.md' \
+    && pass "a second run has only the two hand-merge choices left, the router among them" || fail "second run not clean" "$out"
+[ "$(grep -c '^## Shared files$' "$S8/.ai/AGENTS.md")" = 1 ] && grep -q '^always ask me first$' "$S8/.ai/AGENTS.md" \
+    && pass "the router keeps the human's note and names the shared files once" || fail "router after the migration" "$(grep -n '^## ' "$S8/.ai/AGENTS.md")"
 python3 "$UPDATE" "$S8" --check >/dev/null && pass "--check exits 0 once only a hand-merge choice remains" || fail "--check should exit 0"
 
 echo "== an edited section is the human's, and is only ever hinted at"
@@ -373,8 +394,8 @@ PY
 # (R12 forbids shipping a template at a path a migration moved away) and gains a
 # line, so the merge at the new path has something to merge.
 NEXT="$TMP/next-templates"; cp -r "$PLUGIN_ROOT/skills/ai-init/templates" "$NEXT"
-mv "$NEXT/.ai/workflows/bugfix.md" "$NEXT/.ai/workflows/fix.md"
-sed -i '2i A line the next plugin version inserted near the top.' "$NEXT/.ai/workflows/fix.md"
+mv "$NEXT/.ai/policies/coding.md" "$NEXT/.ai/policies/code-style.md"
+sed -i '2i A line the next plugin version inserted near the top.' "$NEXT/.ai/policies/code-style.md"
 
 echo "== a migration that breaks the rules is refused before anything is written"
 S5="$TMP/schemarules"; v0_project "$S5"
@@ -399,16 +420,16 @@ check_refused migrations-bad-content  'must be bytes'                 "content t
 
 echo "== migrations run before the merge, and every operation is listed once"
 S3="$TMP/schemaops"; v0_project "$S3"
-printf '\n## My own rule\nalways reproduce the bug first\n' >> "$S3/.ai/workflows/bugfix.md"
-python3 "$STATE" --root "$S3" quick --goal "a task in flight" --workflow feature --tier T2 --files .ai/workflows/bugfix.md >/dev/null
+printf '\n## My own rule\nalways reproduce the bug first\n' >> "$S3/.ai/policies/coding.md"
+python3 "$STATE" --root "$S3" quick --goal "a task in flight" --workflow feature --tier T2 --files .ai/policies/coding.md >/dev/null
 export CLAUDE_AGENTIC_MIGRATIONS="$SYNTH" CLAUDE_AGENTIC_TEMPLATES="$NEXT"
 out=$(python3 "$UPDATE" "$S3")
 printf '%s' "$out" | grep -q '^  schema    0 -> 3 ' && pass "the schema line counts every pending migration" || fail "schema line wrong" "$out"
-[ "$(printf '%s' "$out" | grep -c '^  move      .ai/workflows/bugfix.md -> .ai/workflows/fix.md  \[0002\]')" = 1 ] \
+[ "$(printf '%s' "$out" | grep -c '^  move      .ai/policies/coding.md -> .ai/policies/code-style.md  \[0002\]')" = 1 ] \
     && pass "a move is listed once, with its source and its migration" || fail "move line wrong" "$out"
 printf '%s' "$out" | grep -q 'still-not-there' && fail "a move of a file the project never had should be skipped" "$out" \
     || pass "a move whose source is absent is skipped"
-printf '%s' "$out" | grep -q '^  merge     .ai/workflows/fix.md .*your edits kept' \
+printf '%s' "$out" | grep -q '^  merge     .ai/policies/code-style.md .*your edits kept' \
     && pass "the template history follows the move: the file merges at its new path" \
     || fail "a file edited at the old path must merge at the new one, not conflict" "$out"
 printf '%s' "$out" | grep -q '^  delete?   .ai/legacy-notes.md .*needs --apply --confirm-delete NAME' \
@@ -422,11 +443,11 @@ printf '%s' "$first" | grep -q '\[000' && pass "the migrations are planned befor
 
 echo "== the apply keeps the edit at the new path, the original, and the task"
 python3 "$UPDATE" "$S3" --apply >/dev/null
-grep -q 'always reproduce the bug first' "$S3/.ai/workflows/fix.md" && pass "an edit made at the old path survives the move" || fail "the edit was lost"
-grep -q 'A line the next plugin version inserted near the top' "$S3/.ai/workflows/fix.md" \
+grep -q 'always reproduce the bug first' "$S3/.ai/policies/code-style.md" && pass "an edit made at the old path survives the move" || fail "the edit was lost"
+grep -q 'A line the next plugin version inserted near the top' "$S3/.ai/policies/code-style.md" \
     && pass "and the new template's change arrives with it" || fail "the merge lost the plugin's change"
-[ ! -e "$S3/.ai/workflows/bugfix.md" ] && pass "and the old path is gone" || fail "the move left its source behind"
-[ -f "$S3"/.ai/reports/project-update-*/original/.ai/workflows/bugfix.md ] && pass "the original is kept under .ai/reports/" || fail "no original kept"
+[ ! -e "$S3/.ai/policies/coding.md" ] && pass "and the old path is gone" || fail "the move left its source behind"
+[ -f "$S3"/.ai/reports/project-update-*/original/.ai/policies/coding.md ] && pass "the original is kept under .ai/reports/" || fail "no original kept"
 [ "$(cat "$S3/.ai/project/schema-note.md")" = "added by migration 0001" ] && pass "create adds a file once" || fail "create wrong"
 [ "$(jq -r .schema_probe "$S3/.ai/policies/risk-tiers.json")" = "0003" ] && pass "a policy edit is applied" || fail "policy edit missing"
 grep -q 'added by migration 0003' "$S3/.ai/policies/testing.md" && pass "a text edit is applied" || fail "text edit missing"
@@ -437,7 +458,7 @@ python3 "$UPDATE" "$S3" --apply >/dev/null   # plan() runs again while the schem
 [ ! -e "$S3/.ai/VERSION" ] && pass "and the schema is held until the deletion is settled" || fail "VERSION written with a deletion pending"
 out=$(python3 "$UPDATE" "$S3" --check); [ $? -eq 1 ] && printf '%s' "$out" | grep -q 'the schema stays at 0' \
     && pass "--check reports a held schema instead of calling the project current" || fail "--check must not hide a held schema" "$out"
-[ "$(jq -r '.approved_plan.steps[0].allowed_files[0]' "$S3/.ai/state/current.json")" = ".ai/workflows/fix.md" ] \
+[ "$(jq -r '.approved_plan.steps[0].allowed_files[0]' "$S3/.ai/state/current.json")" = ".ai/policies/code-style.md" ] \
     && pass "the task in flight follows the migration" || fail "the task's allowed_files were not migrated"
 [ "$(jq -r '.history[-1].event' "$S3/.ai/state/current.json")" = "schema_migrated" ] && pass "and the state records why" || fail "no schema_migrated entry"
 [ "$(python3 "$STATE" --root "$S3" get --field current_stage)" = "implementation" ] && pass "state.py still reads the migrated state" || fail "the task state is no longer parseable"
@@ -528,8 +549,9 @@ sys.path.insert(0, os.path.join(root, "skills", "project-update"))
 import migrations                                        # noqa: E402
 index = json.load(open(os.path.join(root, "skills/project-update/history/index.json")))
 current, sources = set(), set()
-for name in ("ai-init", "project-init"):
-    base = os.path.join(root, "skills", name, "templates")
+for name, base in (("ai-init", os.path.join(root, "skills", "ai-init", "templates")),
+                   ("project-init", os.path.join(root, "skills", "project-init", "templates")),
+                   ("ai-init/.ai", os.path.join(root, "ai"))):
     for d, _, files in os.walk(base):
         for f in files:
             current.add("%s/%s" % (name, os.path.relpath(os.path.join(d, f), base)))
@@ -607,7 +629,7 @@ S10="$TMP/schema4"; mkdir -p "$S10"
 bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$S10" --runtime claude >/dev/null
 bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$S10" --runtime claude >/dev/null
 cp -r "$FIX/schema-v4/.ai" "$S10/"     # VERSION 4 and a task in flight
-[ "$CURRENT" = 5 ] && pass "the migrations reach schema 5" || fail "CURRENT is $CURRENT, expected 5"
+[ "$CURRENT" -ge 5 ] && pass "the migrations reach schema 5 or later" || fail "CURRENT is $CURRENT, expected 5 or later"
 env -u CLAUDECODE python3 "$STATE" --root "$S10" set next_action "before 0005" >/dev/null 2>&1 \
     && pass "a mutating command works at schema 4, defaults filled in memory" || fail "state.py failed on a schema-4 task"
 python3 - "$S10" <<'PY2'
@@ -631,7 +653,7 @@ assert state["diff"]["task"]["status"] == "not_measured"     # schema 4 untouche
 assert state["goal"] == "widen the export" and state["completed_steps"] == ["1"]
 PY2
 [ $? -eq 0 ] && pass "the keys are added with nulls, and nothing else is touched" || fail "0005 changed the task"
-[ "$(cat "$S10/.ai/VERSION")" = 5 ] && pass "the schema reaches 5" || fail "VERSION not written"
+[ "$(cat "$S10/.ai/VERSION")" = "$CURRENT" ] && pass "the schema reaches $CURRENT" || fail "VERSION not written"
 python3 "$UPDATE" "$S10" | grep -q '^0 automatic' && pass "a second run has nothing to do" || fail "0005 is not idempotent"
 python3 "$UPDATE" "$S10" --check >/dev/null && pass "--check exits 0 once migrated" || fail "--check should exit 0 after 0005"
 env -u CLAUDECODE python3 "$STATE" --root "$S10" get --field history 2>/dev/null \
@@ -652,8 +674,7 @@ printf '%s' "$out" | grep -q 'kept your value for: .*model_tiers.EXPERT.model' &
     && pass "one hint names the tier vocabulary and state.py profile --tier" || fail "tier hint missing or repeated" "$out"
 P22="$TMP/proj22"; mkdir -p "$P22"
 CLAUDE_AGENTIC_TEMPLATES="$OLD/ai-init/templates" bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$P22" >/dev/null
-row=$(grep -n '^| TEST |' "$P22/.ai/workflows/feature.md" | cut -d: -f1)
-sed -i "${row}s/.*/| TEST | \`ai-tester\` | my own rule |/" "$P22/.ai/workflows/feature.md"
+sed -i "4s/.*/my own wording of who writes current.json/" "$P22/.ai/state/README.md"
 out=$(python3 "$UPDATE" "$P22" 2>&1)
 printf '%s' "$out" | grep -q 'names tiers' && fail "the hint must appear only for a model-key conflict" "$out" || pass "any other conflict prints no tier hint"
 

@@ -13,6 +13,10 @@ completeness and honesty, not analysis.
 Read first, when they exist: `.ai/policies/release.md`, `.ai/agents/release.md`,
 `.ai/templates/release-report.md`, and everything under `.ai/reports/<task-id>/`.
 
+A shared file under `.ai/` — a policy, agent contract, workflow or template — is
+read from the project's `.ai/<path>` when it exists, else from
+`{{AI_SHARED}}/<path>`; `.ai/` paths inside those files resolve the same way.
+
 Fill every field of the template. "none" is an answer; "n/a" needs a reason.
 
 ## Rules

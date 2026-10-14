@@ -224,8 +224,12 @@ the playbook asks for.
 
 ## I reinstalled the plugin. Why does my project still follow the old rules?
 
-The installer updates `~/.claude/`. A project's `.ai/`, `docs/sdlc/` templates
-and `CLAUDE.md` block are copies made when it was initialised. Run
+The installer updates `~/.claude/`, including the shared tree
+`claude-agentic/ai/` that every project reads its shared policies, agent
+contracts, workflows and templates from — those take effect at once, unless the
+project overrides one with its own file under `.ai/`. The project-owned rest of
+`.ai/`, the `docs/sdlc/` templates and the `CLAUDE.md` block are copies made when
+it was initialised. Run
 `/project-update` in the project — or `/ai-init` again, which does the same.
 Files you never edited are replaced, edited ones are merged keeping your edits,
 and a real conflict is never overwritten: the plugin's version lands in
@@ -376,7 +380,8 @@ not, and the context is re-read each turn. The scaffolded `.claude/settings.json
 sets `enableAllProjectMcpServers: false`, so a checked-in `.mcp.json` is a
 catalogue rather than a start-up list. Put a server in `enabledMcpjsonServers`
 when nearly every task in the repository needs it, and record why in
-`.ai/policies/tooling.md`. For a server one task needs, enable it, write one
+the tooling policy (`policies/tooling.md`; a project that needs its own copies it
+to `.ai/policies/tooling.md` as an override). For a server one task needs, enable it, write one
 `tools_for_this_task:` line in the task record, and turn it off when the task
 closes.
 

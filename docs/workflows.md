@@ -1,7 +1,8 @@
 # Workflows
 
 `/ai-task` classifies the request into one of five shapes and follows
-`.ai/workflows/<shape>.md`. The shape does not change which stages exist — it
+`workflows/<shape>.md` — the project's `.ai/` copy when it has one, else the
+shared tree's. The shape does not change which stages exist — it
 changes what each stage pays attention to. Who runs a stage is a third,
 independent axis: `pipeline_profile` in `.ai/policies/risk-tiers.json`
 (see `docs/risk-tiers.md`).

@@ -119,7 +119,7 @@ names as an escape hatch.
 
 **Not enforced here:** "do not weaken a test or a static-analysis level to make a
 check pass" is not a property of a git command. It is checked by `ai-reviewer`
-and reported by `ai-release`, and it is stated in `.ai/policies/git.md`.
+and reported by `ai-release`, and it is stated in `policies/git.md` (shared tree).
 
 ## ai-path-guard — where `.ai/` exists
 
@@ -158,7 +158,8 @@ for a future session. All three are written by `state.py` alone — `ask`,
 **Runtime configuration, while a task is in flight** — `.claude/settings*.json`,
 `.claude/agents/`, `skills/`, `commands/`, `hooks/`, `plugins/`, the `.codex/`
 equivalents and `config.toml`, and the pipeline's own `.ai/policies/`,
-`.ai/workflows/`, `.ai/templates/` and `.ai/AGENTS.md`, plus the other runtimes'
+`.ai/workflows/`, `.ai/templates/` and `.ai/AGENTS.md`, the installed shared tree
+`<home>/claude-agentic/ai/` and its resolver `ai-path`, plus the other runtimes'
 instruction files (`.cursorrules`, `.cursor/rules/`, `.github/copilot-instructions.md`,
 `.junie/guidelines.md`). The rule sources join them: `.ai/rules/` and the
 `.claude/rules/` copies rendered from it are instructions for a directory, and

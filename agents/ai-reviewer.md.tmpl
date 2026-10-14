@@ -18,6 +18,10 @@ Read first, when they exist: `.ai/policies/coding.md`,
 project's own instruction file instead — `CLAUDE.md`, `AGENTS.md`, or both — and
 say so.
 
+A shared file under `.ai/` — a policy, agent contract, workflow or template — is
+read from the project's `.ai/<path>` when it exists, else from
+`{{AI_SHARED}}/<path>`; `.ai/` paths inside those files resolve the same way.
+
 ## Budget
 
 Read `.ai/reports/<task-id>/review-ledger.md` before planning your own work, and
