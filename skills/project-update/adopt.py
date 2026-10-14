@@ -1806,13 +1806,16 @@ class Candidate:
         self.lines = text.split("\n")
         if self.lines and self.lines[-1] == "":
             self.lines.pop()
-        block = render_instructions.block_of(text)
-        self.block = None
-        if block is not None:
-            start = next(i for i, l in enumerate(self.lines, 1) if render_instructions.BLOCK_START in l)
-            end = next(i for i, l in enumerate(self.lines, 1) if render_instructions.BLOCK_END in l)
+        found = render_instructions.find_block(text)
+        block = self.block = None
+        if found is not None:
+            block = text[found[0]:found[1]]
+            start = next(i for i, l in enumerate(self.lines, 1) if found[2] in l)
+            end = next(i for i, l in enumerate(self.lines, 1) if found[3] in l)
             self.block = (start, end)
-        self.edited = block is not None and block != shipped
+        # A legacy pair is compared with its markers renamed: a pristine legacy
+        # block is the shipped block, not an edit.
+        self.edited = block is not None and render_instructions.current_markers(block, found[2], found[3]) != shipped
         pointer = {n for n, l in enumerate(self.lines, 1) if l == ALWAYS_POINTER}
         if self.block is None:
             self.nums = list(range(1, len(self.lines) + 1))

@@ -241,4 +241,18 @@ CODEX_DIR="$DIR" bash "$INSTALL" --target codex >/dev/null 2>&1
 [ -z "$(ls -d "$DIR"/skills/*.bak 2>/dev/null)" ] && pass "no *.bak directory is left in skills/" || fail "a backup was left in skills/"
 [ -d "$DIR/backups/skills/ai-init" ] && pass "the backup went to backups/skills/" || fail "backup not found in backups/skills/"
 
+echo "== an AGENTS.md with a legacy Codex-agentic pair gets one block, renamed"
+LG="$TMP/codex-legacy"; mkdir -p "$LG"
+sed 's/claude-agentic:\(start\|end\)/Codex-agentic:\1/' "$PLUGIN_ROOT/skills/ai-init/templates/AGENTS.block.md" > "$TMP/legacy-block"
+{ printf '# legacy\n\nkeep me above\n\n'; cat "$TMP/legacy-block"; printf '\n# my notes\nkeep me below\n'; } > "$LG/AGENTS.md"
+out=$(CODEX_DIR="$LG" bash "$INSTALL" --target codex --codex-plan pro 2>&1)
+[ "$(grep -c -E '(claude|[Cc]odex)-agentic:start' "$LG/AGENTS.md")" = 1 ] && pass "exactly one managed block after the install" || fail "a legacy pair was doubled" "$(grep -n 'agentic:' "$LG/AGENTS.md")"
+if grep -q 'Codex-agentic' "$LG/AGENTS.md"; then fail "the legacy markers are still there"; else pass "the legacy markers are renamed"; fi
+grep -q 'keep me above' "$LG/AGENTS.md" && grep -q 'keep me below' "$LG/AGENTS.md" && pass "the text around the block is kept" || fail "text around the legacy block lost"
+printf '%s' "$out" | grep -q 'AGENTS.md: updated + renamed the legacy Codex-agentic markers' \
+    && pass "the install says what it renamed" || fail "no rename note in the install output" "$(printf '%s' "$out" | grep AGENTS.md)"
+if printf '%s' "$out" | grep -q 'AGENTS.md: managed block 0 B'; then fail "block_size measured 0 B"; else pass "block_size measures the renamed block"; fi
+CODEX_DIR="$LG" bash "$INSTALL" --target codex --codex-plan pro >/dev/null 2>&1
+[ "$(grep -c 'claude-agentic:start' "$LG/AGENTS.md")" = 1 ] && pass "a reinstall keeps one block" || fail "reinstall doubled the block"
+
 summary "codex install"

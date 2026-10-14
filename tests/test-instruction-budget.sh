@@ -343,4 +343,28 @@ printf '%s' "$out" | grep -q '^  update .*CLAUDE.md' \
     && fail "the plugin planned a write over an edited block" "$(printf '%s' "$out" | tail -5)" \
     || pass "an edited block is still never rewritten"
 
+echo "== a legacy Codex-agentic marker pair is the managed block too"
+LB="$TMP/legacy.md"
+sed 's/claude-agentic:\(start\|end\)/Codex-agentic:\1/' "$PLUGIN_ROOT/skills/ai-init/templates/CLAUDE.block.md" > "$TMP/legacy-block"
+{ printf '# mine\n\nkeep this.\n\n'; cat "$TMP/legacy-block"; printf '\n# below\nmore of mine\n'; } > "$LB"
+want=$(python3 "$RENDER" measure "$TMP/legacy-block" | awk '{print $(NF-1)}')
+got=$(python3 "$RENDER" measure "$LB" | awk '{print $(NF-1)}')
+if [ "$got" = "$want" ] && [ "$(python3 "$RENDER" measure "$LB" | awk '{print $(NF-2)}')" = block ]; then
+    pass "measure: the legacy block ($want B) out of a larger file"
+else
+    fail "measure: a legacy pair is not seen as the block" "want block $want, got $(python3 "$RENDER" measure "$LB")"
+fi
+python3 - "$PLUGIN_ROOT/skills/project-update" <<'PYT' && pass "block_of: both legacy spellings, verbatim; half a current pair is none" || fail "block_of on legacy markers"
+import sys; sys.path.insert(0, sys.argv[1]); import render_instructions as r
+for name in ("Codex-agentic", "codex-agentic"):
+    text = "above\n<!-- %s:start -->\nbody\n<!-- %s:end -->\nbelow\n" % (name, name)
+    assert r.block_of(text) == "<!-- %s:start -->\nbody\n<!-- %s:end -->" % (name, name), name
+assert r.block_of("<!-- claude-agentic:start -->\nlone\n<!-- Codex-agentic:start -->\nx\n<!-- Codex-agentic:end -->\n") is None
+assert r.block_of("<!-- Codex-agentic:start -->\nno end\n") is None
+assert r.block_of("<!-- Codex-agentic:end -->\n<!-- Codex-agentic:start -->\n") is None
+cur = "<!-- claude-agentic:start -->\nbody\n<!-- claude-agentic:end -->"
+assert r.block_of("x\n" + cur + "\n<!-- Codex-agentic:start -->\ny\n<!-- Codex-agentic:end -->\n") == cur
+assert r.block_of("x\n" + cur + "\ny\n") == cur
+PYT
+
 summary "instruction budget"

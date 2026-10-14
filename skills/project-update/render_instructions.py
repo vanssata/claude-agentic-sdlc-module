@@ -436,13 +436,54 @@ def rule_slugs_in(text):
     return [m.group("slug") for m in RULE_MARKER_RE.finditer(text)]
 
 
-def block_of(text):
-    """The managed block of an instruction file, markers included, or None."""
-    start = text.find(BLOCK_START)
-    end = text.find(BLOCK_END)
-    if start < 0 or end < 0:
+# A marker pair an older or hand-written instruction file may carry instead of
+# BLOCK_START/BLOCK_END. Every lookup goes through find_block, so a legacy pair
+# is read as the managed block everywhere — measured, merged, renamed — and
+# never has a second block appended beside it.
+LEGACY_MARKER_RE = re.compile(r"<!-- (?P<name>[Cc]odex-agentic):start -->")
+_LEGACY_MARKER_RE_B = re.compile(LEGACY_MARKER_RE.pattern.encode())
+
+
+def find_block(text):
+    """(start, end, start_marker, end_marker) of the managed block in text —
+    end is past the end marker — or None. The current pair wins; a legacy
+    pair counts only when both of its markers are there, in order. Works on
+    str and on bytes alike, offsets in the caller's own units."""
+    if isinstance(text, bytes):
+        start, end, legacy, colon = BLOCK_START.encode(), BLOCK_END.encode(), _LEGACY_MARKER_RE_B, b":"
+    else:
+        start, end, legacy, colon = BLOCK_START, BLOCK_END, LEGACY_MARKER_RE, ":"
+    s, e = text.find(start), text.find(end)
+    if s >= 0 and e >= 0:
+        return s, e + len(end), start, end
+    if s >= 0 or e >= 0:
+        return None   # half a current pair: a broken file, not a legacy one
+    m = legacy.search(text)
+    if m is None:
         return None
-    return text[start:end + len(BLOCK_END)]
+    end_marker = m.group(0).replace(colon + start[start.rfind(colon) + 1:], colon + end[end.rfind(colon) + 1:])
+    e = text.find(end_marker, m.end())
+    if e < 0:
+        return None
+    return m.start(), e + len(end_marker), m.group(0), end_marker
+
+
+def current_markers(block, start_marker, end_marker):
+    """The block with its markers renamed to the current pair; a no-op for a
+    block that already carries them."""
+    if isinstance(block, bytes):
+        return block.replace(start_marker, BLOCK_START.encode()).replace(end_marker, BLOCK_END.encode())
+    return block.replace(start_marker, BLOCK_START).replace(end_marker, BLOCK_END)
+
+
+def block_of(text):
+    """The managed block of an instruction file, markers included, or None —
+    the verbatim slice, so a caller can `replace` it; a legacy pair keeps its
+    own markers here (see current_markers)."""
+    found = find_block(text)
+    if found is None:
+        return None
+    return text[found[0]:found[1]]
 
 
 def measure(paths, whole=False, budget=None, out=sys.stdout):

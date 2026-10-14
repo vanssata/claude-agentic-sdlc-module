@@ -708,6 +708,9 @@ out=$(python3 "$UPDATE" "$L" 2>&1); rc=$?
 [ $rc -eq 0 ] && pass "the dry run exits 0 on a legacy marker" || fail "dry run failed on a legacy marker" "$out"
 printf '%s' "$out" | grep -q 'AGENTS.md .*legacy Codex-agentic markers renamed' \
     && pass "the dry run says the markers will be renamed" || fail "no rename line for the legacy block" "$out"
+printf '%s' "$out" | grep -q 'AGENTS.md (split?)' \
+    && fail "the dry run still reads the legacy block as no block and hints --adopt" "$out" \
+    || pass "the dry run sees the legacy block as the managed block (no split? hint)"
 python3 "$UPDATE" "$L" --apply >/dev/null 2>&1
 [ "$(grep -c 'claude-agentic:start' "$L/AGENTS.md")" = 1 ] && pass "one current block remains" || fail "block doubled or missing" "$(cat "$L/AGENTS.md")"
 if grep -q 'Codex-agentic' "$L/AGENTS.md"; then fail "the legacy markers are still there"; else pass "the legacy markers are gone"; fi

@@ -154,12 +154,12 @@ render_stub() {
 # the user's own file is not the plugin's to refuse.
 block_size() {
   python3 -c '
-import sys
+import re, sys
 path, budget = sys.argv[1], int(sys.argv[2])
 text = open(path, encoding="utf-8").read()
-start = text.find("<!-- claude-agentic:start -->")
-end = text.find("<!-- claude-agentic:end -->")
-block = len(text[start:end + 26].encode("utf-8")) if start >= 0 and end >= 0 else 0
+# The current pair, or a legacy Codex-agentic pair managed_block has not renamed yet.
+m = re.search(r"<!-- (claude-agentic|[Cc]odex-agentic):start -->.*?<!-- \1:end -->", text, flags=re.S)
+block = len(m.group(0).encode("utf-8")) if m else 0
 spaced = lambda n: "{:,}".format(n).replace(",", " ")
 print("%s: managed block %s B (budget %s), file %s B — the rest is yours"
       % (path.split("/")[-1], spaced(block), spaced(budget),
@@ -618,6 +618,17 @@ legacy = re.search(r"(?m)^# Model allocation by task and scope.*?(?=^# |\Z)", te
 if legacy and start not in text[: legacy.start()]:
     text = text[: legacy.start()] + text[legacy.end():]
     notes.append("migrated an unmarked 'Model allocation' section")
+
+# A legacy Codex-agentic pair (both markers, in order, no current pair) is
+# the managed block under its old name: rename it, never append beside it.
+if start not in text and end not in text:
+    pair = re.search(r"<!-- (?P<name>[Cc]odex-agentic):start -->.*?<!-- (?P=name):end -->", text, flags=re.S)
+    if pair:
+        name = pair.group("name")
+        text = (text[: pair.start()]
+                + pair.group(0).replace("<!-- %s:start -->" % name, start).replace("<!-- %s:end -->" % name, end)
+                + text[pair.end():])
+        notes.append("renamed the legacy %s markers" % name)
 
 if start in text and end in text:
     new = re.sub(re.escape(start) + r".*?" + re.escape(end), lambda m: block, text, flags=re.S)

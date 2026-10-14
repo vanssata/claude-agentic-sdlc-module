@@ -80,35 +80,10 @@ RULES_DIR = ".ai/rules"
 RULES_SKIP = {".git", ".ai", "vendor", "node_modules", "bower_components",
               "third_party", "Pods", "site-packages", ".venv", ".pnpm", ".yarn"}
 START, END = "<!-- claude-agentic:start -->", "<!-- claude-agentic:end -->"
-# A marker pair an older or hand-written instruction file may carry instead.
-# It is found, renamed to START/END and merged like the current pair — never
-# left in place with a second block appended beside it.
-LEGACY_MARKER_RE = re.compile(rb"<!-- (?P<name>[Cc]odex-agentic):start -->")
-
-
-def find_block(text):
-    """(start, end, start_marker, end_marker) of the managed block in text —
-    end is past the end marker — or None. The current pair wins; a legacy
-    pair counts only when both of its markers are there, in order."""
-    s, e = text.find(START.encode()), text.find(END.encode())
-    if s >= 0 and e >= 0:
-        return s, e + len(END), START.encode(), END.encode()
-    if s >= 0 or e >= 0:
-        return None   # half a current pair: a broken file, not a legacy one
-    m = LEGACY_MARKER_RE.search(text)
-    if m is None:
-        return None
-    end_marker = b"<!-- " + m.group("name") + b":end -->"
-    e = text.find(end_marker, m.end())
-    if e < 0:
-        return None
-    return m.start(), e + len(end_marker), m.group(0), end_marker
-
-
-def current_markers(block, start_marker, end_marker):
-    """The block with its markers renamed to the current pair; a no-op for a
-    block that already carries them."""
-    return block.replace(start_marker, START.encode()).replace(end_marker, END.encode())
+# The marker lookup is shared with render_instructions (block_of) and adopt:
+# one place knows the legacy Codex-agentic pair.
+find_block = render_instructions.find_block
+current_markers = render_instructions.current_markers
 MISSING = object()
 HASH_RE = re.compile(rb"sha256:[0-9a-f]{64}")
 
