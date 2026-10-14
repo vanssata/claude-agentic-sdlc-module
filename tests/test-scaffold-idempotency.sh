@@ -139,4 +139,20 @@ after=$(cd "$ROOT8" && find . -type f -print0 | sort -z | xargs -0 sha256sum)
 [ "$before" = "$after" ] && pass "a second project scaffold changes no file" || fail "the second run changed files"
 printf '%s' "$out" | grep -q 'nothing to do' && pass "it reports nothing to do" || fail "second run should be a no-op" "$out"
 
+echo "== a legacy Codex-agentic pair is the managed block: nothing is appended beside it"
+# An AGENTS.md from before the markers were unified. The scaffold never rewrites
+# an existing file, so the pair stays for /project-update to rename — but it is
+# the block, and a second one must not be appended.
+for name in Codex-agentic codex-agentic; do
+    R9="$TMP/legacy-$name"; mkdir -p "$R9"
+    { printf '# mine\n\nkeep this.\n\n'; sed "s/claude-agentic:\(start\|end\)/$name:\1/" "$CLAUDE_AGENTIC_TEMPLATES/AGENTS.block.md"; } > "$R9/AGENTS.md"
+    out=$(bash "$SCAFFOLD" "$R9" --runtime codex 2>&1)
+    [ "$(grep -c 'agentic:start -->' "$R9/AGENTS.md")" = 1 ] && pass "$name: one block, the legacy pair is not doubled" \
+        || fail "$name: a second block was appended beside the legacy pair" "$out"
+    printf '%s' "$out" | grep -q 'AGENTS.md (agent workflow block appended)' \
+        && fail "$name: the scaffold reports an appended block" "$out" || pass "$name: no block is reported as appended"
+    grep -q "<!-- $name:start -->" "$R9/AGENTS.md" && grep -q 'keep this.' "$R9/AGENTS.md" \
+        && pass "$name: the file is left as it was" || fail "$name: the scaffold rewrote an existing file"
+done
+
 summary "scaffold-ai.sh"

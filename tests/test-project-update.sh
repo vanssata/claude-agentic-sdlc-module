@@ -750,4 +750,31 @@ shipped=$(jq -cS '._budgets' "$PLUGIN_ROOT/instructions/runtimes.json")
 default=$(cd "$PLUGIN_ROOT/skills/project-update" && python3 -c 'import json, render_instructions as r; print(json.dumps(r.DEFAULT_BUDGETS, sort_keys=True, separators=(",", ":")))')
 [ "$shipped" = "$default" ] && pass "DEFAULT_BUDGETS equals _budgets in runtimes.json" || fail "DEFAULT_BUDGETS drifted from runtimes.json" "$shipped / $default"
 
+echo "== budget hint: a pristine legacy block over the budget is the plugin's to trim, not the project's"
+# The hint compares the block with the shipped one. A legacy pair must be
+# compared through its renamed markers, or a block that --apply will rewrite
+# anyway is reported as "edited here, trimming it is yours".
+PT="$TMP/padded-tpl"; rm -rf "$PT"; cp -r "$PLUGIN_ROOT/skills/ai-init/templates" "$PT"
+python3 - "$PT/AGENTS.block.md" <<'PYT'
+import sys
+p = sys.argv[1]; t = open(p, encoding="utf-8").read()
+i = t.index("<!-- claude-agentic:end -->")
+open(p, "w", encoding="utf-8").write(t[:i] + "<!-- padding, over the project budget -->\n" * 60 + t[i:])
+PYT
+PB="$TMP/padded-legacy"; mkdir -p "$PB/.codex"
+bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$PB" >/dev/null
+bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$PB" >/dev/null
+git -C "$PB" init -q
+{ printf '# legacy\n\n'; sed 's/claude-agentic:\(start\|end\)/Codex-agentic:\1/' "$PT/AGENTS.block.md"; } > "$PB/AGENTS.md"
+out=$(CLAUDE_AGENTIC_TEMPLATES="$PT" python3 "$UPDATE" "$PB" 2>&1); rc=$?
+printf '%s' "$out" | grep -q 'AGENTS.md: the managed block is [0-9]* B, budget [0-9]* B — the plugin ships it that size' \
+    && pass "an untouched legacy block over budget is the plugin's" || fail "the hint blames the project for the plugin's own block (rc=$rc)" "$out"
+printf '%s' "$out" | grep -q 'trimming it is yours' \
+    && fail "an untouched legacy block is reported as edited here" "$out" || pass "no 'edited here' for the untouched block"
+# The same block with one line of the project's own inside it is the project's.
+sed -i '3a my own rule, right inside the block' "$PB/AGENTS.md"
+out=$(CLAUDE_AGENTIC_TEMPLATES="$PT" python3 "$UPDATE" "$PB" 2>&1)
+printf '%s' "$out" | grep -q 'AGENTS.md: the managed block is .* trimming it is yours' \
+    && pass "an edited legacy block over budget is the project's" || fail "an edited legacy block should be the project's to trim" "$out"
+
 summary "project-update"

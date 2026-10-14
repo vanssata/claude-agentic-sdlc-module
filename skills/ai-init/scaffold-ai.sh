@@ -91,7 +91,9 @@ if ! grep -qsF '.ai/state/*.json' "$GI" 2>/dev/null; then
 fi
 
 # The instruction file: create a minimal one if absent, then append the managed
-# block once. An existing file is never replaced — only appended to.
+# block once. An existing file is never replaced — only appended to. A legacy
+# Codex-agentic pair is the block under its old name: nothing is appended beside
+# it; /project-update renames it.
 PROJECT_ESC=$(printf '%s' "$PROJECT" | sed -e 's/[\/&\\]/\\&/g')
 instruction_file() {  # instruction_file <name> <minimal-template> <block-template>
   local md="$ROOT/$1"
@@ -100,7 +102,7 @@ instruction_file() {  # instruction_file <name> <minimal-template> <block-templa
     sed -e "s/{{PROJECT}}/$PROJECT_ESC/g" "$TPL/$2" > "$md"
     created+=("$1")
   fi
-  if ! grep -qsF '<!-- claude-agentic:start -->' "$md" 2>/dev/null; then
+  if ! grep -qsE '<!-- (claude-agentic|[Cc]odex-agentic):start -->' "$md" 2>/dev/null; then
     { [ -s "$md" ] && [ -n "$(tail -c1 "$md")" ] && echo; echo; cat "$TPL/$3"; } >> "$md"
     created+=("$1 (agent workflow block appended)")
   fi
