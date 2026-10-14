@@ -1,0 +1,328 @@
+{
+  "from": 5,
+  "to": 6,
+  "applied_at": "2026-10-14T14:15:57Z",
+  "ops": [
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/policies/production.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/policies/database.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/policies/git.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/policies/release.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/policies/context-management.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/policies/tooling.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/policies/model-routing.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/policies/review-economy.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/agents/context.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/agents/discovery.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/agents/implementer.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/agents/manager.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/agents/planner.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/agents/release.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/agents/reviewer.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/agents/risk.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/agents/security.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/agents/tester.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/workflows/feature.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/workflows/bugfix.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/workflows/hotfix.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/workflows/investigation.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/workflows/refactoring.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/templates/task-context.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/templates/impact-report.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/templates/review-report.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/templates/release-report.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/templates/architecture-decision.md"
+    },
+    {
+      "action": "delete",
+      "migration": 6,
+      "path": ".ai/templates/implementation-plan.md"
+    }
+  ],
+  "deletions": [
+    {
+      "path": ".ai/policies/production.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/policies/database.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/policies/git.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/policies/release.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/policies/context-management.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/policies/tooling.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/policies/model-routing.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/policies/review-economy.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/agents/context.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/agents/discovery.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/agents/implementer.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/agents/manager.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/agents/planner.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/agents/release.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/agents/reviewer.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/agents/risk.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/agents/security.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/agents/tester.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/workflows/feature.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/workflows/bugfix.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/workflows/hotfix.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/workflows/investigation.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/workflows/refactoring.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/templates/task-context.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/templates/impact-report.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/templates/review-report.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/templates/release-report.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/templates/architecture-decision.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    },
+    {
+      "path": ".ai/templates/implementation-plan.md",
+      "confirmed_by": "ikakarov]",
+      "via": "terminal",
+      "at": "2026-10-14T14:15:37Z"
+    }
+  ]
+}
