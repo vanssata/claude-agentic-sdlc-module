@@ -95,3 +95,8 @@ following; each is open unless marked.
 - **(t) A router section at the very end without a final newline** glues onto the next heading when the merge moves it (`put_section`). 0006 always writes the newline; needs a human to strip it. Status: open.
 - **(u) One CRLF line makes `router_merge` rewrite the whole router in CRLF** (`crlf = b"\r\n" in ours`). Status: open.
 - **(v) The template's `## Shared files` text never reaches a router that already has the section.** By design of `router_merge`; a future migration that changes the shared set must rewrite the section itself. Status: accepted.
+
+## Legacy managed-block markers (T-2026-10-14-001)
+
+- **(a) `render_instructions.block_of` and `adopt.py` know only the current marker.** `block_of` (`skills/project-update/render_instructions.py`) and the AGENTS.md reader in `adopt.py` look for `<!-- claude-agentic:start -->` alone, so an instruction file with a legacy `Codex-agentic` pair measures as "no block" and the dry run hints `AGENTS.md (split?) — run /project-update --adopt` until `--apply` has renamed the markers. `update.py` (`find_block`) is the one place fixed in this task; the same lookup in the other two is left as is. Suggested fix: route both through `update.find_block` or a shared helper. Status: open.
+- **(b) `install.sh` still doubles a legacy pair.** The Codex path (`install.sh:607-628`) and `block_size` (`install.sh:160`) look for the current markers only, so an AGENTS.md with a `Codex-agentic` pair gets a second block appended at install or reinstall; the next `/project-update` then renames the legacy pair and leaves two current blocks. Found by the T-2026-10-14-001 review. Suggested fix: the same pair detection as `update.find_block`, in the installer. Status: open.

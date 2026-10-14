@@ -695,6 +695,54 @@ INST="$TMP/installed/skills"; mkdir -p "$INST"; cp -r "$PLUGIN_ROOT/skills/proje
 out=$(python3 "$INST/project-update/update.py" "$B" --check --budget 2>&1); rc=$?
 [ $rc -eq 1 ] && printf '%s' "$out" | grep -q 'over the skeleton budget of 2048 B' && ! printf '%s' "$out" | grep -q Traceback \
     && pass "from a skills-only install the shipped budgets apply" || fail "skills-only install: rc=$rc" "$out"
+echo "== a legacy Codex-agentic marker pair is renamed, not doubled"
+# An AGENTS.md written before the plugin's markers were unified carries
+# <!-- Codex-agentic:start/end -->. The block inside is the shipped one.
+L="$TMP/legacy"; mkdir -p "$L/.codex"
+bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$L" >/dev/null
+bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$L" >/dev/null
+git -C "$L" init -q
+sed 's/claude-agentic:\(start\|end\)/Codex-agentic:\1/' "$PLUGIN_ROOT/skills/ai-init/templates/AGENTS.block.md" > "$TMP/legacy-block"
+{ printf '# legacy\n\nkeep me above\n\n'; cat "$TMP/legacy-block"; printf '\n# my notes\nkeep me below\n'; } > "$L/AGENTS.md"
+out=$(python3 "$UPDATE" "$L" 2>&1); rc=$?
+[ $rc -eq 0 ] && pass "the dry run exits 0 on a legacy marker" || fail "dry run failed on a legacy marker" "$out"
+printf '%s' "$out" | grep -q 'AGENTS.md .*legacy Codex-agentic markers renamed' \
+    && pass "the dry run says the markers will be renamed" || fail "no rename line for the legacy block" "$out"
+python3 "$UPDATE" "$L" --apply >/dev/null 2>&1
+[ "$(grep -c 'claude-agentic:start' "$L/AGENTS.md")" = 1 ] && pass "one current block remains" || fail "block doubled or missing" "$(cat "$L/AGENTS.md")"
+if grep -q 'Codex-agentic' "$L/AGENTS.md"; then fail "the legacy markers are still there"; else pass "the legacy markers are gone"; fi
+grep -q 'keep me above' "$L/AGENTS.md" && grep -q 'keep me below' "$L/AGENTS.md" \
+    && pass "the text around the block is kept" || fail "text around the block lost"
+diff <(sed -n '/claude-agentic:start/,/claude-agentic:end/p' "$L/AGENTS.md") "$PLUGIN_ROOT/skills/ai-init/templates/AGENTS.block.md" >/dev/null \
+    && pass "the renamed block is the shipped one" || fail "the renamed block differs from the shipped block"
+out=$(python3 "$UPDATE" "$L" --apply 2>&1)
+printf '%s' "$out" | grep -q '^0 automatic, 0 conflict' && pass "a second run has nothing left" || fail "second run not clean" "$out"
+# An edited line inside a legacy block: the markers are renamed and the edit is
+# kept — the same path an edited current block takes.
+E="$TMP/legacy-edited"; mkdir -p "$E/.codex"
+bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$E" >/dev/null
+bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$E" >/dev/null
+git -C "$E" init -q
+{ printf '# legacy\n\n'; sed '3a my own rule, right inside the block' "$TMP/legacy-block"; } > "$E/AGENTS.md"
+python3 "$UPDATE" "$E" --apply >/dev/null 2>&1
+if grep -q 'Codex-agentic' "$E/AGENTS.md"; then fail "an edited legacy block keeps its old markers"; else pass "an edited legacy block gets the current markers"; fi
+grep -q 'my own rule, right inside the block' "$E/AGENTS.md" && pass "and its edit is kept" || fail "the edit inside the legacy block was lost" "$(cat "$E/AGENTS.md")"
+[ "$(grep -c 'claude-agentic:start' "$E/AGENTS.md")" = 1 ] && pass "with one block" || fail "edited legacy block doubled"
+# Half a current pair next to a legacy pair is a broken file: nothing is renamed.
+H="$TMP/legacy-half"; mkdir -p "$H/.codex"
+bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$H" >/dev/null
+bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$H" >/dev/null
+git -C "$H" init -q
+{ printf '# half
+
+<!-- claude-agentic:start -->
+lone start
+
+'; cat "$TMP/legacy-block"; } > "$H/AGENTS.md"
+python3 "$UPDATE" "$H" --apply >/dev/null 2>&1
+grep -q 'Codex-agentic:start' "$H/AGENTS.md" && [ "$(grep -c 'claude-agentic:end' "$H/AGENTS.md")" = 1 ] \
+    && pass "a lone current marker beside a legacy pair renames nothing" || fail "a half pair plus a legacy pair was rewritten" "$(cat "$H/AGENTS.md")"
+
 shipped=$(jq -cS '._budgets' "$PLUGIN_ROOT/instructions/runtimes.json")
 default=$(cd "$PLUGIN_ROOT/skills/project-update" && python3 -c 'import json, render_instructions as r; print(json.dumps(r.DEFAULT_BUDGETS, sort_keys=True, separators=(",", ":")))')
 [ "$shipped" = "$default" ] && pass "DEFAULT_BUDGETS equals _budgets in runtimes.json" || fail "DEFAULT_BUDGETS drifted from runtimes.json" "$shipped / $default"

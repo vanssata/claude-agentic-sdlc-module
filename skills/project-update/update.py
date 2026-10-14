@@ -80,6 +80,35 @@ RULES_DIR = ".ai/rules"
 RULES_SKIP = {".git", ".ai", "vendor", "node_modules", "bower_components",
               "third_party", "Pods", "site-packages", ".venv", ".pnpm", ".yarn"}
 START, END = "<!-- claude-agentic:start -->", "<!-- claude-agentic:end -->"
+# A marker pair an older or hand-written instruction file may carry instead.
+# It is found, renamed to START/END and merged like the current pair — never
+# left in place with a second block appended beside it.
+LEGACY_MARKER_RE = re.compile(rb"<!-- (?P<name>[Cc]odex-agentic):start -->")
+
+
+def find_block(text):
+    """(start, end, start_marker, end_marker) of the managed block in text —
+    end is past the end marker — or None. The current pair wins; a legacy
+    pair counts only when both of its markers are there, in order."""
+    s, e = text.find(START.encode()), text.find(END.encode())
+    if s >= 0 and e >= 0:
+        return s, e + len(END), START.encode(), END.encode()
+    if s >= 0 or e >= 0:
+        return None   # half a current pair: a broken file, not a legacy one
+    m = LEGACY_MARKER_RE.search(text)
+    if m is None:
+        return None
+    end_marker = b"<!-- " + m.group("name") + b":end -->"
+    e = text.find(end_marker, m.end())
+    if e < 0:
+        return None
+    return m.start(), e + len(end_marker), m.group(0), end_marker
+
+
+def current_markers(block, start_marker, end_marker):
+    """The block with its markers renamed to the current pair; a no-op for a
+    block that already carries them."""
+    return block.replace(start_marker, START.encode()).replace(end_marker, END.encode())
 MISSING = object()
 HASH_RE = re.compile(rb"sha256:[0-9a-f]{64}")
 
@@ -412,10 +441,11 @@ class MigrationContext:
         runtime = next((rt for rt, entry in INSTRUCTION_FILE.items() if entry[0] == path), None)
         if text is None or runtime is None:
             return "none"
-        start, end = text.find(START.encode()), text.find(END.encode())
-        if start < 0 or end < 0:
+        found = find_block(text)
+        if found is None:
             return "none"
-        ours = text[start:end + len(END)] + b"\n"
+        start, end, start_marker, end_marker = found
+        ours = current_markers(text[start:end], start_marker, end_marker) + b"\n"
         block_tpl = INSTRUCTION_FILE[runtime][1]
         tpl = read(os.path.join(TEMPLATES["ai-init"], block_tpl))
         if ours == tpl or ours in self.history.versions("ai-init/" + block_tpl):
@@ -876,23 +906,34 @@ def block_update(plan, history, runtime):
             b"{{PROJECT}}", os.path.basename(plan.root).encode())
         plan.add("create", name, "with the managed block", content=created.rstrip(b"\n") + b"\n\n" + tpl)
         return
-    s, e = text.find(START.encode()), text.find(END.encode())
-    if s < 0 or e < 0:
+    found = find_block(text)
+    if found is None:
         plan.add("update", name, "managed block appended",
                  content=text.rstrip(b"\n") + b"\n\n" + tpl)
         return
-    e += len(END)
-    ours = text[s:e] + b"\n"
+    s, e, start_marker, end_marker = found
+    legacy = start_marker != START.encode()
+    renamed = " (legacy %s markers renamed)" % start_marker.decode()[len("<!-- "):-len(":start -->")] if legacy else ""
+    ours = current_markers(text[s:e], start_marker, end_marker) + b"\n"
     if ours == tpl:
+        if legacy:
+            plan.add("update", name, "managed block kept" + renamed,
+                     content=text[:s] + tpl.rstrip(b"\n") + text[e:])
         return
     versions = [v for v in history.versions("ai-init/" + block_tpl) if v != tpl]
     if ours in versions:
         new_block = tpl
-        note = "managed block replaced (unchanged since it was installed)"
+        note = "managed block replaced (unchanged since it was installed)" + renamed
     else:
         base = closest(versions, ours, text_ratio) if versions else None
         new_block = merge_text(ours, base, tpl) if base is not None else None
-        note = "managed block merged, your edits kept"
+        note = "managed block merged, your edits kept" + renamed
+    if new_block is None and legacy:
+        # The edit cannot be merged, but the markers can still be renamed: the
+        # block stays as edited, and the next run treats it as an edited
+        # current block — a conflict with the plugin's copy beside it.
+        new_block = ours
+        note = "managed block kept as edited" + renamed
     if new_block is None:
         plan.add("conflict", name, "the managed block was edited here and changed in the plugin",
                  conflict_copy=tpl)

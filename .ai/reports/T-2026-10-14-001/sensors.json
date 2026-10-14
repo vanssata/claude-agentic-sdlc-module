@@ -1,0 +1,78 @@
+{
+  "checked_at": "2026-10-14T15:29:05Z",
+  "declared_tier": "T2",
+  "rescored_tier": "T2",
+  "schema": 1,
+  "sensors": {
+    "bite": {
+      "detail": "no finished step named a test \u2014 traceability says the same",
+      "must_fail": null,
+      "must_pass": null,
+      "restored": null,
+      "status": "unavailable",
+      "tree": "852cfd34c7aca2d3a651f90eed1ff1f24d47f485"
+    },
+    "diff": {
+      "detail": "2 files / 107 lines (T2 task budget 15 / 400)",
+      "enforced": false,
+      "files": 2,
+      "lines": 107,
+      "over": [],
+      "status": "green",
+      "tree": "852cfd34c7aca2d3a651f90eed1ff1f24d47f485",
+      "unscoped": []
+    },
+    "duplicates": {
+      "detail": "0 blocks >= 8 lines repeat",
+      "status": "green",
+      "tree": "852cfd34c7aca2d3a651f90eed1ff1f24d47f485"
+    },
+    "lint": {
+      "detail": "pylint $(git ls-files '*.py'): command not found",
+      "status": "unavailable",
+      "tree": "852cfd34c7aca2d3a651f90eed1ff1f24d47f485"
+    },
+    "plan_sections": {
+      "detail": "inline plan",
+      "status": "not_applicable",
+      "tree": "852cfd34c7aca2d3a651f90eed1ff1f24d47f485"
+    },
+    "rescore": {
+      "detail": "T2 \u2014 scopes: docs, source, tests",
+      "reasons": [],
+      "status": "green",
+      "tier": "T2",
+      "tree": "852cfd34c7aca2d3a651f90eed1ff1f24d47f485"
+    },
+    "tests": {
+      "detail": "verify_command exit 0 in 287s, run 2, log .ai/reports/T-2026-10-14-001/tests-suite-2.log",
+      "log": ".ai/reports/T-2026-10-14-001/tests-suite-2.log",
+      "status": "green",
+      "tree": "852cfd34c7aca2d3a651f90eed1ff1f24d47f485"
+    },
+    "traceability": {
+      "detail": "steps with no test named: 1",
+      "status": "red",
+      "tree": "852cfd34c7aca2d3a651f90eed1ff1f24d47f485",
+      "untraced": [
+        "1"
+      ]
+    },
+    "typecheck": {
+      "detail": "typecheck_command: none (testing.md)",
+      "status": "not_applicable",
+      "tree": "852cfd34c7aca2d3a651f90eed1ff1f24d47f485"
+    }
+  },
+  "task": "T-2026-10-14-001",
+  "tree": "852cfd34c7aca2d3a651f90eed1ff1f24d47f485",
+  "verdict": {
+    "all_green": false,
+    "blocking": [
+      "lint: unavailable",
+      "traceability: red",
+      "bite: unavailable"
+    ],
+    "review": "required"
+  }
+}
