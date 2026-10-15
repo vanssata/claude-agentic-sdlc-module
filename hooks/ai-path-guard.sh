@@ -427,13 +427,68 @@ cover_init() {
     COVER_ROOTS=$(realpath -m -- "$AI_ROOT/.ai" "$AI_ROOT/.claude" "$AI_ROOT/.codex" \
                       "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CODEX_HOME:-$HOME/.codex}" 2>/dev/null | sort -u)
 }
+# work_cap classify|scan|token — count one unit of forking work and deny past
+# the cap. Every Bash call passes through this hook under a 10 s timeout, and a
+# padded command (thousands of operands or tokens) would otherwise outrun it.
+# The caps sit far above ordinary work: a path that matches nothing loose costs
+# no fork and no count, and a line that matches nothing loose never reaches the
+# token loop. Past them the deny side is kept, never the allow side. The counts
+# do not bound what one unit costs (a scan classifies up to 50 hits), so every
+# unit also checks one shared clock: past 6 s of hook time, deny. The worst
+# case is then 6 s plus one unit, inside the 10 s timeout.
+WORK_CLASSIFY=0 WORK_SCAN=0 WORK_TOKEN=0
+WHY_WORK_CAP=$'This command names more paths than the guard can check within its timeout; split it into smaller commands, or pass the list through a file and xargs.'
+work_cap() {
+    case "$1" in
+        classify) WORK_CLASSIFY=$((WORK_CLASSIFY + 1)); [ "$WORK_CLASSIFY" -le 64 ] ;;
+        scan) WORK_SCAN=$((WORK_SCAN + 1)); [ "$WORK_SCAN" -le 16 ] ;;
+        token) WORK_TOKEN=$((WORK_TOKEN + 1)); [ "$WORK_TOKEN" -le 256 ] ;;
+    esac && [ "$SECONDS" -lt 6 ] || deny "$WHY_WORK_CAP"
+}
+
+# work_clock — the 6 s clock alone, in process and without a fork: every loop
+# that runs once per operand or per token calls it, counted work or not — 25000
+# operands that match nothing took 14 s on their own.
+work_clock() { [ "$SECONDS" -lt 6 ] || deny "$WHY_WORK_CAP"; }
+
+# loose_hits — reads lines on stdin and prints the 1-based numbers of those
+# that match a loose pattern: one grep for a whole batch of paths. Bytewise,
+# like ere_match on a long line: in a UTF-8 locale this alternation is
+# quadratic on a long matching line (a 20 KB operand took 4.9 s). -a keeps an
+# old grep's "Binary file matches" off stdout; the pattern comes from a file.
+loose_hits() {
+    local n
+    while IFS=: read -r n _; do
+        [[ $n =~ ^[0-9]+$ ]] && printf '%s\n' "$n"
+    done < <(LC_ALL=C grep -anE -f <(printf '%s\n' "$LOOSE_JOINED") 2>/dev/null)
+}
+
+# covers_work <normalised-abs-path> <lexical> — whether covers_protected has
+# any forking work on this path, with a directory scan counted against its cap
+# in the hook's own shell (covers_protected runs in $( ), where a count or a
+# deny would be lost). <lexical> is non-empty when the path, or the path with a
+# trailing slash, matches the loose patterns (the caller's one grep; the
+# caller counts that candidate). Returns 1 when there is no work: a path that
+# matches nothing loose, has no root under it and is not a directory costs no
+# fork at all, which is what a 3000-file rm of ordinary files needs.
+covers_work() {
+    local c="${1%/}" r work="$2"
+    [ -n "$c" ] || c=/
+    while IFS= read -r r; do
+        [ -n "$r" ] || continue
+        [ "$c" = / ] || [ "$r" = "$c" ] || [[ $r == "$c"/* ]] || continue
+        [ -e "$r" ] && { work_cap scan; return 0; }
+    done <<< "$COVER_ROOTS"
+    [ -d "$c" ] && { work_cap scan; return 0; }
+    [ -n "$work" ]
+}
 covers_protected() {
     local c="${1%/}" r roots=() scan=() line verdict kind
     [ -n "$c" ] || c=/
     for line in "$c" "$c/"; do
         # classify forks; the joined pre-filter decides first, in process,
         # so a 30-file rm of ordinary files costs no fork per file.
-        { [[ $line =~ $LOOSE_JOINED ]]; } 2>/dev/null || continue
+        ere_match "$LOOSE_JOINED" "$line" || continue
         verdict=$(classify "$line"); kind="${verdict%%:*}"
         case "$kind" in
             protected) printf '%s\n' "${line%/}"; return 0 ;;
@@ -459,7 +514,7 @@ covers_protected() {
                    \( -name .git -o -name vendor -o -name node_modules -o -name bower_components -o -name third_party \
                       -o -name Pods -o -name site-packages -o -name .venv -o -name .pnpm -o -name .yarn \) -prune -o -print 2>/dev/null \
                    | head -n 20000; } \
-             | awk '{ print; print $0 "/" }' | grep -E -- "$COVER_JOINED" | head -n 50)
+             | awk '{ print; print $0 "/" }' | LC_ALL=C grep -aE -f <(printf '%s\n' "$COVER_JOINED") | head -n 50)
     return 1
 }
 
@@ -568,6 +623,22 @@ case "$AI_TOOL" in
                 case "$verb" in cp|mv|install|rsync|rm|rmdir|unlink) ;; *) continue ;; esac
                 dest="" sources=() opts_done="" want_dest=""
                 for w in "${operands[@]:1}"; do
+                    work_clock
+                    # An operand over PATH_MAX (4096) names no file as written
+                    # (ENAMETOOLONG), and bash's own ${w##*/} and ${w#*=} are
+                    # quadratic on it (4.5 s at 140 KB). With a glob or an
+                    # expansion it may name a short one: deny. Otherwise it
+                    # keeps its place as a short stand-in that matches nothing.
+                    if [ ${#w} -gt 4096 ]; then
+                        case "$w" in
+                            *[][*?\$\`{}\(\)\\~@!+]*) deny "Refusing a shell $verb with a ${#w}-character operand that holds a glob or expansion character: the guard cannot check what it expands to." ;;
+                        esac
+                        if [ -z "$opts_done" ] && [ -z "$want_dest" ]; then
+                            [[ $w == --target-directory=* ]] && { dest=LONG-OPERAND; continue; }
+                            [[ $w == -* ]] && continue
+                        fi
+                        w=LONG-OPERAND
+                    fi
                     if [ -n "$want_dest" ]; then want_dest=""; dest="$w"; continue; fi
                     if [ -z "$opts_done" ]; then
                         case "$w" in
@@ -611,6 +682,7 @@ case "$AI_TOOL" in
                 [ "${#cands[@]}" -gt 0 ] || continue
                 abss=()
                 for cand in "${cands[@]}"; do
+                    work_clock
                     case "$cand" in
                         '~'|'$HOME'|'${HOME}') cand="$HOME" ;;
                         '~/'*) cand="$HOME/${cand#'~/'}" ;;
@@ -624,15 +696,33 @@ case "$AI_TOOL" in
                 # also normalises ./ and // away.
                 reals=()
                 while IFS= read -r r; do reals+=("$r"); done < <(realpath -m -- "${abss[@]}" 2>/dev/null)
-                [ "${#reals[@]}" -eq "${#abss[@]}" ] || reals=("${abss[@]}")
-                # The loose patterns are the pre-filter built for a whole line:
-                # a miss here is a miss in classify too, which runs only on a
-                # hit. The covering test below does not depend on it — a
-                # directory's own name need not match anything.
-                subject="${abss[*]} ${reals[*]}"
-                prefilter=""
-                { [[ $subject =~ $LOOSE_JOINED ]]; } 2>/dev/null && prefilter=yes
+                # One operand that does not resolve (a symlink loop) drops a
+                # line: resolve them one at a time then, never fall back to
+                # the unresolved list, where a symlinked directory would hide.
+                if [ "${#reals[@]}" -ne "${#abss[@]}" ]; then
+                    reals=()
+                    for abs in "${abss[@]}"; do
+                        work_cap classify
+                        r=$(realpath -m -- "$abs" 2>/dev/null) && [ -n "$r" ] || r="$abs"
+                        reals+=("$r")
+                    done
+                fi
+                # The loose patterns are the pre-filter: a miss is a miss in
+                # classify too, which runs only on a hit. One grep for every
+                # candidate (loose_hits) instead of a regex compile per
+                # candidate (a 3000-file rm): line 3i+1 is "abs real", 3i+2
+                # the normalised path and 3i+3 the same with a slash —
+                # covers_protected's own lexical test. Operands come from one
+                # segment line, so none holds a newline.
+                hits=()
+                while IFS= read -r n; do hits[$n]=yes; done < <(
+                    for i in "${!abss[@]}"; do
+                        norm="${reals[$i]%/}"; [ -n "$norm" ] || norm=/
+                        printf '%s %s\n%s\n%s/\n' "${abss[$i]}" "${reals[$i]}" "$norm" "$norm"
+                    done | loose_hits)
+                work_clock
                 for i in "${!abss[@]}"; do
+                    work_clock
                     abs="${abss[$i]}" real="${reals[$i]}" cand="${cands[$i]}"
                     how="copy or move into"
                     case "$verb" in
@@ -640,7 +730,15 @@ case "$AI_TOOL" in
                         mv) [ "$i" -gt 0 ] && [ "$abs" != "${abss[0]%/}/${abs##*/}" ] && how="move of" ;;
                     esac
                     verdict=""
-                    if [ -n "$prefilter" ]; then
+                    lexical="${hits[$((3 * i + 2))]:-}${hits[$((3 * i + 3))]:-}"
+                    # One count per candidate that needs any classify.
+                    if [ -n "${hits[$((3 * i + 1))]:-}" ] \
+                       || { [ "${covers[$i]}" = yes ] && [ -n "$lexical" ]; }; then
+                        work_cap classify
+                    fi
+                    # real_path "$abs" is "$real" (realpath -m above, or one
+                    # operand at a time).
+                    if [ -n "${hits[$((3 * i + 1))]:-}" ]; then
                         verdict=$(classify "$abs")
                         [ -n "$verdict" ] || verdict=$(classify "$real")
                         [ -n "$verdict" ] || verdict=$(classify "$(real_path "$abs")")
@@ -654,6 +752,7 @@ case "$AI_TOOL" in
                             task_in_flight && deny "Refusing a shell $how runtime configuration while task $AI_TASK_ID is in flight: $cand$WHY_TASK" ;;
                     esac
                     [ "${covers[$i]}" = yes ] || continue
+                    covers_work "$real" "$lexical" || continue
                     found=$(covers_protected "$real") || continue
                     verdict=$(classify "$found"); [ -n "$verdict" ] || verdict=$(classify "$found/")
                     held=" (holds $found)"
@@ -696,10 +795,83 @@ case "$AI_TOOL" in
         ddwrite="${segment}"'dd([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+'
         inplace="${segment}"'(sed|perl|ruby)([[:space:]]+-[^[:space:]]*i[^[:space:]]*)([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+'
 
-        # Every argument-looking token in the command, minus flags.
+        # Every argument-looking token in the command, minus flags. Collected
+        # first, then pre-filtered in one grep (loose_hits) over what classify
+        # would test — the token's absolute path, its resolved path when it
+        # exists, and the absolute path of what follows an '=' — so a token
+        # that matches nothing costs no fork, and prose (a heredoc, a commit
+        # message) does not count against the cap. The rest are counted.
+        tokens=()
         while IFS= read -r token; do
+            work_clock
             [ -n "$token" ] || continue
             case "$token" in -*) continue ;; esac
+            tokens+=("$token")
+        done < <(words=()
+                 IFS=$' \t\n' read -r -d '' -a words <<< "${cmd//[|;&()<>]/ }"
+                 for w in "${words[@]}"; do
+                     while [[ $w == [\"\']* ]]; do w="${w:1}"; done     # strip surrounding quotes
+                     while [[ $w == *[\"\'] ]]; do w="${w%?}"; done
+                     [ -z "$w" ] || printf '%s\n' "$w"
+                 done | sort -u)
+        # A token over PATH_MAX (4096): the rules below would build a regex
+        # as long as it, which past 128 KB grep cannot even be given. As
+        # written no such path opens (ENAMETOOLONG), but a glob or an
+        # expansion makes it short again — `[<4200 c>]urrent.json` is
+        # current.json — so it is denied when it holds one, or when its
+        # absolute form looks interesting; otherwise it is skipped.
+        short=() abs_lines=()
+        for token in "${tokens[@]}"; do
+            work_clock
+            if [ ${#token} -gt 4096 ]; then
+                case "$token" in
+                    *[][*?\$\`{}\(\)\\~@!+]*) deny "Refusing a shell command with a ${#token}-character argument that holds a glob or expansion character: the guard cannot check what it expands to." ;;
+                esac
+                # Not ${token#*=}: that is quadratic, 9.5 s on 200 KB.
+                after=$(LC_ALL=C sed 's/^[^=]*=//' <<< "$token")
+                ere_match "$LOOSE_JOINED" "$(abs_path "$token")"$'\n'"$(abs_path "$after")" \
+                    && deny "Refusing a shell command with a ${#token}-character argument that matches a guarded path pattern: no path that long names a file, and the guard does not check it."
+                continue
+            fi
+            short+=("$token")
+            case "$token" in /*) abs_lines+=("$token") ;; *) abs_lines+=("${AI_CWD%/}/$token") ;; esac
+        done
+        # Resolved paths, for the tokens that exist: one realpath for all of
+        # them, one at a time only when that drops a line.
+        exist=() resolved=()
+        for i in "${!short[@]}"; do work_clock; [ -e "${abs_lines[$i]}" ] && exist+=("$i"); done
+        if [ ${#exist[@]} -gt 0 ]; then
+            while IFS= read -r r; do resolved+=("$r"); done < <(
+                for i in "${exist[@]}"; do printf '%s\0' "${abs_lines[$i]}"; done | xargs -0 realpath -- 2>/dev/null)
+            if [ ${#resolved[@]} -ne ${#exist[@]} ]; then
+                resolved=()
+                for i in "${exist[@]}"; do
+                    work_cap token
+                    r=$(real_path "${short[$i]}"); resolved+=("$r")
+                done
+            fi
+        fi
+        real_lines=("${abs_lines[@]}")
+        for j in "${!exist[@]}"; do real_lines[${exist[$j]}]="${resolved[$j]}"; done
+        # Line 3i+1 is the absolute path, 3i+2 the resolved one, 3i+3 the
+        # absolute path of what follows an '=' (the absolute path again when
+        # there is none). Tokens come from a whitespace split: no newlines.
+        thits=()
+        while IFS= read -r n; do thits[$(( (n - 1) / 3 ))]=yes; done < <(
+            for i in "${!short[@]}"; do
+                token="${short[$i]}"
+                eq="${abs_lines[$i]}"
+                case "$token" in
+                    *=/*) eq="${token#*=}" ;;
+                    *=*) eq="${AI_CWD%/}/${token#*=}" ;;
+                esac
+                printf '%s\n%s\n%s\n' "${abs_lines[$i]}" "${real_lines[$i]}" "$eq"
+            done | loose_hits)
+        work_clock
+        tokens=()
+        for i in "${!short[@]}"; do [ -z "${thits[$i]:-}" ] || tokens+=("${short[$i]}"); done
+        for token in "${tokens[@]}"; do
+            work_cap token
             verdict=$(classify "$(abs_path "$token")")
             [ -n "$verdict" ] || verdict=$(classify "$(real_path "$token")")
             # `dd of=PATH` and friends put the path inside the token.
@@ -746,13 +918,7 @@ case "$AI_TOOL" in
                         task_in_flight && deny "Refusing a shell $how runtime configuration while task $AI_TASK_ID is in flight: $token$WHY_TASK" ;;
                 esac
             fi
-        done < <(words=()
-                 IFS=$' \t\n' read -r -d '' -a words <<< "${cmd//[|;&()<>]/ }"
-                 for w in "${words[@]}"; do
-                     while [[ $w == [\"\']* ]]; do w="${w:1}"; done     # strip surrounding quotes
-                     while [[ $w == *[\"\'] ]]; do w="${w%?}"; done
-                     [ -z "$w" ] || printf '%s\n' "$w"
-                 done | sort -u)
+        done
 
         # A symlink whose target is sensitive: the link does not exist yet at
         # hook time, so the realpath check above cannot see it.

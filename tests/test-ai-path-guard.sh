@@ -195,8 +195,6 @@ for unit in a 'a '; do
     pad() { printf '%*s' 200000 '' | sed "s/ /$unit/g" | head -c 200000; }
     long_hit=$(pad | jq -Rc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
         tool_input:{command:("python3 update.py . --apply " + . + " --co x")}}')
-    # Just over the threshold, not 200 KB: the guard's later rules are slow on
-    # any long line (known-risks: "The path guard is quadratic on long lines").
     long_miss=$(pad | head -c 20000 | jq -Rc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
         tool_input:{command:("echo " + .)}}')
     [ "${#long_hit}" -gt 200000 ] || fail "the padded payload was not built" "${#long_hit} bytes"
@@ -217,6 +215,77 @@ ms=$(( ($(date +%s%N) - t0) / 1000000 ))
 css=$( { printf "cat > dist/app.min.css <<'EOF'\n"; for i in $(seq 600); do printf 'function update(){}:root{--color-%d:#fff}' "$i"; done; printf '\nEOF'; } \
     | jq -Rsc --arg r "$NOAI" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:.}}')
 decide "a 25 KB minified CSS heredoc naming update and --color is allowed" allow "$css"
+# T-2026-10-15-004 (known-risks: "The path guard is quadratic on long lines"):
+# ere_match hands a line over 4096 characters to grep, and the forking work
+# per path and per token is capped, so no padded command outruns the timeout.
+timed() {   # timed <name> <expect> <payload> <max-ms>
+    local t0 ms
+    t0=$(date +%s%N)
+    decide "$1" "$2" "$3"
+    ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+    [ "$ms" -lt "$4" ] && pass "and within $4 ms (${ms} ms)" || fail "$1 took ${ms} ms" "budget $4 ms"
+}
+bash_stdin() { jq -Rsc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:.}}'; }
+pad_a() { printf '%*s' "$1" '' | tr ' ' a; }
+names() { for i in $(seq 3000); do printf ' file%d.txt' "$i"; done; }
+words() { for i in $(seq "$1"); do printf ' w%d' "$i"; done; }
+timed "a 40 KB echo is allowed" allow "$(printf 'echo %s' "$(pad_a 40000)" | bash_stdin)" 1000
+timed "a 40 KB sh -c string is allowed" allow "$(printf "sh -c '%s'" "$(pad_a 40000)" | bash_stdin)" 1000
+timed "a 200 KB echo followed by cat .env is denied" deny "$(printf 'echo %s; cat .env' "$(pad_a 200000)" | bash_stdin)" 1000
+timed "rm -f of 3000 files and a task state file is denied" deny "$(printf 'rm -f%s .ai/state/current.json' "$(names)" | bash_stdin)" 5000
+out=$(printf 'rm -f%s' "$(names)" | bash_stdin)
+t0=$(date +%s%N); printf '%s' "$out" | "$GUARD" >/dev/null 2>&1; ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+[ "$ms" -lt 5000 ] && pass "rm -f of 3000 ordinary files is decided within 5 s (${ms} ms)" || fail "rm -f of 3000 files took ${ms} ms"
+timed "a 200 KB argument glued to a protected path is denied" deny "$(printf 'echo %s/.ai/state/current.json' "$(pad_a 200000)" | bash_stdin)" 1000
+timed "a 200 KB argument beside a frozen path, with no task, is allowed" allow "$(printf 'echo %s .claude/settings.json' "$(pad_a 200000)" | bash_stdin)" 1000
+rm -f "$ROOT/.ai/state/current.json"
+cap=$(printf 'ls%s' "$(for i in $(seq 300); do printf ' .claude/agents/x%d.md' "$i"; done)" | bash_stdin)
+decide "ls of 300 frozen paths is denied by the work cap" deny "$cap"
+printf '%s' "$cap" | "$GUARD" | grep -q 'names more paths than the guard can check' \
+    && pass "and the deny says why" || fail "the work-cap deny names its reason"
+# Prose is not counted (STRONG review): only tokens that hit the pre-filter.
+timed "a 300-word heredoc that mentions .env.example is allowed" allow \
+    "$(printf "cat > docs/setup.md <<'EOF'\ncopy .env.example first.%s\nEOF" "$(words 300)" | bash_stdin)" 3000
+timed "a 300-word commit message that mentions .env.example is allowed" allow \
+    "$(printf 'git commit -m "copy .env.example%s"' "$(words 300)" | bash_stdin)" 3000
+# A padded mover operand (STRONG review BLOCKER: the operand grep was quadratic in UTF-8).
+timed "rm -f of a 200 KB operand and the task state file is denied" deny \
+    "$(printf 'rm -f %s/.ai/state/x.json .ai/state/current.json' "$(pad_a 200000)" | bash_stdin)" 2000
+# A deny reason over 128 KB still denies (review HIGH: jq --arg could not exec).
+timed "cp of a 140 KB-named file and another into .ai/state/ is denied" deny \
+    "$(printf 'cp %s.json x.json .ai/state/' "$(pad_a 140000)" | bash_stdin)" 3000
+# A long glob collapses to a short path (review HIGH).
+STATECWD=$(jq -nc --arg r "$ROOT/.ai/state" --arg c "echo hi > [$(pad_a 4200 | tr a c)]urrent.json; echo .env.example" \
+    '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:$c}}')
+decide "a redirect into a 4200-character glob for current.json is denied" deny "$STATECWD"
+# One operand that does not resolve must not unresolve the rest (review HIGH).
+mkdir -p "$ROOT/lnk"; ln -sfn "$ROOT/.ai/state" "$ROOT/lnk/st"; ln -sfn loopB "$ROOT/lnk/loopA"; ln -sfn loopA "$ROOT/lnk/loopB"
+loop=$(jq -nc --arg r "$ROOT/lnk" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:"mv current.json loopA/x .env.example st/"}}')
+decide "mv into a symlinked state directory beside a symlink loop is denied" deny "$loop"
+# Work nobody counts is on the clock too (re-review BLOCKER: 25000 plain operands, 14 s).
+many=$(for i in $(seq 25000); do printf ' /f%d' "$i"; done)
+timed "mv of 25000 sources and the task state file is denied" deny "$(printf 'mv%s .ai/state/current.json /d' "$many" | bash_stdin)" 8000
+out=$(printf 'mv%s /d' "$many" | bash_stdin)
+t0=$(date +%s%N); printf '%s' "$out" | "$GUARD" >/dev/null 2>&1; ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+[ "$ms" -lt 8000 ] && pass "mv of 25000 plain sources is decided within 8 s (${ms} ms)" || fail "mv of 25000 sources took ${ms} ms"
+# Inside every count the work is still bounded by the clock (review HIGH: 11.4 s).
+WC="$TMP/worst"; mkdir -p "$WC/.ai/policies"
+for i in $(seq 16); do mkdir -p "$WC/d$i/.claude/agents"; for j in $(seq 50); do : > "$WC/d$i/.claude/agents/a$j.md"; done; done
+worst="rm -f$(for i in $(seq 63); do printf ' .claude/agents/x%d.md' "$i"; done); rm -rf$(for i in $(seq 16); do printf ' d%d' "$i"; done); rm -f .ai/policies/path-guard.json"
+timed "63 frozen operands, 16 full directory scans and a policy file are denied" deny \
+    "$(jq -nc --arg r "$WC" --arg c "$worst" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:$c}}')" 8000
+timed "cat .env.example and 60 more tokens is allowed (the cap does not reach normal lines)" allow \
+    "$(printf 'cat .env.example%s' "$(words 60)" | bash_stdin)" 3000
+# The movers caps: 64 operands that need classify, 16 directory scans.
+frozen() { for i in $(seq "$1"); do printf ' .claude/agents/x%d.md' "$i"; done; }
+rm -f "$ROOT/.ai/state/current.json"
+decide "rm -f of 30 frozen paths with no task is allowed" allow "$(printf 'rm -f%s' "$(frozen 30)" | bash_stdin)"
+printf 'rm -f%s' "$(frozen 70)" | bash_stdin | "$GUARD" | grep -q 'names more paths than the guard can check' \
+    && pass "rm -f of 70 frozen paths is denied by the work cap" || fail "rm -f of 70 frozen paths is denied by the work cap"
+mkdir -p "$TMP/scan"; for i in $(seq 20); do mkdir -p "$TMP/scan/d$i"; done
+dirs() { for i in $(seq "$1"); do printf ' %s/scan/d%d' "$TMP" "$i"; done; }
+decide "rm -rf of 16 directories is allowed" allow "$(printf 'rm -rf%s' "$(dirs 16)" | bash_stdin)"
+decide "rm -rf of 17 directories is denied by the work cap" deny "$(printf 'rm -rf%s' "$(dirs 17)" | bash_stdin)"
 
 echo "== ai-path-guard (the installed shared tree is frozen during a task, readable always)"
 # T-2026-10-13-004, Q4=A: <home>/claude-agentic/ai/ and ai-path are the rules a

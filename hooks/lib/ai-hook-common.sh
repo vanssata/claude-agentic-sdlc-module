@@ -171,9 +171,13 @@ sys.stdout.write(cmd)
 allow() { exit 0; }
 
 # deny <reason> — emit the PreToolUse deny object and stop the tool call.
+# The reason goes to jq on stdin, not in argv: a reason that quotes a padded
+# argument can pass 128 KB, where exec fails, jq prints nothing and the hook
+# would allow. A jq that fails anyway still yields a deny.
 deny() {
-    jq -nc --arg reason "$1" \
-      '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$reason}}'
+    printf '%s' "$1" | jq -Rsc \
+      '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:.}}' \
+      || printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing this command: the guard could not encode its reason."}}'
     exit 0
 }
 
@@ -224,9 +228,26 @@ json_strings() {
 # one line at a time: a bracket expression such as [^;&|]* must not match across
 # a newline, and ^ and $ anchor at each line. An empty subject has no lines and
 # never matches; an invalid pattern never matches, as grep's error does not.
+# Over 4096 characters the subject does go to grep: bash's [[ =~ ]] is glibc
+# regexec, whose unanchored search restarts at every offset — 6.4 s for one
+# match on a 40 KB line, past the hook timeout — where GNU grep's DFA is linear.
+# Bytewise (LC_ALL=C): in a UTF-8 locale grep verifies a line the DFA accepts
+# with the same regexec, and a 200 KB line that matches took over 20 s; in C
+# it takes 12 ms. The fork is paid only on a long line. The one difference: a
+# single-character wildcard sees one byte of a multibyte character there.
 ere_match() {
     local re="$1" subject="$2" line
     [ -n "$subject" ] || return 1
+    if [ ${#subject} -gt 4096 ]; then
+        # A here-string, not a pipe: under pipefail an early grep -q exit
+        # would SIGPIPE printf and turn a match into a miss. One trailing
+        # newline is dropped by hand: ${subject%$'\n'} alone costs 0.7 s on
+        # 200 KB in a UTF-8 locale.
+        [ "${subject: -1}" != $'\n' ] || subject="${subject:0:${#subject}-1}"
+        # The pattern comes from a file, not argv, for the same 128 KB limit.
+        LC_ALL=C grep -aqE -f <(printf '%s\n' "$re") 2>/dev/null <<< "$subject"
+        return
+    fi
     case "$subject" in
         *$'\n'*) ;;
         *) { [[ $subject =~ $re ]]; } 2>/dev/null; return ;;
