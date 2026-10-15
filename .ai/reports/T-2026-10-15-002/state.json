@@ -1,0 +1,357 @@
+{
+  "task_id": "T-2026-10-15-002",
+  "goal": "Path guard: parent-directory deny and quote/heredoc-aware segmentation (known-risks a1-a3)",
+  "workflow": "bugfix",
+  "risk_tier": "T4",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "Path guard: parent-directory deny and quote/heredoc-aware segmentation (known-risks a1-a3)",
+        "allowed_files": [
+          "hooks/ai-path-guard.sh",
+          "tests/test-ai-path-guard.sh",
+          "tests/fixtures/path-guard/*",
+          "tests/fixtures/guard-characterization/golden.txt",
+          "tests/test-guard-characterization.sh",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "539c22f9695db779ba9b4560f5c4b7b026047623",
+          "seq": 1,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "tests/fixtures/guard-characterization/golden.txt",
+            "tests/fixtures/path-guard/57-bash-rm-claude-hooks-dir.json",
+            "tests/fixtures/path-guard/58-bash-rm-ai-state-dir.json",
+            "tests/fixtures/path-guard/59-bash-rm-claude-dir.json",
+            "tests/fixtures/path-guard/60-bash-mv-claude-dir-away.json",
+            "tests/fixtures/path-guard/61-bash-cp-dir-onto-claude-agents.json",
+            "tests/fixtures/path-guard/62-bash-rsync-contents-into-claude.json",
+            "tests/fixtures/path-guard/63-bash-mv-onto-bare-policies.json",
+            "tests/fixtures/path-guard/64-bash-for-do-cp.json",
+            "tests/fixtures/path-guard/65-bash-if-then-cp.json",
+            "tests/fixtures/path-guard/66-bash-subshell-cp.json",
+            "tests/fixtures/path-guard/67-bash-cmdsubst-cp.json",
+            "tests/fixtures/path-guard/68-bash-assignment-cp.json",
+            "tests/fixtures/path-guard/69-bash-time-cp.json",
+            "tests/fixtures/path-guard/70-bash-brace-group-rm.json",
+            "tests/fixtures/path-guard/71-bash-continuation-cp.json",
+            "tests/fixtures/path-guard/72-bash-backtick-rm.json",
+            "tests/fixtures/path-guard/73-bash-sh-c-rm.json",
+            "tests/fixtures/path-guard/74-bash-sh-c-seq-rm.json",
+            "tests/fixtures/path-guard/75-bash-sudo-env-rm.json",
+            "tests/fixtures/path-guard/76-bash-echo-prose-rm-allowed.json",
+            "tests/fixtures/path-guard/77-bash-commit-message-allowed.json",
+            "tests/fixtures/path-guard/78-bash-heredoc-script-allowed.json",
+            "tests/fixtures/path-guard/79-bash-comment-allowed.json",
+            "tests/fixtures/path-guard/79-bash-echo-prose-cp-allowed.json.n",
+            "tests/fixtures/path-guard/80-bash-echo-prose-cp-allowed.json",
+            "tests/fixtures/path-guard/81-bash-rm-vendor-allowed.json",
+            "tests/fixtures/path-guard/82-bash-rm-build-allowed.json",
+            "tests/fixtures/path-guard/83-bash-cp-to-home-allowed.json",
+            "tests/fixtures/path-guard/84-bash-rm-tmp-allowed.json",
+            "tests/fixtures/path-guard/85-bash-rm-ai-dir.json",
+            "tests/test-ai-path-guard.sh",
+            "tests/test-guard-characterization.sh"
+          ],
+          "files": 34,
+          "added": 713,
+          "deleted": 56,
+          "lines": 769,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "3 review regressions: here-string read as heredoc; arithmetic << read as heredoc; sh -c only at segment start / $'' not unquoted",
+        "allowed_files": [
+          "hooks/ai-path-guard.sh",
+          "tests/test-ai-path-guard.sh",
+          "tests/fixtures/path-guard/*",
+          "tests/fixtures/guard-characterization/golden.txt",
+          "tests/test-guard-characterization.sh",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "652449407b196b8471d0a85b0ae7955ac568ebb3",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "595eca6920c9695e94a1f1ac77b97048af8b32aa",
+          "seq": 2,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 2,
+          "added": 50,
+          "deleted": 14,
+          "lines": 64,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "R1"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "passed",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "<name>",
+    "granted_at": "2026-10-15T11:08:11Z",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "terminal",
+    "unattended": false
+  },
+  "created_at": "2026-10-15T09:11:16Z",
+  "updated_at": "2026-10-15T11:08:36Z",
+  "history": [
+    {
+      "at": "2026-10-15T09:11:16Z",
+      "event": "task_started",
+      "detail": "Path guard: parent-directory deny and quote/heredoc-aware segmentation (known-risks a1-a3) (bugfix)"
+    },
+    {
+      "at": "2026-10-15T09:11:16Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-15T09:11:16Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-15T09:11:16Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-15T09:11:16Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-15T09:11:16Z",
+      "event": "risk_classified",
+      "detail": "T4: change to the enforcement hook every tool call goes through; plan approved in plan mode"
+    },
+    {
+      "at": "2026-10-15T09:11:16Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-15T09:11:16Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-15T09:11:16Z",
+      "event": "step_started",
+      "detail": "1: Path guard: parent-directory deny and quote/heredoc-aware segmentation (known-risks a1-a3)"
+    },
+    {
+      "at": "2026-10-15T09:29:05Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-15T09:29:16Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-15T09:29:20Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-15T09:29:20Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-15T09:35:56Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-15T09:35:56Z",
+      "event": "remediation",
+      "detail": "R1: 3 review regressions: here-string read as heredoc; arithmetic << read as heredoc; sh -c only at segment start / $'' not unquoted"
+    },
+    {
+      "at": "2026-10-15T09:35:56Z",
+      "event": "step_started",
+      "detail": "R1: 3 review regressions: here-string read as heredoc; arithmetic << read as heredoc; sh -c only at segment start / $'' not unquoted"
+    },
+    {
+      "at": "2026-10-15T09:37:51Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-10-15T09:43:01Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-15T09:43:10Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-15T09:43:10Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-10-15T09:43:14Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval: T4 direct: suite+e2e green, STRONG review findings fixed in R1"
+    },
+    {
+      "at": "2026-10-15T09:43:14Z",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "2026-10-15T11:08:11Z",
+      "event": "human_approval",
+      "detail": "granted by <name> via terminal"
+    },
+    {
+      "at": "2026-10-15T11:08:36Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-15T11:08:36Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-15-002/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-15T11:08:36Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "f51d5b52bbe4116c9d093ba6ed723b333a0a76f7",
+    "base_tree": "5296e45b2822a8345c0da6068cd652900b3c2c30",
+    "task": {
+      "files": 33,
+      "added": 749,
+      "deleted": 56,
+      "lines": 805,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 2,
+      "tree": "595eca6920c9695e94a1f1ac77b97048af8b32aa",
+      "measured_at": "2026-10-15T09:37:51Z",
+      "status": "green"
+    },
+    "rescored_tier": "T4",
+    "rescore_reasons": [],
+    "over_budget": true
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-15-002/sensors.json",
+    "tree": "539c22f9695db779ba9b4560f5c4b7b026047623",
+    "verdict": "required",
+    "checked_at": "2026-10-15T09:29:20Z"
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "539c22f9695db779ba9b4560f5c4b7b026047623",
+        "exit": 0,
+        "duration_s": 357,
+        "log": ".ai/reports/T-2026-10-15-002/tests-suite-1.log",
+        "at": "2026-10-15T09:29:05Z",
+        "env_retry": false
+      },
+      {
+        "n": 1,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "539c22f9695db779ba9b4560f5c4b7b026047623",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-15-002/tests-e2e-1.log",
+        "at": "2026-10-15T09:29:16Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "595eca6920c9695e94a1f1ac77b97048af8b32aa",
+        "exit": 0,
+        "duration_s": 309,
+        "log": ".ai/reports/T-2026-10-15-002/tests-suite-2.log",
+        "at": "2026-10-15T09:43:01Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "595eca6920c9695e94a1f1ac77b97048af8b32aa",
+        "exit": 0,
+        "duration_s": 3,
+        "log": ".ai/reports/T-2026-10-15-002/tests-e2e-2.log",
+        "at": "2026-10-15T09:43:10Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 2
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}
