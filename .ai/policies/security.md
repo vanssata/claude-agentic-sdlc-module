@@ -65,7 +65,7 @@ that only a human edits.
 
 While a task is in flight the runtime's own configuration — `.claude/` and
 `.codex/` settings, agents, skills, commands and hooks, and this project's
-`.ai/policies/` and `.ai/workflows/` — is read-only. Changing the rules a run is
+`.ai/agents/`, `.ai/policies/`, `.ai/workflows/` and `.ai/templates/` — is read-only. Changing the rules a run is
 judged by, inside that run, is not a change an agent may make on its own.
 
 Project-specific additions go in `.ai/policies/path-guard.json`
