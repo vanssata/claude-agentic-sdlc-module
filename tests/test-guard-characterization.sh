@@ -179,6 +179,14 @@ COMMANDS=(
     'cat vendor/acme/pkg/.cursorrules' 'cat vendor/acme/pkg/src.php'
     'cat node_modules/foo/CLAUDE.md' 'cat node_modules/foo/index.js'
     'tar czf a.tgz node_modules/foo/CLAUDE.md' 'echo "node_modules/foo/CLAUDE.md is ignored"'
+    # T-2026-10-15-002: parent directories, and verbs found by segmentation
+    # rather than at the start of a raw line (known-risks a1-a3).
+    'rm -rf .claude' 'rm -rf .ai/state/' 'rm -rf .codex/hooks' 'mv .claude /tmp/x' 'rm -rf ~/.claude'
+    'cp -r src/agents .claude/' 'rsync -a /tmp/evil/ .claude/' 'rm -rf vendor node_modules' 'rm -rf build'
+    'for f in a; do cp "$f" .claude/agents/; done' '(cp x .claude/agents/)' 'FOO=1 cp x .claude/agents/'
+    '{ rm -f .ai/state/current.json; }' "sh -c 'rm -f .ai/state/current.json'" 'echo `rm .ai/state/x.json`'
+    'echo "step 2; rm -f .ai/state/current.json"' $'ls\n# rm -f .ai/state/current.json'
+    $'cat > /tmp/t.sh <<\'EOF\'\nrm -f .ai/state/current.json\nEOF' $'cp x \\\n .claude/agents/'
     # grep matches line by line: a rule must not join a git on one line to a
     # push on the next, and ^/$ anchor at every line.
     $'git status\necho push --force' $'git log\ntouch push' $'git status\ngit push --force'

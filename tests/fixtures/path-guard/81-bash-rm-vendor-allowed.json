@@ -1,0 +1,1 @@
+{"case":"rm -rf of vendor and node_modules is allowed: a dependency's files do not count","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"rm -rf vendor node_modules"}}}

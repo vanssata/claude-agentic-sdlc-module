@@ -194,6 +194,53 @@ rm -f "$ROOT/.ai/state/current.json"
 decide "no task: Write to .ai/agents/ is allowed" allow "$(agent_override Write)"
 printf '{}\n' > "$ROOT/.ai/state/current.json"
 
+echo "== ai-path-guard (parent directories and segmentation, in and out of a task — known-risks a1-a3)"
+# T-2026-10-15-002: a directory above a protected file is the file, for a removal
+# or a move; protected files count always, the frozen runtime only in a task.
+printf '{}\n' > "$ROOT/.ai/state/session.json"
+HOME_T="$TMP/user"; mkdir -p "$HOME_T/.claude/hooks" "$HOME_T/.claude/claude-agentic/ai/policies"
+printf 'x\n' > "$HOME_T/.claude/hooks/ai-path-guard.sh"
+printf 'x\n' > "$HOME_T/.claude/claude-agentic/ai/policies/git.md"
+decide_home() {  # decide_home <description> <expected> <command> — HOME is the test home
+    local name="$1" expect="$2" out decision
+    out=$(jq -nc --arg r "$ROOT" --arg c "$3" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:$c}}' \
+          | env -u CLAUDE_CONFIG_DIR -u CODEX_HOME HOME="$HOME_T" "$GUARD" 2>&1)
+    if [ -z "$out" ]; then decision=allow
+    else decision=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "malformed"' 2>/dev/null || echo malformed); fi
+    if [ "$decision" = "$expect" ]; then pass "$name"
+    else fail "$name" "expected $expect, got $decision${out:+ — $(printf '%s' "$out" | head -c 200)}"; fi
+}
+printf '{"current_stage":"implementation","task_id":"T-1"}\n' > "$ROOT/.ai/state/current.json"
+decide_home "in a task: rm -rf ~/.claude/claude-agentic/ is denied" deny 'rm -rf ~/.claude/claude-agentic/'
+decide_home "in a task: rm -rf \$HOME/.claude/claude-agentic is denied" deny 'rm -rf $HOME/.claude/claude-agentic'
+decide_home "in a task: rm -rf \${HOME}/.claude is denied" deny 'rm -rf ${HOME}/.claude'
+decide_home "in a task: rm -rf of a path with ./ and // in it is denied" deny 'rm -rf ~/.claude/./claude-agentic//ai'
+decide_home "in a task: cp f.txt ~/ stays allowed" allow 'cp f.txt ~/'
+# The STRONG review of T-2026-10-15-002: each of these was denied before the
+# segmentation and must stay denied — a here-string or an arithmetic << is no
+# heredoc, and a shell's -c string runs wherever the shell sits in the segment.
+for c in $'read -r a b <<< "$x"\nrm -f .ai/state/current.json' $'grep foo <<<bar\nrm -f .ai/state/current.json' \
+         $'read -r a <<< "$x"\nmv src/a.txt .claude/settings.json' $'read -r a <<< "$x"\nchmod 000 .ai/state/current.json' \
+         $'echo $((1<<2))\nrm -f .ai/state/current.json' $'(( x <<= 1 ))\nrm -f .ai/state/current.json' \
+         "/bin/sh -c 'cd /tmp; rm -f .ai/state/current.json'" "xargs sh -c 'true; rm -f .ai/state/current.json'" \
+         "find . -exec sh -c 'true; rm -f .ai/state/current.json' \\;" "nice -n 5 bash -c 'true; rm -f .ai/state/current.json'" \
+         "timeout 5 sh -c 'x; rm -f .ai/state/current.json'" "bash -c \$'true; rm -f .ai/state/current.json'"; do
+    decide_home "in a task: still denied: ${c//$'\n'/⏎}" deny "$c"
+done
+out=$(jq -nc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:"rm -rf .ai/state"}}' | "$GUARD" 2>&1)
+printf '%s' "$out" | grep -q 'current\.json\|session\.json' && pass "in a task: the deny names the file found under the directory" \
+    || fail "the deny should name the protected file" "$out"
+rm -f "$ROOT/.ai/state/current.json"
+decide_home "no task: rm -rf .ai/state/ is still denied, it holds a control file" deny 'rm -rf .ai/state/'
+decide_home "no task: { rm -f .ai/state/session.json; } is denied" deny '{ rm -f .ai/state/session.json; }'
+decide_home "no task: rm -rf ~/.claude is denied, it holds the guard's own hooks" deny 'rm -rf ~/.claude'
+decide_home "no task: rm -rf .claude is allowed, the runtime is frozen only in a task" allow 'rm -rf .claude'
+decide_home "no task: mv .claude /tmp/x is allowed" allow 'mv .claude /tmp/x'
+decide_home "no task: rm -rf ~/.claude/claude-agentic/ is allowed" allow 'rm -rf ~/.claude/claude-agentic/'
+decide_home "no task: rm -rf vendor node_modules is allowed" allow 'rm -rf vendor node_modules'
+rm -f "$ROOT/.ai/state/session.json"
+printf '{}\n' > "$ROOT/.ai/state/current.json"
+
 echo "== ai-path-guard (project WITHOUT .ai/ — every guard must be inert)"
 BARE="$TMP/bare"; mkdir -p "$BARE"; printf 'SECRET=1\n' > "$BARE/.env"
 out=$(jq -nc --arg r "$BARE" '{hook_event_name:"PreToolUse",tool_name:"Read",cwd:$r,tool_input:{file_path:($r+"/.env")}}' | "$GUARD")

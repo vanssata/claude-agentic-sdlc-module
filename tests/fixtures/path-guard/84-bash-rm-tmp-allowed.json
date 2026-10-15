@@ -1,0 +1,1 @@
+{"case":"rm -rf under /tmp is allowed","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"rm -rf /tmp/x"}}}

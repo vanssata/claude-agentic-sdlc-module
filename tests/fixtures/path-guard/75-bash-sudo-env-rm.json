@@ -1,0 +1,1 @@
+{"case":"rm after sudo and env assignments is denied (a2)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"sudo env A=1 rm -f .ai/state/current.json"}}}

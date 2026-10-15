@@ -1,0 +1,1 @@
+{"case":"a heredoc that writes a test script is data, not a command (a3)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"cat > /tmp/t.sh <<'EOF'\nrm -f .ai/state/current.json\ncp x .claude/agents/\nEOF\nbash -n /tmp/t.sh"}}}

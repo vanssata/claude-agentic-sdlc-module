@@ -1,0 +1,1 @@
+{"case":"rm -rf of the whole .claude directory is denied in a task (a1)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"rm -rf .claude"}}}

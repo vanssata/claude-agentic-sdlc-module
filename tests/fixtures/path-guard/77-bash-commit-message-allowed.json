@@ -1,0 +1,1 @@
+{"case":"a multi-line commit message that mentions rm is prose (a3)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"git commit -m \"guard: deny parent directories\n\nrm -f .ai/state/current.json is still denied\""}}}

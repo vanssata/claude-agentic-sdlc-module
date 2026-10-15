@@ -522,6 +522,200 @@ rc=0
 rc=0
 ### ai-scope-guard | fixture path-guard/56-bash-mv-docs-allowed.json
 rc=0
+### ai-git-guard | fixture path-guard/57-bash-rm-claude-hooks-dir.json
+rc=0
+### ai-path-guard | fixture path-guard/57-bash-rm-claude-hooks-dir.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a directory that holds runtime configuration while task ? is in flight: .claude/hooks\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/57-bash-rm-claude-hooks-dir.json
+rc=0
+### ai-git-guard | fixture path-guard/58-bash-rm-ai-state-dir.json
+rc=0
+### ai-path-guard | fixture path-guard/58-bash-rm-ai-state-dir.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a directory that holds a claude-agentic control file: .ai/state/ (holds __TMP__/project/.ai/state/current.json)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/58-bash-rm-ai-state-dir.json
+rc=0
+### ai-git-guard | fixture path-guard/59-bash-rm-claude-dir.json
+rc=0
+### ai-path-guard | fixture path-guard/59-bash-rm-claude-dir.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a directory that holds runtime configuration while task ? is in flight: .claude (holds __TMP__/project/.claude/settings.json)\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/59-bash-rm-claude-dir.json
+rc=0
+### ai-git-guard | fixture path-guard/60-bash-mv-claude-dir-away.json
+rc=0
+### ai-path-guard | fixture path-guard/60-bash-mv-claude-dir-away.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell move of a directory that holds runtime configuration while task ? is in flight: .claude (holds __TMP__/project/.claude/settings.json)\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/60-bash-mv-claude-dir-away.json
+rc=0
+### ai-git-guard | fixture path-guard/61-bash-cp-dir-onto-claude-agents.json
+rc=0
+### ai-path-guard | fixture path-guard/61-bash-cp-dir-onto-claude-agents.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into a directory that holds runtime configuration while task ? is in flight: .claude/agents\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/61-bash-cp-dir-onto-claude-agents.json
+rc=0
+### ai-git-guard | fixture path-guard/62-bash-rsync-contents-into-claude.json
+rc=0
+### ai-path-guard | fixture path-guard/62-bash-rsync-contents-into-claude.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into a directory that holds runtime configuration while task ? is in flight: .claude/ (holds __TMP__/project/.claude/settings.json)\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/62-bash-rsync-contents-into-claude.json
+rc=0
+### ai-git-guard | fixture path-guard/63-bash-mv-onto-bare-policies.json
+rc=0
+### ai-path-guard | fixture path-guard/63-bash-mv-onto-bare-policies.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into runtime configuration while task T-2026-09-09-001 is in flight: .ai/policies/x\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/63-bash-mv-onto-bare-policies.json
+rc=0
+### ai-git-guard | fixture path-guard/64-bash-for-do-cp.json
+rc=0
+### ai-path-guard | fixture path-guard/64-bash-for-do-cp.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into runtime configuration while task T-2026-09-09-001 is in flight: .claude/agents/\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/64-bash-for-do-cp.json
+rc=0
+### ai-git-guard | fixture path-guard/65-bash-if-then-cp.json
+rc=0
+### ai-path-guard | fixture path-guard/65-bash-if-then-cp.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into runtime configuration while task T-2026-09-09-001 is in flight: .claude/agents/\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/65-bash-if-then-cp.json
+rc=0
+### ai-git-guard | fixture path-guard/66-bash-subshell-cp.json
+rc=0
+### ai-path-guard | fixture path-guard/66-bash-subshell-cp.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into runtime configuration while task T-2026-09-09-001 is in flight: .claude/agents/\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/66-bash-subshell-cp.json
+rc=0
+### ai-git-guard | fixture path-guard/67-bash-cmdsubst-cp.json
+rc=0
+### ai-path-guard | fixture path-guard/67-bash-cmdsubst-cp.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into runtime configuration while task T-2026-09-09-001 is in flight: .claude/agents/\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/67-bash-cmdsubst-cp.json
+rc=0
+### ai-git-guard | fixture path-guard/68-bash-assignment-cp.json
+rc=0
+### ai-path-guard | fixture path-guard/68-bash-assignment-cp.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into runtime configuration while task T-2026-09-09-001 is in flight: .claude/agents/\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/68-bash-assignment-cp.json
+rc=0
+### ai-git-guard | fixture path-guard/69-bash-time-cp.json
+rc=0
+### ai-path-guard | fixture path-guard/69-bash-time-cp.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into runtime configuration while task T-2026-09-09-001 is in flight: .claude/agents/\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/69-bash-time-cp.json
+rc=0
+### ai-git-guard | fixture path-guard/70-bash-brace-group-rm.json
+rc=0
+### ai-path-guard | fixture path-guard/70-bash-brace-group-rm.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/70-bash-brace-group-rm.json
+rc=0
+### ai-git-guard | fixture path-guard/71-bash-continuation-cp.json
+rc=0
+### ai-path-guard | fixture path-guard/71-bash-continuation-cp.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into runtime configuration while task T-2026-09-09-001 is in flight: .claude/agents/\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/71-bash-continuation-cp.json
+rc=0
+### ai-git-guard | fixture path-guard/72-bash-backtick-rm.json
+rc=0
+### ai-path-guard | fixture path-guard/72-bash-backtick-rm.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/72-bash-backtick-rm.json
+rc=0
+### ai-git-guard | fixture path-guard/73-bash-sh-c-rm.json
+rc=0
+### ai-path-guard | fixture path-guard/73-bash-sh-c-rm.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/73-bash-sh-c-rm.json
+rc=0
+### ai-git-guard | fixture path-guard/74-bash-sh-c-seq-rm.json
+rc=0
+### ai-path-guard | fixture path-guard/74-bash-sh-c-seq-rm.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/74-bash-sh-c-seq-rm.json
+rc=0
+### ai-git-guard | fixture path-guard/75-bash-sudo-env-rm.json
+rc=0
+### ai-path-guard | fixture path-guard/75-bash-sudo-env-rm.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/75-bash-sudo-env-rm.json
+rc=0
+### ai-git-guard | fixture path-guard/76-bash-echo-prose-rm-allowed.json
+rc=0
+### ai-path-guard | fixture path-guard/76-bash-echo-prose-rm-allowed.json
+rc=0
+### ai-scope-guard | fixture path-guard/76-bash-echo-prose-rm-allowed.json
+rc=0
+### ai-git-guard | fixture path-guard/77-bash-commit-message-allowed.json
+rc=0
+### ai-path-guard | fixture path-guard/77-bash-commit-message-allowed.json
+rc=0
+### ai-scope-guard | fixture path-guard/77-bash-commit-message-allowed.json
+rc=0
+### ai-git-guard | fixture path-guard/78-bash-heredoc-script-allowed.json
+rc=0
+### ai-path-guard | fixture path-guard/78-bash-heredoc-script-allowed.json
+rc=0
+### ai-scope-guard | fixture path-guard/78-bash-heredoc-script-allowed.json
+rc=0
+### ai-git-guard | fixture path-guard/79-bash-comment-allowed.json
+rc=0
+### ai-path-guard | fixture path-guard/79-bash-comment-allowed.json
+rc=0
+### ai-scope-guard | fixture path-guard/79-bash-comment-allowed.json
+rc=0
+### ai-git-guard | fixture path-guard/80-bash-echo-prose-cp-allowed.json
+rc=0
+### ai-path-guard | fixture path-guard/80-bash-echo-prose-cp-allowed.json
+rc=0
+### ai-scope-guard | fixture path-guard/80-bash-echo-prose-cp-allowed.json
+rc=0
+### ai-git-guard | fixture path-guard/81-bash-rm-vendor-allowed.json
+rc=0
+### ai-path-guard | fixture path-guard/81-bash-rm-vendor-allowed.json
+rc=0
+### ai-scope-guard | fixture path-guard/81-bash-rm-vendor-allowed.json
+rc=0
+### ai-git-guard | fixture path-guard/82-bash-rm-build-allowed.json
+rc=0
+### ai-path-guard | fixture path-guard/82-bash-rm-build-allowed.json
+rc=0
+### ai-scope-guard | fixture path-guard/82-bash-rm-build-allowed.json
+rc=0
+### ai-git-guard | fixture path-guard/83-bash-cp-to-home-allowed.json
+rc=0
+### ai-path-guard | fixture path-guard/83-bash-cp-to-home-allowed.json
+rc=0
+### ai-scope-guard | fixture path-guard/83-bash-cp-to-home-allowed.json
+rc=0
+### ai-git-guard | fixture path-guard/84-bash-rm-tmp-allowed.json
+rc=0
+### ai-path-guard | fixture path-guard/84-bash-rm-tmp-allowed.json
+rc=0
+### ai-scope-guard | fixture path-guard/84-bash-rm-tmp-allowed.json
+rc=0
+### ai-git-guard | fixture path-guard/85-bash-rm-ai-dir.json
+rc=0
+### ai-path-guard | fixture path-guard/85-bash-rm-ai-dir.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a directory that holds runtime configuration while task ? is in flight: .ai (holds __TMP__/project/.ai/workflows)\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/85-bash-rm-ai-dir.json
+rc=0
 ### ai-git-guard | fixture scope-guard/01-in-scope.json
 rc=0
 ### ai-path-guard | fixture scope-guard/01-in-scope.json
@@ -1468,6 +1662,104 @@ rc=0
 rc=0
 ### ai-path-guard | main bash: echo "node_modules/foo/CLAUDE.md is ignored"
 rc=0
+### ai-git-guard | main bash: rm -rf .claude
+rc=0
+### ai-path-guard | main bash: rm -rf .claude
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a directory that holds runtime configuration while task ? is in flight: .claude (holds __TMP__/project/.claude/settings.json)\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: rm -rf .ai/state/
+rc=0
+### ai-path-guard | main bash: rm -rf .ai/state/
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a directory that holds a claude-agentic control file: .ai/state/ (holds __TMP__/project/.ai/state/current.json)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: rm -rf .codex/hooks
+rc=0
+### ai-path-guard | main bash: rm -rf .codex/hooks
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a directory that holds runtime configuration while task ? is in flight: .codex/hooks\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: mv .claude /tmp/x
+rc=0
+### ai-path-guard | main bash: mv .claude /tmp/x
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell move of a directory that holds runtime configuration while task ? is in flight: .claude (holds __TMP__/project/.claude/settings.json)\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: rm -rf ~/.claude
+rc=0
+### ai-path-guard | main bash: rm -rf ~/.claude
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a directory that holds runtime configuration while task ? is in flight: ~/.claude (holds __TMP__/home/.claude/hooks)\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: cp -r src/agents .claude/
+rc=0
+### ai-path-guard | main bash: cp -r src/agents .claude/
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into a directory that holds runtime configuration while task ? is in flight: .claude/agents\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: rsync -a /tmp/evil/ .claude/
+rc=0
+### ai-path-guard | main bash: rsync -a /tmp/evil/ .claude/
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into a directory that holds runtime configuration while task ? is in flight: .claude/ (holds __TMP__/project/.claude/settings.json)\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: rm -rf vendor node_modules
+rc=0
+### ai-path-guard | main bash: rm -rf vendor node_modules
+rc=0
+### ai-git-guard | main bash: rm -rf build
+rc=0
+### ai-path-guard | main bash: rm -rf build
+rc=0
+### ai-git-guard | main bash: for f in a; do cp "$f" .claude/agents/; done
+rc=0
+### ai-path-guard | main bash: for f in a; do cp "$f" .claude/agents/; done
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into runtime configuration while task T-2026-09-09-001 is in flight: .claude/agents/\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: (cp x .claude/agents/)
+rc=0
+### ai-path-guard | main bash: (cp x .claude/agents/)
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into runtime configuration while task T-2026-09-09-001 is in flight: .claude/agents/\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: FOO=1 cp x .claude/agents/
+rc=0
+### ai-path-guard | main bash: FOO=1 cp x .claude/agents/
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into runtime configuration while task T-2026-09-09-001 is in flight: .claude/agents/\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: { rm -f .ai/state/current.json; }
+rc=0
+### ai-path-guard | main bash: { rm -f .ai/state/current.json; }
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: sh -c 'rm -f .ai/state/current.json'
+rc=0
+### ai-path-guard | main bash: sh -c 'rm -f .ai/state/current.json'
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: echo `rm .ai/state/x.json`
+rc=0
+### ai-path-guard | main bash: echo `rm .ai/state/x.json`
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/x.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: echo "step 2; rm -f .ai/state/current.json"
+rc=0
+### ai-path-guard | main bash: echo "step 2; rm -f .ai/state/current.json"
+rc=0
+### ai-git-guard | main bash: ls
+# rm -f .ai/state/current.json
+rc=0
+### ai-path-guard | main bash: ls
+# rm -f .ai/state/current.json
+rc=0
+### ai-git-guard | main bash: cat > /tmp/t.sh <<'EOF'
+rm -f .ai/state/current.json
+EOF
+rc=0
+### ai-path-guard | main bash: cat > /tmp/t.sh <<'EOF'
+rm -f .ai/state/current.json
+EOF
+rc=0
+### ai-git-guard | main bash: cp x \
+ .claude/agents/
+rc=0
+### ai-path-guard | main bash: cp x \
+ .claude/agents/
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell copy or move into runtime configuration while task T-2026-09-09-001 is in flight: .claude/agents/\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: git status
 echo push --force
 rc=0
@@ -2425,6 +2717,48 @@ rc=0
 ### ai-git-guard | feature bash: tar czf a.tgz node_modules/foo/CLAUDE.md
 rc=0
 ### ai-git-guard | feature bash: echo "node_modules/foo/CLAUDE.md is ignored"
+rc=0
+### ai-git-guard | feature bash: rm -rf .claude
+rc=0
+### ai-git-guard | feature bash: rm -rf .ai/state/
+rc=0
+### ai-git-guard | feature bash: rm -rf .codex/hooks
+rc=0
+### ai-git-guard | feature bash: mv .claude /tmp/x
+rc=0
+### ai-git-guard | feature bash: rm -rf ~/.claude
+rc=0
+### ai-git-guard | feature bash: cp -r src/agents .claude/
+rc=0
+### ai-git-guard | feature bash: rsync -a /tmp/evil/ .claude/
+rc=0
+### ai-git-guard | feature bash: rm -rf vendor node_modules
+rc=0
+### ai-git-guard | feature bash: rm -rf build
+rc=0
+### ai-git-guard | feature bash: for f in a; do cp "$f" .claude/agents/; done
+rc=0
+### ai-git-guard | feature bash: (cp x .claude/agents/)
+rc=0
+### ai-git-guard | feature bash: FOO=1 cp x .claude/agents/
+rc=0
+### ai-git-guard | feature bash: { rm -f .ai/state/current.json; }
+rc=0
+### ai-git-guard | feature bash: sh -c 'rm -f .ai/state/current.json'
+rc=0
+### ai-git-guard | feature bash: echo `rm .ai/state/x.json`
+rc=0
+### ai-git-guard | feature bash: echo "step 2; rm -f .ai/state/current.json"
+rc=0
+### ai-git-guard | feature bash: ls
+# rm -f .ai/state/current.json
+rc=0
+### ai-git-guard | feature bash: cat > /tmp/t.sh <<'EOF'
+rm -f .ai/state/current.json
+EOF
+rc=0
+### ai-git-guard | feature bash: cp x \
+ .claude/agents/
 rc=0
 ### ai-git-guard | feature bash: git status
 echo push --force

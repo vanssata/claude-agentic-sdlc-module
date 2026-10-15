@@ -190,6 +190,226 @@ check_path() {
     done
 }
 
+# shell_segments <command> — the simple commands of a shell line, one per line,
+# each starting with its verb (T-2026-10-15-002, known-risks a1-a3). One awk
+# pass: backslash-newlines are joined; quotes are tracked, so a ; or a newline
+# inside them neither splits nor starts a command, and a quoted newline becomes
+# a space; outside quotes ; | & newline ( ) ` and $( split, except the & of a
+# redirect (>& &> <&); inside double quotes $( ) and backticks still split,
+# because they run; heredoc bodies (<<W, <<-W, <<'W', <<"W", several per line,
+# not <<<) are dropped up to their delimiter; a # that starts a word outside
+# quotes ends the line. Leading keywords, prefixes, their flags and NAME=value
+# assignments are stripped until the verb comes first. This is a model of the
+# shell, not a parser: an unquoted heredoc's $( ) is data to it.
+shell_segments() {
+    printf '%s\n' "$1" | awk -v SQ="'" '
+    { src = src $0 "\n" }
+    function emit(   s, w, n, c, q, k, flagged) {
+        s = cur; cur = ""
+        while (1) {
+            sub(/^[ \t]+/, "", s)
+            if (s == "") return
+            # the first word, quote-aware
+            n = length(s); q = ""; k = 0
+            for (k = 1; k <= n; k++) {
+                c = substr(s, k, 1)
+                if (q != "") { if (c == q) q = ""; continue }
+                if (c == "\"" || c == SQ) { q = c; continue }
+                if (c == " " || c == "\t") break
+            }
+            w = substr(s, 1, k - 1)
+            if (w ~ /^(if|then|else|elif|do|while|until|!|\{|\}|time|exec|command|nohup|builtin|env|sudo)$/) {
+                flagged = (w ~ /^(time|exec|command|env|sudo)$/)
+                s = substr(s, k)
+                if (flagged) {
+                    while (1) {
+                        sub(/^[ \t]+/, "", s)
+                        if (s !~ /^-/) break
+                        sub(/^[^ \t]*/, "", s)
+                    }
+                }
+                continue
+            }
+            if (w ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) { s = substr(s, k); continue }
+            break
+        }
+        print s
+    }
+    function push(kind) { sp++; stk[sp] = kind; qst[sp] = q }
+    END {
+        n = length(src); cur = ""; q = ""; sp = 0; nh = 0
+        i = 1
+        while (i <= n) {
+            c = substr(src, i, 1); d = substr(src, i + 1, 1)
+            if (q == "s") {                       # single quotes: nothing is special
+                if (c == SQ) q = ""
+                cur = cur (c == "\n" ? " " : c); i++; continue
+            }
+            if (q == "a") {                       # ANSI-C quotes: backslash escapes only
+                if (c == "\\") { cur = cur c d; i += 2; continue }
+                if (c == SQ) q = ""
+                cur = cur (c == "\n" ? " " : c); i++; continue
+            }
+            if (c == "\\") {
+                if (d == "\n") { i += 2; continue }
+                cur = cur c d; i += 2; continue
+            }
+            if (q == "d") {
+                if (c == "\"") { q = ""; cur = cur c; i++; continue }
+                if (c == "$" && d == "(") { push("p"); q = ""; emit(); i += 2; continue }
+                if (c == "`") { push("b"); q = ""; emit(); i++; continue }
+                cur = cur (c == "\n" ? " " : c); i++; continue
+            }
+            # outside quotes
+            if (c == SQ) { q = "s"; cur = cur c; i++; continue }
+            if (c == "$" && d == SQ) { q = "a"; cur = cur c d; i += 2; continue }
+            if (c == "\"") { q = "d"; cur = cur c; i++; continue }
+            if (c == "#" && (cur == "" || cur ~ /[ \t]$/)) {
+                while (i <= n && substr(src, i, 1) != "\n") i++
+                continue
+            }
+            if (c == "<" && d == "<" && substr(src, i + 2, 1) == "<") {   # a here-string
+                cur = cur "<<<"; i += 3; continue
+            }
+            if ((c == "$" && d == "(" && substr(src, i + 2, 1) == "(") || (c == "(" && d == "(")) {
+                # arithmetic $(( )) / (( )): copied whole, so its << is no heredoc
+                j = i + (c == "$" ? 3 : 2); depth = 2
+                while (j <= n && depth > 0) {
+                    e = substr(src, j, 1)
+                    if (e == "(") depth++; else if (e == ")") depth--
+                    j++
+                }
+                cur = cur substr(src, i, j - i); i = j; continue
+            }
+            if (c == "<" && d == "<") {
+                j = i + 2; strip = 0
+                if (substr(src, j, 1) == "-") { strip = 1; j++ }
+                while (substr(src, j, 1) == " " || substr(src, j, 1) == "\t") j++
+                w = ""; wq = ""
+                while (j <= n) {
+                    e = substr(src, j, 1)
+                    if (wq != "") { if (e == wq) wq = ""; else w = w e; j++; continue }
+                    if (e == SQ || e == "\"") { wq = e; j++; continue }
+                    if (e == "\\") { w = w substr(src, j + 1, 1); j += 2; continue }
+                    if (e ~ /[ \t\n;&|<>()]/) break
+                    w = w e; j++
+                }
+                if (w != "") { nh++; hd[nh] = w; hs[nh] = strip }
+                i = j; continue
+            }
+            if (c == "\n") {
+                emit(); i++
+                for (h = 1; h <= nh; h++) {       # heredoc bodies, in order
+                    while (i <= n) {
+                        e = index(substr(src, i), "\n")
+                        line = (e ? substr(src, i, e - 1) : substr(src, i))
+                        i = (e ? i + e : n + 1)
+                        if (hs[h]) sub(/^\t+/, "", line)
+                        if (line == hd[h]) break
+                    }
+                }
+                nh = 0; continue
+            }
+            if (c == "$" && d == "(") { push("p"); emit(); i += 2; continue }
+            if (c == "`") {
+                if (sp > 0 && stk[sp] == "b") { q = qst[sp]; sp-- } else push("b")
+                emit(); i++; continue
+            }
+            if (c == "(") { push("p"); emit(); i++; continue }
+            if (c == ")") {
+                if (sp > 0 && stk[sp] == "p") { q = qst[sp]; sp-- }
+                emit(); i++; continue
+            }
+            if (c == "&" && (cur ~ /[<>]$/ || d == ">")) { cur = cur c; i++; continue }
+            if (c == ";" || c == "|" || c == "&") { emit(); i++; continue }
+            cur = cur c; i++
+        }
+        emit()
+    }'
+}
+
+# segments_of <command> — shell_segments, plus one more pass over the string
+# that `bash|sh|zsh|dash|ksh -c` or `eval` runs, so quoting a command does not
+# hide it: `sh -c 'x; rm -f .ai/state/current.json'` is still an rm.
+segments_of() {
+    local segs seg inner extra=""
+    segs=$(shell_segments "$1")
+    while IFS= read -r seg; do
+        inner=""
+        # Anywhere in the segment, not only as its verb: /bin/sh, xargs sh,
+        # find -exec sh, nice/timeout bash all run the string.
+        if [[ $seg =~ (^|[[:space:]/])(ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*c[A-Za-z]*[[:space:]]+(.*)$ ]]; then
+            inner="${BASH_REMATCH[4]}"
+        elif [[ $seg =~ ^eval[[:space:]]+(.*)$ ]]; then
+            inner="${BASH_REMATCH[1]}"
+        fi
+        [ -n "$inner" ] || continue
+        case "$inner" in
+            \$\'*) inner="${inner#\$\'}"; inner="${inner%%\'*}" ;;
+            \'*) inner="${inner#\'}"; inner="${inner%%\'*}" ;;
+            \"*) inner="${inner#\"}"; inner="${inner%\"*}" ;;
+        esac
+        extra+=$(shell_segments "$inner")$'\n'
+    done <<< "$segs"
+    printf '%s\n%s' "$segs" "$extra"
+}
+
+# covers_protected <normalised-abs-path> — prints the first protected file, or
+# while a task is in flight the first frozen runtime file, found at or under the
+# path, and fails when there is none. Dependency files do not count: removing
+# vendor/ is ordinary work. Lexically first (the bare directory of a
+# directory-shaped pattern, existing or not), then on disk: every runtime or .ai
+# root that lies under the path (depth 3 is where all of their control files
+# sit), then the path itself (depth 6, at most 20000 entries).
+COVER_JOINED="" COVER_ROOTS="" COVER_ROOTS_DONE=""
+# cover_init — the joined protected+task patterns and the resolved roots, once
+# per hook call and in the hook's own shell (covers_protected runs in $( )).
+cover_init() {
+    [ -z "$COVER_ROOTS_DONE" ] || return 0
+    COVER_ROOTS_DONE=yes
+    COVER_JOINED=$(chomp_all "$(printf '%s\n%s\n' "$PROTECTED_PATTERNS" "$TASK_PATTERNS" | while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        p="${p#'(^|/)'}"; p="${p#^}"; printf '%s\n' "$p"; done)")
+    COVER_JOINED="${COVER_JOINED//$'\n'/|}"
+    COVER_ROOTS=$(realpath -m -- "$AI_ROOT/.ai" "$AI_ROOT/.claude" "$AI_ROOT/.codex" \
+                      "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CODEX_HOME:-$HOME/.codex}" 2>/dev/null | sort -u)
+}
+covers_protected() {
+    local c="${1%/}" r roots=() scan=() line verdict kind
+    [ -n "$c" ] || c=/
+    for line in "$c" "$c/"; do
+        # classify forks; the joined pre-filter decides first, in process,
+        # so a 30-file rm of ordinary files costs no fork per file.
+        { [[ $line =~ $LOOSE_JOINED ]]; } 2>/dev/null || continue
+        verdict=$(classify "$line"); kind="${verdict%%:*}"
+        case "$kind" in
+            protected) printf '%s\n' "${line%/}"; return 0 ;;
+            task) task_in_flight && { printf '%s\n' "${line%/}"; return 0; } ;;
+        esac
+    done
+    while IFS= read -r r; do
+        [ -n "$r" ] || continue
+        [ "$c" = / ] || [ "$r" = "$c" ] || [[ $r == "$c"/* ]] || continue
+        [ -e "$r" ] && roots+=("$r")
+    done <<< "$COVER_ROOTS"
+    [ -d "$c" ] && scan=("$c")
+    [ ${#roots[@]} -gt 0 ] || [ ${#scan[@]} -gt 0 ] || return 1
+    while IFS= read -r line; do
+        verdict=$(classify "$line"); kind="${verdict%%:*}"
+        case "$kind" in
+            protected) printf '%s\n' "${line%/}"; return 0 ;;
+            task) task_in_flight && { printf '%s\n' "${line%/}"; return 0; } ;;
+        esac
+    done < <({ [ ${#roots[@]} -eq 0 ] || find "${roots[@]}" -maxdepth 3 \
+                   \( -name .git -o -name vendor -o -name node_modules -o -name projects \) -prune -o -print 2>/dev/null
+               [ ${#scan[@]} -eq 0 ] || find "${scan[@]}" -maxdepth 6 \
+                   \( -name .git -o -name vendor -o -name node_modules -o -name bower_components -o -name third_party \
+                      -o -name Pods -o -name site-packages -o -name .venv -o -name .pnpm -o -name .yarn \) -prune -o -print 2>/dev/null \
+                   | head -n 20000; } \
+             | awk '{ print; print $0 "/" }' | grep -E -- "$COVER_JOINED" | head -n 50)
+    return 1
+}
+
 case "$AI_TOOL" in
     Read)
         while IFS= read -r f; do
@@ -271,38 +491,55 @@ case "$AI_TOOL" in
                 ;;
         esac
 
-        # Destinations (T-2026-10-15-001): cp, mv, install and rsync write the
-        # path they name last, and the readers/copiers rules below see only
-        # what a command reads. This runs before the fast path because the
-        # path written need not appear on the line at all: `cp -r new/ai
-        # <home>/claude-agentic/` lands as claude-agentic/ai, which only the
-        # joined destination spells out. One regex per Bash call decides
-        # whether any segment starts with one of the four; the rest runs only
-        # then. Candidates per segment: the destination (the last operand, or
-        # the -t/--target-directory argument), destination/basename(source)
-        # for every source, and for mv every source, which it destroys. A
-        # remote rsync target or `install -d` yields no candidate that matches.
-        segment='(^|[|;&]|&&|\|\|)[[:space:]]*'
-        movers="${segment}"'(cp|mv|install|rsync)([[:space:]]|$)'
-        if ere_match "$movers" "$cmd"; then
-            # Redirections are not operands, and 2>&1 / &>file carry the
-            # segment separator: drop them before splitting on | ; & newline.
-            segments=$(printf '%s\n' "$cmd" \
+        # Segments (T-2026-10-15-002): the rules that name a verb are matched
+        # against the simple commands of the line, not the raw text, so a verb
+        # after do/then/(/$(/time/VAR= is seen, and one inside quotes, a
+        # heredoc body or a comment is not. Computed only when one of those
+        # verbs appears anywhere on the line: the hot path does not change.
+        segs=""
+        VERBS_RE='(^|[^A-Za-z0-9_.-])(cp|mv|install|rsync|rm|rmdir|unlink|tee|truncate|shred|touch|ln|chmod|chown|dd|sed|perl|ruby)([^A-Za-z0-9_.-]|$)'
+        if ere_match "$VERBS_RE" "$cmd"; then
+            segs=$(segments_of "$cmd")
+        fi
+        segment='^[[:space:]]*'
+
+        # Destinations (T-2026-10-15-001) and parent directories
+        # (T-2026-10-15-002): cp, mv, install and rsync write the path they
+        # name last, rm/rmdir/unlink remove every operand, and the
+        # readers/copiers rules below see only what a command reads. This runs
+        # before the fast path because the path written need not appear on the
+        # line at all: `cp -r new/ai <home>/claude-agentic/` lands as
+        # claude-agentic/ai, `rm -rf .claude` names no file. Candidates per
+        # segment: the destination (the last operand, or the
+        # -t/--target-directory argument), destination/basename(source) for
+        # every source, every mv source, which it destroys, every rm operand,
+        # and the destination itself when an rsync or cp source ends in / or
+        # /. (its contents land there). A candidate is denied when it is a
+        # protected, dependency or frozen path itself, or — for all but the
+        # plain destination — when it covers one: a directory above a control
+        # file is the file (covers_protected). A remote rsync target or
+        # `install -d` yields no candidate that matches.
+        movers="${segment}"'(cp|mv|install|rsync|rm|rmdir|unlink)([[:space:]]|$)'
+        if [ -n "$segs" ] && ere_match "$movers" "$segs"; then
+            cover_init
+            # Redirections are not operands: drop them before splitting.
+            segments=$(printf '%s\n' "$segs" \
                 | sed -E 's/[0-9]*[<>]{1,2}&[0-9]+//g; s/(&|[0-9]*)[<>]{1,2}[[:space:]]*[^[:space:]|;&<>]*//g')
-            segments="${segments//[()]/ }"
             while IFS= read -r seg; do
                 operands=()
                 IFS=$' \t' read -r -a operands <<< "$seg"
                 [ "${#operands[@]}" -gt 1 ] || continue
                 verb="${operands[0]}"
-                case "$verb" in cp|mv|install|rsync) ;; *) continue ;; esac
+                case "$verb" in cp|mv|install|rsync|rm|rmdir|unlink) ;; *) continue ;; esac
                 dest="" sources=() opts_done="" want_dest=""
                 for w in "${operands[@]:1}"; do
                     if [ -n "$want_dest" ]; then want_dest=""; dest="$w"; continue; fi
                     if [ -z "$opts_done" ]; then
                         case "$w" in
                             --) opts_done=yes; continue ;;
-                            -t|--target-directory) want_dest=yes; continue ;;
+                            -t|--target-directory)
+                                case "$verb" in rm|rmdir|unlink) ;; *) want_dest=yes ;; esac
+                                continue ;;
                             --target-directory=*) dest="${w#*=}"; continue ;;
                             -*) continue ;;
                         esac
@@ -311,42 +548,69 @@ case "$AI_TOOL" in
                     while [[ $w == *[\"\'] ]]; do w="${w%?}"; done
                     [ -z "$w" ] || sources+=("$w")
                 done
-                if [ -z "$dest" ]; then
-                    [ "${#sources[@]}" -gt 1 ] || continue
-                    dest="${sources[-1]}"; unset 'sources[-1]'
-                fi
-                while [[ $dest == [\"\']* ]]; do dest="${dest:1}"; done
-                while [[ $dest == *[\"\'] ]]; do dest="${dest%?}"; done
-                [ -n "$dest" ] || continue
-                cands=("$dest")
-                for src in "${sources[@]}"; do
-                    src="${src%/}"
-                    cands+=("${dest%/}/${src##*/}")
-                    [ "$verb" = mv ] && cands+=("$src")
-                done
+                # cands[i] is checked as itself; covers[i]=yes also for what
+                # lies under it.
+                cands=() covers=()
+                case "$verb" in
+                    rm|rmdir|unlink)
+                        for src in "${sources[@]}"; do cands+=("$src"); covers+=(yes); done ;;
+                    *)
+                        if [ -z "$dest" ]; then
+                            [ "${#sources[@]}" -gt 1 ] || continue
+                            dest="${sources[-1]}"; unset 'sources[-1]'
+                        fi
+                        while [[ $dest == [\"\']* ]]; do dest="${dest:1}"; done
+                        while [[ $dest == *[\"\'] ]]; do dest="${dest%?}"; done
+                        [ -n "$dest" ] || continue
+                        into=""
+                        for src in "${sources[@]}"; do
+                            case "$verb:$src" in rsync:*/|rsync:*/.|cp:*/|cp:*/.) into=yes ;; esac
+                        done
+                        cands+=("$dest"); covers+=("$into")
+                        for src in "${sources[@]}"; do
+                            src="${src%/}"; src="${src%/.}"
+                            cands+=("${dest%/}/${src##*/}"); covers+=(yes)
+                            [ "$verb" = mv ] && { cands+=("$src"); covers+=(yes); }
+                        done ;;
+                esac
+                [ "${#cands[@]}" -gt 0 ] || continue
                 abss=()
                 for cand in "${cands[@]}"; do
+                    case "$cand" in
+                        '~'|'$HOME'|'${HOME}') cand="$HOME" ;;
+                        '~/'*) cand="$HOME/${cand#'~/'}" ;;
+                        '$HOME/'*) cand="$HOME/${cand#'$HOME/'}" ;;
+                        '${HOME}/'*) cand="$HOME/${cand#'${HOME}/'}" ;;
+                    esac
                     case "$cand" in /*) abss+=("$cand") ;; *) abss+=("${AI_CWD%/}/$cand") ;; esac
                 done
-                # One regex over every candidate and its resolved path, and one
-                # realpath for all of them: a 20-file mv yields 60 candidates,
-                # and bash compiles the pattern anew on every [[ =~ ]], so one
-                # test per candidate — let alone a classify fork each — costs
-                # more than the hook's budget. The loose patterns are the
-                # pre-filter built for a whole line; a miss here is a miss in
-                # classify too, which runs only on a hit.
-                reals=$(realpath -m -- "${abss[@]}" 2>/dev/null)
-                subject="${abss[*]} ${reals//$'\n'/ }"
-                { [[ $subject =~ $LOOSE_JOINED ]]; } 2>/dev/null || continue
+                # One realpath for every candidate: a 20-file mv yields 60, and
+                # a fork per candidate costs more than the hook's budget. It
+                # also normalises ./ and // away.
+                reals=()
+                while IFS= read -r r; do reals+=("$r"); done < <(realpath -m -- "${abss[@]}" 2>/dev/null)
+                [ "${#reals[@]}" -eq "${#abss[@]}" ] || reals=("${abss[@]}")
+                # The loose patterns are the pre-filter built for a whole line:
+                # a miss here is a miss in classify too, which runs only on a
+                # hit. The covering test below does not depend on it — a
+                # directory's own name need not match anything.
+                subject="${abss[*]} ${reals[*]}"
+                prefilter=""
+                { [[ $subject =~ $LOOSE_JOINED ]]; } 2>/dev/null && prefilter=yes
                 for i in "${!abss[@]}"; do
-                    abs="${abss[$i]}" cand="${cands[$i]}"
-                    verdict=$(classify "$abs")
-                    [ -n "$verdict" ] || verdict=$(classify "$(real_path "$abs")")
-                    [ -n "$verdict" ] || continue
-                    kind="${verdict%%:*}"
+                    abs="${abss[$i]}" real="${reals[$i]}" cand="${cands[$i]}"
                     how="copy or move into"
-                    [ "$verb" = mv ] && [ "$abs" != "${abss[0]}" ] && [ "$abs" != "${abss[0]%/}/${abs##*/}" ] && how="move of"
-                    case "$kind" in
+                    case "$verb" in
+                        rm|rmdir|unlink) how="removal of" ;;
+                        mv) [ "$i" -gt 0 ] && [ "$abs" != "${abss[0]%/}/${abs##*/}" ] && how="move of" ;;
+                    esac
+                    verdict=""
+                    if [ -n "$prefilter" ]; then
+                        verdict=$(classify "$abs")
+                        [ -n "$verdict" ] || verdict=$(classify "$real")
+                        [ -n "$verdict" ] || verdict=$(classify "$(real_path "$abs")")
+                    fi
+                    case "${verdict%%:*}" in
                         protected)
                             deny "Refusing a shell $how a claude-agentic control file: $cand$WHY_PROTECTED" ;;
                         vendor)
@@ -354,8 +618,19 @@ case "$AI_TOOL" in
                         task)
                             task_in_flight && deny "Refusing a shell $how runtime configuration while task $AI_TASK_ID is in flight: $cand$WHY_TASK" ;;
                     esac
+                    [ "${covers[$i]}" = yes ] || continue
+                    found=$(covers_protected "$real") || continue
+                    verdict=$(classify "$found"); [ -n "$verdict" ] || verdict=$(classify "$found/")
+                    held=" (holds $found)"
+                    [ "$found" = "${real%/}" ] && held=""   # the bare directory of a pattern
+                    case "${verdict%%:*}" in
+                        protected)
+                            deny "Refusing a shell $how a directory that holds a claude-agentic control file: $cand$held$WHY_PROTECTED" ;;
+                        *)
+                            deny "Refusing a shell $how a directory that holds runtime configuration while task $AI_TASK_ID is in flight: $cand$held$WHY_TASK" ;;
+                    esac
                 done
-            done <<< "${segments//[|;&]/$'\n'}"
+            done <<< "$segments"
         fi
 
         # Fast path: if nothing in the whole command line looks interesting, stop
@@ -421,11 +696,11 @@ case "$AI_TOOL" in
             # runtime's own configuration while a task is in flight.
             how=""
             ere_match ">>?[[:space:]]*[\"']?${esc}" "$cmd" && how="redirect into"
-            [ -n "$how" ] || ere_match "${writers}[\"']?${esc}" "$cmd" && how="${how:-command that writes}"
-            [ -n "$how" ] || ere_match "${modes}[\"']?${esc}" "$cmd" && how="${how:-command that writes}"
-            [ -n "$how" ] || ere_match "${ddwrite}[\"']?${esc}" "$cmd" && how="${how:-command that writes}"
-            [ -n "$how" ] || ere_match "${inplace}[\"']?${esc}" "$cmd" && how="${how:-in-place edit of}"
-            [ -n "$how" ] || ere_match "${removers}[\"']?${esc}" "$cmd" && how="${how:-removal of}"
+            [ -n "$how" ] || ere_match "${writers}[\"']?${esc}" "$segs" && how="${how:-command that writes}"
+            [ -n "$how" ] || ere_match "${modes}[\"']?${esc}" "$segs" && how="${how:-command that writes}"
+            [ -n "$how" ] || ere_match "${ddwrite}[\"']?${esc}" "$segs" && how="${how:-command that writes}"
+            [ -n "$how" ] || ere_match "${inplace}[\"']?${esc}" "$segs" && how="${how:-in-place edit of}"
+            [ -n "$how" ] || ere_match "${removers}[\"']?${esc}" "$segs" && how="${how:-removal of}"
             if [ -n "$how" ]; then
                 case "$kind" in
                     protected)

@@ -1,0 +1,1 @@
+{"case":"rm inside a { } group is denied (a2)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"{ rm -f .ai/state/current.json; }"}}}

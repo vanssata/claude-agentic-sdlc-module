@@ -1,0 +1,1 @@
+{"case":"a commented-out rm is not a command (a3)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"ls\n# rm -f .ai/state/current.json"}}}
