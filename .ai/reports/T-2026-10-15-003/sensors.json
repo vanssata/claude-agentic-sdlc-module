@@ -1,0 +1,80 @@
+{
+  "checked_at": "2026-10-15T11:46:33Z",
+  "declared_tier": "T4",
+  "rescored_tier": "T4",
+  "schema": 1,
+  "sensors": {
+    "bite": {
+      "detail": "no finished step named a test \u2014 traceability says the same",
+      "must_fail": null,
+      "must_pass": null,
+      "restored": null,
+      "status": "unavailable",
+      "tree": "cb780dbbd88509e55eac0009c8d89c1c55d2d244"
+    },
+    "diff": {
+      "detail": "10 files / 240 lines (T4 task budget 30 / 800)",
+      "enforced": false,
+      "files": 10,
+      "lines": 240,
+      "over": [],
+      "status": "green",
+      "tree": "cb780dbbd88509e55eac0009c8d89c1c55d2d244",
+      "unscoped": []
+    },
+    "duplicates": {
+      "detail": "0 blocks >= 8 lines repeat",
+      "status": "green",
+      "tree": "cb780dbbd88509e55eac0009c8d89c1c55d2d244"
+    },
+    "lint": {
+      "detail": "pylint $(git ls-files '*.py'): command not found",
+      "status": "unavailable",
+      "tree": "cb780dbbd88509e55eac0009c8d89c1c55d2d244"
+    },
+    "plan_sections": {
+      "detail": "inline plan",
+      "status": "not_applicable",
+      "tree": "cb780dbbd88509e55eac0009c8d89c1c55d2d244"
+    },
+    "rescore": {
+      "detail": "T4 \u2014 scopes: docs, source, tests",
+      "reasons": [],
+      "status": "green",
+      "tier": "T4",
+      "tree": "cb780dbbd88509e55eac0009c8d89c1c55d2d244"
+    },
+    "tests": {
+      "detail": "verify_command exit 0 in 318s, run 2, log .ai/reports/T-2026-10-15-003/tests-suite-2.log",
+      "log": ".ai/reports/T-2026-10-15-003/tests-suite-2.log",
+      "status": "green",
+      "tree": "cb780dbbd88509e55eac0009c8d89c1c55d2d244"
+    },
+    "traceability": {
+      "detail": "steps with no test named: 1",
+      "status": "red",
+      "tree": "cb780dbbd88509e55eac0009c8d89c1c55d2d244",
+      "untraced": [
+        "1"
+      ]
+    },
+    "typecheck": {
+      "detail": "typecheck_command: none (testing.md)",
+      "status": "not_applicable",
+      "tree": "cb780dbbd88509e55eac0009c8d89c1c55d2d244"
+    }
+  },
+  "task": "T-2026-10-15-003",
+  "tree": "cb780dbbd88509e55eac0009c8d89c1c55d2d244",
+  "verdict": {
+    "all_green": false,
+    "blocking": [
+      "lint: unavailable",
+      "traceability: red",
+      "bite: unavailable",
+      "tier T4 is above T3",
+      "the diff re-scores to T4"
+    ],
+    "review": "required"
+  }
+}

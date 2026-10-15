@@ -1,0 +1,1 @@
+{"case":"jq reading adopt.json stays allowed (ai-status reads it)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"jq -r '.cleanup.unattended' .ai/reports/adopt-x/adopt.json"}}}

@@ -22,7 +22,7 @@
 - **What could go wrong**: an agent that gets past the path guard's approve regex and opens a pty (`script -qec …`) passes the terminal check and grants its own T3+ approval. `--confirm-delete` now also refuses under an agent-session marker (`adopt.human_gate()`); approve does not.
 - **How likely / how bad**: needs a deliberate bypass of the hook; the approval is journalled with `via`. Bad when it happens: the one gate the pipeline may not close itself.
 - **Suggested fix**: give `state.py` the same marker check as `adopt.human_gate()`.
-- **Status**: open
+- **Status**: fixed (T-2026-10-15-003) — `human_route()` in `state.py` refuses a terminal that carries an agent marker (`AGENT_MARKERS`, duplicated from `adopt.py` on purpose); `approve`, `guard_lowering` (`risk --by`) and `remediate --by` go through it. The refusal names the marker and says "not through the `!` prefix". Behaviour change: approving through the `!` prefix, or from a terminal with `CLAUDECODE` set, is refused. Residuals: an agent that unsets every marker inside a pty (`env -u CLAUDECODE script -qec …`) still passes — the markers are evidence, not a boundary, and the path guard's approve rule is the first line; `AI_UNATTENDED=1` typed inline by the agent still passes, recorded `via: unattended`; `cmd_reject` still labels its journal entry `via: terminal` from the tty alone (it cannot grant, the label is just wrong). `risk --by` and `remediate --by` refusals end with "Refused because …" naming the marker (remediation R2).
 
 ## The approve rule is read line by line, so a backslash-newline splits it
 
@@ -31,7 +31,7 @@
 - **What could go wrong**: `python3 …/state.py \` newline `approve --by x` is one command to the shell and two lines to the rule, so the hook allows it; `state.py`'s own tty check is then the only line.
 - **How likely / how bad**: deliberate obfuscation; same class as the documented regex limit.
 - **Suggested fix**: join backslash-newlines before matching, as the `--confirm-delete` rule does.
-- **Status**: open
+- **Status**: fixed (T-2026-10-15-003) — both rules match `cmd_joined` (`${cmd//$'\\\n'/ }`). Side effect: `grep x \` newline `hooks/context-guard.py` is no longer a false deny. The reviews of the same task found more spellings past `APPROVE_RE`, fixed in its remediation R2: a quoted `--root` value with a space (the form the refusal itself prints), a quoted verb, `-- approve`, and a head after `(` or a backtick (`($S approve)`, `$($S approve)`). Residuals: a backslash-newline inside a word (`state\` newline `.py`) is joined with a space, so it still splits the name; a newline inside quotes (`--root "` newline `/p" approve`) still splits every gate rule, `CONFIRM_RE` included (`python3 …/update.py /p --co "` newline `ivan" --apply`; `adopt.py` strips the name) — joining every newline would merge separate commands, so it needs the quote-aware `shell_segments` join, its own task; the approve and context-guard rules still need `.ai/` above the session's cwd (a session in `/` running `state.py --root /abs/p approve` reaches only `human_route()`).
 
 ## The `--confirm-delete` hook rule needs `.ai/` in the session's cwd
 
@@ -40,7 +40,7 @@
 - **What could go wrong**: a session opened in a parent directory runs `update.py /abs/project --apply --confirm-delete X`; only `adopt.human_gate()` refuses it, and an agent adding `AI_UNATTENDED=1` inline passes with `via: unattended`.
 - **How likely / how bad**: needs the agent to type `AI_UNATTENDED=1` itself (the refusal no longer suggests it under a marker); irreversible deletion, originals kept under `.ai/reports/`.
 - **Suggested fix**: evaluate the `--confirm-delete` rule before the `.ai/` opt-in, since it needs no project policy.
-- **Status**: open
+- **Status**: fixed (T-2026-10-15-003) — the rule is a Bash-only check before `find_ai_root … || allow`; every other rule still needs `.ai/`. Consequences: the rule now runs in every repository the plugin is installed for (the hook header says so), and in an `.ai/` project with empty pattern lists. In remediation R2 its head also accepts a variable after `;`, `&`, `|`, `(` or a backtick (`true;$U --apply --confirm-delete x`, `($U …)`, `$($U …)`), which HEAD allowed. An inline `AI_UNATTENDED=1 python3 …/update.py …` is denied: the hook checks its own environment, not the command's. Residual: a spelling the regex does not model (a name built by concatenation, `eval`) still reaches only `adopt.human_gate()`, and there an inline `AI_UNATTENDED=1` passes as `via: unattended`.
 
 ## `adopt.json` / `migration.json` carry the deletion audit but are agent-writable
 
@@ -49,7 +49,7 @@
 - **What could go wrong**: `cleanup.via` / `deletions[].via` can be rewritten with the Write tool after the fact.
 - **How likely / how bad**: deliberate tampering; the audit trail loses its weight.
 - **Suggested fix**: add `.ai/reports/[^/]+/(adopt|migration)\.json$` to the protected patterns, or also journal the deletion into a protected file.
-- **Status**: open
+- **Status**: fixed (T-2026-10-15-003) — `(^|/)\.ai/reports/[^/]+/(adopt|migration)\.json$` is in `protected_config_patterns`; Write/Edit and the shell writes the guard models (`>`, `sed -i`, `tee`, `cp`, `truncate`, `dd`, `mv` onto the file, `rm`/`mv` of an existing parent) are denied; `jq` reads stay allowed (ai-status reads `adopt.json`), `cat` of them is now denied like every protected file (`tests/fixtures/path-guard/86-*`). Residuals, general gaps of the guard rather than of this pattern: an interpreter one-liner, `cd .ai/reports/adopt-x && rm adopt.json`, `find … -delete`, `git clean -fdx .ai/reports` and `ln -sf` still change or remove them — the guard is defence-in-depth, not a boundary.
 
 ## The `--confirm-delete` hook regex is quadratic on very long lines
 
@@ -58,6 +58,15 @@
 - **What could go wrong**: a ~120 KB padded line takes ~13 s, past the 10 s hook timeout; if the runtime treats a timeout as non-blocking the command runs (inferred, not observed). `adopt.py`'s marker check still refuses.
 - **How likely / how bad**: deliberate padding only.
 - **Suggested fix**: deny or skip the ERE for a line over a fixed length that contains both `update` and `--co`.
+- **Status**: fixed (T-2026-10-15-003) — a line over 16384 characters that holds `--co`, `--ap` and either `update` or a `$` is denied before `CONFIRM_RE` runs (200 KB: ~80 ms). The first version required `update` only; the security review timed a 64 KB `$U --co …` line at 12.5 s past it, and the adversarial review found a false deny on a minified-CSS heredoc full of `--color` — both fixed in remediation R2 and pinned in `tests/test-ai-path-guard.sh`. Measured on the way: a 200 KB payload cannot be built with `jq --arg` (one exec argument is capped at 128 KB), which made an earlier test look green. Residuals: under 16384 characters `CONFIRM_RE` with a variable head takes up to ~0.8 s; a long heredoc that holds `--co`, `--ap` and a `$` is denied (err on the deny side); the rest of the guard is slow on any long line — see the next entry.
+
+## The path guard is quadratic on long lines
+
+- **Found**: 2026-10-15, by T-2026-10-15-003 (while testing the long-line `--confirm-delete` fix)
+- **Where**: `hooks/ai-path-guard.sh`, the Bash rules after the `.ai/` opt-in (segmentation and the per-token `readers`/`copiers`/`writers` matching; not narrowed down)
+- **What could go wrong**: a benign `echo <40 KB>` takes ~7.5 s in the hook, 10 KB ~0.5 s; 200 KB would take minutes. Past the 10 s hook timeout, if the runtime treats a timeout as non-blocking, a padded command naming a protected path runs (inferred, not observed).
+- **How likely / how bad**: deliberate padding, or a very long generated command; the deny side of every path rule is lost for that call.
+- **Suggested fix**: a single length cap at the top of the Bash branch (deny over N characters when the line names a protected or sensitive pattern's literal, allow otherwise), or find the quadratic loop and make it linear.
 - **Status**: open
 
 ## tests/test-project-update.sh is red on the uncommitted tier-model v2 tree (found 2026-10-13, outside T1 task on test-runtime-gate.sh)

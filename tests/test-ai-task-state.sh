@@ -611,17 +611,44 @@ printf '%s' "$out" | grep -q "AI_UNATTENDED=1 in the launcher's environment; the
 cmp -s "$TMP/gate-before.json" "$ROOTG/.ai/state/current.json" && pass "a refused approval writes nothing" || fail "the state changed on a refusal"
 [ "$(G get --field human_approval | jq -r .granted)" = false ] && pass "and grants nothing" || fail "nothing should be granted"
 
-echo "== a terminal is what the gate is looking for"
-python3 - "$STATE" "$ROOTG" <<'PTYRUN'
+# approve_in_pty ROOT [NAME=VALUE ...] [-- ARG ...]: approve --by ivan (or the
+# state.py arguments after --) from a pseudo-terminal, with every agent marker
+# removed and then the given ones set. The output goes to $TMP/pty.out, so a
+# refusal can be read back.
+approve_in_pty() {
+  local root=$1; shift
+  python3 - "$STATE" "$root" "$@" >"$TMP/pty.out" 2>&1 <<'PTYRUN'
 import os, pty, sys
 env = dict(os.environ)
-for name in ("CLAUDECODE", "AI_RUNTIME", "AI_UNATTENDED"):
+for name in ("CLAUDECODE", "AI_RUNTIME", "AI_UNATTENDED", "CODEX_THREAD_ID", "CODEX_SESSION_ID",
+             "CODEX_CI", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_VERSION"):
     env.pop(name, None)
+rest = sys.argv[3:]
+command = ["approve", "--by", "ivan"]
+if "--" in rest:
+    command = rest[rest.index("--") + 1:]
+    rest = rest[:rest.index("--")]
+for pair in rest:
+    key, _, value = pair.partition("=")
+    env[key] = value
 os.environ.clear(); os.environ.update(env)
-status = pty.spawn(["python3", sys.argv[1], "--root", sys.argv[2], "approve", "--by", "ivan"])
+status = pty.spawn(["python3", sys.argv[1], "--root", sys.argv[2]] + command)
 sys.exit(os.waitstatus_to_exitcode(status))
 PTYRUN
-[ $? = 0 ] && pass "approve from a terminal exits 0" || fail "a tty should be enough"
+}
+
+echo "== a terminal inside an agent session is not a human (approve through the ! prefix)"
+for marker in CLAUDECODE=1 CODEX_THREAD_ID=x; do
+  approve_in_pty "$ROOTG" "$marker"; rc=$?
+  [ "$rc" = 5 ] && pass "approve from a pty with $marker exits 5" || fail "a pty with $marker must not approve" "exit $rc: $(cat "$TMP/pty.out")"
+  grep -q "${marker%%=*}" "$TMP/pty.out" && grep -q 'not through the `!` prefix' "$TMP/pty.out" \
+    && pass "and the refusal names ${marker%%=*} and the ! prefix" || fail "the marker refusal text is wrong" "$(cat "$TMP/pty.out")"
+  [ "$(G get --field human_approval | jq -r .granted)" = false ] && pass "and grants nothing" || fail "nothing should be granted with $marker"
+done
+
+echo "== a terminal is what the gate is looking for"
+approve_in_pty "$ROOTG"
+[ $? = 0 ] && pass "approve from a terminal exits 0" || fail "a tty should be enough" "$(cat "$TMP/pty.out")"
 G get --field human_approval | jq -e '.granted==true and .via=="terminal" and .unattended==false' >/dev/null \
   && pass "and the state records the route it came in by" || fail "human_approval is wrong" "$(G get --field human_approval)"
 G events --type gate_approved --format jsonl | jq -e '.actor=="human" and .data.via=="terminal" and .data.tty==true' >/dev/null \
@@ -640,6 +667,21 @@ G get --field human_approval | jq -e '.granted==true and .via=="unattended" and 
   && pass "AI_UNATTENDED grants the approval" || fail "the flag should grant" "$(G get --field human_approval)"
 G events --type gate_approved --format jsonl | jq -e '.data.unattended==true and .data.tty==false' >/dev/null \
   && pass "and the journal marks it unattended for ever" || fail "the unattended event is wrong"
+TM=$(G init --goal "unattended in an agent session" --workflow feature --force)
+G stage human_approval >/dev/null
+env -u AI_RUNTIME CLAUDECODE=1 AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTG" approve --by launcher >/dev/null
+G get --field human_approval | jq -e '.granted==true and .via=="unattended" and .unattended==true' >/dev/null \
+  && pass "AI_UNATTENDED with an agent marker still grants, as unattended" || fail "the launcher route should survive a marker" "$(G get --field human_approval)"
+
+echo "== lowering a tier from a terminal inside an agent session says which marker refused it"
+TL=$(G init --goal "lower" --workflow feature --force)
+G risk T4 --note "raised" >/dev/null
+approve_in_pty "$ROOTG" CLAUDECODE=1 -- risk T2 --by ivan --note "by hand"; rc=$?
+[ "$rc" = 5 ] && grep -q "Refused because this run is inside an agent session (CLAUDECODE is set)" "$TMP/pty.out" \
+  && pass "risk --by from a pty with CLAUDECODE exits 5 and names the marker" || fail "the marker should refuse and be named" "exit $rc: $(cat "$TMP/pty.out")"
+[ "$(G get --field risk_tier)" = T4 ] && pass "and the tier stays" || fail "the tier must not be lowered"
+approve_in_pty "$ROOTG" -- risk T2 --by ivan --note "by hand"; rc=$?
+[ "$rc" = 0 ] && [ "$(G get --field risk_tier)" = T2 ] && pass "a plain terminal lowers it" || fail "a terminal with no marker should lower" "exit $rc: $(cat "$TMP/pty.out")"
 
 echo "== a pending question still comes first, and the gate's own does not"
 TP=$(G init --goal "pending first" --workflow feature --force)

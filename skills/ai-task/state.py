@@ -753,8 +753,9 @@ def guard_lowering(root, state, tier, by):
 def refuse_approval_free(root, previous, tier):
     die("APPROVAL_REFUSED — only a human lowers a risk tier, in writing (downgrade_rule). "
         "The task is %s and you asked for %s. Propose it with evidence and let the human run, "
-        "in their own terminal:\n  python3 %s --root %s risk %s --by \"<name>\" --note \"<why>\""
-        % (previous, tier, shlex.quote(os.path.abspath(__file__)), shlex.quote(root), tier), 5)
+        "in their own terminal:\n  python3 %s --root %s risk %s --by \"<name>\" --note \"<why>\"%s"
+        % (previous, tier, shlex.quote(os.path.abspath(__file__)), shlex.quote(root), tier,
+           refused_because()), 5)
 
 
 def cmd_risk(args, root):
@@ -920,10 +921,47 @@ def rescore_task(root, state, to_tree):
     return measurement, scored
 
 
+# Set by the runtimes in every process they start, the `!` prefix's shell
+# included. Duplicated on purpose from skills/project-update/adopt.py
+# (AGENT_MARKERS): the two skills are installed independently and neither
+# imports the other.
+AGENT_MARKERS = ("CLAUDECODE", "CODEX_THREAD_ID", "CODEX_SESSION_ID", "CODEX_CI",
+                 "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_VERSION")
+
+
+def agent_markers():
+    return [name for name in AGENT_MARKERS if name in os.environ]
+
+
+def human_route():
+    """(via, why): "terminal" for a terminal outside any agent session,
+    "unattended" for a launcher that declared the run unattended, else None and
+    what was seen. A terminal alone is not enough — an agent can open a pty — so
+    a terminal that carries an agent marker is the agent's. The same condition
+    as adopt.human_gate()."""
+    markers = agent_markers()
+    if os.isatty(0) and not markers:
+        return "terminal", ""
+    if os.environ.get("AI_UNATTENDED"):
+        return "unattended", ""
+    if markers:
+        return None, ("this run is inside an agent session (%s %s set); run it in a terminal "
+                      "outside Claude Code or Codex, not through the `!` prefix"
+                      % (", ".join(markers), "is" if len(markers) == 1 else "are"))
+    return None, "this run has no terminal"
+
+
 def human_present():
-    """The same condition WP2's approval uses: a terminal, or a launcher that
-    declared the run unattended. An agent has neither."""
-    return os.isatty(0) or bool(os.environ.get("AI_UNATTENDED"))
+    """The condition every human-only command uses: a terminal outside any
+    agent session, or a launcher that declared the run unattended."""
+    return human_route()[0] is not None
+
+
+def refused_because():
+    """The line a human-only refusal ends with, so a human who did run it in a
+    terminal — through the `!` prefix — learns which marker refused them."""
+    why = human_route()[1]
+    return "\nRefused because %s." % why if why else ""
 
 
 def refuse_without_human(what, how):
@@ -1195,9 +1233,9 @@ def cmd_remediate(args, root):
         # round is where a fix starts causing the next regression (review-economy §5).
         die("APPROVAL_REFUSED — this is remediation round %d and the policy allows %d. "
             "Name the invariant behind the repeated failure, show it to the human, and let "
-            "them run:\n  python3 %s --root %s remediate --files %s --by \"<name>\""
+            "them run:\n  python3 %s --root %s remediate --files %s --by \"<name>\"%s"
             % (n, rounds, shlex.quote(os.path.abspath(__file__)), shlex.quote(root),
-               shlex.quote(args.files or "")), 5)
+               shlex.quote(args.files or ""), refused_because()), 5)
     step_id = "R%d" % n
     step = {
         "step_id": step_id,
@@ -2513,16 +2551,16 @@ def close_gate_from_file(root, state, question, by):
     return approved
 
 
-def refuse_approval(root, state, gate_id, by):
+def refuse_approval(root, state, gate_id, by, why):
     # Quoted: this project's own path has a space in it, and the command the
     # refusal prints is the only route a human without the flag has.
     die("APPROVAL_REFUSED — approval happens outside the agent. Run in your own terminal:\n"
         "  python3 %s --root %s approve --by %s\n"
         "or set [Answer]: A on %s in %s and tell the session to sync. An unattended run exports "
         "AI_UNATTENDED=1 in the launcher's environment; the journal then records the approval as "
-        "unattended."
+        "unattended.\nRefused because %s."
         % (shlex.quote(os.path.abspath(__file__)), shlex.quote(root), shlex.quote(by), gate_id,
-           os.path.relpath(questions_path(root, state, None), root)), 5)
+           os.path.relpath(questions_path(root, state, None), root), why), 5)
 
 
 def cmd_approve(args, root):
@@ -2543,11 +2581,11 @@ def cmd_approve(args, root):
         die("APPROVAL_REFUSED — no gate was requested: run 'state.py stage human_approval' "
             "after presenting the plan.", 5)
     tty = os.isatty(0)
-    if not (tty or os.environ.get("AI_UNATTENDED")):
-        refuse_approval(root, state, gate_id, args.by)
     # A terminal is the stronger evidence: a launcher variable left in a human's
     # shell must not downgrade an approval they gave in person.
-    via = "terminal" if tty else "unattended"
+    via, why = human_route()
+    if via is None:
+        refuse_approval(root, state, gate_id, args.by, why)
     claim_runtime(root, state)
     state["human_approval"].update({
         "required": True, "granted": True, "granted_by": args.by, "granted_at": now(),

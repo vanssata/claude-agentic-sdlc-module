@@ -1,0 +1,1 @@
+{"case":"Write to an adopt.json deletion record is denied (it is the audit trail)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/.ai/reports/adopt-x/adopt.json","content":"{}"}}}

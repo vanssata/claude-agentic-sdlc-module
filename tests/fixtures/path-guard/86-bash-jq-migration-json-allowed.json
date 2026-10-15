@@ -1,0 +1,1 @@
+{"case":"jq reading migration.json stays allowed","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"jq '.deletions' .ai/reports/project-update-x/migration.json"}}}

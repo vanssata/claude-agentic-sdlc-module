@@ -1,0 +1,413 @@
+{
+  "task_id": "T-2026-10-15-003",
+  "goal": "Close the five open known-risks around the human gates (approve marker check, \\-newline split, --confirm-delete outside .ai/, adopt/migration json protection, long-line ReDoS)",
+  "workflow": "bugfix",
+  "risk_tier": "T4",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "Close the five open known-risks around the human gates (approve marker check, \\-newline split, --confirm-delete outside .ai/, adopt/migration json protection, long-line ReDoS)",
+        "allowed_files": [
+          "tests/test-ai-task-state.sh",
+          "tests/test-ai-path-guard.sh",
+          "tests/fixtures/path-guard/86-*.json",
+          "skills/ai-task/state.py",
+          "hooks/ai-path-guard.sh",
+          "hooks/ai-path-guard-defaults.json",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "02bfd563c99cad21f07030bb1ad1d3d981a0d45d",
+          "seq": 1,
+          "paths": [
+            "hooks/ai-path-guard-defaults.json",
+            "hooks/ai-path-guard.sh",
+            "skills/ai-task/state.py",
+            "tests/fixtures/path-guard/86-bash-jq-adopt-json-allowed.json",
+            "tests/fixtures/path-guard/86-bash-jq-migration-json-allowed.json",
+            "tests/fixtures/path-guard/86-edit-migration-json.json",
+            "tests/fixtures/path-guard/86-write-adopt-json.json",
+            "tests/test-ai-path-guard.sh",
+            "tests/test-ai-task-state.sh"
+          ],
+          "files": 9,
+          "added": 168,
+          "deleted": 44,
+          "lines": 212,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "1 regression: characterization golden lacks the four new 86-* fixtures (additions only)",
+        "allowed_files": [
+          "tests/test-ai-task-state.sh",
+          "tests/test-ai-path-guard.sh",
+          "tests/fixtures/path-guard/86-*.json",
+          "skills/ai-task/state.py",
+          "hooks/ai-path-guard.sh",
+          "hooks/ai-path-guard-defaults.json",
+          ".ai/project/known-risks.md",
+          "tests/fixtures/guard-characterization/golden.txt"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "02bfd563c99cad21f07030bb1ad1d3d981a0d45d",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "cb780dbbd88509e55eac0009c8d89c1c55d2d244",
+          "seq": 2,
+          "paths": [
+            "tests/fixtures/guard-characterization/golden.txt"
+          ],
+          "files": 1,
+          "added": 28,
+          "deleted": 0,
+          "lines": 28,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R2",
+        "description": "review R2: long-line cap bypass via $VAR head and CSS false deny; CONFIRM_RE head boundary misses ;&|(`; APPROVE_RE misses quoted --root/verb, --, $( ); risk/remediate refusal omits marker; header comment",
+        "allowed_files": [
+          "tests/test-ai-task-state.sh",
+          "tests/test-ai-path-guard.sh",
+          "tests/fixtures/path-guard/86-*.json",
+          "skills/ai-task/state.py",
+          "hooks/ai-path-guard.sh",
+          "hooks/ai-path-guard-defaults.json",
+          ".ai/project/known-risks.md",
+          "tests/fixtures/guard-characterization/golden.txt"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "cb780dbbd88509e55eac0009c8d89c1c55d2d244",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "cc0b3568e0f353b5b7c808a8c778d7969b1d1e8d",
+          "seq": 3,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "skills/ai-task/state.py",
+            "tests/test-ai-path-guard.sh",
+            "tests/test-ai-task-state.sh"
+          ],
+          "files": 4,
+          "added": 82,
+          "deleted": 20,
+          "lines": 102,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "R1",
+    "R2"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "passed",
+  "security_status": "passed",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "<name>",
+    "granted_at": "2026-10-15T12:05:07Z",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "terminal",
+    "unattended": false
+  },
+  "created_at": "2026-10-15T11:18:53Z",
+  "updated_at": "2026-10-15T12:26:19Z",
+  "history": [
+    {
+      "at": "2026-10-15T11:18:53Z",
+      "event": "task_started",
+      "detail": "Close the five open known-risks around the human gates (approve marker check, \\-newline split, --confirm-delete outside .ai/, adopt/migration json protection, long-line ReDoS) (bugfix)"
+    },
+    {
+      "at": "2026-10-15T11:18:53Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-15T11:18:53Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-15T11:18:53Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-15T11:18:53Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-15T11:18:53Z",
+      "event": "risk_classified",
+      "detail": "T4: pipeline path scope; plan approved in plan mode"
+    },
+    {
+      "at": "2026-10-15T11:18:53Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-15T11:18:53Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-15T11:18:53Z",
+      "event": "step_started",
+      "detail": "1: Close the five open known-risks around the human gates (approve marker check, \\-newline split, --confirm-delete outside .ai/, adopt/migration json protection, long-line ReDoS)"
+    },
+    {
+      "at": "2026-10-15T11:39:48Z",
+      "event": "field_set",
+      "detail": "test_status = unknown (suite run 1, exit 1)"
+    },
+    {
+      "at": "2026-10-15T11:40:07Z",
+      "event": "set",
+      "detail": "test_status = new_regression"
+    },
+    {
+      "at": "2026-10-15T11:40:07Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-15T11:40:07Z",
+      "event": "remediation",
+      "detail": "R1: 1 regression: characterization golden lacks the four new 86-* fixtures (additions only)"
+    },
+    {
+      "at": "2026-10-15T11:40:07Z",
+      "event": "step_started",
+      "detail": "R1: 1 regression: characterization golden lacks the four new 86-* fixtures (additions only)"
+    },
+    {
+      "at": "2026-10-15T11:41:06Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-10-15T11:46:25Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-15T11:46:33Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-15T11:46:33Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-15T11:52:11Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-15T11:52:11Z",
+      "event": "remediation",
+      "detail": "R2: review R2: long-line cap bypass via $VAR head and CSS false deny; CONFIRM_RE head boundary misses ;&|(`; APPROVE_RE misses quoted --root/verb, --, $( ); risk/remediate refusal omits marker; header comment"
+    },
+    {
+      "at": "2026-10-15T11:52:11Z",
+      "event": "step_started",
+      "detail": "R2: review R2: long-line cap bypass via $VAR head and CSS false deny; CONFIRM_RE head boundary misses ;&|(`; APPROVE_RE misses quoted --root/verb, --, $( ); risk/remediate refusal omits marker; header comment"
+    },
+    {
+      "at": "2026-10-15T11:55:01Z",
+      "event": "step_completed",
+      "detail": "R2"
+    },
+    {
+      "at": "2026-10-15T12:00:21Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 3, exit 0)"
+    },
+    {
+      "at": "2026-10-15T12:00:25Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-15T12:00:33Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-10-15T12:00:33Z",
+      "event": "set",
+      "detail": "security_status = passed"
+    },
+    {
+      "at": "2026-10-15T12:00:33Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval"
+    },
+    {
+      "at": "2026-10-15T12:00:33Z",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "2026-10-15T12:05:07Z",
+      "event": "human_approval",
+      "detail": "granted by <name> via terminal"
+    },
+    {
+      "at": "2026-10-15T12:26:19Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-15T12:26:19Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-15-003/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-15T12:26:19Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "f2872130d4ad05fc69cd7ea347e4aa78ffcf00ed",
+    "base_tree": "595eca6920c9695e94a1f1ac77b97048af8b32aa",
+    "task": {
+      "files": 10,
+      "added": 266,
+      "deleted": 52,
+      "lines": 318,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 17,
+      "tree": "cc0b3568e0f353b5b7c808a8c778d7969b1d1e8d",
+      "measured_at": "2026-10-15T11:55:01Z",
+      "status": "green"
+    },
+    "rescored_tier": "T4",
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-15-003/sensors.json",
+    "tree": "cb780dbbd88509e55eac0009c8d89c1c55d2d244",
+    "verdict": "required",
+    "checked_at": "2026-10-15T11:46:33Z"
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "02bfd563c99cad21f07030bb1ad1d3d981a0d45d",
+        "exit": 1,
+        "duration_s": 323,
+        "log": ".ai/reports/T-2026-10-15-003/tests-suite-1.log",
+        "at": "2026-10-15T11:39:48Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "cb780dbbd88509e55eac0009c8d89c1c55d2d244",
+        "exit": 0,
+        "duration_s": 318,
+        "log": ".ai/reports/T-2026-10-15-003/tests-suite-2.log",
+        "at": "2026-10-15T11:46:25Z",
+        "env_retry": false
+      },
+      {
+        "n": 1,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "cb780dbbd88509e55eac0009c8d89c1c55d2d244",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-15-003/tests-e2e-1.log",
+        "at": "2026-10-15T11:46:33Z",
+        "env_retry": false
+      },
+      {
+        "n": 3,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "cc0b3568e0f353b5b7c808a8c778d7969b1d1e8d",
+        "exit": 0,
+        "duration_s": 319,
+        "log": ".ai/reports/T-2026-10-15-003/tests-suite-3.log",
+        "at": "2026-10-15T12:00:21Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "cc0b3568e0f353b5b7c808a8c778d7969b1d1e8d",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-15-003/tests-e2e-2.log",
+        "at": "2026-10-15T12:00:25Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 3
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}

@@ -716,6 +716,34 @@ rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a directory that holds runtime configuration while task ? is in flight: .ai (holds __TMP__/project/.ai/workflows)\n\nWhile a task is in flight the runtime's own configuration is frozen: settings,\nagent and skill definitions, commands, hooks, and the pipeline's policies and\nworkflows. A run that edits the rules it is being judged by is how scope and\nreview quietly get weaker. Finish or archive the task\n(skills/ai-task/state.py close), then change this through /project-update or by\nhand outside a run. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/85-bash-rm-ai-dir.json
 rc=0
+### ai-git-guard | fixture path-guard/86-bash-jq-adopt-json-allowed.json
+rc=0
+### ai-path-guard | fixture path-guard/86-bash-jq-adopt-json-allowed.json
+rc=0
+### ai-scope-guard | fixture path-guard/86-bash-jq-adopt-json-allowed.json
+rc=0
+### ai-git-guard | fixture path-guard/86-bash-jq-migration-json-allowed.json
+rc=0
+### ai-path-guard | fixture path-guard/86-bash-jq-migration-json-allowed.json
+rc=0
+### ai-scope-guard | fixture path-guard/86-bash-jq-migration-json-allowed.json
+rc=0
+### ai-git-guard | fixture path-guard/86-edit-migration-json.json
+rc=0
+### ai-path-guard | fixture path-guard/86-edit-migration-json.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/reports/project-update-x/migration.json (matched: (^|/)\\.ai/reports/[^/]+/(adopt|migration)\\.json$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/86-edit-migration-json.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/reports/project-update-x/migration.json is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
+### ai-git-guard | fixture path-guard/86-write-adopt-json.json
+rc=0
+### ai-path-guard | fixture path-guard/86-write-adopt-json.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/reports/adopt-x/adopt.json (matched: (^|/)\\.ai/reports/[^/]+/(adopt|migration)\\.json$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/86-write-adopt-json.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/reports/adopt-x/adopt.json is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
 ### ai-git-guard | fixture scope-guard/01-in-scope.json
 rc=0
 ### ai-path-guard | fixture scope-guard/01-in-scope.json

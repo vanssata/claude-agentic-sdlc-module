@@ -28,6 +28,7 @@
     "(^|/)\\.ai/state/handoff\\.md$",
     "(^|/)\\.ai/reports/[^/]+/questions\\.md$",
     "(^|/)\\.ai/reports/[^/]+/events\\.jsonl$",
+    "(^|/)\\.ai/reports/[^/]+/(adopt|migration)\\.json$",
     "(^|/)\\.ai/policies/[^/]*\\.json$",
     "(^|/)\\.claude/hooks/ai-[^/]*$",
     "/\\.claude/hooks/ai-[^/]*$",

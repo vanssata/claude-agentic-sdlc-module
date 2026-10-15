@@ -152,6 +152,72 @@ for c in "grep -n confirm-delete /home/u/.claude/skills/project-update/update.py
     [ -z "$out" ] && pass "allowed: $c" || fail "'$c' must not be refused" "$(printf '%s' "$out" | head -c 160)"
 done
 
+echo "== ai-path-guard (a backslash-newline does not split the gate rules)"
+printf '{"current_stage":"human_approval","task_id":"T-1"}\n' > "$ROOT/.ai/state/current.json"
+decide "state.py \\⏎approve --by x is denied" deny "$(jq -nc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
+    tool_input:{command:"python3 /home/u/.claude/skills/ai-task/state.py \\\napprove --by x"}}')"
+decide "python3 \\⏎context-guard.py is denied" deny "$(jq -nc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
+    tool_input:{command:"python3 \\\n/home/u/.claude/hooks/context-guard.py"}}')"
+# Spellings the T-2026-10-15-003 reviews found past APPROVE_RE.
+for c in "python3 /h/state.py --root \"/Store/Claude Plugins/p\" approve --by x" \
+         "python3 /h/state.py --root '/a b' approve --by x" \
+         "python3 /h/state.py \"approve\" --by x" "python3 /h/state.py -- approve --by x" \
+         "S=/h/state.py; (\$S approve --by x)" "echo \$(\$S approve --by x)" "echo \`\$S approve --by x\`"; do
+    decide "denied: $c" deny "$(jq -nc --arg r "$ROOT" --arg c "$c" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:$c}}')"
+done
+for c in "grep -n approve skills/ai-task/state.py" "python3 /h/state.py get --field human_approval"; do
+    decide "allowed: $c" allow "$(jq -nc --arg r "$ROOT" --arg c "$c" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:$c}}')"
+done
+decide "but grep x \\⏎context-guard.py is a read, not a run" allow "$(jq -nc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
+    tool_input:{command:"grep -n APPROVE_RE \\\nhooks/context-guard.py"}}')"
+printf '{}\n' > "$ROOT/.ai/state/current.json"
+
+echo "== ai-path-guard (--confirm-delete is denied from a cwd with no .ai/)"
+NOAI="$TMP/no-ai-here"; mkdir -p "$NOAI"
+decide "update.py /abs/p --apply --confirm-delete x from a cwd without .ai/ is denied" deny \
+    "$(jq -nc --arg r "$NOAI" --arg p "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
+        tool_input:{command:("python3 /home/u/.claude/skills/project-update/update.py " + $p + " --apply --confirm-delete x")}}')"
+for c in "ls -la" "python3 /home/u/.claude/skills/project-update/update.py $ROOT --apply" "cat README.md"; do
+    decide "still allowed without .ai/: $c" allow "$(jq -nc --arg r "$NOAI" --arg c "$c" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:$c}}')"
+done
+# A variable head after ; & | ( or a backtick (T-2026-10-15-003 security review).
+for c in "U=/x/update.py; true;\$U --apply --confirm-delete bob" "true&&\$U --apply --confirm-delete bob" \
+         "(\$U --apply --confirm-delete bob)" "echo \$(\$U --apply --confirm-delete bob)" \
+         "echo \`\$U --apply --confirm-delete bob\`"; do
+    decide "denied without .ai/: $c" deny "$(jq -nc --arg r "$NOAI" --arg c "$c" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:$c}}')"
+done
+decide "and a Write there stays none of the guard's business" allow \
+    "$(jq -nc --arg r "$NOAI" '{hook_event_name:"PreToolUse",tool_name:"Write",cwd:$r,tool_input:{file_path:($r+"/x.txt")}}')"
+
+echo "== ai-path-guard (a padded line cannot outrun the hook timeout)"
+for unit in a 'a '; do
+    # Through stdin: one exec argument is capped at 128 KB, so --arg would fail.
+    pad() { printf '%*s' 200000 '' | sed "s/ /$unit/g" | head -c 200000; }
+    long_hit=$(pad | jq -Rc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
+        tool_input:{command:("python3 update.py . --apply " + . + " --co x")}}')
+    # Just over the threshold, not 200 KB: the guard's later rules are slow on
+    # any long line (known-risks: "The path guard is quadratic on long lines").
+    long_miss=$(pad | head -c 20000 | jq -Rc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
+        tool_input:{command:("echo " + .)}}')
+    [ "${#long_hit}" -gt 200000 ] || fail "the padded payload was not built" "${#long_hit} bytes"
+    t0=$(date +%s%N)
+    decide "a 200 KB line ('$unit' padding) holding update and --co is denied" deny "$long_hit"
+    ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+    [ "$ms" -lt 1000 ] && pass "and within a second (${ms} ms)" || fail "the long-line deny took ${ms} ms"
+    decide "a 20 KB line ('$unit' padding) without them is allowed" allow "$long_miss"
+done
+# The variable head needs no `update` on the long line (security review).
+var_hit=$( { printf 'U=/x/update.py\n'; for i in $(seq 8000); do printf '$U --co '; done; printf '; $U --apply --confirm-delete bob'; } \
+    | jq -Rsc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:.}}')
+t0=$(date +%s%N)
+decide "a 64 KB line of \$U --co … --apply is denied" deny "$var_hit"
+ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+[ "$ms" -lt 1000 ] && pass "and within a second (${ms} ms)" || fail "the variable-head deny took ${ms} ms"
+# A minified line full of --color and the word update is not a confirmed deletion (review).
+css=$( { printf "cat > dist/app.min.css <<'EOF'\n"; for i in $(seq 600); do printf 'function update(){}:root{--color-%d:#fff}' "$i"; done; printf '\nEOF'; } \
+    | jq -Rsc --arg r "$NOAI" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:.}}')
+decide "a 25 KB minified CSS heredoc naming update and --color is allowed" allow "$css"
+
 echo "== ai-path-guard (the installed shared tree is frozen during a task, readable always)"
 # T-2026-10-13-004, Q4=A: <home>/claude-agentic/ai/ and ai-path are the rules a
 # run is judged by, like the policies they replace.
