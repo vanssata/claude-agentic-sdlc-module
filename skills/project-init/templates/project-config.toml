@@ -11,7 +11,7 @@
 
 # MCP servers: default off. Enable here only what nearly every task in this
 # repository needs; give a single task what only it needs, and take it away
-# again when the task ends (`.ai/policies/tooling.md`). Every connected server
+# again when the task ends (`policies/tooling.md`). Every connected server
 # sits in the context of every turn, used or not.
 #
 #   [mcp_servers.example]

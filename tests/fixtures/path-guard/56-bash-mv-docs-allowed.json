@@ -1,0 +1,1 @@
+{"case":"mv between two ordinary files is allowed","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"mv docs/a.md docs/b.md"}}}

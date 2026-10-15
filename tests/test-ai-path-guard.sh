@@ -166,10 +166,32 @@ for home in .claude .codex; do
     decide "$home in a task: Read of the shared tree is allowed" allow "$(tool Read "$SH/ai/policies/git.md")"
     decide "$home in a task: running ai-path is allowed" allow "$(bash_cmd "$SH/ai-path policies/git.md")"
     decide "$home in a task: a sibling file is not frozen by this rule" allow "$(tool Write "$SH/ai-path.notes")"
+    # T-2026-10-15-001 (known-risks a): the whole tree, replaced or removed in
+    # one shell command, with nothing inside ai/ named on the line.
+    decide "$home in a task: rm -rf of the bare shared tree is denied" deny "$(bash_cmd "rm -rf $SH/ai")"
+    decide "$home in a task: the same rm followed by && is denied" deny "$(bash_cmd "rm -rf $SH/ai && echo done")"
+    decide "$home in a task: and with no space before the && (review: patsub_replacement ate the &)" deny "$(bash_cmd "rm -rf $SH/ai&& echo done")"
+    decide "$home in a task: and with a redirect glued to the path" deny "$(bash_cmd "rm -rf $SH/ai>/dev/null")"
+    decide "$home in a task: mv over the bare shared tree is denied" deny "$(bash_cmd "mv $TMP/new $SH/ai")"
+    decide "$home in a task: cp -r of a directory named ai into the home is denied" deny "$(bash_cmd "cp -r $TMP/new/ai $SH/")"
+    decide "$home in a task: install into the shared tree is denied" deny "$(bash_cmd "install -m 644 $TMP/x $SH/ai/policies/git.md")"
+    decide "$home in a task: cp to a sibling that merely starts with ai is allowed" allow "$(bash_cmd "cp $TMP/x $SH/ai-notes")"
     rm -f "$ROOT/.ai/state/current.json"
     decide "$home no task: Write to the shared tree is allowed" allow "$(tool Write "$SH/ai/policies/git.md")"
     decide "$home no task: Write to ai-path is allowed" allow "$(tool Write "$SH/ai-path")"
+    decide "$home no task: rm -rf of the shared tree is the guard's business only in a task" allow "$(bash_cmd "rm -rf $SH/ai")"
 done
+printf '{}\n' > "$ROOT/.ai/state/current.json"
+
+echo "== ai-path-guard (.ai/agents/ is an override path, frozen like the policies)"
+# T-2026-10-15-001 (known-risks b): a project copy under .ai/agents/ shadows the
+# shared contract, so dropping one mid-task rewrites the reviewer's own rules.
+agent_override() { jq -nc --arg r "$ROOT" --arg t "$1" '{hook_event_name:"PreToolUse",tool_name:$t,cwd:$r,tool_input:{file_path:($r+"/.ai/agents/reviewer.md")}}'; }
+printf '{"current_stage":"implementation","task_id":"T-1"}\n' > "$ROOT/.ai/state/current.json"
+decide "in a task: Write to .ai/agents/ is denied" deny "$(agent_override Write)"
+decide "in a task: Read of .ai/agents/ is allowed" allow "$(agent_override Read)"
+rm -f "$ROOT/.ai/state/current.json"
+decide "no task: Write to .ai/agents/ is allowed" allow "$(agent_override Write)"
 printf '{}\n' > "$ROOT/.ai/state/current.json"
 
 echo "== ai-path-guard (project WITHOUT .ai/ — every guard must be inert)"

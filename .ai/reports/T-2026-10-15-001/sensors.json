@@ -1,0 +1,103 @@
+{
+  "checked_at": "2026-10-15T08:41:43Z",
+  "declared_tier": "T4",
+  "rescored_tier": "T4",
+  "schema": 1,
+  "sensors": {
+    "bite": {
+      "detail": "no finished step named a test \u2014 traceability says the same",
+      "must_fail": null,
+      "must_pass": null,
+      "restored": null,
+      "status": "unavailable",
+      "tree": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f"
+    },
+    "diff": {
+      "detail": "14 files / 277 lines (T4 task budget 30 / 800)",
+      "enforced": false,
+      "files": 14,
+      "lines": 277,
+      "over": [],
+      "status": "green",
+      "tree": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f",
+      "unscoped": []
+    },
+    "duplicates": {
+      "blocks": [
+        [
+          "skills/project-init/templates/project-config.toml:1",
+          "skills/project-update/history/blobs/b9da99bf05f0f08663469288f694f153fb6f2d806cdedf2cdb10cee3d3722295:1"
+        ],
+        [
+          "skills/project-init/templates/project-config.toml:3",
+          "skills/project-update/history/blobs/b9da99bf05f0f08663469288f694f153fb6f2d806cdedf2cdb10cee3d3722295:3"
+        ],
+        [
+          "skills/project-init/templates/project-config.toml:4",
+          "skills/project-update/history/blobs/b9da99bf05f0f08663469288f694f153fb6f2d806cdedf2cdb10cee3d3722295:4"
+        ],
+        [
+          "skills/project-init/templates/project-config.toml:5",
+          "skills/project-update/history/blobs/b9da99bf05f0f08663469288f694f153fb6f2d806cdedf2cdb10cee3d3722295:5"
+        ],
+        [
+          "skills/project-init/templates/project-config.toml:7",
+          "skills/project-update/history/blobs/b9da99bf05f0f08663469288f694f153fb6f2d806cdedf2cdb10cee3d3722295:7"
+        ]
+      ],
+      "detail": "6 block(s) of >= 8 lines appear twice: skills/project-init/templates/project-config.toml:1 ~ skills/project-update/history/blobs/b9da99bf05f0f08663469288f694f153fb6f2d806cdedf2cdb10cee3d3722295:1",
+      "status": "red",
+      "tree": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f"
+    },
+    "lint": {
+      "detail": "pylint $(git ls-files '*.py'): command not found",
+      "status": "unavailable",
+      "tree": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f"
+    },
+    "plan_sections": {
+      "detail": "inline plan",
+      "status": "not_applicable",
+      "tree": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f"
+    },
+    "rescore": {
+      "detail": "T4 \u2014 scopes: docs, source, tests",
+      "reasons": [],
+      "status": "green",
+      "tier": "T4",
+      "tree": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f"
+    },
+    "tests": {
+      "detail": "verify_command exit 0 in 272s, run 2, log .ai/reports/T-2026-10-15-001/tests-suite-2.log",
+      "log": ".ai/reports/T-2026-10-15-001/tests-suite-2.log",
+      "status": "green",
+      "tree": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f"
+    },
+    "traceability": {
+      "detail": "steps with no test named: 1",
+      "status": "red",
+      "tree": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f",
+      "untraced": [
+        "1"
+      ]
+    },
+    "typecheck": {
+      "detail": "typecheck_command: none (testing.md)",
+      "status": "not_applicable",
+      "tree": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f"
+    }
+  },
+  "task": "T-2026-10-15-001",
+  "tree": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f",
+  "verdict": {
+    "all_green": false,
+    "blocking": [
+      "lint: unavailable",
+      "traceability: red",
+      "duplicates: red",
+      "bite: unavailable",
+      "tier T4 is above T3",
+      "the diff re-scores to T4"
+    ],
+    "review": "required"
+  }
+}

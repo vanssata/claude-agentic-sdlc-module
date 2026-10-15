@@ -1,0 +1,1 @@
+{"case":"cp of an ordinary file to an ordinary directory is allowed","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"cp src/Service.php /tmp/"}}}

@@ -106,7 +106,7 @@ git_subcommand() {  # the first non-flag word after `git`
 
 WHY_HISTORY=$'\n\nRewriting or force-pushing shared history destroys other people\'s work and cannot\nbe undone from here. If this really is needed, a human does it after agreeing with\nwhoever else has the branch checked out.'
 WHY_PROTECTED=$'\n\nProtected branches change through a reviewed pull request, not through a push\nfrom an agent session. Open a PR, or ask the human to run this push themselves.'
-WHY_DEPLOY=$'\n\nProduction deployments are a human action with a human on the hook for the\nrollback. The pipeline ends at the release report and human approval; see\n.ai/policies/release.md.'
+WHY_DEPLOY=$'\n\nProduction deployments are a human action with a human on the hook for the\nrollback. The pipeline ends at the release report and human approval; see\npolicies/release.md.'
 
 # ---------------------------------------------------------------- 1. secrets in a commit
 if ere_match '(^|[|;&[:space:]])git[[:space:]]+(add|stage)([[:space:]]|$)' "$cmd"; then

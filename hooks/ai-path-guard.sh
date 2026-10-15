@@ -79,18 +79,28 @@ VENDOR_PATTERNS=$(chomp_all "$VENDOR_PATTERNS")
 [ -n "$DENY_PATTERNS$PROTECTED_PATTERNS$TASK_PATTERNS$VENDOR_PATTERNS" ] || allow
 INTERESTING_PATTERNS=""
 LOOSE_PATTERNS=""
+TOKEN_END='([[:space:]"'\'';&|)<>]|$)'
 while IFS= read -r pattern; do
     [ -n "$pattern" ] || continue
     INTERESTING_PATTERNS+="$pattern"$'\n'
     loose="${pattern#'(^|/)'}"; loose="${loose#^}"; loose="${loose%\$}"
+    # Spliced in by hand: a pattern substitution would read the & in TOKEN_END
+    # as "the matched text" wherever patsub_replacement is on (bash 5.2+).
+    rest="$loose"; loose=""
+    while [[ $rest == *'$'* ]]; do loose+="${rest%%\$*}$TOKEN_END"; rest="${rest#*\$}"; done
+    loose+="$rest"
     LOOSE_PATTERNS+="$loose"$'\n'
 done <<< "$DENY_PATTERNS"$'\n'"$PROTECTED_PATTERNS"$'\n'"$TASK_PATTERNS"$'\n'"$VENDOR_PATTERNS"
 INTERESTING_PATTERNS=$(chomp_all "$INTERESTING_PATTERNS")
 LOOSE_PATTERNS=$(chomp_all "$LOOSE_PATTERNS")
+LOOSE_JOINED="${LOOSE_PATTERNS//$'\n'/|}"
 # Anchor-free copy used only as a cheap pre-filter over a whole command line,
 # where a path is surrounded by spaces rather than by the start of the string.
 # Dropping anchors can only widen a pattern, so the pre-filter never hides a
-# path the precise per-argument pass would have caught.
+# path the precise per-argument pass would have caught. An anchor left inside
+# a pattern — `ai(/|$)` — becomes the end of a token instead (TOKEN_END): the
+# pre-filter sees the whole line, and `…/ai && echo` has the path end at a
+# space, not at the end of the line. Widening only, like dropping the anchors.
 
 WHY_SENSITIVE=$'\n\nProduction secrets and data dumps must not enter the model context.\nIf this path is genuinely safe (a .dist/.example file, a fixture), add a regex to\n"allow_patterns" in .ai/policies/path-guard.json. See .ai/policies/security.md.'
 WHY_PROTECTED=$'\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md.'
@@ -261,6 +271,93 @@ case "$AI_TOOL" in
                 ;;
         esac
 
+        # Destinations (T-2026-10-15-001): cp, mv, install and rsync write the
+        # path they name last, and the readers/copiers rules below see only
+        # what a command reads. This runs before the fast path because the
+        # path written need not appear on the line at all: `cp -r new/ai
+        # <home>/claude-agentic/` lands as claude-agentic/ai, which only the
+        # joined destination spells out. One regex per Bash call decides
+        # whether any segment starts with one of the four; the rest runs only
+        # then. Candidates per segment: the destination (the last operand, or
+        # the -t/--target-directory argument), destination/basename(source)
+        # for every source, and for mv every source, which it destroys. A
+        # remote rsync target or `install -d` yields no candidate that matches.
+        segment='(^|[|;&]|&&|\|\|)[[:space:]]*'
+        movers="${segment}"'(cp|mv|install|rsync)([[:space:]]|$)'
+        if ere_match "$movers" "$cmd"; then
+            # Redirections are not operands, and 2>&1 / &>file carry the
+            # segment separator: drop them before splitting on | ; & newline.
+            segments=$(printf '%s\n' "$cmd" \
+                | sed -E 's/[0-9]*[<>]{1,2}&[0-9]+//g; s/(&|[0-9]*)[<>]{1,2}[[:space:]]*[^[:space:]|;&<>]*//g')
+            segments="${segments//[()]/ }"
+            while IFS= read -r seg; do
+                operands=()
+                IFS=$' \t' read -r -a operands <<< "$seg"
+                [ "${#operands[@]}" -gt 1 ] || continue
+                verb="${operands[0]}"
+                case "$verb" in cp|mv|install|rsync) ;; *) continue ;; esac
+                dest="" sources=() opts_done="" want_dest=""
+                for w in "${operands[@]:1}"; do
+                    if [ -n "$want_dest" ]; then want_dest=""; dest="$w"; continue; fi
+                    if [ -z "$opts_done" ]; then
+                        case "$w" in
+                            --) opts_done=yes; continue ;;
+                            -t|--target-directory) want_dest=yes; continue ;;
+                            --target-directory=*) dest="${w#*=}"; continue ;;
+                            -*) continue ;;
+                        esac
+                    fi
+                    while [[ $w == [\"\']* ]]; do w="${w:1}"; done
+                    while [[ $w == *[\"\'] ]]; do w="${w%?}"; done
+                    [ -z "$w" ] || sources+=("$w")
+                done
+                if [ -z "$dest" ]; then
+                    [ "${#sources[@]}" -gt 1 ] || continue
+                    dest="${sources[-1]}"; unset 'sources[-1]'
+                fi
+                while [[ $dest == [\"\']* ]]; do dest="${dest:1}"; done
+                while [[ $dest == *[\"\'] ]]; do dest="${dest%?}"; done
+                [ -n "$dest" ] || continue
+                cands=("$dest")
+                for src in "${sources[@]}"; do
+                    src="${src%/}"
+                    cands+=("${dest%/}/${src##*/}")
+                    [ "$verb" = mv ] && cands+=("$src")
+                done
+                abss=()
+                for cand in "${cands[@]}"; do
+                    case "$cand" in /*) abss+=("$cand") ;; *) abss+=("${AI_CWD%/}/$cand") ;; esac
+                done
+                # One regex over every candidate and its resolved path, and one
+                # realpath for all of them: a 20-file mv yields 60 candidates,
+                # and bash compiles the pattern anew on every [[ =~ ]], so one
+                # test per candidate — let alone a classify fork each — costs
+                # more than the hook's budget. The loose patterns are the
+                # pre-filter built for a whole line; a miss here is a miss in
+                # classify too, which runs only on a hit.
+                reals=$(realpath -m -- "${abss[@]}" 2>/dev/null)
+                subject="${abss[*]} ${reals//$'\n'/ }"
+                { [[ $subject =~ $LOOSE_JOINED ]]; } 2>/dev/null || continue
+                for i in "${!abss[@]}"; do
+                    abs="${abss[$i]}" cand="${cands[$i]}"
+                    verdict=$(classify "$abs")
+                    [ -n "$verdict" ] || verdict=$(classify "$(real_path "$abs")")
+                    [ -n "$verdict" ] || continue
+                    kind="${verdict%%:*}"
+                    how="copy or move into"
+                    [ "$verb" = mv ] && [ "$abs" != "${abss[0]}" ] && [ "$abs" != "${abss[0]%/}/${abs##*/}" ] && how="move of"
+                    case "$kind" in
+                        protected)
+                            deny "Refusing a shell $how a claude-agentic control file: $cand$WHY_PROTECTED" ;;
+                        vendor)
+                            deny "Refusing a shell $how an instruction file inside a dependency: $cand$WHY_VENDOR" ;;
+                        task)
+                            task_in_flight && deny "Refusing a shell $how runtime configuration while task $AI_TASK_ID is in flight: $cand$WHY_TASK" ;;
+                    esac
+                done
+            done <<< "${segments//[|;&]/$'\n'}"
+        fi
+
         # Fast path: if nothing in the whole command line looks interesting, stop
         # here. This keeps the common case to a single match instead of one pass
         # per argument, which matters because the hook runs on every Bash call.
@@ -277,8 +374,11 @@ case "$AI_TOOL" in
         # the start of a command, not at any token boundary: `touch`, `chmod` and
         # `ln` are ordinary English, and `grep -rn touch .ai/policies/...` is
         # somebody reading a policy file, not writing one.
-        segment='(^|[|;&]|&&|\|\|)[[:space:]]*'
         writers="${segment}"'(tee|truncate|shred|touch|ln)([[:space:]]+-[^[:space:]]+)*[[:space:]]+'
+        # Removing a control file, a dependency's instruction file or a frozen
+        # runtime file is as much a write as overwriting it. Any argument of
+        # the command, not only the first: `rm -rf a b` names b too.
+        removers="${segment}"'(rm|rmdir|unlink)([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+'
         # chmod and chown take one more argument before the path: the mode or
         # the owner. dd takes its destination inside a token, as of=PATH, which
         # is why the token loop also classifies what follows an '='.
@@ -325,6 +425,7 @@ case "$AI_TOOL" in
             [ -n "$how" ] || ere_match "${modes}[\"']?${esc}" "$cmd" && how="${how:-command that writes}"
             [ -n "$how" ] || ere_match "${ddwrite}[\"']?${esc}" "$cmd" && how="${how:-command that writes}"
             [ -n "$how" ] || ere_match "${inplace}[\"']?${esc}" "$cmd" && how="${how:-in-place edit of}"
+            [ -n "$how" ] || ere_match "${removers}[\"']?${esc}" "$cmd" && how="${how:-removal of}"
             if [ -n "$how" ]; then
                 case "$kind" in
                     protected)
