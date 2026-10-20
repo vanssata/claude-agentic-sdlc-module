@@ -306,6 +306,27 @@ timed "100000 one-word segments and rm -f a.txt are allowed" allow \
     "$( { rep 'x;' 100000; printf 'rm -f a.txt'; } | bash_stdin)" 3000
 timed "100000 one-word segments and rm of the task state file are denied" deny \
     "$( { rep 'x;' 100000; printf 'rm -f .ai/state/current.json'; } | bash_stdin)" 3000
+# T-2026-10-20-002 (known-risks: the candidate filter and its regex ran in two
+# locales): both are bytewise, and the regex names the UTF-8 bytes of the 15
+# multibyte characters glibc's [[:space:]] matches, so a line that splits
+# /bin/sh, -c and the string on one of them through IFS is read in any locale.
+sh_ifs() { printf "set -- '/bin/sh%s-c%srm -f %s'; IFS='%s'; \$1" "$1" "$1" "$2" "$1"; }
+for b in 1680:'\xe1\x9a\x80' 2000:'\xe2\x80\x80' 2001:'\xe2\x80\x81' 2002:'\xe2\x80\x82' \
+         2003:'\xe2\x80\x83' 2004:'\xe2\x80\x84' 2005:'\xe2\x80\x85' 2006:'\xe2\x80\x86' \
+         2008:'\xe2\x80\x88' 2009:'\xe2\x80\x89' 200A:'\xe2\x80\x8a' 2028:'\xe2\x80\xa8' \
+         2029:'\xe2\x80\xa9' 205F:'\xe2\x81\x9f' 3000:'\xe3\x80\x80'; do
+    cp=${b%%:*} u=$(printf "${b#*:}")
+    decide "IFS=U+$cp running /bin/sh -c 'rm of the task state file' is denied" deny \
+        "$(sh_ifs "$u" .ai/state/current.json | bash_stdin)"
+    decide "echo of /bin/sh -c 'rm of the task state file' with U+$cp blanks is denied" deny \
+        "$(printf "echo /bin/sh%s-c%s'rm -f .ai/state/current.json'" "$u" "$u" | bash_stdin)"
+    decide "IFS=U+$cp running /bin/sh -c 'rm -f a.txt' is allowed" allow "$(sh_ifs "$u" a.txt | bash_stdin)"
+done
+LC_ALL=C decide "under LC_ALL=C, IFS=U+3000 running /bin/sh -c 'rm of the task state file' is denied" deny \
+    "$(sh_ifs $'\xe3\x80\x80' .ai/state/current.json | bash_stdin)"
+# U+2007 is not in that set: like IFS=, it stays out of reach (known-risks).
+decide "IFS=U+2007 is not a blank: its /bin/sh -c split is allowed, as before" allow \
+    "$(sh_ifs $'\xe2\x80\x87' .ai/state/current.json | bash_stdin)"
 
 echo "== ai-path-guard (the installed shared tree is frozen during a task, readable always)"
 # T-2026-10-13-004, Q4=A: <home>/claude-agentic/ai/ and ai-path are the rules a

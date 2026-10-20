@@ -391,30 +391,46 @@ shell_segments() {
 # the same regex. It runs inside $( ), where a deny is captured instead of
 # emitted: past either limit it prints nothing and returns 3, and the caller
 # denies.
+# T-2026-10-20-002: the grep and sh_string's regex are both bytewise, so they
+# agree in every locale. In UTF-8, [[:space:]] also matches 15 multibyte
+# characters (U+1680, U+2000-2006, U+2008-200A, U+2028, U+2029, U+205F,
+# U+3000) that a C-locale grep never picks, and bash splits on any of them as
+# IFS: `set -- '/bin/sh<U+3000>-c<U+3000>rm …'; IFS=<U+3000>; $1` runs the rm.
+# SH_BLANK names their UTF-8 bytes beside ASCII [[:space:]]. SH_RE and EVAL_RE
+# are valid only under LC_ALL=C: in UTF-8, bash rejects those bytes as an
+# invalid collation character, and nothing would be read.
+SH_BLANK=$'([[:space:]]|\xe1\x9a\x80|\xe2\x80[\x80-\x86\x88-\x8a\xa8\xa9]|\xe2\x81\x9f|\xe3\x80\x80)'
+# Anywhere in the segment, not only as its verb: /bin/sh, xargs sh,
+# find -exec sh, nice/timeout bash all run the string.
+SH_RE="(^|$SH_BLANK|/)(ba|z|da|k)?sh($SH_BLANK+-[A-Za-z]+)*$SH_BLANK+-[A-Za-z]*c[A-Za-z]*$SH_BLANK+(.*)\$"
+EVAL_RE="^eval$SH_BLANK+(.*)\$"
+# sh_string <segment> — sets the caller's inner to the string a sh -c or eval in
+# the segment runs, one layer of quotes off, and fails when that string is
+# empty. The string is the last group, as SH_BLANK adds groups. `local LC_ALL`
+# switches bash's own locale until the function returns; nothing here starts
+# a process, so no child of the hook (shell_segments' awk) sees it.
+sh_string() {
+    local LC_ALL=C
+    inner=""
+    if [[ $1 =~ $SH_RE ]] || [[ $1 =~ $EVAL_RE ]]; then
+        inner="${BASH_REMATCH[-1]}"
+    fi
+    [ -n "$inner" ] || return 1
+    case "$inner" in
+        \$\'*) inner="${inner#\$\'}"; inner="${inner%%\'*}" ;;
+        \'*) inner="${inner#\'}"; inner="${inner%%\'*}" ;;
+        \"*) inner="${inner#\"}"; inner="${inner%\"*}" ;;
+    esac
+}
 segments_of() {
     local segs seg inner extra="" seen=0
-    # Anywhere in the segment, not only as its verb: /bin/sh, xargs sh,
-    # find -exec sh, nice/timeout bash all run the string.
-    local sh_re='(^|[[:space:]/])(ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*c[A-Za-z]*[[:space:]]+(.*)$'
-    local eval_re='^eval[[:space:]]+(.*)$'
     segs=$(shell_segments "$1")
     while IFS= read -r seg; do
         seen=$((seen + 1))
         [ "$seen" -le 64 ] && [ "$SECONDS" -lt 6 ] || return 3
-        inner=""
-        if [[ $seg =~ $sh_re ]]; then
-            inner="${BASH_REMATCH[4]}"
-        elif [[ $seg =~ $eval_re ]]; then
-            inner="${BASH_REMATCH[1]}"
-        fi
-        [ -n "$inner" ] || continue
-        case "$inner" in
-            \$\'*) inner="${inner#\$\'}"; inner="${inner%%\'*}" ;;
-            \'*) inner="${inner#\'}"; inner="${inner%%\'*}" ;;
-            \"*) inner="${inner#\"}"; inner="${inner%\"*}" ;;
-        esac
+        sh_string "$seg" || continue
         extra+=$(shell_segments "$inner")$'\n'
-    done < <(LC_ALL=C grep -aE -e "$sh_re" -e "$eval_re" <<< "$segs")
+    done < <(LC_ALL=C grep -aE -e "$SH_RE" -e "$EVAL_RE" <<< "$segs")
     printf '%s\n%s' "$segs" "$extra"
 }
 
