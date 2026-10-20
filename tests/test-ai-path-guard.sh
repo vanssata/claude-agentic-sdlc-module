@@ -286,6 +286,26 @@ mkdir -p "$TMP/scan"; for i in $(seq 20); do mkdir -p "$TMP/scan/d$i"; done
 dirs() { for i in $(seq "$1"); do printf ' %s/scan/d%d' "$TMP" "$i"; done; }
 decide "rm -rf of 16 directories is allowed" allow "$(printf 'rm -rf%s' "$(dirs 16)" | bash_stdin)"
 decide "rm -rf of 17 directories is denied by the work cap" deny "$(printf 'rm -rf%s' "$(dirs 17)" | bash_stdin)"
+# T-2026-10-20-001 (known-risks: padded sh -c segments): segments_of re-reads
+# at most 64 sh -c / eval strings, and every segment loop is on the clock.
+rep() { local i; for i in $(seq "$2"); do printf '%s' "$1"; done; }
+timed "6000 sh -c segments and rm of the task state file are denied" deny \
+    "$( { rep 'sh -c x; ' 6000; printf 'rm -f .ai/state/current.json'; } | bash_stdin)" 2000
+timed "6000 eval segments and rm of the task state file are denied" deny \
+    "$( { rep 'eval x; ' 6000; printf 'rm -f .ai/state/current.json'; } | bash_stdin)" 2000
+decide "64 sh -c segments and rm -f a.txt are allowed" allow \
+    "$( { rep 'sh -c x; ' 64; printf 'rm -f a.txt'; } | bash_stdin)"
+{ rep 'sh -c x; ' 65; printf 'rm -f a.txt'; } | bash_stdin | "$GUARD" | grep -q 'names more paths than the guard can check' \
+    && pass "65 sh -c segments and rm -f a.txt are denied by the work cap" \
+    || fail "65 sh -c segments and rm -f a.txt are denied by the work cap"
+{ rep 'sh -c x; ' 63; printf "sh -c 'rm -f .ai/state/current.json'"; } | bash_stdin | "$GUARD" \
+    | grep -q 'removal of a claude-agentic control file' \
+    && pass "the 64th sh -c string is still read: its rm of the state file is denied" \
+    || fail "the 64th sh -c string is still read: its rm of the state file is denied"
+timed "100000 one-word segments and rm -f a.txt are allowed" allow \
+    "$( { rep 'x;' 100000; printf 'rm -f a.txt'; } | bash_stdin)" 3000
+timed "100000 one-word segments and rm of the task state file are denied" deny \
+    "$( { rep 'x;' 100000; printf 'rm -f .ai/state/current.json'; } | bash_stdin)" 3000
 
 echo "== ai-path-guard (the installed shared tree is frozen during a task, readable always)"
 # T-2026-10-13-004, Q4=A: <home>/claude-agentic/ai/ and ai-path are the rules a

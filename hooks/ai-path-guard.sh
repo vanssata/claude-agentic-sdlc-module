@@ -384,16 +384,27 @@ shell_segments() {
 # segments_of <command> — shell_segments, plus one more pass over the string
 # that `bash|sh|zsh|dash|ksh -c` or `eval` runs, so quoting a command does not
 # hide it: `sh -c 'x; rm -f .ai/state/current.json'` is still an rm.
+# T-2026-10-20-001: one bytewise grep over all segments picks the candidates,
+# so a line of 100000 segments costs no bash regex per segment, and at most 64
+# candidates are re-read, each on the 6 s clock (6000 `sh -c x;` segments took
+# 14.5 s). A candidate with nothing after `-c` or `eval` counts too: it costs
+# the same regex. It runs inside $( ), where a deny is captured instead of
+# emitted: past either limit it prints nothing and returns 3, and the caller
+# denies.
 segments_of() {
-    local segs seg inner extra=""
+    local segs seg inner extra="" seen=0
+    # Anywhere in the segment, not only as its verb: /bin/sh, xargs sh,
+    # find -exec sh, nice/timeout bash all run the string.
+    local sh_re='(^|[[:space:]/])(ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*c[A-Za-z]*[[:space:]]+(.*)$'
+    local eval_re='^eval[[:space:]]+(.*)$'
     segs=$(shell_segments "$1")
     while IFS= read -r seg; do
+        seen=$((seen + 1))
+        [ "$seen" -le 64 ] && [ "$SECONDS" -lt 6 ] || return 3
         inner=""
-        # Anywhere in the segment, not only as its verb: /bin/sh, xargs sh,
-        # find -exec sh, nice/timeout bash all run the string.
-        if [[ $seg =~ (^|[[:space:]/])(ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*c[A-Za-z]*[[:space:]]+(.*)$ ]]; then
+        if [[ $seg =~ $sh_re ]]; then
             inner="${BASH_REMATCH[4]}"
-        elif [[ $seg =~ ^eval[[:space:]]+(.*)$ ]]; then
+        elif [[ $seg =~ $eval_re ]]; then
             inner="${BASH_REMATCH[1]}"
         fi
         [ -n "$inner" ] || continue
@@ -403,7 +414,7 @@ segments_of() {
             \"*) inner="${inner#\"}"; inner="${inner%\"*}" ;;
         esac
         extra+=$(shell_segments "$inner")$'\n'
-    done <<< "$segs"
+    done < <(LC_ALL=C grep -aE -e "$sh_re" -e "$eval_re" <<< "$segs")
     printf '%s\n%s' "$segs" "$extra"
 }
 
@@ -435,7 +446,9 @@ cover_init() {
 # token loop. Past them the deny side is kept, never the allow side. The counts
 # do not bound what one unit costs (a scan classifies up to 50 hits), so every
 # unit also checks one shared clock: past 6 s of hook time, deny. The worst
-# case is then 6 s plus one unit, inside the 10 s timeout.
+# case is then 6 s plus one unit, inside the 10 s timeout. segments_of keeps
+# its own count (64 sh -c / eval segments) on the same clock, and fails instead
+# of denying: it runs in $( ), and its caller denies with the same reason.
 WORK_CLASSIFY=0 WORK_SCAN=0 WORK_TOKEN=0
 WHY_WORK_CAP=$'This command names more paths than the guard can check within its timeout; split it into smaller commands, or pass the list through a file and xargs.'
 work_cap() {
@@ -589,7 +602,7 @@ case "$AI_TOOL" in
         segs=""
         VERBS_RE='(^|[^A-Za-z0-9_.-])(cp|mv|install|rsync|rm|rmdir|unlink|tee|truncate|shred|touch|ln|chmod|chown|dd|sed|perl|ruby)([^A-Za-z0-9_.-]|$)'
         if ere_match "$VERBS_RE" "$cmd"; then
-            segs=$(segments_of "$cmd")
+            segs=$(segments_of "$cmd") || deny "$WHY_WORK_CAP"
         fi
         segment='^[[:space:]]*'
 
@@ -612,10 +625,14 @@ case "$AI_TOOL" in
         movers="${segment}"'(cp|mv|install|rsync|rm|rmdir|unlink)([[:space:]]|$)'
         if [ -n "$segs" ] && ere_match "$movers" "$segs"; then
             cover_init
-            # Redirections are not operands: drop them before splitting.
+            # Redirections are not operands: drop them before splitting. Only
+            # mover segments reach the loop (100000 one-word segments took
+            # 1.1 s there, before any clock).
             segments=$(printf '%s\n' "$segs" \
-                | sed -E 's/[0-9]*[<>]{1,2}&[0-9]+//g; s/(&|[0-9]*)[<>]{1,2}[[:space:]]*[^[:space:]|;&<>]*//g')
+                | sed -E 's/[0-9]*[<>]{1,2}&[0-9]+//g; s/(&|[0-9]*)[<>]{1,2}[[:space:]]*[^[:space:]|;&<>]*//g' \
+                | LC_ALL=C grep -aE "$movers")
             while IFS= read -r seg; do
+                work_clock
                 operands=()
                 IFS=$' \t' read -r -a operands <<< "$seg"
                 [ "${#operands[@]}" -gt 1 ] || continue
