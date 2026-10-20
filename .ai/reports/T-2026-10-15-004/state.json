@@ -1,0 +1,407 @@
+{
+  "task_id": "T-2026-10-15-004",
+  "goal": "Path guard: no padded command outruns the hook timeout (linear ere_match on long lines, movers filters, work caps)",
+  "workflow": "bugfix",
+  "risk_tier": "T4",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "Path guard: no padded command outruns the hook timeout (linear ere_match on long lines, movers filters, work caps)",
+        "allowed_files": [
+          "hooks/lib/ai-hook-common.sh",
+          "hooks/ai-path-guard.sh",
+          "tests/test-ai-path-guard.sh",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "ba5eac48fa176eb74c813d9af3d589b3362a5678",
+          "seq": 1,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "hooks/lib/ai-hook-common.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 3,
+          "added": 137,
+          "deleted": 19,
+          "lines": 156,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "STRONG review: 1 BLOCKER (mover grep UTF-8 quadratic), 4 HIGH (deny() argv fail-open, >4096 glob token, realpath fallback, caps do not bound total work), 2 MEDIUM (grep output parse, token cap on prose)",
+        "allowed_files": [
+          "hooks/lib/ai-hook-common.sh",
+          "hooks/ai-path-guard.sh",
+          "tests/test-ai-path-guard.sh",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "ba5eac48fa176eb74c813d9af3d589b3362a5678",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "53db23aa1cd07d619cd77c904cbb4c1cfea7a8ec",
+          "seq": 2,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "hooks/lib/ai-hook-common.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 3,
+          "added": 147,
+          "deleted": 27,
+          "lines": 174,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R2",
+        "description": "re-review: 1 BLOCKER (uncounted per-operand work has no clock), 3 LOW documented",
+        "allowed_files": [
+          "hooks/lib/ai-hook-common.sh",
+          "hooks/ai-path-guard.sh",
+          "tests/test-ai-path-guard.sh",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "53db23aa1cd07d619cd77c904cbb4c1cfea7a8ec",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "de6cd55626f92f84a66d06420e7d76485eeab5f2",
+          "seq": 3,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 2,
+          "added": 19,
+          "deleted": 1,
+          "lines": 20,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "R1",
+    "R2"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "blockers_open",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "<name>",
+    "granted_at": "2026-10-15T15:56:08Z",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "terminal",
+    "unattended": false
+  },
+  "created_at": "2026-10-15T13:26:30Z",
+  "updated_at": "2026-10-20T09:37:42Z",
+  "history": [
+    {
+      "at": "2026-10-15T13:26:30Z",
+      "event": "task_started",
+      "detail": "Path guard: no padded command outruns the hook timeout (linear ere_match on long lines, movers filters, work caps) (bugfix)"
+    },
+    {
+      "at": "2026-10-15T13:26:30Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-15T13:26:30Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-15T13:26:30Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-15T13:26:30Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-15T13:26:30Z",
+      "event": "risk_classified",
+      "detail": "T4: T4: guard every Bash call passes through; plan approved in plan mode"
+    },
+    {
+      "at": "2026-10-15T13:26:30Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-15T13:26:30Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-15T13:26:30Z",
+      "event": "step_started",
+      "detail": "1: Path guard: no padded command outruns the hook timeout (linear ere_match on long lines, movers filters, work caps)"
+    },
+    {
+      "at": "2026-10-15T14:00:41Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-15T14:00:52Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-15T14:21:06Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-15T14:21:07Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-15T14:21:07Z",
+      "event": "remediation",
+      "detail": "R1: STRONG review: 1 BLOCKER (mover grep UTF-8 quadratic), 4 HIGH (deny() argv fail-open, >4096 glob token, realpath fallback, caps do not bound total work), 2 MEDIUM (grep output parse, token cap on prose)"
+    },
+    {
+      "at": "2026-10-15T14:21:07Z",
+      "event": "step_started",
+      "detail": "R1: STRONG review: 1 BLOCKER (mover grep UTF-8 quadratic), 4 HIGH (deny() argv fail-open, >4096 glob token, realpath fallback, caps do not bound total work), 2 MEDIUM (grep output parse, token cap on prose)"
+    },
+    {
+      "at": "2026-10-15T14:36:58Z",
+      "event": "field_set",
+      "detail": "test_status = unknown (suite run 2, exit 1)"
+    },
+    {
+      "at": "2026-10-15T14:37:46Z",
+      "event": "set",
+      "detail": "test_status = existing_failure"
+    },
+    {
+      "at": "2026-10-15T14:37:51Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-15T14:43:57Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-15T14:43:57Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-10-15T14:43:57Z",
+      "event": "remediation",
+      "detail": "R2: re-review: 1 BLOCKER (uncounted per-operand work has no clock), 3 LOW documented"
+    },
+    {
+      "at": "2026-10-15T14:43:57Z",
+      "event": "step_started",
+      "detail": "R2: re-review: 1 BLOCKER (uncounted per-operand work has no clock), 3 LOW documented"
+    },
+    {
+      "at": "2026-10-15T14:52:33Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 3, exit 0)"
+    },
+    {
+      "at": "2026-10-15T14:52:45Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 3, exit 0)"
+    },
+    {
+      "at": "2026-10-15T14:56:34Z",
+      "event": "step_completed",
+      "detail": "R2"
+    },
+    {
+      "at": "2026-10-15T14:56:34Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-15T15:42:45Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval: T4 direct mode done: suite run 3 green, e2e green, STRONG review: R1+R2 closed 1+1 BLOCKER, 4 HIGH, 2 MEDIUM; one pre-existing HIGH accepted as residual by the human"
+    },
+    {
+      "at": "2026-10-15T15:42:45Z",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "2026-10-15T15:56:08Z",
+      "event": "human_approval",
+      "detail": "granted by <name> via terminal"
+    },
+    {
+      "at": "2026-10-20T09:37:42Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-20T09:37:42Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-15-004/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-20T09:37:42Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "1fa190863788c335cd8e893b4181ce970d2b317d",
+    "base_tree": "cc0b3568e0f353b5b7c808a8c778d7969b1d1e8d",
+    "task": {
+      "files": 3,
+      "added": 279,
+      "deleted": 23,
+      "lines": 302,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 17,
+      "tree": "de6cd55626f92f84a66d06420e7d76485eeab5f2",
+      "measured_at": "2026-10-15T14:56:34Z",
+      "status": "green"
+    },
+    "rescored_tier": "T4",
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-15-004/sensors.json",
+    "tree": null,
+    "verdict": null,
+    "checked_at": null
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "ba5eac48fa176eb74c813d9af3d589b3362a5678",
+        "exit": 0,
+        "duration_s": 313,
+        "log": ".ai/reports/T-2026-10-15-004/tests-suite-1.log",
+        "at": "2026-10-15T14:00:41Z",
+        "env_retry": false
+      },
+      {
+        "n": 1,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "ba5eac48fa176eb74c813d9af3d589b3362a5678",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-15-004/tests-e2e-1.log",
+        "at": "2026-10-15T14:00:52Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "65aeed5026242f2cfe0fecf9af62f217cbc6c83e",
+        "exit": 1,
+        "duration_s": 335,
+        "log": ".ai/reports/T-2026-10-15-004/tests-suite-2.log",
+        "at": "2026-10-15T14:36:58Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "53db23aa1cd07d619cd77c904cbb4c1cfea7a8ec",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-15-004/tests-e2e-2.log",
+        "at": "2026-10-15T14:37:51Z",
+        "env_retry": false
+      },
+      {
+        "n": 3,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "55f23542735d10f5423817cde872d891305e9790",
+        "exit": 0,
+        "duration_s": 372,
+        "log": ".ai/reports/T-2026-10-15-004/tests-suite-3.log",
+        "at": "2026-10-15T14:52:33Z",
+        "env_retry": false
+      },
+      {
+        "n": 3,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "55f23542735d10f5423817cde872d891305e9790",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-15-004/tests-e2e-3.log",
+        "at": "2026-10-15T14:52:45Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 3
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}

@@ -1,0 +1,284 @@
+{
+  "task_id": "T-2026-10-20-001",
+  "goal": "Path guard: padded sh -c / eval segments and very long one-word lines no longer outrun the 10 s hook timeout",
+  "workflow": "bugfix",
+  "risk_tier": "T4",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "Path guard: padded sh -c / eval segments and very long one-word lines no longer outrun the 10 s hook timeout",
+        "allowed_files": [
+          "hooks/ai-path-guard.sh",
+          "tests/test-ai-path-guard.sh",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "0922a06d85f72551e1ac5582ff988fd011088b62",
+          "seq": 1,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 2,
+          "added": 47,
+          "deleted": 10,
+          "lines": 57,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "review (STRONG, pass): 1 MEDIUM + 2 LOW + 1 INFO, all in the known-risks record — false residual (U+3000 IFS split flips deny to allow), prose counts toward the 64 cap, one inner unit can run past 6 s, unrecognised sh -c spellings",
+        "allowed_files": [
+          "hooks/ai-path-guard.sh",
+          "tests/test-ai-path-guard.sh",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "0922a06d85f72551e1ac5582ff988fd011088b62",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "51cdf1ae808725b2987e8edc82f9bb3b48ae47f8",
+          "seq": 2,
+          "paths": [],
+          "files": 0,
+          "added": 0,
+          "deleted": 0,
+          "lines": 0,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "R1"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "passed",
+  "security_status": "not_applicable",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "<name>",
+    "granted_at": "2026-10-20T10:16:33Z",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "terminal",
+    "unattended": false
+  },
+  "created_at": "2026-10-20T09:46:28Z",
+  "updated_at": "2026-10-20T10:18:13Z",
+  "history": [
+    {
+      "at": "2026-10-20T09:46:28Z",
+      "event": "task_started",
+      "detail": "Path guard: padded sh -c / eval segments and very long one-word lines no longer outrun the 10 s hook timeout (bugfix)"
+    },
+    {
+      "at": "2026-10-20T09:46:28Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-20T09:46:28Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-20T09:46:28Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-20T09:46:28Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-20T09:46:28Z",
+      "event": "risk_classified",
+      "detail": "T4: T4 trigger: the path guard every Bash call passes through (same as T-2026-10-15-004); plan approved in plan mode"
+    },
+    {
+      "at": "2026-10-20T09:46:28Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-20T09:46:28Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-20T09:46:28Z",
+      "event": "step_started",
+      "detail": "1: Path guard: padded sh -c / eval segments and very long one-word lines no longer outrun the 10 s hook timeout"
+    },
+    {
+      "at": "2026-10-20T09:56:18Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-20T10:01:33Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-20T10:01:41Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-20T10:01:45Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-20T10:11:33Z",
+      "event": "remediation",
+      "detail": "R1: review (STRONG, pass): 1 MEDIUM + 2 LOW + 1 INFO, all in the known-risks record — false residual (U+3000 IFS split flips deny to allow), prose counts toward the 64 cap, one inner unit can run past 6 s, unrecognised sh -c spellings"
+    },
+    {
+      "at": "2026-10-20T10:11:33Z",
+      "event": "step_started",
+      "detail": "R1: review (STRONG, pass): 1 MEDIUM + 2 LOW + 1 INFO, all in the known-risks record — false residual (U+3000 IFS split flips deny to allow), prose counts toward the 64 cap, one inner unit can run past 6 s, unrecognised sh -c spellings"
+    },
+    {
+      "at": "2026-10-20T10:12:08Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-10-20T10:12:20Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-10-20T10:12:20Z",
+      "event": "set",
+      "detail": "security_status = not_applicable"
+    },
+    {
+      "at": "2026-10-20T10:12:27Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval: T4 direct mode: suite green, e2e green, STRONG review pass (0 BLOCKER/HIGH; MEDIUM+LOWs fixed in the record, R1)"
+    },
+    {
+      "at": "2026-10-20T10:12:27Z",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "2026-10-20T10:16:33Z",
+      "event": "human_approval",
+      "detail": "granted by <name> via terminal"
+    },
+    {
+      "at": "2026-10-20T10:18:13Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-20T10:18:13Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-20-001/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-20T10:18:13Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "c73b943f1d58ccbe9c3ba6df13d2bff509fe478f",
+    "base_tree": "de6cd55626f92f84a66d06420e7d76485eeab5f2",
+    "task": {
+      "files": 2,
+      "added": 47,
+      "deleted": 10,
+      "lines": 57,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 17,
+      "tree": "51cdf1ae808725b2987e8edc82f9bb3b48ae47f8",
+      "measured_at": "2026-10-20T10:12:08Z",
+      "status": "green"
+    },
+    "rescored_tier": "T4",
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-20-001/sensors.json",
+    "tree": "0922a06d85f72551e1ac5582ff988fd011088b62",
+    "verdict": "required",
+    "checked_at": "2026-10-20T10:01:45Z"
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "0922a06d85f72551e1ac5582ff988fd011088b62",
+        "exit": 0,
+        "duration_s": 312,
+        "log": ".ai/reports/T-2026-10-20-001/tests-suite-1.log",
+        "at": "2026-10-20T10:01:33Z",
+        "env_retry": false
+      },
+      {
+        "n": 1,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "0922a06d85f72551e1ac5582ff988fd011088b62",
+        "exit": 0,
+        "duration_s": 3,
+        "log": ".ai/reports/T-2026-10-20-001/tests-e2e-1.log",
+        "at": "2026-10-20T10:01:41Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 1
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}
