@@ -1,0 +1,594 @@
+{
+  "task_id": "T-2026-10-20-003",
+  "goal": "Path guard: segments_of reads the sh -c spellings SH_RE misses (long options, -o/-O name, -c --/-/-e, redirections around -c, quoted or backslashed command word)",
+  "workflow": "bugfix",
+  "risk_tier": "T4",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "Path guard: segments_of reads the sh -c spellings SH_RE misses (long options, -o/-O name, -c --/-/-e, redirections around -c, quoted or backslashed command word)",
+        "allowed_files": [
+          "tests/test-ai-path-guard.sh",
+          "hooks/ai-path-guard.sh",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "6f28118270c38b8c25f5ac1c602088cd24160a37",
+          "seq": 1,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 2,
+          "added": 26,
+          "deleted": 1,
+          "lines": 27,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "review pass 1: 2 BLOCKER (find 'sh' -exec sh -c deny->allow; quadratic regex on ' sh 2>' padding), 1 HIGH (-o/-O name after -c), 1 MEDIUM (>| and mixed-quote targets claimed)",
+        "allowed_files": [
+          "tests/test-ai-path-guard.sh",
+          "hooks/ai-path-guard.sh",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "6f28118270c38b8c25f5ac1c602088cd24160a37",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "6716dc12a6f352e472d31262438adf44e90f5cbf",
+          "seq": 2,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 2,
+          "added": 62,
+          "deleted": 15,
+          "lines": 77,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R2",
+        "description": "review pass 2: 2 BLOCKER (9+ short options before -c deny->allow; quadratic on U+3000 padding via SH_WORD), 2 LOW (8-per-segment cap on ordinary commands; Status claims)",
+        "allowed_files": [
+          "tests/test-ai-path-guard.sh",
+          "hooks/ai-path-guard.sh",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "6716dc12a6f352e472d31262438adf44e90f5cbf",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "1dfee67a0d9ba2db5f5f56ca7670c63e5660ef0f",
+          "seq": 3,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 2,
+          "added": 40,
+          "deleted": 16,
+          "lines": 56,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R3",
+        "description": "remediation batch 3",
+        "allowed_files": [
+          "tests/test-ai-path-guard.sh",
+          "hooks/ai-path-guard.sh",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "1dfee67a0d9ba2db5f5f56ca7670c63e5660ef0f",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "38b26a53565990c49ef577dd8162c40e8f995828",
+          "seq": 4,
+          "paths": [
+            "hooks/ai-path-guard.sh"
+          ],
+          "files": 1,
+          "added": 2,
+          "deleted": 1,
+          "lines": 3,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R4",
+        "description": "review pass 4: 2 MEDIUM (BLOCKER 5 pinned by no test; comment/record drift), 1 LOW (known-risks line refs); tests and text only — invariant: no SH_WORD piece crosses the blank after a match start's sh",
+        "allowed_files": [
+          "tests/test-ai-path-guard.sh",
+          "hooks/ai-path-guard.sh",
+          ".ai/project/known-risks.md",
+          "CLAUDE.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "38b26a53565990c49ef577dd8162c40e8f995828",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "7761a83fce7cbb3b1633d9a0e5626d7c3f92ee70",
+          "seq": 5,
+          "paths": [
+            "CLAUDE.md",
+            "hooks/ai-path-guard.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 3,
+          "added": 22,
+          "deleted": 8,
+          "lines": 30,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "R1",
+    "R2",
+    "R3",
+    "R4"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "passed",
+  "security_status": "not_applicable",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "ikakarov",
+    "granted_at": "2026-10-21T10:42:06Z",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "terminal",
+    "unattended": false
+  },
+  "created_at": "2026-10-20T12:02:19Z",
+  "updated_at": "2026-10-21T10:42:29Z",
+  "history": [
+    {
+      "at": "2026-10-20T12:02:19Z",
+      "event": "task_started",
+      "detail": "Path guard: segments_of reads the sh -c spellings SH_RE misses (long options, -o/-O name, -c --/-/-e, redirections around -c, quoted or backslashed command word) (bugfix)"
+    },
+    {
+      "at": "2026-10-20T12:02:19Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-20T12:02:19Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-20T12:02:19Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-20T12:02:19Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-20T12:02:19Z",
+      "event": "risk_classified",
+      "detail": "T4: T4: the guard every Bash call runs through; plan approved in plan mode"
+    },
+    {
+      "at": "2026-10-20T12:02:19Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-20T12:02:19Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-20T12:02:19Z",
+      "event": "step_started",
+      "detail": "1: Path guard: segments_of reads the sh -c spellings SH_RE misses (long options, -o/-O name, -c --/-/-e, redirections around -c, quoted or backslashed command word)"
+    },
+    {
+      "at": "2026-10-20T12:18:10Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-20T12:18:28Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-20T12:18:33Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-20T12:18:33Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-20T12:51:13Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-20T12:53:47Z",
+      "event": "remediation",
+      "detail": "R1: review pass 1: 2 BLOCKER (find 'sh' -exec sh -c deny->allow; quadratic regex on ' sh 2>' padding), 1 HIGH (-o/-O name after -c), 1 MEDIUM (>| and mixed-quote targets claimed)"
+    },
+    {
+      "at": "2026-10-20T12:53:47Z",
+      "event": "step_started",
+      "detail": "R1: review pass 1: 2 BLOCKER (find 'sh' -exec sh -c deny->allow; quadratic regex on ' sh 2>' padding), 1 HIGH (-o/-O name after -c), 1 MEDIUM (>| and mixed-quote targets claimed)"
+    },
+    {
+      "at": "2026-10-20T13:04:37Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-10-20T13:10:27Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-20T13:10:37Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-20T13:10:43Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-20T13:22:38Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-20T13:22:38Z",
+      "event": "remediation",
+      "detail": "R2: review pass 2: 2 BLOCKER (9+ short options before -c deny->allow; quadratic on U+3000 padding via SH_WORD), 2 LOW (8-per-segment cap on ordinary commands; Status claims)"
+    },
+    {
+      "at": "2026-10-20T13:22:38Z",
+      "event": "step_started",
+      "detail": "R2: review pass 2: 2 BLOCKER (9+ short options before -c deny->allow; quadratic on U+3000 padding via SH_WORD), 2 LOW (8-per-segment cap on ordinary commands; Status claims)"
+    },
+    {
+      "at": "2026-10-21T08:53:52Z",
+      "event": "step_completed",
+      "detail": "R2"
+    },
+    {
+      "at": "2026-10-21T09:00:22Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 3, exit 0)"
+    },
+    {
+      "at": "2026-10-21T09:00:34Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 3, exit 0)"
+    },
+    {
+      "at": "2026-10-21T09:00:34Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-21T09:16:05Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-21T09:18:24Z",
+      "event": "remediation",
+      "detail": "R3: remediation batch 3"
+    },
+    {
+      "at": "2026-10-21T09:18:24Z",
+      "event": "step_started",
+      "detail": "R3: remediation batch 3"
+    },
+    {
+      "at": "2026-10-21T09:53:21Z",
+      "event": "step_completed",
+      "detail": "R3"
+    },
+    {
+      "at": "2026-10-21T09:59:57Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 4, exit 0)"
+    },
+    {
+      "at": "2026-10-21T10:01:09Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 4, exit 0)"
+    },
+    {
+      "at": "2026-10-21T10:01:32Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-21T10:15:07Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-10-21T10:15:23Z",
+      "event": "question_asked",
+      "detail": "Q1: Review pass 4 passed with 2 MEDIUM + 1 LOW (BLOCKER 5 untested; comment/known-risks still claim quoted blanks and the old follow-on cut; known-risks line refs off by one). How are they handled?"
+    },
+    {
+      "at": "2026-10-21T10:27:17Z",
+      "event": "question_answered",
+      "detail": "Q1 = B"
+    },
+    {
+      "at": "2026-10-21T10:28:57Z",
+      "event": "remediation",
+      "detail": "R4: review pass 4: 2 MEDIUM (BLOCKER 5 pinned by no test; comment/record drift), 1 LOW (known-risks line refs); tests and text only — invariant: no SH_WORD piece crosses the blank after a match start's sh"
+    },
+    {
+      "at": "2026-10-21T10:28:57Z",
+      "event": "step_started",
+      "detail": "R4: review pass 4: 2 MEDIUM (BLOCKER 5 pinned by no test; comment/record drift), 1 LOW (known-risks line refs); tests and text only — invariant: no SH_WORD piece crosses the blank after a match start's sh"
+    },
+    {
+      "at": "2026-10-21T10:33:49Z",
+      "event": "step_completed",
+      "detail": "R4"
+    },
+    {
+      "at": "2026-10-21T10:39:50Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 5, exit 0)"
+    },
+    {
+      "at": "2026-10-21T10:40:00Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 5, exit 0)"
+    },
+    {
+      "at": "2026-10-21T10:40:34Z",
+      "event": "set",
+      "detail": "security_status = not_applicable"
+    },
+    {
+      "at": "2026-10-21T10:40:46Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval: T4 release summary in .ai/reports/T-2026-10-20-003/task.md shown; suite run 5 and e2e run 5 green; review pass 4 passed"
+    },
+    {
+      "at": "2026-10-21T10:40:46Z",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "2026-10-21T10:42:06Z",
+      "event": "human_approval",
+      "detail": "granted by ikakarov via terminal"
+    },
+    {
+      "at": "2026-10-21T10:42:29Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-21T10:42:29Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-20-003/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-21T10:42:29Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "21faea3f7efb4c7956731e2608582b1b4fe10b5c",
+    "base_tree": "2787a88a173f7657368c25b065730d7a03e8a4fd",
+    "task": {
+      "files": 3,
+      "added": 116,
+      "deleted": 5,
+      "lines": 121,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 4,
+      "tree": "7761a83fce7cbb3b1633d9a0e5626d7c3f92ee70",
+      "measured_at": "2026-10-21T10:33:49Z",
+      "status": "green"
+    },
+    "rescored_tier": "T4",
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-20-003/sensors.json",
+    "tree": "38b26a53565990c49ef577dd8162c40e8f995828",
+    "verdict": "required",
+    "checked_at": "2026-10-21T10:01:32Z"
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "6f28118270c38b8c25f5ac1c602088cd24160a37",
+        "exit": 0,
+        "duration_s": 343,
+        "log": ".ai/reports/T-2026-10-20-003/tests-suite-1.log",
+        "at": "2026-10-20T12:18:10Z",
+        "env_retry": false
+      },
+      {
+        "n": 1,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "6f28118270c38b8c25f5ac1c602088cd24160a37",
+        "exit": 0,
+        "duration_s": 3,
+        "log": ".ai/reports/T-2026-10-20-003/tests-e2e-1.log",
+        "at": "2026-10-20T12:18:28Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "6716dc12a6f352e472d31262438adf44e90f5cbf",
+        "exit": 0,
+        "duration_s": 345,
+        "log": ".ai/reports/T-2026-10-20-003/tests-suite-2.log",
+        "at": "2026-10-20T13:10:27Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "6716dc12a6f352e472d31262438adf44e90f5cbf",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-20-003/tests-e2e-2.log",
+        "at": "2026-10-20T13:10:37Z",
+        "env_retry": false
+      },
+      {
+        "n": 3,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "1dfee67a0d9ba2db5f5f56ca7670c63e5660ef0f",
+        "exit": 0,
+        "duration_s": 385,
+        "log": ".ai/reports/T-2026-10-20-003/tests-suite-3.log",
+        "at": "2026-10-21T09:00:22Z",
+        "env_retry": false
+      },
+      {
+        "n": 3,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "1dfee67a0d9ba2db5f5f56ca7670c63e5660ef0f",
+        "exit": 0,
+        "duration_s": 3,
+        "log": ".ai/reports/T-2026-10-20-003/tests-e2e-3.log",
+        "at": "2026-10-21T09:00:34Z",
+        "env_retry": false
+      },
+      {
+        "n": 4,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "38b26a53565990c49ef577dd8162c40e8f995828",
+        "exit": 0,
+        "duration_s": 392,
+        "log": ".ai/reports/T-2026-10-20-003/tests-suite-4.log",
+        "at": "2026-10-21T09:59:57Z",
+        "env_retry": false
+      },
+      {
+        "n": 4,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "38b26a53565990c49ef577dd8162c40e8f995828",
+        "exit": 0,
+        "duration_s": 3,
+        "log": ".ai/reports/T-2026-10-20-003/tests-e2e-4.log",
+        "at": "2026-10-21T10:01:09Z",
+        "env_retry": false
+      },
+      {
+        "n": 5,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "7761a83fce7cbb3b1633d9a0e5626d7c3f92ee70",
+        "exit": 0,
+        "duration_s": 360,
+        "log": ".ai/reports/T-2026-10-20-003/tests-suite-5.log",
+        "at": "2026-10-21T10:39:50Z",
+        "env_retry": false
+      },
+      {
+        "n": 5,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "7761a83fce7cbb3b1633d9a0e5626d7c3f92ee70",
+        "exit": 0,
+        "duration_s": 5,
+        "log": ".ai/reports/T-2026-10-20-003/tests-e2e-5.log",
+        "at": "2026-10-21T10:40:00Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 5
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}

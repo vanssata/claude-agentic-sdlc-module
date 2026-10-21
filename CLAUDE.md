@@ -22,6 +22,8 @@
 
 <!-- Recurring mistakes and their corrections. Grow this list from code review. -->
 
+- A BLOCKER is closed only with a test that pins it; for a regex's running time, a `timed` case at the measured size that fails on the tree before the fix. Reviews of T-2026-10-20-003 found an untested blocker twice, and its BLOCKERs 2, 4 and 5 all came from edits to `SH_WORD`/`SH_RE` in `hooks/ai-path-guard.sh`, where the invariant is: no piece of a word crosses the blank after a match start's `sh`.
+
 <!-- claude-agentic:start -->
 ## AI agent workflow
 

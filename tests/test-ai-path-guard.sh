@@ -327,6 +327,63 @@ LC_ALL=C decide "under LC_ALL=C, IFS=U+3000 running /bin/sh -c 'rm of the task s
 # U+2007 is not in that set: like IFS=, it stays out of reach (known-risks).
 decide "IFS=U+2007 is not a blank: its /bin/sh -c split is allowed, as before" allow \
     "$(sh_ifs $'\xe2\x80\x87' .ai/state/current.json | bash_stdin)"
+# T-2026-10-20-003 (known-risks: sh -c spellings segments_of does not read): a
+# long option, -o/-O and its name, --, -, -e or a redirection beside -c, and a
+# quoted or backslashed command word all still run the string.
+for p in "bash --norc -c" "bash -o posix -c" "bash +o posix -c" "bash -O extglob -c" \
+         "bash -eo pipefail -c" "bash --rcfile /dev/null -c" "sh -c --" "sh -c -" "sh -c -e" \
+         "sh -c 2>/dev/null" "sh -c 2> /dev/null" "sh -c >/dev/null 2>&1" "sh -c &>/dev/null" \
+         "sh </dev/null -c" "'sh' -c" '"bash" -c' '\sh -c' "'/bin/sh' -c"; do
+    decide "$p 'rm of the task state file' is denied" deny \
+        "$(printf "%s 'rm -f .ai/state/current.json'" "$p" | bash_stdin)"
+done
+for p in "bash --norc -c" "bash -o posix -c" "sh -c --" "sh -c 2>/dev/null" "'sh' -c" '\sh -c'; do
+    decide "$p 'rm -f a.txt' is allowed" allow "$(printf "%s 'rm -f a.txt'" "$p" | bash_stdin)"
+done
+decide "sh -c 'x' 2>/dev/null is allowed" allow "$(printf "sh -c 'x' 2>/dev/null" | bash_stdin)"
+decide "sh -c echo -n hi is allowed" allow "$(printf 'sh -c echo -n hi' | bash_stdin)"
+# Its review: a name after -c, a target of quoted and bare pieces, and a match
+# that begins at an argument (-exec is a cluster with a c) all still deny.
+for p in "bash -c -o posix" "bash -c +O extglob" "bash -c -eo pipefail" "bash -c -e -o pipefail" \
+         "bash -c 2>/dev/null -o posix" 'sh -c 2>"$HOME"/x' 'sh -c 2>/tmp/x\ y' \
+         "find . -name 'sh' -exec sh -c" "find . -name sh 2>/dev/null -exec sh -c" \
+         "find . -path '*/sh' -exec bash -c" "sudo -u 'sh' -c x bash -c"; do
+    decide "$p 'rm of the task state file' is denied" deny \
+        "$(printf "%s 'rm -f .ai/state/current.json'" "$p" | bash_stdin)"
+done
+decide "a bash -c inside a sh -c string, rm of the task state file, is denied" deny \
+    "$(printf "sh -c 'echo; bash -c \"rm -f .ai/state/current.json\"'" | bash_stdin)"
+decide "bash -c -o posix 'rm -f a.txt' is allowed" allow "$(printf "bash -c -o posix 'rm -f a.txt'" | bash_stdin)"
+decide "find -name 'sh' -exec sh -c 'rm -f a.txt' is allowed" allow \
+    "$(printf "find . -name 'sh' -exec sh -c 'rm -f a.txt' \\\\;" | bash_stdin)"
+timed "200 KB of ' sh 2>' words and rm of the task state file are denied" deny \
+    "$( { printf echo; rep ' sh 2>' 33333; printf ' X sh -c x; rm -f .ai/state/current.json'; } | bash_stdin)" 2000
+# Its second pass: a flag that takes no word is not counted before -c, as on
+# HEAD; a word stops at a multibyte blank, not only at an ASCII one, and keeps
+# the other characters whose first byte a multibyte blank shares.
+for p in "bash $(rep '-e ' 9)-c" "bash -e -u -x -v -e -u -x -v -e -c" "sh -a -b -e -f -h -m -u -v -x -c" \
+         "bash $(rep '-e ' 20)-c" "bash -o posix $(rep '-e ' 9)-O extglob -c" \
+         $'bash 2>/tmp/\xe2\x80\xa6\xe3\x81\x82\xe2\x86\x92\xe1\x9a\x81x -c'; do
+    decide "$p 'rm of the task state file' is denied" deny \
+        "$(printf "%s 'rm -f .ai/state/current.json'" "$p" | bash_stdin)"
+done
+decide "bash with 9 -e before -c and 'rm -f a.txt' is allowed" allow \
+    "$(printf "bash %s-c 'rm -f a.txt'" "$(rep '-e ' 9)" | bash_stdin)"
+u=$'\xe3\x80\x80'
+timed "140 KB of U+3000 ' sh -o x' words and rm of the task state file are denied" deny \
+    "$( { printf echo; rep "${u}sh$u-o${u}x" 10000; printf ' X sh -c x; rm -f .ai/state/current.json'; } | bash_stdin)" 2000
+timed "140 KB of U+3000 ' sh 2>x' words and rm -f a.txt are allowed" allow \
+    "$( { printf echo; rep "${u}sh${u}2>x" 13000; printf ' X sh -c x; rm -f a.txt'; } | bash_stdin)" 2000
+# Its fourth pass: a quoted piece holds no blank. With one, ` sh 2>\''` (\' is
+# escaped outside a quote, closes '…', is literal in "…") kept every start's
+# target quoted to the end of the line: 11.4 s at 200 KB. A quoted target with
+# a blank is therefore not read, as on HEAD (known-risks).
+timed "200 KB of ' sh 2>' words each followed by \\'' and rm of the task state file are denied" deny \
+    "$( { printf echo; rep " sh 2>\\''" 22000; printf ' X sh -c x; rm -f .ai/state/current.json'; } | bash_stdin)" 2000
+timed "140 KB of the same with U+3000 blanks and rm -f a.txt are allowed" allow \
+    "$( { printf echo; rep "${u}sh${u}2>\\''" 11000; printf ' X sh -c x; rm -f a.txt'; } | bash_stdin)" 2000
+decide "bash 2>'/tmp/a b' -c 'rm of the task state file' is allowed, as on HEAD" allow \
+    "$(printf "bash 2>'/tmp/a b' -c 'rm -f .ai/state/current.json'" | bash_stdin)"
 
 echo "== ai-path-guard (the installed shared tree is frozen during a task, readable always)"
 # T-2026-10-13-004, Q4=A: <home>/claude-agentic/ai/ and ai-path are the rules a

@@ -402,17 +402,54 @@ shell_segments() {
 SH_BLANK=$'([[:space:]]|\xe1\x9a\x80|\xe2\x80[\x80-\x86\x88-\x8a\xa8\xa9]|\xe2\x81\x9f|\xe3\x80\x80)'
 # Anywhere in the segment, not only as its verb: /bin/sh, xargs sh,
 # find -exec sh, nice/timeout bash all run the string.
-SH_RE="(^|$SH_BLANK|/)(ba|z|da|k)?sh($SH_BLANK+-[A-Za-z]+)*$SH_BLANK+-[A-Za-z]*c[A-Za-z]*$SH_BLANK+(.*)\$"
+# T-2026-10-20-003: SH_OPT is the words bash takes before the -c cluster
+# without making one the string, SH_COPT one it takes after it. Either side, a
+# flag (SH_FLAG): a short cluster, -, +e, not ending in o/O; --. Or an option
+# that takes a word (SH_ARG): a cluster that ends in o/O and its name (-o
+# posix, -eo pipefail, +O extglob); a redirection and its target, joined or
+# apart (2>/dev/null, 2> /dev/null, 2>&1, &>/dev/null, </dev/null).
+# Before -c only, as bash rejects them after it: a long option (--norc),
+# --rcfile or --init-file and its file. A name, file or target is one word of
+# bare, quoted and backslashed pieces (2>"$HOME"/x, 2>/tmp/x\ y). No two
+# alternatives fit the same word: glibc reports the first that fits, and a
+# bare -o left `posix '…'` as the string. Before -c any number of flags
+# (SH_FLAG, as on HEAD) and at most 8 options that take a word (SH_ARG); at
+# most 4 words after: unbounded, a line of ` sh 2>` words made every sh a match
+# start that scanned to the end of the line (13 s at 200 KB). A flag holds no
+# match start, so a run of them is read by at most the 9 starts whose options
+# reach it. Only a backslashed piece holds a blank: bare or in quotes (SH_NB) a
+# piece takes no [[:space:]] and no byte E1-E3 but SH_MB, the characters of
+# those lead bytes not in SH_BLANK. So no word runs past the blank after a
+# start's sh: one across U+3000 took 11.5 s at 280 KB, a quote across
+# ` sh 2>\''` 11.4 s at 200 KB; 2>'/tmp/a b' is not read, as on HEAD. The
+# command word may be quoted or backslashed: 'sh', "bash", \sh, '/bin/sh'. On
+# the deny side it reads more than bash runs: in `bash -c -- -x '…'` bash runs
+# -x, the guard reads '…'.
+SH_MB=$'\xe1([\x80-\x99\x9b-\xbf][\x80-\xbf]|\x9a[\x81-\xbf])|\xe2([\x82-\xbf][\x80-\xbf]|\x80[\x87\x8b-\xa7\xaa-\xbf]|\x81[\x80-\x9e\xa0-\xbf])|\xe3([\x81-\xbf][\x80-\xbf]|\x80[\x81-\xbf])'
+SH_NB="[^[:space:]'\"\\\\"$'\xe1-\xe3'"]|$SH_MB"
+SH_WORD="($SH_NB|\\\\.|'($SH_NB|[\"\\\\])*'|\"($SH_NB|['\\\\])*\")+"
+SH_FLAG="[-+]([A-Za-z]*[A-NP-Za-np-z])?|--"
+SH_ARG="[-+][A-Za-z]*[oO]$SH_BLANK+$SH_WORD|[0-9]*(>[>&]?|<[>&]?|&>>?)$SH_BLANK*$SH_WORD"
+SH_OPT="(($SH_BLANK+($SH_FLAG|--[A-Za-z][-A-Za-z]*))*$SH_BLANK+($SH_ARG|--(rcfile|init-file)$SH_BLANK+$SH_WORD)){0,8}($SH_BLANK+($SH_FLAG|--[A-Za-z][-A-Za-z]*))*"
+SH_COPT="($SH_FLAG|$SH_ARG)"
+SH_RE="(^|$SH_BLANK|/)(['\"]|\\\\)?(ba|z|da|k)?sh['\"]?$SH_OPT$SH_BLANK+-[A-Za-z]*c[A-Za-z]*($SH_BLANK+$SH_COPT){0,4}$SH_BLANK+(.*)\$"
 EVAL_RE="^eval$SH_BLANK+(.*)\$"
 # sh_string <segment> — sets the caller's inner to the string a sh -c or eval in
 # the segment runs, one layer of quotes off, and fails when that string is
 # empty. The string is the last group, as SH_BLANK adds groups. `local LC_ALL`
 # switches bash's own locale until the function returns; nothing here starts
 # a process, so no child of the hook (shell_segments' awk) sees it.
+# T-2026-10-20-003: it also sets rest to the text after the matched command
+# word, behind one byte so that ^ cannot match there, for the next sh -c. With
+# a second argument, a string that is not quoted is cut to its first SH_WORD,
+# which stops at a quoted blank too (rm" -f x" reads rm), less than bash runs.
 sh_string() {
-    local LC_ALL=C
-    inner=""
-    if [[ $1 =~ $SH_RE ]] || [[ $1 =~ $EVAL_RE ]]; then
+    local LC_ALL=C m
+    inner="" rest=""
+    if [[ $1 =~ $SH_RE ]]; then
+        inner="${BASH_REMATCH[-1]}" m="${BASH_REMATCH[0]}"
+        rest="x${m#*sh}"
+    elif [[ $1 =~ $EVAL_RE ]]; then
         inner="${BASH_REMATCH[-1]}"
     fi
     [ -n "$inner" ] || return 1
@@ -420,16 +457,31 @@ sh_string() {
         \$\'*) inner="${inner#\$\'}"; inner="${inner%%\'*}" ;;
         \'*) inner="${inner#\'}"; inner="${inner%%\'*}" ;;
         \"*) inner="${inner#\"}"; inner="${inner%\"*}" ;;
+        *) [ -z "${2:-}" ] || { [[ $inner =~ ^$SH_WORD ]] && inner="${BASH_REMATCH[0]}"; } ;;
     esac
 }
 segments_of() {
-    local segs seg inner extra="" seen=0
+    local segs seg inner rest hops extra="" seen=0
     segs=$(shell_segments "$1")
     while IFS= read -r seg; do
         seen=$((seen + 1))
         [ "$seen" -le 64 ] && [ "$SECONDS" -lt 6 ] || return 3
         sh_string "$seg" || continue
         extra+=$(shell_segments "$inner")$'\n'
+        # T-2026-10-20-003: every sh -c in the segment, not only the leftmost.
+        # A match can begin at an argument (find -name 'sh' -exec sh -c '…',
+        # where -exec is the cluster); the one bash runs is then further on.
+        # Each further string counts against the same 64 and the same clock,
+        # and at most 8 follow one segment: each costs a regex over the rest
+        # of the line (64 took 2.5 s on 400 KB of ` sh -c` words). It is read
+        # as bash runs it, a bare string to its first word, so none of them
+        # costs a read of the rest of the line.
+        hops=0
+        while sh_string "$rest" word; do
+            seen=$((seen + 1)) hops=$((hops + 1))
+            [ "$seen" -le 64 ] && [ "$hops" -le 8 ] && [ "$SECONDS" -lt 6 ] || return 3
+            extra+=$(shell_segments "$inner")$'\n'
+        done
     done < <(LC_ALL=C grep -aE -e "$SH_RE" -e "$EVAL_RE" <<< "$segs")
     printf '%s\n%s' "$segs" "$extra"
 }
