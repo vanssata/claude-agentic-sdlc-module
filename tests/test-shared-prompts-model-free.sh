@@ -45,7 +45,7 @@ for plan in pro team-pro team-max max max20; do
     b=$(hits "$TMP/block-$plan" 2>/dev/null)
     [ -z "$b" ] && pass "--plan $plan: the CLAUDE.md block names no model" || fail "--plan $plan: models in the block" "$(printf '%s' "$b" | head -5)"
     routing=$(printf '%s\n' "$out" | sed -n '/^== routing.md (on demand)/,/^== profile.json/p')
-    printf '%s' "$routing" | grep -q '{{' && fail "--plan $plan: routing.md has an unrendered placeholder" || pass "--plan $plan: routing.md renders completely"
+    grep -q '{{' <<<"$routing" && fail "--plan $plan: routing.md has an unrendered placeholder" || pass "--plan $plan: routing.md renders completely"
 done
 for plan in plus pro; do
     out=$(CODEX_DIR="$TMP/none-cx" bash install.sh --target codex --codex-plan "$plan" --dry-run 2>/dev/null)

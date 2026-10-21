@@ -69,16 +69,16 @@ S get --field history | jq -e '.[] | select(.event=="human_approval")' >/dev/nul
 
 echo "== validation and failure modes"
 out=$(S stage nonsense 2>&1); [ $? -ne 0 ] || true
-printf '%s' "$out" | grep -q "stage must be one of" && pass "an unknown stage is rejected" || fail "unknown stage should be rejected" "$out"
+grep -q "stage must be one of" <<<"$out" && pass "an unknown stage is rejected" || fail "unknown stage should be rejected" "$out"
 
 out=$(S risk T9 2>&1 || true)
-printf '%s' "$out" | grep -q "risk tier must be one of" && pass "an unknown risk tier is rejected" || fail "unknown tier should be rejected" "$out"
+grep -q "risk tier must be one of" <<<"$out" && pass "an unknown risk tier is rejected" || fail "unknown tier should be rejected" "$out"
 
 out=$(S set test_status green 2>&1 || true)
-printf '%s' "$out" | grep -q "must be one of" && pass "an invalid test_status is rejected" || fail "invalid status should be rejected" "$out"
+grep -q "must be one of" <<<"$out" && pass "an invalid test_status is rejected" || fail "invalid status should be rejected" "$out"
 
 out=$(S step 99 2>&1 || true)
-printf '%s' "$out" | grep -q "no step '99'" && pass "an unknown step id is rejected" || fail "unknown step should be rejected" "$out"
+grep -q "no step '99'" <<<"$out" && pass "an unknown step id is rejected" || fail "unknown step should be rejected" "$out"
 
 echo "== archive and re-init"
 ARCHIVED=$(S archive)
@@ -88,7 +88,7 @@ ARCHIVED=$(S archive)
 S init --goal "second task" --workflow bugfix >/dev/null
 S stage implementation >/dev/null
 out=$(S init --goal "third task" --workflow bugfix 2>&1 || true)
-printf '%s' "$out" | grep -q "still at stage" && pass "starting a second task over a live one is refused" || fail "should refuse to clobber a live task" "$out"
+grep -q "still at stage" <<<"$out" && pass "starting a second task over a live one is refused" || fail "should refuse to clobber a live task" "$out"
 S init --goal "third task" --workflow bugfix --force >/dev/null && pass "--force starts a fresh task anyway" || fail "--force should work"
 
 echo "== triage records the four inline stages in one call"
@@ -99,7 +99,7 @@ n=$(S get --field history | jq '[.[] | select(.event=="stage" and (.detail|test(
 [ "$n" = 4 ] && pass "all four stages are in the audit trail" || fail "expected 4 inline stage records, got $n"
 S get --field context_summary_ref | grep -q '^inline: template' && pass "the inline context is kept in the state" || fail "context not stored"
 out=$(S triage T9 2>&1 || true)
-printf '%s' "$out" | grep -q "risk tier must be one of" && pass "triage rejects an unknown tier" || fail "triage should reject T9" "$out"
+grep -q "risk tier must be one of" <<<"$out" && pass "triage rejects an unknown tier" || fail "triage should reject T9" "$out"
 
 echo "== quick: the direct path up to T4 in one call"
 S init --goal "quick base" --workflow feature --force >/dev/null; S done >/dev/null; S archive >/dev/null
@@ -107,7 +107,7 @@ S quick --goal "shared behaviour" --workflow feature --tier T4 --files "src/Orde
   && pass "quick accepts T4: shared behaviour runs in direct mode" || fail "quick should accept T4"
 S done >/dev/null; S archive >/dev/null
 out=$(S quick --goal "rename a label" --workflow feature --tier T1 --files "templates/admin/*.twig,translations/messages.en.yaml" --note "isolated label" 2>&1)
-printf '%s' "$out" | grep -q "step 1 armed" && pass "quick records the task and arms step 1" || fail "quick should arm step 1" "$out"
+grep -q "step 1 armed" <<<"$out" && pass "quick records the task and arms step 1" || fail "quick should arm step 1" "$out"
 [ "$(S get --field risk_tier)" = T1 ] && pass "quick sets the tier" || fail "quick should set the tier"
 [ "$(S get --field current_stage)" = implementation ] && pass "quick lands on implementation" || fail "quick stage wrong"
 [ "$(S get --field approved_plan.current_step_id)" = 1 ] && pass "quick arms the scope guard on step 1" || fail "current step should be 1"
@@ -116,16 +116,16 @@ S get --field approved_plan.steps | jq -e '.[0].allowed_files | index("translati
 n=$(S get --field history | jq '[.[] | select(.event=="stage" and (.detail|test("inline")))] | length')
 [ "$n" = 4 ] && pass "quick still writes the four triage stages to the audit trail" || fail "expected 4 inline stage records, got $n"
 out=$(S quick --goal "x" --workflow feature --tier T5 --files a --force 2>&1); rc=$?
-[ $rc = 1 ] && printf '%s' "$out" | grep -q "quick is for T0 to T4" && pass "quick refuses T5 and above" || fail "quick should refuse T5 with exit 1" "rc=$rc $out"
+[ $rc = 1 ] && grep -q "quick is for T0 to T4" <<<"$out" && pass "quick refuses T5 and above" || fail "quick should refuse T5 with exit 1" "rc=$rc $out"
 out=$(S quick --goal "x" --workflow feature --tier T1 --files "" --force 2>&1 || true)
-printf '%s' "$out" | grep -q "at least one file" && pass "quick refuses an empty scope" || fail "quick should refuse empty --files" "$out"
+grep -q "at least one file" <<<"$out" && pass "quick refuses an empty scope" || fail "quick should refuse empty --files" "$out"
 
 echo "== remediate: one step for the whole batch of fixes"
 out=$(S remediate --files tests/FooTest.php 2>&1 || true)
-printf '%s' "$out" | grep -q "still in progress" && pass "remediate refuses while a step is open" || fail "should refuse with an open step" "$out"
+grep -q "still in progress" <<<"$out" && pass "remediate refuses while a step is open" || fail "should refuse with an open step" "$out"
 S step-done 1 >/dev/null
 out=$(S remediate --files "tests/FooTest.php,tests/BarTest.php" --note "3 regressions from the verification run" 2>&1)
-printf '%s' "$out" | grep -q "step R1 armed" && pass "remediate arms step R1" || fail "remediate should arm R1" "$out"
+grep -q "step R1 armed" <<<"$out" && pass "remediate arms step R1" || fail "remediate should arm R1" "$out"
 [ "$(S get --field approved_plan.current_step_id)" = R1 ] && pass "R1 is the current step" || fail "current step should be R1"
 S get --field approved_plan.steps | jq -e '[.[] | select(.step_id=="R1")][0].allowed_files | (index("templates/admin/*.twig") != null) and (index("tests/BarTest.php") != null)' >/dev/null \
   && pass "R1 scope is the union of the finished steps and the named files" || fail "R1 scope wrong"
@@ -144,11 +144,11 @@ jq -e '.current_stage == "done"' "$ARCHIVED" >/dev/null && pass "the archived ta
 echo "== a corrupt state file is loud, not silently replaced"
 printf 'not json at all' > "$ROOT/.ai/state/current.json"
 out=$(S get 2>&1 || true)
-printf '%s' "$out" | grep -q "unreadable" && pass "a corrupt state file reports the problem" || fail "corrupt state should be loud" "$out"
+grep -q "unreadable" <<<"$out" && pass "a corrupt state file reports the problem" || fail "corrupt state should be loud" "$out"
 
 echo "== no .ai/ at all"
 out=$(python3 "$STATE" --root "$TMP" get 2>&1 || true)
-printf '%s' "$out" | grep -q "run /ai-init first" && pass "a project without .ai/ says what to do" || fail "should point at /ai-init" "$out"
+grep -q "run /ai-init first" <<<"$out" && pass "a project without .ai/ says what to do" || fail "should point at /ai-init" "$out"
 
 echo "== the journal: one line per state change (R8, R9)"
 ROOT2="$TMP/journal"; mkdir -p "$ROOT2/.ai/state" "$ROOT2/.ai/reports"
@@ -260,20 +260,20 @@ jq -se '[.[] | select(.event=="note")] | length==2 and (.[0].data.why|test("two 
 jq -se '[.[] | select(.event=="handoff_written" and .actor=="hook")][0] | .data.lines==21' "$JOURNAL3" >/dev/null \
   && pass "a hook event is recorded as actor hook" || fail "event command wrong"
 out=$(J event not_a_type 2>&1 || true)
-printf '%s' "$out" | grep -q "unknown event type" && pass "an unknown event type is refused" || fail "should refuse unknown types" "$out"
+grep -q "unknown event type" <<<"$out" && pass "an unknown event type is refused" || fail "should refuse unknown types" "$out"
 out=$(J note wrong "x" 2>&1 || true)
-printf '%s' "$out" | grep -q "note kind must be one of" && pass "note refuses an unknown kind" || fail "should refuse the kind" "$out"
+grep -q "note kind must be one of" <<<"$out" && pass "note refuses an unknown kind" || fail "should refuse the kind" "$out"
 
 echo "== events reads the journal back"
 [ "$(J events --last 0 --format jsonl | wc -l)" = "$(wc -l < "$JOURNAL3")" ] && pass "--last 0 prints every line" || fail "events should print every line"
 out=$(J events --type nosuchtype 2>&1 || true)
-printf '%s' "$out" | grep -q "unknown event type" && pass "a mistyped filter is refused, not answered with silence" || fail "--type should be validated" "$out"
+grep -q "unknown event type" <<<"$out" && pass "a mistyped filter is refused, not answered with silence" || fail "--type should be validated" "$out"
 [ "$(J events --type note --format jsonl | wc -l)" = 2 ] && pass "events filters by type" || fail "--type should filter"
 [ "$(J events --last 1 --format jsonl | wc -l)" = 1 ] && pass "events honours --last" || fail "--last should limit"
 J events --task "$T2" --type task_closed | grep -q task_closed && pass "events reads another task's journal" || fail "--task should select the task"
 printf 'not json\n' >> "$JOURNAL3"
 err=$(J events --last 1 2>&1 >/dev/null)
-printf '%s' "$err" | grep -q "skipped 1 unparseable" && pass "an unparseable line is reported, not fatal" || fail "should report the skipped line" "$err"
+grep -q "skipped 1 unparseable" <<<"$err" && pass "an unparseable line is reported, not fatal" || fail "should report the skipped line" "$err"
 
 echo "== done --abandon closes without pretending the work landed"
 J done --abandon | grep -q abandoned && pass "done --abandon says so" || fail "done --abandon should say so"
@@ -401,7 +401,7 @@ cmp -s "$TMP/q-synced.md" "$QF" && pass "syncing an already-synced file changes 
 echo "== an answer that is not an option stays pending"
 sed -i 's/^\[Answer\]: B — by ivan.*/[Answer]: F/' "$QF"
 err=$(Q questions --sync 2>&1 >/dev/null)
-printf '%s' "$err" | grep -q "Q1: invalid choice 'F'" && pass "--sync reports the invalid choice" || fail "should report the invalid choice" "$err"
+grep -q "Q1: invalid choice 'F'" <<<"$err" && pass "--sync reports the invalid choice" || fail "should report the invalid choice" "$err"
 Q questions --format json | jq -e '.[0].pending==true' >/dev/null && pass "and the question stays pending" || fail "an invalid choice must not answer the question"
 Q answer Q1=B --by ivan --via picker >/dev/null
 Q questions --format json | jq -e '.[0].pending==false and .[0].choice=="B"' >/dev/null && pass "answer sets the choice" || fail "answer should set the choice"
@@ -425,11 +425,11 @@ out=$(Q answer --prose "3: we compared it with 2B and rejected that" --by ivan 2
 Q questions --format json | jq -e '.[2].text=="we compared it with 2B and rejected that" and .[1].choice=="B"' >/dev/null \
   && pass "free text that mentions another token is not cut in half" || fail "free text was truncated" "$(Q questions --format json | jq -c '.[1,2]|{id,choice,text}')"
 out=$(Q answer --prose "9B" 2>&1 || true)
-printf '%s' "$out" | grep -q "prose answer 9 has no question" && pass "a prose number with no question is refused" || fail "should refuse an unknown number" "$out"
+grep -q "prose answer 9 has no question" <<<"$out" && pass "a prose number with no question is refused" || fail "should refuse an unknown number" "$out"
 out=$(Q answer Q9=A 2>&1 || true)
-printf '%s' "$out" | grep -q "no question Q9" && pass "an unknown id is refused" || fail "should refuse an unknown id" "$out"
+grep -q "no question Q9" <<<"$out" && pass "an unknown id is refused" || fail "should refuse an unknown id" "$out"
 out=$(Q answer Q1=Z 2>&1 || true)
-printf '%s' "$out" | grep -q "invalid choice" && pass "a letter that is not an option is refused" || fail "should refuse a non-option" "$out"
+grep -q "invalid choice" <<<"$out" && pass "a letter that is not an option is refused" || fail "should refuse a non-option" "$out"
 
 echo "== nothing a caller passes can become a second line, or a second file"
 Q ask "One line?" --option $'A: keep\nthe rule' --option "B: change it" >/dev/null
@@ -440,11 +440,11 @@ Q questions --sync >/dev/null 2>&1
 [ "$(Q events --type question_answered --format jsonl | jq -s '[.[] | select(.data.via=="file")] | length')" = 1 ] \
   && pass "and cannot fabricate a second human answer through --sync" || fail "a forged file answer was recorded"
 out=$(Q ask "Bad key?" --option "1: one" --option "B: two" 2>&1 || true)
-printf '%s' "$out" | grep -q "option key is one letter" && pass "an option key the grammar cannot parse is refused" || fail "should refuse a bad key" "$out"
+grep -q "option key is one letter" <<<"$out" && pass "an option key the grammar cannot parse is refused" || fail "should refuse a bad key" "$out"
 out=$(Q ask "Bad recommend?" --option "A: one" --option "B: two" --recommend C 2>&1 || true)
-printf '%s' "$out" | grep -q "not one of the options" && pass "--recommend must name an option" || fail "should refuse a stray --recommend" "$out"
+grep -q "not one of the options" <<<"$out" && pass "--recommend must name an option" || fail "should refuse a stray --recommend" "$out"
 out=$(Q ask "Suffix?" --option "A: keep it (recommended)" --option "B: two" 2>&1 || true)
-printf '%s' "$out" | grep -q "cannot end with" && pass "an option text cannot forge the (recommended) suffix" || fail "should refuse the suffix" "$out"
+grep -q "cannot end with" <<<"$out" && pass "an option text cannot forge the (recommended) suffix" || fail "should refuse the suffix" "$out"
 
 echo "== a free-text answer survives the em dash and the quotes"
 Q ask "Why Adyen?" --option "A: cheaper" --option "B: faster" >/dev/null
@@ -471,13 +471,13 @@ Q questions --format json | jq -e --arg id "$QID" '.[] | select(.id==$id) | .tex
 
 echo "== a gate question is not answered with answer"
 out=$(Q ask "Approve me?" --option "A: yes" --option "B: no" --gate human_approval 2>&1 || true)
-printf '%s' "$out" | grep -q "a gate is requested by 'state.py stage human_approval', not by ask" \
+grep -q "a gate is requested by 'state.py stage human_approval', not by ask" <<<"$out" \
   && pass "an agent cannot author a gate question" || fail "ask --gate should be refused" "$out"
 Q questions --pending --format json | jq -e 'length==0' >/dev/null || Q answer --prose "$(Q questions --pending --format json | jq -r '[.[].number | tostring + "A"] | join(" ")')" >/dev/null 2>&1
 Q stage human_approval >/dev/null 2>&1
 grep -q "^## G1\. Approve $T7 for implementation? (gate: human_approval)$" "$QF" && pass "a gate question is a G id" || fail "the gate heading is wrong" "$(grep '^## G' "$QF")"
 out=$(Q answer G1=A 2>&1 || true)
-printf '%s' "$out" | grep -q "G1 is a gate: run 'state.py approve' in your terminal" && pass "answer refuses a gate id with the route to take" || fail "wrong gate message" "$out"
+grep -q "G1 is a gate: run 'state.py approve' in your terminal" <<<"$out" && pass "answer refuses a gate id with the route to take" || fail "wrong gate message" "$out"
 
 echo "== a pending question blocks a stage, and nothing else (R3)"
 TB=$(Q init --goal "one open question" --workflow feature --force)
@@ -490,7 +490,7 @@ for c in "stage implementation" "triage T2" "plan --ref x --steps /dev/null" "st
          "remediate --files a" "approve --by me" "done" "close"; do
   out=$(Q $c 2>&1); rc=$?
   [ "$rc" = 4 ] || { blocked_ok="'$c' exited $rc, not 4: $out"; break; }
-  printf '%s' "$out" | grep -q "QUESTIONS_PENDING — 1 unanswered in .ai/reports/$TB/questions.md: Q1\. Answer with 'state.py answer Q1=<letter>'" \
+  grep -q "QUESTIONS_PENDING — 1 unanswered in .ai/reports/$TB/questions.md: Q1\. Answer with 'state.py answer Q1=<letter>'" <<<"$out" \
     || { blocked_ok="'$c' printed: $out"; break; }
   cmp -s "$TMP/state-before.json" "$ROOT7/.ai/state/current.json" \
     || { blocked_ok="'$c' changed the state while refusing"; break; }
@@ -499,7 +499,7 @@ for c in "stage implementation" "triage T2" "plan --ref x --steps /dev/null" "st
 done
 [ "$blocked_ok" = yes ] && pass "each of the nine stage-moving commands exits 4 and leaves the state byte-identical" \
   || fail "R3's blocked list is wrong" "$blocked_ok"
-printf '%s' "$(Q stage implementation 2>&1)" | grep -q "Stage stays at plan\." && pass "the refusal names the stage it stays at" || fail "the exit-4 text is wrong"
+grep -q "Stage stays at plan\." <<<"$(Q stage implementation 2>&1)" && pass "the refusal names the stage it stays at" || fail "the exit-4 text is wrong"
 open_ok=yes
 for c in "get" "set next_action x" "risks --add r" "modules billing" "note decision d" \
          "ask q --option A:one --option B:two" "questions" "events"; do
@@ -566,10 +566,10 @@ P questions --topic my-idea --format md | grep -q '^- \*\*What problem are we so
 [ -z "$(find "$ROOT10" -name 'events.jsonl' -o -name '.ai' 2>/dev/null)" ] \
   && pass "a topic question writes no journal anywhere in the tree" || fail "topic mode wrote a journal"
 out=$(P ask "Escape?" --option "A: one" --option "B: two" --topic "../../pwned/evil" 2>&1 || true)
-printf '%s' "$out" | grep -q "takes a slug of lowercase letters" && pass "a slug that is a path is refused" || fail "--topic must not steer the path" "$out"
+grep -q "takes a slug of lowercase letters" <<<"$out" && pass "a slug that is a path is refused" || fail "--topic must not steer the path" "$out"
 [ ! -e "$ROOT10/../pwned" ] && [ ! -e "$ROOT10/docs/pwned" ] && pass "and nothing was written outside docs/sdlc/intent/" || fail "the traversal wrote a file"
 out=$(P ask "Gate?" --option "A: one" --option "B: two" --gate human_approval --topic my-idea 2>&1 || true)
-printf '%s' "$out" | grep -q "a gate is requested by" && pass "a topic file cannot hold a gate either" || fail "--gate --topic should be refused" "$out"
+grep -q "a gate is requested by" <<<"$out" && pass "a topic file cannot hold a gate either" || fail "--gate --topic should be refused" "$out"
 
 echo "== the gate: approval happens outside the agent (R11)"
 ROOTG="$TMP/gate"; mkdir -p "$ROOTG/.ai/state" "$ROOTG/.ai/reports"
@@ -578,7 +578,7 @@ TG=$(G init --goal "gated" --workflow feature)
 GF="$ROOTG/.ai/reports/$TG/questions.md"
 
 out=$(G approve --by ivan 2>&1); rc=$?
-[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "APPROVAL_REFUSED — no gate was requested: run 'state.py stage human_approval' after presenting the plan." \
+[ "$rc" = 5 ] && grep -q "APPROVAL_REFUSED — no gate was requested: run 'state.py stage human_approval' after presenting the plan." <<<"$out" \
   && pass "approve before the gate was requested exits 5 with the second text" || fail "wrong refusal without a gate" "exit $rc: $out"
 
 G stage human_approval >/dev/null
@@ -595,18 +595,18 @@ out=$(G stage human_approval 2>&1); rc=$?
 cp "$ROOTG/.ai/state/current.json" "$TMP/gate-before.json"
 out=$(G approve --by ivan 2>&1); rc=$?
 [ "$rc" = 5 ] && pass "approve under a pipe exits 5" || fail "approve should refuse a piped stdin" "exit $rc: $out"
-printf '%s' "$out" | grep -q "^state.py: APPROVAL_REFUSED — approval happens outside the agent. Run in your own terminal:$" \
+grep -q "^state.py: APPROVAL_REFUSED — approval happens outside the agent. Run in your own terminal:$" <<<"$out" \
   && pass "and the first line is the I1 text" || fail "the refusal text is wrong" "$out"
-printf '%s' "$out" | grep -qE "^  python3 '?.*/skills/ai-task/state\.py'? --root '?$ROOTG'? approve --by ivan$" \
+grep -qE "^  python3 '?.*/skills/ai-task/state\.py'? --root '?$ROOTG'? approve --by ivan$" <<<"$out" \
   && pass "and the second line is a command a shell can actually run" || fail "the terminal command is wrong" "$out"
 mkdir -p "$TMP/with space/.ai/state" "$TMP/with space/.ai/reports"
 python3 "$STATE" --root "$TMP/with space" init --goal "spaces" --workflow feature >/dev/null
 python3 "$STATE" --root "$TMP/with space" stage human_approval >/dev/null
 cmd=$(python3 "$STATE" --root "$TMP/with space" approve --by "the human" 2>&1 | sed -n 2p)
 eval "$cmd --help" >/dev/null 2>&1 && pass "and it survives a path with a space in it" || fail "the printed command must be shell-safe" "$cmd"
-printf '%s' "$out" | grep -q "set \[Answer\]: A on G1 in .ai/reports/$TG/questions.md and tell the session to sync" \
+grep -q "set \[Answer\]: A on G1 in .ai/reports/$TG/questions.md and tell the session to sync" <<<"$out" \
   && pass "and it names the file route" || fail "the file route is missing" "$out"
-printf '%s' "$out" | grep -q "AI_UNATTENDED=1 in the launcher's environment; the journal then records the approval as unattended." \
+grep -q "AI_UNATTENDED=1 in the launcher's environment; the journal then records the approval as unattended." <<<"$out" \
   && pass "and the unattended route, with its consequence" || fail "the unattended route is missing" "$out"
 cmp -s "$TMP/gate-before.json" "$ROOTG/.ai/state/current.json" && pass "a refused approval writes nothing" || fail "the state changed on a refusal"
 [ "$(G get --field human_approval | jq -r .granted)" = false ] && pass "and grants nothing" || fail "nothing should be granted"
@@ -656,7 +656,7 @@ G events --type gate_approved --format jsonl | jq -e '.actor=="human" and .data.
 grep -q '^\[Answer\]: A — by ivan via terminal at ' "$GF" && pass "approve answers the gate's own question" || fail "G1 should be answered" "$(grep '^\[Answer\]' "$GF")"
 G done >/dev/null && pass "so the very next command is not blocked by it (Risks 3)" || fail "the gate must not block done"
 out=$(G approve --by someone-else 2>&1)
-printf '%s' "$out" | grep -q "already approved by ivan" && pass "a second approve prints the grant that exists" || fail "re-approval should be a no-op" "$out"
+grep -q "already approved by ivan" <<<"$out" && pass "a second approve prints the grant that exists" || fail "re-approval should be a no-op" "$out"
 [ "$(G events --type gate_approved --format jsonl | wc -l)" = 1 ] && pass "and emits no second gate_approved" || fail "one approval per gate, or the record is unreadable"
 
 echo "== the unattended route is allowed, and never invisible"
@@ -689,7 +689,7 @@ G stage human_approval >/dev/null
 out=$(G approve --by ivan 2>&1); [ $? = 5 ] && pass "with only the gate pending, approve gets as far as the route check" || fail "G* must not block approve" "$out"
 G ask "Which rule?" --option "A: one" --option "B: two" >/dev/null
 out=$(G approve --by ivan 2>&1); rc=$?
-[ "$rc" = 4 ] && printf '%s' "$out" | grep -q "QUESTIONS_PENDING" \
+[ "$rc" = 4 ] && grep -q "QUESTIONS_PENDING" <<<"$out" \
   && pass "with a Q pending, approve exits 4 and says which question to answer" || fail "a pending Q should exit 4" "exit $rc: $out"
 
 echo "== reject records the refusal and leaves the stage alone"
@@ -724,17 +724,17 @@ out=$(H handoff --print)
 missing=""
 for heading in "# Handoff — $TH (feature, T2)" "Goal: add the per-line fee" "Next: " "Pending questions: Q1 — .ai/reports/$TH/questions.md" \
                "## Decisions (latest 3)" "## Rejected (latest 3)" "## Failed attempts (latest 3)" "## Latest user instruction (verbatim,"; do
-  printf '%s' "$out" | grep -qF "$heading" || missing="$missing[$heading]"
+  grep -qF "$heading" <<<"$out" || missing="$missing[$heading]"
 done
 [ -z "$missing" ] && pass "and carries every part of I4" || fail "a part of the handoff is missing" "$missing"
 [ "$(printf '%s' "$out" | grep -c '^- decision')" = 3 ] && pass "three decisions, not ten" || fail "the latest three only"
 [ "$(printf '%s' "$out" | grep '^- decision' | head -1)" = "- decision 10 — because reason 10" ] \
   && [ "$(printf '%s' "$out" | grep -c '^- decision \(10\|9\|8\)')" = 3 ] \
   && pass "newest first, and it is the three newest" || fail "the latest three, newest first" "$(printf '%s' "$out" | grep '^- decision')"
-printf '%s' "$out" | grep -q '^- attempt 3 — error: boom 3 with a second line$' && pass "a failed attempt keeps its error on one line" || fail "the error should be collapsed"
+grep -q '^- attempt 3 — error: boom 3 with a second line$' <<<"$out" && pass "a failed attempt keeps its error on one line" || fail "the error should be collapsed"
 len=$(printf '%s' "$out" | grep '^> ' | wc -c)
 [ "$len" -le 305 ] && [ "$len" -ge 100 ] && pass "the user's last words are there, capped at 300 characters" || fail "the prompt should be present and capped" "$len"
-printf '%s' "$out" | grep -q '← resume point (step 1: src/Checkout/\*.php, src/Payment/Fee.php)' \
+grep -q '← resume point (step 1: src/Checkout/\*.php, src/Payment/Fee.php)' <<<"$out" \
   && pass "Next names the resume point and its scope" || fail "the resume point is missing" "$out"
 H get --field resume_point | jq -e '.step_id=="1" and .stage=="implementation" and .runtime=="claude"' >/dev/null \
   && pass "and the state carries it for a reader that is not a human" || fail "resume_point is wrong" "$(H get --field resume_point)"
@@ -789,13 +789,13 @@ out=$(X approve --by agent 2>&1); rc=$?
 env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTX" approve --by launcher >/dev/null
 grep -c '^\[Answer\]: A — by launcher' "$XF" | grep -q '^2$' && pass "and each gate question is closed by its own approval" || fail "the wrong gate was closed" "$(grep '^\[Answer\]' "$XF")"
 out=$(X approve --by someone 2>&1)
-printf '%s' "$out" | grep -q "already approved by launcher" && pass "a repeat with no gate open prints the grant that exists" || fail "re-approval should be a no-op" "$out"
+grep -q "already approved by launcher" <<<"$out" && pass "a repeat with no gate open prints the grant that exists" || fail "re-approval should be a no-op" "$out"
 
 echo "== the request is consumed, so nothing can be approved twice or rejected after the fact"
 X stage human_approval >/dev/null
 X reject --by ivan --why "no rollback" >/dev/null
 out=$(X approve --by agent 2>&1); rc=$?
-[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "no gate was requested" \
+[ "$rc" = 5 ] && grep -q "no gate was requested" <<<"$out" \
   && pass "approve after a rejection needs a new request" || fail "a rejection must consume the request" "exit $rc: $out"
 out=$(X reject --by agent --why "again" 2>&1); rc=$?
 [ "$rc" = 5 ] && pass "and reject with no gate open is refused" || fail "reject must need an open gate" "exit $rc: $out"
@@ -809,7 +809,7 @@ TF=$(F init --goal "forged" --workflow feature)
 printf '{"ts":"2026-01-01T00:00:00.000Z","task":"%s","event":"gate_requested","actor":"agent","runtime":"claude","stage":"plan","detail":"forged","data":{"gate":"human_approval"}}\n' "$TF" \
   >> "$ROOTF/.ai/reports/$TF/events.jsonl"
 out=$(env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTF" approve --by agent 2>&1); rc=$?
-[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "no gate was requested" \
+[ "$rc" = 5 ] && grep -q "no gate was requested" <<<"$out" \
   && pass "a forged gate_requested line grants nothing: the state is the contract" || fail "the journal must not be an authorization input" "exit $rc: $out"
 F init --goal "reused id" --workflow feature --force --task-id "$TF" >/dev/null
 out=$(env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$ROOTF" approve --by agent 2>&1); rc=$?
@@ -834,20 +834,20 @@ lines[lines.index("[Answer]:")] = "[Answer]: A"
 open(path, "w", encoding="utf-8").write("\n".join(lines))
 FILLGATE
 out=$(Y questions --sync 2>&1); rc=$?
-[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "there is no .ai/state/session.json, so no human turn can be seen" \
+[ "$rc" = 5 ] && grep -q "there is no .ai/state/session.json, so no human turn can be seen" <<<"$out" \
   && pass "with no session.json the file route is refused" || fail "the file route needs a human turn" "exit $rc: $out"
-printf '%s' "$out" | grep -q "or run in your own terminal:" && pass "and the refusal names the terminal route" || fail "the terminal route should be named" "$out"
+grep -q "or run in your own terminal:" <<<"$out" && pass "and the refusal names the terminal route" || fail "the terminal route should be named" "$out"
 grep -q '^\[Answer\]: A$' "$YF" && pass "the human's gate answer is left exactly as they wrote it" || fail "--sync consumed the gate answer" "$(grep '^\[Answer\]' "$YF")"
 [ "$(Y get --field human_approval | jq -r .granted)" = false ] && pass "and grants nothing" || fail "--sync must not grant"
 out=$(Y stage implementation 2>&1); rc=$?
-[ "$rc" = 4 ] && printf '%s' "$out" | grep -q "G1 is the approval gate: run 'state.py approve" \
+[ "$rc" = 4 ] && grep -q "G1 is the approval gate: run 'state.py approve" <<<"$out" \
   && pass "the stage stays blocked, and the refusal names the command that works" || fail "a filled gate must not unblock the pipeline" "exit $rc: $out"
 
 REQUESTED=$(Y get --field human_approval | jq -r .requested_at)
 printf '{"runtime":"claude","session_id":"s1","last_prompt_session":"s1","last_prompt_at":"2020-01-01T00:00:00Z","last_prompt":"older"}' \
   > "$YS"
 out=$(Y questions --sync 2>&1); rc=$?
-[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "is older than the approval request ($REQUESTED)" \
+[ "$rc" = 5 ] && grep -q "is older than the approval request ($REQUESTED)" <<<"$out" \
   && pass "a prompt older than the request is not a turn taken on the plan" || fail "the turn must follow the request" "exit $rc: $out"
 [ "$(Y get --field human_approval | jq -r .granted)" = false ] && pass "and still nothing is granted" || fail "an old turn must not grant"
 
@@ -870,7 +870,7 @@ data.update({"session_id": "window-2", "last_prompt_session": "window-2",
 json.dump(data, open(sys.argv[1], "w", encoding="utf-8"))
 OTHERWINDOW
 out=$(Y questions --sync 2>&1); rc=$?
-[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "came from another session (window-2, not s1, which is where the gate was requested)" \
+[ "$rc" = 5 ] && grep -q "came from another session (window-2, not s1, which is where the gate was requested)" <<<"$out" \
   && pass "a turn taken in another window is not this session's turn" || fail "the turn must be this session's" "exit $rc: $out"
 python3 - "$YS" <<'SAMEWINDOW'
 import json, sys
@@ -879,7 +879,7 @@ data.update({"session_id": "s1", "last_prompt_session": "s1"})
 json.dump(data, open(sys.argv[1], "w", encoding="utf-8"))
 SAMEWINDOW
 out=$(Y questions --sync 2>&1)
-printf '%s' "$out" | grep -q "gate approved by .* via the file" && pass "after the human takes a turn, the file route grants" || fail "the file route should grant" "$out"
+grep -q "gate approved by .* via the file" <<<"$out" && pass "after the human takes a turn, the file route grants" || fail "the file route should grant" "$out"
 
 Y get --field human_approval | jq -e '.granted==true and .via=="file" and .unattended==false' >/dev/null \
   && pass "and the state records which route it came in by" || fail "human_approval is wrong" "$(Y get --field human_approval)"
@@ -887,7 +887,7 @@ Y events --type gate_approved --format jsonl | jq -e '.actor=="human" and .data.
   && pass "and the journal records a human answering the file" || fail "gate_approved{via:file} is wrong"
 grep -q '^\[Answer\]: A — by .* via file at ' "$YF" && pass "and the gate question is closed with its trailer" || fail "the gate answer should carry a trailer" "$(grep '^\[Answer\]' "$YF")"
 Y stage implementation >/dev/null && pass "so the pipeline moves again" || fail "a granted gate should unblock"
-out=$(Y questions --sync 2>&1); printf '%s' "$out" | grep -q "gate approved" && fail "syncing twice must not grant twice" "$out" || pass "syncing an already-granted gate does nothing"
+out=$(Y questions --sync 2>&1); grep -q "gate approved" <<<"$out" && fail "syncing twice must not grant twice" "$out" || pass "syncing an already-granted gate does nothing"
 [ "$(Y events --type gate_approved --format jsonl | wc -l)" = 1 ] && pass "and the journal holds one approval" || fail "one approval per gate"
 
 echo "== the file route can reject, and can run unattended"
@@ -910,7 +910,7 @@ data["last_prompt_session"] = data["session_id"]
 json.dump(data, open(sys.argv[1], "w", encoding="utf-8"))
 TURN2
 out=$(Y questions --sync 2>&1)
-printf '%s' "$out" | grep -q "gate rejected by .* via the file" && pass "a B on the gate is a rejection" || fail "the file route should reject" "$out"
+grep -q "gate rejected by .* via the file" <<<"$out" && pass "a B on the gate is a rejection" || fail "the file route should reject" "$out"
 Y get --field human_approval | jq -e '.granted==false and .requested_at==null' >/dev/null \
   && pass "and it consumes the request like the terminal route does" || fail "a rejection should consume the request"
 Y events --type gate_rejected --format jsonl | tail -1 | jq -e '.actor=="human" and (.data.why|test("no rollback"))' >/dev/null \
@@ -1050,7 +1050,7 @@ turn s1 "$(V get --field human_approval | jq -r .requested_at)"
 
 fill G1 "yes, go ahead — but check the rollback"
 err=$(V questions --sync 2>&1 >/dev/null)
-printf '%s' "$err" | grep -q "is the approval gate: answer it A or B" \
+grep -q "is the approval gate: answer it A or B" <<<"$err" \
   && pass "free text on the gate is not read as a rejection" || fail "a gate takes A or B" "$err"
 [ "$(V get --field human_approval | jq -r .requested_at)" != null ] \
   && pass "and the gate stays open" || fail "free text must not consume the gate"
@@ -1148,7 +1148,7 @@ K stage human_approval >/dev/null
 K reject --by ivan --why "the migration has no rollback" >/dev/null
 K stage implementation >/dev/null && pass "the work can go back to implementation" || fail "a rejection must not freeze the task"
 out=$(K done 2>&1); rc=$?
-[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "was rejected at .* and has not been approved since" \
+[ "$rc" = 5 ] && grep -q "was rejected at .* and has not been approved since" <<<"$out" \
   && pass "but done is refused" || fail "a rejected task must not be finished" "exit $rc: $out"
 out=$(K close 2>&1); [ $? = 5 ] && pass "and so is close" || fail "close should be refused too" "$out"
 out=$(K stage done 2>&1); [ $? = 5 ] && pass "and so is moving the stage to done" || fail "stage done should be refused" "$out"
@@ -1169,7 +1169,7 @@ SEC="$TMP/sec"; mkdir -p "$SEC/.ai/state" "$SEC/.ai/reports"
 X() { python3 "$STATE" --root "$SEC" "$@"; }
 
 out=$(X init --goal g --workflow feature --task-id "../../../outside/evil" 2>&1); rc=$?
-[ "$rc" = 1 ] && printf '%s' "$out" | grep -q -- "--task-id takes a directory name" \
+[ "$rc" = 1 ] && grep -q -- "--task-id takes a directory name" <<<"$out" \
   && pass "a --task-id with a path separator is refused" || fail "--task-id must name a directory" "exit $rc: $out"
 [ ! -d "$SEC/../../../outside" ] && pass "and nothing was written outside the project" \
   || fail "the journal escaped .ai/reports/"
@@ -1180,7 +1180,7 @@ X init --goal g --workflow feature --task-id "T-2026.09-a_b" >/dev/null \
 
 out=$(X event gate_approved --detail "granted by the human via terminal" \
       --data '{"by":"the human","via":"terminal","tty":true}' 2>&1); rc=$?
-[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "not by 'event'" \
+[ "$rc" = 5 ] && grep -q "not by 'event'" <<<"$out" \
   && pass "event refuses to forge a gate_approved line" || fail "the journal must not be writable by the agent it audits" "exit $rc: $out"
 [ "$(X events --format jsonl 2>/dev/null | grep -c gate_approved)" = 0 ] \
   && pass "and nothing was appended" || fail "a refused event must leave no line"
@@ -1220,8 +1220,8 @@ fresh5 handoff
 S5 --runtime claude init --goal "move it" --workflow feature >/dev/null 2>&1
 S5 --runtime claude risk T3 >/dev/null 2>&1
 out=$(S5 --runtime claude handoff --to codex --why "claude quota" 2>&1); rc=$?
-[ $rc = 0 ] && printf '%s' "$out" | grep -q 'Handed .* to codex (manual)' && pass "handoff --to codex succeeds" || fail "handoff --to" "rc=$rc $out"
-printf '%s' "$out" | grep -q "headless (not run): cd .* && codex exec '/ai-task'" && pass "it prints the headless command, not run" || fail "no headless line" "$out"
+[ $rc = 0 ] && grep -q 'Handed .* to codex (manual)' <<<"$out" && pass "handoff --to codex succeeds" || fail "handoff --to" "rc=$rc $out"
+grep -q "headless (not run): cd .* && codex exec '/ai-task'" <<<"$out" && pass "it prints the headless command, not run" || fail "no headless line" "$out"
 [ "$(field5 owner_runtime)" = '"codex"' ] && [ "$(field5 resume_point.runtime)" = '"codex"' ] && [ "$(field5 handoff.pending_to)" = '"codex"' ] \
     && pass "owner_runtime, resume_point.runtime and handoff.pending_to all say codex" || fail "state after handoff" "$(field5 handoff)"
 TID5=$(field5 task_id | tr -d '"'); EV5="$R5/.ai/reports/$TID5/events.jsonl"
@@ -1232,7 +1232,7 @@ grep -q '^Handed to codex at .* resume there with /ai-task' "$R5/.ai/state/hando
 out=$(S5 --runtime claude handoff --to codex 2>&1); rc=$?
 [ $rc = 2 ] && pass "handing to the owner again exits 2" || fail "same-owner handoff should exit 2" "rc=$rc $out"
 out=$(S5 --runtime claude set next_action "keep going here" 2>&1); rc=$?
-[ $rc = 7 ] && printf '%s' "$out" | grep -q '^state.py: RUNTIME_HANDOFF_PENDING' && pass "a change from the old owner exits 7 RUNTIME_HANDOFF_PENDING" || fail "old owner should be refused" "rc=$rc $out"
+[ $rc = 7 ] && grep -q '^state.py: RUNTIME_HANDOFF_PENDING' <<<"$out" && pass "a change from the old owner exits 7 RUNTIME_HANDOFF_PENDING" || fail "old owner should be refused" "rc=$rc $out"
 S5 --runtime claude get --field current_stage >/dev/null 2>&1 && pass "reading it from the old owner is still fine" || fail "a read was refused"
 n_before=$(grep -c '"runtime_handoff"' "$EV5")
 S5 --runtime codex set next_action "resumed in codex" >/dev/null 2>&1; rc=$?
@@ -1245,11 +1245,11 @@ S5 --runtime claude handoff --to codex >/dev/null 2>&1 && pass "pending question
 S5 --runtime codex handoff --to claude >/dev/null 2>&1
 S5 --runtime claude done --abandon >/dev/null 2>&1
 out=$(S5 --runtime claude handoff --to codex 2>&1); rc=$?
-[ $rc = 2 ] && printf '%s' "$out" | grep -q 'closed' && pass "a closed task cannot be handed over (exit 2)" || fail "closed task handoff" "rc=$rc $out"
+[ $rc = 2 ] && grep -q 'closed' <<<"$out" && pass "a closed task cannot be handed over (exit 2)" || fail "closed task handoff" "rc=$rc $out"
 fresh5 missing
 S5 --runtime claude init --goal g --workflow feature >/dev/null 2>&1
 out=$(CODEX_HOME="$W5/nowhere" CLAUDE_CONFIG_DIR="$CLH" python3 "$STATE" --root "$R5" --runtime claude handoff --to codex 2>&1); rc=$?
-[ $rc = 2 ] && printf '%s' "$out" | grep -q 'not installed' && pass "a runtime that is not installed is refused (exit 2)" || fail "missing target" "rc=$rc $out"
+[ $rc = 2 ] && grep -q 'not installed' <<<"$out" && pass "a runtime that is not installed is refused (exit 2)" || fail "missing target" "rc=$rc $out"
 
 echo "== WP5: cross-vendor review (R11)"
 fresh5 review
@@ -1266,7 +1266,7 @@ fresh5 review-low
 S5 --runtime claude init --goal "small" --workflow feature >/dev/null 2>&1
 S5 --runtime claude risk T2 >/dev/null 2>&1
 out=$(S5 --runtime claude handoff --to codex --for review 2>&1); rc=$?
-[ $rc = 0 ] && printf '%s' "$out" | grep -q 'below cross_vendor_review_from T4' && [ "$(field5 cross_vendor_review)" = null ] \
+[ $rc = 0 ] && grep -q 'below cross_vendor_review_from T4' <<<"$out" && [ "$(field5 cross_vendor_review)" = null ] \
     && pass "T2 --for review is allowed and noted, not recorded as a cross-vendor review" || fail "T2 review handoff" "rc=$rc $out"
 
 echo "== WP5 review fixes: blockers win, a stale request is cancelled, the process names the runtime"
@@ -1288,9 +1288,9 @@ S5 --runtime claude set next_action x >/dev/null 2>&1
 S5 --runtime claude handoff --to codex >/dev/null 2>&1
 grep -q 'for the cross-vendor review' "$R5/.ai/state/handoff.md" && fail "a plain handoff inherited the old review" || pass "a later plain handoff is not a review"
 out=$(S5 --runtime claude init --goal "other" --workflow feature --force 2>&1); rc=$?
-[ $rc = 7 ] && printf '%s' "$out" | grep -q 'would discard it' && pass "init --force cannot drop a task handed to the other runtime (exit 7)" || fail "init --force" "rc=$rc $out"
+[ $rc = 7 ] && grep -q 'would discard it' <<<"$out" && pass "init --force cannot drop a task handed to the other runtime (exit 7)" || fail "init --force" "rc=$rc $out"
 out=$(env -u CLAUDECODE CLAUDE_CONFIG_DIR="$CLH" CODEX_HOME="$CXH" AI_RUNTIME= python3 "$STATE" --root "$R5" set next_action y 2>&1); rc=$?
-[ $rc = 7 ] && printf '%s' "$out" | grep -q -- '--runtime claude handoff --to claude' && pass "a plain shell is told a command it can run" || fail "shell message" "rc=$rc $out"
+[ $rc = 7 ] && grep -q -- '--runtime claude handoff --to claude' <<<"$out" && pass "a plain shell is told a command it can run" || fail "shell message" "rc=$rc $out"
 fresh5 detect
 S5 --runtime claude init --goal g --workflow feature >/dev/null 2>&1
 printf '{"runtime":"codex","session_id":"s1"}' > "$R5/.ai/state/session.json"
@@ -1312,12 +1312,12 @@ out=$(S5 --runtime claude handoff --to claude 2>&1); rc=$?
 echo "== WP5: the advisory line (R12)"
 fresh5 advice
 err=$(S5 --runtime claude init --goal "rename everything" --workflow refactoring 2>&1 >/dev/null)
-printf '%s' "$err" | grep -qx 'preferred runtime: codex (plan table: refactoring -> codex)' && pass "init names codex for refactoring, on stderr" || fail "no advisory line" "$err"
+grep -qx 'preferred runtime: codex (plan table: refactoring -> codex)' <<<"$err" && pass "init names codex for refactoring, on stderr" || fail "no advisory line" "$err"
 grep -qx 'preferred runtime: codex (plan table: refactoring -> codex)' "$R5/.ai/state/handoff.md" && pass "handoff.md carries the same line" || fail "handoff.md lacks the advice"
 [ "$(wc -l < "$R5/.ai/state/handoff.md")" -le 30 ] && pass "handoff.md is still at most 30 lines" || fail "handoff.md grew past 30 lines"
 [ "$(field5 owner_runtime)" = '"claude"' ] && pass "nothing moves by itself" || fail "the advice moved the task"
 err=$(S5 --runtime claude risk T3 2>&1 >/dev/null)
-printf '%s' "$err" | grep -q '^preferred runtime: codex' && pass "risk repeats it" || fail "risk should print the advice" "$err"
+grep -q '^preferred runtime: codex' <<<"$err" && pass "risk repeats it" || fail "risk should print the advice" "$err"
 fresh5 advice-none
 err=$(CODEX_HOME="$W5/nowhere" CLAUDE_CONFIG_DIR="$CLH" python3 "$STATE" --root "$R5" --runtime claude init --goal g --workflow refactoring 2>&1 >/dev/null)
 [ -z "$err" ] && pass "no advice when the other runtime is not installed" || fail "advice without codex" "$err"
@@ -1325,7 +1325,7 @@ fresh5 advice-quota
 mkdir -p "$CLH/state"; NOW5=$(date +%s)
 jq -n --argjson n "$NOW5" '{quota:{weekly_pct:95,seen_at:$n,resets_at:($n+3600),source:"statusline"}}' > "$CLH/state/runtime-gate.json"
 err=$(S5 --runtime claude init --goal g --workflow feature 2>&1 >/dev/null)
-printf '%s' "$err" | grep -qx 'preferred runtime: codex (quota 95% >= 90%)' && pass "own quota >= 90% names the other runtime" || fail "quota advice" "$err"
+grep -qx 'preferred runtime: codex (quota 95% >= 90%)' <<<"$err" && pass "own quota >= 90% names the other runtime" || fail "quota advice" "$err"
 mkdir -p "$CXH/state"; jq -n --argjson n "$NOW5" '{quota:{weekly_pct:97,seen_at:$n,resets_at:($n+3600),source:"rollout"}}' > "$CXH/state/runtime-gate.json"
 fresh5 advice-both
 err=$(S5 --runtime claude init --goal g --workflow feature 2>&1 >/dev/null)
@@ -1344,7 +1344,7 @@ fresh5 cap
 mkdir -p "$R5/.ai/policies"
 printf '{"pipeline_profile": "solo", "pipeline_profiles": {"solo": {"direct_mode_cap": "T3"}}}' > "$R5/.ai/policies/risk-tiers.json"
 out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T4 --files a.py 2>&1); rc=$?
-[ $rc = 8 ] && printf '%s' "$out" | grep -q '^state.py: DIRECT_MODE_CAP T3 (profile solo)' && pass "quick T4 above a project cap of T3 exits 8 DIRECT_MODE_CAP" || fail "cap" "rc=$rc $out"
+[ $rc = 8 ] && grep -q '^state.py: DIRECT_MODE_CAP T3 (profile solo)' <<<"$out" && pass "quick T4 above a project cap of T3 exits 8 DIRECT_MODE_CAP" || fail "cap" "rc=$rc $out"
 fresh5 cap-ok
 S5 --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py >/dev/null 2>&1 && pass "quick T2 is within the cap" || fail "T2 refused"
 fresh5 cap-ok-t4
@@ -1353,37 +1353,37 @@ fresh5 cap-team
 mkdir -p "$R5/.ai/policies"
 printf '{"pipeline_profile": "team", "pipeline_profiles": {"solo": {"direct_mode_cap": "T1"}, "team": {"direct_mode_cap": "T2"}}}' > "$R5/.ai/policies/risk-tiers.json"
 out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T3 --files a.py 2>&1); rc=$?
-[ $rc = 8 ] && printf '%s' "$out" | grep -q 'DIRECT_MODE_CAP T2 (profile team)' && pass "the cap is read for the active profile" || fail "team cap" "rc=$rc $out"
+[ $rc = 8 ] && grep -q 'DIRECT_MODE_CAP T2 (profile team)' <<<"$out" && pass "the cap is read for the active profile" || fail "team cap" "rc=$rc $out"
 fresh5 cap-mode
 mkdir -p "$R5/.ai/policies"
 printf '{"pipeline_profile": "solo", "pipeline_profiles": {"solo": {"mode": {"T0": "direct", "T1": "direct", "T2": "direct", "T3": "sdlc"}}}}' > "$R5/.ai/policies/risk-tiers.json"
 out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T3 --files a.py 2>&1); rc=$?
-[ $rc = 8 ] && printf '%s' "$out" | grep -q 'DIRECT_MODE_CAP T2 (profile solo)' && pass "without the key, the cap is the highest tier whose mode is direct" || fail "mode-derived cap" "rc=$rc $out"
+[ $rc = 8 ] && grep -q 'DIRECT_MODE_CAP T2 (profile solo)' <<<"$out" && pass "without the key, the cap is the highest tier whose mode is direct" || fail "mode-derived cap" "rc=$rc $out"
 fresh5 cap-legacy
 mkdir -p "$R5/.ai/policies"
 printf '{"pipeline_profile": "solo", "tiers": {"T0": {}, "T1": {}, "T2": {}, "T3": {}, "T4": {}, "T5": {}}}' > "$R5/.ai/policies/risk-tiers.json"
 out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T4 --files a.py 2>&1); rc=$?
-[ $rc = 8 ] && printf '%s' "$out" | grep -q 'DIRECT_MODE_CAP T3 (profile solo)' && pass "a six-tier policy keeps its old cap of T3: an un-updated project is not widened" || fail "legacy cap" "rc=$rc $out"
+[ $rc = 8 ] && grep -q 'DIRECT_MODE_CAP T3 (profile solo)' <<<"$out" && pass "a six-tier policy keeps its old cap of T3: an un-updated project is not widened" || fail "legacy cap" "rc=$rc $out"
 fresh5 cap-legacy-team
 mkdir -p "$R5/.ai/policies"
 printf '{"pipeline_profile": "team", "tiers": {"T0": {}, "T1": {}, "T2": {}, "T3": {}, "T4": {}, "T5": {}}}' > "$R5/.ai/policies/risk-tiers.json"
 out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T4 --files a.py 2>&1); rc=$?
-[ $rc = 8 ] && printf '%s' "$out" | grep -q 'DIRECT_MODE_CAP T3 (profile team)' && pass "a six-tier policy caps quick at T3 for every profile, team included" || fail "legacy team cap" "rc=$rc $out"
+[ $rc = 8 ] && grep -q 'DIRECT_MODE_CAP T3 (profile team)' <<<"$out" && pass "a six-tier policy caps quick at T3 for every profile, team included" || fail "legacy team cap" "rc=$rc $out"
 fresh5 cap-gap
 mkdir -p "$R5/.ai/policies"
 printf '{"pipeline_profile": "solo", "pipeline_profiles": {"solo": {"mode": {"T0": "direct", "T1": "sdlc", "T2": "sdlc", "T3": "direct"}}}}' > "$R5/.ai/policies/risk-tiers.json"
 out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py 2>&1); rc=$?
-[ $rc = 8 ] && printf '%s' "$out" | grep -q 'DIRECT_MODE_CAP T0 (profile solo)' && pass "a gap in the mode map ends the direct run: the cap is the unbroken run from T0" || fail "mode gap" "rc=$rc $out"
+[ $rc = 8 ] && grep -q 'DIRECT_MODE_CAP T0 (profile solo)' <<<"$out" && pass "a gap in the mode map ends the direct run: the cap is the unbroken run from T0" || fail "mode gap" "rc=$rc $out"
 fresh5 cap-malformed
 mkdir -p "$R5/.ai/policies"
 printf '{"pipeline_profile": "solo", "pipeline_profiles": ["solo"]}' > "$R5/.ai/policies/risk-tiers.json"
 out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py 2>&1); rc=$?
-[ $rc = 1 ] && printf '%s' "$out" | grep -q 'malformed' && ! printf '%s' "$out" | grep -q Traceback && pass "a malformed policy is a one-line error, not a traceback and not an open gate" || fail "malformed policy" "rc=$rc $out"
+[ $rc = 1 ] && grep -q 'malformed' <<<"$out" && ! grep -q Traceback <<<"$out" && pass "a malformed policy is a one-line error, not a traceback and not an open gate" || fail "malformed policy" "rc=$rc $out"
 fresh5 cap-typo
 mkdir -p "$R5/.ai/policies"
 printf '{"pipeline_profile": "solo", "pipeline_profiles": {"solo": {"direct_mode_cap": "t3"}}}' > "$R5/.ai/policies/risk-tiers.json"
 out=$(S5 --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py 2>&1); rc=$?
-[ $rc = 1 ] && printf '%s' "$out" | grep -q 'not a tier' && pass "a cap that is not a tier is an error, not an open gate" || fail "typo cap" "rc=$rc $out"
+[ $rc = 1 ] && grep -q 'not a tier' <<<"$out" && pass "a cap that is not a tier is an error, not an open gate" || fail "typo cap" "rc=$rc $out"
 fresh5 cap-none
 out=$(CLAUDE_CONFIG_DIR="$W5/nowhere" CODEX_HOME="$W5/nowhere" python3 "$STATE" --root "$R5" --runtime claude quick --goal g --workflow bugfix --tier T2 --files a.py 2>&1); rc=$?
 [ $rc = 0 ] && pass "no profile file, no policy: the solo default cap of T4, T2 is within it" || fail "no-profile quick" "rc=$rc $out"

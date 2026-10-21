@@ -160,7 +160,7 @@ S stage security_review >/dev/null;  S set security_status passed >/dev/null
 S stage release_report >/dev/null
 S stage human_approval >/dev/null
 out=$(S approve --by "the human" 2>&1); rc=$?
-[ "$rc" = 5 ] && printf '%s' "$out" | grep -q "approval happens outside the agent" \
+[ "$rc" = 5 ] && grep -q "approval happens outside the agent" <<<"$out" \
   && pass "approval is refused to a session whose stdin is a pipe" || fail "approve should exit 5 under a pipe" "exit $rc: $out"
 # What a launcher does, and what the journal must then say it was.
 AI_UNATTENDED=1 python3 "$DIR/skills/ai-task/state.py" --root "$REPO" approve --by "the human" >/dev/null

@@ -21,7 +21,7 @@ DIR2="$TMP/b"; mkdir -p "$DIR2/agents"
 out=$(CLAUDE_DIR="$DIR2" bash "$INSTALL" --plan max --fable yes 2>&1)
 [ -f "$DIR2/agents/reviewer.md" ] && pass "an edited reviewer.md is kept" || fail "an edited file must not be removed"
 grep -q 'my own extra rule' "$DIR2/agents/reviewer.md" && pass "with the user's edit intact" || fail "edit lost"
-printf '%s' "$out" | grep -q 'you have edited it' && pass "and the conflict is reported" || fail "should report the conflict" "$out"
+grep -q 'you have edited it' <<<"$out" && pass "and the conflict is reported" || fail "should report the conflict" "$out"
 
 echo "== an upgrade reaches a registration this version changed"
 DIRU="$TMP/upgrade"; mkdir -p "$DIRU"
@@ -42,7 +42,7 @@ echo "== a pre-plugin unmarked routing section is migrated"
 DIR3="$TMP/c"; mkdir -p "$DIR3"
 printf '# Model allocation by task and scope\n\nold hand-written rules\n\n# Something else of mine\n\nkeep me\n' > "$DIR3/CLAUDE.md"
 out=$(CLAUDE_DIR="$DIR3" bash "$INSTALL" --plan max --fable yes 2>&1)
-printf '%s' "$out" | grep -q "migrated an unmarked" && pass "the unmarked section is migrated" || fail "should migrate it" "$out"
+grep -q "migrated an unmarked" <<<"$out" && pass "the unmarked section is migrated" || fail "should migrate it" "$out"
 grep -q 'old hand-written rules' "$DIR3/CLAUDE.md" && fail "the superseded rules should be gone" || pass "its superseded rules are removed"
 grep -q 'keep me' "$DIR3/CLAUDE.md" && pass "unrelated sections are kept" || fail "unrelated content must survive"
 [ "$(grep -c 'claude-agentic:start' "$DIR3/CLAUDE.md")" = 1 ] && pass "one managed block results" || fail "expected one block"

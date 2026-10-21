@@ -21,13 +21,13 @@ echo "== a response split over three lines is counted once"
 } > "$TMP/proj/sess1.jsonl"
 # sonnet: 1M cache read * $2 * 0.1 = $0.20; 100k output * $10 = $1.00
 out=$(python3 "$SCRIPT" --root "$TMP/proj" 2>&1)
-printf '%s' "$out" | grep -q 'TOTAL  \$1.20' && pass "duplicated lines are billed once, at the final output count" || fail "expected TOTAL \$1.20" "$out"
+grep -q 'TOTAL  \$1.20' <<<"$out" && pass "duplicated lines are billed once, at the final output count" || fail "expected TOTAL \$1.20" "$out"
 
 echo "== subagent transcripts are reported as their own share"
 line msg_b claude-opus-5 0 1000000 > "$TMP/proj/sess1/subagents/agent-x1.jsonl"   # $0.50
 out=$(python3 "$SCRIPT" --root "$TMP/proj" 2>&1)
-printf '%s' "$out" | grep -q 'TOTAL  \$1.70' && pass "the subagent response is added once" || fail "expected TOTAL \$1.70" "$out"
-printf '%s' "$out" | grep -q 'SUBAGENTS  \$0.50 (29% of total)' && pass "the subagent share is reported" || fail "expected SUBAGENTS \$0.50" "$out"
+grep -q 'TOTAL  \$1.70' <<<"$out" && pass "the subagent response is added once" || fail "expected TOTAL \$1.70" "$out"
+grep -q 'SUBAGENTS  \$0.50 (29% of total)' <<<"$out" && pass "the subagent share is reported" || fail "expected SUBAGENTS \$0.50" "$out"
 
 echo "== --task: one task's window, tokens per runtime and the plan budget (R14)"
 H="$TMP/home"; P="$TMP/project"; T=T-2026-09-01-001
@@ -49,15 +49,15 @@ tline() {  # tline <ts> <id> <in> <out> <cache_read>
   tline 2026-09-01T10:45:00.5Z in2 0 0 400000
   tline 2026-09-01T11:30:00Z after 9000000 0 0; } > "$TR/sess.jsonl"
 out=$(CLAUDE_CONFIG_DIR="$H/.claude" CODEX_HOME="$H/.codex" python3 "$SCRIPT" --task "$T" --project "$P" 2>&1)
-printf '%s' "$out" | grep -q "^task $T tier T3 window 2026-09-01T10:00:00+00:00..2026-09-01T11:00:00+00:00" \
+grep -q "^task $T tier T3 window 2026-09-01T10:00:00+00:00..2026-09-01T11:00:00+00:00" <<<"$out" \
     && pass "the window runs from task_started to task_closed, the tier is the final one" || fail "task header" "$out"
-printf '%s' "$out" | grep -q '^claude   tokens in 400,000 cache 1,900,000 out 100,000 total 2,400,000' \
+grep -q '^claude   tokens in 400,000 cache 1,900,000 out 100,000 total 2,400,000' <<<"$out" \
     && pass "only the calls inside the window count, per provider" || fail "window tokens" "$out"
-printf '%s' "$out" | grep -q 'budget max T3 6.0M · used 2.4M (40%)' \
+grep -q 'budget max T3 6.0M · used 2.4M (40%)' <<<"$out" \
     && pass "the runtime's plan budget for the final tier, and the share used" || fail "budget line" "$out"
 [ "$(sha256sum "$P/.ai/reports/$T/events.jsonl")" = "$before" ] && pass "the journal is only read" || fail "the journal changed"
 out=$(CLAUDE_CONFIG_DIR="$H/.claude" CODEX_HOME="$H/.codex" python3 "$SCRIPT" --task T-none --project "$P" 2>&1); rc=$?
-[ $rc = 1 ] && printf '%s' "$out" | grep -q 'no journal for T-none' && pass "an unknown task exits 1 and says why" || fail "unknown task" "rc=$rc $out"
+[ $rc = 1 ] && grep -q 'no journal for T-none' <<<"$out" && pass "an unknown task exits 1 and says why" || fail "unknown task" "rc=$rc $out"
 
 echo "== identifiers that are not strings do not take the report down with them"
 # A transcript that writes message.id, requestId, response_id or a turn id as a
@@ -65,7 +65,7 @@ echo "== identifiers that are not strings do not take the report down with them"
 NS="$TMP/numid"; mkdir -p "$NS"
 printf '{"timestamp":"2026-09-01T10:00:00Z","message":{"id":12345,"model":"claude-sonnet-5","usage":{"input_tokens":0,"output_tokens":100000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}\n' > "$NS/a.jsonl"
 nout=$(USAGE_REPORT_CACHE="$TMP/numid-cache.json" python3 "$SCRIPT" --root "$NS" 2>&1)
-printf '%s' "$nout" | grep -q 'TOTAL  \$1.00' && pass "a numeric message id is reported, not a traceback" || fail "numeric message id" "$nout"
+grep -q 'TOTAL  \$1.00' <<<"$nout" && pass "a numeric message id is reported, not a traceback" || fail "numeric message id" "$nout"
 [ "$(USAGE_REPORT_CACHE="$TMP/numid-cache.json" python3 "$SCRIPT" --root "$NS" 2>&1)" = "$nout" ] \
     && pass "and the entry it wrote is served back, not rejected every run" || fail "numeric id, warm run"
 
@@ -80,7 +80,7 @@ Z="$TMP/relcwd"; mkdir -p "$Z"
 warm=$( cd "$Z" && chmod 000 "$TR/sess.jsonl"
         USAGE_REPORT_CACHE=relcache.json CLAUDE_CONFIG_DIR="$H/.claude" CODEX_HOME="$H/.codex" \
           python3 "$SCRIPT" --task "$T" --project "$P" 2>&1; chmod 644 "$TR/sess.jsonl" )
-printf '%s' "$warm" | grep -q '^claude   tokens in 400,000 cache 1,900,000 out 100,000 total 2,400,000' \
+grep -q '^claude   tokens in 400,000 cache 1,900,000 out 100,000 total 2,400,000' <<<"$warm" \
     && pass "the second --task run reads the cache it wrote, transcript untouched" \
     || fail "a relative cache path did not warm under --task" "$warm"
 [ ! -e "$P/relcache.json" ] && pass "and nothing is dropped into the project directory" || fail "a cache file was written inside the project"
@@ -89,10 +89,10 @@ echo "== --budgets prints each installed plan's tables"
 mkdir -p "$H/.codex/claude-agentic"
 python3 "$PLUGIN_ROOT/scripts/resolve-profile.py" codex-plus --fable no --print agentic > "$H/.codex/claude-agentic/profile.json"
 out=$(CLAUDE_CONFIG_DIR="$H/.claude" CODEX_HOME="$H/.codex" python3 "$SCRIPT" --budgets 2>&1)
-printf '%s' "$out" | grep -q '^claude: Max (max)' && printf '%s' "$out" | grep -q '^codex: Plus (plus)' \
+grep -q '^claude: Max (max)' <<<"$out" && grep -q '^codex: Plus (plus)' <<<"$out" \
     && pass "both runtimes' plans are listed" || fail "budgets header" "$out"
-printf '%s' "$out" | grep -q 'fan-out        1 agents, 1 on STRONG/EXPERT, serial' && pass "with the fan-out" || fail "fan-out line" "$out"
-printf '%s' "$out" | grep -q 'tokens / task  T0 0.4M  T1 0.8M  T2 2M  T3 6M  T4 10M  T5 16M' && pass "and the token table" || fail "token table" "$out"
+grep -q 'fan-out        1 agents, 1 on STRONG/EXPERT, serial' <<<"$out" && pass "with the fan-out" || fail "fan-out line" "$out"
+grep -q 'tokens / task  T0 0.4M  T1 0.8M  T2 2M  T3 6M  T4 10M  T5 16M' <<<"$out" && pass "and the token table" || fail "token table" "$out"
 out=$(CLAUDE_CONFIG_DIR="$TMP/none" CODEX_HOME="$TMP/none" python3 "$SCRIPT" --budgets 2>&1); rc=$?
 [ $rc = 1 ] && pass "no profile installed: exit 1" || fail "budgets without a profile: rc=$rc"
 
@@ -178,7 +178,7 @@ tplain()  { USAGE_REPORT_CACHE="" python3 "$SCRIPT" --root "$TD" --today 2>&1; }
 # the slots together.
 { tline_at "$yst" straddle 300000; tline_at "$now" straddle 100000; } > "$TD/s.jsonl"
 first=$(tcached)
-printf '%s' "$first" | grep -q 'TOTAL  \$1.00' && pass "--today bills today's own winner, not the response's largest block" || fail "--today total" "$first"
+grep -q 'TOTAL  \$1.00' <<<"$first" && pass "--today bills today's own winner, not the response's largest block" || fail "--today total" "$first"
 [ "$first" = "$(tplain)" ] && pass "--today off a cold cache picks the same slot as an uncached run" || fail "--today cold" "$first"
 [ "$(tcached)" = "$(tplain)" ] && pass "--today off a warm cache picks the same slot" || fail "--today warm" "$(tcached)"
 tline_at "$now" later 100000 >> "$TD/s.jsonl"
@@ -192,7 +192,7 @@ nplain()  { USAGE_REPORT_CACHE="" python3 "$SCRIPT" --root "$NL" 2>&1; }
 cline n1 100000 > "$NL/s.jsonl"
 printf '{"timestamp":"2026-09-01T10:00:00Z","message":{"id":"n2","model":"claude-sonnet-5","usage":{"input_tokens":0,"output_tokens":100000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}' >> "$NL/s.jsonl"
 out=$(ncached)
-printf '%s' "$out" | grep -q 'TOTAL  \$2.00' && pass "a last line with no newline is still counted" || fail "unterminated last line" "$out"
+grep -q 'TOTAL  \$2.00' <<<"$out" && pass "a last line with no newline is still counted" || fail "unterminated last line" "$out"
 [ "$(ncached)" = "$out" ] && [ "$(nplain)" = "$out" ] && pass "and counted once on a rescan, cached or not" || fail "unterminated last line, rescan" "$(ncached)"
 
 # The other runtime's fold state must never be handed to this one.
@@ -201,10 +201,10 @@ printf '{"type":"session_meta","timestamp":"2026-09-01T10:00:00Z","payload":{"id
 printf '{"type":"token_usage_record","timestamp":"2026-09-01T10:00:02Z","payload":{"response_id":"rx","turn_id":"t","usage":{"input_tokens":1000000,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":0}}}\n' >> "$X/rollout-x.jsonl"
 USAGE_REPORT_CACHE="$XC" python3 "$SCRIPT" --provider codex --root "$X" --all > /dev/null 2>&1
 out=$(USAGE_REPORT_CACHE="$XC" python3 "$SCRIPT" --provider claude --root "$X" --all 2>&1); rc=$?
-[ $rc = 0 ] && ! printf '%s' "$out" | grep -qi 'Traceback' \
+[ $rc = 0 ] && ! grep -qi 'Traceback' <<<"$out" \
     && pass "a cache entry from the other runtime's fold is a miss, not a crash" || fail "cross-provider cache entry" "rc=$rc $out"
 out=$(USAGE_REPORT_CACHE="$XC" python3 "$SCRIPT" --provider codex --root "$X" --all 2>&1)
-printf '%s' "$out" | grep -q '^codex ' && pass "and the runtime that owns the directory still reports it" || fail "codex after a claude read" "$out"
+grep -q '^codex ' <<<"$out" && pass "and the runtime that owns the directory still reports it" || fail "codex after a claude read" "$out"
 # Two guards reject that entry, and the load-bearing one is the shape check:
 # the two folds' states have disjoint key sets, so `kind` is the cheap first cut
 # and cannot be pinned on its own by any state this program can produce. What is
@@ -233,10 +233,10 @@ OD="$TMP/odd"; mkdir -p "$OD"
 # Exponent and float spellings are still counts: 1e5 output tokens on sonnet is $1.00.
 printf '{"timestamp":"2026-09-01T10:00:00Z","message":{"id":"e1","model":"claude-sonnet-5","usage":{"input_tokens":0,"output_tokens":"1e5","cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}\n' > "$OD/s.jsonl"
 out=$(USAGE_REPORT_CACHE="" python3 "$SCRIPT" --root "$OD" 2>&1)
-printf '%s' "$out" | grep -q 'TOTAL  \$1.00' && pass "an exponent-form count (\"1e5\") is read as 100,000" || fail "exponent count" "$out"
+grep -q 'TOTAL  \$1.00' <<<"$out" && pass "an exponent-form count (\"1e5\") is read as 100,000" || fail "exponent count" "$out"
 printf '{"timestamp":"2026-09-01T10:00:00Z","message":{"id":"e1","model":"claude-sonnet-5","usage":{"input_tokens":"nan","output_tokens":1e999,"cache_creation_input_tokens":"x","cache_read_input_tokens":null}}}\n' > "$OD/s.jsonl"
 out=$(USAGE_REPORT_CACHE="" python3 "$SCRIPT" --root "$OD" 2>&1); rc=$?
-[ $rc = 0 ] && printf '%s' "$out" | grep -qi '^no usage records matched' && pass "nan, infinity and words count as nothing, without a crash" || fail "non-finite counts" "rc=$rc $out"
+[ $rc = 0 ] && grep -qi '^no usage records matched' <<<"$out" && pass "nan, infinity and words count as nothing, without a crash" || fail "non-finite counts" "rc=$rc $out"
 {
     echo '[]'; echo '"a string"'; echo '42'; echo 'null'
     echo '{"message":"not an object"}'
@@ -245,8 +245,8 @@ out=$(USAGE_REPORT_CACHE="" python3 "$SCRIPT" --root "$OD" 2>&1); rc=$?
     line ok claude-sonnet-5 100000 0
 } > "$OD/s.jsonl"
 out=$(USAGE_REPORT_CACHE="" python3 "$SCRIPT" --root "$OD" 2>&1); rc=$?
-[ $rc = 0 ] && printf '%s' "$out" | grep -q 'TOTAL  \$1.00' && pass "valid JSON of the wrong shape is skipped, the good line still counts" || fail "malformed lines" "rc=$rc $out"
+[ $rc = 0 ] && grep -q 'TOTAL  \$1.00' <<<"$out" && pass "valid JSON of the wrong shape is skipped, the good line still counts" || fail "malformed lines" "rc=$rc $out"
 out=$(USAGE_REPORT_CACHE="$TMP/odd-cache.json" python3 "$SCRIPT" --root "$OD" 2>&1); rc=$?
-[ $rc = 0 ] && printf '%s' "$out" | grep -q 'TOTAL  \$1.00' && pass "and the same through the cache" || fail "malformed lines, cached" "rc=$rc $out"
+[ $rc = 0 ] && grep -q 'TOTAL  \$1.00' <<<"$out" && pass "and the same through the cache" || fail "malformed lines, cached" "rc=$rc $out"
 
 summary "usage-report"

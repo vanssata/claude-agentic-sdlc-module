@@ -15,13 +15,13 @@ for combo in "max yes:xhigh:fable[1m]" "max no:high:Opus 5.5 [1m] by default" "p
     out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan "$1" --fable "$2" --dry-run 2>&1)
     rc=$?
     [ $rc -eq 0 ] && pass "--plan $1 --fable $2 exits 0" || fail "--plan $1 --fable $2 should exit 0" "$out"
-    printf '%s' "$out" | grep -q '{{' && fail "--plan $1 --fable $2 left an unrendered placeholder" || pass "--plan $1 --fable $2 renders every placeholder"
-    printf '%s' "$out" | grep -q "effort: $effort" && pass "--plan $1 --fable $2 renders architect effort $effort" || fail "expected effort: $effort" "$out"
-    printf '%s' "$out" | grep -qF "$model" && pass "--plan $1 --fable $2 names $model" || fail "expected $model in the output" "$out"
-    printf '%s' "$out" | grep -q 'nothing written' && pass "--plan $1 --fable $2 writes nothing" || fail "dry run should write nothing"
+    grep -q '{{' <<<"$out" && fail "--plan $1 --fable $2 left an unrendered placeholder" || pass "--plan $1 --fable $2 renders every placeholder"
+    grep -q "effort: $effort" <<<"$out" && pass "--plan $1 --fable $2 renders architect effort $effort" || fail "expected effort: $effort" "$out"
+    grep -qF "$model" <<<"$out" && pass "--plan $1 --fable $2 names $model" || fail "expected $model in the output" "$out"
+    grep -q 'nothing written' <<<"$out" && pass "--plan $1 --fable $2 writes nothing" || fail "dry run should write nothing"
 done
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable no --dry-run 2>&1)
-printf '%s' "$out" | sed -n '/^== settings snippet/,/^== agents/p' | grep -q '"fable' && fail "--fable no must drop fable from the settings" "$out" || pass "--fable no drops fable from the settings"
+grep -q '"fable' <<<"$(sed -n '/^== settings snippet/,/^== agents/p' <<<"$out")" && fail "--fable no must drop fable from the settings" "$out" || pass "--fable no drops fable from the settings"
 
 echo "== dry run: the shared tree"
 for target in claude codex; do
@@ -29,56 +29,56 @@ for target in claude codex; do
     n=$(printf '%s\n' "$out" | grep -c '^   shared:  claude-agentic/ai (29 files), claude-agentic/ai-path$')
     [ "$n" -eq 1 ] && pass "$target: the would-install list names the shared tree once" || fail "$target: shared line count $n" "$out"
     span=$(printf '%s\n' "$out" | sed -n '/^== \(CLAUDE\|AGENTS\)\.md managed block:/,/^== profile\.json/p')
-    printf '%s' "$span" | grep -q '^   shared:' && fail "$target: the shared line is inside the block/routing span" || pass "$target: the shared line is outside the block/routing span"
-    printf '%s' "$span" | grep -qF 'claude-agentic/ai-path <path>' && pass "$target: routing.md renders the shared-files line" || fail "$target: routing.md lacks the shared-files line" "$span"
-    printf '%s' "$out" | grep -q '{{' && fail "$target: an unrendered placeholder" || pass "$target: every placeholder is rendered"
+    grep -q '^   shared:' <<<"$span" && fail "$target: the shared line is inside the block/routing span" || pass "$target: the shared line is outside the block/routing span"
+    grep -qF 'claude-agentic/ai-path <path>' <<<"$span" && pass "$target: routing.md renders the shared-files line" || fail "$target: routing.md lacks the shared-files line" "$span"
+    grep -q '{{' <<<"$out" && fail "$target: an unrendered placeholder" || pass "$target: every placeholder is rendered"
 done
 
 echo "== pro: opusplan session, EXPERT tier pinned to opus"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan pro --dry-run 2>&1)
-printf '%s' "$out" | grep -q '"model": "opusplan"' && pass "pro sets the session model to opusplan" || fail "pro should set opusplan" "$out"
-printf '%s' "$out" | grep -q 'Opus 5 in plan mode' && pass "pro names opusplan in the CLAUDE.md block" || fail "block should explain opusplan" "$out"
-printf '%s' "$out" | grep -q '^model: opus' && pass "pro pins model: opus on the EXPERT agents" || fail "EXPERT agents should pin opus on pro" "$out"
-printf '%s' "$out" | grep -q '/ai-task <request>' && pass "the block routes every change through /ai-task" || fail "block should name /ai-task" "$out"
+grep -q '"model": "opusplan"' <<<"$out" && pass "pro sets the session model to opusplan" || fail "pro should set opusplan" "$out"
+grep -q 'Opus 5 in plan mode' <<<"$out" && pass "pro names opusplan in the CLAUDE.md block" || fail "block should explain opusplan" "$out"
+grep -q '^model: opus' <<<"$out" && pass "pro pins model: opus on the EXPERT agents" || fail "EXPERT agents should pin opus on pro" "$out"
+grep -q '/ai-task <request>' <<<"$out" && pass "the block routes every change through /ai-task" || fail "block should name /ai-task" "$out"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable yes --dry-run 2>&1)
-printf '%s' "$out" | grep -qx 'model: opus' && pass "max pins opus on ai-expert" || fail "ai-expert should pin opus on max" "$out"
-printf '%s' "$out" | grep -qx 'effort: xhigh' && pass "max renders the EXPERT tier at xhigh" || fail "EXPERT effort should be xhigh on max" "$out"
+grep -qx 'model: opus' <<<"$out" && pass "max pins opus on ai-expert" || fail "ai-expert should pin opus on max" "$out"
+grep -qx 'effort: xhigh' <<<"$out" && pass "max renders the EXPERT tier at xhigh" || fail "EXPERT effort should be xhigh on max" "$out"
 
 echo "== team-pro and team-max share the pro and max profiles"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan team-pro --dry-run 2>&1)
-printf '%s' "$out" | grep -q 'plan=team-pro (Team Pro, pro profile)' && pass "team-pro uses the pro profile" || fail "team-pro should use the pro profile" "$out"
-printf '%s' "$out" | grep -q '"model": "opusplan"' && pass "team-pro sets the session model to opusplan" || fail "team-pro should set opusplan" "$out"
-printf '%s' "$out" | grep -q '^model: opus' && pass "team-pro pins model: opus on the EXPERT agents" || fail "EXPERT agents should pin opus on team-pro" "$out"
-printf '%s' "$out" | grep -q 'Model routing (Team Pro plan)' && pass "team-pro is named in the CLAUDE.md block" || fail "block should say Team Pro" "$out"
+grep -q 'plan=team-pro (Team Pro, pro profile)' <<<"$out" && pass "team-pro uses the pro profile" || fail "team-pro should use the pro profile" "$out"
+grep -q '"model": "opusplan"' <<<"$out" && pass "team-pro sets the session model to opusplan" || fail "team-pro should set opusplan" "$out"
+grep -q '^model: opus' <<<"$out" && pass "team-pro pins model: opus on the EXPERT agents" || fail "EXPERT agents should pin opus on team-pro" "$out"
+grep -q 'Model routing (Team Pro plan)' <<<"$out" && pass "team-pro is named in the CLAUDE.md block" || fail "block should say Team Pro" "$out"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan team-pro --fable yes --dry-run 2>&1)
-printf '%s' "$out" | grep -q 'fable=no' && pass "team-pro forces --fable no" || fail "team-pro should refuse Fable" "$out"
+grep -q 'fable=no' <<<"$out" && pass "team-pro forces --fable no" || fail "team-pro should refuse Fable" "$out"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan team-max --dry-run 2>&1)
-printf '%s' "$out" | grep -q 'plan=team-max (Team Max, max profile) fable=yes fable-gate=on' && pass "team-max uses the max profile with Fable and the gate" || fail "team-max should behave like max" "$out"
-printf '%s' "$out" | grep -q '^model: fable\[1m\]' && pass "team-max pins fable[1m] on architect" || fail "team-max should pin fable on architect" "$out"
-printf '%s' "$out" | grep -q 'Model routing (Team Max plan)' && pass "team-max is named in the CLAUDE.md block" || fail "block should say Team Max" "$out"
+grep -q 'plan=team-max (Team Max, max profile) fable=yes fable-gate=on' <<<"$out" && pass "team-max uses the max profile with Fable and the gate" || fail "team-max should behave like max" "$out"
+grep -q '^model: fable\[1m\]' <<<"$out" && pass "team-max pins fable[1m] on architect" || fail "team-max should pin fable on architect" "$out"
+grep -q 'Model routing (Team Max plan)' <<<"$out" && pass "team-max is named in the CLAUDE.md block" || fail "block should say Team Max" "$out"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan team-premium --dry-run 2>&1)
-printf '%s' "$out" | grep -q 'plan=team-max' && pass "team-premium is an alias of team-max" || fail "team-premium should map to team-max" "$out"
+grep -q 'plan=team-max' <<<"$out" && pass "team-premium is an alias of team-max" || fail "team-premium should map to team-max" "$out"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan team-standard --dry-run 2>&1)
-printf '%s' "$out" | grep -q 'plan=team-pro' && pass "team-standard is an alias of team-pro" || fail "team-standard should map to team-pro" "$out"
+grep -q 'plan=team-pro' <<<"$out" && pass "team-standard is an alias of team-pro" || fail "team-standard should map to team-pro" "$out"
 
 echo "== plan detection reads the seat of a Team org"
 HOME_T="$TMP/home-team"; mkdir -p "$HOME_T"
 printf '{"oauthAccount":{"organizationType":"claude_team"}}' > "$HOME_T/.claude.json"
 out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
-printf '%s' "$out" | grep -q 'plan=team-pro' && pass "claude_team with no seat falls back to team-pro" || fail "team org without a seat should map to team-pro" "$out"
-printf '%s' "$out" | grep -q -- '--plan team-max' && pass "the fallback says how to pick team-max" || fail "the fallback should mention --plan team-max" "$out"
+grep -q 'plan=team-pro' <<<"$out" && pass "claude_team with no seat falls back to team-pro" || fail "team org without a seat should map to team-pro" "$out"
+grep -q -- '--plan team-max' <<<"$out" && pass "the fallback says how to pick team-max" || fail "the fallback should mention --plan team-max" "$out"
 printf '{"oauthAccount":{"organizationType":"claude_team","seatTier":"standard"}}' > "$HOME_T/.claude.json"
 out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
-printf '%s' "$out" | grep -q 'detected plan: team-pro' && pass "a standard seat is detected as team-pro" || fail "standard seat should map to team-pro" "$out"
+grep -q 'detected plan: team-pro' <<<"$out" && pass "a standard seat is detected as team-pro" || fail "standard seat should map to team-pro" "$out"
 printf '{"oauthAccount":{"organizationType":"claude_team","seatTier":"premium"}}' > "$HOME_T/.claude.json"
 out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
-printf '%s' "$out" | grep -q 'detected plan: team-max' && pass "a premium seat is detected as team-max" || fail "premium seat should map to team-max" "$out"
+grep -q 'detected plan: team-max' <<<"$out" && pass "a premium seat is detected as team-max" || fail "premium seat should map to team-max" "$out"
 printf '{"oauthAccount":{"organizationType":"claude_team","organizationRateLimitTier":"default_claude_max_5x"}}' > "$HOME_T/.claude.json"
 out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
-printf '%s' "$out" | grep -q 'detected plan: team-max' && pass "a max rate-limit tier is detected as team-max" || fail "max rate-limit tier should map to team-max" "$out"
+grep -q 'detected plan: team-max' <<<"$out" && pass "a max rate-limit tier is detected as team-max" || fail "max rate-limit tier should map to team-max" "$out"
 printf '{"oauthAccount":{"organizationType":"claude_max"}}' > "$HOME_T/.claude.json"
 out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
-printf '%s' "$out" | grep -q 'plan=max (Max' && pass "claude_max is still detected as max" || fail "max org should map to max" "$out"
+grep -q 'plan=max (Max' <<<"$out" && pass "claude_max is still detected as max" || fail "max org should map to max" "$out"
 
 echo "== balanced-max: only the session is strong"
 outb=$(CLAUDE_DIR="$TMP/none" CODEX_DIR="$TMP/nonecx" bash "$INSTALL" --target both --plan balanced-max --dry-run 2>&1)
@@ -95,14 +95,14 @@ echo "== max20: Max 20x, detected from organizationRateLimitTier (R3)"
 snippet() { sed -n '/^== settings snippet/,/^== agents/p'; }
 out20=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan max20 --dry-run 2>&1)
 outmax=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan max --dry-run 2>&1)
-printf '%s' "$out20" | grep -q 'plan=max20 (Max 20x, max profile) fable=yes' && pass "--plan max20 is Max 20x on the max profile" || fail "--plan max20 header" "$(printf '%s' "$out20" | grep '^== claude: plan')"
+grep -q 'plan=max20 (Max 20x, max profile) fable=yes' <<<"$out20" && pass "--plan max20 is Max 20x on the max profile" || fail "--plan max20 header" "$(printf '%s' "$out20" | grep '^== claude: plan')"
 [ "$(printf '%s' "$out20" | snippet)" = "$(printf '%s' "$outmax" | snippet)" ] \
     && pass "max20's settings snippet equals max's" || fail "max20 snippet differs from max"
 for plan in pro team-pro team-max max max20; do
     o=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan "$plan" --dry-run 2>&1)
     printf '%s' "$o" | snippet | sed '1d;$d' | jq -e 'has("claude_agentic") | not' >/dev/null \
         && pass "$plan: claude_agentic never reaches settings.json" || fail "$plan: claude_agentic leaked into the snippet"
-    printf '%s' "$o" | grep -q "^== profile.json (plan tables): $TMP/none/claude-agentic/profile.json" \
+    grep -q "^== profile.json (plan tables): $TMP/none/claude-agentic/profile.json" <<<"$o" \
         && pass "$plan: --dry-run lists profile.json" || fail "$plan: profile.json not listed"
 done
 printf '%s' "$out20" | sed -n '/^== profile.json/,/^== would install/p' | sed '1d;$d' \
@@ -111,17 +111,17 @@ printf '%s' "$out20" | sed -n '/^== profile.json/,/^== would install/p' | sed '1
     && pass "max20 profile.json carries plan, runtime, fable and the max20 budgets" || fail "max20 profile.json content"
 printf '{"oauthAccount":{"organizationType":"claude_max","organizationRateLimitTier":"default_claude_max_20x"}}' > "$HOME_T/.claude.json"
 out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
-printf '%s' "$out" | grep -q 'plan=max20 (Max 20x' && pass "default_claude_max_20x is detected as max20" || fail "max_20x should map to max20" "$out"
+grep -q 'plan=max20 (Max 20x' <<<"$out" && pass "default_claude_max_20x is detected as max20" || fail "max_20x should map to max20" "$out"
 err=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 >/dev/null </dev/null)
-printf '%s' "$err" | grep -q 'detected plan: max20 (organizationRateLimitTier default_claude_max_20x)' \
+grep -q 'detected plan: max20 (organizationRateLimitTier default_claude_max_20x)' <<<"$err" \
     && pass "without a terminal the detection is printed on stderr" || fail "detection should be on stderr" "$err"
 printf '{"oauthAccount":{"organizationType":"claude_max","organizationRateLimitTier":"default_claude_max_5x"}}' > "$HOME_T/.claude.json"
 out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
-printf '%s' "$out" | grep -q 'plan=max (Max' && pass "default_claude_max_5x stays max" || fail "max_5x should map to max" "$out"
+grep -q 'plan=max (Max' <<<"$out" && pass "default_claude_max_5x stays max" || fail "max_5x should map to max" "$out"
 PREV="$TMP/prev"; mkdir -p "$PREV/claude-agentic"; printf '{"plan":"max20"}' > "$PREV/claude-agentic/profile.json"
 printf '{}' > "$HOME_T/.claude.json"
 out=$(HOME="$HOME_T" CLAUDE_DIR="$PREV" bash "$INSTALL" --dry-run 2>&1 </dev/null)
-printf '%s' "$out" | grep -q 'plan=max20' && pass "an undetectable account falls back to the plan the last install recorded" || fail "previous profile.json plan not used" "$out"
+grep -q 'plan=max20' <<<"$out" && pass "an undetectable account falls back to the plan the last install recorded" || fail "previous profile.json plan not used" "$out"
 
 echo "== R16/R18: every installed agent's model and effort, per plan"
 # Captured from the installer before the agent sources became templates (WP5
@@ -309,7 +309,7 @@ echo "== migration off the predecessor plugin's block"
 DIR3="$TMP/claude3"; mkdir -p "$DIR3"
 printf '<!-- claude-routing:start -->\nrouting rules\n<!-- claude-routing:end -->\n\n# My own notes\n' > "$DIR3/CLAUDE.md"
 out=$(CLAUDE_DIR="$DIR3" bash "$INSTALL" --plan max --fable yes 2>&1)
-printf '%s' "$out" | grep -q 'migrated the claude-routing block' && pass "the migration is reported" || fail "migration should be reported" "$out"
+grep -q 'migrated the claude-routing block' <<<"$out" && pass "the migration is reported" || fail "migration should be reported" "$out"
 [ "$(grep -c 'claude-agentic:start' "$DIR3/CLAUDE.md")" = 1 ] && pass "exactly one managed block remains" || fail "expected one block"
 grep -q 'claude-routing:start' "$DIR3/CLAUDE.md" && fail "the predecessor block should have been migrated away" || pass "the claude-routing block is migrated away"
 grep -q 'routing rules' "$DIR3/CLAUDE.md" && fail "the old block's content should be gone" || pass "its superseded content is removed"

@@ -154,6 +154,6 @@ out=$(CODEX_HOME="$HOME_DIR" CODEX_MODEL_GATE_STATE=/proc/cannot/write.json \
 echo "== the CLI reports usage for an unknown command"
 out=$(gate wibble 2>&1); rc=$?
 [ $rc -eq 2 ] && pass "an unknown command exits 2" || fail "expected exit 2" "$out"
-printf '%s' "$out" | grep -q 'usage:' && pass "it prints usage" || fail "should print usage"
+grep -q 'usage:' <<<"$out" && pass "it prints usage" || fail "should print usage"
 
 summary "codex-model-gate"

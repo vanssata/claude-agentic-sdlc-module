@@ -64,16 +64,16 @@ chmod 755 "$R1/.ai/templates/review-report.md"; "${G[@]}" -C "$R1" commit -qam "
 before=$(tree_sum "$R1")
 out=$(upd "$R1" 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$before" = "$(tree_sum "$R1")" ] && pass "the dry run exits 0 and writes nothing" || fail "dry run: rc=$rc or files changed" "$out"
-printf '%s' "$out" | grep -q '^  schema    5 -> 6 ' && pass "the dry run names the schema step" || fail "no schema line" "$out"
+grep -q '^  schema    5 -> 6 ' <<<"$out" && pass "the dry run names the schema step" || fail "no schema line" "$out"
 [ "$(printf '%s\n' "$out" | grep -c '^  delete? ')" -eq 29 ] && pass "all 29 shipped copies are proposed, the oldest versions too" \
     || fail "expected 29 delete? lines" "$(printf '%s\n' "$out" | grep '^  delete? ')"
-printf '%s\n' "$out" | grep -q '^  update  *\.ai/AGENTS\.md  *\[0006\] unchanged since it was installed' \
+grep -q '^  update  *\.ai/AGENTS\.md  *\[0006\] unchanged since it was installed' <<<"$out" \
     && pass "the shipped router is replaced" || fail "the router is not replaced" "$out"
-printf '%s\n' "$out" | grep -qE 'policies/(safety|security)\.md' && fail "safety.md or security.md is named" "$out" \
+grep -qE 'policies/(safety|security)\.md' <<<"$out" && fail "safety.md or security.md is named" "$out" \
     || pass "safety.md and security.md are never named"
-printf '%s' "$out" | grep -q 'commit .ai/ first' && fail "a clean .ai/ gets the commit-first hint" || pass "a committed .ai/ gets no commit-first hint"
+grep -q 'commit .ai/ first' <<<"$out" && fail "a clean .ai/ gets the commit-first hint" || pass "a committed .ai/ gets no commit-first hint"
 out=$(upd "$R1" --check); rc=$?
-[ $rc -eq 1 ] && printf '%s' "$out" | grep -qE '^project is behind the installed plugin: schema 5 -> 6, (.*, )?29 deletion\(s\) a human must confirm, the schema stays at 5 until they are settled — run /project-update$' \
+[ $rc -eq 1 ] && grep -qE '^project is behind the installed plugin: schema 5 -> 6, (.*, )?29 deletion\(s\) a human must confirm, the schema stays at 5 until they are settled — run /project-update$' <<<"$out" \
     && pass "--check names the deletions and the held schema" || fail "--check: rc=$rc" "$out"
 upd "$R1" --apply >/dev/null 2>&1
 [ "$(cat "$R1/.ai/VERSION")" = 5 ] && [ "$(sections "$R1")" = 1 ] && [ "$(present "$R1")" = 29 ] \
@@ -96,7 +96,7 @@ rec="$R1/$REPORT/migration.json"
     && [ "$(jq -r '[.deletions[].via] | unique | join(",")' "$rec")" = unattended ] && [ "$(jq -r .to "$rec")" = 6 ] \
     && pass "migration.json records each deletion, who confirmed it and how" || fail "migration.json" "$(cat "$rec")"
 out=$(upd "$R1" 2>&1)
-printf '%s' "$out" | grep -q '^0 automatic, 0 conflict' && pass "a second run has nothing to do" || fail "second run" "$out"
+grep -q '^0 automatic, 0 conflict' <<<"$out" && pass "a second run has nothing to do" || fail "second run" "$out"
 upd "$R1" --check >/dev/null && pass "--check exits 0 at schema 6" || fail "--check should exit 0 at schema 6"
 
 echo "== L5: the empty directories stay, and the shared copy applies"
@@ -108,11 +108,11 @@ echo "== M6: a migrated project — a copy that comes back, an edited one"
 cp "$PLUGIN_ROOT/ai/policies/git.md" "$R1/.ai/policies/git.md"
 { cat "$PLUGIN_ROOT/ai/policies/tooling.md"; printf 'our own rule\n'; } > "$R1/.ai/policies/tooling.md"
 out=$(upd "$R1" 2>&1)
-printf '%s\n' "$out" | grep -qE '^  delete\?  *\.ai/policies/git\.md  *\[shared\] identical to a shipped version' \
+grep -qE '^  delete\?  *\.ai/policies/git\.md  *\[shared\] identical to a shipped version' <<<"$out" \
     && pass "a re-added shipped copy is offered for deletion again" || fail "no delete? [shared]" "$out"
 [ "$(printf '%s\n' "$out" | grep -c 'override the plugin.s shared copy and no longer receive its changes: .ai/policies/tooling.md')" = 1 ] \
     && pass "an edited copy is named once, as an override" || fail "no aggregated override hint" "$out"
-printf '%s' "$out" | grep -q 'commit .ai/ first' && pass "an uncommitted .ai/ gets the commit-first hint (M4)" || fail "no commit-first hint" "$out"
+grep -q 'commit .ai/ first' <<<"$out" && pass "an uncommitted .ai/ gets the commit-first hint (M4)" || fail "no commit-first hint" "$out"
 upd "$R1" --apply >/dev/null 2>&1
 [ "$(cat "$R1/.ai/VERSION")" = 6 ] && [ -f "$R1/.ai/policies/git.md" ] && pass "VERSION stays 6 and nothing is deleted unconfirmed" \
     || fail "M6 plain apply changed VERSION or deleted"
@@ -129,7 +129,7 @@ mkdir -p "$E/.ai/policies/adopted"; printf 'adopted\n' > "$E/.ai/policies/adopte
 "${G[@]}" -C "$E" add -A && "${G[@]}" -C "$E" commit -qm edits
 crlf=$(sha256sum < "$E/.ai/workflows/bugfix.md")
 out=$(upd "$E" 2>&1)
-printf '%s\n' "$out" | grep -q 'hint      .ai/policies/git.md overrides the plugin.s shared copy' \
+grep -q 'hint      .ai/policies/git.md overrides the plugin.s shared copy' <<<"$out" \
     && pass "a one-byte edit is an override" || fail "no override hint for git.md" "$out"
 [ "$(printf '%s\n' "$out" | grep -c '^  delete? ')" = 28 ] && pass "the other 28 are proposed, the CRLF copy among them" || fail "expected 28 delete?" "$out"
 confirm "$E" >/dev/null 2>&1
@@ -141,7 +141,7 @@ confirm "$E" >/dev/null 2>&1
     && pass "a project-only workflow and an adopted policy are untouched" || fail "project-only files touched"
 [ "$(cat "$E/.ai/VERSION")" = 6 ] && pass "an override does not hold the schema" || fail "VERSION is $(cat "$E/.ai/VERSION")"
 out=$(upd "$E" 2>&1)
-printf '%s' "$out" | grep -q '^0 automatic, 0 conflict' && printf '%s' "$out" | grep -q 'no longer receive its changes: .ai/policies/git.md' \
+grep -q '^0 automatic, 0 conflict' <<<"$out" && grep -q 'no longer receive its changes: .ai/policies/git.md' <<<"$out" \
     && pass "a second run changes nothing and names the override" || fail "second run on the edited project" "$out"
 
 echo "== the router fixtures"
@@ -169,9 +169,9 @@ for d in "$R2" "$R3" "$R4" "$R5"; do
     router_first "$out" && pass "$(basename "$d"): the router item precedes the first delete?" || fail "$(basename "$d"): router not first" "$out"
 done
 out=$(upd "$R5" 2>&1)
-printf '%s\n' "$out" | grep -q '^  create  *\.ai/AGENTS\.md  *\[0006\]' && pass "r5: a missing router is created" || fail "r5: no create" "$out"
+grep -q '^  create  *\.ai/AGENTS\.md  *\[0006\]' <<<"$out" && pass "r5: a missing router is created" || fail "r5: no create" "$out"
 out=$(upd "$R2" 2>&1)
-printf '%s\n' "$out" | grep -q 'Shared files section added; your router edits kept' && pass "r2: an adopted router gets the section inserted" \
+grep -q 'Shared files section added; your router edits kept' <<<"$out" && pass "r2: an adopted router gets the section inserted" \
     || fail "r2: no insertion" "$out"
 for d in "$R2" "$R3" "$R4" "$R5"; do
     confirm "$d" >/dev/null 2>&1
@@ -191,7 +191,7 @@ grep -q '(our own wording) |$' "$R3/.ai/AGENTS.md" && pass "r3: the edited last 
 grep -q '^## Where to look$' "$R4/.ai/AGENTS.md" && [ "$(grep -n '^## Shared files$' "$R4/.ai/AGENTS.md" | cut -d: -f1)" -gt "$(grep -n '^## Keeping this directory true$' "$R4/.ai/AGENTS.md" | cut -d: -f1)" ] \
     && pass "r4: with the heading renamed the section is appended, the rename kept" || fail "r4: placement" "$(cat "$R4/.ai/AGENTS.md")"
 out=$(upd "$R4" 2>&1)
-[ "$(sections "$R4")" = 1 ] && ! printf '%s\n' "$out" | grep -qE '^  (update|merge|conflict)  *\.ai/AGENTS\.md' \
+[ "$(sections "$R4")" = 1 ] && ! grep -qE '^  (update|merge|conflict)  *\.ai/AGENTS\.md' <<<"$out" \
     && pass "r4: the next run neither doubles the section nor conflicts" || fail "r4: a later run rewrites or conflicts on the router" "$out"
 
 echo "== R7: a router whose section a human moved is merged around the section"
@@ -207,7 +207,7 @@ PY
 "${G[@]}" -C "$R7" add -A && "${G[@]}" -C "$R7" commit -qm "section moved"
 moved=$(sha256sum < "$R7/.ai/AGENTS.md")
 out=$(upd "$R7" --apply 2>&1)
-! printf '%s\n' "$out" | grep -qE '^  (update|merge|conflict)  *\.ai/AGENTS\.md' \
+! grep -qE '^  (update|merge|conflict)  *\.ai/AGENTS\.md' <<<"$out" \
     && pass "r7: the moved section is neither doubled nor a conflict" || fail "r7: router rewritten or conflicting" "$out"
 [ "$(sha256sum < "$R7/.ai/AGENTS.md")" = "$moved" ] && [ "$(sections "$R7")" = 1 ] \
     && pass "r7: the human's router is kept, with one section" || fail "r7: the router was rewritten" "$(grep -n '^## ' "$R7/.ai/AGENTS.md")"
@@ -230,7 +230,7 @@ PY
     "${G[@]}" -C "$d" add -A && "${G[@]}" -C "$d" commit -qm migrated
     for run in 1 2; do
         out=$(upd "$d" --apply 2>&1)
-        ! printf '%s\n' "$out" | grep -qE '^  (update|merge|conflict)  *\.ai/AGENTS\.md' \
+        ! grep -qE '^  (update|merge|conflict)  *\.ai/AGENTS\.md' <<<"$out" \
             && pass "r8-$kind: run $run after the migration leaves the router alone" || fail "r8-$kind: run $run touches the router" "$out"
     done
 done
@@ -257,7 +257,7 @@ assert "always ask us first" in ours
 assert strip(ours).replace("\n## our routing note\nalways ask us first\n", "") == strip(open(sys.argv[2]).read())
 PY
 out=$(upd "$R10" 2>&1)
-! printf '%s\n' "$out" | grep -qE '^  (update|merge|conflict)  *\.ai/AGENTS\.md' && pass "r10: and the run after that is quiet" || fail "r10: not settled" "$out"
+! grep -qE '^  (update|merge|conflict)  *\.ai/AGENTS\.md' <<<"$out" && pass "r10: and the run after that is quiet" || fail "r10: not settled" "$out"
 
 echo "== R9: an edited CRLF router gets the section before the table, in CRLF"
 R9="$W/r9"; v5_project "$R9"
@@ -284,9 +284,9 @@ cp "$PLUGIN_ROOT/skills/ai-init/templates/.ai/VERSION" "$X/VERSION"
 XP="$W/extra"; v5_project "$XP"; confirm "$XP" >/dev/null 2>&1
 "${G[@]}" -C "$XP" add -A && "${G[@]}" -C "$XP" commit -qm migrated
 out=$(CLAUDE_AGENTIC_SHARED="$X" python3 "$UPDATE" "$XP" 2>&1)
-! printf '%s\n' "$out" | grep -qE '^  delete\?  *\.ai/(VERSION|policies/security\.md)' \
+! grep -qE '^  delete\?  *\.ai/(VERSION|policies/security\.md)' <<<"$out" \
     && pass "a planted policies/security.md or VERSION is not offered for deletion" || fail "project-owned file offered for deletion" "$out"
-printf '%s\n' "$out" | grep -q 'outside the shared set, ignored' && pass "the extra files are named in a hint" || fail "no undeclared-file hint" "$out"
+grep -q 'outside the shared set, ignored' <<<"$out" && pass "the extra files are named in a hint" || fail "no undeclared-file hint" "$out"
 [ "$(python3 -c "import sys; sys.path.insert(0, '$PLUGIN_ROOT/skills/project-update'); import update; print(len(update.declared_shared()))")" = 29 ] \
     && pass "the declared shared set is 0006's 29" || fail "declared_shared() is not 29"
 
@@ -295,14 +295,14 @@ R6="$W/r6"; v5_project "$R6"
 mv "$R6/.ai/AGENTS.md" "$R6/.ai/router-real.md" && ln -s router-real.md "$R6/.ai/AGENTS.md"
 "${G[@]}" -C "$R6" add -A && "${G[@]}" -C "$R6" commit -qm symlink
 out=$(confirm "$R6" 2>&1); rc=$?
-[ $rc -eq 3 ] && printf '%s' "$out" | grep -q 'aborted at update .ai/AGENTS.md' && pass "exit 3 at the router item" || fail "r6: rc=$rc" "$out"
+[ $rc -eq 3 ] && grep -q 'aborted at update .ai/AGENTS.md' <<<"$out" && pass "exit 3 at the router item" || fail "r6: rc=$rc" "$out"
 [ "$(present "$R6")" = 29 ] && [ "$(cat "$R6/.ai/VERSION")" = 5 ] && pass "every shared copy is still there, VERSION 5" \
     || fail "r6: $(present "$R6") present, VERSION $(cat "$R6/.ai/VERSION")"
 
 echo "== Q5: a Gemini project keeps safety.md and security.md"
 GM="$W/gemini"; v5_project "$GM" gemini
 out=$(upd "$GM" 2>&1)
-printf '%s\n' "$out" | grep -qE 'policies/(safety|security)\.md' && fail "gemini: safety/security named" "$out" || pass "gemini: neither is named"
+grep -qE 'policies/(safety|security)\.md' <<<"$out" && fail "gemini: safety/security named" "$out" || pass "gemini: neither is named"
 confirm "$GM" >/dev/null 2>&1
 [ -f "$GM/.ai/policies/safety.md" ] && [ -f "$GM/.ai/policies/security.md" ] && [ "$(present "$GM")" = 0 ] \
     && pass "gemini: both remain after the confirmed run, the shared copies are gone" || fail "gemini: outcome wrong"
@@ -315,11 +315,11 @@ out=$(AI_UNATTENDED=1 CLAUDE_AGENTIC_SHARED=/nonexistent python3 "$UPDATE" "$M2"
 [ $rc -eq 2 ] && [ "$before" = "$(tree_sum "$M2")" ] && pass "and the confirmed run writes nothing either" || fail "no tree, confirmed: rc=$rc" "$out"
 cp -r "$PLUGIN_ROOT/ai" "$W/partial"; rm "$W/partial/policies/git.md"
 out=$(CLAUDE_AGENTIC_SHARED="$W/partial" python3 "$UPDATE" "$M2" 2>&1); rc=$?
-[ $rc -eq 2 ] && printf '%s' "$out" | grep -q 'policies/git.md' && pass "a local tree missing one file exits 2 and names it" || fail "partial: rc=$rc" "$out"
+[ $rc -eq 2 ] && grep -q 'policies/git.md' <<<"$out" && pass "a local tree missing one file exits 2 and names it" || fail "partial: rc=$rc" "$out"
 MC="$W/m2codex"; v5_project "$MC" codex
 mkdir -p "$W/h2/.codex/skills/project-update"
 out=$(HOME="$W/h2" python3 "$UPDATE" "$MC" 2>&1); rc=$?
-[ $rc -eq 2 ] && printf '%s' "$out" | grep -qF "$W/h2/.codex" && pass "a declared home with the plugin but no tree exits 2 and names the home" \
+[ $rc -eq 2 ] && grep -qF "$W/h2/.codex" <<<"$out" && pass "a declared home with the plugin but no tree exits 2 and names the home" \
     || fail "codex home: rc=$rc" "$out"
 out=$(HOME="$W/h3" python3 "$UPDATE" "$MC" 2>&1); rc=$?
 [ $rc -eq 0 ] && pass "with no such home on this machine it proceeds" || fail "no home: rc=$rc" "$out"
@@ -332,9 +332,9 @@ cp "$M9/.ai/policies/git.md" "$M9/.ai/project/git-real.md" && rm "$M9/.ai/polici
 out=$(upd "$M9" 2>&1)
 [ "$(printf '%s\n' "$out" | grep -c 'hint      .ai/workflows/.* is a symlink, so this update never deletes it')" = 5 ] \
     && pass "a symlinked directory: a hint per file, no deletion" || fail "no symlink hints for workflows" "$out"
-printf '%s\n' "$out" | grep -q 'hint      .ai/policies/git.md: .ai/policies/git.md is a symlink' && pass "a symlinked file: a hint" \
+grep -q 'hint      .ai/policies/git.md: .ai/policies/git.md is a symlink' <<<"$out" && pass "a symlinked file: a hint" \
     || fail "no symlink hint for git.md" "$out"
-printf '%s\n' "$out" | grep -qE '^  delete\?  *\.ai/(workflows/|policies/git\.md)' && fail "a symlinked path is proposed for deletion" "$out" \
+grep -qE '^  delete\?  *\.ai/(workflows/|policies/git\.md)' <<<"$out" && fail "a symlinked path is proposed for deletion" "$out" \
     || pass "neither is proposed for deletion"
 confirm "$M9" >/dev/null 2>&1
 [ "$(ls "$W/outside-workflows" | wc -l)" = 5 ] && [ -L "$M9/.ai/policies/git.md" ] && [ -f "$M9/.ai/project/git-real.md" ] \
@@ -411,8 +411,8 @@ PY
 )
 printf '%s\n' "$sweep" | grep '^hash sweep:' | sed 's/^/  /'
 if [ -n "${M3_LOG:-}" ]; then printf '%s\n' "$sweep" > "$M3_LOG"; fi
-printf '%s\n' "$sweep" | grep -qE '^hash sweep: 29 keys, [0-9]+ versions; 0 not on record; 0 with a blob; bytes: 2 rounds, 3 old fixtures; 0 not deleted; flipped: 0 not an override$' \
-    && ! printf '%s\n' "$sweep" | grep -q '^FAIL\|Traceback' \
+grep -qE '^hash sweep: 29 keys, [0-9]+ versions; 0 not on record; 0 with a blob; bytes: 2 rounds, 3 old fixtures; 0 not deleted; flipped: 0 not an override$' <<<"$sweep" \
+    && ! grep -q '^FAIL\|Traceback' <<<"$sweep" \
     && pass "every shared version is on record by hash alone; real bytes are deleted; one flipped byte makes it an override" \
     || fail "hash sweep" "$(printf '%s\n' "$sweep" | head -20)"
 

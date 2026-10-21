@@ -47,10 +47,10 @@ echo "== the per-response counter is billed, not the running total"
 } > "$S/2026/09/01/rollout-2026-09-01T10-00-00-t.jsonl"
 # 2 x (1M in @ $2 + 100k out @ $12) = $4.00 + $2.40 = $6.40
 out=$(run)
-printf '%s' "$out" | grep -q 'TOTAL  \$6.40' \
+grep -q 'TOTAL  \$6.40' <<<"$out" \
     && pass "each response is billed once, from usage and not from the running totals" \
     || fail "expected TOTAL \$6.40" "$out"
-printf '%s' "$out" | grep -q 'gpt-5.6-terra (medium)' \
+grep -q 'gpt-5.6-terra (medium)' <<<"$out" \
     && pass "the model and effort come from the turn context" || fail "model not resolved" "$out"
 
 echo "== cached input is not billed twice"
@@ -62,10 +62,10 @@ echo "== cached input is not billed twice"
 rm "$S/2026/09/01/rollout-2026-09-01T10-00-00-t.jsonl"
 # input_tokens includes the cached part: 100k fresh @ $2 + 900k cached @ $0.20 = $0.38
 out=$(run)
-printf '%s' "$out" | grep -q 'TOTAL  \$0.38' \
+grep -q 'TOTAL  \$0.38' <<<"$out" \
     && pass "cached tokens are charged at the cache rate, not the full input rate" \
     || fail "expected TOTAL \$0.38" "$out"
-printf '%s' "$out" | grep -qE '^codex +gpt-5.6-terra \(medium\) +100,000 ' \
+grep -qE '^codex +gpt-5.6-terra \(medium\) +100,000 ' <<<"$out" \
     && pass "and the IN column shows fresh input only" || fail "IN column wrong" "$out"
 
 echo "== a repeated response_id is counted once"
@@ -81,7 +81,7 @@ echo "== a repeated response_id is counted once"
 } > "$S/2026/09/01/rollout-2026-09-01T13-00-00-t4.jsonl"
 rm "$S/2026/09/01/rollout-2026-09-01T11-00-00-t2.jsonl"
 out=$(run)
-printf '%s' "$out" | grep -q 'TOTAL  \$2.00' \
+grep -q 'TOTAL  \$2.00' <<<"$out" \
     && pass "a resumed thread replaying a response does not double-bill it" \
     || fail "expected TOTAL \$2.00" "$out"
 
@@ -94,10 +94,10 @@ rm "$S/2026/09/01/rollout-2026-09-01T13-00-00-t4.jsonl"
 } > "$S/2026/09/01/rollout-2026-09-01T14-00-00-sub.jsonl"
 # terra 1M in = $2.00, sol 1M in = $4.00 -> total $6.00, subagents $4.00 (67%)
 out=$(run)
-printf '%s' "$out" | grep -q 'TOTAL  \$6.00' && pass "both threads are counted" || fail "expected TOTAL \$6.00" "$out"
-printf '%s' "$out" | grep -q 'SUBAGENTS  \$4.00 (67% of total)' \
+grep -q 'TOTAL  \$6.00' <<<"$out" && pass "both threads are counted" || fail "expected TOTAL \$6.00" "$out"
+grep -q 'SUBAGENTS  \$4.00 (67% of total)' <<<"$out" \
     && pass "the spawned thread is reported as a subagent" || fail "subagent share wrong" "$out"
-printf '%s' "$out" | grep -q 'ai-reviewer' \
+grep -q 'ai-reviewer' <<<"$out" \
     && pass "and named, so the report says which agent spent it" || fail "agent name missing" "$out"
 
 echo "== a string-form subagent source is recognised too"
@@ -106,32 +106,32 @@ printf '%s\n' "$(meta sub2 /work parent2 '{"subagent":"review"}')" \
               "$(usage rr turnR 1000000 0 0 0)" \
     > "$S/2026/09/01/rollout-2026-09-01T15-00-00-sub2.jsonl"
 out=$(run)
-printf '%s' "$out" | grep -q 'review' && pass "{\"subagent\":\"review\"} is recognised" || fail "string form missed" "$out"
+grep -q 'review' <<<"$out" && pass "{\"subagent\":\"review\"} is recognised" || fail "string form missed" "$out"
 
 echo "== the cost column is labelled an estimate while the rates are unverified"
 verified=$(jq -r '.codex.rates_verified' "$PLUGIN_ROOT/skills/usage-report/prices.json")
 if [ "$verified" = false ]; then
-    printf '%s' "$out" | grep -q 'ESTIMATE for codex' \
+    grep -q 'ESTIMATE for codex' <<<"$out" \
         && pass "an unverified price table is declared, not presented as fact" || fail "estimate note missing" "$out"
 else
-    printf '%s' "$out" | grep -q 'ESTIMATE for codex' \
+    grep -q 'ESTIMATE for codex' <<<"$out" \
         && fail "rates are verified but the report still calls them an estimate" \
         || pass "verified rates are reported without the estimate note"
 fi
 
 echo "== --today filters by the record timestamp"
 out=$(run --today)
-printf '%s' "$out" | grep -q 'no usage records matched' \
+grep -q 'no usage records matched' <<<"$out" \
     && pass "a day with no records reports nothing rather than everything" || fail "--today did not filter" "$out"
 
 echo "== the provider is sniffed from the directory when it is not given"
 out=$(python3 "$SCRIPT" --root "$S" --all 2>&1)
-printf '%s' "$out" | grep -q '^codex ' && pass "rollout-*.jsonl is recognised as Codex" || fail "sniff failed" "$out"
+grep -q '^codex ' <<<"$out" && pass "rollout-*.jsonl is recognised as Codex" || fail "sniff failed" "$out"
 
 echo "== an empty directory is not an error"
 mkdir -p "$TMP/empty"
 out=$(python3 "$SCRIPT" --provider codex --root "$TMP/empty" --all 2>&1)
-printf '%s' "$out" | grep -q 'no usage records matched' && pass "an empty root says so" || fail "empty root mishandled" "$out"
+grep -q 'no usage records matched' <<<"$out" && pass "an empty root says so" || fail "empty root mishandled" "$out"
 
 echo "== malformed records are skipped, not fatal"
 {
@@ -145,7 +145,7 @@ echo "== malformed records are skipped, not fatal"
 } > "$S/2026/09/01/rollout-2026-09-01T16-00-00-t9.jsonl"
 out=$(python3 "$SCRIPT" --provider codex --root "$S" --all 2>&1); rc=$?
 [ $rc -eq 0 ] && pass "a corrupt transcript does not crash the report" || fail "exit $rc" "$out"
-printf '%s' "$out" | grep -q 'gpt-5.6-terra' && pass "and the good records are still counted" || fail "good records lost" "$out"
+grep -q 'gpt-5.6-terra' <<<"$out" && pass "and the good records are still counted" || fail "good records lost" "$out"
 
 echo "== a usage record with no turn context falls back to the last model seen"
 {
@@ -154,7 +154,7 @@ echo "== a usage record with no turn context falls back to the last model seen"
     usage rA unknown-turn 1000000 0 0 0
 } > "$S/2026/09/01/rollout-2026-09-01T17-00-00-t10.jsonl"
 out=$(python3 "$SCRIPT" --provider codex --root "$S" --all 2>&1)
-printf '%s' "$out" | grep -q 'gpt-5.6-sol (high)' \
+grep -q 'gpt-5.6-sol (high)' <<<"$out" \
     && pass "an unannounced turn is attributed to the thread's last model, not to 'unknown'" \
     || fail "fallback model missing" "$out"
 
@@ -162,8 +162,8 @@ echo "== --provider both reads neither runtime's records into the other"
 CL="$TMP/claude-proj"; mkdir -p "$CL"
 printf '{"timestamp":"2026-09-01T10:00:00Z","message":{"id":"m1","model":"claude-sonnet-5","usage":{"input_tokens":1000000,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}\n' > "$CL/s.jsonl"
 out=$(python3 "$SCRIPT" --root "$CL" --all 2>&1)
-printf '%s' "$out" | grep -q '^claude ' && pass "a Claude directory is sniffed as Claude" || fail "claude sniff failed" "$out"
-printf '%s' "$out" | grep -q '^codex ' && fail "Claude records must not be attributed to codex" || pass "and produces no codex rows"
+grep -q '^claude ' <<<"$out" && pass "a Claude directory is sniffed as Claude" || fail "claude sniff failed" "$out"
+grep -q '^codex ' <<<"$out" && fail "Claude records must not be attributed to codex" || pass "and produces no codex rows"
 
 echo "== the incremental parse cache, on a rollout file"
 # A rollout file is appended to for as long as the thread lives, so the cache
@@ -209,7 +209,7 @@ MD="$TMP/malformed"; mkdir -p "$MD"
 } > "$MD/rollout-m.jsonl"
 out=$(USAGE_REPORT_CACHE="" python3 "$SCRIPT" --provider codex --root "$MD" --all 2>&1); rc=$?
 # rM: 1M in @ $2 = $2.00; rx: 1e5 out @ $12 = $1.20, its non-string timestamp read as none.
-[ $rc = 0 ] && printf '%s' "$out" | grep -q 'TOTAL  \$3.20' && pass "wrong-shaped records are skipped; an exponent count and a numeric timestamp still fold" || fail "malformed rollout" "rc=$rc $out"
+[ $rc = 0 ] && grep -q 'TOTAL  \$3.20' <<<"$out" && pass "wrong-shaped records are skipped; an exponent count and a numeric timestamp still fold" || fail "malformed rollout" "rc=$rc $out"
 
 echo "== cache writes are billed at the published 1.25x of input"
 CW="$TMP/cachewrite"; mkdir -p "$CW"
@@ -220,7 +220,7 @@ CW="$TMP/cachewrite"; mkdir -p "$CW"
 } > "$CW/rollout-w.jsonl"
 out=$(USAGE_REPORT_CACHE="" python3 "$SCRIPT" --provider codex --root "$CW" --all 2>&1)
 # 1M cache write on terra: 1M x $2 x 1.25 = $2.50
-printf '%s' "$out" | grep -q 'TOTAL  \$2.50' && pass "1M cache-write tokens on terra cost \$2.50" || fail "cache write multiplier" "$out"
+grep -q 'TOTAL  \$2.50' <<<"$out" && pass "1M cache-write tokens on terra cost \$2.50" || fail "cache write multiplier" "$out"
 
 echo "== every Codex family resolves to its own row, not a shorter key"
 fam=$(python3 - "$SCRIPT" "$PLUGIN_ROOT/skills/usage-report/prices.json" <<'PY3'

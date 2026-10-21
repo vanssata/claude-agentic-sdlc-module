@@ -25,7 +25,7 @@ cp -r "$PLUGIN_ROOT/skills/project-init/templates" "$TMP/project-init"
 printf '\n- an edit nobody put in the stub\n' >> "$TMP/templates/CLAUDE.block.md"
 out=$(python3 "$RENDER" build --check --templates "$TMP/templates" \
                               --project-init "$TMP/project-init" 2>&1); rc=$?
-if [ $rc -eq 1 ] && printf '%s' "$out" | grep -q 'CLAUDE.block.md'; then
+if [ $rc -eq 1 ] && grep -q 'CLAUDE.block.md' <<<"$out"; then
     pass "build --check: a hand-edited template is drift"
 else
     fail "build --check: a hand-edited template is drift" "exit $rc: $out"
@@ -64,7 +64,7 @@ fi
 
 echo "== an unknown placeholder is an error, not a silent gap"
 out=$(RENDER_PLAN= python3 "$RENDER" render --scope global --runtime claude --kind block 2>&1); rc=$?
-if [ $rc -eq 1 ] && printf '%s' "$out" | grep -q 'unresolved placeholder'; then
+if [ $rc -eq 1 ] && grep -q 'unresolved placeholder' <<<"$out"; then
     pass "an unresolved {{X}} exits 1 with its line"
 else
     fail "an unresolved {{X}} exits 1 with its line" "exit $rc: $out"
@@ -124,7 +124,7 @@ STUB=$(python3 "$RENDER" render --scope global --runtime claude --kind block \
        --var PLAN_LABEL=Max --var READ_LINES=4000)
 for phrase in '/ai-task <request>' '.ai/AGENTS.md' 'SCOPE_CHANGE_REQUIRED' '/ai-init' \
               'human approval' 'source of truth' 'one batch' 'routing.md'; do
-    if printf '%s' "$STUB" | grep -qF -- "$phrase"; then
+    if grep -qF -- "$phrase" <<<"$STUB"; then
         pass "the stub says \"$phrase\""
     else
         fail "the stub no longer says \"$phrase\"" "it is what makes the stub safe alone"
@@ -234,12 +234,12 @@ grep -q 'generated from .ai/rules/payment.md' "$RP/.claude/rules/payment.md" \
     && pass "and says which file to edit instead" || fail "the generated copy does not name its source"
 [ -f "$RP/tests/Payment/.claude" ] && fail "a rule wrote outside the directories it names"
 out=$(python3 "$PLUGIN_ROOT/skills/project-update/update.py" "$RP" 2>&1)
-printf '%s' "$out" | grep -q '^0 automatic' \
+grep -q '^0 automatic' <<<"$out" \
     && pass "re-rendering is a no-op: the round trip is idempotent" \
     || fail "the second render is not a no-op" "$(printf '%s' "$out" | grep -E '^  (create|update|delete)')"
 rm "$RP/.ai/rules/imports.md"
 out=$(python3 "$PLUGIN_ROOT/skills/project-update/update.py" "$RP" 2>&1)
-printf '%s' "$out" | grep -q 'rule block imports removed' \
+grep -q 'rule block imports removed' <<<"$out" \
     && pass "a removed source takes its rendered blocks with it" \
     || fail "a removed rule left its blocks behind" "$out"
 
@@ -267,7 +267,7 @@ install_case() {  # install_case <label> <target> <args...>
     fi
     [ -f "$dir/claude-agentic/routing.md" ] \
         && pass "$label: routing.md installed" || fail "$label: routing.md missing"
-    printf '%s' "$out" | grep -q 'managed block .* B (budget' \
+    grep -q 'managed block .* B (budget' <<<"$out" \
         && pass "$label: the size line is printed" || fail "$label: no size line" "$(printf '%s' "$out" | tail -3)"
 }
 install_case max-fable   claude --plan max --fable yes
@@ -284,7 +284,7 @@ python3 -c "open('$USERDIR/CLAUDE.md','w').write('# mine\n\n' + ('a line the use
 before=$(python3 -c "print(open('$USERDIR/CLAUDE.md').read()[:-1].count(chr(10)))")
 out=$(CLAUDE_DIR="$USERDIR" bash "$PLUGIN_ROOT/install.sh" --target claude --plan max --fable yes 2>&1); rc=$?
 [ $rc -eq 0 ] && pass "a 20 KiB user file does not fail the install" || fail "install exited $rc" "$(printf '%s' "$out" | tail -3)"
-printf '%s' "$out" | grep -q 'the rest is yours' \
+grep -q 'the rest is yours' <<<"$out" \
     && pass "the size line names the user's share" || fail "no size line for the large file"
 python3 - "$USERDIR/CLAUDE.md" <<'PY' && pass "every line the user wrote survives byte-identical" || fail "the user's text was changed"
 import sys
@@ -302,13 +302,13 @@ CXBIG="$SPACE/codex-big"; mkdir -p "$CXBIG"
 python3 -c "open('$CXBIG/AGENTS.md','w').write('# mine\n\n' + ('a line the user wrote.\n' * 950))"
 out=$(CODEX_DIR="$CXBIG" CLAUDE_DIR="$CXBIG/claude" bash "$PLUGIN_ROOT/install.sh" \
         --target codex --codex-plan pro 2>&1)
-printf '%s' "$out" | grep -q 'Codex reads at most 32 KiB' \
+grep -q 'Codex reads at most 32 KiB' <<<"$out" \
     && pass "a 20 KiB AGENTS.md gets the advisory" \
     || fail "no advisory for a 20 KiB AGENTS.md" "$(printf '%s' "$out" | tail -3)"
 CXSMALL="$SPACE/codex-small"; mkdir -p "$CXSMALL"
 out=$(CODEX_DIR="$CXSMALL" CLAUDE_DIR="$CXSMALL/claude" bash "$PLUGIN_ROOT/install.sh" \
         --target codex --codex-plan pro 2>&1)
-printf '%s' "$out" | grep -q 'Codex reads at most 32 KiB' \
+grep -q 'Codex reads at most 32 KiB' <<<"$out" \
     && fail "a fresh AGENTS.md got the advisory" "the limit is nowhere near" \
     || pass "a fresh AGENTS.md is left alone about the limit"
 
@@ -330,16 +330,16 @@ open('$HINT/docs/sdlc/constitution.md','w').write(
     '# Constitution\n\n' + ''.join('C%d. a principle this project does not negotiate.\n' % n
                                      for n in range(1, 21)))"
 out=$(python3 "$PLUGIN_ROOT/skills/project-update/update.py" "$HINT" 2>&1)
-printf '%s' "$out" | grep -q 'CLAUDE.md: the managed block is .* B, budget 2048 B' \
+grep -q 'CLAUDE.md: the managed block is .* B, budget 2048 B' <<<"$out" \
     && pass "the over-budget block is named with its byte count" \
     || fail "no budget hint for an over-budget block" "$(printf '%s' "$out" | tail -5)"
-printf '%s' "$out" | grep -q 'trimming it is yours' \
+grep -q 'trimming it is yours' <<<"$out" \
     && pass "the hint says an edited block is the project's to trim" \
     || fail "the budget hint does not say whose the block is" "$(printf '%s' "$out" | tail -5)"
-printf '%s' "$out" | grep -q 'docs/sdlc/constitution.md: 20 principles, at most 15' \
+grep -q 'docs/sdlc/constitution.md: 20 principles, at most 15' <<<"$out" \
     && pass "the constitution cap is advisory here, and named" \
     || fail "no constitution hint" "$(printf '%s' "$out" | tail -5)"
-printf '%s' "$out" | grep -q '^  update .*CLAUDE.md' \
+grep -q '^  update .*CLAUDE.md' <<<"$out" \
     && fail "the plugin planned a write over an edited block" "$(printf '%s' "$out" | tail -5)" \
     || pass "an edited block is still never rewritten"
 

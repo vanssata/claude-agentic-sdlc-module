@@ -30,21 +30,21 @@ mkdir -p "$TMP/probe"
 out=$(CODEX_DIR="$TMP/probe" bash "$INSTALL" --target codex --dry-run 2>&1); rc=$?
 [ $rc -eq 0 ] && pass "the dry run exits 0" || fail "dry run should exit 0" "$out"
 [ -z "$(ls -A "$TMP/probe")" ] && pass "the target directory is untouched" || fail "the dry run wrote files" "$(ls -A "$TMP/probe")"
-printf '%s' "$out" | grep -q 'would have added model = "gpt-5.6-sol"' && pass "the dry run names the model it would set" || fail "expected the model change in the dry run" "$out"
-printf '%s' "$out" | grep -q '{{' && fail "an unrendered placeholder reached the output" || pass "the AGENTS.md block renders completely"
-printf '%s' "$out" | grep -q 'claude-agentic:start' && pass "the managed block is shown" || fail "the managed block should be printed"
-printf '%s' "$out" | grep -q 'plan=pro (Pro)' && pass "with no ChatGPT login the pro profile is assumed" || fail "no auth.json should fall back to pro" "$out"
-printf '%s' "$out" | grep -q -- '--codex-plan plus' && pass "the fallback says how to pick plus" || fail "the fallback should mention --codex-plan plus" "$out"
+grep -q 'would have added model = "gpt-5.6-sol"' <<<"$out" && pass "the dry run names the model it would set" || fail "expected the model change in the dry run" "$out"
+grep -q '{{' <<<"$out" && fail "an unrendered placeholder reached the output" || pass "the AGENTS.md block renders completely"
+grep -q 'claude-agentic:start' <<<"$out" && pass "the managed block is shown" || fail "the managed block should be printed"
+grep -q 'plan=pro (Pro)' <<<"$out" && pass "with no ChatGPT login the pro profile is assumed" || fail "no auth.json should fall back to pro" "$out"
+grep -q -- '--codex-plan plus' <<<"$out" && pass "the fallback says how to pick plus" || fail "the fallback should mention --codex-plan plus" "$out"
 
 echo "== the plus plan renders its own profile"
 out=$(CODEX_DIR="$TMP/probe" bash "$INSTALL" --target codex --codex-plan plus --dry-run 2>&1); rc=$?
 [ $rc -eq 0 ] && pass "--codex-plan plus exits 0" || fail "--codex-plan plus should exit 0" "$out"
-printf '%s' "$out" | grep -q 'plan=plus (Plus)' && pass "plus is reported" || fail "plus should be reported" "$out"
-printf '%s' "$out" | grep -q 'would have added model_reasoning_effort = "medium"' && pass "plus runs the session at medium" || fail "plus should set medium" "$out"
-printf '%s' "$out" | grep -q 'would have added max_concurrent_threads_per_session = 3' && pass "plus caps agent threads at 3" || fail "plus should cap threads at 3" "$out"
-printf '%s' "$out" | grep -q 'ChatGPT Plus plan' && pass "the AGENTS.md block names the Plus plan" || fail "block should name Plus" "$out"
-printf '%s' "$out" | grep -q '`xhigh` stays off' && pass "the AGENTS.md block keeps xhigh off on Plus" || fail "block should keep xhigh off" "$out"
-printf '%s' "$out" | grep -q '{{' && fail "plus left an unrendered placeholder" "$out" || pass "the plus block renders completely"
+grep -q 'plan=plus (Plus)' <<<"$out" && pass "plus is reported" || fail "plus should be reported" "$out"
+grep -q 'would have added model_reasoning_effort = "medium"' <<<"$out" && pass "plus runs the session at medium" || fail "plus should set medium" "$out"
+grep -q 'would have added max_concurrent_threads_per_session = 3' <<<"$out" && pass "plus caps agent threads at 3" || fail "plus should cap threads at 3" "$out"
+grep -q 'ChatGPT Plus plan' <<<"$out" && pass "the AGENTS.md block names the Plus plan" || fail "block should name Plus" "$out"
+grep -q '`xhigh` stays off' <<<"$out" && pass "the AGENTS.md block keeps xhigh off on Plus" || fail "block should keep xhigh off" "$out"
+grep -q '{{' <<<"$out" && fail "plus left an unrendered placeholder" "$out" || pass "the plus block renders completely"
 out=$(CODEX_DIR="$TMP/probe" bash "$INSTALL" --target codex --codex-plan team --dry-run 2>&1); rc=$?
 [ $rc -ne 0 ] && pass "an unknown --codex-plan is rejected" || fail "unknown codex plan should fail" "$out"
 
@@ -56,14 +56,14 @@ b64 = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip
 print(b64({"alg":"none"}) + "." + b64({"https://api.openai.com/auth":{"chatgpt_plan_type":"plus"}}) + ".sig")')
 printf '{"auth_mode":"chatgpt","tokens":{"id_token":"%s"}}' "$jwt" > "$HOME_P/.codex/auth.json"
 out=$(HOME="$HOME_P" CODEX_DIR="$HOME_P/.codex" bash "$INSTALL" --target codex --dry-run 2>&1 </dev/null)
-printf '%s' "$out" | grep -q 'detected codex plan: plus' && pass "chatgpt_plan_type=plus is detected" || fail "plus should be detected from auth.json" "$out"
-printf '%s' "$out" | grep -q 'plan=plus (Plus)' && pass "the detected plan selects the plus profile" || fail "detected plus should select the plus profile" "$out"
+grep -q 'detected codex plan: plus' <<<"$out" && pass "chatgpt_plan_type=plus is detected" || fail "plus should be detected from auth.json" "$out"
+grep -q 'plan=plus (Plus)' <<<"$out" && pass "the detected plan selects the plus profile" || fail "detected plus should select the plus profile" "$out"
 
 echo "== real install"
 out=$(CODEX_DIR="$DIR" bash "$INSTALL" --target codex 2>&1); rc=$?
 [ $rc -eq 0 ] && pass "install exits 0" || fail "install should exit 0" "$out"
 
-printf '%s' "$out" | grep -q 'plan            pro' && pass "the summary names the plan" || fail "summary should name the plan" "$out"
+grep -q 'plan            pro' <<<"$out" && pass "the summary names the plan" || fail "summary should name the plan" "$out"
 
 for f in agents/ai-expert.toml agents/ai-reviewer.toml agents/ai-risk-strong.toml \
          agents/ai-planner-strong.toml agents/ai-expert-strong.toml agents/architect.toml agents/Explore.toml \
@@ -102,7 +102,7 @@ for ev in PreToolUse PostToolUse; do
     # Codex, so it must be a regex; Codex tests it unanchored, like jq's test().
     m=$(jq -r --arg e "$ev" '[.hooks[$e][] | select(.hooks[].command | test("runtime-gate")) | .matcher] | if length == 1 then .[0] else "" end' "$DIR/hooks.json")
     [ -n "$m" ] || fail "$ev: expected exactly one gate entry"
-    printf '%s' "$m" | grep -q '[^A-Za-z0-9_|]' || fail "$ev gate matcher '$m' is an exact list in Codex, not a regex"
+    grep -q '[^A-Za-z0-9_|]' <<<"$m" || fail "$ev gate matcher '$m' is an exact list in Codex, not a regex"
     for t in collaborationspawn_agent spawn_agent Agent; do
         jq -en --arg m "$m" --arg t "$t" '$t | test($m)' >/dev/null || fail "$ev gate matcher '$m' misses $t"
     done
@@ -151,7 +151,7 @@ CODEX_DIR="$UP" bash "$INSTALL" --target codex --codex-plan pro >/dev/null 2>&1
     && pass "a second install changes nothing" || fail "reinstall doubled or renamed the gate"
 jq -e '[.hooks.SubagentStop[].hooks[].command] | index("my-stop.sh")' "$UP/hooks.json" >/dev/null \
     && pass "the user's own SubagentStop hook survives" || fail "user hook lost"
-printf '%s' "$out" | grep -q 'kept: codex-model-gate.py as the gate command' && pass "the kept command is reported, with the /hooks reminder" || fail "kept command not reported" "$out"
+grep -q 'kept: codex-model-gate.py as the gate command' <<<"$out" && pass "the kept command is reported, with the /hooks reminder" || fail "kept command not reported" "$out"
 
 echo "== the managed AGENTS.md block"
 [ "$(grep -c 'claude-agentic:start' "$DIR/AGENTS.md")" = 1 ] && pass "exactly one managed block" || fail "expected one managed block"
@@ -166,7 +166,7 @@ jq -e '.runtime == "codex" and (.plan == "plus" or .plan == "pro") and .fable ==
     && pass "profile.json written for the Codex install, tiers read from the Codex profile" || fail "codex profile.json missing or wrong"
 grep -q 'claude_agentic' "$DIR/config.toml" && fail "claude_agentic leaked into config.toml" || pass "config.toml has no claude_agentic"
 out=$(CODEX_DIR="$TMP/probe-profile" bash "$INSTALL" --target codex --codex-plan plus --dry-run 2>&1)
-printf '%s' "$out" | grep -q "^== profile.json (plan tables): $TMP/probe-profile/claude-agentic/profile.json" \
+grep -q "^== profile.json (plan tables): $TMP/probe-profile/claude-agentic/profile.json" <<<"$out" \
     && pass "--dry-run lists the Codex profile.json" || fail "codex dry run should list profile.json"
 [ ! -e "$TMP/probe-profile/claude-agentic/profile.json" ] && pass "and does not write it" || fail "dry run wrote profile.json"
 
@@ -249,9 +249,9 @@ out=$(CODEX_DIR="$LG" bash "$INSTALL" --target codex --codex-plan pro 2>&1)
 [ "$(grep -c -E '(claude|[Cc]odex)-agentic:start' "$LG/AGENTS.md")" = 1 ] && pass "exactly one managed block after the install" || fail "a legacy pair was doubled" "$(grep -n 'agentic:' "$LG/AGENTS.md")"
 if grep -q 'Codex-agentic' "$LG/AGENTS.md"; then fail "the legacy markers are still there"; else pass "the legacy markers are renamed"; fi
 grep -q 'keep me above' "$LG/AGENTS.md" && grep -q 'keep me below' "$LG/AGENTS.md" && pass "the text around the block is kept" || fail "text around the legacy block lost"
-printf '%s' "$out" | grep -q 'AGENTS.md: updated + renamed the legacy Codex-agentic markers' \
+grep -q 'AGENTS.md: updated + renamed the legacy Codex-agentic markers' <<<"$out" \
     && pass "the install says what it renamed" || fail "no rename note in the install output" "$(printf '%s' "$out" | grep AGENTS.md)"
-if printf '%s' "$out" | grep -q 'AGENTS.md: managed block 0 B'; then fail "block_size measured 0 B"; else pass "block_size measures the renamed block"; fi
+if grep -q 'AGENTS.md: managed block 0 B' <<<"$out"; then fail "block_size measured 0 B"; else pass "block_size measures the renamed block"; fi
 CODEX_DIR="$LG" bash "$INSTALL" --target codex --codex-plan pro >/dev/null 2>&1
 [ "$(grep -c 'claude-agentic:start' "$LG/AGENTS.md")" = 1 ] && pass "a reinstall keeps one block" || fail "reinstall doubled the block"
 

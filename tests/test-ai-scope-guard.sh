@@ -41,7 +41,7 @@ echo "== ai-scope-guard (codex apply_patch payloads)"
 run_codex_fixtures "$GUARD" scope "$ROOT"
 out=$(jq -r '.payload' "$PLUGIN_ROOT/tests/fixtures/codex-hooks/21-scope-apply-patch-out-of-scope.json" \
       | sed "s|__ROOT__|$ROOT|g" | "$GUARD")
-printf '%s' "$out" | grep -q 'SCOPE_CHANGE_REQUIRED' \
+grep -q 'SCOPE_CHANGE_REQUIRED' <<<"$out" \
     && pass "an out-of-scope patch is refused with the SCOPE_CHANGE_REQUIRED signal" \
     || fail "the Codex deny message must carry SCOPE_CHANGE_REQUIRED" "$out"
 assert_fails_open "$GUARD" "a malformed Codex payload fails open" "{ not json"
@@ -72,7 +72,7 @@ out=$(jq -nc --arg r "$BARE" '{hook_event_name:"PreToolUse",tool_name:"Edit",cwd
 # The deny message must carry the literal signal the manager parses for.
 write_state implementation 1
 out=$(printf '%s' "$payload" | "$GUARD")
-if printf '%s' "$out" | grep -q 'SCOPE_CHANGE_REQUIRED'; then
+if grep -q 'SCOPE_CHANGE_REQUIRED' <<<"$out"; then
     pass "deny message contains the SCOPE_CHANGE_REQUIRED signal"
 else
     fail "deny message must contain SCOPE_CHANGE_REQUIRED" "$out"
@@ -98,7 +98,7 @@ edit_of() {  # edit_of <relative path> — the guard's output for that edit
 for first in '["src/a.php"]' '[]'; do
     dup_state "$first"
     out=$(edit_of src/secret.php)
-    if printf '%s' "$out" | grep -q 'explicitly forbidden'; then
+    if grep -q 'explicitly forbidden' <<<"$out"; then
         pass "first step allowed_files=$first: the second step's forbidden_files still bite"
     else
         fail "first step allowed_files=$first: a forbidden file was not refused" "${out:-allowed}"
@@ -112,7 +112,7 @@ out=$(edit_of src/a.php)
 [ -z "$out" ] && pass "the first step's allowed_files count as well" \
     || fail "the first step's allowed_files were dropped" "$out"
 out=$(edit_of src/nowhere.php)
-printf '%s' "$out" | grep -q 'SCOPE_CHANGE_REQUIRED' \
+grep -q 'SCOPE_CHANGE_REQUIRED' <<<"$out" \
     && pass "a file in neither step is still out of scope" \
     || fail "a file in neither step should be out of scope" "${out:-allowed}"
 

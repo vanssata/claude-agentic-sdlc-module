@@ -87,11 +87,11 @@ out=$(python3 "$UPDATE" "$P" 2>&1); rc=$?
 [ $rc -eq 0 ] && pass "the dry run exits 0" || fail "dry run failed" "$out"
 after=$(cd "$P" && find . -path ./.git -prune -o -type f -print | sort | xargs md5sum | md5sum)
 [ "$before" = "$after" ] && pass "the dry run writes nothing" || fail "the dry run changed files"
-printf '%s' "$out" | grep -q 'policy .*+ pipeline_profile$' && pass "policy changes are listed for confirmation" || fail "pipeline_profile should be a listed policy change" "$out"
-printf '%s' "$out" | grep -q 'pipeline_profiles\.' && fail "a new subtree should be listed once, at its top" "$out" || pass "a new subtree is listed once"
+grep -q 'policy .*+ pipeline_profile$' <<<"$out" && pass "policy changes are listed for confirmation" || fail "pipeline_profile should be a listed policy change" "$out"
+grep -q 'pipeline_profiles\.' <<<"$out" && fail "a new subtree should be listed once, at its top" "$out" || pass "a new subtree is listed once"
 out=$(python3 "$UPDATE" "$P" --check); [ $? -eq 1 ] && pass "--check exits 1 while an update is pending" || fail "--check should exit 1"
 # The exact shape /ai-status reads: one line, the reasons, the command (R21 keeps it byte-identical).
-[ "$(printf '%s\n' "$out" | wc -l)" -eq 1 ] && printf '%s' "$out" | grep -qE '^project is behind the installed plugin: schema 0 -> [0-9]+, [0-9]+ file\(s\) to update, 1 need a manual merge — run /project-update$' \
+[ "$(printf '%s\n' "$out" | wc -l)" -eq 1 ] && grep -qE '^project is behind the installed plugin: schema 0 -> [0-9]+, [0-9]+ file\(s\) to update, 1 need a manual merge — run /project-update$' <<<"$out" \
     && pass "the plain --check line keeps its exact shape" || fail "the plain --check line changed" "$out"
 
 echo "== apply"
@@ -117,12 +117,12 @@ cmp -s "$P/.ai/policies/safety.md" "$PLUGIN_ROOT/skills/ai-init/templates/.ai/po
 grep -q 'keep me' "$P/CLAUDE.md" && grep -q '.ai/state/handoff.md' "$P/CLAUDE.md" \
     && pass "the CLAUDE.md block is updated and the rest of the file kept" || fail "CLAUDE.md update wrong"
 [ "$(grep -c 'claude-agentic:start' "$P/CLAUDE.md")" = 1 ] && pass "one managed block remains" || fail "block duplicated"
-printf '%s' "$out" | grep -q 'verify_command is empty' && pass "an empty verify_command is flagged" || fail "hint missing" "$out"
+grep -q 'verify_command is empty' <<<"$out" && pass "an empty verify_command is flagged" || fail "hint missing" "$out"
 
 echo "== idempotent"
 snap=$(cd "$P" && find . -path ./.git -prune -o -type f -print | sort | xargs md5sum | md5sum)
 out=$(python3 "$UPDATE" "$P" --apply 2>&1)
-printf '%s' "$out" | grep -q '^0 automatic, 1 conflict' && pass "a second run has nothing automatic left" || fail "second run not clean" "$out"
+grep -q '^0 automatic, 1 conflict' <<<"$out" && pass "a second run has nothing automatic left" || fail "second run not clean" "$out"
 [ "$snap" = "$(cd "$P" && find . -path ./.git -prune -o -type f -print | sort | xargs md5sum | md5sum)" ] \
     && pass "a second run changes nothing" || fail "second run changed files"
 out=$(python3 "$UPDATE" "$P" --check) && pass "--check exits 0 once only a hand-merge choice remains" || fail "--check should exit 0"
@@ -204,7 +204,7 @@ echo "== a project carries a schema version"
 S0="$TMP/schema0"; v0_project "$S0"
 [ ! -e "$S0/.ai/VERSION" ] && pass "a project from before the schema has no .ai/VERSION" || fail "the v0 fixture should have no VERSION"
 python3 "$UPDATE" "$S0" | grep -q "^  schema    0 -> $CURRENT" && pass "the dry run says which schema step is pending" || fail "no schema line" "$(python3 "$UPDATE" "$S0")"
-out=$(python3 "$UPDATE" "$S0" --check); [ $? -eq 1 ] && printf '%s' "$out" | grep -q "schema 0 -> $CURRENT" \
+out=$(python3 "$UPDATE" "$S0" --check); [ $? -eq 1 ] && grep -q "schema 0 -> $CURRENT" <<<"$out" \
     && pass "--check exits 1 and names the schema step" || fail "--check should name the schema" "$out"
 before=$(cd "$S0" && find . -type f | sort | xargs md5sum | md5sum)
 python3 "$UPDATE" "$S0" >/dev/null
@@ -305,9 +305,9 @@ printf '# GEMINI\n\nmy own instructions\n' > "$S8/GEMINI.md"          # a third 
 printf '\n## my routing note\nalways ask me first\n' >> "$S8/.ai/AGENTS.md"
 
 out=$(python3 "$UPDATE" "$S8")
-printf '%s' "$out" | grep -q '^  update    CLAUDE.md .*\[0003\] SDLC workflow section removed (now in the managed block)' \
+grep -q '^  update    CLAUDE.md .*\[0003\] SDLC workflow section removed (now in the managed block)' <<<"$out" \
     && pass "the dry run names the section it will take out" || fail "no 0003 line for CLAUDE.md" "$out"
-printf '%s' "$out" | grep -q 'AGENTS.md: the managed block was edited here' \
+grep -q 'AGENTS.md: the managed block was edited here' <<<"$out" \
     && pass "and hints that an edited block cannot be replaced" || fail "no edited-block hint" "$out"
 before=$(cd "$S8" && find . -type f | sort | xargs md5sum | md5sum)
 [ "$before" = "$(cd "$S8" && find . -type f | sort | xargs md5sum | md5sum)" ] && pass "the dry run writes nothing" || fail "the dry run changed files"
@@ -332,8 +332,8 @@ out=$(python3 "$UPDATE" "$S8")
 # Two hand-merge choices: the edited managed block, and the router — edited on
 # the oldest shipped version, so the plugin's later router changes really
 # collide with the human's note (T-2026-10-13-004 re-review: not silenced).
-printf '%s' "$out" | grep -q '^0 automatic, 2 conflict' \
-    && printf '%s' "$out" | grep -qE '^  conflict  *\.ai/AGENTS\.md' \
+grep -q '^0 automatic, 2 conflict' <<<"$out" \
+    && grep -qE '^  conflict  *\.ai/AGENTS\.md' <<<"$out" \
     && pass "a second run has only the two hand-merge choices left, the router among them" || fail "second run not clean" "$out"
 [ "$(grep -c '^## Shared files$' "$S8/.ai/AGENTS.md")" = 1 ] && grep -q '^always ask me first$' "$S8/.ai/AGENTS.md" \
     && pass "the router keeps the human's note and names the shared files once" || fail "router after the migration" "$(grep -n '^## ' "$S8/.ai/AGENTS.md")"
@@ -346,9 +346,9 @@ snap=$(md5sum "$S9/CLAUDE.md" | cut -d' ' -f1)
 out=$(python3 "$UPDATE" "$S9" --apply 2>&1)
 [ "$(md5sum "$S9/CLAUDE.md" | cut -d' ' -f1)" != "$snap" ] && grep -q 'we always open an ADR first' "$S9/CLAUDE.md" \
     && pass "an edited section survives the migration" || fail "an edited section must not be rewritten" "$out"
-printf '%s' "$out" | grep -q 'CLAUDE.md: the SDLC workflow section was edited' \
+grep -q 'CLAUDE.md: the SDLC workflow section was edited' <<<"$out" \
     && pass "and the human is told it is now theirs to keep" || fail "no hint for an edited section" "$out"
-printf '%s' "$out" | grep -q '^  update    CLAUDE.md .*\[0003\]' && fail "0003 must not touch an edited section" "$out" \
+grep -q '^  update    CLAUDE.md .*\[0003\]' <<<"$out" && fail "0003 must not touch an edited section" "$out" \
     || pass "0003 plans no rewrite it cannot match verbatim"
 [ "$(cat "$S9/.ai/VERSION")" = "$CURRENT" ] && pass "and the schema still advances" || fail "a hint must not hold the schema"
 
@@ -360,7 +360,7 @@ echo "== a docs/sdlc-only project has no schema and runs no migration"
 S6="$TMP/sdlconly"; mkdir -p "$S6"
 CLAUDE_ROUTING_TEMPLATES="$OLD/project-init/templates" bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$S6" >/dev/null
 out=$(python3 "$UPDATE" "$S6")
-printf '%s' "$out" | grep -qE 'schema|VERSION' && fail "a project without .ai/ should see no schema" "$out" || pass "no schema for a docs/sdlc-only project"
+grep -qE 'schema|VERSION' <<<"$out" && fail "a project without .ai/ should see no schema" "$out" || pass "no schema for a docs/sdlc-only project"
 out=$(CLAUDE_AGENTIC_MIGRATIONS="$FIX/migrations-broken" python3 "$UPDATE" "$S6" 2>&1); [ $? -eq 0 ] \
     && pass "and a broken registry cannot break it" || fail "a schema-less project must not care about migrations" "$out"
 
@@ -379,7 +379,7 @@ rm -rf "$S1"
 echo "== the migration registry is ordered, and a broken one is refused"
 S2="$TMP/schemabroken"; v0_project "$S2"
 out=$(CLAUDE_AGENTIC_MIGRATIONS="$FIX/migrations-broken" python3 "$UPDATE" "$S2" 2>&1); rc=$?
-[ $rc -eq 2 ] && printf '%s' "$out" | grep -q '0002' && pass "a gap in the migrations exits 2 and names it" || fail "a gap should exit 2" "$out"
+[ $rc -eq 2 ] && grep -q '0002' <<<"$out" && pass "a gap in the migrations exits 2 and names it" || fail "a gap should exit 2" "$out"
 python3 - "$PLUGIN_ROOT" <<'PY'
 import os, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "skills", "project-update"))
@@ -403,7 +403,7 @@ snap=$(cd "$S5" && find . -type f | sort | xargs md5sum | md5sum)
 check_refused() {  # <fixture dir> <text the message must contain> <what the rule is>
     local out rc
     out=$(CLAUDE_AGENTIC_MIGRATIONS="$FIX/$1" python3 "$UPDATE" "$S5" --apply 2>&1); rc=$?
-    [ $rc -eq 2 ] && printf '%s' "$out" | grep -q "$2" \
+    [ $rc -eq 2 ] && grep -q "$2" <<<"$out" \
         && [ "$snap" = "$(cd "$S5" && find . -type f | sort | xargs md5sum | md5sum)" ] \
         && pass "$3" || fail "$3" "rc=$rc $out"
 }
@@ -424,22 +424,22 @@ printf '\n## My own rule\nalways reproduce the bug first\n' >> "$S3/.ai/policies
 python3 "$STATE" --root "$S3" quick --goal "a task in flight" --workflow feature --tier T2 --files .ai/policies/coding.md >/dev/null
 export CLAUDE_AGENTIC_MIGRATIONS="$SYNTH" CLAUDE_AGENTIC_TEMPLATES="$NEXT"
 out=$(python3 "$UPDATE" "$S3")
-printf '%s' "$out" | grep -q '^  schema    0 -> 3 ' && pass "the schema line counts every pending migration" || fail "schema line wrong" "$out"
+grep -q '^  schema    0 -> 3 ' <<<"$out" && pass "the schema line counts every pending migration" || fail "schema line wrong" "$out"
 [ "$(printf '%s' "$out" | grep -c '^  move      .ai/policies/coding.md -> .ai/policies/code-style.md  \[0002\]')" = 1 ] \
     && pass "a move is listed once, with its source and its migration" || fail "move line wrong" "$out"
-printf '%s' "$out" | grep -q 'still-not-there' && fail "a move of a file the project never had should be skipped" "$out" \
+grep -q 'still-not-there' <<<"$out" && fail "a move of a file the project never had should be skipped" "$out" \
     || pass "a move whose source is absent is skipped"
-printf '%s' "$out" | grep -q '^  merge     .ai/policies/code-style.md .*your edits kept' \
+grep -q '^  merge     .ai/policies/code-style.md .*your edits kept' <<<"$out" \
     && pass "the template history follows the move: the file merges at its new path" \
     || fail "a file edited at the old path must merge at the new one, not conflict" "$out"
-printf '%s' "$out" | grep -q '^  delete?   .ai/legacy-notes.md .*needs --apply --confirm-delete NAME' \
+grep -q '^  delete?   .ai/legacy-notes.md .*needs --apply --confirm-delete NAME' <<<"$out" \
     && pass "a deletion is proposed, not performed" || fail "delete? line wrong" "$out"
-printf '%s' "$out" | grep -q 'policy .*~ schema_probe\|policy .*+ schema_probe' \
+grep -q 'policy .*~ schema_probe\|policy .*+ schema_probe' <<<"$out" \
     && pass "a migration's policy edit is listed for confirmation" || fail "no policy line for the migrated policy" "$out"
-printf '%s' "$out" | grep -q 'deletion(s) awaiting --confirm-delete' && pass "the summary counts what is waiting for a human" || fail "no deletion count" "$out"
-printf '%s' "$out" | grep -q 'a task is in flight while the schema changes' && pass "a task in flight is flagged" || fail "no in-flight hint" "$out"
+grep -q 'deletion(s) awaiting --confirm-delete' <<<"$out" && pass "the summary counts what is waiting for a human" || fail "no deletion count" "$out"
+grep -q 'a task is in flight while the schema changes' <<<"$out" && pass "a task in flight is flagged" || fail "no in-flight hint" "$out"
 first=$(printf '%s' "$out" | grep -n '^  \(create\|move\|update\|delete?\)' | head -1)
-printf '%s' "$first" | grep -q '\[000' && pass "the migrations are planned before the template merge" || fail "a migration item must come first" "$out"
+grep -q '\[000' <<<"$first" && pass "the migrations are planned before the template merge" || fail "a migration item must come first" "$out"
 
 echo "== the apply keeps the edit at the new path, the original, and the task"
 python3 "$UPDATE" "$S3" --apply >/dev/null
@@ -456,7 +456,7 @@ python3 "$UPDATE" "$S3" --apply >/dev/null   # plan() runs again while the schem
     && pass "an idempotent edit does not apply twice when the run repeats" || fail "the migration duplicated its edit"
 [ -f "$S3/.ai/legacy-notes.md" ] && pass "the proposed deletion did not happen" || fail "a file was deleted without confirmation"
 [ ! -e "$S3/.ai/VERSION" ] && pass "and the schema is held until the deletion is settled" || fail "VERSION written with a deletion pending"
-out=$(python3 "$UPDATE" "$S3" --check); [ $? -eq 1 ] && printf '%s' "$out" | grep -q 'the schema stays at 0' \
+out=$(python3 "$UPDATE" "$S3" --check); [ $? -eq 1 ] && grep -q 'the schema stays at 0' <<<"$out" \
     && pass "--check reports a held schema instead of calling the project current" || fail "--check must not hide a held schema" "$out"
 [ "$(jq -r '.approved_plan.steps[0].allowed_files[0]' "$S3/.ai/state/current.json")" = ".ai/policies/code-style.md" ] \
     && pass "the task in flight follows the migration" || fail "the task's allowed_files were not migrated"
@@ -474,7 +474,7 @@ out=$(env -u AI_UNATTENDED python3 "$UPDATE" "$S3" --apply --confirm-delete test
 if [ $HAS_PTY -eq 1 ]; then
     cp -a "$S3" "$TMP/schemaops-tty"
     out=$(pty env "${NOMARK[@]}" CLAUDECODE=1 python3 "$UPDATE" "$S3" --apply --confirm-delete tester); rc=$?
-    [ $rc -eq 5 ] && [ -e "$S3/.ai/legacy-notes.md" ] && printf '%s' "$out" | grep -q CLAUDECODE \
+    [ $rc -eq 5 ] && [ -e "$S3/.ai/legacy-notes.md" ] && grep -q CLAUDECODE <<<"$out" \
         && pass "CLAUDECODE=1 with a terminal: exit 5, names the marker, the file stays" || fail "CLAUDECODE under a pty (rc=$rc)" "$out"
     out=$(pty env "${NOMARK[@]}" python3 "$UPDATE" "$TMP/schemaops-tty" --apply --confirm-delete tester); rc=$?
     [ $rc -eq 0 ] && [ ! -e "$TMP/schemaops-tty/.ai/legacy-notes.md" ] \
@@ -499,7 +499,7 @@ S4="$TMP/schemalink"; v0_project "$S4"
 rm "$S4/.ai/policies/testing.md"; ln -s "$TMP/elsewhere" "$S4/.ai/policies/testing.md"
 out=$(python3 "$UPDATE" "$S4" --apply 2>&1); rc=$?
 [ $rc -eq 3 ] && [ ! -e "$TMP/elsewhere" ] && pass "a symlinked target exits 3 and is not written through" || fail "a symlink must not be followed" "$out"
-printf '%s' "$out" | grep -q 'nothing after it was written; run the dry run again' && pass "and the abort says what to do" || fail "abort message wrong" "$out"
+grep -q 'nothing after it was written; run the dry run again' <<<"$out" && pass "and the abort says what to do" || fail "abort message wrong" "$out"
 
 echo "== both runtimes reach the same schema"
 for rt in claude codex both; do
@@ -521,9 +521,9 @@ python3 "$UPDATE" "$RD" --apply >/dev/null 2>&1 || fail "the rules could not be 
 printf '\n# mine\nkeep me\n' >> "$RD/src/Payment/CLAUDE.md"
 rm "$RD/.ai/rules/payment.md"
 out=$(python3 "$UPDATE" "$RD" 2>&1)
-printf '%s' "$out" | grep -q "delete? *.claude/rules/payment.md" \
+grep -q "delete? *.claude/rules/payment.md" <<<"$out" \
     && pass "the path-scoped copy is proposed, not deleted" || fail "no delete? for the rendered copy" "$out"
-printf '%s' "$out" | grep -q 'needs --apply --confirm-delete NAME' \
+grep -q 'needs --apply --confirm-delete NAME' <<<"$out" \
     && pass "and says how a human confirms it" || fail "the deletion does not name its gate"
 python3 "$UPDATE" "$RD" --apply >/dev/null 2>&1
 [ -f "$RD/.claude/rules/payment.md" ] \
@@ -538,7 +538,7 @@ AI_UNATTENDED=1 python3 "$UPDATE" "$RD" --apply --confirm-delete "Ivan" >/dev/nu
 [ -f "$RD/.ai/reports/project-update-$(date -u +%Y-%m-%d)/original/.claude/rules/payment.md" ] \
     && pass "its original is kept" || fail "the deleted copy was not kept"
 out=$(python3 "$UPDATE" "$RD" 2>&1)
-printf '%s' "$out" | grep -q '^0 automatic, 0 conflict' \
+grep -q '^0 automatic, 0 conflict' <<<"$out" \
     && pass "and the project is then up to date" || fail "the rules run is not idempotent" "$out"
 
 echo "== every key in the template history is accounted for"
@@ -589,7 +589,7 @@ bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$S9" --runtime claude >/dev/n
 cp -r "$FIXV3/.ai" "$S9/"      # VERSION 3 and a task in flight, as the fixture ships them
 
 out=$(python3 "$UPDATE" "$S9")
-printf '%s' "$out" | grep -q '\[0004\]' \
+grep -q '\[0004\]' <<<"$out" \
     && pass "the dry run names the state migration" || fail "no 0004 line" "$out"
 python3 - "$S9" <<'PY2'
 import json, os, sys
@@ -617,7 +617,7 @@ PY2
 python3 "$UPDATE" "$S9" | grep -q '^0 automatic' && pass "a second run has nothing to do" || fail "0004 is not idempotent"
 
 out=$(env -u CLAUDECODE python3 "$STATE" --root "$S9" step-done 2 2>&1); rc=$?
-[ $rc -eq 0 ] && printf '%s' "$out" | grep -q 'unavailable' \
+[ $rc -eq 0 ] && grep -q 'unavailable' <<<"$out" \
     && pass "a task that started before schema 4 finishes its step, measuring nothing" \
     || fail "step-done should carry on" "$out($rc)"
 
@@ -641,7 +641,7 @@ PY2
 cp -r "$FIX/schema-v4/.ai" "$S10/"     # back to the bare schema-4 task
 python3 "$UPDATE" "$S10" --check >/dev/null; [ $? -eq 1 ] && pass "--check exits 1 at schema 4" || fail "--check should exit 1 at schema 4"
 out=$(python3 "$UPDATE" "$S10")
-printf '%s' "$out" | grep -q '\[0005\]' && pass "the dry run names migration 0005" || fail "no 0005 line" "$out"
+grep -q '\[0005\]' <<<"$out" && pass "the dry run names migration 0005" || fail "no 0005 line" "$out"
 python3 "$UPDATE" "$S10" --apply >/dev/null
 python3 - "$S10" <<'PY2'
 import json, os, sys
@@ -669,14 +669,14 @@ P21="$TMP/proj21"; mkdir -p "$P21"
 CLAUDE_AGENTIC_TEMPLATES="$OLD/ai-init/templates" bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$P21" >/dev/null
 jq '.model_tiers.EXPERT.model = "my own expert"' "$P21/.ai/policies/risk-tiers.json" > "$TMP/rt" && mv "$TMP/rt" "$P21/.ai/policies/risk-tiers.json"
 out=$(python3 "$UPDATE" "$P21" 2>&1)
-printf '%s' "$out" | grep -q 'kept your value for: .*model_tiers.EXPERT.model' && pass "the edited model value is a conflict" || fail "no model_tiers conflict" "$out"
+grep -q 'kept your value for: .*model_tiers.EXPERT.model' <<<"$out" && pass "the edited model value is a conflict" || fail "no model_tiers conflict" "$out"
 [ "$(printf '%s' "$out" | grep -c 'the plugin now names tiers (FAST/BALANCED/STRONG/EXPERT), not models; the model of a tier comes from the installed plan: state.py profile --tier <TIER>')" = 1 ] \
     && pass "one hint names the tier vocabulary and state.py profile --tier" || fail "tier hint missing or repeated" "$out"
 P22="$TMP/proj22"; mkdir -p "$P22"
 CLAUDE_AGENTIC_TEMPLATES="$OLD/ai-init/templates" bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$P22" >/dev/null
 sed -i "4s/.*/my own wording of who writes current.json/" "$P22/.ai/state/README.md"
 out=$(python3 "$UPDATE" "$P22" 2>&1)
-printf '%s' "$out" | grep -q 'names tiers' && fail "the hint must appear only for a model-key conflict" "$out" || pass "any other conflict prints no tier hint"
+grep -q 'names tiers' <<<"$out" && fail "the hint must appear only for a model-key conflict" "$out" || pass "any other conflict prints no tier hint"
 
 echo "== --check --budget: a root instruction file over its byte budget exits 1 (WP6 R21)"
 B="$TMP/budget"; mkdir -p "$B"
@@ -687,13 +687,13 @@ out=$(python3 "$UPDATE" "$B" --check --budget); rc=$?
 python3 "$UPDATE" "$B" --budget >/dev/null 2>&1; [ $? -eq 2 ] && pass "--budget without --check is a usage error" || fail "--budget alone should exit 2"
 head -c 400 /dev/zero | tr '\0' 'x' >> "$B/CLAUDE.md"; printf '\n' >> "$B/CLAUDE.md"
 out=$(python3 "$UPDATE" "$B" --check --budget); rc=$?
-[ $rc -eq 1 ] && printf '%s' "$out" | grep -qE '^CLAUDE\.md file [0-9]+ B over the skeleton budget of 2048 B$' \
+[ $rc -eq 1 ] && grep -qE '^CLAUDE\.md file [0-9]+ B over the skeleton budget of 2048 B$' <<<"$out" \
     && pass "a padded CLAUDE.md exits 1 and names the file and the budget" || fail "padded file: rc=$rc" "$out"
-printf '%s' "$out" | grep -q ' block ' && fail "the block itself is within budget and must not be listed" "$out" || pass "only the offender is listed"
+grep -q ' block ' <<<"$out" && fail "the block itself is within budget and must not be listed" "$out" || pass "only the offender is listed"
 # An installed plugin has skills/ but no instructions/: the budgets must still apply.
 INST="$TMP/installed/skills"; mkdir -p "$INST"; cp -r "$PLUGIN_ROOT/skills/project-update" "$INST/"
 out=$(python3 "$INST/project-update/update.py" "$B" --check --budget 2>&1); rc=$?
-[ $rc -eq 1 ] && printf '%s' "$out" | grep -q 'over the skeleton budget of 2048 B' && ! printf '%s' "$out" | grep -q Traceback \
+[ $rc -eq 1 ] && grep -q 'over the skeleton budget of 2048 B' <<<"$out" && ! grep -q Traceback <<<"$out" \
     && pass "from a skills-only install the shipped budgets apply" || fail "skills-only install: rc=$rc" "$out"
 echo "== a legacy Codex-agentic marker pair is renamed, not doubled"
 # An AGENTS.md written before the plugin's markers were unified carries
@@ -706,9 +706,9 @@ sed 's/claude-agentic:\(start\|end\)/Codex-agentic:\1/' "$PLUGIN_ROOT/skills/ai-
 { printf '# legacy\n\nkeep me above\n\n'; cat "$TMP/legacy-block"; printf '\n# my notes\nkeep me below\n'; } > "$L/AGENTS.md"
 out=$(python3 "$UPDATE" "$L" 2>&1); rc=$?
 [ $rc -eq 0 ] && pass "the dry run exits 0 on a legacy marker" || fail "dry run failed on a legacy marker" "$out"
-printf '%s' "$out" | grep -q 'AGENTS.md .*legacy Codex-agentic markers renamed' \
+grep -q 'AGENTS.md .*legacy Codex-agentic markers renamed' <<<"$out" \
     && pass "the dry run says the markers will be renamed" || fail "no rename line for the legacy block" "$out"
-printf '%s' "$out" | grep -q 'AGENTS.md (split?)' \
+grep -q 'AGENTS.md (split?)' <<<"$out" \
     && fail "the dry run still reads the legacy block as no block and hints --adopt" "$out" \
     || pass "the dry run sees the legacy block as the managed block (no split? hint)"
 python3 "$UPDATE" "$L" --apply >/dev/null 2>&1
@@ -719,7 +719,7 @@ grep -q 'keep me above' "$L/AGENTS.md" && grep -q 'keep me below' "$L/AGENTS.md"
 diff <(sed -n '/claude-agentic:start/,/claude-agentic:end/p' "$L/AGENTS.md") "$PLUGIN_ROOT/skills/ai-init/templates/AGENTS.block.md" >/dev/null \
     && pass "the renamed block is the shipped one" || fail "the renamed block differs from the shipped block"
 out=$(python3 "$UPDATE" "$L" --apply 2>&1)
-printf '%s' "$out" | grep -q '^0 automatic, 0 conflict' && pass "a second run has nothing left" || fail "second run not clean" "$out"
+grep -q '^0 automatic, 0 conflict' <<<"$out" && pass "a second run has nothing left" || fail "second run not clean" "$out"
 # An edited line inside a legacy block: the markers are renamed and the edit is
 # kept — the same path an edited current block takes.
 E="$TMP/legacy-edited"; mkdir -p "$E/.codex"
@@ -767,14 +767,14 @@ bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$PB" >/dev/null
 git -C "$PB" init -q
 { printf '# legacy\n\n'; sed 's/claude-agentic:\(start\|end\)/Codex-agentic:\1/' "$PT/AGENTS.block.md"; } > "$PB/AGENTS.md"
 out=$(CLAUDE_AGENTIC_TEMPLATES="$PT" python3 "$UPDATE" "$PB" 2>&1); rc=$?
-printf '%s' "$out" | grep -q 'AGENTS.md: the managed block is [0-9]* B, budget [0-9]* B — the plugin ships it that size' \
+grep -q 'AGENTS.md: the managed block is [0-9]* B, budget [0-9]* B — the plugin ships it that size' <<<"$out" \
     && pass "an untouched legacy block over budget is the plugin's" || fail "the hint blames the project for the plugin's own block (rc=$rc)" "$out"
-printf '%s' "$out" | grep -q 'trimming it is yours' \
+grep -q 'trimming it is yours' <<<"$out" \
     && fail "an untouched legacy block is reported as edited here" "$out" || pass "no 'edited here' for the untouched block"
 # The same block with one line of the project's own inside it is the project's.
 sed -i '3a my own rule, right inside the block' "$PB/AGENTS.md"
 out=$(CLAUDE_AGENTIC_TEMPLATES="$PT" python3 "$UPDATE" "$PB" 2>&1)
-printf '%s' "$out" | grep -q 'AGENTS.md: the managed block is .* trimming it is yours' \
+grep -q 'AGENTS.md: the managed block is .* trimming it is yours' <<<"$out" \
     && pass "an edited legacy block over budget is the project's" || fail "an edited legacy block should be the project's to trim" "$out"
 
 summary "project-update"

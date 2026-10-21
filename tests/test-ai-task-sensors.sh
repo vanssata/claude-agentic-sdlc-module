@@ -62,9 +62,9 @@ OUT=$(N diff --from "$BASE" --to "$AFTER" --tier T2 --scope step --format json)
     || fail "should count exactly the one source file" "$OUT"
 [ "$(printf '%s' "$OUT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["lines"])')" = 2 ] \
     && pass "lines are added + deleted after exclusions" || fail "should count 2 lines" "$OUT"
-printf '%s' "$OUT" | grep -q '"excluded_lines": 1' \
+grep -q '"excluded_lines": 1' <<<"$OUT" \
     && pass "the excluded lines are reported, not silently dropped" || fail "excluded_lines should be 1"
-printf '%s' "$OUT" | grep -q '"unbudgeted_lines": 1' \
+grep -q '"unbudgeted_lines": 1' <<<"$OUT" \
     && pass "the docs scope is counted but not budgeted" || fail "unbudgeted_lines should be 1"
 
 # git's own numbers are the reference; a sensor that disagrees with git is wrong.
@@ -74,7 +74,7 @@ GIT_LINES=$(git -C "$ROOT" diff --numstat "$BASE" "$AFTER" -- src/app.php | awk 
 N diff --from "$BASE" --to "$AFTER" --tier T2 --allowed "src/**" >/dev/null 2>&1
 [ $? -eq 0 ] && pass "a file inside allowed_files is in scope" || fail "src/** should allow src/app.php"
 OUT=$(N diff --from "$BASE" --to "$AFTER" --tier T2 --allowed "tests/**"); RC=$?
-[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'unscoped: src/app.php' \
+[ $RC -eq 2 ] && grep -q 'unscoped: src/app.php' <<<"$OUT" \
     && pass "a file outside allowed_files is red and named" || fail "should be red and name the file" "$OUT($RC)"
 
 # The scope guard's reading of a plan glob, not a stricter one: a file the hook
@@ -96,12 +96,12 @@ with open(root + "/.ai/policies/risk-tiers.json", "w") as fh:
     json.dump(policy, fh)
 PY
 OUT=$(N diff --from "$BASE" --to "$AFTER" --tier T2 --scope step); RC=$?
-[ $RC -eq 0 ] && printf '%s' "$OUT" | grep -q 'budget: over — ' \
+[ $RC -eq 0 ] && grep -q 'budget: over — ' <<<"$OUT" \
     && pass "over the per-step budget is reported, by how much, and stays green: size is advisory" \
     || fail "should be green and say by how much" "$OUT($RC)"
-printf '%s' "$OUT" | grep -q '(advisory' \
+grep -q '(advisory' <<<"$OUT" \
     && pass "and the line says it is advisory" || fail "should say advisory" "$OUT"
-printf '%s' "$OUT" | grep -q 'budget 1 / 1' \
+grep -q 'budget 1 / 1' <<<"$OUT" \
     && pass "the project's own numbers are used, not the defaults" || fail "should read the project policy"
 # Only a project that wrote `enforce: true` turns the measurement into a gate.
 python3 - "$ROOT" <<'PY'
@@ -112,30 +112,30 @@ policy = json.load(open(p)); policy["diff_budget"]["enforce"] = True
 json.dump(policy, open(p, "w"))
 PY
 OUT=$(N diff --from "$BASE" --to "$AFTER" --tier T2 --scope step); RC=$?
-[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'budget: over — ' && ! printf '%s' "$OUT" | grep -q '(advisory' \
+[ $RC -eq 2 ] && grep -q 'budget: over — ' <<<"$OUT" && ! grep -q '(advisory' <<<"$OUT" \
     && pass "with diff_budget.enforce true the same diff is red" || fail "should be red under enforce" "$OUT($RC)"
 rm -f "$ROOT/.ai/policies/risk-tiers.json"
 
 echo "== section 2c: unavailable is never a refusal"
 BARE="$TMP/with space/bare"; mkdir -p "$BARE/.ai/state"
 OUT=$(python3 "$SENSORS" --root "$BARE" snapshot); RC=$?
-[ $RC -eq 3 ] && printf '%s' "$OUT" | grep -qi unavailable \
+[ $RC -eq 3 ] && grep -qi unavailable <<<"$OUT" \
     && pass "a non-git root is unavailable (exit 3), not an error" || fail "should exit 3" "$OUT($RC)"
 OUT=$(N diff --from "$BASE" --to 0000000000000000000000000000000000000000); RC=$?
-[ $RC -eq 3 ] && printf '%s' "$OUT" | grep -q 'UNAVAIL' \
+[ $RC -eq 3 ] && grep -q 'UNAVAIL' <<<"$OUT" \
     && pass "a tree that is gone is unavailable, not a crash" || fail "should exit 3" "$OUT($RC)"
 
 echo "== section 3: re-scoring and detect"
 OUT=$(N rescore --from "$BASE" --to "$AFTER" --declared T2); RC=$?
-[ $RC -eq 0 ] && printf '%s' "$OUT" | grep -q 'green' \
+[ $RC -eq 0 ] && grep -q 'green' <<<"$OUT" \
     && pass "a source-only diff keeps its declared tier" || fail "should stay T2" "$OUT($RC)"
 
 OUT=$(N rescore --from "$BASE" --to "$DEEP" --declared T2); RC=$?
-[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'T2 -> T5' \
+[ $RC -eq 2 ] && grep -q 'T2 -> T5' <<<"$OUT" \
     && pass "a diff reaching **/Payment/** re-scores to T5" || fail "should raise to T5" "$OUT($RC)"
 
 OUT=$(N rescore --from "$BASE" --to "$DEEP" --declared T6)
-printf '%s' "$OUT" | grep -q 'T6' \
+grep -q 'T6' <<<"$OUT" \
     && pass "re-scoring never lowers a declared tier (downgrade_rule)" || fail "must not lower" "$OUT"
 
 # Size never re-scores a tier on its own: a task over its budget is recorded
@@ -152,7 +152,7 @@ with open(root + "/.ai/policies/risk-tiers.json", "w") as fh:
     json.dump(policy, fh)
 PY
 OUT=$(N rescore --from "$BASE" --to "$AFTER" --declared T2); RC=$?
-[ $RC -eq 0 ] && printf '%s' "$OUT" | grep -q 'green' \
+[ $RC -eq 0 ] && grep -q 'green' <<<"$OUT" \
     && pass "a task over its budget keeps its tier: the budget is advisory" || fail "size must not raise the tier" "$OUT($RC)"
 python3 - "$ROOT" <<'PY'
 import json, sys
@@ -161,16 +161,16 @@ policy = json.load(open(p)); policy["diff_budget"]["enforce"] = True
 json.dump(policy, open(p, "w"))
 PY
 OUT=$(N rescore --from "$BASE" --to "$AFTER" --declared T2); RC=$?
-[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'T2 -> T3' \
+[ $RC -eq 2 ] && grep -q 'T2 -> T3' <<<"$OUT" \
     && pass "with enforce true, over the task budget raises one tier (the old behaviour)" \
     || fail "enforce should raise to T3" "$OUT($RC)"
 rm -f "$ROOT/.ai/policies/risk-tiers.json"
 
 printf '{"scripts": {"lint": "eslint ."}}\n' > "$ROOT/package.json"
 OUT=$(N detect)
-printf '%s' "$OUT" | grep -q 'lint_command: npm run lint' \
+grep -q 'lint_command: npm run lint' <<<"$OUT" \
     && pass "detect proposes the command it found" || fail "should propose npm run lint" "$OUT"
-printf '%s' "$OUT" | grep -q 'typecheck_command: none' \
+grep -q 'typecheck_command: none' <<<"$OUT" \
     && pass "nothing detected proposes an explicit none, never a silent green" || fail "should ask for none" "$OUT"
 [ ! -e "$ROOT/node_modules" ] && pass "detect runs nothing it detected" || fail "detect must not run a tool"
 
@@ -217,9 +217,9 @@ S step 1 >/dev/null
 
 printf 'one\ntwo\nthree\nfour\nfive\nsix\nseven\n' > "$GATE/src/app.php"
 OUT=$(S step-done 1 2>&1); RC=$?
-[ $RC -eq 6 ] && printf '%s' "$OUT" | grep -q DIFF_BUDGET_EXCEEDED \
+[ $RC -eq 6 ] && grep -q DIFF_BUDGET_EXCEEDED <<<"$OUT" \
     && pass "a step over its tier's budget exits 6 when the project enforces the budget" || fail "should exit 6" "$OUT($RC)"
-printf '%s' "$OUT" | grep -q 'step-split' \
+grep -q 'step-split' <<<"$OUT" \
     && pass "the refusal names the way out" || fail "should suggest step-split" "$OUT"
 [ "$(S get --field approved_plan.current_step_id)" = 1 ] \
     && pass "a refused step stays in progress — no work is lost" || fail "step should stay current"
@@ -227,7 +227,7 @@ printf '%s' "$OUT" | grep -q 'step-split' \
 printf 'one\ntwo\n' > "$GATE/src/app.php"
 mkdir -p "$GATE/lib"; printf 'stray\n' > "$GATE/lib/Other.php"
 OUT=$(S step-done 1 2>&1); RC=$?
-[ $RC -eq 6 ] && printf '%s' "$OUT" | grep -q 'SCOPE_CHANGE_REQUIRED' \
+[ $RC -eq 6 ] && grep -q 'SCOPE_CHANGE_REQUIRED' <<<"$OUT" \
     && pass "a file outside the step's files exits 6 and is named" || fail "should exit 6" "$OUT($RC)"
 rm -f "$GATE/lib/Other.php"
 
@@ -237,11 +237,11 @@ printf 'fee\ntwo\nthree\nfour\nfive\nsix\n' > "$GATE/src/Payment/Fee.php"
 OUT=$(S step-done 1 2>&1); RC=$?
 [ $RC -eq 6 ] && pass "the step that grew a second concern is refused" || fail "should refuse" "$OUT($RC)"
 OUT=$(S step-split 1 --files "src/Payment/*.php" --note "the payment part" 2>&1)
-printf '%s' "$OUT" | grep -q '1.2' && pass "step-split makes a sibling step" || fail "should split" "$OUT"
+grep -q '1.2' <<<"$OUT" && pass "step-split makes a sibling step" || fail "should split" "$OUT"
 OUT=$(S step-done 1 2>&1); RC=$?
 [ $RC -eq 0 ] && pass "after the split the step measures only its own files" \
                || fail "step 1 should pass now" "$OUT($RC)"
-printf '%s' "$OUT" | grep -q 'step 1 diff' \
+grep -q 'step 1 diff' <<<"$OUT" \
     && pass "step-done reports what it measured" || fail "should print the step diff" "$OUT"
 
 echo "== section 5: re-scoring at the gate"
@@ -254,7 +254,7 @@ J diff.rescore_reasons | grep -q payments \
 
 echo "== section 6: only a human lowers a tier"
 OUT=$(S risk T2 --note "it is small really" 2>&1 </dev/null); RC=$?
-[ $RC -eq 5 ] && printf '%s' "$OUT" | grep -q 'APPROVAL_REFUSED' \
+[ $RC -eq 5 ] && grep -q 'APPROVAL_REFUSED' <<<"$OUT" \
     && pass "an agent cannot lower a tier (downgrade_rule)" || fail "should exit 5" "$OUT($RC)"
 [ "$(S get --field risk_tier)" = T4 ] && pass "the tier is unchanged by the refusal" || fail "tier moved"
 OUT=$(AI_UNATTENDED=1 S risk T2 --by "Ivan" --note "reviewed by hand" 2>&1 </dev/null); RC=$?
@@ -273,7 +273,7 @@ S step-done R1 --force >/dev/null
 S remediate --files "tests/**" --note "second batch" >/dev/null
 S step-done R2 --force >/dev/null
 OUT=$(S remediate --files "tests/**" --note "third batch" 2>&1 </dev/null); RC=$?
-[ $RC -eq 5 ] && printf '%s' "$OUT" | grep -q 'round 3' \
+[ $RC -eq 5 ] && grep -q 'round 3' <<<"$OUT" \
     && pass "a third remediation round needs the human (remediation_rule)" \
     || fail "should refuse round 3" "$OUT($RC)"
 
@@ -295,9 +295,9 @@ A quick --goal "a wide but harmless step" --workflow feature --tier T2 --files "
 printf 'one\ntwo\nthree\nfour\nfive\nsix\nseven\n' > "$ADV/src/app.php"
 OUT=$(A step-done 1 2>&1); RC=$?
 [ $RC -eq 0 ] && pass "a step over its budget is finished, not refused" || fail "should exit 0" "$OUT($RC)"
-printf '%s' "$OUT" | grep -q 'budget: over' && printf '%s' "$OUT" | grep -q '(advisory)' \
+grep -q 'budget: over' <<<"$OUT" && grep -q '(advisory)' <<<"$OUT" \
     && pass "and the warning says by how much, and that it is advisory" || fail "should warn" "$OUT"
-printf '%s' "$OUT" | grep -q 'step-split' \
+grep -q 'step-split' <<<"$OUT" \
     && pass "and still names step-split as the way to a smaller review" || fail "should name step-split" "$OUT"
 [ "$(A get --field approved_plan.steps | jq -r '.[0].status')" = done ] \
     && pass "the step is done" || fail "step should be done"
@@ -325,7 +325,7 @@ for spec in "requirements.txt:dependencies" "requirements-dev.txt:dependencies" 
     mkdir -p "$FLOOR/$(dirname "$path")"; printf 'x\n' > "$FLOOR/$path"
     FTREE=$(F snapshot)
     OUT=$(F rescore --from "$FBASE" --to "$FTREE" --declared T3); RC=$?
-    [ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q "T3 -> T4: $want" \
+    [ $RC -eq 2 ] && grep -q "T3 -> T4: $want" <<<"$OUT" \
         && pass "$path is $want and floors at T4, above the T3 ceiling" \
         || fail "$path should re-score T3 -> T4 ($want)" "$OUT($RC)"
     rm -f "$FLOOR/$path"
@@ -375,7 +375,7 @@ LOG=$(J tests.runs.0.log)
     && pass "the run is bound to the tree it ran on" || fail "a run should record its tree"
 
 OUT=$(S test-run --scope suite --env-retry 2>&1); RC=$?
-[ $RC -ne 0 ] && printf '%s' "$OUT" | grep -q 'classified' \
+[ $RC -ne 0 ] && grep -q 'classified' <<<"$OUT" \
     && pass "--env-retry is refused until a failure was classified as one" \
     || fail "should refuse an unclassified retry" "$OUT($RC)"
 
@@ -386,16 +386,16 @@ S test-run --scope suite >/dev/null 2>&1
 S test-run --scope suite >/dev/null 2>&1
 S test-run --scope suite >/dev/null 2>&1
 OUT=$(S test-run --scope suite 2>&1); RC=$?
-[ $RC -eq 6 ] && printf '%s' "$OUT" | grep -q 'run budget exhausted' \
+[ $RC -eq 6 ] && grep -q 'run budget exhausted' <<<"$OUT" \
     && pass "the suite cannot be run forever: the cap is the human's cue" \
     || fail "should exhaust the run budget" "$OUT($RC)"
 
 echo "== section 8: the static sensors"
 NG() { python3 "$SENSORS" --root "$GATE" "$@"; }
 OUT=$(NG check --no-bite 2>&1)
-printf '%s' "$OUT" | grep -q 'lint          n/a' \
+grep -q 'lint          n/a' <<<"$OUT" \
     && pass "lint_command: none is not applicable, and does not block" || fail "none should be n/a" "$OUT"
-printf '%s' "$OUT" | grep -q 'traceability  RED' \
+grep -q 'traceability  RED' <<<"$OUT" \
     && pass "a finished step whose named test does not exist is red" || fail "traceability should be red" "$OUT"
 
 # A missing line is unavailable — never green — and says what to write.
@@ -407,11 +407,11 @@ open(p, "w").write(s)
 PY2
 printf '{}\n' > "$GATE/tsconfig.json"
 OUT=$(NG check --no-bite 2>&1)
-printf '%s' "$OUT" | grep -q 'typecheck     UNAVAIL' \
+grep -q 'typecheck     UNAVAIL' <<<"$OUT" \
     && pass "a missing typecheck_command is unavailable, not green" || fail "should be unavailable" "$OUT"
-printf '%s' "$OUT" | grep -q 'npx tsc --noEmit' \
+grep -q 'npx tsc --noEmit' <<<"$OUT" \
     && pass "and it proposes the line it found" || fail "should propose tsc" "$OUT"
-printf '%s' "$OUT" | grep -q 'review: required' \
+grep -q 'review: required' <<<"$OUT" \
     && pass "one unavailable sensor is enough to keep the review" || fail "review should be required" "$OUT"
 rm -f "$GATE/tsconfig.json"
 
@@ -422,7 +422,7 @@ for f in dup1 dup2; do
       > "$GATE/src/$f.php"
 done
 OUT=$(NG check --only duplicates 2>&1)
-printf '%s' "$OUT" | grep -q 'duplicates    RED' \
+grep -q 'duplicates    RED' <<<"$OUT" \
     && pass "a block repeated in two files is red" || fail "duplicates should be red" "$OUT"
 rm -f "$GATE/src/dup1.php" "$GATE/src/dup2.php"
 
@@ -430,9 +430,9 @@ echo "== section 8b: a result belongs to the tree it was taken on"
 NG check --no-bite >/dev/null 2>&1
 printf 'moved on\n' >> "$GATE/src/app.php"
 OUT=$(NG report 2>&1)
-printf '%s' "$OUT" | grep -q 'STALE' \
+grep -q 'STALE' <<<"$OUT" \
     && pass "a report from an older tree reads as stale, not as a pass" || fail "should be stale" "$OUT"
-printf '%s' "$OUT" | grep -q 'review: required' \
+grep -q 'review: required' <<<"$OUT" \
     && pass "and stale keeps the review" || fail "stale should keep the review" "$OUT"
 
 LEDGER="$GATE/.ai/reports/$TASK/review-ledger.md"
@@ -494,7 +494,7 @@ B test-run --scope suite >/dev/null
 
 TREE_BEFORE_BITE=$(NB snapshot)
 OUT=$(NB bite 2>&1); RC=$?
-[ $RC -eq 0 ] && printf '%s' "$OUT" | grep -q 'bite          green' \
+[ $RC -eq 0 ] && grep -q 'bite          green' <<<"$OUT" \
     && pass "a test that fails without the change bites" || fail "bite should be green" "$OUT($RC)"
 [ "$(NB snapshot)" = "$TREE_BEFORE_BITE" ] \
     && pass "the worktree is byte-identical afterwards" || fail "bite must restore the worktree"
@@ -510,7 +510,7 @@ state["approved_plan"]["steps"][0]["required_tests"] = ["tests/blind_test.py"]
 json.dump(state, open(p, "w"), indent=2)
 PY2
 OUT=$(NB bite 2>&1); RC=$?
-[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'do not reach it' \
+[ $RC -eq 2 ] && grep -q 'do not reach it' <<<"$OUT" \
     && pass "a test that passes without the change is red, however green the suite is" \
     || fail "bite should be red" "$OUT($RC)"
 [ "$(NB snapshot)" = "$TREE_BEFORE_BITE" ] \
@@ -558,7 +558,7 @@ json.dump(state, open(p, "w"), indent=2)
 PY2
 B test-run --scope suite >/dev/null
 OUT=$(B review-gate 2>&1); RC=$?
-[ $RC -eq 0 ] && printf '%s' "$OUT" | grep -q 'review: skipped' \
+[ $RC -eq 0 ] && grep -q 'review: skipped' <<<"$OUT" \
     && pass "T2 with every sensor green replaces the review (decision 6)" \
     || fail "should skip the review" "$OUT($RC)"
 [ "$(B get --field review_status)" = skipped_green ] \
@@ -567,7 +567,7 @@ OUT=$(B review-gate 2>&1); RC=$?
     && pass "the report a human can read is on disk" || fail "sensors.json should exist"
 
 OUT=$(B set review_status skipped_green 2>&1); RC=$?
-[ $RC -ne 0 ] && printf '%s' "$OUT" | grep -q 'review-gate' \
+[ $RC -ne 0 ] && grep -q 'review-gate' <<<"$OUT" \
     && pass "no one can assert a skipped review by hand" || fail "set should refuse" "$OUT($RC)"
 
 # One unavailable sensor is enough: a tool nobody wrote down is not a pass.
@@ -578,7 +578,7 @@ s = open(p).read().replace("lint_command:        none\n", "")
 open(p, "w").write(s)
 PY2
 OUT=$(B review-gate 2>&1); RC=$?
-[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'review: required' \
+[ $RC -eq 2 ] && grep -q 'review: required' <<<"$OUT" \
     && pass "a missing linter keeps the review, it does not grant a skip" \
     || fail "should require the review" "$OUT($RC)"
 python3 - "$BITE" <<'PY2'
@@ -591,7 +591,7 @@ PY2
 AI_UNATTENDED=1 B risk T3 --note "shared behaviour after all" >/dev/null
 B test-run --scope suite >/dev/null
 OUT=$(B review-gate 2>&1); RC=$?
-[ $RC -eq 2 ] && printf '%s' "$OUT" | grep -q 'above T2' \
+[ $RC -eq 2 ] && grep -q 'above T2' <<<"$OUT" \
     && pass "at T3 the review always runs — the sensors only feed it" \
     || fail "T3 should require the review" "$OUT($RC)"
 grep -q 'sensors.py' "$BITE/.ai/reports/$BTASK/review-ledger.md" \
@@ -706,7 +706,7 @@ python3 "$STATE_PY" --root "$BAS" risk T2 --note "isolated" >/dev/null
 python3 "$STATE_PY" --root "$BAS" plan --ref ".ai/reports/$BTASK2/plan.md" --steps "$TMP/rem-steps.json" >/dev/null
 printf 'a\nfixed\n' > "$BAS/src/a.php"
 OUT=$(python3 "$STATE_PY" --root "$BAS" step-done 1 2>&1)
-printf '%s' "$OUT" | grep -q "base tree" \
+grep -q "base tree" <<<"$OUT" \
     && fail "the first step starts at the base tree; nothing to say" "$OUT" \
     || pass "the first step measured from the base tree prints no note"
 # Step 1 finished, but its tree was never recorded (snapshot unavailable).
@@ -718,7 +718,7 @@ json.dump(d, open(p, "w"))
 PY2
 printf 'b\nfixed\n' > "$BAS/src/b.php"
 OUT=$(python3 "$STATE_PY" --root "$BAS" step-done 2 2>&1); RC=$?
-[ $RC -eq 0 ] && printf '%s' "$OUT" | grep -q "measured from the task's base tree" \
+[ $RC -eq 0 ] && grep -q "measured from the task's base tree" <<<"$OUT" \
     && pass "a later step that falls back to the base tree says so" \
     || fail "step-done should name the base-tree fallback" "$OUT($RC)"
 

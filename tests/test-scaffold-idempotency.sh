@@ -12,7 +12,7 @@ ROOT="$TMP/project"; mkdir -p "$ROOT"
 
 echo "== first run"
 out=$(bash "$SCAFFOLD" "$ROOT" 2>&1)
-printf '%s' "$out" | grep -q 'created in' && pass "first run creates the tree" || fail "first run should create files" "$out"
+grep -q 'created in' <<<"$out" && pass "first run creates the tree" || fail "first run should create files" "$out"
 
 EXPECTED=$(find "$CLAUDE_AGENTIC_TEMPLATES/.ai" -type f | wc -l)
 ACTUAL=$(find "$ROOT/.ai" -type f | wc -l)
@@ -42,11 +42,11 @@ for f in AGENTS.md .junie/guidelines.md; do
     [ -e "$FOUR/$f" ] && fail "$f should not exist: it was not asked for" || pass "$f was not created"
 done
 out=$(bash "$SCAFFOLD" "$FOUR" --runtime nope 2>&1) && fail "an unknown runtime should exit 2" \
-    || printf '%s' "$out" | grep -q 'comma list' && pass "an unknown runtime is refused by name" || fail "wrong message for an unknown runtime" "$out"
+    || grep -q 'comma list' <<<"$out" && pass "an unknown runtime is refused by name" || fail "wrong message for an unknown runtime" "$out"
 
 echo "== second run"
 out=$(bash "$SCAFFOLD" "$ROOT" 2>&1)
-printf '%s' "$out" | grep -q 'nothing to do' && pass "second run reports nothing to do" || fail "second run should be a no-op" "$out"
+grep -q 'nothing to do' <<<"$out" && pass "second run reports nothing to do" || fail "second run should be a no-op" "$out"
 
 # A project scaffolded before .ai/VERSION existed is schema 0, and must stay
 # schema 0 until /project-update migrates it: the scaffold must not declare it
@@ -102,7 +102,7 @@ grep -q 'claude-agentic:start' "$ROOT4/AGENTS.md" && pass "AGENTS.md carries the
 [ "$(find "$ROOT4" -maxdepth 1 -name '.ai' | wc -l)" = 1 ] && pass "there is exactly one .ai/ tree" || fail "expected one .ai/ tree"
 grep -q 'ai-task' "$ROOT4/AGENTS.md" && pass "AGENTS.md names the same pipeline entry point" || fail "AGENTS.md should name /ai-task"
 out=$(bash "$SCAFFOLD" "$ROOT4" --runtime both 2>&1)
-printf '%s' "$out" | grep -q 'nothing to do' && pass "a dual-runtime scaffold is idempotent too" || fail "second run should be a no-op" "$out"
+grep -q 'nothing to do' <<<"$out" && pass "a dual-runtime scaffold is idempotent too" || fail "second run should be a no-op" "$out"
 [ "$(grep -c 'claude-agentic:start' "$ROOT4/AGENTS.md")" = 1 ] && pass "the AGENTS.md block is not duplicated" || fail "AGENTS.md block duplicated"
 
 echo "== a Codex-only project gets no stray CLAUDE.md"
@@ -137,7 +137,7 @@ before=$(cd "$ROOT8" && find . -type f -print0 | sort -z | xargs -0 sha256sum)
 out=$(bash "$SCAFFOLD2" "$ROOT8" --runtime both 2>&1)
 after=$(cd "$ROOT8" && find . -type f -print0 | sort -z | xargs -0 sha256sum)
 [ "$before" = "$after" ] && pass "a second project scaffold changes no file" || fail "the second run changed files"
-printf '%s' "$out" | grep -q 'nothing to do' && pass "it reports nothing to do" || fail "second run should be a no-op" "$out"
+grep -q 'nothing to do' <<<"$out" && pass "it reports nothing to do" || fail "second run should be a no-op" "$out"
 
 echo "== a legacy Codex-agentic pair is the managed block: nothing is appended beside it"
 # An AGENTS.md from before the markers were unified. The scaffold never rewrites
@@ -149,7 +149,7 @@ for name in Codex-agentic codex-agentic; do
     out=$(bash "$SCAFFOLD" "$R9" --runtime codex 2>&1)
     [ "$(grep -c 'agentic:start -->' "$R9/AGENTS.md")" = 1 ] && pass "$name: one block, the legacy pair is not doubled" \
         || fail "$name: a second block was appended beside the legacy pair" "$out"
-    printf '%s' "$out" | grep -q 'AGENTS.md (agent workflow block appended)' \
+    grep -q 'AGENTS.md (agent workflow block appended)' <<<"$out" \
         && fail "$name: the scaffold reports an appended block" "$out" || pass "$name: no block is reported as appended"
     grep -q "<!-- $name:start -->" "$R9/AGENTS.md" && grep -q 'keep this.' "$R9/AGENTS.md" \
         && pass "$name: the file is left as it was" || fail "$name: the scaffold rewrote an existing file"

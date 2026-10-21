@@ -80,9 +80,9 @@ out=$(printf '%s' "$approve_cmd" | AI_UNATTENDED=1 "$GUARD" 2>&1)
 [ -z "$out" ] && pass "AI_UNATTENDED in the hook's own environment lets a launcher through" \
     || fail "the unattended launcher should be allowed" "$out"
 out=$(printf '%s' "$approve_cmd" | "$GUARD" 2>&1)
-printf '%s' "$out" | grep -q "Approval happens outside the agent" \
+grep -q "Approval happens outside the agent" <<<"$out" \
     && pass "and the deny text teaches the human what to do" || fail "WHY_APPROVE is missing" "$out"
-printf '%s' "$out" | grep -q "AI_UNATTENDED=1 in the launcher" \
+grep -q "AI_UNATTENDED=1 in the launcher" <<<"$out" \
     && pass "including the unattended route and what it costs" || fail "the unattended route should be named"
 
 echo "== ai-path-guard (the context guard is the runtime's to run, not the work's)"
@@ -126,7 +126,7 @@ out=$(printf '%s' "$confirm_cmd" | AI_UNATTENDED=1 "$GUARD" 2>&1)
 [ -z "$out" ] && pass "AI_UNATTENDED in the hook's own environment lets a launcher through" \
     || fail "the unattended launcher should be allowed" "$out"
 out=$(printf '%s' "$confirm_cmd" | "$GUARD" 2>&1)
-printf '%s' "$out" | grep -q "outside Claude Code or Codex" && printf '%s' "$out" | grep -q "terminal" \
+grep -q "outside Claude Code or Codex" <<<"$out" && grep -q "terminal" <<<"$out" \
     && pass "and the deny text names the terminal outside Claude Code or Codex" || fail "WHY_CONFIRM_DELETE is missing" "$out"
 # Spellings the review found one token away from the fixtures (T-2026-09-27-003 review).
 for c in "python3 -m \"update\" . --apply --confirm-delete x" "python3 -m 'update' . --apply --confirm-delete x" \
@@ -461,7 +461,7 @@ for c in $'read -r a b <<< "$x"\nrm -f .ai/state/current.json' $'grep foo <<<bar
     decide_home "in a task: still denied: ${c//$'\n'/⏎}" deny "$c"
 done
 out=$(jq -nc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:"rm -rf .ai/state"}}' | "$GUARD" 2>&1)
-printf '%s' "$out" | grep -q 'current\.json\|session\.json' && pass "in a task: the deny names the file found under the directory" \
+grep -q 'current\.json\|session\.json' <<<"$out" && pass "in a task: the deny names the file found under the directory" \
     || fail "the deny should name the protected file" "$out"
 rm -f "$ROOT/.ai/state/current.json"
 decide_home "no task: rm -rf .ai/state/ is still denied, it holds a control file" deny 'rm -rf .ai/state/'

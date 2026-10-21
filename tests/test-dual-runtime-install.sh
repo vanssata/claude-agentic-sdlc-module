@@ -63,7 +63,7 @@ out=$(run dir-only --target auto --plan max --fable yes </dev/null)
 wrote "$TMP/dir-only/claude" && pass "auto installed Claude" || fail "Claude should have been installed"
 if wrote "$TMP/dir-only/codex"; then fail "a codex directory without a codex executable must be left alone"
 else pass "the Codex directory is left untouched"; fi
-if printf '%s' "$out" | grep -q 'codex plan\|ChatGPT plan'; then fail "no Codex plan may be asked for or chosen"
+if grep -q 'codex plan\|ChatGPT plan' <<<"$out"; then fail "no Codex plan may be asked for or chosen"
 else pass "no Codex plan is asked for"; fi
 printf '%s' "$out" | grep -c >/dev/null 'no codex on PATH — skipped' \
     && pass "the skip is reported with its reason" || fail "expected the skip note" "$(printf '%s' "$out" | head -3)"
@@ -74,15 +74,15 @@ printf '%s' "$out" | grep -c >/dev/null -- '--target both' \
 stub claude
 mkdir -p "$TMP/dir only spaced/codex"
 out=$(run "dir only spaced" --target auto --plan max --fable yes </dev/null)
-printf '%s' "$out" | grep -qF "codex: $TMP/dir only spaced/codex found but no codex on PATH" \
+grep -qF "codex: $TMP/dir only spaced/codex found but no codex on PATH" <<<"$out" \
     && pass "the note keeps a path with spaces whole" || fail "the note split the path" "$(printf '%s' "$out" | head -3)"
 
 stub
 mkdir -p "$TMP/dirs-only/claude" "$TMP/dirs-only/codex"
 out=$(run dirs-only --target auto </dev/null); rc=$?
-[ $rc -ne 0 ] && printf '%s' "$out" | grep -q 'No supported runtime' \
+[ $rc -ne 0 ] && grep -q 'No supported runtime' <<<"$out" \
     && pass "directories alone are no runtime: it stops and says so" || fail "expected 'No supported runtime'" "$(printf '%s' "$out" | head -3)"
-if printf '%s' "$out" | grep -q 'Enter plan\|codex plan\|ChatGPT plan'; then fail "nothing may be asked for"
+if grep -q 'Enter plan\|codex plan\|ChatGPT plan' <<<"$out"; then fail "nothing may be asked for"
 else pass "no plan is asked for"; fi
 
 echo "== neither present"
