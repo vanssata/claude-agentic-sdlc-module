@@ -118,6 +118,13 @@ following; each is open unless marked.
 - **What could go wrong**: KNOWN FACT — failed once in `bash tests/run-all.sh` (suite run 2 of T-2026-10-15-004, `.ai/reports/T-2026-10-15-004/tests-suite-2.log:2088`), passed in run 1 and passes alone (144/0) on the same tree; the task's diff touches only the path guard. INFERENCE — the dry run's output depends on something outside the test's sandbox (installed state or timing).
 - **How likely / how bad**: intermittent; a red suite that is not a regression.
 - **Suggested fix**: find what the dry run reads from the real home and isolate it in the test.
+- **Status**: fixed (2026-10-21, T1, `tests/test-fable-gate.sh` only). KNOWN FACT — not the home: the test runs under `set -uo pipefail` (`:6`) and checked the 17.7 KB dry-run output with `printf '%s' "$out" | grep -q …`. Bash's `printf` writes it in 4096-byte chunks (strace: 4×4096 + 1321), the matcher line sits at byte 4258, and when `grep -q` exits on the match before `printf` has written its last chunk, `printf` dies of SIGPIPE, the pipeline returns 141 and the check fails. Measured on this machine, 3000 runs of the line-253 check: idle 0 failures; with every core busy 17 and 4 failures, all exit 141; the fixed form 0 under the same load. Fix: the 12 `printf '%s' "$out" | grep -q '…'` lines in the file became `grep -q '…' <<<"$out"` — the shell writes the here-string before grep starts, so no writer is left to receive SIGPIPE. Dropping `-q` would not help: GNU grep with stdout on `/dev/null` exits on the first match too. The same pattern elsewhere: see the next entry.
+
+## `<writer> | grep -q` under `pipefail` can fail by SIGPIPE in other test files (found 2026-10-21, while fixing the entry above)
+- **Where**: about 540 `| grep -q` checks in 20 other `tests/*.sh` files that set `pipefail` — most in `test-project-adopt.sh` (125), `test-ai-task-state.sh` (99), `test-project-update.sh` (57), `test-ai-task-sensors.sh` (47), `test-install-dry-run.sh` (37).
+- **What could go wrong**: KNOWN FACT — the mechanism above: a check fails with 141 when the writer's output is over one 4096-byte write and `grep -q` matches before the last one. INFERENCE — only checks on outputs over 4 KB can fail; a short output is written in one `write` and cannot. Not measured per file.
+- **How likely / how bad**: intermittent, more likely under load; a red suite that is not a regression.
+- **Suggested fix**: the same here-string form, file by file, starting with the checks on dry-run and install output; a test-only task.
 - **Status**: open
 
 ## Padded `sh -c` segments still outrun the path guard (found 2026-10-15 by the STRONG re-review of T-2026-10-15-004)

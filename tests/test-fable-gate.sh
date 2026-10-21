@@ -248,18 +248,18 @@ old_count() { jq '[.hooks[]?[]?.hooks[]? | select(.command | test("fable-gate"))
 
 echo "== installer: dry runs per install option"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable yes --dry-run 2>&1)
-printf '%s' "$out" | grep -q 'fable-gate=on runtime-gate=on' && pass "--plan max --fable yes: the gate and its Fable branch are on" || fail "max+fable should enable the gate" "$out"
-printf '%s' "$out" | grep -q 'runtime-gate.py status' && pass "--plan max --fable yes: CLAUDE.md explains the gate and the Opus re-run" || fail "the block should mention the gate"
-printf '%s' "$out" | grep -q '"matcher": "rate_limit|model_not_found"' && pass "--plan max --fable yes: StopFailure is matched on the two unavailability errors" || fail "StopFailure matcher missing"
+grep -q 'fable-gate=on runtime-gate=on' <<<"$out" && pass "--plan max --fable yes: the gate and its Fable branch are on" || fail "max+fable should enable the gate" "$out"
+grep -q 'runtime-gate.py status' <<<"$out" && pass "--plan max --fable yes: CLAUDE.md explains the gate and the Opus re-run" || fail "the block should mention the gate"
+grep -q '"matcher": "rate_limit|model_not_found"' <<<"$out" && pass "--plan max --fable yes: StopFailure is matched on the two unavailability errors" || fail "StopFailure matcher missing"
 for opt in "max no" "pro no" "pro yes"; do
     set -- $opt
     out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan "$1" --fable "$2" --dry-run 2>&1)
-    printf '%s' "$out" | grep -q 'fable-gate=off runtime-gate=on' && pass "--plan $1 --fable $2: the gate is on, its Fable branch off" || fail "--plan $1 --fable $2 header" "$out"
-    printf '%s' "$out" | grep -q 'runtime-gate.py status' && fail "--plan $1 --fable $2 must not describe the Fable gate" || pass "--plan $1 --fable $2: CLAUDE.md does not describe the Fable reroute"
-    printf '%s' "$out" | grep -q '"StopFailure"' && fail "--plan $1 --fable $2 must not register StopFailure" || pass "--plan $1 --fable $2: no StopFailure entry"
+    grep -q 'fable-gate=off runtime-gate=on' <<<"$out" && pass "--plan $1 --fable $2: the gate is on, its Fable branch off" || fail "--plan $1 --fable $2 header" "$out"
+    grep -q 'runtime-gate.py status' <<<"$out" && fail "--plan $1 --fable $2 must not describe the Fable gate" || pass "--plan $1 --fable $2: CLAUDE.md does not describe the Fable reroute"
+    grep -q '"StopFailure"' <<<"$out" && fail "--plan $1 --fable $2 must not register StopFailure" || pass "--plan $1 --fable $2: no StopFailure entry"
 done
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --dry-run 2>&1)
-printf '%s' "$out" | grep -q 'fable-gate=on' && pass "--plan max (fable auto) turns the Fable branch on" || fail "fable auto on max should enable the Fable branch"
+grep -q 'fable-gate=on' <<<"$out" && pass "--plan max (fable auto) turns the Fable branch on" || fail "fable auto on max should enable the Fable branch"
 
 echo "== installer: real installs per option"
 D="$TMP/c-max-yes"; mkdir -p "$D"
@@ -294,7 +294,7 @@ CLAUDE_DIR="$D" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 [ "$(gate_count "$D/settings.json")" = 5 ] && pass "fable yes adds the gate next to the user's own hooks" || fail "gate not added alongside user hooks"
 out=$(CLAUDE_DIR="$D" bash "$INSTALL" --plan max --fable no 2>&1)
 [ "$(gate_count "$D/settings.json")" = 4 ] && pass "a later --fable no leaves the gate on four events" || fail "gate count after fable off: $(gate_count "$D/settings.json")"
-printf '%s' "$out" | grep -q 'removed: runtime-gate StopFailure' && pass "the removal is reported" || fail "removal should be reported" "$out"
+grep -q 'removed: runtime-gate StopFailure' <<<"$out" && pass "the removal is reported" || fail "removal should be reported" "$out"
 jq -e '[.hooks.PostToolUse[].hooks[].command] | index("my-agent-logger.sh")' "$D/settings.json" >/dev/null \
     && pass "the user's own PostToolUse:Agent hook survives" || fail "user PostToolUse hook lost"
 jq -e '[.hooks.StopFailure[].hooks[].command] == ["notify-me.sh"]' "$D/settings.json" >/dev/null \
@@ -326,12 +326,12 @@ for ev in PreToolUse PostToolUse SubagentStart SubagentStop StopFailure; do
     [ "$n" = 1 ] || fail "$ev has $n gate commands after the upgrade"
 done
 pass "exactly one gate command per event after the upgrade"
-printf '%s' "$out" | grep -q 'replaced: fable-gate hooks with runtime-gate' && pass "the replacement is reported" || fail "replacement not reported" "$out"
+grep -q 'replaced: fable-gate hooks with runtime-gate' <<<"$out" && pass "the replacement is reported" || fail "replacement not reported" "$out"
 jq -e '[.hooks.PostToolUse[].hooks[].command] | index("my-agent-logger.sh")' "$D/settings.json" >/dev/null \
     && pass "the user's hook on the same event survives the upgrade" || fail "user hook lost in the upgrade"
 [ "$(jq -r .statusLine.command "$D/settings.json")" = "\"\$HOME/.claude/hooks/runtime-gate.py\" statusline --then 'my-line.sh'" ] \
     && pass "the old statusline wrapper is re-pointed, the user's command kept" || fail "statusline not moved" "$(jq -r .statusLine.command "$D/settings.json")"
-printf '%s' "$out" | grep -q 'statusline: moved the fable-gate statusline wrapper' && pass "the move is reported" || fail "move not reported" "$out"
+grep -q 'statusline: moved the fable-gate statusline wrapper' <<<"$out" && pass "the move is reported" || fail "move not reported" "$out"
 
 echo "== installer: the quota check runs through the statusline on every plan"
 PREFIX='"$HOME/.claude/hooks/runtime-gate.py" statusline'
@@ -339,12 +339,12 @@ ORIG='bash ~/.claude/statusline-command.sh --flag "two words" '"'"'single'"'"
 H="$TMP/h-wrap"; D="$H/.claude"; mkdir -p "$D"
 jq -n --arg c "$ORIG" '{statusLine:{type:"command",command:$c,padding:1}}' > "$D/settings.json"
 out=$(CLAUDE_DIR="$D" bash "$INSTALL" --plan max --fable yes --dry-run 2>&1)
-printf '%s' "$out" | grep -q 'statusline: would have wrapped' && pass "the dry run says it would wrap the statusline" || fail "dry run should announce the wrap" "$out"
+grep -q 'statusline: would have wrapped' <<<"$out" && pass "the dry run says it would wrap the statusline" || fail "dry run should announce the wrap" "$out"
 [ "$(jq -r .statusLine.command "$D/settings.json")" = "$ORIG" ] && pass "and the dry run leaves it alone" || fail "dry run changed the statusline"
 out=$(CLAUDE_DIR="$D" bash "$INSTALL" --plan max --fable yes 2>&1)
 cmd=$(jq -r .statusLine.command "$D/settings.json")
 case "$cmd" in "$PREFIX --then "*) pass "an install wraps an existing statusline command";; *) fail "statusline not wrapped" "$cmd";; esac
-printf '%s' "$out" | grep -q 'statusline: wrapped' && pass "the wrap is reported" || fail "wrap not reported" "$out"
+grep -q 'statusline: wrapped' <<<"$out" && pass "the wrap is reported" || fail "wrap not reported" "$out"
 [ "$(jq -r .statusLine.padding "$D/settings.json")" = 1 ] && pass "other statusLine fields are kept" || fail "statusLine padding lost"
 CLAUDE_DIR="$D" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 [ "$(jq -r .statusLine.command "$D/settings.json")" = "$cmd" ] && pass "a re-install does not wrap twice" || fail "statusline double-wrapped" "$(jq -r .statusLine.command "$D/settings.json")"
