@@ -64,7 +64,8 @@ summary where the two disagree — it is rendered from the state, not remembered
   REVIEW** with this runtime's own reviewer on the STRONG tier, record it with
   `$STATE set review_status <passed|blockers_open>` (that marks the review
   `done` and stores your verdict as its `result`; an owner's `blockers_open`
-  stays), then hand it back: `$STATE handoff --to <from>`.
+  stays), then hand it back: `$STATE handoff --to <from>`. The verdict maps as
+  in ADVERSARIAL REVIEW, and the pass is one of the task's two.
 - **It says `Handed to <the other runtime>`**: do not work on it here. Every
   state change exits 7 `RUNTIME_HANDOFF_PENDING` until that runtime resumes it.
   Tell the user where to resume; take it back with `$STATE handoff --to <this
@@ -121,7 +122,9 @@ runs through, a migration, money, identity, infrastructure — never how many
 files or lines it touches; adding a resource and its screens without changing
 an existing process is T3, a change to a process is T4, money and identity
 are T5, the irreversible is T6. When two tiers are arguable take the higher.
-Until it is known, act as for T2.
+A project's `examples` in `risk-tiers.json` refine the generic rows and win
+where they speak; "take the higher" decides between two generic rows, never
+over a project example. Until it is known, act as for T2.
 
 ## 1a. Direct mode — T0, T1, T2, T3, T4
 
@@ -451,6 +454,15 @@ at T2 and T3 in solo (`ai-reviewer` with `model: $($STATE profile --tier BALANCE
 on Claude Code, `ai-reviewer-balanced` on Codex), STRONG above. Save findings to
 `.ai/reports/<task-id>/review-report.md`.
 
+Brief it with the tier. In direct mode (T0–T4) the review is bounded: its
+inputs are the task goal, the diff, the tests the step names, and the
+project's own fixture corpus and threat model (`.ai/policies/safety.md`, the
+guards' `*-defaults.json`, the test fixtures). A finding that needs an input
+outside them comes back `INFO` with `in_scope: no`; write those into
+`.ai/project/known-risks.md` as one entry, and they never open a remediation.
+You may move a finding to `in_scope: yes`, never the other way. At T5 and T6
+the reviewer's "Look for" list applies unbounded.
+
 The sensor rows are already in the ledger, so the reviewer inherits them
 instead of re-deriving them. Before you delegate, probe the change yourself for
 a minute: the handful of
@@ -459,15 +471,24 @@ scratchpad, outcomes noted in `.ai/reports/<task-id>/review-ledger.md`. The
 reviewer starts where you stopped. A re-review after a remediation is scoped —
 do the named findings close, and what did the remediation introduce — never a
 second full pass. One reviewer per pass; fan out narrow reviewers only at T5/T6
-when the change is wide. Full rules: `.ai/policies/review-economy.md`.
+when the change is wide. A task gets two passes — one full review and one
+scoped re-review — whoever asks for them, a re-review the human requests
+included; when both are spent, the next verdict is the human's, not a third
+pass. Full rules: `.ai/policies/review-economy.md`.
 
 ```bash
 $STATE set review_status <passed|blockers_open>
 ```
 
+The reviewer's `verdict: pass` is `passed`; `blockers_open` is `blockers_open`,
+and so is `pass_with_findings` (an in-scope HIGH, no BLOCKER) — the closest
+value `set` accepts today. It stays `blockers_open` after its remediation; the
+close summary names the labels the remediation closed.
+
 Every BLOCKER and HIGH is fixed together, in one `$STATE remediate` step, then
-the verification command runs once and one scoped re-review closes the named
-findings — never one finding, one fix, one re-review at a time. A finding whose
+the verification command runs once. After `blockers_open` one scoped re-review
+closes the named findings; after `pass_with_findings` the green run closes them
+and no re-review runs — never one finding, one fix, one re-review at a time. A finding whose
 cause is the plan goes back to PLAN for that step only. Findings that are real but out of scope go to `.ai/project/known-risks.md`.
 When a finding is a mistake this repository has seen before, add one line to the
 project `CLAUDE.md` in this task: the second occurrence is when a correction

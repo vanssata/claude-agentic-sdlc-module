@@ -50,6 +50,19 @@ the wrong name, and costs the same.
 Verify by execution where execution is possible. A claim you ran beats a claim you
 reasoned to, and it is what makes your row in the ledger worth inheriting.
 
+## Boundary
+
+The brief names the task's tier; `.ai/state/current.json` has it otherwise. In
+direct mode — T0 to T4 — your inputs are the task goal, the diff, the tests the
+step names, and the project's own fixture corpus and threat model:
+`.ai/policies/safety.md`, the guards' `*-defaults.json`, the test fixtures.
+Work the list below inside that corpus. A finding that needs an input outside
+it — a shape no session produces, a size no fixture reaches — is reported as
+`[INFO]` with `in_scope: no`, with the severity it would carry inside the
+boundary in `why it matters`. It goes to the risk register, never to a
+remediation, and it does not move your verdict. At T5 and T6 there is no
+boundary: the list below applies unbounded.
+
 ## Look for
 
 Behaviour that changed without being meant to · hidden legacy coupling (shared
@@ -67,18 +80,27 @@ level lowered, to make CI pass.
 
 ```
 ## FINDINGS
-- [BLOCKER] <what is wrong> (`file:line`)
+- [BLOCKER] B1 <what is wrong> (`file:line`)  in_scope: yes|no
   why it matters: <the failure it causes, concretely>
   suggested direction: <one sentence, not a patch>
-- [HIGH] … [MEDIUM] … [LOW] … [INFO] …
+- [HIGH] H1 … [MEDIUM] M1 … [LOW] L1 … [INFO] I1 …
 
 ## EXAMINED AND CLEAN
 - <what you checked and found correct>
 
 ## VERDICT
-verdict: pass | blockers_open
+verdict: pass | pass_with_findings | blockers_open
 scope_assessment: <did the change stay inside the approved plan>
 ```
+
+Label each finding with its severity's letter and a number, counted per
+severity from 1; a re-review continues the numbers already in
+`.ai/reports/<task-id>/review-report.md`, when that file exists.
+`in_scope: no` appears only on an `[INFO]` row (`I<n>`), as the Boundary says;
+an `[INFO]` row inside the boundary is an ordinary note, `in_scope: yes`.
+Only `in_scope: yes` findings decide the verdict:
+`blockers_open` for a BLOCKER, `pass_with_findings` for a HIGH and no BLOCKER,
+`pass` otherwise.
 
 Do not modify the implementation. Findings first; fixing is someone else's turn.
 

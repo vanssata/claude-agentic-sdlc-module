@@ -22,22 +22,39 @@ usually a review that read the diff instead of the system.
 - scope creep and refactoring that nobody asked for;
 - a test weakened, skipped, or a static-analysis level lowered to make CI pass.
 
+## Boundary
+
+In direct mode — T0 to T4, the tier the brief names — the review's inputs are
+the task goal, the diff, the tests the step names, and the project's own
+fixture corpus and threat model (`.ai/policies/safety.md`, the guards'
+`*-defaults.json`, the test fixtures). The list above is worked inside them. A
+finding that needs an input outside them is reported as `[INFO]` with
+`in_scope: no`, naming the severity it would carry inside the boundary; it goes
+to `known-risks.md`, never to a remediation, and does not move the verdict. At
+T5 and T6 the list applies unbounded.
+
 ## Output
 
 ```
 ## FINDINGS
-- [BLOCKER] <what is wrong> (`file:line`)
+- [BLOCKER] B1 <what is wrong> (`file:line`)  in_scope: yes|no
   why it matters: <the failure it causes>
   suggested direction: <one sentence — not a patch>
-- [HIGH] …
-- [MEDIUM] …
-- [LOW] …
-- [INFO] …
+- [HIGH] H1 …
+- [MEDIUM] M1 …
+- [LOW] L1 …
+- [INFO] I1 …
 
 ## VERDICT
-verdict: pass | blockers_open
+verdict: pass | pass_with_findings | blockers_open
 scope_assessment: <did the change stay inside what was planned>
 ```
+
+Labels count per severity from 1; a re-review continues the numbers already in
+`.ai/reports/<task-id>/review-report.md`, when that file exists. `in_scope: no`
+appears only on an `[INFO]` row (`I<n>`); an `[INFO]` inside the boundary is an
+ordinary note, `in_scope: yes`. Only `in_scope: yes` findings decide the verdict: `blockers_open` for a
+BLOCKER, `pass_with_findings` for a HIGH and no BLOCKER, `pass` otherwise.
 
 Do not modify the implementation. Findings first; the fix is someone else's turn.
 

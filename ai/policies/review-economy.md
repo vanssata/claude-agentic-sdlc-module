@@ -87,6 +87,36 @@ Nothing else. The prompt says so explicitly, and points at the ledger for
 everything already settled. A re-review that re-reads the whole change is a new
 first review wearing the wrong name, and it costs the same.
 
+A task gets **two passes**: one full review and one scoped re-review, at every
+tier. That holds whoever asks — a re-review the human requests is one of the
+two, a cross-vendor review is one, and the parallel dimensions of §4 together
+are one. When both are spent, a third pass is not the next move: the human
+decides the verdict. The reviewer's verdict says which closing rule applies:
+`blockers_open` (a BLOCKER) takes the remediation and the scoped re-review;
+`pass_with_findings` (a HIGH, no BLOCKER) takes the remediation and a green
+verification run, no re-review; `pass` closes. `state.py` has no value of its
+own for `pass_with_findings` yet: it is recorded as `blockers_open`, stays so
+after the green run, and the close summary names the labels that run closed.
+
+## 3a. The boundary of a direct-mode review
+
+Below T5 the review is bounded. Its inputs are the task goal, the diff, the
+tests the step names, and the project's own fixture corpus and threat model —
+`.ai/policies/safety.md`, the guards' `*-defaults.json`, the test fixtures.
+The reviewer works its whole list inside that corpus; what it may not do is
+build a new input outside it — a shape no session produces, a size no fixture
+reaches — and turn it into a finding the task must fix. Such a finding is
+reported as `INFO` with `in_scope: no`, the session writes it into
+`known-risks.md` as one entry, and it never opens a remediation. Every finding
+carries `in_scope: yes|no`, the reviewer's own call; the session may override
+it only towards `yes`.
+
+A guard whose input is any shell line is a bottomless well for an unbounded
+reviewer: every pass finds a new input nobody will type, and every fix for one
+is the next pass's target. The boundary is what lets a review end. At T5 and
+T6 there is none — the reviewer's list applies unbounded, as the cost of being
+wrong there warrants.
+
 ## 4. Split one pass into parallel dimensions, not serial rounds
 
 Four serial passes at ten minutes are forty minutes of wall clock. Three narrow
@@ -173,7 +203,7 @@ work.
   the T2/T3 model review, and only under §8's measured conditions.
 - No reviewer is moved to a cheaper model to go faster. Narrow the surface, never
   the mind.
-- A blocker still returns to implementation, however late it arrives and however
-  many passes it costs.
+- A blocker still returns to implementation, however late it arrives. Past the
+  two passes of §3, a human — not a third pass — decides that it closed.
 - The probe is the manager's own work and never replaces the adversarial pass. It
   exists so the pass starts further in, not so it happens less.
