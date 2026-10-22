@@ -306,6 +306,50 @@ timed "100000 one-word segments and rm -f a.txt are allowed" allow \
     "$( { rep 'x;' 100000; printf 'rm -f a.txt'; } | bash_stdin)" 3000
 timed "100000 one-word segments and rm of the task state file are denied" deny \
     "$( { rep 'x;' 100000; printf 'rm -f .ai/state/current.json'; } | bash_stdin)" 3000
+# T-2026-10-21-001 (known-risks: many mover segments reach the 6 s clock): the
+# movers pass makes one realpath and one loose_hits for every candidate on the
+# line, not one per segment, and every decision keeps its reason and its place.
+timed "1000 rm segments and rm -f a.txt are allowed" allow \
+    "$( { rep 'rm x; ' 1000; printf 'rm -f a.txt'; } | bash_stdin)" 2000
+timed "1000 rm segments and rm of the task state file are denied" deny \
+    "$( { rep 'rm x; ' 1000; printf 'rm -f .ai/state/current.json'; } | bash_stdin)" 2000
+out=$( { rep 'rm x; ' 1000; printf 'rm -f .ai/state/current.json'; } | bash_stdin | "$GUARD")
+grep -q 'removal of a claude-agentic control file' <<<"$out" \
+    && pass "and the deny names the control file, not the work cap" \
+    || fail "1000 rm segments: the deny names the control file, not the work cap" "$(head -c 200 <<<"$out")"
+globop="$(pad_a 4097)*"
+out=$(printf 'rm -f .ai/state/current.json; rm -f %s' "$globop" | bash_stdin | "$GUARD")
+grep -q 'removal of a claude-agentic control file' <<<"$out" \
+    && pass "a control-file deny comes before a later segment's long glob operand deny" \
+    || fail "a control-file deny comes before a later segment's long glob operand deny" "$(head -c 200 <<<"$out")"
+out=$(printf 'rm -f %s; rm -f .ai/state/current.json' "$globop" | bash_stdin | "$GUARD")
+grep -q 'operand that holds a glob or expansion character' <<<"$out" \
+    && pass "a long glob operand deny comes before a later segment's control-file deny" \
+    || fail "a long glob operand deny comes before a later segment's control-file deny" "$(head -c 200 <<<"$out")"
+out=$(printf 'rm x; mv a.txt .ai/state/current.json' | bash_stdin | "$GUARD")
+grep -q 'copy or move into a claude-agentic control file' <<<"$out" \
+    && pass "a later segment's mv destination is still a copy or move into, not a move of" \
+    || fail "a later segment's mv destination is still a copy or move into, not a move of" "$(head -c 200 <<<"$out")"
+for c in "mv loopA/x y; mv current.json .env.example st/" "mv current.json .env.example st/; mv loopA/x y"; do
+    out=$(jq -nc --arg r "$ROOT/lnk" --arg c "$c" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:$c}}' | "$GUARD")
+    grep -q 'claude-agentic control file' <<<"$out" \
+        && pass "$c: a symlink loop in one segment does not hide a symlinked state directory in another" \
+        || fail "$c: a symlink loop in one segment does not hide a symlinked state directory in another" "$(head -c 200 <<<"$out")"
+done
+# Its STRONG review: one realpath for the whole line was a unit the clock could
+# not stop (400 segments of a symlink chain ran past 20 s; HEAD denied by the
+# clock in 5.1 s), and an early segment's deny waited for the whole line (HEAD
+# 0.2 s with the control-file reason, then 5.8 s with the work cap's).
+mkdir -p "$ROOT/chain"; ln -sfn . "$ROOT/chain/c"
+chain="chain/$(rep c/ 2000)x"
+timed "400 rm segments of a 4 KB symlink chain and rm of the task state file are denied" deny \
+    "$( { rep "rm $chain; " 400; printf 'rm -f .ai/state/current.json'; } | bash_stdin)" 8000
+pl=$( { printf 'rm -f .ai/state/current.json; '; rep 'rm x; ' 20000; printf 'rm y'; } | bash_stdin)
+timed "rm of the task state file before 20000 rm segments is denied" deny "$pl" 2000
+out=$(printf '%s' "$pl" | "$GUARD")
+grep -q 'removal of a claude-agentic control file' <<<"$out" \
+    && pass "and the deny names the control file, not the work cap" \
+    || fail "the state file before 20000 rm segments: the deny names the control file" "$(head -c 200 <<<"$out")"
 # T-2026-10-20-002 (known-risks: the candidate filter and its regex ran in two
 # locales): both are bytewise, and the regex names the UTF-8 bytes of the 15
 # multibyte characters glibc's [[:space:]] matches, so a line that splits

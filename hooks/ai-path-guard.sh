@@ -699,6 +699,129 @@ case "$AI_TOOL" in
             segments=$(printf '%s\n' "$segs" \
                 | sed -E 's/[0-9]*[<>]{1,2}&[0-9]+//g; s/(&|[0-9]*)[<>]{1,2}[[:space:]]*[^[:space:]|;&<>]*//g' \
                 | LC_ALL=C grep -aE "$movers")
+            # Batches (T-2026-10-21-001): segments are parsed until their
+            # candidates fill MOVER_CHUNK bytes, resolved together and checked
+            # segment by segment, in order. A realpath fork and a loose_hits
+            # pipeline per segment cost ~7 ms, and 1000 rm segments reached the
+            # 6 s clock; one call for the whole line was a unit the clock could
+            # not stop (400 segments of a symlink chain ran past 20 s), and an
+            # early segment's deny waited for the whole line. A batch's cands,
+            # covers and abss run across its segments; segment s owns
+            # seg_count[s] of them from seg_first[s].
+            MOVER_CHUNK=32768
+            # mover_resolve <first> <end> [one-at-a-time] — reals[] and hits[]
+            # for the batch's candidates first .. end-1, one realpath and one
+            # loose_hits per MOVER_CHUNK bytes of them, each on the clock.
+            # One realpath for many candidates: a 20-file mv yields 60, and a
+            # fork per candidate costs more than the hook's budget. It also
+            # normalises ./ and // away. One operand that does not resolve (a
+            # symlink loop) drops a line: return 1 then, or with one-at-a-time
+            # resolve the whole range one at a time, never fall back to the
+            # unresolved list, where a symlinked directory would hide.
+            # The loose patterns are the pre-filter: a miss is a miss in
+            # classify too, which runs only on a hit. One grep for many
+            # candidates (loose_hits) instead of a regex compile per candidate
+            # (a 3000-file rm): line 3i+1 is "abs real", 3i+2 the normalised
+            # path and 3i+3 the same with a slash — covers_protected's own
+            # lexical test, i the candidate's index in the batch. Operands
+            # come from segment lines, so none holds a newline.
+            mover_resolve() {
+                local first="$1" end="$2" at k n r had size=0 cuts=() args got=()
+                for ((k = first; k < end; k++)); do
+                    work_clock
+                    [ "$size" -lt "$MOVER_CHUNK" ] || { cuts+=("$k"); size=0; }
+                    size=$((size + ${#abss[k]} + 1))
+                done
+                cuts+=("$end") at="$first"
+                for k in "${cuts[@]}"; do
+                    work_clock
+                    args=()
+                    for ((n = at; n < k; n++)); do args+=("${abss[n]}"); done
+                    had=${#got[@]}
+                    while IFS= read -r r; do got+=("$r"); done < <(realpath -m -- "${args[@]}" 2>/dev/null)
+                    if [ $((${#got[@]} - had)) -ne "${#args[@]}" ]; then
+                        [ -n "${3:-}" ] || return 1
+                        got=()
+                        for ((n = first; n < end; n++)); do
+                            work_cap classify
+                            r=$(realpath -m -- "${abss[n]}" 2>/dev/null) && [ -n "$r" ] || r="${abss[n]}"
+                            got+=("$r")
+                        done
+                        break
+                    fi
+                    at="$k"
+                done
+                for ((n = first; n < end; n++)); do reals[n]="${got[n - first]}"; done
+                at="$first"
+                for k in "${cuts[@]}"; do
+                    work_clock
+                    while IFS= read -r r; do hits[3 * at + r]=yes; done < <(
+                        for ((n = at; n < k; n++)); do
+                            norm="${reals[n]%/}"; [ -n "$norm" ] || norm=/
+                            printf '%s %s\n%s\n%s/\n' "${abss[n]}" "${reals[n]}" "$norm" "$norm"
+                        done | loose_hits)
+                    at="$k"
+                done
+            }
+            # mover_check — resolve the batch, check its segments in order and
+            # empty it. A batch whose realpath drops a line (a symlink loop)
+            # is resolved segment by segment, as each segment was before: the
+            # same counts and the same denies, in order.
+            mover_check() {
+                local s first last per_seg=""
+                reals=() hits=()
+                [ "${#abss[@]}" -eq 0 ] || mover_resolve 0 "${#abss[@]}" || per_seg=yes
+                for s in "${!seg_first[@]}"; do
+                    first="${seg_first[$s]}" last=$((seg_first[s] + seg_count[s])) verb="${seg_verb[$s]}"
+                    [ -z "$per_seg" ] || mover_resolve "$first" "$last" one-at-a-time
+                    work_clock
+                    for ((i = first; i < last; i++)); do
+                        work_clock
+                        abs="${abss[$i]}" real="${reals[$i]}" cand="${cands[$i]}"
+                        how="copy or move into"
+                        case "$verb" in
+                            rm|rmdir|unlink) how="removal of" ;;
+                            mv) [ "$i" -gt "$first" ] && [ "$abs" != "${abss[first]%/}/${abs##*/}" ] && how="move of" ;;
+                        esac
+                        verdict=""
+                        lexical="${hits[$((3 * i + 2))]:-}${hits[$((3 * i + 3))]:-}"
+                        # One count per candidate that needs any classify.
+                        if [ -n "${hits[$((3 * i + 1))]:-}" ] \
+                           || { [ "${covers[$i]}" = yes ] && [ -n "$lexical" ]; }; then
+                            work_cap classify
+                        fi
+                        # real_path "$abs" is "$real" (realpath -m above, or one
+                        # operand at a time).
+                        if [ -n "${hits[$((3 * i + 1))]:-}" ]; then
+                            verdict=$(classify "$abs")
+                            [ -n "$verdict" ] || verdict=$(classify "$real")
+                            [ -n "$verdict" ] || verdict=$(classify "$(real_path "$abs")")
+                        fi
+                        case "${verdict%%:*}" in
+                            protected)
+                                deny "Refusing a shell $how a claude-agentic control file: $cand$WHY_PROTECTED" ;;
+                            vendor)
+                                deny "Refusing a shell $how an instruction file inside a dependency: $cand$WHY_VENDOR" ;;
+                            task)
+                                task_in_flight && deny "Refusing a shell $how runtime configuration while task $AI_TASK_ID is in flight: $cand$WHY_TASK" ;;
+                        esac
+                        [ "${covers[$i]}" = yes ] || continue
+                        covers_work "$real" "$lexical" || continue
+                        found=$(covers_protected "$real") || continue
+                        verdict=$(classify "$found"); [ -n "$verdict" ] || verdict=$(classify "$found/")
+                        held=" (holds $found)"
+                        [ "$found" = "${real%/}" ] && held=""   # the bare directory of a pattern
+                        case "${verdict%%:*}" in
+                            protected)
+                                deny "Refusing a shell $how a directory that holds a claude-agentic control file: $cand$held$WHY_PROTECTED" ;;
+                            *)
+                                deny "Refusing a shell $how a directory that holds runtime configuration while task $AI_TASK_ID is in flight: $cand$held$WHY_TASK" ;;
+                        esac
+                    done
+                done
+                cands=() covers=() abss=() seg_first=() seg_count=() seg_verb=() batch=0
+            }
+            cands=() covers=() abss=() seg_first=() seg_count=() seg_verb=() batch=0 pending=""
             while IFS= read -r seg; do
                 work_clock
                 operands=()
@@ -714,9 +837,11 @@ case "$AI_TOOL" in
                     # quadratic on it (4.5 s at 140 KB). With a glob or an
                     # expansion it may name a short one: deny. Otherwise it
                     # keeps its place as a short stand-in that matches nothing.
+                    # The deny waits until the segments before it are checked,
+                    # and no segment after it is read.
                     if [ ${#w} -gt 4096 ]; then
                         case "$w" in
-                            *[][*?\$\`{}\(\)\\~@!+]*) deny "Refusing a shell $verb with a ${#w}-character operand that holds a glob or expansion character: the guard cannot check what it expands to." ;;
+                            *[][*?\$\`{}\(\)\\~@!+]*) pending="Refusing a shell $verb with a ${#w}-character operand that holds a glob or expansion character: the guard cannot check what it expands to."; break 2 ;;
                         esac
                         if [ -z "$opts_done" ] && [ -z "$want_dest" ]; then
                             [[ $w == --target-directory=* ]] && { dest=LONG-OPERAND; continue; }
@@ -740,8 +865,8 @@ case "$AI_TOOL" in
                     [ -z "$w" ] || sources+=("$w")
                 done
                 # cands[i] is checked as itself; covers[i]=yes also for what
-                # lies under it.
-                cands=() covers=()
+                # lies under it. This segment's candidates start at first.
+                first=${#cands[@]}
                 case "$verb" in
                     rm|rmdir|unlink)
                         for src in "${sources[@]}"; do cands+=("$src"); covers+=(yes); done ;;
@@ -764,92 +889,24 @@ case "$AI_TOOL" in
                             [ "$verb" = mv ] && { cands+=("$src"); covers+=(yes); }
                         done ;;
                 esac
-                [ "${#cands[@]}" -gt 0 ] || continue
-                abss=()
-                for cand in "${cands[@]}"; do
+                [ "${#cands[@]}" -gt "$first" ] || continue
+                for ((k = first; k < ${#cands[@]}; k++)); do
                     work_clock
+                    cand="${cands[k]}"
                     case "$cand" in
                         '~'|'$HOME'|'${HOME}') cand="$HOME" ;;
                         '~/'*) cand="$HOME/${cand#'~/'}" ;;
                         '$HOME/'*) cand="$HOME/${cand#'$HOME/'}" ;;
                         '${HOME}/'*) cand="$HOME/${cand#'${HOME}/'}" ;;
                     esac
-                    case "$cand" in /*) abss+=("$cand") ;; *) abss+=("${AI_CWD%/}/$cand") ;; esac
+                    case "$cand" in /*) ;; *) cand="${AI_CWD%/}/$cand" ;; esac
+                    abss+=("$cand") batch=$((batch + ${#cand} + 1))
                 done
-                # One realpath for every candidate: a 20-file mv yields 60, and
-                # a fork per candidate costs more than the hook's budget. It
-                # also normalises ./ and // away.
-                reals=()
-                while IFS= read -r r; do reals+=("$r"); done < <(realpath -m -- "${abss[@]}" 2>/dev/null)
-                # One operand that does not resolve (a symlink loop) drops a
-                # line: resolve them one at a time then, never fall back to
-                # the unresolved list, where a symlinked directory would hide.
-                if [ "${#reals[@]}" -ne "${#abss[@]}" ]; then
-                    reals=()
-                    for abs in "${abss[@]}"; do
-                        work_cap classify
-                        r=$(realpath -m -- "$abs" 2>/dev/null) && [ -n "$r" ] || r="$abs"
-                        reals+=("$r")
-                    done
-                fi
-                # The loose patterns are the pre-filter: a miss is a miss in
-                # classify too, which runs only on a hit. One grep for every
-                # candidate (loose_hits) instead of a regex compile per
-                # candidate (a 3000-file rm): line 3i+1 is "abs real", 3i+2
-                # the normalised path and 3i+3 the same with a slash —
-                # covers_protected's own lexical test. Operands come from one
-                # segment line, so none holds a newline.
-                hits=()
-                while IFS= read -r n; do hits[$n]=yes; done < <(
-                    for i in "${!abss[@]}"; do
-                        norm="${reals[$i]%/}"; [ -n "$norm" ] || norm=/
-                        printf '%s %s\n%s\n%s/\n' "${abss[$i]}" "${reals[$i]}" "$norm" "$norm"
-                    done | loose_hits)
-                work_clock
-                for i in "${!abss[@]}"; do
-                    work_clock
-                    abs="${abss[$i]}" real="${reals[$i]}" cand="${cands[$i]}"
-                    how="copy or move into"
-                    case "$verb" in
-                        rm|rmdir|unlink) how="removal of" ;;
-                        mv) [ "$i" -gt 0 ] && [ "$abs" != "${abss[0]%/}/${abs##*/}" ] && how="move of" ;;
-                    esac
-                    verdict=""
-                    lexical="${hits[$((3 * i + 2))]:-}${hits[$((3 * i + 3))]:-}"
-                    # One count per candidate that needs any classify.
-                    if [ -n "${hits[$((3 * i + 1))]:-}" ] \
-                       || { [ "${covers[$i]}" = yes ] && [ -n "$lexical" ]; }; then
-                        work_cap classify
-                    fi
-                    # real_path "$abs" is "$real" (realpath -m above, or one
-                    # operand at a time).
-                    if [ -n "${hits[$((3 * i + 1))]:-}" ]; then
-                        verdict=$(classify "$abs")
-                        [ -n "$verdict" ] || verdict=$(classify "$real")
-                        [ -n "$verdict" ] || verdict=$(classify "$(real_path "$abs")")
-                    fi
-                    case "${verdict%%:*}" in
-                        protected)
-                            deny "Refusing a shell $how a claude-agentic control file: $cand$WHY_PROTECTED" ;;
-                        vendor)
-                            deny "Refusing a shell $how an instruction file inside a dependency: $cand$WHY_VENDOR" ;;
-                        task)
-                            task_in_flight && deny "Refusing a shell $how runtime configuration while task $AI_TASK_ID is in flight: $cand$WHY_TASK" ;;
-                    esac
-                    [ "${covers[$i]}" = yes ] || continue
-                    covers_work "$real" "$lexical" || continue
-                    found=$(covers_protected "$real") || continue
-                    verdict=$(classify "$found"); [ -n "$verdict" ] || verdict=$(classify "$found/")
-                    held=" (holds $found)"
-                    [ "$found" = "${real%/}" ] && held=""   # the bare directory of a pattern
-                    case "${verdict%%:*}" in
-                        protected)
-                            deny "Refusing a shell $how a directory that holds a claude-agentic control file: $cand$held$WHY_PROTECTED" ;;
-                        *)
-                            deny "Refusing a shell $how a directory that holds runtime configuration while task $AI_TASK_ID is in flight: $cand$held$WHY_TASK" ;;
-                    esac
-                done
+                seg_first+=("$first") seg_count+=($((${#cands[@]} - first))) seg_verb+=("$verb")
+                [ "$batch" -lt "$MOVER_CHUNK" ] || mover_check
             done <<< "$segments"
+            mover_check
+            [ -z "$pending" ] || deny "$pending"
         fi
 
         # Fast path: if nothing in the whole command line looks interesting, stop
