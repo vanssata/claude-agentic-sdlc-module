@@ -1,0 +1,648 @@
+{
+  "task_id": "T-2026-10-21-001",
+  "goal": "The path guard's movers pass makes one realpath and one loose_hits for the whole line, so 1000 mover segments decide in under a second with every decision and reason unchanged",
+  "workflow": "bugfix",
+  "risk_tier": "T4",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "The path guard's movers pass makes one realpath and one loose_hits for the whole line, so 1000 mover segments decide in under a second with every decision and reason unchanged",
+        "allowed_files": [
+          "tests/test-ai-path-guard.sh",
+          "hooks/ai-path-guard.sh",
+          ".ai/project/known-risks.md",
+          "README.md",
+          ".ai/reports/T-2026-10-21-001/task.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "2ff557755ff6b0e914dd92aee662b05dffd3c9f7",
+          "seq": 1,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 2,
+          "added": 88,
+          "deleted": 33,
+          "lines": 121,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "STRONG review: HIGH whole-line realpath is one unclocked unit (symlink-chain line past the 10 s timeout); MEDIUM an early segment's deny waits for the whole line (reason becomes WHY_WORK_CAP); LOW array slicing makes the parse pass quadratic",
+        "allowed_files": [
+          "tests/test-ai-path-guard.sh",
+          "hooks/ai-path-guard.sh",
+          ".ai/project/known-risks.md",
+          "README.md",
+          ".ai/reports/T-2026-10-21-001/task.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "2ff557755ff6b0e914dd92aee662b05dffd3c9f7",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "8fe3e99247934992b2b9bd5cf9c1b4b7a82a05de",
+          "seq": 2,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 2,
+          "added": 142,
+          "deleted": 96,
+          "lines": 238,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R2",
+        "description": "scoped STRONG re-review of R1: HIGH-1 early deny waits and gets WHY_WORK_CAP when later segments add no candidates; HIGH-2 E2BIG deny->allow accepted (Q1=A), pin it and correct known-risks:152; LOW stale test comment; 2 INFO to known-risks",
+        "allowed_files": [
+          "tests/test-ai-path-guard.sh",
+          "hooks/ai-path-guard.sh",
+          ".ai/project/known-risks.md",
+          "README.md",
+          ".ai/reports/T-2026-10-21-001/task.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "0bdb7a3d8cbb5fc30dd46ac2592af3db6a007c4b",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "18957fcc7a814ff9278adf9c2c0d76b01157583c",
+          "seq": 3,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 2,
+          "added": 35,
+          "deleted": 10,
+          "lines": 45,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R3",
+        "description": "R2 re-review HIGH-1 residual: a later segment slow to parse (quadratic quote strip) delays an early deny; linear quote strip + check before a segment that would push the batch text past 32 KB",
+        "allowed_files": [
+          "tests/test-ai-path-guard.sh",
+          "hooks/ai-path-guard.sh",
+          ".ai/project/known-risks.md",
+          "README.md",
+          ".ai/reports/T-2026-10-21-001/task.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "18957fcc7a814ff9278adf9c2c0d76b01157583c",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "064f7ee3b806e5d44151b15abcfdd4bea8d5cb19",
+          "seq": 4,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 2,
+          "added": 43,
+          "deleted": 5,
+          "lines": 48,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R4",
+        "description": "R3 re-review HIGH-1 residual: many candidates under a long cwd delay an early deny; check the batch before building a segment's candidates when their absolute-path bytes would pass 32 KB; cwd prefix computed once",
+        "allowed_files": [
+          "tests/test-ai-path-guard.sh",
+          "hooks/ai-path-guard.sh",
+          ".ai/project/known-risks.md",
+          "README.md",
+          ".ai/reports/T-2026-10-21-001/task.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "effa634e2f1776171721651c7c259fc443d3a869",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "0eedadbe18a3097d549f665030a816278a207c8c",
+          "seq": 5,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 2,
+          "added": 41,
+          "deleted": 2,
+          "lines": 43,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "R1",
+    "R2",
+    "R3",
+    "R4"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "blockers_open",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "ikakarov",
+    "granted_at": "2026-10-22T10:54:46Z",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "terminal",
+    "unattended": false
+  },
+  "created_at": "2026-10-21T13:35:15Z",
+  "updated_at": "2026-10-22T10:55:27Z",
+  "history": [
+    {
+      "at": "2026-10-21T13:35:15Z",
+      "event": "task_started",
+      "detail": "The path guard's movers pass makes one realpath and one loose_hits for the whole line, so 1000 mover segments decide in under a second with every decision and reason unchanged (bugfix)"
+    },
+    {
+      "at": "2026-10-21T13:35:15Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-21T13:35:15Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-21T13:35:15Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-21T13:35:15Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-21T13:35:15Z",
+      "event": "risk_classified",
+      "detail": "T4: hooks/ai-path-guard.sh is a process every Bash call runs through; fixes known-risks.md:147; plan approved in plan mode (~/.claude/plans/merry-tickling-moonbeam.md)"
+    },
+    {
+      "at": "2026-10-21T13:35:15Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-21T13:35:15Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-21T13:35:15Z",
+      "event": "step_started",
+      "detail": "1: The path guard's movers pass makes one realpath and one loose_hits for the whole line, so 1000 mover segments decide in under a second with every decision and reason unchanged"
+    },
+    {
+      "at": "2026-10-21T13:55:46Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-21T13:56:07Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-21T13:56:17Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-21T14:11:19Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-21T14:11:19Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-21T14:11:19Z",
+      "event": "remediation",
+      "detail": "R1: STRONG review: HIGH whole-line realpath is one unclocked unit (symlink-chain line past the 10 s timeout); MEDIUM an early segment's deny waits for the whole line (reason becomes WHY_WORK_CAP); LOW array slicing makes the parse pass quadratic"
+    },
+    {
+      "at": "2026-10-21T14:11:19Z",
+      "event": "step_started",
+      "detail": "R1: STRONG review: HIGH whole-line realpath is one unclocked unit (symlink-chain line past the 10 s timeout); MEDIUM an early segment's deny waits for the whole line (reason becomes WHY_WORK_CAP); LOW array slicing makes the parse pass quadratic"
+    },
+    {
+      "at": "2026-10-21T14:22:45Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-10-21T14:28:38Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-21T14:29:19Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-21T14:29:19Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-21T14:30:19Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval: T4 result shown: R1 fixed STRONG review HIGH/MEDIUM/LOW, pinned by tests; suite run 2 and e2e run 2 green; no re-review (no BLOCKER)"
+    },
+    {
+      "at": "2026-10-21T14:30:19Z",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "2026-10-22T08:12:53Z",
+      "event": "human_approval",
+      "detail": "granted by ikakarov via terminal"
+    },
+    {
+      "at": "2026-10-22T08:44:02Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-22T08:44:02Z",
+      "event": "question_asked",
+      "detail": "Q1: R1 allows clean lines HEAD denied with WHY_WORK_CAP because one segment's realpath hit E2BIG (cwd 1524 chars, rm of 1500 files: HEAD deny 0.52 s, R1 allow 2.2 s). Accept this change?"
+    },
+    {
+      "at": "2026-10-22T08:57:08Z",
+      "event": "question_answered",
+      "detail": "Q1 = A"
+    },
+    {
+      "at": "2026-10-22T08:57:08Z",
+      "event": "remediation",
+      "detail": "R2: scoped STRONG re-review of R1: HIGH-1 early deny waits and gets WHY_WORK_CAP when later segments add no candidates; HIGH-2 E2BIG deny->allow accepted (Q1=A), pin it and correct known-risks:152; LOW stale test comment; 2 INFO to known-risks"
+    },
+    {
+      "at": "2026-10-22T08:57:08Z",
+      "event": "step_started",
+      "detail": "R2: scoped STRONG re-review of R1: HIGH-1 early deny waits and gets WHY_WORK_CAP when later segments add no candidates; HIGH-2 E2BIG deny->allow accepted (Q1=A), pin it and correct known-risks:152; LOW stale test comment; 2 INFO to known-risks"
+    },
+    {
+      "at": "2026-10-22T09:03:59Z",
+      "event": "step_completed",
+      "detail": "R2"
+    },
+    {
+      "at": "2026-10-22T09:10:21Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 3, exit 0)"
+    },
+    {
+      "at": "2026-10-22T09:10:28Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 3, exit 0)"
+    },
+    {
+      "at": "2026-10-22T09:11:12Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-22T09:26:21Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-22T09:26:21Z",
+      "event": "question_asked",
+      "detail": "Q2: R2 re-review: HIGH-1 residual — one later segment slow to parse (quote-strip :876-877, ~0.27 s per 4 KB operand of \"\"x2047) delays an early deny: HEAD deny 0.29 s control-file reason, R2 deny 6.0 s WHY_WORK_CAP. Decision stays deny. A third remediation round needs you. How to proceed?"
+    },
+    {
+      "at": "2026-10-22T09:30:29Z",
+      "event": "question_answered",
+      "detail": "Q2 = X"
+    },
+    {
+      "at": "2026-10-22T09:33:17Z",
+      "event": "remediation",
+      "detail": "R3: R2 re-review HIGH-1 residual: a later segment slow to parse (quadratic quote strip) delays an early deny; linear quote strip + check before a segment that would push the batch text past 32 KB"
+    },
+    {
+      "at": "2026-10-22T09:33:17Z",
+      "event": "step_started",
+      "detail": "R3: R2 re-review HIGH-1 residual: a later segment slow to parse (quadratic quote strip) delays an early deny; linear quote strip + check before a segment that would push the batch text past 32 KB"
+    },
+    {
+      "at": "2026-10-22T09:44:42Z",
+      "event": "step_completed",
+      "detail": "R3"
+    },
+    {
+      "at": "2026-10-22T09:50:26Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 4, exit 0)"
+    },
+    {
+      "at": "2026-10-22T09:50:35Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 4, exit 0)"
+    },
+    {
+      "at": "2026-10-22T10:10:16Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-22T10:10:16Z",
+      "event": "question_asked",
+      "detail": "Q3: R3 re-review: HIGH-1 open in a further shape — a later segment with many candidates under a long cwd (rm/mv x5000-5300, cwd 1.5-3.3 KB): HEAD deny 0.11 s control-file reason, R3 5.4-6.0 s WHY_WORK_CAP. Decision stays deny. A fourth round needs you. How to proceed?"
+    },
+    {
+      "at": "2026-10-22T10:10:38Z",
+      "event": "question_answered",
+      "detail": "Q3 = A"
+    },
+    {
+      "at": "2026-10-22T10:10:38Z",
+      "event": "remediation",
+      "detail": "R4: R3 re-review HIGH-1 residual: many candidates under a long cwd delay an early deny; check the batch before building a segment's candidates when their absolute-path bytes would pass 32 KB; cwd prefix computed once"
+    },
+    {
+      "at": "2026-10-22T10:10:38Z",
+      "event": "step_started",
+      "detail": "R4: R3 re-review HIGH-1 residual: many candidates under a long cwd delay an early deny; check the batch before building a segment's candidates when their absolute-path bytes would pass 32 KB; cwd prefix computed once"
+    },
+    {
+      "at": "2026-10-22T10:17:40Z",
+      "event": "step_completed",
+      "detail": "R4"
+    },
+    {
+      "at": "2026-10-22T10:24:04Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 5, exit 0)"
+    },
+    {
+      "at": "2026-10-22T10:24:14Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 5, exit 0)"
+    },
+    {
+      "at": "2026-10-22T10:52:36Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-22T10:52:36Z",
+      "event": "question_asked",
+      "detail": "Q4: R4 re-review: HIGH-1 closed (pass-4 shapes 0.12-0.21 s, control-file reason; no further shape found). Open: fail-closed clock margin - the estimate costs ~3.8 us per mover segment with no candidates; rm -f; x90000 (540 KB): HEAD allow 4.65 s, R4 1/6 work-cap deny (R3 already 1/3 at x95000). How to proceed?"
+    },
+    {
+      "at": "2026-10-22T10:53:38Z",
+      "event": "question_answered",
+      "detail": "Q4 = A"
+    },
+    {
+      "at": "2026-10-22T10:53:58Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-22T10:54:35Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval: T4 result shown after R4: HIGH-1 closed; Q1=A and Q4=A accepted residuals; suite run 5 and e2e run 5 green; review_status blockers_open only for the accepted Q4 margin"
+    },
+    {
+      "at": "2026-10-22T10:54:35Z",
+      "event": "gate_requested",
+      "detail": "G2: human_approval"
+    },
+    {
+      "at": "2026-10-22T10:54:46Z",
+      "event": "human_approval",
+      "detail": "granted by ikakarov via terminal"
+    },
+    {
+      "at": "2026-10-22T10:55:27Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-22T10:55:27Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-21-001/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-22T10:55:27Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "2f7f9f7f843240e4b5dae11703a94d19d429d696",
+    "base_tree": "8fe761938dc9538418b9163b3ed5004510b21fa0",
+    "task": {
+      "files": 2,
+      "added": 287,
+      "deleted": 84,
+      "lines": 371,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 631,
+      "tree": "0eedadbe18a3097d549f665030a816278a207c8c",
+      "measured_at": "2026-10-22T10:17:40Z",
+      "status": "green"
+    },
+    "rescored_tier": "T4",
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-21-001/sensors.json",
+    "tree": "0908c6974fe50867f6aa30f07038e7d6ff6e2731",
+    "verdict": "required",
+    "checked_at": "2026-10-22T10:53:58Z"
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "a44e321e4634c49ce0f6ca9b5c8f8d2fe844b698",
+        "exit": 0,
+        "duration_s": 378,
+        "log": ".ai/reports/T-2026-10-21-001/tests-suite-1.log",
+        "at": "2026-10-21T13:55:46Z",
+        "env_retry": false
+      },
+      {
+        "n": 1,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "2ff557755ff6b0e914dd92aee662b05dffd3c9f7",
+        "exit": 0,
+        "duration_s": 3,
+        "log": ".ai/reports/T-2026-10-21-001/tests-e2e-1.log",
+        "at": "2026-10-21T13:56:07Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "8fe3e99247934992b2b9bd5cf9c1b4b7a82a05de",
+        "exit": 0,
+        "duration_s": 352,
+        "log": ".ai/reports/T-2026-10-21-001/tests-suite-2.log",
+        "at": "2026-10-21T14:28:38Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "0bdb7a3d8cbb5fc30dd46ac2592af3db6a007c4b",
+        "exit": 0,
+        "duration_s": 3,
+        "log": ".ai/reports/T-2026-10-21-001/tests-e2e-2.log",
+        "at": "2026-10-21T14:29:19Z",
+        "env_retry": false
+      },
+      {
+        "n": 3,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "18957fcc7a814ff9278adf9c2c0d76b01157583c",
+        "exit": 0,
+        "duration_s": 375,
+        "log": ".ai/reports/T-2026-10-21-001/tests-suite-3.log",
+        "at": "2026-10-22T09:10:21Z",
+        "env_retry": false
+      },
+      {
+        "n": 3,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "18957fcc7a814ff9278adf9c2c0d76b01157583c",
+        "exit": 0,
+        "duration_s": 3,
+        "log": ".ai/reports/T-2026-10-21-001/tests-e2e-3.log",
+        "at": "2026-10-22T09:10:28Z",
+        "env_retry": false
+      },
+      {
+        "n": 4,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "50fb3b113830e005222723ebd3aed3f749b1b32b",
+        "exit": 0,
+        "duration_s": 344,
+        "log": ".ai/reports/T-2026-10-21-001/tests-suite-4.log",
+        "at": "2026-10-22T09:50:26Z",
+        "env_retry": false
+      },
+      {
+        "n": 4,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "223fd8dd1b0b9bd7c487b2b90830b15d5cdfd0f0",
+        "exit": 0,
+        "duration_s": 3,
+        "log": ".ai/reports/T-2026-10-21-001/tests-e2e-4.log",
+        "at": "2026-10-22T09:50:35Z",
+        "env_retry": false
+      },
+      {
+        "n": 5,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "0eedadbe18a3097d549f665030a816278a207c8c",
+        "exit": 0,
+        "duration_s": 384,
+        "log": ".ai/reports/T-2026-10-21-001/tests-suite-5.log",
+        "at": "2026-10-22T10:24:04Z",
+        "env_retry": false
+      },
+      {
+        "n": 5,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "0eedadbe18a3097d549f665030a816278a207c8c",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-21-001/tests-e2e-5.log",
+        "at": "2026-10-22T10:24:14Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 5
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}
