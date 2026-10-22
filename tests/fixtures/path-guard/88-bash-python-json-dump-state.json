@@ -1,0 +1,1 @@
+{"case":"a python one-liner that json.dumps into .ai/state/current.json is denied (§4a)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"python3 -c \"import json; s=json.load(open('.ai/state/current.json')); s['current_stage']='done'; json.dump(s, open('.ai/state/current.json', 'w'))\""}}}

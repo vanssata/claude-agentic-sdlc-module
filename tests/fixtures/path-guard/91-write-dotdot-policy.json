@@ -1,0 +1,1 @@
+{"case":"writing the root policy file through src/.. is denied (§4b)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/src/../.ai/policies/risk-tiers.json","content":"{}"}}}

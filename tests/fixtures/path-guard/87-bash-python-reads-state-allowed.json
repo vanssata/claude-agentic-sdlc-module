@@ -1,0 +1,1 @@
+{"case":"a python one-liner that only reads .ai/state/current.json is allowed (§4a)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"python3 -c \"import json; print(json.load(open('.ai/state/current.json'))['current_stage'])\""}}}

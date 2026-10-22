@@ -497,31 +497,34 @@ decide "bash 2>'/tmp/a b' -c 'rm of the task state file' is allowed, as on HEAD"
 echo "== ai-path-guard (the installed shared tree is frozen during a task, readable always)"
 # T-2026-10-13-004, Q4=A: <home>/claude-agentic/ai/ and ai-path are the rules a
 # run is judged by, like the policies they replace.
+# The installed tree is anchored to the runtime's home (direct-mode-diet D4b):
+# the guard is given the test home as its own, and every expectation stands.
+decide_t() { HOME="$TMP/user" CLAUDE_CONFIG_DIR='' CODEX_HOME='' decide "$@"; }
 for home in .claude .codex; do
     SH="$TMP/user/$home/claude-agentic"
     tool() { jq -nc --arg r "$ROOT" --arg t "$1" --arg p "$2" '{hook_event_name:"PreToolUse",tool_name:$t,cwd:$r,tool_input:{file_path:$p}}'; }
     bash_cmd() { jq -nc --arg r "$ROOT" --arg c "$1" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:$c}}'; }
     printf '{"current_stage":"implementation","task_id":"T-1"}\n' > "$ROOT/.ai/state/current.json"
-    decide "$home in a task: Write to the shared tree is denied" deny "$(tool Write "$SH/ai/policies/git.md")"
-    decide "$home in a task: Edit of the shared tree is denied" deny "$(tool Edit "$SH/ai/policies/git.md")"
-    decide "$home in a task: Write to ai-path is denied" deny "$(tool Write "$SH/ai-path")"
-    decide "$home in a task: Read of the shared tree is allowed" allow "$(tool Read "$SH/ai/policies/git.md")"
-    decide "$home in a task: running ai-path is allowed" allow "$(bash_cmd "$SH/ai-path policies/git.md")"
-    decide "$home in a task: a sibling file is not frozen by this rule" allow "$(tool Write "$SH/ai-path.notes")"
+    decide_t "$home in a task: Write to the shared tree is denied" deny "$(tool Write "$SH/ai/policies/git.md")"
+    decide_t "$home in a task: Edit of the shared tree is denied" deny "$(tool Edit "$SH/ai/policies/git.md")"
+    decide_t "$home in a task: Write to ai-path is denied" deny "$(tool Write "$SH/ai-path")"
+    decide_t "$home in a task: Read of the shared tree is allowed" allow "$(tool Read "$SH/ai/policies/git.md")"
+    decide_t "$home in a task: running ai-path is allowed" allow "$(bash_cmd "$SH/ai-path policies/git.md")"
+    decide_t "$home in a task: a sibling file is not frozen by this rule" allow "$(tool Write "$SH/ai-path.notes")"
     # T-2026-10-15-001 (known-risks a): the whole tree, replaced or removed in
     # one shell command, with nothing inside ai/ named on the line.
-    decide "$home in a task: rm -rf of the bare shared tree is denied" deny "$(bash_cmd "rm -rf $SH/ai")"
-    decide "$home in a task: the same rm followed by && is denied" deny "$(bash_cmd "rm -rf $SH/ai && echo done")"
-    decide "$home in a task: and with no space before the && (review: patsub_replacement ate the &)" deny "$(bash_cmd "rm -rf $SH/ai&& echo done")"
-    decide "$home in a task: and with a redirect glued to the path" deny "$(bash_cmd "rm -rf $SH/ai>/dev/null")"
-    decide "$home in a task: mv over the bare shared tree is denied" deny "$(bash_cmd "mv $TMP/new $SH/ai")"
-    decide "$home in a task: cp -r of a directory named ai into the home is denied" deny "$(bash_cmd "cp -r $TMP/new/ai $SH/")"
-    decide "$home in a task: install into the shared tree is denied" deny "$(bash_cmd "install -m 644 $TMP/x $SH/ai/policies/git.md")"
-    decide "$home in a task: cp to a sibling that merely starts with ai is allowed" allow "$(bash_cmd "cp $TMP/x $SH/ai-notes")"
+    decide_t "$home in a task: rm -rf of the bare shared tree is denied" deny "$(bash_cmd "rm -rf $SH/ai")"
+    decide_t "$home in a task: the same rm followed by && is denied" deny "$(bash_cmd "rm -rf $SH/ai && echo done")"
+    decide_t "$home in a task: and with no space before the && (review: patsub_replacement ate the &)" deny "$(bash_cmd "rm -rf $SH/ai&& echo done")"
+    decide_t "$home in a task: and with a redirect glued to the path" deny "$(bash_cmd "rm -rf $SH/ai>/dev/null")"
+    decide_t "$home in a task: mv over the bare shared tree is denied" deny "$(bash_cmd "mv $TMP/new $SH/ai")"
+    decide_t "$home in a task: cp -r of a directory named ai into the home is denied" deny "$(bash_cmd "cp -r $TMP/new/ai $SH/")"
+    decide_t "$home in a task: install into the shared tree is denied" deny "$(bash_cmd "install -m 644 $TMP/x $SH/ai/policies/git.md")"
+    decide_t "$home in a task: cp to a sibling that merely starts with ai is allowed" allow "$(bash_cmd "cp $TMP/x $SH/ai-notes")"
     rm -f "$ROOT/.ai/state/current.json"
-    decide "$home no task: Write to the shared tree is allowed" allow "$(tool Write "$SH/ai/policies/git.md")"
-    decide "$home no task: Write to ai-path is allowed" allow "$(tool Write "$SH/ai-path")"
-    decide "$home no task: rm -rf of the shared tree is the guard's business only in a task" allow "$(bash_cmd "rm -rf $SH/ai")"
+    decide_t "$home no task: Write to the shared tree is allowed" allow "$(tool Write "$SH/ai/policies/git.md")"
+    decide_t "$home no task: Write to ai-path is allowed" allow "$(tool Write "$SH/ai-path")"
+    decide_t "$home no task: rm -rf of the shared tree is the guard's business only in a task" allow "$(bash_cmd "rm -rf $SH/ai")"
 done
 printf '{}\n' > "$ROOT/.ai/state/current.json"
 
@@ -582,6 +585,116 @@ decide_home "no task: rm -rf ~/.claude/claude-agentic/ is allowed" allow 'rm -rf
 decide_home "no task: rm -rf vendor node_modules is allowed" allow 'rm -rf vendor node_modules'
 rm -f "$ROOT/.ai/state/session.json"
 printf '{}\n' > "$ROOT/.ai/state/current.json"
+
+echo "== ai-path-guard (reads and roots — direct-mode-diet §4a, §4b)"
+# §4a: a one-liner that names .ai/state/ or .ai/reports/ is denied only when the
+# command also shows a write indicator; an eval keeps the old rule. The state
+# file is {} here, so a task is in flight throughout this section.
+mkdir -p "$ROOT/.ai/reports/T-1"
+for c in "python3 -c \"import json; print(json.load(open('.ai/state/current.json'))['current_stage'])\"" \
+         "python3 -c \"print(open('.ai/reports/T-1/events.jsonl', 'r').read().count('gate'))\"" \
+         "python3 -c \"import pathlib; print(pathlib.Path('.ai/state/current.json').read_text())\"" \
+         "python3 -c \"import json; print(json.dumps(json.load(open('.ai/state/current.json')), indent=2))\" | head -20" \
+         "perl -e 'open(my \$f, \"<\", \".ai/state/current.json\"); print <\$f>'" \
+         "node -e \"console.log(require('fs').readFileSync('.ai/state/current.json', 'utf8'))\"" \
+         "ruby -e 'puts File.read(\".ai/state/current.json\")'"; do
+    decide_home "a read-only one-liner is allowed: $c" allow "$c"
+done
+for c in "python3 -c \"open('.ai/state/current.json', 'w').write('{}')\"" \
+         "python3 -c \"open('.ai/reports/T-1/notes.md', mode='a').write('x')\"" \
+         "python3 -c \"import pathlib; pathlib.Path('.ai/state/x.json').open('w').write('{}')\"" \
+         "python3 -c \"open(\\\".ai/state/x.json\\\", \\\"wb\\\")\"" \
+         "python3 -c \"import os; os.open('.ai/state/x.json', os.O_WRONLY | os.O_CREAT)\"" \
+         "python3 -c \"import pathlib; pathlib.Path('.ai/state/x.json').write_text('{}')\"" \
+         "python3 -c \"import pathlib; pathlib.Path('.ai/state/x.json').write_bytes(b'{}')\"" \
+         "python3 -c \"import json; m='w'; json.dump({}, open('.ai/state/x.json', m))\"" \
+         "python3 -c \"import os; os.replace('/tmp/x', '.ai/state/current.json')\"" \
+         "python3 -c \"import os; os.remove('.ai/state/current.json')\"" \
+         "python3 -c \"import shutil; shutil.copy('/tmp/x', '.ai/state/current.json')\"" \
+         "python3 -c \"import os; os.truncate('.ai/state/current.json', 0)\"" \
+         "python3 -c \"import pathlib; pathlib.Path('.ai/state/x.json').touch()\"" \
+         "python3 -c \"import os; os.unlink('.ai/state/current.json')\"" \
+         "python3 -c \"import os; os.rename('/tmp/x', '.ai/state/current.json')\"" \
+         "python3 -c \"import os; os.symlink('/tmp/x', '.ai/state/current.json')\"" \
+         "python3 -c \"import subprocess; subprocess.run(['rm', '.ai/state/current.json'])\"" \
+         "python3 -c \"import os; os.system('rm .ai/state/current.json')\"" \
+         "perl -e 'open(my \$f, \">\", \".ai/state/current.json\")'" \
+         "perl -e 'open(F, \">>.ai/reports/T-1/events.jsonl\")'" \
+         "perl -e 'open(F, \"+<\", \".ai/state/current.json\")'" \
+         "perl -e 'system(\"rm\", \".ai/state/current.json\")'" \
+         "perl -e '\`rm .ai/state/current.json\`'" \
+         "ruby -e 'File.write(\".ai/state/current.json\", \"{}\")'" \
+         "ruby -e 'File.delete(\".ai/state/current.json\")'" \
+         "ruby -e 'IO.write(\".ai/state/current.json\", \"{}\")'" \
+         "ruby -e 'require \"fileutils\"; FileUtils.rm(\".ai/state/current.json\")'" \
+         "node -e \"require('fs').writeFileSync('.ai/state/current.json', '{}')\"" \
+         "node -e \"const fs = require('fs'); fs.appendFileSync('.ai/reports/T-1/events.jsonl', 'x')\"" \
+         "node -e \"const fs = require('fs'); fs.rmSync('.ai/state/current.json')\"" \
+         "node -e \"const fs = require('fs'); fs.copyFileSync('/tmp/x', '.ai/state/current.json')\"" \
+         "node -e \"const fs = require('fs'); fs.mkdirSync('.ai/reports/T-9')\"" \
+         "node -e \"require('child_process').execSync('rm .ai/state/current.json')\"" \
+         "python3 -c 'print(1)'; php -r 'file_put_contents(\".ai/state/current.json\", \"{}\");'" \
+         "python3 -c 'print(1)'; php -r 'copy(\"/tmp/x\", \".ai/state/current.json\");'" \
+         "python3 -c 'print(\"{}\")' > .ai/reports/T-1/notes.md" \
+         "python3 -c 'print(\"{}\")' >> .ai/reports/T-1/notes.md" \
+         "python3 -c 'print(\"{}\")' | tee -a .ai/reports/T-1/notes.md" \
+         "eval \"cat .ai/state/current.json\""; do
+    decide_home "a writing one-liner is denied: $c" deny "$c"
+done
+# The indicator regex runs in-process up to 4096 characters (ere_match): a
+# padded line of open( calls is the slow case for its [^)]* pieces.
+for unit in 'open(' 'a'; do
+    pad=$(rep "$unit" $(( 4000 / ${#unit} )))
+    timed "a 4 KB one-liner padded with '$unit' that reads the state is allowed" allow \
+        "$(printf "python3 -c \"print(open('.ai/state/current.json').read())\" # %s" "$pad" | bash_stdin)" 500
+done
+
+# §4b: the protected and task patterns are anchored to the project root and to
+# the runtime homes. The same basenames are denied under the root and allowed in
+# a tree outside it, in the plugin's templates and in a fixture tree.
+SCRATCH="$TMP/scratch"; mkdir -p "$SCRATCH/.ai/state" "$SCRATCH/.ai/policies"
+printf '{}\n' > "$SCRATCH/.ai/state/current.json"; printf '{}\n' > "$SCRATCH/.ai/policies/path-guard.json"
+write_at() { jq -nc --arg r "$ROOT" --arg p "$1" '{hook_event_name:"PreToolUse",tool_name:"Write",cwd:$r,tool_input:{file_path:$p,content:"{}"}}'; }
+for rel in .ai/state/current.json .ai/state/handoff.md .ai/reports/T-1/questions.md .ai/reports/T-1/events.jsonl \
+           .ai/policies/path-guard.json .ai/policies/risk-tiers.json .ai/workflows/t3.md .ai/AGENTS.md \
+           .claude/settings.json .claude/agents/x.md .claude/hooks/ai-x.sh .codex/config.toml .codex/hooks/ai-x.sh \
+           docs/sdlc/constitution.md .github/copilot-instructions.md .junie/guidelines.md .cursor/rules/x.mdc .cursorrules; do
+    decide "in a task: Write to $rel under the root is denied" deny "$(write_at "$ROOT/$rel")"
+    decide "in a task: Write to $rel in a tree outside the root is allowed" allow "$(write_at "$SCRATCH/$rel")"
+    decide "in a task: Write to $rel under the ai-init templates is allowed" allow "$(write_at "$ROOT/skills/ai-init/templates/$rel")"
+    decide "in a task: Write to $rel under a fixture tree is allowed" allow "$(write_at "$ROOT/tests/fixtures/adopt/x/$rel")"
+done
+decide "Write through src/.. to the root's policy file is denied" deny "$(write_at "$ROOT/src/../.ai/policies/risk-tiers.json")"
+decide "Write through //./ to the root's state file is denied" deny "$(write_at "$ROOT//.ai/./state/current.json")"
+decide "Write through ../ out of the root is allowed" allow "$(write_at "$ROOT/../scratch/.ai/policies/path-guard.json")"
+ln -sfn "$ROOT" "$TMP/rootlink"
+decide "Write by the physical path while the cwd is a link to the root is denied" deny \
+    "$(jq -nc --arg r "$TMP/rootlink" --arg p "$ROOT/.ai/policies/path-guard.json" '{hook_event_name:"PreToolUse",tool_name:"Write",cwd:$r,tool_input:{file_path:$p}}')"
+decide "Write of a new state file through a link to the root is denied" deny "$(write_at "$TMP/rootlink/.ai/state/session-new.json")"
+decide "Edit from cwd=src of the root's policy file is denied" deny \
+    "$(jq -nc --arg r "$ROOT/src" --arg p "$ROOT/.ai/policies/path-guard.json" '{hook_event_name:"PreToolUse",tool_name:"Edit",cwd:$r,tool_input:{file_path:$p}}')"
+decide_home "cat of a policy file outside the root is allowed" allow "cat $SCRATCH/.ai/policies/path-guard.json"
+decide_home "cat of the root's policy file is still denied" deny 'cat .ai/policies/path-guard.json'
+decide_home "cp into a state file outside the root is allowed" allow "cp /tmp/x $SCRATCH/.ai/state/current.json"
+decide_home "a redirect into a state file outside the root is allowed" allow "echo '{}' > $SCRATCH/.ai/state/current.json"
+decide_home "rm -rf of a .ai/ tree outside the root is allowed" allow "rm -rf $SCRATCH/.ai"
+decide_home "a redirect through src/.. into the root's policy file is denied" deny 'echo x > src/../.ai/policies/path-guard.json'
+decide_home "cp through src/.. onto the root's policy file is denied" deny 'cp /tmp/x src/../.ai/policies/risk-tiers.json'
+decide_home "rm -rf .ai/state is still denied" deny 'rm -rf .ai/state'
+# The home trees: ~/.claude/hooks/ai-* and the shared tree, by every spelling.
+write_home() { HOME="$HOME_T" CLAUDE_CONFIG_DIR="${2-}" CODEX_HOME='' decide "$1" "$3" "$(write_at "$4")"; }
+write_home "Write to ~/.claude/hooks/ai-* is denied" '' deny "$HOME_T/.claude/hooks/ai-path-guard.sh"
+write_home "Write to ~/.codex/hooks/ai-* is denied" '' deny "$HOME_T/.codex/hooks/ai-git-guard.sh"
+write_home "in a task: Write to ~/.claude/settings.json is denied" '' deny "$HOME_T/.claude/settings.json"
+write_home "in a task: Write to ~/.claude/claude-agentic/ai/ is denied" '' deny "$HOME_T/.claude/claude-agentic/ai/policies/git.md"
+write_home "Write to \$CLAUDE_CONFIG_DIR/hooks/ai-* is denied" "$TMP/cfg" deny "$TMP/cfg/hooks/ai-path-guard.sh"
+write_home "in a task: Write to \$CLAUDE_CONFIG_DIR/settings.json is denied" "$TMP/cfg" deny "$TMP/cfg/settings.json"
+write_home "Write to hooks/ai-* of a .claude/ that is no runtime home is allowed" '' allow "$SCRATCH/.claude/hooks/ai-x.sh"
+decide_home "rm ~/.claude/hooks/ai-x is denied" deny 'rm ~/.claude/hooks/ai-x'
+decide_home "rm -f \"\$HOME\"/.claude/hooks/ai-path-guard.sh is denied" deny 'rm -f "$HOME"/.claude/hooks/ai-path-guard.sh'
+decide_home "echo x > ~/.claude/hooks/ai-path-guard.sh is denied" deny 'echo x > ~/.claude/hooks/ai-path-guard.sh'
+decide_home "in a task: cp into ~/.claude/claude-agentic/ai/ is denied" deny 'cp /tmp/x ~/.claude/claude-agentic/ai/policies/git.md'
+rm -rf "$TMP/rootlink"
 
 echo "== ai-path-guard (project WITHOUT .ai/ — every guard must be inert)"
 BARE="$TMP/bare"; mkdir -p "$BARE"; printf 'SECRET=1\n' > "$BARE/.env"

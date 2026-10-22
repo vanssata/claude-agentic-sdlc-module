@@ -1,0 +1,1 @@
+{"case":"writing a policy file in a tree outside the project root is allowed (§4b)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/../scratch/.ai/policies/path-guard.json","content":"{}"}}}

@@ -1,0 +1,1 @@
+{"case":"writing the ai-init template of a policy file in a task is allowed (§4b)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/skills/ai-init/templates/.ai/policies/risk-tiers.json","content":"{}"}}}
