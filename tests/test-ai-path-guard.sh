@@ -307,8 +307,9 @@ timed "100000 one-word segments and rm -f a.txt are allowed" allow \
 timed "100000 one-word segments and rm of the task state file are denied" deny \
     "$( { rep 'x;' 100000; printf 'rm -f .ai/state/current.json'; } | bash_stdin)" 3000
 # T-2026-10-21-001 (known-risks: many mover segments reach the 6 s clock): the
-# movers pass makes one realpath and one loose_hits for every candidate on the
-# line, not one per segment, and every decision keeps its reason and its place.
+# movers pass checks its segments in batches, one realpath and one loose_hits
+# per 32 KB of candidates, not one per segment, and every decision keeps its
+# reason and its place.
 timed "1000 rm segments and rm -f a.txt are allowed" allow \
     "$( { rep 'rm x; ' 1000; printf 'rm -f a.txt'; } | bash_stdin)" 2000
 timed "1000 rm segments and rm of the task state file are denied" deny \
@@ -350,6 +351,70 @@ out=$(printf '%s' "$pl" | "$GUARD")
 grep -q 'removal of a claude-agentic control file' <<<"$out" \
     && pass "and the deny names the control file, not the work cap" \
     || fail "the state file before 20000 rm segments: the deny names the control file" "$(head -c 200 <<<"$out")"
+# Its re-review: a batch was checked only when its candidates filled 32 KB, so
+# segments that add none (`rm -f;`) or one behind thousands of options left an
+# early deny waiting for the end of the line (HEAD 1.1 s with the control-file
+# reason, then 5 s with the work cap's). One segment past ARG_MAX, which HEAD
+# denied by the work cap once its realpath failed with E2BIG, is checked
+# candidate by candidate now: allowed when none of them is protected.
+pl=$( { printf 'rm -f .ai/state/current.json; '; rep 'rm -f; ' 150000; printf 'rm y'; } | bash_stdin)
+timed "rm of the task state file before 150000 rm segments with no operand is denied" deny "$pl" 3000
+out=$(printf '%s' "$pl" | "$GUARD")
+grep -q 'removal of a claude-agentic control file' <<<"$out" \
+    && pass "and the deny names the control file, not the work cap" \
+    || fail "the state file before 150000 operandless rm segments: the deny names the control file" "$(head -c 200 <<<"$out")"
+pl=$( { printf 'rm -f .ai/state/current.json; '; rep "rm $(rep '-f ' 2000)y; " 200; } | bash_stdin)
+timed "rm of the task state file before 200 rm segments of 2000 options is denied" deny "$pl" 3000
+out=$(printf '%s' "$pl" | "$GUARD")
+grep -q 'removal of a claude-agentic control file' <<<"$out" \
+    && pass "and the deny names the control file, not the work cap" \
+    || fail "the state file before 200 option-heavy rm segments: the deny names the control file" "$(head -c 200 <<<"$out")"
+deep="$ROOT/$(for i in 1 2 3 4 5 6 7 8; do pad_a 200; printf /; done)"; mkdir -p "$deep"
+decide "rm of 1500 files under a 1600-character cwd is allowed: past ARG_MAX, every candidate is checked" allow \
+    "$(printf 'rm%s' "$(words 1500)" | jq -Rsc --arg r "${deep%/}" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:.}}')"
+# Its second re-review: a later segment slow to parse still held an early deny.
+# Stripping quotes one character at a time cost 0.27 s per 4 KB operand of
+# `""`: the state file before one 123 KB segment of 30 such operands was denied
+# by HEAD in 0.29 s with the control-file reason, by R2 in 6.0 s with the work
+# cap's. The strip is linear now, and a segment that would take the batch's text
+# past 32 KB is parsed only after the batch is checked.
+qop="a$(rep '""' 2047)"
+pl=$( { printf 'rm -f .ai/state/current.json; rm'; rep " $qop" 30; } | bash_stdin)
+timed "rm of the task state file before a 123 KB segment of quote-padded operands is denied" deny "$pl" 2000
+out=$(printf '%s' "$pl" | "$GUARD")
+grep -q 'removal of a claude-agentic control file' <<<"$out" \
+    && pass "and the deny names the control file, not the work cap" \
+    || fail "the state file before a 123 KB quote-padded segment: the deny names the control file" "$(head -c 200 <<<"$out")"
+pl=$( { rep "rm $qop; " 16; printf 'rm -f .ai/state/current.json; '; rep "rm $qop; " 8; } | bash_stdin)
+timed "rm of the task state file among 24 quote-padded rm segments is denied" deny "$pl" 2000
+out=$(printf '%s' "$pl" | "$GUARD")
+grep -q 'removal of a claude-agentic control file' <<<"$out" \
+    && pass "and the deny names the control file, not the work cap" \
+    || fail "the state file among 24 quote-padded segments: the deny names the control file" "$(head -c 200 <<<"$out")"
+decide "rm of the task state file inside runs of both quote kinds is denied" deny \
+    "$(printf '%s' "rm \"'\".ai/state/current.json\"'\"" | bash_stdin)"
+decide "cp -t into the state directory inside runs of both quote kinds is denied" deny \
+    "$(printf '%s' "cp -t \"'\".ai/state\"'\" current.json" | bash_stdin)"
+decide "an operand of quotes only names no file" allow "$(printf '%s' "rm '\"\"' a.txt" | bash_stdin)"
+# Its third re-review: the batch was bounded by text, not by the absolute paths
+# a segment's candidates make. Under a 3.3 KB cwd one later `rm` of 5000 short
+# operands (29 KB of text) made 16 MB of them, built and resolved before the
+# earlier deny was checked (HEAD 0.11 s with the control-file reason, R3 5.6 s
+# with the work cap's). A destination multiplies every source the same way.
+deep2="$ROOT/$(for i in $(seq 16); do pad_a 200; printf /; done)"; mkdir -p "$deep2"
+pl=$(printf 'rm -f %s/.ai/state/current.json; rm%s' "$ROOT" "$(words 5000)" \
+    | jq -Rsc --arg r "${deep2%/}" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:.}}')
+timed "rm of the task state file before an rm of 5000 operands under a 3.3 KB cwd is denied" deny "$pl" 2000
+out=$(printf '%s' "$pl" | "$GUARD")
+grep -q 'removal of a claude-agentic control file' <<<"$out" \
+    && pass "and the deny names the control file, not the work cap" \
+    || fail "the state file before 5000 operands under a 3.3 KB cwd: the deny names the control file" "$(head -c 200 <<<"$out")"
+pl=$( { printf 'rm -f .ai/state/current.json; mv'; words 3000; printf ' d/%s' "$(pad_a 4000)"; } | bash_stdin)
+timed "rm of the task state file before an mv of 3000 sources into a 4 KB destination is denied" deny "$pl" 2000
+out=$(printf '%s' "$pl" | "$GUARD")
+grep -q 'removal of a claude-agentic control file' <<<"$out" \
+    && pass "and the deny names the control file, not the work cap" \
+    || fail "the state file before 3000 sources into a 4 KB destination: the deny names the control file" "$(head -c 200 <<<"$out")"
 # T-2026-10-20-002 (known-risks: the candidate filter and its regex ran in two
 # locales): both are bytewise, and the regex names the UTF-8 bytes of the 15
 # multibyte characters glibc's [[:space:]] matches, so a line that splits

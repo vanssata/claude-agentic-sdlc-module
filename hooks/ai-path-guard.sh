@@ -699,13 +699,15 @@ case "$AI_TOOL" in
             segments=$(printf '%s\n' "$segs" \
                 | sed -E 's/[0-9]*[<>]{1,2}&[0-9]+//g; s/(&|[0-9]*)[<>]{1,2}[[:space:]]*[^[:space:]|;&<>]*//g' \
                 | LC_ALL=C grep -aE "$movers")
-            # Batches (T-2026-10-21-001): segments are parsed until their
-            # candidates fill MOVER_CHUNK bytes, resolved together and checked
-            # segment by segment, in order. A realpath fork and a loose_hits
-            # pipeline per segment cost ~7 ms, and 1000 rm segments reached the
-            # 6 s clock; one call for the whole line was a unit the clock could
-            # not stop (400 segments of a symlink chain ran past 20 s), and an
-            # early segment's deny waited for the whole line. A batch's cands,
+            # Batches (T-2026-10-21-001): segments are parsed until the text
+            # read and the candidates made fill MOVER_CHUNK bytes, resolved
+            # together and checked segment by segment, in order. A realpath
+            # fork and a loose_hits pipeline per segment cost ~7 ms, and 1000
+            # rm segments reached the 6 s clock; one call for the whole line was
+            # a unit the clock could not stop (400 segments of a symlink chain
+            # ran past 20 s), and an early segment's deny waited for the whole
+            # line — as it did when only candidates counted, behind 150000
+            # segments that make none (`rm -f;`). A batch's cands,
             # covers and abss run across its segments; segment s owns
             # seg_count[s] of them from seg_first[s].
             MOVER_CHUNK=32768
@@ -768,7 +770,7 @@ case "$AI_TOOL" in
             # is resolved segment by segment, as each segment was before: the
             # same counts and the same denies, in order.
             mover_check() {
-                local s first last per_seg=""
+                local s first last per_seg="" verb
                 reals=() hits=()
                 [ "${#abss[@]}" -eq 0 ] || mover_resolve 0 "${#abss[@]}" || per_seg=yes
                 for s in "${!seg_first[@]}"; do
@@ -821,9 +823,28 @@ case "$AI_TOOL" in
                 done
                 cands=() covers=() abss=() seg_first=() seg_count=() seg_verb=() batch=0
             }
+            # quote_tail <name> — drop the quote run at the end of variable
+            # <name>, which no longer starts with a quote. Bytewise: under a
+            # UTF-8 locale an invalid byte makes bash match a pattern by bytes
+            # but count ${#…} and ${…:n} in characters, and the two disagree.
+            quote_tail() {
+                local -n quoted="$1"
+                local LC_ALL=C qrun
+                qrun=${quoted%[!\"\']*}; quoted=${quoted:0:${#qrun}+1}
+            }
             cands=() covers=() abss=() seg_first=() seg_count=() seg_verb=() batch=0 pending=""
+            # The prefix a relative candidate takes, once: per candidate,
+            # ${AI_CWD%/} on a 4 KB cwd cost 5.5 s over 16000 operands. A
+            # candidate's absolute form is at most mover_base longer than it.
+            cwd_slash="${AI_CWD%/}/"
+            mover_base=$(( (${#AI_CWD} > ${#HOME} ? ${#AI_CWD} : ${#HOME}) + 2 ))
             while IFS= read -r seg; do
                 work_clock
+                # Check the batch before a segment that would take its text
+                # past MOVER_CHUNK, so an earlier deny waits for 32 KB of parse
+                # at most, never for one long segment.
+                [ $((batch + ${#seg})) -lt "$MOVER_CHUNK" ] || mover_check
+                batch=$((batch + ${#seg} + 1))
                 operands=()
                 IFS=$' \t' read -r -a operands <<< "$seg"
                 [ "${#operands[@]}" -gt 1 ] || continue
@@ -860,10 +881,27 @@ case "$AI_TOOL" in
                             -*) continue ;;
                         esac
                     fi
-                    while [[ $w == [\"\']* ]]; do w="${w:1}"; done
-                    while [[ $w == *[\"\'] ]]; do w="${w%?}"; done
+                    # The quote runs at both ends go in one step each: a
+                    # character at a time cost 0.27 s per 4 KB operand of `""`.
+                    qrun=${w%%[!\"\']*}; w=${w:${#qrun}}
+                    [[ $w != *[\"\'] ]] || quote_tail w
                     [ -z "$w" ] || sources+=("$w")
                 done
+                # Check the batch before building this segment's candidates
+                # when their absolute paths could take it past MOVER_CHUNK: a
+                # long cwd or destination multiplies every source, and 5000
+                # operands under a 3.3 KB cwd held an earlier deny for 6 s while
+                # they were built and resolved. Each source makes at most two
+                # candidates and the destination one, none longer than
+                # mover_base + the destination + the source.
+                dl=0
+                case "$verb" in
+                    rm|rmdir|unlink) ;;
+                    *) dl=${#dest}; [ -n "$dest" ] || [ "${#sources[@]}" -eq 0 ] || dl=${#sources[-1]} ;;
+                esac
+                [ "${#seg_first[@]}" -eq 0 ] \
+                    || [ $((batch + (2 * ${#sources[@]} + 1) * (mover_base + dl) + 2 * ${#seg})) -lt "$MOVER_CHUNK" ] \
+                    || mover_check
                 # cands[i] is checked as itself; covers[i]=yes also for what
                 # lies under it. This segment's candidates start at first.
                 first=${#cands[@]}
@@ -875,8 +913,8 @@ case "$AI_TOOL" in
                             [ "${#sources[@]}" -gt 1 ] || continue
                             dest="${sources[-1]}"; unset 'sources[-1]'
                         fi
-                        while [[ $dest == [\"\']* ]]; do dest="${dest:1}"; done
-                        while [[ $dest == *[\"\'] ]]; do dest="${dest%?}"; done
+                        qrun=${dest%%[!\"\']*}; dest=${dest:${#qrun}}
+                        [[ $dest != *[\"\'] ]] || quote_tail dest
                         [ -n "$dest" ] || continue
                         into=""
                         for src in "${sources[@]}"; do
@@ -899,11 +937,10 @@ case "$AI_TOOL" in
                         '$HOME/'*) cand="$HOME/${cand#'$HOME/'}" ;;
                         '${HOME}/'*) cand="$HOME/${cand#'${HOME}/'}" ;;
                     esac
-                    case "$cand" in /*) ;; *) cand="${AI_CWD%/}/$cand" ;; esac
+                    case "$cand" in /*) ;; *) cand="$cwd_slash$cand" ;; esac
                     abss+=("$cand") batch=$((batch + ${#cand} + 1))
                 done
                 seg_first+=("$first") seg_count+=($((${#cands[@]} - first))) seg_verb+=("$verb")
-                [ "$batch" -lt "$MOVER_CHUNK" ] || mover_check
             done <<< "$segments"
             mover_check
             [ -z "$pending" ] || deny "$pending"
