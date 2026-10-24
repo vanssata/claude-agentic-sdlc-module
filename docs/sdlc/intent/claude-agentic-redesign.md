@@ -185,6 +185,76 @@ to bring a schema-less `.ai/` forward in one run, since every user project is be
 `SCOPE_CHANGE_REQUIRED` should amend the step in place instead of returning to PLAN, because
 nine amendments in eight tasks is the normal case, not the exception.
 
+## Superpowers: how this module should use it, and the Codex side (checked 2026-10-24)
+
+What was checked: https://claude.com/marketplace/plugins/superpowers, the `obra/superpowers`
+repository (skills list, `using-superpowers`, `subagent-driven-development`, `hooks/`), this
+module's own references, and both local installs. Two repository files returned HTTP 503 and are
+unverified: `hooks/hooks.json` and `skills/using-superpowers/references/codex-tools.md`.
+
+**State today.** Superpowers is not installed on this machine in either runtime
+(`~/.claude/plugins/installed_plugins.json`, `~/.codex/config.toml`). The module mentions it in
+exactly two optional lines: `skills/sdlc-intent/SKILL.md:34` ("if `superpowers:brainstorming` is
+available, invoke it") and `skills/sdlc-plan/SKILL.md:19` (`superpowers:writing-plans` for step
+granularity). Neither line has ever run here.
+
+**What superpowers is.** Fifteen skills (MIT, Jesse Vincent): workflow — `brainstorming`,
+`writing-plans`, `executing-plans`, `subagent-driven-development`, `dispatching-parallel-agents`,
+`using-git-worktrees`, `requesting-code-review`, `receiving-code-review`,
+`finishing-a-development-branch`; discipline — `test-driven-development`, `systematic-debugging`,
+`verification-before-completion`; meta — `using-superpowers` (SessionStart hook injects it and makes
+skill use mandatory before any response), `writing-skills`, `diagnosing-superpowers`. Each skill has
+"red flags" and "common rationalizations" tables — the same anatomy as skills.addy.ie.
+
+**Overlap with this module, by job.**
+
+| Job | superpowers | claude-agentic today | Verdict |
+|---|---|---|---|
+| intent / design dialogue | `brainstorming` (one question at a time, before plan mode) | `/sdlc-intent` (same shape, plus `state.py ask --topic` for a durable record) | superpowers drives the dialogue; the module keeps the record |
+| plan | `writing-plans` (bite-sized tasks, exact paths, verification step each) | `/sdlc-plan`, `ai-planner`, plan mode | identical goal; adopt its task format as the `guarded` plan shape (`allowed_files` is already "exact paths") |
+| execute | `executing-plans` (inline, one final review), `subagent-driven-development` (fresh subagent per task, two-stage review, round cap, ledger) | direct mode (inline) and the full pipeline | the two superpowers modes map one-to-one onto `guarded` and `full`; their round cap and ledger are what `review-economy.md` reinvented |
+| verify | `verification-before-completion`, `test-driven-development` | "verify once, to the end, one batch", bugfix shows the failing test first | same rules; superpowers has no `verify_command` record or test-run cap |
+| review | `requesting-code-review`, `receiving-code-review` | `ai-reviewer`, `review-gate`, sensors | superpowers reviews by checklist, never by model-tier; the tier choice stays ours |
+| isolation | `using-git-worktrees` | nothing | adopt: a `guarded`/`full` task in a worktree makes the scope guard and `git revert` trivial |
+| finish | `finishing-a-development-branch` (merge / PR / keep / discard) | `/ship` + human approval | complementary: superpowers stops for pushes and merges too |
+| risk | none | tiers, path floors, weight (proposed) | the one thing superpowers has no answer for; it is this module's reason to exist |
+| guards | none (prompt discipline only) | three deterministic hooks | keep; superpowers relies on the model obeying |
+
+**Recommendation.** Do not re-implement what superpowers ships. In the redesign, each of the six
+commands names the superpowers skill it delegates its method to when the plugin is present, and
+carries a short fallback when it is not — the pattern the two existing lines already use, made
+systematic:
+
+- `/spec` → `superpowers:brainstorming`, answers recorded through `state.py ask --topic`.
+- `/plan` → `superpowers:writing-plans`; the module adds the weight and `allowed_files`.
+- `/build` light → nothing extra; guarded → `executing-plans` inside `using-git-worktrees`;
+  full → `subagent-driven-development`, with the module's `ai-reviewer`/`ai-security` as the
+  reviewers and its round cap (2) overriding theirs.
+- `/review` → `requesting-code-review` checklist as the reviewer brief; `receiving-code-review`
+  for the remediation batch.
+- `/ship` → `finishing-a-development-branch`, stopped before merge or push by `ai-git-guard`.
+- always → `verification-before-completion`, `systematic-debugging` for the bugfix workflow.
+
+What stays in this module: weight-based risk, path floors, the deterministic guards, the journal
+and `verify_command`, the state machine's four public commands. A `/setup` check should report
+whether superpowers is installed and, if not, print the install line for the runtime in use.
+
+Two cautions. `using-superpowers` makes skill invocation mandatory "before ANY response" through
+a SessionStart hook; our `context-guard` also writes at SessionStart and our stub is paid for on
+every turn — measure the combined always-loaded cost with `tests/test-instruction-budget.sh`
+before recommending both. And superpowers forbids parallel implementer subagents while this
+module implements in the session; the mapping above keeps our rule (session implements) and uses
+superpowers' implementer only in `full`.
+
+**Codex.** There is no separate "superpowers for Codex": the same plugin installs in Codex from the
+official plugin marketplace (`/plugins` in Codex CLI, search "superpowers"; the repo carries a
+`.codex-plugin/` directory and a `references/codex-tools.md` tool mapping). This machine's
+`~/.codex/config.toml` already registers `claude-plugins-official` as a marketplace, so the install
+is one step there too. Skills follow the open `SKILL.md` format (agentskills.io), which Codex reads
+natively; skills.addy.ie's set installs into Codex with `npx skills add addyosmani/agent-skills`.
+The module's Codex adapter therefore needs no second integration: the same `superpowers:<skill>`
+names resolve in both runtimes, and the fallback lines cover an install without it.
+
 ## How to resume
 
 1. Read `docs/redesign-analysis-2026-10-24.md` (sections 1, 2a and 3; 4 for phasing).
