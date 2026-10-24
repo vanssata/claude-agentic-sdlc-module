@@ -33,6 +33,11 @@ that the developer has read, and **Open questions** what the spec stage must set
   reader agents, 13 directory rules, 4 guard hooks totalling 166 lines, 380 helper scripts, a
   file-change table as the release summary.
 
+- Across the whole machine (see **Evidence from every project** below): 84 tasks, 83 of them in
+  September 2026; T4 on 13 of 19 tasks in productEditorApp and 6 of 6 in the Learning Workbench;
+  39 `review-gate` calls in three projects with 0 `skipped_green`; five of seven `.ai/` trees
+  behind the plugin; hand-written skills, rules and plan-mode plans are what developers kept using.
+
 ## Proposed outcome
 
 - A developer sees six commands named by the job, in lifecycle order, after
@@ -129,6 +134,56 @@ From the analysis, read by the developer on 2026-10-24 (not a brainstorm; no
   printing the new name on first use.
 - Phase 1 scope: whether the merged `workflows.md` and the prose diet ship with the weight
   model or after it.
+
+## Evidence from every project on this machine (2026-10-24)
+
+Inventory of `/Store/Projects/*`, `/Store/ProjectToBuild/*`, `/Store/Ideas/*` plus the Claude Code
+prompt history (`~/.claude/history.jsonl`, 1 253 prompts). Seven projects have `.ai/`; six ever ran
+`/ai-task`. Numbers reproduce with `tools/journal-summary.py <root>`.
+
+| Project | `.ai/` schema | tasks | when | tiers | review-gate | local toolbox |
+|---|---|---|---|---|---|---|
+| claude-agentic (this repo) | 6 | 24 | Sep–Oct | T2 9, T4 9 | 32 calls, 0 skipped | none |
+| new-abrv2-desginsystem | 5 | 21 | Sep only | T2 9, T3 7, T4 3 | 1 call, red (`bite` unavailable, `tests` stale) | 1 plan; 9 `scope_change` events |
+| productEditorApp | none (pre-5) | 19 | Sep only | **T4 13 of 19**, feature workflow, median 104 min | none recorded | 13 SDLC docs |
+| SyliusSlider | 5 | 7 | Sep 6, Oct 1 | T2 6 | 6 calls, 6 red: `lint`/`typecheck`/`tests` green, `bite` unavailable 5/5, `traceability` red 4/5 | 3 agents, 4 hooks, 1 skill |
+| Personal Learning Assistant Workbench | none | 7 | Sep only | **T4 6 of 6**, median 169 min | none | 2 plans |
+| new-shop-2019 | none | 6 | one afternoon, Sep 10 | T3 6 (old table) | none | 158 plans, 10 skills, 4 agents, 13 rules, 4 hooks |
+| abr-v1 | none | 0 | — | — | — | 3 skills, 3 hooks, 57 commits |
+| vanssa-site | none | 0 | — | — | — | 2 skills |
+
+What the whole machine says:
+
+- **Adoption was a September burst, not a habit.** 84 tasks in total; 83 of them in September 2026,
+  one in October outside this repository. Prompt history agrees: `/ai-task` was typed 4 times in
+  new-abrv2 (173 prompts there), 6 times in productEditorApp (83 prompts), 0 times in SyliusSlider,
+  abr-v1, breezy-bg and the shop. The most typed plugin commands are `/project-update` and
+  `/project-init`, i.e. maintenance of the plugin itself, not work.
+- **T4 inflation is not local to this repo.** productEditorApp 13 of 19 and the Learning Workbench
+  6 of 6 landed on T4; new-abrv2 has 3. Everywhere the trigger is the generic "changes a process"
+  row. Only SyliusSlider, a small bugfix stream, stayed at T2.
+- **The sensor gate never produced `skipped_green` anywhere**: 39 `review-gate` calls across three
+  projects, 0 skips. In SyliusSlider the project's own checks were green every time and the gate
+  still went red on `bite` (the step command takes no `{files}` placeholder) and `traceability`.
+  The gate fails on plumbing, never on code.
+- **Five of seven `.ai/` trees are behind the plugin** (no `VERSION`, or schema 5); none of the
+  user projects received the direct-mode diet. The knowledge base is written once by `/ai-init`
+  and never updated; the directory rules and skills the developer writes by hand are what stay
+  alive (new-shop: 13 rules, 10 skills; abr-v1: 3 skills, 3 hooks; SyliusSlider: 3 agents, 4 hooks).
+- **Plan mode is the planner the developer actually uses**: 158 plans in the shop, `/plan` typed 12
+  times in breezy-bg, 2 in SyliusSlider; `/sdlc-intent` and `/sdlc-spec` were typed 3 times in
+  this repo and 3 in a learning project, nowhere else.
+- **Scope friction shows up where the pipeline was used most**: new-abrv2 journals 9
+  `scope_change` events in 8 journaled tasks — plans that named the wrong files, amended mid-step.
+- **Cross-runtime is real but thin**: five projects carry `.codex/`; the pipeline journals show
+  two runtime handoffs in total, both in this repository.
+
+Consequences for the proposal, on top of the new-shop lessons: the weight model must be
+tested against productEditorApp and the Learning Workbench (both all-T4 feature streams on a solo
+developer's own code) and must land them in `guarded`, not `full`; `/setup --update` must be able
+to bring a schema-less `.ai/` forward in one run, since every user project is behind; and
+`SCOPE_CHANGE_REQUIRED` should amend the step in place instead of returning to PLAN, because
+nine amendments in eight tasks is the normal case, not the exception.
 
 ## How to resume
 
