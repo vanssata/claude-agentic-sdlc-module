@@ -1,0 +1,156 @@
+{
+  "task_id": "T-2026-10-22-002",
+  "goal": "Path guard: allow read-only interpreter one-liners on .ai/state|reports, and anchor protected/task patterns to the root and the runtime home trees (direct-mode-diet §4a, §4b)",
+  "workflow": "feature",
+  "risk_tier": "T4",
+  "current_stage": "implementation",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": "1",
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "Path guard: allow read-only interpreter one-liners on .ai/state|reports, and anchor protected/task patterns to the root and the runtime home trees (direct-mode-diet §4a, §4b)",
+        "allowed_files": [
+          "hooks/ai-path-guard.sh",
+          "tests/test-ai-path-guard.sh",
+          "tests/fixtures/path-guard/87-bash-python-reads-state-allowed.json",
+          "tests/fixtures/path-guard/88-bash-python-json-dump-state.json",
+          "tests/fixtures/path-guard/89-write-policy-outside-root-allowed.json",
+          "tests/fixtures/path-guard/90-write-ai-init-template-policy-allowed.json",
+          "tests/fixtures/path-guard/91-write-dotdot-policy.json",
+          "tests/test-guard-characterization.sh",
+          "tests/fixtures/guard-characterization/golden.txt",
+          "docs/hooks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "in_progress"
+      }
+    ]
+  },
+  "completed_steps": [],
+  "test_status": "not_run",
+  "e2e_status": "not_run",
+  "review_status": "not_started",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "implement (step tests only), then the verification command once, then e2e once",
+  "human_approval": {
+    "required": true,
+    "granted": false,
+    "granted_by": null,
+    "granted_at": null,
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": null,
+    "unattended": false
+  },
+  "created_at": "2026-10-22T11:49:57Z",
+  "updated_at": "2026-10-22T11:49:57Z",
+  "history": [
+    {
+      "at": "2026-10-22T11:49:57Z",
+      "event": "task_started",
+      "detail": "Path guard: allow read-only interpreter one-liners on .ai/state|reports, and anchor protected/task patterns to the root and the runtime home trees (direct-mode-diet §4a, §4b) (feature)"
+    },
+    {
+      "at": "2026-10-22T11:49:57Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-22T11:49:57Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-22T11:49:57Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-22T11:49:57Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-22T11:49:57Z",
+      "event": "risk_classified",
+      "detail": "T4: T4: rule change that allows what was denied (spec D1/D4d); plan approved in plan mode; fixtures numbered 87-91 because 11-15 are taken"
+    },
+    {
+      "at": "2026-10-22T11:49:57Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-22T11:49:57Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-22T11:49:57Z",
+      "event": "step_started",
+      "detail": "1: Path guard: allow read-only interpreter one-liners on .ai/state|reports, and anchor protected/task patterns to the root and the runtime home trees (direct-mode-diet §4a, §4b)"
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "implementation",
+    "step_id": "1",
+    "next_action": "implement (step tests only), then the verification command once, then e2e once",
+    "at": "2026-10-22T11:49:57Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-22-002/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-22T11:49:57Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "4b3b9e1dc7fdf68aa450bbd52b5989626e61305e",
+    "base_tree": "3f47f5ea232379353abf163bbccfbe4b222b777e",
+    "task": {
+      "files": 0,
+      "added": 0,
+      "deleted": 0,
+      "lines": 0,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 0,
+      "tree": null,
+      "measured_at": null,
+      "status": "not_measured"
+    },
+    "rescored_tier": null,
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-22-002/sensors.json",
+    "tree": null,
+    "verdict": null,
+    "checked_at": null
+  },
+  "tests": {
+    "runs": [],
+    "suite_runs": 0
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}
