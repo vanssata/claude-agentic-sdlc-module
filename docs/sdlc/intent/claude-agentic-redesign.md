@@ -6,7 +6,7 @@ Evidence and the full proposal: `docs/redesign-analysis-2026-10-24.md` (Bulgaria
 machine) and the second analysis "claude-agentic — анализ и опростяване (2026-10-24)",
 a Claude Doc at https://claude.ai/artifact/UqxcHvZhP1Nn7xaLhnkiDm (Bulgarian, the other
 machine: 65 journals in seven `.ai/` roots, 582 transcripts, hook timings — see **Second
-analysis** below). This intent is the entry point for the next session; the analysis holds the numbers and the
+analysis** below; its evidence bundle is `files/claude-agentic-bundle-2026-10-24.zip`). This intent is the entry point for the next session; the analysis holds the numbers and the
 reasoning behind every line below. Written on 2026-10-24 from an analysis session, not from
 a `state.py ask --topic` brainstorm, so **Decisions taken** lists the analysis' conclusions
 that the developer has read, and **Open questions** what the spec stage must settle.
@@ -335,14 +335,18 @@ oroCRM, oddoAbries, ArgoCD, and the plugin itself. Local `main` since `bb7d54f` 
 intent and the first analysis (`e87e240`, `1b28852`, `c2a6bd7`); `new-refactor` has `main`
 merged and carries the open task T-2026-10-22-002.
 
-**Reference archive.** The doc's appendix D names `claude-agentic-bundle-2026-10-24.tar.gz`
-(1.4 MB; also `.zip`, 2.0 MB) at `/Store/Claude Plugins/` on the other machine: a `git archive`
-of the repo at `bb7d54f` (794 tracked files, no `*.log` under `.ai/reports/`), `evidence/events/`
-with the 65 journals as `<project>__<task-id>.jsonl`, `evidence/journals.py`, `triggers.py`,
-`scan_transcripts.py` (the scripts behind the numbers; the third runs only there),
-`evidence/usage-report.txt`, `installed/profile.json` and `routing.md`, and a README. **It is
-not on this machine** (searched the whole filesystem on 2026-10-24); copy it before the spec
-needs to re-run the journal numbers, or re-run `tools/journal-summary.py` on the originals.
+**Reference archive.** `files/claude-agentic-bundle-2026-10-24.zip` in this repository (2.0 MB,
+866 files; `files/` is git-ignored, `.gitignore:12`; the `.tar.gz` named in the doc is the same
+content). Its README says what it holds: `claude-agentic/` is a `git archive` of this repo at
+`e03162b` (= `bb7d54f` plus the carried task state in `.ai/state/`; 794 tracked files, no
+`*.log` under `.ai/reports/`); `evidence/events/` has the 65 journals as
+`<project>__<task-id>.jsonl` (claude-agentic 23, oddoAbries 19, new-shop-2019-v1-replica 14,
+oroCRM 4, abrites-site-v2-erp-fix 3, abrites-site-v2 1, ArgoCD 1); `evidence/journals.py` and
+`triggers.py` reproduce the per-task and per-tier tables (`python3 -I journals.py` re-run here
+on 2026-10-24 gives the same 65 / 61 / 185 questions / 18 rescores / 1 732 handoffs);
+`scan_transcripts.py` runs only on the original machine; `evidence/usage-report.txt` is the
+2026-10-24 cost output; `installed/profile.json` and `routing.md` are the other machine's
+install. Extract it into an empty directory outside the repo before reading it.
 
 **Numbers that change the picture** (all measured; method and limits in the doc's appendix A):
 
@@ -424,8 +428,8 @@ stays full + irreversible; an ArgoCD manifest in `env/dev` T6 becomes plan (`env
 
 1. Read `docs/redesign-analysis-2026-10-24.md` (sections 1, 2a and 3; 4 for phasing) and the
    Claude Doc's §4–§8 (the link above; read it through the Claude Docs connector, not by fetch).
-   Fetch `claude-agentic-bundle-2026-10-24.tar.gz` from the other machine if the journals there
-   are needed again.
+   The journals and scripts behind its numbers are in `files/claude-agentic-bundle-2026-10-24.zip`
+   (git-ignored); extract outside the repo and run `python3 -I evidence/journals.py`.
 2. Check `/ai-status` and `git log` for the state of direct-mode-diet tasks 2–4.
 3. `/sdlc-spec docs/sdlc/intent/claude-agentic-redesign.md` to turn this into a spec, or
    `/ai-task` for phase 1 once the diet is closed.
