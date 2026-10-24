@@ -2,8 +2,11 @@
 
 <!-- Stage 1 of the SDLC flow. Say WHAT and WHY. Leave HOW to the spec. -->
 
-Evidence and the full proposal: `docs/redesign-analysis-2026-10-24.md` (Bulgarian). This
-intent is the entry point for the next session; the analysis holds the numbers and the
+Evidence and the full proposal: `docs/redesign-analysis-2026-10-24.md` (Bulgarian, this
+machine) and the second analysis "claude-agentic — анализ и опростяване (2026-10-24)",
+a Claude Doc at https://claude.ai/artifact/UqxcHvZhP1Nn7xaLhnkiDm (Bulgarian, the other
+machine: 65 journals in seven `.ai/` roots, 582 transcripts, hook timings — see **Second
+analysis** below). This intent is the entry point for the next session; the analysis holds the numbers and the
 reasoning behind every line below. Written on 2026-10-24 from an analysis session, not from
 a `state.py ask --topic` brainstorm, so **Decisions taken** lists the analysis' conclusions
 that the developer has read, and **Open questions** what the spec stage must settle.
@@ -33,6 +36,13 @@ that the developer has read, and **Open questions** what the spec stage must set
   reader agents, 13 directory rules, 4 guard hooks totalling 166 lines, 380 helper scripts, a
   file-change table as the release summary.
 
+- The second analysis, on the production machine, measures the same shape at a larger scale:
+  about 22 000 tokens of procedure loaded before the first edit, 185 human stops in 65 tasks
+  (T4 median 5.6 per task, T2 zero), 34 of 44 tasks running the full suite two to five times,
+  10 of 18 tier raises caused by line or file counts, 43 % of tasks at T4+, 11 % of all spend on
+  the plugin maintaining itself, about 1 100 refused tool calls, and three mandatory process
+  systems competing in one session (this plugin, superpowers v7 with its "MUST invoke" banner,
+  built-in plan mode and `/code-review`). Hooks cost 16–41 ms per call and are not the problem.
 - Across the whole machine (see **Evidence from every project** below): 84 tasks, 83 of them in
   September 2026; T4 on 13 of 19 tasks in productEditorApp and 6 of 6 in the Learning Workbench;
   39 `review-gate` calls in three projects with 0 `skipped_green`; five of seven `.ai/` trees
@@ -119,6 +129,30 @@ From the analysis, read by the developer on 2026-10-24 (not a brainstorm; no
   extraction only.
 - `/status --cost` reads `events.jsonl`; `settings.common.json` raises `cleanupPeriodDays`.
 
+Confirmed or sharpened by the second analysis (2026-10-24, read by the developer):
+
+- Size is never an input: `diff_budget`, the `diff` and `rescore` sensors and `step-split`
+  for budget go away; the only effect of size is the advice "the plan has nine steps, consider
+  splitting".
+- Paths become hints that may raise one axis by one point, never a floor on the mode. (This
+  supersedes "path floors stay deterministic" above — see the open question on floors.)
+- An unknown axis scores 1, not 2, and is listed as UNKNOWN in the plan; "take the higher" is
+  removed. Re-scoring during a task happens only on reversibility and domain, raises the review
+  tier, and never restarts the task or waits for a human.
+- Questions are collected once, at planning; during build only a real blocker stops.
+- `max_suite_runs` 5 → 2; a third run needs a human decision.
+- `handoff.md` is written at phase boundaries and before compaction, not on every state change
+  (1 730 events → about 5 per task).
+- Remove: `hooks/fable-gate.py`, `hooks/codex-model-gate.py`, the seven agents from
+  2026-09-02 and their Codex twins, every `.bak` next to a live file (one dated `backups/`
+  directory instead), `.ai/reports/**` from the plugin's own git history going forward.
+- `runtime-gate` keeps only the outage reroute; fan-out budgets go.
+- Codex is best effort: one source (`agents/*.md.tmpl`, skills), rendered at install, no
+  `-strong`/`-balanced` twins; Codex is not a gate for a change on the Claude side.
+- Before phase 1: close the four open tasks (ArgoCD 09-14, oroCRM 09-30-002,
+  abrites-site-v2 10-22-001, this repo's T-2026-10-22-002), because they keep the guards
+  armed in four repositories.
+
 ## Open questions
 
 - Exact point values and thresholds of the seven weight questions, and whether question 2
@@ -134,6 +168,42 @@ From the analysis, read by the developer on 2026-10-24 (not a brainstorm; no
   printing the new name on first use.
 - Phase 1 scope: whether the merged `workflows.md` and the prose diet ship with the weight
   model or after it.
+- **Command surface: six or nine.** This intent proposes `/setup /spec /plan /build /review
+  /status` + `/ship`; the second analysis proposes nine plus `/task` (adds `/test` and `/cost`,
+  keeps `/task` as the thin chain `plan → build → test → review → ship`). The spec must pick
+  one list; the second analysis' is the more recent and the more complete.
+- **Mode names**: light / guarded / full (this intent) or quick / plan / full (second analysis).
+  Same three behaviours; pick one and use it in every file.
+- **Weight table**: seven questions with evidence (this intent) or six axes scored 0–2
+  (scope, behaviour, reversibility, domain, novelty, coverage; W = 0–12; quick ≤ 3, plan 4–7,
+  full ≥ 8 or reversibility = 2 or domain = 2; "full + irreversible" when both are 2 or on
+  DROP / data migration / prod infra). The six-axis table is concrete enough to implement
+  (`weight.py` ≤ 300 lines, `weight.json` ≤ 80 lines) and was checked against nine real tasks;
+  prefer it unless the spec finds a case it misclassifies.
+- **Path floors**: keep them for payments, auth and infra (this intent) or demote every path to
+  a one-point hint (second analysis: a font in `login.html.twig` is not auth, an enum fixture
+  under `Migrations/Data/` is not a migration, in a GitOps repo everything is `k8s/**`). The
+  second analysis' domain axis already covers money, tax, identity and personal data by a
+  project-configured list, so the floors would be redundant; confirm in the spec.
+- **Superpowers**: the two analyses disagree on the facts and the answer. This intent found it
+  not installed here and recommends delegating each command's method to it when present. The
+  second analysis found superpowers v7.0.0 active on the production machine with a 3.2 KB
+  per-session banner, and recommends variant A: disable it in projects with `.ai/`
+  (`enabledPlugins`) and absorb `systematic-debugging` and `test-driven-development` as
+  sections of `/build`; variant B is calling its skills from `/spec`, `/plan`, `/review`.
+  Decide per machine profile or once for the plugin.
+- **Path guard rewrite** (second analysis §6.7): down to about 250 lines — deny secrets,
+  write-deny on `.ai/state`, `events.jsonl`, `questions.md`; reads always allowed; no `sh -c` /
+  `eval` segmentation; commands over 4 KB refused with one sentence; `task_protected_patterns`
+  only for `.ai/policies` and `.claude/settings*.json`. This intent keeps the rewrite in the
+  optional phase 3; the second analysis puts it in phase 3 too but as a must, with the
+  characterization suite as the net for the deny decisions that remain. T-2026-10-22-002 is
+  the interim fix on the current engine.
+- **T0–T6 labels**: keep as an output label for report compatibility, or only the three mode
+  words with a T-label in the journal for one version (second analysis' proposal).
+- **Team profile and abrites-staging-v2**: nobody on either machine uses the team profile
+  (proposal: documented, not tested on every run); abrites-staging-v2's pre-plugin `ai-tools`
+  branch with six own guards: `--adopt` or abandon.
 
 ## Evidence from every project on this machine (2026-10-24)
 
@@ -255,9 +325,107 @@ natively; skills.addy.ie's set installs into Codex with `npx skills add addyosma
 The module's Codex adapter therefore needs no second integration: the same `superpowers:<skill>`
 names resolve in both runtimes, and the fallback lines cover an install without it.
 
+## Second analysis: the production machine (Claude Doc, 2026-10-24)
+
+Source: "claude-agentic — анализ и опростяване (2026-10-24)", https://claude.ai/artifact/UqxcHvZhP1Nn7xaLhnkiDm
+(tab `cd0cf1fc-6d89`, rev 13, about 58 KB; Export → Markdown gives the same text). It analyses
+the plugin at commit `bb7d54f` (main, 2026-10-22) as installed on the other machine, with the
+projects there: abrites-site-v2 (+ worktrees), abrites-staging-v2, new-shop-2019-v1-replica,
+oroCRM, oddoAbries, ArgoCD, and the plugin itself. Local `main` since `bb7d54f` holds only this
+intent and the first analysis (`e87e240`, `1b28852`, `c2a6bd7`); `new-refactor` has `main`
+merged and carries the open task T-2026-10-22-002.
+
+**Reference archive.** The doc's appendix D names `claude-agentic-bundle-2026-10-24.tar.gz`
+(1.4 MB; also `.zip`, 2.0 MB) at `/Store/Claude Plugins/` on the other machine: a `git archive`
+of the repo at `bb7d54f` (794 tracked files, no `*.log` under `.ai/reports/`), `evidence/events/`
+with the 65 journals as `<project>__<task-id>.jsonl`, `evidence/journals.py`, `triggers.py`,
+`scan_transcripts.py` (the scripts behind the numbers; the third runs only there),
+`evidence/usage-report.txt`, `installed/profile.json` and `routing.md`, and a README. **It is
+not on this machine** (searched the whole filesystem on 2026-10-24); copy it before the spec
+needs to re-run the journal numbers, or re-run `tools/journal-summary.py` on the originals.
+
+**Numbers that change the picture** (all measured; method and limits in the doc's appendix A):
+
+| What | Measured |
+|---|---|
+| Procedure read before the first edit | ≈ 22 200 tokens: `ai-task/SKILL.md` 8 067, `risk-tiers.json` 6 406, `review-economy.md` 2 710, `routing.md` 1 692, `testing.md` 1 574, global `CLAUDE.md` 1 295 (every turn), … |
+| Tasks with a journal | 65 in 7 roots, 61 closed; T2 38 %, T3 15 %, T4 34 %, T5 6 %, T6 3 % |
+| Human stops | 185 (130 questions + 55 gates); T4 median 5.6 per task, T2 0; T3/T4 is the line between "runs" and "waits" |
+| Tier raises | 18: 10 over the line/file budget, 4 scope pipeline (CLAUDE.md, policies), 3 scope migrations (same enum fixture three times), 1 scope auth (a font in `login.html.twig`) |
+| Scope changes | 31; the file-level plan is almost always incomplete at step 1 |
+| Test runs | 34 of 44 tasks ran the suite more than once; max 5 suite + 5 e2e in one task; one plugin run is 4–5 min |
+| Reviews | 47 review reports, 76 ledgers, 19 security reports, 22 plan reviews |
+| Refused tool calls / plan mode / compactions | ≈ 1 100 / ≈ 1 480 / ≈ 1 100 occurrences in transcripts |
+| Cost (list-price equivalent, 11 weeks) | $4 609 Claude + $85 Codex (2 %); Opus 83 %, of it 99.6 % cache-read; plugin self-maintenance 11 %; from pipeline adoption on 2026-09-23 the median day went from under $47 to ≈ $200 |
+| Hook latency (median of 5) | path-guard 36–41 ms, git-guard 16, scope-guard 19, cap-large-read 22, runtime-gate 38, context-guard 31; a 20 KB `sh -c` line 1 645 ms |
+| Plugin inventory | 14 commands, 22 agents per runtime (+21/+18 `.bak`), 10 hooks, 30 `state.py` subcommands (2 812 lines), `sensors.py` 1 592, path guard 1 135, runtime-gate 1 265, `risk-tiers.json` 629 lines; 24 010 source lines; 29 test suites |
+| Open tasks keeping guards armed | 4: ArgoCD (since 09-14, 551 h), oroCRM 09-30-002, abrites-site-v2 10-22-001 (T6 for a SQL-dump init), this repo 10-22-002 |
+
+**Diagnosis in one line each** (doc §4): ceremony scales on the wrong variable (paths and
+size, not weight); "take the higher" + floors + rescore systematically over-classify; three
+mandatory process systems contradict each other; the surface confuses the human; the pipeline
+does not obey its own test and review rules (a rule the model ignores under 22 000 tokens needs
+to be a script); context is the cost and the plugin adds to it; the dual runtime doubles
+everything for 2 % of use; the path guard is a tripwire at sandbox price.
+
+**What it takes from skills.addy.ie** (doc §5): phase-named commands, SKILL.md ≤ 300 lines of
+steps only, policies as references read on demand, a thin `/task` instead of a 662-line
+conductor and a manager persona, descriptions ≤ 1 024 characters, scripts with ≤ 20 lines of
+output for status / weight / sensors / release summary, `weight.json` ≤ 80 lines +
+`docs/weight.md`, human checkpoints only at plan → build (full) and at `/ship`, fan-out only in
+`/ship` for full. Not taken: addy has no risk model and no state; the weight and a thin
+`current.json` + journal stay, and `/spec` is optional here.
+
+**Its proposal in full** (doc §6; the open questions above record where it differs from this
+intent):
+
+- Nine commands + one: `/setup [--update|--adopt|--light]`, `/spec`, `/plan`, `/build [--mode]`,
+  `/test`, `/review`, `/ship`, `/status`, `/cost [--task|--value]`, and `/task <request>` =
+  plan → build → test → review → ship with the mode from the weight. Old names stay as aliases
+  for one release; a 60-line `using-claude-agentic` replaces `manager.md` and the routing in
+  `AGENTS.md`.
+- Weight = six axes × 0–2, first four as deterministic as possible (`weight.py`), last two by
+  the model with one line of reasoning each. Modes quick / plan / full, plus "full +
+  irreversible" (the current T6 confirmation). `--mode` overrides everything and is journaled
+  with `--by`.
+- Fewer stops: one pause per mode; solo approval is a chat answer, `approve` outside the agent
+  only for team and `AI_UNATTENDED`; sensors first, then one full + one scoped review as a rule
+  in `/review`.
+- Removals (doc §6.4): the sdlc-* and project-init commands as separate entries, `diff_budget`
+  and size sensors, path floors, the two shim hooks, seven stale agents and 39 `.bak` files,
+  agents `ai-context`, `ai-indexer`, `ai-risk`, `ai-planner`, `ai-release`, `ai-tester`,
+  `ai-expert` (7 of 22 remain: Explore, log-reader, ai-discovery, ai-implementer on request,
+  ai-reviewer, ai-security, architect), `state.py` 30 → ≈ 10 subcommands, `review-economy.md`,
+  `tooling.md`, `context-management.md` out of the per-task reading list.
+- Context diet (§6.5): global block ≤ 1 KB (now 5.2 KB with the personal rules), project block
+  ≤ 0.8 KB, `/setup --update` warns on `CLAUDE.md`/`AGENTS.md` over 4 KB (ArgoCD 45 KB,
+  new-shop 22 KB), `/task` suggests a 200k session for quick/plan.
+- Guards (§6.7): git-guard, scope-guard (project paths only; plan mode scope = the whole
+  task's files), cap-large-read and context-guard stay; path guard rewritten to ≈ 250 lines;
+  runtime-gate keeps only the outage reroute. The README's known risks stay true after the
+  rewrite.
+- Rollout (§7): phase 1 "stop the bleeding" 1–2 days (`max_suite_runs` 2, size gating off,
+  floors → hints, delete stale agents / `.bak` / shims, `/status` as a script, aliases); phase
+  2 new surface, one week; phase 3 cleaning (path guard, agents 22 → 7, reports out of git,
+  migration 0007 `risk-tiers.json` → `weight.json`), one week. Seven metrics with targets:
+  procedure tokens ≤ 6 000, stops quick/plan 0 and full 2, one suite run (two with
+  remediation), STRONG reviews ≈ 15 %, refused tool calls < 0.3 per 100 and none on reads,
+  self-maintenance < 5 %, plan-task median < 1 h.
+
+**Re-classification of real tasks under the six axes** (doc §6.2), the test cases the spec
+must keep: font in `login.html.twig` T3→T4 becomes quick; Odoo VAT module 401 lines T4→T5
+becomes full by domain, not by lines; oroCRM enum fixture T4→T5×3 becomes plan; 1 733-line
+generated DDL in a test fixture T2→T5 becomes quick; the path-guard regex fix
+(T-2026-10-21-001, 21 h, 6 questions) becomes plan; migration 0006 deleting user `.ai/` files
+stays full + irreversible; an ArgoCD manifest in `env/dev` T6 becomes plan (`env/prod` + secret
+→ full); a project `CLAUDE.md` T2→T3 becomes quick.
+
 ## How to resume
 
-1. Read `docs/redesign-analysis-2026-10-24.md` (sections 1, 2a and 3; 4 for phasing).
+1. Read `docs/redesign-analysis-2026-10-24.md` (sections 1, 2a and 3; 4 for phasing) and the
+   Claude Doc's §4–§8 (the link above; read it through the Claude Docs connector, not by fetch).
+   Fetch `claude-agentic-bundle-2026-10-24.tar.gz` from the other machine if the journals there
+   are needed again.
 2. Check `/ai-status` and `git log` for the state of direct-mode-diet tasks 2–4.
 3. `/sdlc-spec docs/sdlc/intent/claude-agentic-redesign.md` to turn this into a spec, or
    `/ai-task` for phase 1 once the diet is closed.

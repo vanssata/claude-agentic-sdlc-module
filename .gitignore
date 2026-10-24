@@ -9,3 +9,4 @@ __pycache__/
 .ai/state/handoff.md
 .ai/state/*.tmp
 .ai/local/
+files
