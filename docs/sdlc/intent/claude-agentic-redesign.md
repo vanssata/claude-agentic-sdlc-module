@@ -191,7 +191,11 @@ Confirmed or sharpened by the second analysis (2026-10-24, read by the developer
   per-session banner, and recommends variant A: disable it in projects with `.ai/`
   (`enabledPlugins`) and absorb `systematic-debugging` and `test-driven-development` as
   sections of `/build`; variant B is calling its skills from `/spec`, `/plan`, `/review`.
-  Decide per machine profile or once for the plugin.
+  Since 2026-10-24 evening superpowers 7.0.1 is installed here as well, so the decision is one
+  for the plugin, not per machine: A (disable in `.ai/` projects via `enabledPlugins`, absorb
+  the two discipline skills) or B (delegate, as the table above maps). Either way the spec must
+  state the combined SessionStart cost (3.6 KB superpowers + `context-guard` + the managed
+  block) and whether `/setup` writes the `enabledPlugins` line.
 - **Path guard rewrite** (second analysis §6.7): down to about 250 lines — deny secrets,
   write-deny on `.ai/state`, `events.jsonl`, `questions.md`; reads always allowed; no `sh -c` /
   `eval` segmentation; commands over 4 KB refused with one sentence; `task_protected_patterns`
@@ -262,9 +266,18 @@ repository (skills list, `using-superpowers`, `subagent-driven-development`, `ho
 module's own references, and both local installs. Two repository files returned HTTP 503 and are
 unverified: `hooks/hooks.json` and `skills/using-superpowers/references/codex-tools.md`.
 
-**State today.** Superpowers is not installed on this machine in either runtime
-(`~/.claude/plugins/installed_plugins.json`, `~/.codex/config.toml`). The module mentions it in
-exactly two optional lines: `skills/sdlc-intent/SKILL.md:34` ("if `superpowers:brainstorming` is
+**State today (updated 2026-10-24, evening).** Superpowers 7.0.1 is now installed on this
+machine too, for Claude Code only: user scope, `superpowers@superpowers-marketplace` enabled in
+`~/.claude/settings.json`, installed 2026-10-24 20:57 UTC, commit `2ce8aa1`. It is not in
+`~/.codex/config.toml` (Codex has `claude-plugins-official` registered; one install step).
+Both machines are therefore in the same situation the second analysis describes: its
+SessionStart hook (matcher `startup|clear|compact`) injects `using-superpowers`, 3.6 KB per
+session and again after every `/clear` and compaction, with "1 % chance → you ABSOLUTELY MUST
+invoke the skill". This repository's `.claude/settings.json` does not disable it, so the two
+mandatory processes now overlap in this project as well. `tests/test-instruction-budget.sh`
+still passes (92/92) because it measures the managed block, not plugin hooks; the combined
+always-loaded cost has not been measured yet. The module mentions superpowers in exactly two
+optional lines: `skills/sdlc-intent/SKILL.md:34` ("if `superpowers:brainstorming` is
 available, invoke it") and `skills/sdlc-plan/SKILL.md:19` (`superpowers:writing-plans` for step
 granularity). Neither line has ever run here.
 
