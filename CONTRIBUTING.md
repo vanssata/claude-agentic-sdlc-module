@@ -62,7 +62,7 @@ Run the suite to the end and fix every failure before you push.
   or a guard must keep working under Claude Code **and** Codex, and the
   end-to-end suite proves that.
 - If you accept a risk instead of fixing it, add it to
-  [Known risks](README.md#known-risks) in the same shape as the other entries
+  [Known risks](docs/known-risks.md) in the same shape as the other entries
   (risk, why it stays, limits, what to do, source).
 - A shared policy, agent contract, workflow or template lives once, in `ai/`;
   `install.sh` puts it at `<home>/claude-agentic/ai/` and projects read it from
@@ -85,7 +85,7 @@ Run the suite to the end and fix every failure before you push.
 
 A release bumps `version` in `.codex-plugin/plugin.json`, the version badge and
 the **Version** line at the top of the README, and the version named in
-**Known risks**, all in one commit. It is then tagged `vX.Y.Z`.
+**Known risks** (the README and `docs/known-risks.md`), all in one commit. It is then tagged `vX.Y.Z`.
 
 ## License
 
