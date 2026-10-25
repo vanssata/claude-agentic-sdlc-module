@@ -1566,4 +1566,62 @@ out=$(DH set review_status passed --by ivan 2>&1); rc=$?
 D events --type human_set --format jsonl | jq -e '.data.by=="ivan" and .data.via=="unattended" and .actor=="agent"' >/dev/null \
   && pass "and journals human_set, an unattended one as unattended, like approve" || fail "human_set event" "$(D events --type human_set --format jsonl)"
 
+echo "== the shipped template's suite cap (redesign 1.1)"
+# A project seeded from the template gets max_suite_runs 2: the first run and
+# the one after the remediation. A third is the human's call, exit 6.
+CAP="$TMP/cap"; mkdir -p "$CAP/.ai/state" "$CAP/.ai/reports" "$CAP/.ai/policies" "$CAP/src"
+cp "$PLUGIN_ROOT/skills/ai-init/templates/.ai/policies/risk-tiers.json" "$CAP/.ai/policies/"
+cp "$DM/.ai/policies/testing.md" "$CAP/.ai/policies/"
+git init -q "$CAP"; git -C "$CAP" config user.email t@example.com; git -C "$CAP" config user.name t
+printf 'base\n' > "$CAP/src/app.py"; git -C "$CAP" add -A; git -C "$CAP" commit -qm base
+C() { env -u AI_UNATTENDED python3 "$STATE" --root "$CAP" "$@"; }
+C quick --goal "cap" --workflow feature --tier T2 --files "src/app.py" >/dev/null 2>&1
+printf 'changed\n' > "$CAP/src/app.py"
+C test-run --scope suite >/dev/null 2>&1; r1=$?
+C test-run --scope suite >/dev/null 2>&1; r2=$?
+out=$(C test-run --scope suite 2>&1); rc=$?
+[ $r1 = 0 ] && [ $r2 = 0 ] && [ $rc = 6 ] && grep -q 'run budget exhausted: 2 suite runs, the policy allows 2' <<<"$out" \
+  && pass "the template allows two suite runs; the third exits 6" || fail "template suite cap" "r1=$r1 r2=$r2 rc=$rc $out"
+
+echo "== R4 phase 1: size never refuses and never keeps a reviewer (redesign 1.2)"
+# 2 000 lines over 40 files at T2 — five times the T2 task budget — in a project
+# that wrote `enforce: true`. The step finishes, the tier stays and close ends
+# on skipped_green: size is reported, never a gate.
+BIG="$TMP/big"; mkdir -p "$BIG/src" "$BIG/tests"
+git -C "$BIG" init -q -b main; git -C "$BIG" config user.email t@example.com; git -C "$BIG" config user.name t
+printf 'def fee(x):\n    return x\n' > "$BIG/src/fee.py"; printf '__pycache__/\n' > "$BIG/.gitignore"
+CLAUDE_AGENTIC_TEMPLATES="$PLUGIN_ROOT/skills/ai-init/templates" bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$BIG" >/dev/null
+python3 - "$BIG/.ai/policies/risk-tiers.json" <<'PY'
+import json, sys
+policy = json.load(open(sys.argv[1])); policy["diff_budget"]["enforce"] = True
+json.dump(policy, open(sys.argv[1], "w"), indent=2)
+PY
+cat > "$BIG/.ai/policies/testing.md" <<'MD'
+# Testing policy
+verify_command:      for t in tests/*_test.py; do python3 "$t" || exit 1; done
+step_test_command:   python3 {files}
+e2e_command:         python3 -c 'import sys; sys.path.insert(0, "src"); from fee import fee; assert fee(3) == 6'
+lint_command:        none
+typecheck_command:   none
+MD
+git -C "$BIG" add -A && git -C "$BIG" commit -qm base
+B() { env -u AI_UNATTENDED python3 "$STATE" --root "$BIG" "$@"; }
+B quick --goal "fee doubles, and forty generated modules" --workflow feature --tier T2 \
+  --files "src/**,tests/fee_test.py" --tests tests/fee_test.py >/dev/null 2>&1
+printf 'import sys; sys.path.insert(0, "src")\nfrom fee import fee\nassert fee(2) == 4\n' > "$BIG/tests/fee_test.py"
+printf 'def fee(x):\n    return x * 2\n' > "$BIG/src/fee.py"
+for i in $(seq 1 40); do
+  for j in $(seq 1 50); do printf 'c_%d_%d = %d\n' "$i" "$j" "$((i * 100 + j))"; done > "$BIG/src/gen_$i.py"
+done
+out=$(B test-run --scope all 2>&1); rc=$?
+[ $rc = 0 ] && pass "the 2 000-line task runs green" || fail "big task test-run" "rc=$rc $out"
+out=$(B close 2>&1); rc=$?
+ARCH=$(tail -1 <<<"$out")
+[ $rc = 0 ] && ! grep -q 'DIFF_BUDGET_EXCEEDED' <<<"$out" && [ -f "$ARCH" ] \
+  && pass "close finishes the step with no size refusal, enforce: true notwithstanding" || fail "big task close" "rc=$rc $out"
+jq -e '.review_status == "skipped_green" and .risk_tier == "T2" and .diff.over_budget == true
+       and .diff.task.files >= 40 and .diff.task.lines >= 2000' "$ARCH" >/dev/null \
+  && pass "and archives T2, over_budget recorded, on skipped_green" \
+  || fail "big task archive" "$(jq -c '{review_status, risk_tier, d: .diff | {over_budget, task}}' "$ARCH" 2>&1)"
+
 summary "state.py"

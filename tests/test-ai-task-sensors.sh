@@ -103,7 +103,7 @@ grep -q '(advisory' <<<"$OUT" \
     && pass "and the line says it is advisory" || fail "should say advisory" "$OUT"
 grep -q 'budget 1 / 1' <<<"$OUT" \
     && pass "the project's own numbers are used, not the defaults" || fail "should read the project policy"
-# Only a project that wrote `enforce: true` turns the measurement into a gate.
+# Since redesign 1.2 `enforce: true` is read and ignored: size never gates.
 python3 - "$ROOT" <<'PY'
 import json, sys
 root = sys.argv[1]
@@ -112,8 +112,8 @@ policy = json.load(open(p)); policy["diff_budget"]["enforce"] = True
 json.dump(policy, open(p, "w"))
 PY
 OUT=$(N diff --from "$BASE" --to "$AFTER" --tier T2 --scope step); RC=$?
-[ $RC -eq 2 ] && grep -q 'budget: over — ' <<<"$OUT" && ! grep -q '(advisory' <<<"$OUT" \
-    && pass "with diff_budget.enforce true the same diff is red" || fail "should be red under enforce" "$OUT($RC)"
+[ $RC -eq 0 ] && grep -q 'budget: over — ' <<<"$OUT" && grep -q '(advisory' <<<"$OUT" \
+    && pass "with diff_budget.enforce true the same diff stays green and advisory" || fail "enforce must not turn size red" "$OUT($RC)"
 rm -f "$ROOT/.ai/policies/risk-tiers.json"
 
 echo "== section 2c: unavailable is never a refusal"
@@ -131,15 +131,18 @@ OUT=$(N rescore --from "$BASE" --to "$AFTER" --declared T2); RC=$?
     && pass "a source-only diff keeps its declared tier" || fail "should stay T2" "$OUT($RC)"
 
 OUT=$(N rescore --from "$BASE" --to "$DEEP" --declared T2); RC=$?
-[ $RC -eq 2 ] && grep -q 'T2 -> T5' <<<"$OUT" \
-    && pass "a diff reaching **/Payment/** re-scores to T5" || fail "should raise to T5" "$OUT($RC)"
+[ $RC -eq 0 ] && grep -q 'green    T2 ' <<<"$OUT" && ! grep -q -- '->' <<<"$OUT" \
+    && grep -q 'hint: payments (.*) — path_scopes says T5; tier unchanged' <<<"$OUT" \
+    && pass "a diff reaching **/Payment/** keeps T2 and prints a payments hint" || fail "should stay T2 with a hint" "$OUT($RC)"
+[ "$(grep -c 'hint: payments' <<<"$OUT")" = 1 ] \
+    && pass "one hint per scope, however many files reach it" || fail "one hint per scope" "$OUT"
 
 OUT=$(N rescore --from "$BASE" --to "$DEEP" --declared T6)
 grep -q 'T6' <<<"$OUT" \
     && pass "re-scoring never lowers a declared tier (downgrade_rule)" || fail "must not lower" "$OUT"
 
-# Size never re-scores a tier on its own: a task over its budget is recorded
-# as over_budget and keeps its tier unless the project wrote enforce: true.
+# Size never re-scores a tier: a task over its budget is recorded as
+# over_budget and keeps its tier, enforce: true included (redesign 1.2).
 python3 - "$ROOT" <<'PY'
 import json, sys
 root = sys.argv[1]
@@ -161,9 +164,9 @@ policy = json.load(open(p)); policy["diff_budget"]["enforce"] = True
 json.dump(policy, open(p, "w"))
 PY
 OUT=$(N rescore --from "$BASE" --to "$AFTER" --declared T2); RC=$?
-[ $RC -eq 2 ] && grep -q 'T2 -> T3' <<<"$OUT" \
-    && pass "with enforce true, over the task budget raises one tier (the old behaviour)" \
-    || fail "enforce should raise to T3" "$OUT($RC)"
+[ $RC -eq 0 ] && grep -q 'green    T2 ' <<<"$OUT" && grep -q 'budget: over' <<<"$OUT" \
+    && pass "with enforce true, over the task budget still keeps the tier and reports the size" \
+    || fail "enforce must not raise the tier" "$OUT($RC)"
 rm -f "$ROOT/.ai/policies/risk-tiers.json"
 
 printf '{"scripts": {"lint": "eslint ."}}\n' > "$ROOT/package.json"
@@ -188,7 +191,8 @@ git init -q "$GATE"; git -C "$GATE" config user.email t@example.com
 git -C "$GATE" config user.name Test
 printf 'one\n' > "$GATE/src/app.php"; git -C "$GATE" add -A
 git -C "$GATE" commit -qm base
-# This project wrote `enforce: true`: here the budget is a gate, not a warning.
+# This project wrote `enforce: true`. Before redesign 1.2 that made the budget a
+# gate; now it is read and ignored, and only a file outside the step refuses.
 cat > "$GATE/.ai/policies/risk-tiers.json" <<'JSON'
 {"version": 4,
  "diff_budget": {"enforce": true,
@@ -215,44 +219,49 @@ S step 1 >/dev/null
 [ -n "$(J approved_plan.steps.0.tree_before)" ] \
     && pass "starting a step records the tree it began with" || fail "step should record tree_before"
 
-printf 'one\ntwo\nthree\nfour\nfive\nsix\nseven\n' > "$GATE/src/app.php"
-OUT=$(S step-done 1 2>&1); RC=$?
-[ $RC -eq 6 ] && grep -q DIFF_BUDGET_EXCEEDED <<<"$OUT" \
-    && pass "a step over its tier's budget exits 6 when the project enforces the budget" || fail "should exit 6" "$OUT($RC)"
-grep -q 'step-split' <<<"$OUT" \
-    && pass "the refusal names the way out" || fail "should suggest step-split" "$OUT"
-[ "$(S get --field approved_plan.current_step_id)" = 1 ] \
-    && pass "a refused step stays in progress — no work is lost" || fail "step should stay current"
-
 printf 'one\ntwo\n' > "$GATE/src/app.php"
 mkdir -p "$GATE/lib"; printf 'stray\n' > "$GATE/lib/Other.php"
 OUT=$(S step-done 1 2>&1); RC=$?
 [ $RC -eq 6 ] && grep -q 'SCOPE_CHANGE_REQUIRED' <<<"$OUT" \
     && pass "a file outside the step's files exits 6 and is named" || fail "should exit 6" "$OUT($RC)"
+grep -q 'step-split' <<<"$OUT" \
+    && pass "the refusal names the way out" || fail "should suggest step-split" "$OUT"
+[ "$(S get --field approved_plan.current_step_id)" = 1 ] \
+    && pass "a refused step stays in progress — no work is lost" || fail "step should stay current"
 rm -f "$GATE/lib/Other.php"
 
 # The step grew a second concern: the payment file is its own step now. The
 # original step's own glob still matches it, so the split must say otherwise.
+# Nothing demands the split any more; it stays the way to a smaller review.
+printf 'one\ntwo\nthree\nfour\nfive\nsix\nseven\n' > "$GATE/src/app.php"
 printf 'fee\ntwo\nthree\nfour\nfive\nsix\n' > "$GATE/src/Payment/Fee.php"
-OUT=$(S step-done 1 2>&1); RC=$?
-[ $RC -eq 6 ] && pass "the step that grew a second concern is refused" || fail "should refuse" "$OUT($RC)"
 OUT=$(S step-split 1 --files "src/Payment/*.php" --note "the payment part" 2>&1)
 grep -q '1.2' <<<"$OUT" && pass "step-split makes a sibling step" || fail "should split" "$OUT"
 OUT=$(S step-done 1 2>&1); RC=$?
-[ $RC -eq 0 ] && pass "after the split the step measures only its own files" \
-               || fail "step 1 should pass now" "$OUT($RC)"
+[ $RC -eq 0 ] && ! grep -q DIFF_BUDGET_EXCEEDED <<<"$OUT" \
+    && pass "a step over its budget is finished under enforce: true — size never refuses" \
+    || fail "enforce must not refuse a step" "$OUT($RC)"
+grep -q 'budget: over' <<<"$OUT" && grep -q '(advisory)' <<<"$OUT" \
+    && pass "and the size is still reported, as advisory" || fail "should warn advisory" "$OUT"
 grep -q 'step 1 diff' <<<"$OUT" \
     && pass "step-done reports what it measured" || fail "should print the step diff" "$OUT"
 
-echo "== section 5: re-scoring at the gate"
-[ "$(S get --field risk_tier)" = T4 ] \
-    && pass "the payment file re-scores the task from T2 to T4" || fail "should raise to T4"
-S events --last 20 --format jsonl 2>/dev/null | grep -q '"event": "tier_raised"' \
-    && pass "the raise is in the journal" || fail "tier_raised should be journalled"
-J diff.rescore_reasons | grep -q payments \
-    && pass "the reason names the scope and the file" || fail "reasons should name payments"
+echo "== section 5: a path scope is a hint at the gate"
+[ "$(S get --field risk_tier)" = T2 ] \
+    && pass "the payment file leaves the declared T2 alone" || fail "path must not raise the tier" "$(S get --field risk_tier)"
+! S events --last 20 --format jsonl 2>/dev/null | grep -q '"event": "tier_raised"' \
+    && pass "no tier_raised in the journal" || fail "tier_raised must not be journalled"
+J diff.rescore_hints | jq -r '.[]' | grep -q 'payments (src/Payment/Fee.php) — path_scopes says T4; tier unchanged' \
+    && pass "the hint names the scope, the file and the floor" || fail "rescore_hints should name payments" "$(J diff.rescore_hints)"
+grep -q '^hint: payments (' <<<"$OUT" \
+    && pass "and step-done prints it" || fail "hint should be printed" "$OUT"
+printf 'fee\n' >> "$GATE/src/Payment/Fee.php"
+S step 1.2 >/dev/null; OUT=$(S step-done 1.2 2>&1)
+! grep -q '^hint: payments' <<<"$OUT" \
+    && pass "a hint already printed is not printed again" || fail "hint printed twice" "$OUT"
 
 echo "== section 6: only a human lowers a tier"
+S risk T4 --note "the payment part, by hand" >/dev/null 2>&1 </dev/null
 OUT=$(S risk T2 --note "it is small really" 2>&1 </dev/null); RC=$?
 [ $RC -eq 5 ] && grep -q 'APPROVAL_REFUSED' <<<"$OUT" \
     && pass "an agent cannot lower a tier (downgrade_rule)" || fail "should exit 5" "$OUT($RC)"
@@ -267,7 +276,6 @@ OUT=$(S risk T5 --note "actually a migration" 2>&1 </dev/null); RC=$?
 
 # --force is the escape hatch a human uses when a refusal is wrong; here it is
 # only bookkeeping, to reach the third remediation round.
-S step 1.2 >/dev/null; S step-done 1.2 --force >/dev/null
 S remediate --files "tests/**" --note "first batch" >/dev/null
 S step-done R1 --force >/dev/null
 S remediate --files "tests/**" --note "second batch" >/dev/null
@@ -305,14 +313,15 @@ grep -q 'step-split' <<<"$OUT" \
     && pass "the task keeps its tier: size never re-scores it" || fail "size must not raise the tier" "$(A get --field risk_tier)"
 [ "$(A get --field diff.over_budget)" = True ] \
     && pass "over_budget is recorded for the reviewer to see" || fail "over_budget should be recorded"
-# Advisory never means unread: a task past its budget cannot close on skipped_green.
+# Since redesign 1.2 size is no reason to keep a reviewer: the gate never
+# names it (R4 phase 1 closes such a task on skipped_green in test-ai-task-state.sh).
 OUT=$(A review-gate 2>&1); RC=$?
-[ $RC -ne 0 ] && jq -e '.verdict.blocking | map(select(test("over the task budget"))) | length == 1' "$ADV/$(A get --field sensors.file)" >/dev/null \
-    && pass "and a task over its budget keeps its reviewer: the gate records the size as a reason" \
-    || fail "over budget should block skipped_green" "$OUT($RC)"
+jq -e '.verdict.blocking | map(select(test("budget"))) | length == 0' "$ADV/$(A get --field sensors.file)" >/dev/null \
+    && pass "and the size is not a reason the gate keeps a reviewer" \
+    || fail "over budget must not block skipped_green" "$OUT($RC)"
 rm -rf "$ADV"
 
-echo "== section 6d: the default floors that change a process sit above the skip ceiling"
+echo "== section 6d: the default floors that change a process are hints above the skip ceiling"
 FLOOR="$TMP/with space/floors"; mkdir -p "$FLOOR/.ai/state"
 git init -q "$FLOOR"; git -C "$FLOOR" config user.email t@example.com; git -C "$FLOOR" config user.name Test
 printf 'base\n' > "$FLOOR/README.md"; git -C "$FLOOR" add -A; git -C "$FLOOR" commit -qm base
@@ -325,9 +334,10 @@ for spec in "requirements.txt:dependencies" "requirements-dev.txt:dependencies" 
     mkdir -p "$FLOOR/$(dirname "$path")"; printf 'x\n' > "$FLOOR/$path"
     FTREE=$(F snapshot)
     OUT=$(F rescore --from "$FBASE" --to "$FTREE" --declared T3); RC=$?
-    [ $RC -eq 2 ] && grep -q "T3 -> T4: $want" <<<"$OUT" \
-        && pass "$path is $want and floors at T4, above the T3 ceiling" \
-        || fail "$path should re-score T3 -> T4 ($want)" "$OUT($RC)"
+    [ $RC -eq 0 ] && grep -q 'green    T3 ' <<<"$OUT" \
+        && grep -q "hint: $want ($path) — path_scopes says T4; tier unchanged" <<<"$OUT" \
+        && pass "$path is $want, a T4 hint above the T3 ceiling, tier unchanged" \
+        || fail "$path should hint T4 ($want) and keep T3" "$OUT($RC)"
     rm -f "$FLOOR/$path"
 done
 printf 'x\n' > "$FLOOR/docs/notes.txt" 2>/dev/null || { mkdir -p "$FLOOR/docs"; printf 'x\n' > "$FLOOR/docs/notes.txt"; }

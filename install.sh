@@ -43,8 +43,9 @@
 # This plugin supersedes claude-routing. On the first run it migrates that
 # plugin's managed block into this one's, so the two never coexist.
 #
-# Idempotent: re-running updates in place, backs up what it replaces to *.bak,
-# and never duplicates a hook entry or a managed block.
+# Idempotent: re-running updates in place, backs up what it replaces to
+# backups/<date>/<path> under the runtime's home (outside every directory a
+# runtime loads), and never duplicates a hook entry or a managed block.
 set -euo pipefail
 
 # An explicitly supplied CLAUDE_DIR/CODEX_DIR is how the test suite points the
@@ -357,7 +358,7 @@ else
     ARCHITECT_EFFORT="xhigh"
     EXPERT_ROW="\`opus\` / \`xhigh\`, pinned so a Sonnet session cannot weaken it; \`architect\` alone pins \`fable[1m]\` / \`xhigh\`"
     PLAN_SPECIFIC="- Session model is ${SESSION_HUMAN} by default, compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}). A large context is not free: every turn re-reads it, so keep \`/clear\` between tasks. ${ONE_M_RULE} \`ai-expert\` pins \`opus\` at \`xhigh\` rather than inheriting the session: a session may run on Sonnet (the IDE agent's Model setting), and the last-resort tier must not drop below the \`opus\` reviewer it escalates from. Fable 5.1 [1m] is pinned on \`architect\` (\`model: fable[1m]\`, \`xhigh\`) and is the session only when the user starts one with \`claude-1m fable\` — never pick it for a reader, a reviewer or \`ai-expert\`. \`max\` stays off.
-- \`runtime-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/runtime-gate.py status\` shows the gate (\`fable-gate.py status\` still works); \`clear\` re-enables Fable early."
+- \`runtime-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/runtime-gate.py status\` shows the gate; \`clear\` re-enables Fable early."
   else
     ARCHITECT_MODEL_LINE="# model: intentionally omitted — inherits the session model (${SESSION_HUMAN}, Fable disabled in this install)"
     ARCHITECT_EFFORT="high"
@@ -519,11 +520,63 @@ claude_dry_run() {
   echo "== would migrate: the claude-routing managed block, if present, into this one"
 }
 
+# Every backup goes to one dated directory, <root>/backups/<date>/<path>: a
+# backup beside the file it saves would be loaded too (agents/, hooks/ and
+# skills/ are read whole by both runtimes). A second run on the same day
+# replaces that day's copy, as a *.bak did.
+BACKUP_DATE=$(date +%F)
+backup_file() {  # backup_file <dst> <root> [copy] — save <dst> (or a copy of it taken earlier) into backups/<date>/
+  local dst="$1" root="$2" src="${3:-$1}" rel bak
+  rel="${dst#"$root"/}"
+  bak="$root/backups/$BACKUP_DATE/$rel"
+  mkdir -p "$(dirname "$bak")"
+  rm -rf "$bak"
+  # A file is copied through a symlink (a CLAUDE.md linked from dotfiles is
+  # saved as its content, not as a link to the file about to be rewritten).
+  if [ -d "$src" ]; then cp -r "$src" "$bak"; else cp -L "$src" "$bak"; fi
+  echo "backup: $rel -> backups/$BACKUP_DATE/$rel"
+}
+
+retire() {  # retire <root> <rel> — move what nothing installs any more into backups/<date>/
+  local root="$1" rel="$2" dest
+  [ -e "$root/$rel" ] || return 0
+  dest="$root/backups/$BACKUP_DATE/$rel"
+  mkdir -p "$(dirname "$dest")"
+  rm -rf "$dest"; mv "$root/$rel" "$dest"
+  echo "retired: $rel -> backups/$BACKUP_DATE/$rel"
+}
+
+# sweep_bak <root> <root-file>… — once per install, every *.bak an older
+# installer left beside a live file moves into backups/<date>/, keeping its
+# path. Only the directories and root files this installer writes, without
+# recursing; a .bak with no live file beside it is not ours and stays.
+sweep_bak() {
+  local root="$1" bak rel dest name; shift
+  local candidates=("$root"/agents/*.bak "$root"/hooks/*.bak "$root"/hooks/lib/*.bak
+                    "$root"/claude-agentic/*.bak "$root"/bin/*.bak)
+  for name in "$@"; do candidates+=("$root/$name.bak"); done
+  for bak in "${candidates[@]}"; do
+    [ -f "$bak" ] && [ -e "${bak%.bak}" ] || continue
+    rel="${bak#"$root"/}"
+    dest="$root/backups/$BACKUP_DATE/$rel"
+    mkdir -p "$(dirname "$dest")"
+    mv "$bak" "$dest"
+    echo "moved: $rel -> backups/$BACKUP_DATE/$rel"
+  done
+}
+
+# The seven agents the 2026-09-02 install shipped, which nothing installs any
+# more. Moved, not deleted: one mv out of backups/<date>/agents/ brings one back.
+STALE_AGENTS="code-implementer qa-runner qa-fixer db-migrator doc-lookup log-inspector sylius-i18n-keys"
+retire_stale_agents() {  # retire_stale_agents <root> <md|toml>
+  local name
+  for name in $STALE_AGENTS; do retire "$1" "agents/$name.$2"; done
+}
+
 install_file() {  # install_file <src> <dst> [root] — back up on a real change, then copy
   local src="$1" dst="$2" root="${3:-$CLAUDE_DIR}"
   if [ -e "$dst" ] && ! cmp -s "$src" "$dst"; then
-    cp "$dst" "$dst.bak"
-    echo "backup: ${dst#"$root"/} -> $(basename "$dst").bak"
+    backup_file "$dst" "$root"
   fi
   cp "$src" "$dst"
   echo "installed: ${dst#"$root"/}"
@@ -531,16 +584,14 @@ install_file() {  # install_file <src> <dst> [root] — back up on a real change
 
 # install_skills <destination-root> — a backup must not land inside skills/:
 # both runtimes load every directory there as a skill, so a "<name>.bak" copy
-# would show up as a second, stale command. Backups go to a sibling directory.
+# would show up as a second, stale command. Backups go to backups/<date>/skills/.
 install_skills() {
-  local root="$1" backups="$1/backups/skills" d name dst stale
+  local root="$1" backups="$1/backups/$BACKUP_DATE/skills" d name dst stale
   for d in "$SRC"/skills/*/; do
     name=$(basename "$d")
     dst="$root/skills/$name"
     if [ -d "$dst" ] && ! diff -rq -x __pycache__ "$d" "$dst" >/dev/null 2>&1; then
-      mkdir -p "$backups"
-      rm -rf "$backups/$name"; cp -r "$dst" "$backups/$name"
-      echo "backup: skills/$name -> backups/skills/$name"
+      backup_file "$dst" "$root"
     fi
     rm -rf "$dst"; cp -r "$d" "$dst"
     # A developer who ran the scripts in place leaves __pycache__ behind; it
@@ -555,10 +606,11 @@ install_skills() {
     mkdir -p "$backups"
     rm -rf "$backups/$(basename "${stale%.bak}")-old"
     mv "$stale" "$backups/$(basename "${stale%.bak}")-old"
-    echo "moved: skills/$(basename "$stale") -> backups/skills/ (it was loading as a duplicate skill)"
+    echo "moved: skills/$(basename "$stale") -> backups/$BACKUP_DATE/skills/ (it was loading as a duplicate skill)"
   done
   chmod +x "$root/skills/ai-init/scaffold-ai.sh" "$root/skills/ai-task/state.py" \
-           "$root/skills/ai-task/sensors.py" "$root/skills/project-update/update.py"
+           "$root/skills/ai-task/sensors.py" "$root/skills/project-update/update.py" \
+           "$root/skills/status/status.py"
 }
 
 # install_shared <destination-root> — the .ai/ files every project shares, at
@@ -567,15 +619,13 @@ install_skills() {
 # is copied next to the old one and renamed into place, so there is no moment
 # without a tree; a tree that differs from ai/ is backed up first.
 install_shared() {
-  local root="$1" home="$1/claude-agentic" backups="$1/backups/claude-agentic-ai"
+  local root="$1" home="$1/claude-agentic"
   mkdir -p "$home"
   rm -rf "$home/ai.new" "$home/ai.old"
   cp -r "$SRC/ai" "$home/ai.new"
   if [ -d "$home/ai" ]; then
     if ! diff -rq "$SRC/ai" "$home/ai" >/dev/null 2>&1; then
-      mkdir -p "$backups"
-      rm -rf "$backups/ai"; cp -r "$home/ai" "$backups/ai"
-      echo "backup: claude-agentic/ai -> backups/claude-agentic-ai/ai"
+      backup_file "$home/ai" "$root"
     fi
     mv "$home/ai" "$home/ai.old"
   fi
@@ -593,11 +643,11 @@ shared_line() {
 
 # managed_block <target.md> <block-file> <label> — replace the one managed block,
 # or append it; migrates the predecessor plugin's block and an unmarked legacy
-# section on the way. Writes <target>.bak first.
+# section on the way. Backs up a non-empty <target> first, into backups/<date>/.
 managed_block() {
   local target="$1" block="$2" label="$3"
   touch "$target"
-  cp "$target" "$target.bak"
+  if [ -s "$target" ]; then backup_file "$target" "$(dirname "$target")"; fi
   BLOCK="$block" LABEL="$label" python3 - "$target" <<'PY'
 import os, re, sys
 path = sys.argv[1]
@@ -639,19 +689,20 @@ else:
     action = "appended"
 new = re.sub(r"\n{4,}", "\n\n\n", new)
 open(path, "w").write(new)
-print("%s: %s%s (backup in %s.bak)"
-      % (label, action, " + " + " + ".join(notes) if notes else "", label))
+print("%s: %s%s" % (label, action, " + " + " + ".join(notes) if notes else ""))
 PY
 }
 
 claude_apply() {
 
 mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/hooks/lib" "$CLAUDE_DIR/skills"
+sweep_bak "$CLAUDE_DIR" settings.json CLAUDE.md
 
 # ---------------------------------------------------------------- 1. agents
 for f in "$TMP"/agents/*.md; do
   install_file "$f" "$CLAUDE_DIR/agents/$(basename "$f")"
 done
+retire_stale_agents "$CLAUDE_DIR" md
 
 # `reviewer` is superseded by `ai-reviewer`, which is adversarial, tier-aware and
 # reads the project's policies. Retire it only when it is byte-identical to the
@@ -712,10 +763,10 @@ install_skills "$CLAUDE_DIR"
 
 # ---------------------------------------------------------------- 4. settings.json
 SETTINGS="$CLAUDE_DIR/settings.json"
-if [ -f "$SETTINGS" ]; then cp "$SETTINGS" "$SETTINGS.bak"; else echo '{}' > "$SETTINGS"; fi
+if [ -f "$SETTINGS" ]; then backup_file "$SETTINGS" "$CLAUDE_DIR"; else echo '{}' > "$SETTINGS"; fi
 # Every gate entry already in settings.json — fable-gate from before WP5, or
 # runtime-gate from an earlier run — is removed first and the snippet's own are
-# merged below, so an upgrade never leaves two gates on one event (the shim
+# merged below, so an upgrade never leaves two gates on one event (two entries
 # would run the gate twice and count every agent twice). Only the gate's own
 # commands go (matched by their /hooks/<name>.py path, not a substring); a group
 # or event list left empty by that is dropped, the user's own hooks stay.
@@ -764,9 +815,12 @@ jq -s '
         )
       )
 ' "$SETTINGS" "$TMP/settings.snippet.json" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-echo "merged: settings.json (backup in settings.json.bak)"
+echo "merged: settings.json"
 
 statusline_gate "$SETTINGS" on apply
+# The fable-gate.py shim's last users were the hook entries and the statusline
+# wrapper rewritten above; nothing calls it any more.
+retire "$CLAUDE_DIR" hooks/fable-gate.py
 
 # ---------------------------------------------------------------- 5. CLAUDE.md block
 GLOBAL_MD="$CLAUDE_DIR/CLAUDE.md"
@@ -1004,9 +1058,8 @@ codex_dry_run() {
   echo "== reminder: Codex lists a non-managed hook until you review it in /hooks"
 }
 
-# The guard scripts Codex can actually use. cap-large-read.py and fable-gate.py
-# are deliberately absent: Codex has no hookable Read tool, and Fable is a
-# Claude model. context-guard.py is here because Codex has both compaction
+# The guard scripts Codex can actually use. cap-large-read.py is deliberately
+# absent: Codex has no hookable Read tool. context-guard.py is here because Codex has both compaction
 # events and SessionStart, so the handoff, the questions and session.json cross
 # unchanged; what does not cross is the transcript-derived snapshot, which is
 # built from a Claude transcript and stays Claude-only. The same file serves
@@ -1016,18 +1069,19 @@ codex_hook_files() {
     "$SRC/hooks/ai-git-guard.sh" \
     "$SRC/hooks/ai-path-guard.sh" \
     "$SRC/hooks/ai-scope-guard.sh" \
-    "$SRC/hooks/codex-model-gate.py" \
     "$SRC/hooks/runtime-gate.py" \
     "$SRC/hooks/context-guard.py"
 }
 
 codex_apply() {
   mkdir -p "$CODEX_DIR/agents" "$CODEX_DIR/hooks/lib" "$CODEX_DIR/skills"
+  sweep_bak "$CODEX_DIR" hooks.json config.toml AGENTS.md
 
   # -------------------------------------------------------------- 1. agents
   for f in "$TMP"/codex-agents/*.toml; do
     install_file "$f" "$CODEX_DIR/agents/$(basename "$f")" "$CODEX_DIR"
   done
+  retire_stale_agents "$CODEX_DIR" toml
 
   # -------------------------------------------------------------- 2. hooks
   local f dst
@@ -1052,21 +1106,16 @@ codex_apply() {
 
   # -------------------------------------------------------------- 4. hooks.json
   local HOOKS="$CODEX_DIR/hooks.json"
-  [ -f "$HOOKS" ] || echo '{}' > "$HOOKS"
-  cp "$HOOKS" "$HOOKS.bak"
+  if [ -f "$HOOKS" ]; then backup_file "$HOOKS" "$CODEX_DIR"; else echo '{}' > "$HOOKS"; fi
   # codex-model-gate entries from before WP5 and runtime-gate ones from an
   # earlier run are removed first, so the merge below adds exactly one gate per
   # event. Codex runs only hooks the user has reviewed; config.toml keeps each
   # approval as [hooks.state."<file>:<event>:<group>:<index>"] trusted_hash, a
-  # hash of the whole entry. An install that already registers
-  # codex-model-gate.py keeps that command (the shim execs runtime-gate.py), so
-  # an entry that is otherwise unchanged keeps its approval; a changed one
-  # (a new matcher, a new event) needs one review in /hooks.
-  local GATE_HOOKS="$SRC/codex/hooks.json"
+  # hash of the whole entry. A codex-model-gate.py entry becomes a runtime-gate.py
+  # one, a changed entry: Codex skips it until it is reviewed once in /hooks.
+  local had_shim=0
   if jq -e '[.hooks // {} | .[]?[]? | .hooks[]?.command // "" | select(test("/hooks/codex-model-gate\\.py"))] | length > 0' "$HOOKS" >/dev/null 2>&1; then
-    GATE_HOOKS="$TMP/codex-hooks.json"
-    sed 's|/hooks/runtime-gate\.py|/hooks/codex-model-gate.py|g' "$SRC/codex/hooks.json" > "$GATE_HOOKS"
-    echo "kept: codex-model-gate.py as the gate command (it runs runtime-gate.py); review the changed gate entries once in /hooks, or Codex skips them"
+    had_shim=1
   fi
   jq 'if (.hooks | type) == "object" then
       .hooks |= (with_entries(.value |= [ .[]
@@ -1091,11 +1140,23 @@ codex_apply() {
                                         | index($c) ) | not ) ) )
           )
         )
-  ' "$HOOKS" "$GATE_HOOKS" > "$HOOKS.tmp" && mv "$HOOKS.tmp" "$HOOKS"
-  echo "merged: hooks.json (backup in hooks.json.bak)"
+  ' "$HOOKS" "$SRC/codex/hooks.json" > "$HOOKS.tmp" && mv "$HOOKS.tmp" "$HOOKS"
+  echo "merged: hooks.json"
+  if [ "$had_shim" = 1 ]; then
+    echo "replaced: codex-model-gate.py hooks with runtime-gate.py — review the changed gate entries once in /hooks, or Codex skips them"
+  fi
+  retire "$CODEX_DIR" hooks/codex-model-gate.py
 
   # -------------------------------------------------------------- 5. config.toml
-  python3 "$SRC/scripts/merge-codex-config.py" "$CODEX_DIR/config.toml" --profile "$CODEX_PROFILE"
+  # Backed up only when the merge changed it, as the script did on its own: a
+  # second install the same day must not replace the user's original with ours.
+  local before="$TMP/config.toml.before"
+  rm -f "$before"
+  if [ -s "$CODEX_DIR/config.toml" ]; then cp -L "$CODEX_DIR/config.toml" "$before"; fi
+  python3 "$SRC/scripts/merge-codex-config.py" "$CODEX_DIR/config.toml" --profile "$CODEX_PROFILE" --no-backup
+  if [ -s "$before" ] && ! cmp -s "$before" "$CODEX_DIR/config.toml"; then
+    backup_file "$CODEX_DIR/config.toml" "$CODEX_DIR" "$before"
+  fi
 
   # -------------------------------------------------------------- 6. AGENTS.md
   managed_block "$CODEX_DIR/AGENTS.md" "$TMP/AGENTS.block.md" "AGENTS.md"
@@ -1133,7 +1194,7 @@ Restart Codex, then:
   /skills        lists ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*, usage-report
   /ai-init       in a project, to survey it and build .ai/
 
-Your previous default model was replaced. config.toml.bak holds the old one.
+Your previous default model was replaced. backups/$BACKUP_DATE/config.toml holds the old one.
 SUM
 }
 

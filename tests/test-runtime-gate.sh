@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# runtime-gate.py: the one gate behind both old names (R5). The old suites prove
-# the behaviour through the shims; this one proves what is new — the AI_RUNTIME_GATE
+# runtime-gate.py: the one gate behind both old names (R5). test-runtime-gate-fable.sh
+# and test-runtime-gate-codex.sh prove the behaviour per runtime (the shims they
+# once ran through are gone since redesign 1.3); this one proves what is new — the AI_RUNTIME_GATE
 # names winning over the old ones, the runtime read from the home the hook runs
 # from, the one-time import of an old gate's state, and failing open.
 set -uo pipefail
@@ -19,7 +20,7 @@ for v in $(env | sed -n 's/^\(\(AI_RUNTIME_GATE\|CLAUDE_FABLE_GATE\|CODEX_MODEL_
 # One installed copy per runtime, where install.sh puts them.
 CL="$HOME/.claude"; CX="$HOME/.codex"
 mkdir -p "$CL/hooks" "$CL/agents" "$CX/hooks" "$CX/agents"
-for d in "$CL/hooks" "$CX/hooks"; do cp "$PLUGIN_ROOT"/hooks/{runtime-gate,fable-gate,codex-model-gate}.py "$d/"; done
+for d in "$CL/hooks" "$CX/hooks"; do cp "$PLUGIN_ROOT/hooks/runtime-gate.py" "$d/"; done
 printf -- '---\nname: architect\nmodel: fable[1m]\n---\nbody\n' > "$CL/agents/architect.md"
 python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$CX/agents" >/dev/null
 printf 'model = "gpt-5.6-sol"\n\n[agents]\ndefault_subagent_model = "gpt-5.6-terra"\n' > "$CX/config.toml"
@@ -42,11 +43,10 @@ out=$(codex_call python3 "$CX/hooks/runtime-gate.py")
 [ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.agent_type')" = ai-expert-strong ] && pass "an EXPERT spawn is rerouted to its STRONG twin" || fail "codex reroute" "$out"
 python3 "$CX/hooks/runtime-gate.py" clear >/dev/null
 
-echo "== the shims name their runtime wherever they sit"
-python3 "$PLUGIN_ROOT/hooks/codex-model-gate.py" status 2>/dev/null | grep -q '^inactive: EXPERT' \
-    && pass "codex-model-gate.py outside ~/.codex is still Codex" || fail "codex shim lost its runtime"
-python3 "$CX/hooks/fable-gate.py" status | grep -q '^inactive: model: fable' \
-    && pass "fable-gate.py inside ~/.codex is still Claude Code" || fail "fable shim lost its runtime"
+echo "== the shims are gone (redesign 1.3)"
+for s in fable-gate codex-model-gate; do
+    [ ! -e "$PLUGIN_ROOT/hooks/$s.py" ] && pass "the plugin ships no $s.py" || fail "$s.py still shipped"
+done
 
 echo "== new names win over the old ones"
 out=$(AI_RUNTIME_GATE_STATE="$TMP/new.json" CLAUDE_FABLE_GATE_STATE="$TMP/old.json" python3 "$CL/hooks/runtime-gate.py" set 60 x)
@@ -389,12 +389,5 @@ out=$(AI_RUNTIME_GATE_CLAUDE_FALLBACK=sonnet AI_RUNTIME_GATE_FALLBACK=haiku clau
 [ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model')" = sonnet ] \
     && pass "AI_RUNTIME_GATE_CLAUDE_FALLBACK wins over the shared name" || fail "per-runtime name ignored" "$out"
 python3 "$CL/hooks/runtime-gate.py" clear >/dev/null
-
-echo "== the shims stay shims"
-for s in fable-gate codex-model-gate; do
-    n=$(wc -l < "$PLUGIN_ROOT/hooks/$s.py")
-    [ "$n" -le 20 ] && pass "$s.py is $n lines" || fail "$s.py grew to $n lines"
-    grep -q 'os.execv' "$PLUGIN_ROOT/hooks/$s.py" && pass "$s.py execs runtime-gate.py" || fail "$s.py does not exec"
-done
 
 summary "runtime-gate"

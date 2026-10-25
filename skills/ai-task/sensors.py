@@ -55,10 +55,9 @@ TIERS = ["T0", "T1", "T2", "T3", "T4", "T5", "T6"]
 
 # Defaults for a project whose risk-tiers.json predates WP4. They are the same
 # numbers the template ships, so a project that never updates still gets a
-# measurement — it simply never gets a gate it did not ask for. The budget is
-# advisory unless the policy sets `enforce: true`: over it, step-done warns and
-# rescore records it, but neither refuses the step nor raises the tier. The
-# tier comes from the scope of a change, never from how many files it touches.
+# measurement and never a gate. The budget is advisory, whatever `enforce` says:
+# over it, step-done warns and rescore records it, but neither refuses the step
+# nor raises the tier. Nor does a path scope: its min_tier is printed as a hint.
 DEFAULT_DIFF_BUDGET = {
     "enforce": False,
     "per_step": {"T0": {"max_lines": 300, "max_files": 15},
@@ -435,12 +434,11 @@ def tier_max(a, b):
     return a if tier_index(a) >= tier_index(b) else b
 
 
-def budget_enforced(policy):
-    """`diff_budget.enforce` — false unless the project wrote true: the budget
-    is a measurement that is reported, not a gate, unless asked for."""
-    if not isinstance(policy, dict):
-        return False
-    return bool((policy.get("diff_budget") or {}).get("enforce"))
+def budget_enforced(policy):  # pylint: disable=unused-argument
+    """Always false since redesign 1.2: the budget is a measurement that is
+    reported, never a gate. `diff_budget.enforce` is still read from old
+    policies and ignored, `enforce: true` included; the function goes in 2.6."""
+    return False
 
 
 def budget_for(policy, scope, tier):
@@ -536,38 +534,35 @@ def measure(root, from_tree, to_tree, policy, tier="T2", allowed=None, scope="st
         result["over"].append("%d lines > %d" % (result["lines"], budget["max_lines"]))
     if budget.get("max_files") is not None and result["files"] > budget["max_files"]:
         result["over"].append("%d files > %d" % (result["files"], budget["max_files"]))
-    # A file outside the step is always red. Size is red only when the project
-    # wrote `diff_budget.enforce: true`; otherwise it is measured and reported.
+    # A file outside the step is always red. Size never is: it is measured and
+    # reported (`enforced` stays in the result, always false, until 2.6).
     result["enforced"] = budget_enforced(policy)
-    result["status"] = RED if (result["unscoped"] or (result["over"] and result["enforced"])) else GREEN
+    result["status"] = RED if result["unscoped"] else GREEN
     return result
 
 
-def rescore(declared, measurement, policy=None):
-    """max(declared, the tier every touched scope demands). The tier comes from
-    the scope of a change, never from its size: an over-budget task is recorded
-    (`over_budget`) and raised one tier only when the policy says
-    `diff_budget.enforce: true`. It never returns anything lower than
-    `declared`: downgrade_rule says only a human lowers a tier, in writing."""
-    out = {"status": UNAVAILABLE, "tier": declared, "reasons": [],
+def rescore(declared, measurement, policy=None):  # pylint: disable=unused-argument
+    """The scopes the real diff reached, against the declared tier. Since
+    redesign 1.2 nothing here moves the tier: a scope whose `min_tier` sits
+    above `declared` becomes a hint, one per scope, and an over-budget task is
+    recorded (`over_budget`). The tier returned is `declared`, never lower and
+    never higher; `reasons` stays empty and is kept for old readers."""
+    out = {"status": UNAVAILABLE, "tier": declared, "reasons": [], "hints": [],
            "declared": declared, "over_budget": False}
     if measurement["status"] == UNAVAILABLE:
         out["detail"] = measurement.get("detail") or "diff unavailable"
         return out
     tier = declared if declared in TIERS else "T0"
+    hinted = set()
     for path, _lines, name, min_tier in measurement.get("per_file", []):
-        if tier_index(min_tier) > tier_index(tier):
-            tier = min_tier
-            out["reasons"].append("%s (%s)" % (name, path))
+        if tier_index(min_tier) > tier_index(tier) and name not in hinted:
+            hinted.add(name)
+            out["hints"].append("%s (%s) — path_scopes says %s; tier unchanged"
+                                % (name, path, min_tier))
     if measurement["over"] and measurement["scope"] == "task":
         out["over_budget"] = True
-        if budget_enforced(policy):
-            raised = TIERS[min(tier_index(tier) + 1, len(TIERS) - 1)]
-            if raised != tier:
-                out["reasons"].append("over the task budget: %s" % "; ".join(measurement["over"]))
-                tier = raised
     out["tier"] = tier
-    out["status"] = RED if tier_index(tier) > tier_index(declared) else GREEN
+    out["status"] = GREEN
     return out
 
 
@@ -1277,9 +1272,12 @@ def check(root, state, policy, skip_bite=False, only=None):
     if "rescore" in wanted:
         results["rescore"] = {
             "status": scored["status"],
-            "detail": ("%s — scopes: %s" % (scored["tier"], ", ".join(measurement["scopes"]) or "none")
+            "detail": ("%s — scopes: %s%s"
+                       % (scored["tier"], ", ".join(measurement["scopes"]) or "none",
+                          "".join(" — hint: %s" % hint for hint in scored["hints"]))
                        if scored["status"] != UNAVAILABLE else scored.get("detail", "")),
-            "tier": scored["tier"], "reasons": scored["reasons"]}
+            "tier": scored["tier"], "reasons": scored["reasons"],
+            "hints": scored.get("hints", [])}
     if "traceability" in wanted:
         results["traceability"] = sensor_traceability(root, state, policy)
     if "duplicates" in wanted:
@@ -1305,11 +1303,8 @@ def check(root, state, policy, skip_bite=False, only=None):
         blocking.append("tier %s is above %s" % (declared, ceiling))
     if scored["status"] != UNAVAILABLE and tier_index(scored["tier"]) > tier_index(ceiling):
         blocking.append("the diff re-scores to %s" % scored["tier"])
-    # Advisory means the budget never classifies; it still decides whether the
-    # sensors may stand in for a reader. A task past its budget keeps its review.
-    if measurement["status"] != UNAVAILABLE and measurement["over"]:
-        blocking.append("over the task budget (%s): a reviewer reads it"
-                        % "; ".join(measurement["over"]))
+    # Size no longer decides whether the sensors may stand in for a reader
+    # (redesign 1.2): the `diff` sensor reports it, and that is all.
     report = {"schema": 1, "task": task_id, "tree": tree, "declared_tier": declared,
               "rescored_tier": scored.get("tier"), "checked_at": now(),
               "sensors": results,
@@ -1441,6 +1436,8 @@ def cmd_rescore(args, root):
                   if result["over_budget"] else "")
         print("rescore       green    %s — scopes: %s%s"
               % (result["tier"], ", ".join(measurement["scopes"]) or "none", budget))
+        for hint in result["hints"]:
+            print("              hint: %s" % hint)
         return OK
     print("rescore       RED      %s -> %s: %s"
           % (args.declared, result["tier"], "; ".join(result["reasons"][:3])))

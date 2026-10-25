@@ -1,4 +1,4 @@
-<!-- generated from risk-tiers.json sha256:616a6da3c59073926c5ece428efa251fbe539d25a53bcf50be67522f44848368 -->
+<!-- generated from risk-tiers.json sha256:80cf708a42ad6d7851f4063e0d9127b850f274dcb6633c9a9773d01173d437f8 -->
 <!-- If /ai-status reports this hash as stale, risk-tiers.json changed and this
      mirror did not. The JSON file is the source of truth; update this by hand. -->
 
@@ -92,7 +92,8 @@ fixed in the step, before `state.py step-done`. **After the last step**: the
 full fast suite, `verify_command`, once, to the end, with no fail-fast flag —
 every failure is collected and classified first, every new regression is fixed
 in **one** remediation step (`state.py remediate`), and the command runs once
-more. At most two rounds, then the human decides. **At the end of the task**,
+more. At most two rounds, then the human decides: `sensors.tests.max_suite_runs`
+is 2, and a third `state.py test-run --scope suite` exits 6. **At the end of the task**,
 after the fast suite is green: `e2e_command`, once — never per step, skipped at
 T0/T1 and whenever the change cannot reach an e2e-covered flow, which is said
 in one line. Review findings are handled the same way as test failures: one
@@ -108,7 +109,8 @@ long. The triggers are listed under `delegate_anyway_when`.
 
 A tier is a prediction made before the work; the diff is what the work turned out
 to be. `state.py step-done` measures the step and the task against `diff_budget`
-and re-scores the tier from `path_scopes` — by scope, never by size.
+and checks the task against `path_scopes`. Neither moves the tier: size is
+reported and a path scope is a hint.
 
 | | per step | per task |
 |---|---|---|
@@ -124,27 +126,28 @@ Lock files, snapshots, minified and generated files are excluded; the `docs`
 scope is counted and reported but not budgeted. The budget is **advisory**:
 over it, `step-done` finishes the step and warns, naming
 `state.py step-split <id> --files …` as the way to a smaller review, and the
-re-score leaves the tier alone. Advisory never means unread: a task over its
-budget keeps its model review, `review-gate` refuses `skipped_green` while the
-size is over. Only a project that writes `diff_budget.enforce: true` turns the
-budget back into a gate (exit 6, one tier up). A file outside the step's
-`allowed_files` is `SCOPE_CHANGE_REQUIRED`, as it has always been.
+re-score leaves the tier alone. Size never decides whether the sensors may
+stand in for a reader, and `diff_budget.enforce` is read and ignored, `true`
+included. A file outside the step's `allowed_files` is `SCOPE_CHANGE_REQUIRED`,
+as it has always been.
 
 `path_scopes` is ordered and the first match wins, which is why `pipeline` and
-`dependencies` stand above `docs` and `tests` above `payments`. Every floor
-that changes a process — `pipeline`, `dependencies`, `migrations`, `config` —
-is T4, above the ceiling at which the sensors may stand in for a reader; a
-change reaching `**/Payment/**` or `**/Security/**` is at least T5, and
-infrastructure is T6, whatever the tier said at the start. Re-scoring **only
-ever raises** a tier: `downgrade_rule` means a human lowers one, in writing,
-and `state.py risk`/`triage` refuses a lowering that no human asked for.
+`dependencies` stand above `docs` and `tests` above `payments`. A scope's
+`min_tier` is a **hint**, not a floor: every scope that changes a process —
+`pipeline`, `dependencies`, `migrations`, `config` — says T4, a change reaching
+`**/Payment/**` or `**/Security/**` says T5, and infrastructure says T6. When
+the task's tier sits below it, `step-done` prints `hint: payments
+(src/Payment/X.php) — path_scopes says T5; tier unchanged` once per scope and
+leaves the tier where it is. Raising it is `state.py risk`; `downgrade_rule`
+means a human lowers one, in writing, and `state.py risk`/`triage` refuses a
+lowering that no human asked for.
 
 ### When the sensors replace the review
 
 At T3 and below, when every sensor in `required_for_skip` is green or
 explicitly not applicable — the suite passed on this exact tree, the required
-tests fail without the change (`bite`), the task is inside its budget and the
-re-scored tier is still T3 or lower — the model review is replaced by the
+tests fail without the change (`bite`) and the task's tier is T3 or lower,
+whatever its size — the model review is replaced by the
 sensor set, and `state.py review-gate` records `review_status: skipped_green`.
 This is the intent's decision 6; `review-economy.md` carries the reasoning.
 

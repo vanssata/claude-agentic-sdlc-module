@@ -104,7 +104,7 @@ The main session itself runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}` and does 
 - Session model is {{SESSION_MODEL_ID}} at `{{SESSION_EFFORT}}`. Implement code yourself in the main conversation; `ai-implementer` is for mechanical pattern-copying steps or when the user asks.
 - Do not switch a running session to a stronger model for one hard question. Send the question to `architect` or `ai-expert` with a brief instead, and keep the session where it is.
 {{CODEX_PLAN_RULE}} Readers never go above `low`.
-- `codex-model-gate` checks {{EXPERT_MODEL}} at run time. After a rate-limit or model-unavailable failure from an {{EXPERT_MODEL}} subagent, the gate sends every EXPERT launch to {{STRONG_MODEL}} until the record expires, and says so in the agent's context. `~/.codex/hooks/codex-model-gate.py status` shows the gate; `clear` re-enables {{EXPERT_MODEL}} early. An ordinary low-confidence or wrong answer never activates it.
+- `runtime-gate` checks {{EXPERT_MODEL}} at run time. After a rate-limit or model-unavailable failure from an {{EXPERT_MODEL}} subagent, the gate sends every EXPERT launch to {{STRONG_MODEL}} until the record expires, and says so in the agent's context. `~/.codex/hooks/runtime-gate.py status` shows the gate; `clear` re-enables {{EXPERT_MODEL}} early. An ordinary low-confidence or wrong answer never activates it.
 - `{{SUBAGENT_EFFORT}}` is the default effort for agents. Raise to `high` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; above `high` only per the rule above.
 - Delegate logs, test output, CI/CD and kubectl/helm output to `log-reader`. Never read raw logs in the main context.
 

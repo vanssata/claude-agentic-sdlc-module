@@ -141,7 +141,7 @@ done
 C="$TMP/explicit-both/claude"
 printf 'local edit\n' >> "$C/claude-agentic/ai/policies/git.md"
 out=$(run explicit-both --target both --plan pro)
-grep -q '^local edit$' "$C/backups/claude-agentic-ai/ai/policies/git.md" 2>/dev/null \
+grep -q '^local edit$' "$C/backups/$(date +%F)/claude-agentic/ai/policies/git.md" 2>/dev/null \
     && pass "reinstall backs up an edited shared tree" || fail "no backup of the edited shared tree" "$out"
 diff -r "$PLUGIN_ROOT/ai" "$C/claude-agentic/ai" >/dev/null 2>&1 \
     && pass "reinstall restores the shipped shared tree" || fail "reinstall left the edited tree"

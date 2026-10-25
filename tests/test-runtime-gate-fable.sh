@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# fable-gate.py: records Fable unavailability from StopFailure / PostToolUse /
-# the statusline, rewrites model: fable -> opus on PreToolUse:Agent while the
-# record lives, and fails open. Then the installer: the gate is registered only
-# on a Fable install, and a later non-Fable install strips it again.
+# runtime-gate.py under Claude Code (the plugin path is not under a .codex/, so
+# detect_runtime() answers claude): records Fable unavailability from
+# StopFailure / PostToolUse / the statusline, rewrites model: fable -> opus on
+# PreToolUse:Agent while the record lives, and fails open. The legacy
+# CLAUDE_FABLE_GATE* names are still honoured, so they stay in use here. Then the
+# installer: the Fable branch is registered only on a Fable install, a later
+# non-Fable install strips it again, and the old fable-gate.py shim is retired.
+# Formerly test-fable-gate.sh, which ran all of this through the shim.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
-GATE="$PLUGIN_ROOT/hooks/fable-gate.py"
+GATE="$PLUGIN_ROOT/hooks/runtime-gate.py"
 INSTALL="$PLUGIN_ROOT/install.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
@@ -238,8 +242,8 @@ out=$(printf '%s' "$high" | python3 "$GATE" statusline --then 'echo "$HOME" | gr
 
 # ------------------------------------------------------------------ installer
 # Since WP5 the gate is runtime-gate.py, registered on every Claude plan (OQ4);
-# the Fable branch (StopFailure) only on a Fable install. fable-gate.py stays as
-# a shim, so everything above runs through the old name unchanged.
+# the Fable branch (StopFailure) only on a Fable install. The fable-gate.py shim
+# is gone since redesign 1.3: an install retires an old copy into backups/<date>/.
 settings_has_gate() {  # settings_has_gate <settings.json> <event> -> 0 if registered
     jq -e --arg e "$2" '[.hooks[$e][]?.hooks[]?.command] | any(test("runtime-gate"))' "$1" >/dev/null
 }
@@ -270,7 +274,7 @@ done
 jq -e '.hooks.PreToolUse[] | select(.hooks[0].command | test("runtime-gate")) | .matcher == "Agent"' "$D/settings.json" >/dev/null \
     && pass "the PreToolUse entry matches the Agent tool" || fail "PreToolUse matcher should be Agent"
 [ -x "$D/hooks/runtime-gate.py" ] && pass "runtime-gate.py is installed executable" || fail "runtime-gate.py not executable"
-[ -x "$D/hooks/fable-gate.py" ] && pass "the fable-gate.py shim is installed too" || fail "fable-gate.py shim missing"
+[ ! -e "$D/hooks/fable-gate.py" ] && pass "the fable-gate.py shim is not installed" || fail "fable-gate.py shim still installed"
 [ "$(old_count "$D/settings.json")" = 0 ] && pass "no fable-gate command is registered" || fail "fable-gate still registered"
 grep -qxF 'model: fable[1m]' "$D/agents/architect.md" && pass "architect keeps model: fable[1m] (the gate reroutes at run time)" || fail "architect should stay pinned to fable[1m]"
 grep -qx 'model: opus' "$D/agents/ai-expert.md" && pass "ai-expert is pinned to opus on max, outside the gate" || fail "ai-expert should pin model: opus on max"
@@ -319,7 +323,11 @@ jq -n --arg c "$OLDCMD" --arg s "$OLDCMD statusline --then 'my-line.sh'" '{statu
     PreToolUse:[{matcher:"Agent",hooks:[{type:"command",command:$c,timeout:5}]}],
     PostToolUse:[{matcher:"Agent",hooks:[{type:"command",command:$c,timeout:5}]},{matcher:"Agent",hooks:[{type:"command",command:"my-agent-logger.sh"}]}],
     StopFailure:[{matcher:"rate_limit|model_not_found",hooks:[{type:"command",command:$c,timeout:5}]}]}}' > "$D/settings.json"
+mkdir -p "$D/hooks"; printf '#!/usr/bin/env python3\n# the old shim\n' > "$D/hooks/fable-gate.py"
 out=$(CLAUDE_DIR="$D" bash "$INSTALL" --plan max --fable yes 2>&1)
+[ ! -e "$D/hooks/fable-gate.py" ] && grep -q '^# the old shim' "$D/backups/$(date +%F)/hooks/fable-gate.py" \
+    && grep -q "retired: hooks/fable-gate.py -> backups/$(date +%F)/hooks/fable-gate.py" <<<"$out" \
+    && pass "the old fable-gate.py shim is retired into backups/<date>/hooks/" || fail "shim not retired" "$out"
 [ "$(old_count "$D/settings.json")" = 0 ] && pass "every fable-gate entry is replaced" || fail "fable-gate entries left: $(old_count "$D/settings.json")"
 for ev in PreToolUse PostToolUse SubagentStart SubagentStop StopFailure; do
     n=$(jq --arg e "$ev" '[.hooks[$e][]?.hooks[]? | select(.command | test("runtime-gate"))] | length' "$D/settings.json")
@@ -375,4 +383,4 @@ for opt in "max no" "pro no"; do
     esac
 done
 
-summary "fable-gate"
+summary "runtime-gate (claude)"

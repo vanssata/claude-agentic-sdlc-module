@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
-# codex-model-gate.py: an EXPERT agent must fall back to STRONG while the expert
-# model cannot serve the account — and must NOT fall back because an agent gave a
-# poor answer. Both halves are tested here; the second one is the reason the gate
-# matches explicit capacity signals instead of the word "error".
+# runtime-gate.py under Codex: an EXPERT agent must fall back to STRONG while the
+# expert model cannot serve the account — and must NOT fall back because an agent
+# gave a poor answer. Both halves are tested here; the second one is the reason
+# the gate matches explicit capacity signals instead of the word "error".
+# The gate runs from a copy under a .codex/hooks/ directory, which is how
+# detect_runtime() knows it is the Codex gate; the legacy CODEX_MODEL_GATE* names
+# are still honoured, so they stay in use here. Formerly test-codex-model-gate.sh,
+# which ran all of this through the codex-model-gate.py shim.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
-GATE="$PLUGIN_ROOT/hooks/codex-model-gate.py"
 FIX="$PLUGIN_ROOT/tests/fixtures/codex-hooks"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+GATE="$TMP/.codex/hooks/runtime-gate.py"
+mkdir -p "$(dirname "$GATE")"; cp "$PLUGIN_ROOT/hooks/runtime-gate.py" "$GATE"; chmod +x "$GATE"
 
 # A scratch Codex home whose custom agents pin the same models the installer does.
 HOME_DIR="$TMP/codex"
@@ -156,4 +161,4 @@ out=$(gate wibble 2>&1); rc=$?
 [ $rc -eq 2 ] && pass "an unknown command exits 2" || fail "expected exit 2" "$out"
 grep -q 'usage:' <<<"$out" && pass "it prints usage" || fail "should print usage"
 
-summary "codex-model-gate"
+summary "runtime-gate (codex)"

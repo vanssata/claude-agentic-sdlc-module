@@ -180,17 +180,22 @@ for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Ex
          hooks/cap-large-read.py hooks/project-scaffold.sh hooks/ai-git-guard.json \
          skills/ai-init/SKILL.md skills/ai-init/scaffold-ai.sh skills/ai-task/state.py \
          skills/ai-audit/SKILL.md skills/ai-status/SKILL.md skills/project-init/SKILL.md \
+         skills/status/SKILL.md skills/status/status.py \
          skills/sdlc-intent/SKILL.md skills/sdlc-spec/SKILL.md skills/sdlc-plan/SKILL.md \
          skills/ai-init/templates/.ai/AGENTS.md skills/project-init/templates/intent.md \
          skills/project-update/SKILL.md skills/project-update/update.py skills/project-update/history/index.json \
          skills/project-update/migrations/__init__.py skills/project-update/migrations/0001_schema_version.py \
-         skills/usage-report/SKILL.md skills/usage-report/usage-report.py hooks/fable-gate.py \
+         skills/usage-report/SKILL.md skills/usage-report/usage-report.py \
          hooks/context-guard.py claude-agentic/routing.md claude-agentic/ai-path \
          claude-agentic/ai/policies/git.md claude-agentic/ai/workflows/feature.md \
          skills/project-update/render_instructions.py; do
     [ -e "$DIR/$f" ] && pass "$f installed" || fail "$f missing"
 done
 [ -x "$DIR/hooks/ai-git-guard.sh" ] && pass "hooks are executable" || fail "hooks should be executable"
+[ -x "$DIR/skills/status/status.py" ] && pass "status.py is executable" || fail "status.py should be executable"
+for f in hooks/fable-gate.py hooks/codex-model-gate.py; do
+    [ ! -e "$DIR/$f" ] && pass "$f is not installed (redesign 1.3)" || fail "$f installed"
+done
 [ -x "$DIR/claude-agentic/ai-path" ] && pass "ai-path is executable" || fail "ai-path should be executable"
 grep -qF "$DIR/claude-agentic/ai/" "$DIR/claude-agentic/routing.md" && pass "routing.md names the installed shared tree" || fail "routing.md should name $DIR/claude-agentic/ai/"
 grep -qF "$DIR/claude-agentic/ai-path <path>" "$DIR/claude-agentic/routing.md" && pass "routing.md names the resolver" || fail "routing.md should name the resolver"
@@ -274,10 +279,44 @@ CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 [ -z "$(ls -d "$DIR"/skills/*.bak 2>/dev/null)" ] \
     && pass "no *.bak directory is left in skills/ (they would load as duplicate skills)" \
     || fail "a backup was left in skills/" "$(ls -d "$DIR"/skills/*.bak)"
-[ -d "$DIR/backups/skills/ai-init" ] && pass "the backup went to backups/skills/ instead" || fail "backup not found in backups/skills/"
+[ -d "$DIR/backups/$(date +%F)/skills/ai-init" ] && pass "the backup went to backups/<date>/skills/ instead" || fail "backup not found in backups/<date>/skills/"
 mkdir -p "$DIR/skills/legacy.bak"
 CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 [ ! -d "$DIR/skills/legacy.bak" ] && pass "a backup left by an older installer is moved out" || fail "stale .bak skill not cleaned up"
+
+echo "== an older install: its *.bak files, the seven stale agents and the shim move to backups/<date>/"
+DAY=$(date +%F)
+STALE="code-implementer qa-runner qa-fixer db-migrator doc-lookup log-inspector sylius-i18n-keys"
+for a in $STALE; do printf -- '---\nname: %s\n---\nold\n' "$a" > "$DIR/agents/$a.md"; done
+printf 'mine\n' > "$DIR/agents/x.md"; printf 'old mine\n' > "$DIR/agents/x.md.bak"
+printf 'orphan\n' > "$DIR/agents/gone.md.bak"
+printf 'old\n' > "$DIR/hooks/ai-git-guard.sh.bak"; printf 'old\n' > "$DIR/hooks/lib/ai-hook-common.sh.bak"
+printf 'old\n' > "$DIR/claude-agentic/routing.md.bak"
+printf '{}\n' > "$DIR/settings.json.bak"; printf 'old\n' > "$DIR/CLAUDE.md.bak"
+printf '#!/usr/bin/env python3\n' > "$DIR/hooks/fable-gate.py"
+printf 'old\n' > "$DIR/bin/claude-1m.bak"
+out=$(CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes 2>&1)
+[ ! -e "$DIR/bin/claude-1m.bak" ] && [ -f "$DIR/backups/$DAY/bin/claude-1m.bak" ] \
+    && pass "bin/claude-1m.bak is swept too" || fail "bin/*.bak not swept" "$out"
+for a in $STALE; do
+    [ ! -e "$DIR/agents/$a.md" ] && [ -f "$DIR/backups/$DAY/agents/$a.md" ] \
+        && grep -q "retired: agents/$a.md -> backups/$DAY/agents/$a.md" <<<"$out" \
+        && pass "agents/$a.md is retired into backups/<date>/agents/" || fail "agents/$a.md not retired" "$out"
+done
+[ -f "$DIR/agents/x.md" ] && [ "$(cat "$DIR/backups/$DAY/agents/x.md.bak")" = "old mine" ] && [ ! -e "$DIR/agents/x.md.bak" ] \
+    && pass "a seeded x.md.bak beside a live x.md moves to backups/<date>/agents/x.md.bak" || fail "x.md.bak not swept" "$out"
+grep -q "moved: agents/x.md.bak -> backups/$DAY/agents/x.md.bak" <<<"$out" && pass "and the move is printed" || fail "sweep not reported" "$out"
+[ -f "$DIR/agents/gone.md.bak" ] && pass "a .bak with no live file beside it is left alone" || fail "orphan .bak moved"
+[ ! -e "$DIR/hooks/fable-gate.py" ] && [ -f "$DIR/backups/$DAY/hooks/fable-gate.py" ] \
+    && pass "an installed fable-gate.py shim is retired too" || fail "shim not retired" "$out"
+left=$(for f in "$DIR"/*.bak "$DIR"/agents/*.bak "$DIR"/hooks/*.bak "$DIR"/hooks/lib/*.bak "$DIR"/claude-agentic/*.bak "$DIR"/bin/*.bak; do
+           [ -f "$f" ] && [ -e "${f%.bak}" ] && printf '%s ' "${f#"$DIR"/}"; done)
+[ -z "$left" ] && pass "no *.bak is left beside a live file" || fail "*.bak left beside a live file" "$left"
+[ -z "$(cd "$DIR" && find . -path ./backups -prune -o -name '*.bak' -print | grep -v '^./agents/gone.md.bak$')" ] \
+    && pass "an install writes no *.bak anywhere outside backups/" || fail "*.bak written" "$(cd "$DIR" && find . -path ./backups -prune -o -name '*.bak' -print)"
+[ -f "$DIR/backups/$DAY/settings.json" ] && [ -f "$DIR/backups/$DAY/CLAUDE.md" ] \
+    && pass "settings.json and CLAUDE.md are backed up into backups/<date>/" || fail "root backups missing" "$(ls "$DIR/backups/$DAY")"
+rm -f "$DIR/agents/x.md" "$DIR/agents/gone.md.bak"
 
 echo "== re-install is idempotent"
 CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1

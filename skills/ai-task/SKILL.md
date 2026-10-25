@@ -211,8 +211,9 @@ Skip `$STATE init` above for T0–T4; direct mode has its own single call.
    own terminal, `$STATE close` again archives it.
 
 That is the whole path. The sections below are for T5 and above, and for the
-`team` profile. A T4 whose diff is re-scored to T5 by the sensors leaves direct
-mode here: say so and continue with the sections below from ADVERSARIAL REVIEW.
+`team` profile. A T4 you raise to T5 — a path hint you agree with, `$STATE risk
+T5` — leaves direct mode here: say so and continue with the sections below from
+ADVERSARIAL REVIEW.
 
 ## 1. Walk the pipeline
 
@@ -361,19 +362,23 @@ $STATE step-done <step_id>
 ```
 
 `step-done` measures what the step actually changed, between the tree it began
-with and the tree now, and refuses two things with **exit 6**:
-`DIFF_BUDGET_EXCEEDED` when the step outgrew its tier's budget, and
-`SCOPE_CHANGE_REQUIRED` when it touched a file outside its own. Neither is a
-refusal to do the work — the step stays in progress and the way out is printed:
+with and the tree now. It refuses one thing with **exit 6**:
+`SCOPE_CHANGE_REQUIRED` when the step touched a file outside its own. That is
+not a refusal to do the work — the step stays in progress and the way out is
+printed:
 
 ```bash
 $STATE step-split <step_id> --files "<the part that is its own step>" --note "<why>"
 ```
 
 The moved files leave the original step and become a sibling that inherits the
-tree it started from. After every step the task's diff is re-scored from
-`path_scopes`: a change that reached `**/Payment/**` is T5 from then on,
-whatever it was called at the start. A re-score only ever raises — lowering a
+tree it started from. Size is reported, never refused: a step over its tier's
+budget finishes with an advisory `budget: over` line that names `step-split`
+as the way to a smaller review, whatever `diff_budget.enforce` says. After
+every step the task's diff is checked against `path_scopes`, and a scope whose
+`min_tier` sits above the task's tier prints once as `hint: payments
+(src/Payment/X.php) — path_scopes says T5; tier unchanged`. A hint never moves
+the tier: if you agree with it, raise the tier with `$STATE risk`; lowering a
 tier needs a human, in their own terminal, with `--by`.
 
 ### TEST — the step's tests inside the step, the suite once, e2e once
@@ -441,15 +446,15 @@ $STATE review-gate
 ```
 
 It runs every sensor on the tree as it is now — the recorded suite result, the
-linter and type checker the project wrote down, the diff against the budget,
-the tier re-scored from the real diff, step-to-test traceability, repeated
+linter and type checker the project wrote down, the diff against the budget
+(reported, not judged), the path-scope hints, step-to-test traceability, repeated
 blocks, and whether the named tests **fail without the change** — writes
 `.ai/reports/<task-id>/sensors.json` and one ledger row per settled sensor, and
 answers one of two things. At T3 and below, all green records
 `review_status: skipped_green` and the review is done: the sensors are the
 review (decision 6, `review-economy.md` §8). Anything else — a red sensor, a
-tool nobody wrote down, a result from an older tree, a task over its diff
-budget, a tier above T3 — prints
+tool nobody wrote down, a result from an older tree, a tier above T3 —
+prints
 `review: required` with the reason, and you delegate exactly as before. From
 T4 it always says required.
 

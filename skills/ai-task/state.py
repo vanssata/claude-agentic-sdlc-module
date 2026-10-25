@@ -29,7 +29,7 @@ Usage:
   state.py step   <step_id>
   state.py step-done <step_id> [--force]    measures the step's diff against its allowed files
                                          (exit 6 asks for a split) and against the tier's budget,
-                                         a warning unless diff_budget.enforce is true
+                                         always a warning; a path scope above the tier is a hint
   state.py step-split <step_id> --files a,b [--note TEXT]   move part of a step into its own
   state.py review-gate                   # all sensors green at or below T3 -> review_status=skipped_green
   state.py test-run --scope step|suite|e2e [--files a,b] [--env-retry]
@@ -201,7 +201,8 @@ def find_root(start):
 
 def die(message, code=1):
     """1 validation · 2 argparse · 4 QUESTIONS_PENDING · 5 APPROVAL_REFUSED ·
-    6 DIFF_BUDGET_EXCEEDED / SCOPE_CHANGE_REQUIRED (I1, WP4 I4) ·
+    6 SCOPE_CHANGE_REQUIRED / run budget / REVIEW_BUDGET (I1, WP4 I4; no
+    DIFF_BUDGET_EXCEEDED since redesign 1.2) ·
     7 RUNTIME_HANDOFF_PENDING · 8 DIRECT_MODE_CAP (WP5 I4; one meaning per code)."""
     print("state.py: %s" % message, file=sys.stderr)
     sys.exit(code)
@@ -349,6 +350,7 @@ def apply_defaults(state):
                                  "measured_at": None, "status": "not_measured"}
     state["diff"].setdefault("rescored_tier", None)
     state["diff"].setdefault("rescore_reasons", [])
+    state["diff"].setdefault("rescore_hints", [])
     state["diff"].setdefault("over_budget", False)
     if not isinstance(state.get("sensors"), dict):
         state["sensors"] = {"file": ".ai/reports/%s/sensors.json" % task_id,
@@ -910,7 +912,9 @@ def budget_line(prefix, measurement):
 
 def rescore_task(root, state, to_tree):
     """What the change turned out to be, against what it was called at the start.
-    Only ever upwards: downgrade_rule says a human lowers a tier, in writing."""
+    Since redesign 1.2 it never moves the tier: a path scope whose min_tier sits
+    above the declared tier is stored in `diff.rescore_hints` and printed once,
+    to stderr. A tier is raised by a human or `state.py risk`, not by a path."""
     declared = state.get("risk_tier") or "T0"
     _policy, measurement = measure_diff(root, state["diff"].get("base_tree"), to_tree,
                                         declared, None, "task")
@@ -929,16 +933,14 @@ def rescore_task(root, state, to_tree):
         return measurement, None
     state["diff"]["rescored_tier"] = scored["tier"]
     state["diff"]["rescore_reasons"] = scored["reasons"]
-    if scored["tier"] != declared and TIERS.index(scored["tier"]) > TIERS.index(declared):
-        previous = state.get("risk_tier")
-        state["risk_tier"] = scored["tier"]
-        note = "rescored from the real diff: %s" % ("; ".join(scored["reasons"][:3])
-                                                    or "over the task budget")
-        emit_tier(root, state, previous, scored["tier"], note)
-        if state.get("current_stage") in ("implementation", "test", "adversarial_review"):
-            # The plan review cannot happen retroactively; every other gate of
-            # the higher tier still applies, and the record says which one did not.
-            record(state, "plan_review", "superseded by the review of the real diff")
+    # A hint names its scope before " (": the first file of a scope can change
+    # between steps, the scope cannot, so a scope is printed once per task.
+    hints = scored.get("hints") or []
+    shown = {h.split(" (", 1)[0] for h in state["diff"].get("rescore_hints") or []}
+    for hint in hints:
+        if hint.split(" (", 1)[0] not in shown:
+            print("hint: %s" % hint, file=sys.stderr)
+    state["diff"]["rescore_hints"] = hints
     return measurement, scored
 
 
@@ -1054,13 +1056,8 @@ def finish_step(root, state, step, force=False):
             % (step_id, ", ".join(measured["unscoped"][:5]), step_id,
                shlex.quote(",".join(measured["unscoped"][:5]))), 6)
     if measured["over"] and not force:
-        if measured.get("enforced"):
-            die("DIFF_BUDGET_EXCEEDED step %s: %s. A step this size is reviewed as one thing and "
-                "should not be — split it:\n  state.py step-split %s --files \"<the part that is "
-                "its own step>\""
-                % (step_id, "; ".join(measured["over"]), step_id), 6)
-        # Advisory by default: the size of a change is a warning, never its
-        # tier and never a refusal — the scope decides both (SCOPE_CHANGE_REQUIRED above).
+        # The size of a change is a warning, never its tier and never a refusal,
+        # `enforce: true` included (redesign 1.2); only the scope refuses, above.
         print("budget: over — step %s: %s (advisory). Split it when that helps the review:\n"
               "  state.py step-split %s --files \"<the part that is its own step>\""
               % (step_id, "; ".join(measured["over"]), step_id), file=sys.stderr)
@@ -1090,8 +1087,7 @@ def finish_step(root, state, step, force=False):
               % (step_id, measured.get("detail") or "not measured"))
     else:
         print(budget_line("step %s diff" % step_id, measured)
-              + (" — budget: over — %s%s" % ("; ".join(measured["over"]),
-                                             "" if measured.get("enforced") else " (advisory)")
+              + (" — budget: over — %s (advisory)" % "; ".join(measured["over"])
                  if measured["over"] else " — ok"))
     if from_base and measured["status"] != "unavailable" and completed_before(state, step):
         print("step %s measured from the task's base tree: it has no tree_before and no "
@@ -1099,9 +1095,6 @@ def finish_step(root, state, step, force=False):
     if task_measured["status"] != "unavailable":
         print(budget_line("task diff", task_measured)
               + ("; rescored %s" % scored["tier"] if scored else ""))
-    if scored and scored["tier"] != tier:
-        print("tier raised %s -> %s: %s"
-              % (tier, scored["tier"], "; ".join(scored["reasons"][:3])))
     remaining = [s["step_id"] for s in steps if s["status"] != "done"]
     print("step %s done; remaining: %s" % (step_id, ", ".join(remaining) or "none"))
     if not remaining:
@@ -1494,7 +1487,7 @@ def cmd_review_gate(args, root):
     It replaces it only at or below `skip_review_at_or_below`, only when every
     required sensor measured something and that something was green, and only on
     the tree as it is right now. Anything else — a red sensor, a tool nobody
-    wrote down, a result from an older tree, a diff that re-scores above the
+    wrote down, a result from an older tree, a declared tier above the
     ceiling — and the review runs exactly as it did before, with the sensor rows
     attached so the reviewer does not re-derive what is already settled.
     """

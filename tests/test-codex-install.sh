@@ -68,13 +68,14 @@ grep -q 'plan            pro' <<<"$out" && pass "the summary names the plan" || 
 for f in agents/ai-expert.toml agents/ai-reviewer.toml agents/ai-risk-strong.toml \
          agents/ai-planner-strong.toml agents/ai-expert-strong.toml agents/architect.toml agents/Explore.toml \
          hooks/ai-git-guard.sh hooks/ai-path-guard.sh hooks/ai-scope-guard.sh \
-         hooks/codex-model-gate.py hooks/context-guard.py hooks/lib/ai-hook-common.sh hooks/ai-git-guard.json \
+         hooks/runtime-gate.py hooks/context-guard.py hooks/lib/ai-hook-common.sh hooks/ai-git-guard.json \
          hooks/ai-path-guard-defaults.json hooks.json config.toml AGENTS.md \
          skills/ai-task/state.py skills/ai-init/scaffold-ai.sh skills/usage-report/usage-report.py; do
     [ -e "$DIR/$f" ] && pass "$f installed" || fail "$f missing"
 done
 [ -x "$DIR/hooks/ai-git-guard.sh" ] && pass "the guards are executable" || fail "guards should be executable"
-[ -x "$DIR/hooks/codex-model-gate.py" ] && pass "the model gate is executable" || fail "the gate should be executable"
+[ -x "$DIR/hooks/runtime-gate.py" ] && pass "the model gate is executable" || fail "the gate should be executable"
+[ -e "$DIR/hooks/codex-model-gate.py" ] && fail "the codex-model-gate.py shim is gone (redesign 1.3)" || pass "the codex-model-gate.py shim is not installed"
 [ -e "$DIR/hooks/cap-large-read.py" ] && fail "cap-large-read has no Codex event to fire on and must not be installed" \
     || pass "cap-large-read is not installed (Codex has no hookable Read tool)"
 [ -e "$DIR/hooks/fable-gate.py" ] && fail "the Fable gate is Claude-only" || pass "the Fable gate is not installed"
@@ -133,16 +134,21 @@ n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/hooks.json")
 [ "$n" = 4 ] && pass "and the PreToolUse count is still four" || fail "PreToolUse should stay 4, got $n"
 
 echo "== an install from before WP5 is upgraded, not doubled"
-UP="$TMP/codex-upgrade"; mkdir -p "$UP"
+UP="$TMP/codex-upgrade"; mkdir -p "$UP/hooks" "$UP/agents"
+DAY=$(date +%F)
+printf '#!/usr/bin/env python3\n# the old shim\n' > "$UP/hooks/codex-model-gate.py"
+STALE="code-implementer qa-runner qa-fixer db-migrator doc-lookup log-inspector sylius-i18n-keys"
+for a in $STALE; do printf 'name = "%s"\n' "$a" > "$UP/agents/$a.toml"; done
+printf 'old\n' > "$UP/agents/ai-expert.toml"; printf 'older\n' > "$UP/agents/ai-expert.toml.bak"
 OLD='"$HOME/.codex/hooks/codex-model-gate.py"'
 jq -n --arg c "$OLD" '{hooks:{PreToolUse:[{matcher:"Agent",hooks:[{type:"command",command:$c,timeout:5}]}],
     PostToolUse:[{matcher:"Agent",hooks:[{type:"command",command:$c,timeout:5}]}],
     SubagentStop:[{hooks:[{type:"command",command:$c,timeout:5}]},{hooks:[{type:"command",command:"my-stop.sh"}]}]}}' > "$UP/hooks.json"
 out=$(CODEX_DIR="$UP" bash "$INSTALL" --target codex --codex-plan pro 2>&1)
-[ "$(jq '[.hooks[]?[]?.hooks[]? | select(.command | test("runtime-gate"))] | length' "$UP/hooks.json")" = 0 ] \
-    && pass "an upgrade keeps the trusted codex-model-gate command" || fail "the upgrade registered a new, unreviewed command"
+[ "$(jq '[.hooks[]?[]?.hooks[]? | select(.command | test("codex-model-gate"))] | length' "$UP/hooks.json")" = 0 ] \
+    && pass "an upgrade replaces every codex-model-gate command" || fail "a codex-model-gate command is left"
 for ev in PreToolUse PostToolUse SubagentStart SubagentStop; do
-    n=$(jq --arg e "$ev" '[.hooks[$e][]?.hooks[]? | select(.command | test("codex-model-gate"))] | length' "$UP/hooks.json")
+    n=$(jq --arg e "$ev" '[.hooks[$e][]?.hooks[]? | select(.command | test("/hooks/runtime-gate\\.py"))] | length' "$UP/hooks.json")
     [ "$n" = 1 ] || fail "$ev has $n gate commands after the upgrade"
 done
 pass "exactly one gate command per event after the upgrade"
@@ -151,7 +157,18 @@ CODEX_DIR="$UP" bash "$INSTALL" --target codex --codex-plan pro >/dev/null 2>&1
     && pass "a second install changes nothing" || fail "reinstall doubled or renamed the gate"
 jq -e '[.hooks.SubagentStop[].hooks[].command] | index("my-stop.sh")' "$UP/hooks.json" >/dev/null \
     && pass "the user's own SubagentStop hook survives" || fail "user hook lost"
-grep -q 'kept: codex-model-gate.py as the gate command' <<<"$out" && pass "the kept command is reported, with the /hooks reminder" || fail "kept command not reported" "$out"
+grep -q 'replaced: codex-model-gate.py hooks with runtime-gate.py — review the changed gate entries once in /hooks' <<<"$out" \
+    && pass "the replacement is reported, with the /hooks re-trust reminder" || fail "replacement not reported" "$out"
+[ ! -e "$UP/hooks/codex-model-gate.py" ] && grep -q '^# the old shim' "$UP/backups/$DAY/hooks/codex-model-gate.py" \
+    && pass "the installed shim is retired into backups/<date>/hooks/" || fail "shim not retired" "$out"
+for a in $STALE; do
+    [ ! -e "$UP/agents/$a.toml" ] && [ -f "$UP/backups/$DAY/agents/$a.toml" ] || fail "agents/$a.toml not retired" "$out"
+done
+pass "the seven stale agents are retired into backups/<date>/agents/"
+[ ! -e "$UP/agents/ai-expert.toml.bak" ] && [ "$(cat "$UP/backups/$DAY/agents/ai-expert.toml.bak")" = older ] \
+    && pass "a *.bak beside a live agent moves to backups/<date>/agents/" || fail "agent .bak not swept" "$out"
+[ -z "$(cd "$UP" && find . -path ./backups -prune -o -name '*.bak' -print)" ] \
+    && pass "no *.bak is left outside backups/" || fail "*.bak left" "$(cd "$UP" && find . -path ./backups -prune -o -name '*.bak' -print)"
 
 echo "== the managed AGENTS.md block"
 [ "$(grep -c 'claude-agentic:start' "$DIR/AGENTS.md")" = 1 ] && pass "exactly one managed block" || fail "expected one managed block"
@@ -171,9 +188,9 @@ grep -q "^== profile.json (plan tables): $TMP/probe-profile/claude-agentic/profi
 [ ! -e "$TMP/probe-profile/claude-agentic/profile.json" ] && pass "and does not write it" || fail "dry run wrote profile.json"
 
 echo "== re-install is idempotent"
-before=$(cd "$DIR" && find . -type f ! -name '*.bak' -print0 | sort -z | xargs -0 sha256sum)
+before=$(cd "$DIR" && find . -path ./backups -prune -o -type f -print0 | sort -z | xargs -0 sha256sum)
 CODEX_DIR="$DIR" bash "$INSTALL" --target codex >/dev/null 2>&1
-after=$(cd "$DIR" && find . -type f ! -name '*.bak' -print0 | sort -z | xargs -0 sha256sum)
+after=$(cd "$DIR" && find . -path ./backups -prune -o -type f -print0 | sort -z | xargs -0 sha256sum)
 [ "$before" = "$after" ] && pass "a second install changes no file" || fail "the second install changed files" "$(diff <(printf '%s' "$before") <(printf '%s' "$after") | head -10)"
 [ "$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/hooks.json")" = 4 ] && pass "hook entries are not duplicated" || fail "hooks duplicated"
 [ "$(grep -c 'claude-agentic:start' "$DIR/AGENTS.md")" = 1 ] && pass "the managed block is not duplicated" || fail "block duplicated"
@@ -208,8 +225,21 @@ CODEX_DIR="$DIR2" bash "$INSTALL" --target codex >/dev/null 2>&1
 [ "$(toml_get "$DIR2/config.toml" agents.interrupt_message)" = "False" ] && pass "an unmanaged key inside [agents] survives" || fail "agents.interrupt_message was lost"
 [ "$(toml_get "$DIR2/config.toml" agents.default_subagent_model)" = "gpt-5.6-terra" ] && pass "the managed [agents] keys are added alongside it" || fail "the subagent default was not added"
 grep -q '# my own notes, keep these' "$DIR2/config.toml" && pass "comments survive" || fail "a comment was dropped"
-[ -f "$DIR2/config.toml.bak" ] && pass "the old config is backed up" || fail "no config.toml.bak"
-cmp -s "$TMP/config.orig" "$DIR2/config.toml.bak" && pass "the backup is the original file" || fail "the backup does not match the original"
+[ -f "$DIR2/backups/$(date +%F)/config.toml" ] && [ ! -e "$DIR2/config.toml.bak" ] \
+    && pass "the old config is backed up into backups/<date>/, not beside it" || fail "no backups/<date>/config.toml"
+cmp -s "$TMP/config.orig" "$DIR2/backups/$(date +%F)/config.toml" && pass "the backup is the original file" || fail "the backup does not match the original"
+# Review M1: a second install the same day changes nothing in config.toml, so
+# it must not replace the user's original in that day's backup with ours.
+out=$(CODEX_DIR="$DIR2" bash "$INSTALL" --target codex 2>&1)
+cmp -s "$TMP/config.orig" "$DIR2/backups/$(date +%F)/config.toml" \
+    && pass "a second install the same day keeps the original in the backup" || fail "same-day re-install overwrote the config backup" "$(cat "$DIR2/backups/$(date +%F)/config.toml")"
+grep -q 'backup: config.toml' <<<"$out" && fail "an unchanged config.toml was backed up again" "$out" || pass "an unchanged config.toml is not backed up again"
+# Review I1: a symlinked instruction file is saved as its content, not as a link.
+mkdir -p "$TMP/dotfiles"; printf 'dotfile notes\n' > "$TMP/dotfiles/AGENTS.md"
+rm -f "$DIR2/AGENTS.md"; ln -s "$TMP/dotfiles/AGENTS.md" "$DIR2/AGENTS.md"
+CODEX_DIR="$DIR2" bash "$INSTALL" --target codex >/dev/null 2>&1
+[ ! -L "$DIR2/backups/$(date +%F)/AGENTS.md" ] && grep -qx 'dotfile notes' "$DIR2/backups/$(date +%F)/AGENTS.md" \
+    && pass "a symlinked AGENTS.md is backed up as its content" || fail "symlinked AGENTS.md backed up as a link"
 python3 -c 'import sys,tomllib;tomllib.load(open(sys.argv[1],"rb"))' "$DIR2/config.toml" \
     && pass "the edited config still parses" || fail "the edited config is not valid TOML"
 
@@ -239,7 +269,7 @@ echo "== backups never land inside skills/"
 printf 'stale\n' > "$DIR/skills/ai-init/EXTRA.md"
 CODEX_DIR="$DIR" bash "$INSTALL" --target codex >/dev/null 2>&1
 [ -z "$(ls -d "$DIR"/skills/*.bak 2>/dev/null)" ] && pass "no *.bak directory is left in skills/" || fail "a backup was left in skills/"
-[ -d "$DIR/backups/skills/ai-init" ] && pass "the backup went to backups/skills/" || fail "backup not found in backups/skills/"
+[ -d "$DIR/backups/$(date +%F)/skills/ai-init" ] && pass "the backup went to backups/<date>/skills/" || fail "backup not found in backups/<date>/skills/"
 
 echo "== an AGENTS.md with a legacy Codex-agentic pair gets one block, renamed"
 LG="$TMP/codex-legacy"; mkdir -p "$LG"

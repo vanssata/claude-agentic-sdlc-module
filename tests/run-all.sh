@@ -11,9 +11,9 @@ FAILED=""
 for suite in test-ai-path-guard.sh test-ai-scope-guard.sh test-ai-git-guard.sh test-guard-characterization.sh \
              test-ai-task-state.sh test-ai-task-sensors.sh test-scaffold-idempotency.sh test-install-dry-run.sh \
              test-end-to-end.sh test-merge-migration.sh test-project-update.sh test-project-adopt.sh test-usage-report.sh \
-             test-fable-gate.sh test-context-guard.sh test-ai-status-root.sh \
+             test-runtime-gate-fable.sh test-context-guard.sh test-ai-status-root.sh \
              test-codex-agent-render.sh test-codex-install.sh test-dual-runtime-install.sh \
-             test-codex-model-gate.sh test-codex-usage-report.sh test-instruction-budget.sh \
+             test-runtime-gate-codex.sh test-codex-usage-report.sh test-instruction-budget.sh \
              test-profiles.sh test-runtime-gate.sh test-shared-prompts-model-free.sh test-shared-tree.sh \
              test-migration-0006.sh; do
     [ -f "$suite" ] || continue

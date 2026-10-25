@@ -135,7 +135,7 @@ top of `verify_command` once to the end and `e2e_command` once.
 ### Phase 1 — numbers, deletions, `/status` (old rules)
 
 - **G0 (human, before 1.1).** OQ10: the three open tasks on the production machine (ArgoCD 09-14, oroCRM
-  09-30-002, abrites-site-v2 10-22-001) are closed. Tick here: `[ ]`.
+  09-30-002, abrites-site-v2 10-22-001) are closed. Tick here: `[x]`.
 - **1.1 `max_suite_runs` 5 → 2 in the shipped template.** T2, workflow feature. Consumes: —. Produces: the
   template number that 0007's `min(old, 2)` relies on. Proof: `test-project-update.sh` (template history
   rebuilt), the cap case in `test-ai-task-state.sh`.

@@ -245,3 +245,23 @@ following; each is open unless marked.
 - **How likely / how bad**: certain; one avoidable review per T2/T3 task.
 - **Suggested fix**: fix the three messages (none changes behaviour) — `sensors.py` inside diet task 4, the other two in a T1 task — or a human decides in `.pylintrc`.
 - **Status**: open
+
+## Redesign phase 1 left text and rules that still describe the old gates (found 2026-10-25 by T-2026-10-25-003)
+
+- **Found**: 2026-10-25, T-2026-10-25-003 (redesign 1.1–1.4), deliberately outside its files
+- **Where**:
+  - `hooks/runtime-gate.py:82,1238` (`LEGACY`, `--as`) and its docstring: the shim entry point nothing calls any more — 2.4 edits this file.
+  - `hooks/ai-path-guard-defaults.json:37` protects `.codex/hooks/codex-model-gate.py`, a name no install writes now; `runtime-gate.py` matches no protected pattern under either home (it never did: the shim it replaced only exec'd it) — the rules belong to 3.4.
+  - `docs/hooks.md`, `README.md`, `docs/architecture.md`, `docs/hook-performance.md`, `.pylintrc` still name `fable-gate.py`/`codex-model-gate.py` — 3.6.
+  - `.ai/policies/testing.md:147` maps `hooks/fable-gate.py` to `tests/test-fable-gate.sh`, now `tests/test-runtime-gate-fable.sh` — a human row.
+  - `ai/policies/review-economy.md:189-190`, `agents/ai-reviewer.md.tmpl:35`, `docs/risk-tiers.md:72-76`, `docs/faq.md:52,76,93` still say the budget keeps a reviewer, `enforce: true` refuses and the diff re-scores the tier — 2.3/3.6.
+  - `tests/test-runtime-gate-fable.sh`, `tests/test-runtime-gate-codex.sh`: the two suites retargeted from the shims; 3.3a ports them with the rest.
+  - Review L1: `/ai-status` promises `/status` does not keep — template `risk-tiers.md:2` (mirror hash "reported stale"), `:42` and `ai/policies/model-routing.md:22,106` ("shows all four" tiers), `skills/project-update/SKILL.md:185`, `skills/project-update/update.py:856,1571,1580` comments. Nothing reports a stale mirror now — 2.3.
+  - Review L4: `skills/ai-task/sensors.py:1304` still writes "the diff re-scores to T<n>" into every T4+ `sensors.json` (it duplicates "tier T<n> is above T3"; the re-score no longer raises) — 2.6 removes the check.
+  - Review L5: neither dry run announces the retire/sweep moves into `backups/<date>/`.
+  - Review I2: with the template cap at 2 and no `--by` until 2.2a, an `--env-retry` or a findings-closing run can need a third suite run that exits 6 — the spec's interim (R20).
+  - Review I3: `/status` ships before gate G1/OQ9 (a built-in `/status` may collide); `/ai-status` still works. The plan puts G1 before 2.3.
+- **What could go wrong**: KNOWN FACT — an agent that reads the stale text expects a size refusal or a tier raise that no longer happens, or looks for a shim that is not installed. INFERENCE — until 2.1–2.2a, a diff reaching `**/Payment/**`, auth or infra prints only a hint and keeps its declared tier (the spec's interim gap).
+- **How likely / how bad**: likely to confuse, never to weaken a guard beyond what 1.2 already decided.
+- **Suggested fix**: the redesign tasks named above.
+- **Status**: open
