@@ -541,6 +541,25 @@ out=$(python3 "$UPDATE" "$RD" 2>&1)
 grep -q '^0 automatic, 0 conflict' <<<"$out" \
     && pass "and the project is then up to date" || fail "the rules run is not idempotent" "$out"
 
+echo "== a nested worktree or repository is not this project's: its rule blocks are never touched"
+RN="$TMP/rules-nested"; cp -r "$RD" "$RN"
+stale=$'# theirs\n<!-- claude-agentic:rule:gone:start -->\nold\n<!-- claude-agentic:rule:gone:end -->\n'
+for sub in .claude/worktrees/wt vendor-repo; do
+    mkdir -p "$RN/$sub/src/Payment"; printf '%s' "$stale" > "$RN/$sub/src/Payment/CLAUDE.md"
+done
+printf 'gitdir: /elsewhere/.git/worktrees/wt\n' > "$RN/.claude/worktrees/wt/.git"   # a worktree: .git is a file
+mkdir -p "$RN/vendor-repo/.git"                                                    # a repository: .git is a dir
+out=$(python3 "$UPDATE" "$RN" 2>&1)
+grep -qE 'worktrees/wt|vendor-repo' <<<"$out" \
+    && fail "the dry run plans inside a nested worktree or repository" "$out" || pass "the dry run names neither nested tree"
+out=$(python3 "$UPDATE" "$RN" --check 2>&1); rc=$?
+[ $rc -eq 0 ] && pass "--check exits 0: a nested tree's blocks are not pending" || fail "--check exits $rc" "$out"
+python3 "$UPDATE" "$RN" --apply >/dev/null 2>&1
+for sub in .claude/worktrees/wt vendor-repo; do
+    [ "$(cat "$RN/$sub/src/Payment/CLAUDE.md"; echo x)" = "${stale}x" ] \
+        && pass "--apply leaves $sub/src/Payment/CLAUDE.md byte-identical" || fail "--apply wrote into $sub"
+done
+
 echo "== every key in the template history is accounted for"
 python3 - "$PLUGIN_ROOT" <<'PY'
 import json, os, sys

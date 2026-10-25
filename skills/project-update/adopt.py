@@ -131,6 +131,7 @@ TRANSFORMS = ("copy", "append-section", "rule", "instruction-file", "drop", "ign
 MAP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "adopt-map.json")
 INCOMPLETE = "ADOPT_INCOMPLETE"
 # Never walked for foreign files: not ours to read, or not text.
+# A child holding a .git entry (worktree, nested repository, submodule) is pruned too.
 WALK_SKIP = {".git", ".ai", "vendor", "node_modules", "bower_components", "third_party",
              "Pods", "site-packages", ".venv", ".pnpm", ".yarn", "__pycache__"}
 SECRET_RE = re.compile(r"(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*\S{8,}"
@@ -205,10 +206,12 @@ def under_root(path, root):
 
 
 def walk(root):
-    """Every file under root, relative with `/`, skipping WALK_SKIP directories."""
+    """Every file under root, relative with `/`, skipping WALK_SKIP directories
+    and nested git trees."""
     out = []
     for here, dirs, files in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in WALK_SKIP)
+        dirs[:] = sorted(d for d in dirs if d not in WALK_SKIP
+                         and not os.path.lexists(os.path.join(here, d, ".git")))
         rel = os.path.relpath(here, root)
         for name in sorted(files):
             out.append(name if rel == "." else "%s/%s" % (rel.replace(os.sep, "/"), name))

@@ -101,6 +101,17 @@ grep -qE '^  adopt     .kiro/steering/tech.md -> .ai/policies/adopted/always.md 
 grep -q '^  ignored   .kiro/steering/aws-aidlc-rules/' <<<"$out" \
     && pass "AI-DLC installed for Kiro stays out of the steering row" || fail "aws-aidlc-rules not ignored" "$out"
 
+echo "== a nested worktree is not this project's: its foreign files are never detected"
+N="$TMP/nested-wt"; scaffold "$N" claude; commit "$N"
+git -C "$N" worktree add -q -b wt "$N/.claude/worktrees/wt" 2>/dev/null
+mkdir -p "$N/.claude/worktrees/wt/.cursor/rules"
+printf '# theirs\nuse tabs\n' > "$N/.claude/worktrees/wt/.cursorrules"
+printf -- '---\nalwaysApply: true\n---\nuse tabs\n' > "$N/.claude/worktrees/wt/.cursor/rules/x.mdc"
+commit "$N/.claude/worktrees/wt"
+out=$(python3 "$UPDATE" "$N" --adopt 2>&1)
+grep -qE '^  detect ' <<<"$out" && fail "a foreign tool is detected from a nested worktree" "$out" || pass "nothing is detected"
+grep -q 'worktrees/wt' <<<"$out" && fail "the adopt names a file in the nested worktree" "$out" || pass "and no file of the nested worktree is named"
+
 echo "== every row of the table is exercised by a fixture"
 for f in junie-gemini large-claude-md large-agents-md; do adopt_fixture "$f" "$P/$f"; done
 used=$(cd "$PLUGIN_ROOT/skills/project-update" && python3 - "$P" <<'EOF'

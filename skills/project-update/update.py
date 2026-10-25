@@ -77,6 +77,7 @@ STATE_FILE = ".ai/state/current.json"
 RULES_DIR = ".ai/rules"
 # Directories a stale rule block is never hunted in: a dependency's instruction
 # file is not ours (the path guard refuses it too), and .git is not text.
+# A child holding a .git entry (worktree, nested repository, submodule) is pruned too.
 RULES_SKIP = {".git", ".ai", "vendor", "node_modules", "bower_components",
               "third_party", "Pods", "site-packages", ".venv", ".pnpm", ".yarn"}
 START, END = "<!-- claude-agentic:start -->", "<!-- claude-agentic:end -->"
@@ -983,7 +984,8 @@ def rendered_rules(plan):
     blocks, docs = [], []
     names = set(render_instructions.RULE_FILE.values())
     for dirpath, dirnames, filenames in os.walk(plan.root):
-        dirnames[:] = sorted(d for d in dirnames if d not in RULES_SKIP)
+        dirnames[:] = sorted(d for d in dirnames if d not in RULES_SKIP
+                             and not os.path.lexists(os.path.join(dirpath, d, ".git")))
         rel_dir = os.path.relpath(dirpath, plan.root)
         for name in sorted(filenames):
             rel = name if rel_dir == "." else os.path.join(rel_dir, name)
