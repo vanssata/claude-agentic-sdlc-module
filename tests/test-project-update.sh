@@ -560,6 +560,31 @@ for sub in .claude/worktrees/wt vendor-repo; do
         && pass "--apply leaves $sub/src/Payment/CLAUDE.md byte-identical" || fail "--apply wrote into $sub"
 done
 
+echo "== a rule naming a nested tree is not written there: the writer covers what the take-back walks (M1)"
+RW="$TMP/rules-nested-writer"; cp -r "$RD" "$RW"
+mkdir -p "$RW/libs/sub" "$RW/.claude/worktrees/wt/src"
+printf 'gitdir: ../../.git/modules/libs/sub\n' > "$RW/libs/sub/.git"               # a submodule: .git is a file
+printf 'gitdir: /elsewhere/.git/worktrees/wt\n' > "$RW/.claude/worktrees/wt/.git"   # a worktree: .git is a file
+printf -- '---\ndirs: [libs, libs/sub, .claude/worktrees/wt/src]\n---\n# Sub rules\n- new text\n' > "$RW/.ai/rules/sub.md"
+stale=$'# theirs\n<!-- claude-agentic:rule:sub:start -->\nold\n<!-- claude-agentic:rule:sub:end -->\n'
+printf '%s' "$stale" > "$RW/libs/sub/CLAUDE.md"
+out=$(python3 "$UPDATE" "$RW" 2>&1)
+grep -qE '^  (create|update) +(libs/sub|\.claude/worktrees/wt)/' <<<"$out" \
+    && fail "the dry run plans a write inside a nested tree" "$out" || pass "the dry run plans no write inside either nested tree"
+grep -qE '^  hint +libs/sub/CLAUDE.md: libs/sub is a nested git tree' <<<"$out" \
+    && pass "a hint names libs/sub and why the rule is not rendered there" || fail "no hint for the nested target" "$out"
+grep -qE '^  create +libs/CLAUDE.md ' <<<"$out" \
+    && pass "the rule's target outside the nested tree still renders" || fail "the control target is not planned" "$out"
+python3 "$UPDATE" "$RW" --apply >/dev/null 2>&1
+[ "$(cat "$RW/libs/sub/CLAUDE.md"; echo x)" = "${stale}x" ] \
+    && pass "--apply leaves libs/sub/CLAUDE.md byte-identical" || fail "--apply wrote into the submodule" "$(cat "$RW/libs/sub/CLAUDE.md")"
+[ ! -e "$RW/.claude/worktrees/wt/src/CLAUDE.md" ] \
+    && pass "--apply creates nothing inside the worktree" || fail "--apply created .claude/worktrees/wt/src/CLAUDE.md"
+grep -q 'claude-agentic:rule:sub:start' "$RW/libs/CLAUDE.md" 2>/dev/null \
+    && pass "--apply renders the control target libs/CLAUDE.md" || fail "the control target was not written"
+out=$(python3 "$UPDATE" "$RW" --check 2>&1); rc=$?
+[ $rc -eq 0 ] && pass "--check exits 0: a hint is not a pending update" || fail "--check exits $rc" "$out"
+
 echo "== every key in the template history is accounted for"
 python3 - "$PLUGIN_ROOT" <<'PY'
 import json, os, sys

@@ -19,7 +19,7 @@ scaffold() {
 
 # commit <dir>: a git work tree with everything committed.
 commit() {
-    [ -d "$1/.git" ] || { git -C "$1" init -q; git -C "$1" config user.email t@example.com; git -C "$1" config user.name t; }
+    [ -e "$1/.git" ] || { git -C "$1" init -q; git -C "$1" config user.email t@example.com; git -C "$1" config user.name t; }
     git -C "$1" add -A; git -C "$1" commit -qm "${2:-fixture}" >/dev/null
 }
 
@@ -103,13 +103,15 @@ grep -q '^  ignored   .kiro/steering/aws-aidlc-rules/' <<<"$out" \
 
 echo "== a nested worktree is not this project's: its foreign files are never detected"
 N="$TMP/nested-wt"; scaffold "$N" claude; commit "$N"
-git -C "$N" worktree add -q -b wt "$N/.claude/worktrees/wt" 2>/dev/null
+git -C "$N" worktree add -q -b wt "$N/.claude/worktrees/wt" 2>/dev/null || fail "git worktree add failed: the case below would prove nothing"
+[ -f "$N/.claude/worktrees/wt/.git" ] && pass "the fixture is a real worktree: its .git is a file" || fail "no worktree .git file"
 mkdir -p "$N/.claude/worktrees/wt/.cursor/rules"
 printf '# theirs\nuse tabs\n' > "$N/.claude/worktrees/wt/.cursorrules"
 printf -- '---\nalwaysApply: true\n---\nuse tabs\n' > "$N/.claude/worktrees/wt/.cursor/rules/x.mdc"
 commit "$N/.claude/worktrees/wt"
 out=$(python3 "$UPDATE" "$N" --adopt 2>&1)
-grep -qE '^  detect ' <<<"$out" && fail "a foreign tool is detected from a nested worktree" "$out" || pass "nothing is detected"
+grep -qE 'ADOPT_INCOMPLETE|^  unmapped ' <<<"$out" \
+    && fail "the adopt stops on a file of the nested worktree" "$out" || pass "no ADOPT_INCOMPLETE and no unmapped row"
 grep -q 'worktrees/wt' <<<"$out" && fail "the adopt names a file in the nested worktree" "$out" || pass "and no file of the nested worktree is named"
 
 echo "== every row of the table is exercised by a fixture"
