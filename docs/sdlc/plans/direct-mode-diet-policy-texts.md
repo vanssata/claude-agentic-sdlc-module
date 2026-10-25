@@ -8,6 +8,9 @@ flight** (`state.py get --quiet` says `no task in flight`) and commits.
 
 Generated from the tree after diet task 1 (T-2026-10-22-001, uncommitted when
 this was written) by reading each target file; nothing here has been applied.
+The `known-risks.md` hunk of Part A was restaged on 2026-10-25 against
+`ee838dc` (T-2026-10-25-001 appended an entry after the last one Part A
+touches); its three new entries now follow that entry.
 
 ## Two parts, and why
 
@@ -214,7 +217,7 @@ diff --git a/.ai/project/known-risks.md b/.ai/project/known-risks.md
  
  ## Many mover segments on one line reach the path guard's 6 s clock (found 2026-10-20 while probing T-2026-10-20-001)
  - **Where**: `hooks/ai-path-guard.sh`, the movers pass (`:642-800`): one `realpath` fork, and for a loose hit more, per `cp`/`mv`/`install`/`rsync`/`rm`/`rmdir`/`unlink` segment. Older than T-2026-10-20-001 and not changed by it.
-@@ -156,33 +176,59 @@
+@@ -156,35 +176,35 @@
  - **What could go wrong**: KNOWN FACT (scratchpad probe, HEAD and after alike) — `rm` + N operands of 1 KB + ` a.txt`, one segment: N=250 allow 1.2 s, N=500 allow 3.4 s, N=1000 deny by the clock in 14.8 s; one segment of 3000 × 1 KB, or of 400 × 4 KB symlink-chain operands, is still running at 15 s. A trace of the N=500 line puts 2.5 s inside that one `awk` call. The clock is checked only after it returns, so the hook passes its 10 s timeout. Multi-segment lines are not affected: the cost grows with the length of one segment.
  - **How likely / how bad**: an unusually long single command (about 1 MB); deny side only if the runtime blocks on a timeout. INFERENCE (as for the other timeout entries): a timed-out hook does not block, so the command would run unchecked.
  - **Suggested fix**: find the quadratic step inside the `awk` program (string concatenation or `substr` per character over the whole segment) and make it linear, or cap the bytes `shell_segments` reads per segment and deny past it. Its own T4 hooks task; the characterization golden must stay identical.
@@ -250,7 +253,15 @@ diff --git a/.ai/project/known-risks.md b/.ai/project/known-risks.md
  - **What could go wrong**: INFERENCE from the code and the movers pass's measurement (0.27 s per 4 KB operand of `""`), not measured here — a line of many quote-padded words spends that per word in the subshell; the reading loop checks the clock between tokens, so such a line is denied by the clock, not let through.
  - **How likely / how bad**: a crafted line; a false deny with `WHY_WORK_CAP`.
  - **Suggested fix**: the movers pass's one-step strip (`quote_tail`). Its own hooks task.
+-- **Status**: open
 +- **Status**: accepted (2026-10-22, docs/sdlc/specs/direct-mode-diet.md)
+ 
+ 
+ ## Interpreter tripwire residuals after M2/L4 (found 2026-10-25 while scoping T-2026-10-25-001)
+@@ -198,3 +218,30 @@
+ - **How likely / how bad**: unusual spellings, each needing the mode to be the line's only write indicator. A miss is a write into `.ai/state|reports` that nothing else stops: the protected-file patterns do not read interpreter code, so for a one-liner the tripwire is the only check, `.ai/state/current.json` included. A false deny costs a Read-tool call.
+ - **Suggested fix**: anchor the head to a command position the way `segments_of` does; read `-i` from the parsed argv rather than a regex; add the I1 write calls. Its own hooks task.
+ - **Status**: open
 +
 +## Any session can write `review_status passed` without a review (found 2026-10-22 while writing docs/sdlc/specs/direct-mode-diet.md)
 +
@@ -259,8 +270,8 @@ diff --git a/.ai/project/known-risks.md b/.ai/project/known-risks.md
 +- **What could go wrong**: KNOWN FACT — `set` refuses only `skipped_green` for `review_status`; `state.py set review_status passed` is accepted from any session, so the state cannot tell a verdict a reviewer returned from one the session typed. The diet adds no second route to `passed` (`remediate --closes` needs a report a review wrote) and leaves this as it is.
 +- **How likely / how bad**: RISK — needs an agent to record a verdict nobody gave; the journal shows the write, not its source.
 +- **Suggested fix**: its own design: the verdict carries the review run that produced it.
- - **Status**: open
- 
++- **Status**: open
++
 +## One open step blocks every write outside it, scratchpad included (found 2026-10-22 while writing docs/sdlc/specs/direct-mode-diet.md)
 +
 +- **Found**: 2026-10-22, twice while writing the direct-mode-diet spec (non-goal "the scope guard's reach")
