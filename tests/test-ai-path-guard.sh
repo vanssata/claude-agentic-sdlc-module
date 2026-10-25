@@ -85,6 +85,30 @@ grep -q "Approval happens outside the agent" <<<"$out" \
 grep -q "AI_UNATTENDED=1 in the launcher" <<<"$out" \
     && pass "including the unattended route and what it costs" || fail "the unattended route should be named"
 
+echo "== ai-path-guard (the human's verdict past the review budget: set … --by)"
+setby() { jq -nc --arg r "$ROOT" --arg c "$1" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:$c}}'; }
+SETBY="python3 /home/u/.claude/skills/ai-task/state.py --root . set review_status passed --by ivan"
+rm -f "$ROOT/.ai/state/current.json"
+decide "no task in flight: set --by is none of the guard's business" allow "$(setby "$SETBY")"
+printf '{"current_stage":"implementation","task_id":"T-1"}\n' > "$ROOT/.ai/state/current.json"
+decide "with a task in flight, set review_status … --by is denied like approve" deny "$(setby "$SETBY")"
+for c in "python3 /h/state.py set --by ivan review_status passed" \
+         "python3 /h/state.py set review_status passed --by=ivan" \
+         "python3 /h/state.py set review_status passed --b ivan" \
+         "S=/h/state.py; \$S set review_status passed \"--by\" ivan"; do
+    decide "denied: $c" deny "$(setby "$c")"
+done
+for c in "python3 /home/u/.claude/skills/ai-task/state.py set review_status passed" \
+         "python3 /h/state.py set review_status passed && git log --by-me" \
+         "python3 /h/state.py get --field review_status --by-the-way"; do
+    decide "allowed: $c" allow "$(setby "$c")"
+done
+out=$(setby "$SETBY" | AI_UNATTENDED=1 "$GUARD" 2>&1)
+[ -z "$out" ] && pass "AI_UNATTENDED lets a launcher give the verdict" || fail "the unattended launcher should be allowed" "$out"
+out=$(setby "$SETBY" | "$GUARD" 2>&1)
+grep -q "review_rounds_max" <<<"$out" && pass "and the deny text names the budget and the human's command" || fail "WHY_SET_BY missing" "$out"
+printf '{}\n' > "$ROOT/.ai/state/current.json"
+
 echo "== ai-path-guard (the context guard is the runtime's to run, not the work's)"
 hookrun=$(jq -nc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
     tool_input:{command:"python3 /home/u/.claude/hooks/context-guard.py"}}')
@@ -695,6 +719,110 @@ decide_home "rm -f \"\$HOME\"/.claude/hooks/ai-path-guard.sh is denied" deny 'rm
 decide_home "echo x > ~/.claude/hooks/ai-path-guard.sh is denied" deny 'echo x > ~/.claude/hooks/ai-path-guard.sh'
 decide_home "in a task: cp into ~/.claude/claude-agentic/ai/ is denied" deny 'cp /tmp/x ~/.claude/claude-agentic/ai/policies/git.md'
 rm -rf "$TMP/rootlink"
+
+echo "== ai-path-guard (review of T-2026-10-22-002: nested roots, reads HEAD allowed, missed writes)"
+# B1: a cwd inside a nested .ai/ tree (a fixture, the ai-init templates, a
+# worktree) must not unprotect the outer project's control files: every
+# ancestor that holds .ai/ is a root. HEAD denied all of these.
+NEST="$TMP/nest"; mkdir -p "$NEST/.ai/state" "$NEST/.ai/policies" "$NEST/.ai/reports/T-1" "$NEST/sub/fix/.ai/policies"
+printf '{}\n' > "$NEST/.ai/state/current.json"; printf '{}\n' > "$NEST/.ai/policies/path-guard.json"
+nest_tool() { jq -nc --arg c "$NEST/sub/fix" --arg t "$1" --arg p "$2" '{hook_event_name:"PreToolUse",tool_name:$t,cwd:$c,tool_input:{file_path:$p,content:"{}"}}'; }
+nest_bash() { jq -nc --arg c "$NEST/sub/fix" --arg x "$1" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$c,tool_input:{command:$x}}'; }
+decide "cwd in a nested .ai/ tree: Write to the outer root's state file is denied" deny "$(nest_tool Write "$NEST/.ai/state/current.json")"
+decide "cwd in a nested .ai/ tree: Write to the outer root's handoff is denied" deny "$(nest_tool Write "$NEST/.ai/state/handoff.md")"
+decide "cwd in a nested .ai/ tree: Edit of the outer root's policy file is denied" deny "$(nest_tool Edit "$NEST/.ai/policies/path-guard.json")"
+decide "cwd in a nested .ai/ tree: Write to the outer root's journal is denied" deny "$(nest_tool Write "$NEST/.ai/reports/T-1/events.jsonl")"
+decide "cwd in a nested .ai/ tree: echo >> ../../.ai/state/handoff.md is denied" deny "$(nest_bash 'echo x >> ../../.ai/state/handoff.md')"
+decide "cwd in a nested .ai/ tree: cp onto the outer root's policy file is denied" deny "$(nest_bash "cp /tmp/x $NEST/.ai/policies/path-guard.json")"
+decide "cwd in a nested .ai/ tree: its own policy file is still the nearest root's" deny "$(nest_tool Write "$NEST/sub/fix/.ai/policies/path-guard.json")"
+decide "cwd in a nested .ai/ tree: an ordinary file of the outer root is allowed" allow "$(nest_tool Write "$NEST/src.txt")"
+# M1: reads of report files that HEAD allowed at the fast path stay allowed:
+# incidental words (a count('a'), sys.stdout.write, re.compile, .copy(), a '|')
+# are no write.
+for c in "python3 -c \"print(open('.ai/reports/T-1/notes.md').read().count('a'))\"" \
+         "python3 -c \"import sys; sys.stdout.write(open('.ai/reports/T-1/review-report.md').read())\"" \
+         "python3 -c \"import re; r=re.compile('BLOCKER'); print(len(r.findall(open('.ai/reports/T-1/review-report.md').read())))\"" \
+         "python3 -c \"import json; d=json.load(open('.ai/reports/T-1/sensors.json')).copy(); print(d)\"" \
+         "python3 -c \"print('|'.join(open('.ai/reports/T-1/plan.md').read().split()))\"" \
+         "ls .ai/reports/T-1/ && python3 -c \"import sys; sys.stdout.write('ok')\""; do
+    decide_home "a read HEAD allowed stays allowed: $c" allow "$c"
+done
+# L1, L2: write spellings the first indicators missed.
+for c in "ruby -e 'f = File.new(\".ai/state/handoff.md\", \"w\"); f.puts \"x\"'" \
+         "python3 -c \"from pathlib import Path; Path('/tmp/c.json').replace('.ai/state/current.json')\"" \
+         "python3 -c \"import fileinput; [print(l) for l in fileinput.input('.ai/state/handoff.md', inplace=True)]\"" \
+         "python3 -c \"import io; io.FileIO('.ai/state/current.json', 'w')\"" \
+         "perl -MFile::Slurp -e 'write_file(\".ai/state/handoff.md\", \"x\")'" \
+         "perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md" \
+         "perl -i -pe 's/a/b/' .ai/reports/T-1/notes.md" \
+         "ruby -i -pe 'sub(/a/, \"b\")' .ai/reports/T-1/notes.md"; do
+    decide_home "a writing one-liner is denied: $c" deny "$c"
+done
+
+echo "== ai-path-guard (M2, L4 of T-2026-10-22-002)"
+# M2: a switch that only starts with an in-place letter, a str.replace and a
+# quoted 'a' after any comma are reads. HEAD denied the first five.
+for c in "ruby -rdigest -e 'puts Digest::SHA256.hexdigest(File.read(\".ai/state/current.json\"))'" \
+         "perl -mio -e 'print 1' .ai/reports/T-1/notes.md" \
+         "python3 -c \"from pathlib import Path; print(Path('.ai/state/current.json').read_text().replace('a','b'))\"" \
+         "python3 -c \"import json; d=json.load(open('.ai/state/current.json')); print(d.get('x', 'a'))\"" \
+         "python3 -c \"print('x', '|y', open('.ai/state/current.json').read())\"" \
+         "perl -Mstrict -e 'print 1' .ai/reports/T-1/notes.md" \
+         "python3 -c \"print(', '.join(open('.ai/state/current.json').read().split()))\""; do
+    decide_home "a read is allowed: $c" allow "$c"
+done
+# L4: Path.copy, copy_into and move_into (Python 3.14) write their target.
+for c in "python3 -c \"from pathlib import Path; Path('/tmp/x').copy('.ai/state/current.json')\"" \
+         "python3 -c \"from pathlib import Path; t='.ai/state/current.json'; Path('/tmp/x').copy(t, follow_symlinks=False)\"" \
+         "python3 -c \"from pathlib import Path; Path('/tmp/x').copy_into('.ai/state/')\"" \
+         "python3 -c \"from pathlib import Path; Path('/tmp/x').move_into('.ai/state/')\""; do
+    decide_home "a writing one-liner is denied: $c" deny "$c"
+done
+# Writes that the tightened indicators must still see; ruby -r json -i is a
+# miss on HEAD, the separate argument ended the option loop.
+for c in "perl -pie 's/a/b/' .ai/reports/T-1/notes.md" \
+         "perl -i.bak -pe 's/a/b/' .ai/reports/T-1/notes.md" \
+         "perl -0777 -pi -e 's/a/b/' .ai/reports/T-1/notes.md" \
+         "perl -I lib -i -pe 's/a/b/' .ai/reports/T-1/notes.md" \
+         "ruby -i2 -pe 'sub(/a/, \"b\")' .ai/reports/T-1/notes.md" \
+         "ruby -r json -i -pe 'sub(/a/, \"b\")' .ai/reports/T-1/notes.md" \
+         "python3 -c \"import os; a='.ai/state/'; b='handoff.md'; print('x', file=open(os.path.join(a, b), 'w'))\"" \
+         "node -e \"const fs=require('fs'); fs.openSync('.ai/state/current.json', 'a')\"" \
+         "perl -e 'open my \$fh, \">\", \".ai/state/handoff.md\"; print \$fh \"x\"'" \
+         "perl -e 'my \$f=\".ai/state/handoff.md\"; open(F, \">>\$f\"); print F \"x\"'" \
+         "python3 -c \"from pathlib import Path; f=Path('.ai/state/handoff.md').open('w'); print('x', file=f)\"" \
+         "python3 -c \"print('x', file=open('.ai/state/handoff.md', mode='w'))\"" \
+         "python3 -c \"from pathlib import Path; p=Path('/tmp/c'); t=Path('.ai/state/current.json'); p.replace(str(t))\""; do
+    decide_home "a writing one-liner is still denied: $c" deny "$c"
+done
+# Review of T-2026-10-25-001, H1, L1: the first-argument walk reads three
+# levels of parens, quoted strings and new Class(; HEAD denied all of these.
+for c in "python3 -c \"import os; open(os.path.join(os.getcwd(), '.ai/state/current.json'), 'w').close()\"" \
+         "python3 -c \"from pathlib import Path; f=open(str(Path.cwd() / '.ai/reports/T-1/notes.md'), 'a'); print('x', file=f)\"" \
+         "node -e \"const fs=require('fs'), path=require('path'); const fd=fs.openSync(path.join(process.cwd(), '.ai/state/current.json'), 'w'); fs.writeSync(fd, '{}')\"" \
+         "ruby -e \"File.open(File.expand_path(File.join(Dir.pwd, '.ai/state/current.json')), 'w') { |f| f.puts 'x' }\"" \
+         "php -c x.ini -e \"\\\$h = fopen(dirname(getcwd()) . '/.ai/reports/T-1/notes.md', 'a'); fprintf(\\\$h, 'x');\"" \
+         "perl -MIO::File -e 'my \$fh = new IO::File(\".ai/reports/T-1/notes.md\", \"w\"); print \$fh \"x\"'" \
+         "php -c x.ini -e \"\\\$f = new SplFileObject('.ai/state/current.json', 'w');\"" \
+         "python3 -c \"print('x', file=open('.ai/reports/T-1/a,b.md', 'w'))\"" \
+         "python3 -c \"print('x', file=open(\\\".ai/reports/T-1/n.md\\\", \\\"a\\\"))\"" \
+         "python3 -c \"import os; from pathlib import Path; p=Path('/tmp/a'); p.replace(os.path.join('.ai/state/', 'b'))\"" \
+         "perl -gpi -e 's/a/b/' .ai/reports/T-1/notes.md" \
+         "perl -tpi -e 's/a/b/' .ai/reports/T-1/notes.md" \
+         "ruby -vpi -e 'sub(/a/, \"b\")' .ai/reports/T-1/notes.md" \
+         "ruby -E utf-8 -i -pe 'sub(/a/, \"b\")' .ai/reports/T-1/notes.md"; do
+    decide_home "a writing one-liner is still denied: $c" deny "$c"
+done
+# L2: a copy.copy and a str.replace whose string holds a paren are reads.
+for c in "python3 -c \"import copy, json; from pathlib import Path; d=copy.copy(json.loads(Path('.ai/state/current.json').read_text())); print(d)\"" \
+         "python3 -c \"from pathlib import Path; print(Path('.ai/state/current.json').read_text().replace(')', ''))\""; do
+    decide_home "a read is allowed: $c" allow "$c"
+done
+# The mode indicator walks the first argument with a nested group: a long line
+# of commas and parens goes to grep (ere_match), measured at 40 KB.
+pad=$(rep '(a, b),' 5800)
+timed "a 40 KB one-liner of commas and parens that reads the state is allowed" allow \
+    "$(printf "python3 -c \"print(open('.ai/state/current.json').read())\" # open(%s" "$pad" | bash_stdin)" 1000
 
 echo "== ai-path-guard (project WITHOUT .ai/ — every guard must be inert)"
 BARE="$TMP/bare"; mkdir -p "$BARE"; printf 'SECRET=1\n' > "$BARE/.env"

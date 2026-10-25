@@ -214,7 +214,8 @@
       "examples": [
         "an isolated admin screen or form",
         "a new field on an existing form, a grid column or filter",
-        "a small isolated feature that changes no existing process"
+        "a small isolated feature that changes no existing process",
+        "this repository: a change that moves no guard decision and no state.py refusal — skill or agent text, usage-report, installer paths, performance work that keeps the guard golden byte-identical"
       ],
       "model_tier": "BALANCED",
       "stages_required": [
@@ -241,7 +242,8 @@
         "a new resource: entity, repository, form, grid, routes, menu, translations",
         "a non-critical API extension",
         "a new service with limited blast radius",
-        "anything that adds and presents data without changing an existing process"
+        "anything that adds and presents data without changing an existing process",
+        "this repository: a change that adds a decision or a refusal — a new deny, a new sensor, a new state.py check — or changes a deny's reason text, the guard golden re-recorded"
       ],
       "model_tier": "BALANCED",
       "stages_required": [
@@ -272,7 +274,8 @@
         "asynchronous processing",
         "an important integration",
         "a schema migration that adds to an existing table",
-        "configuration and dependencies"
+        "configuration and dependencies",
+        "this repository: a change that allows what was denied or weakens a refusal; one that changes the approval path (approve, questions --sync, AI_UNATTENDED, review_status transitions); one that changes how user projects are installed or migrated (install.sh, the project-update merge, tools/)"
       ],
       "model_tier": "STRONG",
       "stages_required": [

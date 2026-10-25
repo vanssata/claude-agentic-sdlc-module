@@ -121,10 +121,9 @@ out=$(S quick --goal "x" --workflow feature --tier T1 --files "" --force 2>&1 ||
 grep -q "at least one file" <<<"$out" && pass "quick refuses an empty scope" || fail "quick should refuse empty --files" "$out"
 
 echo "== remediate: one step for the whole batch of fixes"
-out=$(S remediate --files tests/FooTest.php 2>&1 || true)
-grep -q "still in progress" <<<"$out" && pass "remediate refuses while a step is open" || fail "should refuse with an open step" "$out"
-S step-done 1 >/dev/null
 out=$(S remediate --files "tests/FooTest.php,tests/BarTest.php" --note "3 regressions from the verification run" 2>&1)
+grep -q "step 1 done" <<<"$out" && pass "remediate finishes the open step first (§5b′)" || fail "remediate should finish step 1" "$out"
+S get --field completed_steps | grep -q '"1"' && pass "and step 1 is recorded done" || fail "step 1 should be done"
 grep -q "step R1 armed" <<<"$out" && pass "remediate arms step R1" || fail "remediate should arm R1" "$out"
 [ "$(S get --field approved_plan.current_step_id)" = R1 ] && pass "R1 is the current step" || fail "current step should be R1"
 S get --field approved_plan.steps | jq -e '[.[] | select(.step_id=="R1")][0].allowed_files | (index("templates/admin/*.twig") != null) and (index("tests/BarTest.php") != null)' >/dev/null \
@@ -1278,6 +1277,9 @@ S5 --runtime claude handoff --to codex --for review >/dev/null 2>&1
 S5 --runtime codex set review_status passed >/dev/null 2>&1
 [ "$(field5 review_status)" = '"blockers_open"' ] && field5 cross_vendor_review | jq -e '.status == "done" and .result == "passed"' >/dev/null \
     && pass "the other vendor's passed does not clear the owner's blockers" || fail "blockers cleared" "$(field5 review_status) $(field5 cross_vendor_review)"
+[ "$(field5 reviews)" = 2 ] && pass "the cross-vendor verdict counts against the review budget too (§3b)" || fail "codex verdict not counted" "$(field5 reviews)"
+out=$(S5 --runtime codex set review_status passed 2>&1); rc=$?
+[ $rc = 6 ] && grep -q REVIEW_BUDGET <<<"$out" && pass "and a third verdict from codex exits 6 like any other" || fail "codex third verdict" "rc=$rc $out"
 fresh5 review-back
 S5 --runtime claude init --goal "pay" --workflow feature >/dev/null 2>&1
 S5 --runtime claude risk T4 >/dev/null 2>&1
@@ -1396,5 +1398,172 @@ python3 "$RP" max --fable yes --print agentic > "$CLH/claude-agentic/profile.jso
 [ "$(cd "$W5" && S5 --runtime claude profile --field budgets.fan_out.max_parallel_agents)" = 3 ] && pass "--field walks a dotted path" || fail "profile --field"
 (cd "$W5" && CLAUDE_CONFIG_DIR="$W5/nowhere" python3 "$STATE" --runtime claude profile >/dev/null 2>&1); rc=$?
 [ $rc = 1 ] && pass "no profile: exit 1, and no .ai/ is needed" || fail "profile without a file: rc=$rc"
+
+echo "== direct mode in three calls (§2b, §3, §5)"
+DM="$TMP/direct"; mkdir -p "$DM/.ai/state" "$DM/.ai/reports" "$DM/.ai/policies" "$DM/src" "$DM/tests"
+D() { env -u AI_UNATTENDED python3 "$STATE" --root "$DM" "$@"; }
+DH() { env -u CLAUDECODE -u AI_RUNTIME AI_UNATTENDED=1 python3 "$STATE" --root "$DM" "$@"; }
+dfield() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1]))
+for k in sys.argv[2].split("."): d = d[int(k)] if isinstance(d, list) else (d.get(k) if isinstance(d, dict) else None)
+print(json.dumps(d))' "$DM/.ai/state/current.json" "$1"; }
+git init -q "$DM"; git -C "$DM" config user.email t@example.com; git -C "$DM" config user.name t
+printf 'base\n' > "$DM/src/app.py"; printf 'base\n' > "$DM/src/other.py"
+git -C "$DM" add -A; git -C "$DM" commit -qm base
+cat > "$DM/.ai/policies/testing.md" <<'MD'
+# Testing policy
+verify_command:      printf 'suite\n'; exit ${SUITE_EXIT:-0}
+step_test_command:   printf 'step %s\n' {files}
+e2e_command:         printf 'e2e\n'; exit ${E2E_EXIT:-0}
+lint_command:        none
+typecheck_command:   none
+MD
+dnew() {  # dnew <tier> [extra quick args…]: a fresh quick task on the fixture
+  [ -f "$DM/.ai/state/current.json" ] && { D done --abandon >/dev/null 2>&1; D archive >/dev/null 2>&1; }
+  git -C "$DM" checkout -q -- src; git -C "$DM" clean -qfd src
+  local tier=$1; shift
+  D quick --goal "direct $tier" --workflow feature --tier "$tier" --files "src/app.py" "$@" >/dev/null 2>&1
+}
+
+dnew T4 --tests "tests/a.sh,tests/b.sh"
+[ "$(dfield approved_plan.steps.0.required_tests)" = '["tests/a.sh", "tests/b.sh"]' ] \
+  && pass "quick --tests becomes step 1's required_tests (§2b)" || fail "quick --tests" "$(dfield approved_plan.steps.0.required_tests)"
+dnew T4
+[ "$(dfield approved_plan.steps.0.required_tests)" = '[]' ] && pass "without --tests it stays [] as before" || fail "required_tests default"
+
+echo "== test-run --scope all"
+printf 'changed\n' > "$DM/src/app.py"
+out=$(D test-run --scope all 2>&1); rc=$?
+[ $rc = 0 ] && pass "a green suite and a green e2e exit 0" || fail "scope all green" "rc=$rc $out"
+[ "$(dfield tests.runs | jq -r '[.[].scope] | join(",")')" = "suite,e2e" ] \
+  && pass "and are recorded as two runs, suite then e2e" || fail "two runs" "$(dfield tests.runs)"
+[ "$(dfield test_status)" = '"passing"' ] && [ "$(dfield e2e_status)" = '"passing"' ] \
+  && pass "each sets its own field" || fail "fields after all" "$(dfield test_status) $(dfield e2e_status)"
+[ "$(dfield tests.suite_runs)" = 1 ] && pass "the suite part counts against max_suite_runs" || fail "suite_runs" "$(dfield tests.suite_runs)"
+out=$(SUITE_EXIT=1 D test-run --scope all 2>&1); rc=$?
+[ $rc = 1 ] && grep -q 'e2e: not run — the suite is red' <<<"$out" && [ "$(dfield tests.runs | jq '[.[] | select(.scope=="e2e")] | length')" = 1 ] \
+  && pass "a red suite stops before e2e" || fail "red suite ran e2e" "rc=$rc $out"
+out=$(D test-run --scope all --files src/app.py 2>&1); rc=$?
+[ $rc = 1 ] && grep -q 'runs the whole suite' <<<"$out" && pass "--files is refused with all" || fail "--files with all" "rc=$rc $out"
+out=$(D test-run --scope suite --e2e not-applicable "no flow" 2>&1); rc=$?
+[ $rc = 1 ] && grep -q 'is for --scope all' <<<"$out" && pass "--e2e belongs to --scope all only" || fail "--e2e with suite" "rc=$rc $out"
+out=$(D test-run --scope all --e2e not-applicable "a docs change reaches no flow" 2>&1); rc=$?
+[ $rc = 0 ] && [ "$(dfield e2e_status)" = '"not_applicable"' ] && [ "$(dfield tests.runs | jq '[.[] | select(.scope=="e2e")] | length')" = 1 ] \
+  && pass "--e2e not-applicable runs the suite and records e2e as not applicable" || fail "e2e not-applicable" "rc=$rc $out"
+D events --type field_set --format jsonl | jq -e 'select(.data.value=="not_applicable") | .data.why == "a docs change reaches no flow"' >/dev/null \
+  && pass "with the reason in the journal" || fail "the reason should be journalled"
+
+echo "== close: the direct path's exit"
+dnew T4
+printf 'changed\n' > "$DM/src/app.py"
+D test-run --scope all >/dev/null 2>&1
+out=$(D close 2>&1); rc=$?
+[ $rc = 2 ] && grep -q 'review required' <<<"$out" && grep -q 'done --abandon' <<<"$out" \
+  && pass "close at T4 with no review exits 2 and names the way out" || fail "close owed review" "rc=$rc $out"
+grep -q 'step 1 done' <<<"$out" && [ "$(dfield completed_steps)" = '["1"]' ] \
+  && pass "and finished the open step on the way" || fail "close should finish step 1" "$out"
+D set review_status passed >/dev/null
+out=$(D close 2>&1); rc=$?
+[ $rc = 0 ] && grep -q 'ready for approval' <<<"$out" && grep -q 'approve --by' <<<"$out" \
+  && [ "$(dfield current_stage)" = '"human_approval"' ] && [ "$(dfield human_approval.gate_id)" = '"G1"' ] \
+  && pass "with the review passed, close at T4 requests the gate and stops" || fail "close requests gate" "rc=$rc $out"
+out=$(D close 2>&1); rc=$?
+[ $rc = 4 ] && grep -q 'G1 is the approval gate' <<<"$out" && pass "closing again before approval exits 4 at the gate" || fail "close at open gate" "rc=$rc $out"
+DH approve --by "the human" >/dev/null
+ARCH=$(D close 2>&1 | tail -1)
+[ -f "$ARCH" ] && [ ! -f "$DM/.ai/state/current.json" ] && jq -e '.current_stage=="done"' "$ARCH" >/dev/null \
+  && pass "after approve, close archives the task" || fail "close after approve" "$ARCH"
+
+dnew T4
+out=$(D close 2>&1); rc=$?
+[ $rc = 0 ] && [ ! -f "$DM/.ai/state/current.json" ] \
+  && pass "a record nothing was done under still closes at once (the escalation exit)" || fail "escalation close" "rc=$rc $out"
+
+# A plan approved before the work is not the work approved: T5 grants G1 on the
+# plan, then a step is done, and close must ask again rather than archive.
+git -C "$DM" checkout -q -- src
+D init --goal "plan first" --workflow feature >/dev/null; D risk T5 >/dev/null
+printf '[{"step_id":"1","description":"d","allowed_files":["src/app.py"]}]' > "$TMP/dm-steps.json"
+D plan --ref x --steps "$TMP/dm-steps.json" >/dev/null; D stage human_approval >/dev/null
+DH approve --by "the human" >/dev/null; sleep 1
+D step 1 >/dev/null; printf 'changed\n' > "$DM/src/app.py"; D set review_status passed >/dev/null
+out=$(D close 2>&1); rc=$?
+[ $rc = 0 ] && grep -q 'ready for approval' <<<"$out" && [ -f "$DM/.ai/state/current.json" ] \
+  && [ "$(dfield human_approval.gate_id)" = '"G2"' ] \
+  && pass "a grant older than the last finished step does not close the task: close asks again (G2)" || fail "stale approval" "rc=$rc $out"
+
+dnew T2
+printf 'changed\n' > "$DM/src/app.py"
+D test-run --scope all >/dev/null 2>&1
+out=$(D close 2>&1); rc=$?
+[ $rc = 2 ] && grep -q 'traceability' <<<"$out" && pass "at T2 close runs the gate afresh: a red sensor keeps the review" || fail "T2 gate in close" "rc=$rc $out"
+
+dnew T4
+printf 'scoped\n' > "$DM/src/app.py"; printf 'not mine\n' > "$DM/src/other.py"
+out=$(D close 2>&1); rc=$?
+[ $rc = 6 ] && grep -q 'SCOPE_CHANGE_REQUIRED' <<<"$out" && [ "$(dfield completed_steps)" = '[]' ] \
+  && pass "close refuses an open step that left its files, exit 6" || fail "close scope" "rc=$rc $out"
+out=$(D remediate --files tests/x.sh 2>&1); rc=$?
+[ $rc = 6 ] && grep -q 'SCOPE_CHANGE_REQUIRED' <<<"$out" && [ "$(dfield approved_plan.steps | jq length)" = 1 ] \
+  && pass "and so does remediate, before opening any batch" || fail "remediate scope" "rc=$rc $out"
+git -C "$DM" checkout -q -- src/other.py
+
+echo "== passed_with_findings: a green run closes what the remediation named (§3a)"
+D set review_status passed_with_findings >/dev/null && [ "$(dfield review_status)" = '"passed_with_findings"' ] \
+  && pass "set review_status passed_with_findings is accepted" || fail "pwf not accepted"
+out=$(D remediate --closes H1 2>&1); rc=$?
+[ $rc = 1 ] && grep -q 'needs the review' <<<"$out" && pass "--closes is refused without a review report" || fail "closes without report" "rc=$rc $out"
+printf '## Pass 1\n- [HIGH] H1 the cap is off by one (`src/app.py:1`)  in_scope: yes\n- [MEDIUM] M2 a name (`src/app.py:1`)  in_scope: yes\nverdict: pass_with_findings\n' \
+  > "$DM/.ai/reports/$(dfield task_id | tr -d '"')/review-report.md"
+out=$(D remediate --closes "H1,H7" 2>&1); rc=$?
+[ $rc = 1 ] && grep -q 'H7, which is not a finding' <<<"$out" && pass "--closes refuses a label the report does not carry" || fail "unknown label" "rc=$rc $out"
+out=$(D remediate --closes "H" 2>&1); rc=$?
+[ $rc = 1 ] && grep -q 'finding labels like H1' <<<"$out" && pass "--closes refuses what is not a label" || fail "bad label" "rc=$rc $out"
+cp "$DM/.ai/reports/$(dfield task_id | tr -d '"')/review-report.md" "$TMP/dm-report.md"
+printf -- '- [HIGH] H10 a later finding\n- [HIGH] H3 see H1 \n' > "$DM/.ai/reports/$(dfield task_id | tr -d '"')/review-report.md"
+out=$(D remediate --closes "H1" 2>&1); rc=$?
+[ $rc = 1 ] && grep -q 'H1, which is not a finding' <<<"$out" \
+  && pass "H10, or H1 quoted in another finding's text, is not finding H1" || fail "label prefix matched" "rc=$rc $out"
+cp "$TMP/dm-report.md" "$DM/.ai/reports/$(dfield task_id | tr -d '"')/review-report.md"
+out=$(D remediate --closes "H1,M2" --tests tests/x.sh 2>&1); rc=$?
+[ $rc = 0 ] && [ "$(dfield approved_plan.steps.1.closes)" = '["H1", "M2"]' ] \
+  && [ "$(dfield approved_plan.steps.1.required_tests)" = '["tests/x.sh"]' ] \
+  && pass "with the report, R1 carries closes and its --tests" || fail "remediate --closes" "rc=$rc $out"
+D test-run --scope all >/dev/null 2>&1
+[ "$(dfield review_status)" = '"passed_with_findings"' ] && pass "a green run on the tree the batch began from closes nothing" || fail "unchanged tree closed findings"
+printf 'fixed\n' > "$DM/src/app.py"
+out=$(D test-run --scope all 2>&1); rc=$?
+[ $rc = 0 ] && [ "$(dfield review_status)" = '"passed"' ] && grep -q 'H1, M2 closed' <<<"$out" \
+  && pass "a green run after the fix moves the review to passed" || fail "findings not closed" "rc=$rc $out"
+D events --type findings_closed --format jsonl | jq -e '.data.labels == ["H1","M2"] and (.data.run|type)=="number" and (.data.tree|length) > 0' >/dev/null \
+  && pass "and journals findings_closed with the labels, the run and the tree" || fail "findings_closed event" "$(D events --type findings_closed --format jsonl)"
+# Review H1: a later passed_with_findings brings findings no --closes named yet;
+# the batch that answered the first verdict must not close the second.
+D set review_status passed_with_findings >/dev/null
+printf 'later\n' > "$DM/src/app.py"
+out=$(D test-run --scope all 2>&1); rc=$?
+[ $rc = 0 ] && [ "$(dfield review_status)" = '"passed_with_findings"' ] \
+  && [ "$(D events --type findings_closed --format jsonl | wc -l)" = 1 ] \
+  && pass "an older --closes batch does not close a later passed_with_findings" || fail "stale batch closed a new verdict" "rc=$rc $out"
+
+echo "== the review budget (§3b)"
+dnew T4
+D set review_status blockers_open >/dev/null; D set review_status passed_with_findings >/dev/null
+[ "$(dfield reviews)" = 2 ] && pass "each verdict counts: reviews = 2" || fail "reviews count" "$(dfield reviews)"
+D set review_status in_progress >/dev/null; [ "$(dfield reviews)" = 2 ] && pass "a non-verdict value does not count" || fail "in_progress counted"
+out=$(D set review_status passed 2>&1); rc=$?
+[ $rc = 6 ] && grep -q 'REVIEW_BUDGET' <<<"$out" && grep -q 'set review_status passed --by' <<<"$out" \
+  && [ "$(dfield review_status)" = '"in_progress"' ] \
+  && pass "the third verdict exits 6 REVIEW_BUDGET with the human's command, and changes nothing" || fail "budget" "rc=$rc $out"
+D events --type review_budget_refused --format jsonl | jq -e '.data.reviews==2 and .data.max==2' >/dev/null \
+  && pass "and journals review_budget_refused" || fail "review_budget_refused"
+out=$(D set review_status passed --by ivan 2>&1); rc=$?
+[ $rc = 5 ] && grep -q 'outside the agent' <<<"$out" && pass "set --by from an agent session is refused, exit 5" || fail "set --by agent" "rc=$rc $out"
+out=$(D set test_status passing --by ivan 2>&1); rc=$?
+[ $rc = 1 ] && grep -q -- '--by is for review_status' <<<"$out" && pass "--by is only for review_status" || fail "--by other field" "rc=$rc $out"
+out=$(DH set review_status passed --by ivan 2>&1); rc=$?
+[ $rc = 0 ] && [ "$(dfield review_status)" = '"passed"' ] && [ "$(dfield reviews)" = 2 ] \
+  && pass "the human's verdict past the budget passes and is not counted" || fail "set --by human" "rc=$rc $out"
+D events --type human_set --format jsonl | jq -e '.data.by=="ivan" and .data.via=="unattended" and .actor=="agent"' >/dev/null \
+  && pass "and journals human_set, an unattended one as unattended, like approve" || fail "human_set event" "$(D events --type human_set --format jsonl)"
 
 summary "state.py"

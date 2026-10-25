@@ -38,6 +38,10 @@ bash tests/run-all.sh
 pylint $(git ls-files '*.py')
 ```
 
+pylint comes from the distribution package (`python3-pylint` on Debian and
+Ubuntu); no `pip` install is needed — `pylint` on `PATH` is what
+`lint_command` in `.ai/policies/testing.md` calls.
+
 Run the suite to the end and fix every failure before you push.
 
 - A new suite goes into the list in `tests/run-all.sh`, otherwise it never runs.

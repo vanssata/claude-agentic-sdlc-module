@@ -145,6 +145,40 @@ migrations, fixtures, test SQL.
 written by `state.py`; policy is edited by a human, outside an agent run, where
 the change is reviewable.
 
+These control files and the runtime configuration below belong to **this
+project and the installed runtime**, so their patterns are anchored
+(direct-mode-diet §4b). A path counts only when it lies under a project root
+or under a runtime home (`~/.claude`, `~/.codex`, `$CLAUDE_CONFIG_DIR`,
+`$CODEX_HOME`). A project root is the `.ai/` root of the session's working
+directory, as written and as resolved, and every ancestor of it that also holds
+`.ai/`. The ancestors matter because a session whose working directory sits in
+a nested `.ai/` tree is still the outer project's session. Such a tree is a
+fixture, the ai-init templates, or a worktree, and the outer project's state
+must stay guarded from there. The pattern is then matched against the path relative to that
+root, so a leading `(^|/)` means the top of the root. A copy elsewhere is an
+ordinary file: a fixture tree in the scratchpad,
+`skills/ai-init/templates/.ai/`, `tests/fixtures/**/.ai/`, or another
+`.claude/hooks/` that is no runtime home. The path is normalised first, so
+`src/../.ai/policies/x.json` and `//.ai/./state/` are still the root's. A path
+that misses as written but would have matched unanchored is resolved and tried
+again, so a link to the root still counts. Its longest existing directory and
+the roots are resolved with `cd -P`, inside the subshell the check already runs
+in, so no process is started. A path that still holds shell text,
+such as `$HOME`, `$PWD`, a backtick, `~` or a glob, cannot be placed under a
+root or outside one, so it is matched unanchored as before. A project pattern
+that starts with `^` was written against the absolute path and is still matched
+against it. The residual is accepted: an agent in project A can write project
+B's `.ai/state/` by absolute path and A's guard does not see it. B's guard
+does, in B's session. `deny_patterns` and `dependency_instruction_patterns` are
+not anchored, because a secret is a secret anywhere and a vendored instruction
+file is third-party data anywhere.
+
+One gap is known and predates the anchoring. A `$CLAUDE_CONFIG_DIR` or
+`$CODEX_HOME` that is not named `.claude` or `.codex` is guarded for the file
+tools only. A shell command reaches the path lists through a text pre-filter
+that looks for `.claude/` and `.codex/`. So `echo x > $CFG/hooks/ai-path-guard.sh`
+with a literal custom directory is not refused, as on HEAD.
+
 The three added with schema 2 are protected for the same reason the state file
 is — each is an input to a decision, not a document. `questions.md` carries the
 `[Answer]:` line that can *grant the approval gate*, so an agent that could edit
@@ -245,9 +279,56 @@ tokens that are not its own flags — search with the Grep tool instead.
 There is a third, cheaper route to the same place, and it is closed by the
 interpreter tripwire further down: `python3 -c 'open(".ai/state/session.json",
 "w")…'` writes the human turn without going through a file tool at all. Any
-interpreter one-liner or `eval` that mentions `.ai/state/` or `.ai/reports/` is
-refused for that reason. Like the rest of the tripwire it is a tripwire, not a
-wall.
+interpreter one-liner that mentions `.ai/state/` or `.ai/reports/` **and shows
+a write** is refused for that reason (direct-mode-diet §4a). A one-liner that
+only reads them — `python3 -c "import json; print(json.load(open('.ai/state/current.json'))['current_stage'])"`
+— is allowed, because reading the state is how the work gets done. The write
+indicators are matched in process over the whole line:
+
+- a call that writes, removes, renames, links, copies or runs a command, in
+  Python, Perl, Ruby, Node or PHP: `write_text(`, `json.dump(`, `os.remove(`,
+  `writeFileSync(`, `File.delete(`, `file_put_contents(`, `write_file(`,
+  `system(`, `exec(` and the like. `stdout.write` and `stderr.write` print, so
+  they do not count. `copy(` counts only bare, as PHP spells it, not a dict's
+  `.copy()`; `copy_into(` and `move_into(` (Python 3.14) count anywhere;
+- a name that does the same without a call: `subprocess`, `shutil`,
+  `child_process`, `FileUtils`, the `O_WRONLY`-style flags, `os.replace`,
+  `fileinput`'s `inplace`, a backtick, `$( )`, `%x` and `qx`;
+- on a line that says `Path`, a `.replace(target)` with one argument — a
+  `str.replace(old, new)` has two and is no write — or a `.copy(target)` with
+  an argument (`Path.copy`, Python 3.14) — a dict's `.copy()` has none, and
+  `copy.copy(x)` does not count;
+- `open`, `new` or `FileIO` on the line, with a quoted mode that holds `w`, `a`,
+  `x` or `+` right after the first argument of `open…`, `new`, `new Class` or
+  `FileIO`, after `mode=` or right after `open…(`, or a Perl mode in the same
+  place (`">"`, `"+<"`, `"|-"`). The first argument is read as plain
+  characters, quoted strings and parentheses three deep counting the call's
+  own, so `open(os.path.join(os.getcwd(), p), 'w')`, `open('a,b.md', 'w')`
+  and `new IO::File(p, "w")` are seen; a fourth level of parentheses, or a
+  string holding its own kind of quote escaped, is not. A `count('a')` or a
+  `d.get('x', 'a')` elsewhere on the line is no mode;
+- a shell redirect or a `tee` whose target is under those paths.
+
+An `eval` that mentions them is refused as before, because its body is opaque.
+So is `perl -i` or `ruby -i` (an `i` in a cluster of switches that take no
+argument, such as `-pi`, `-ni`, `-gpi` or `-i.bak`; also after `-C`, `-E`,
+`-I`, `-M`, `-m` or `-r`, which may take a separate argument, as in
+`ruby -r json -i`), because it
+rewrites the files it is given. `ruby -rdigest` and `perl -mio` load a library
+and are no `-i`. Deliberate obfuscation, such
+as a computed mode, `getattr` or base64, is not read: the guards defend against
+mistakes, not against a command built to pass them.
+
+The rule also reaches further than it did. HEAD reached the tripwire only when
+the line named a protected file. Now any line with an interpreter `-c`/`-e` (or
+an in-place `perl`/`ruby`) that names `.ai/state/` or `.ai/reports/` gets there.
+So a write into an unprotected report file, such as
+`.ai/reports/<id>/notes.md`, is refused too. A read of such a file is still
+allowed, unless the line happens to show one of the indicators above. Like the
+rest of the tripwire it is a tripwire, not a wall. It matches text, so it is not
+anchored to the project root the way the path lists are. It also misses an
+interpreter named by its path or version (`/usr/bin/python3`, `python3.12`),
+`perl -E`, and `php -r` on its own, as HEAD did.
 
 **`AI_UNATTENDED=1` turns both off**, because an unattended run has no human to
 take a turn. It is for a launcher — CI, a cron job, a scripted batch — that

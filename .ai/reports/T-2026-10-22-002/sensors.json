@@ -1,0 +1,79 @@
+{
+  "checked_at": "2026-10-24T21:27:44Z",
+  "declared_tier": "T4",
+  "rescored_tier": "T4",
+  "schema": 1,
+  "sensors": {
+    "bite": {
+      "detail": "no finished step named a test \u2014 traceability says the same",
+      "must_fail": null,
+      "must_pass": null,
+      "restored": null,
+      "status": "unavailable",
+      "tree": "d7f5d6b5b8d7a2724ee07c689930783c2057d603"
+    },
+    "diff": {
+      "detail": "tree 3f47f5ea2 is gone (pruned?)",
+      "enforced": false,
+      "files": 0,
+      "lines": 0,
+      "over": [],
+      "status": "unavailable",
+      "tree": "d7f5d6b5b8d7a2724ee07c689930783c2057d603",
+      "unscoped": []
+    },
+    "duplicates": {
+      "detail": "diff unavailable",
+      "status": "unavailable",
+      "tree": "d7f5d6b5b8d7a2724ee07c689930783c2057d603"
+    },
+    "lint": {
+      "detail": "pylint $(git ls-files '*.py') exited 12, log .ai/reports/T-2026-10-22-002/lint.log",
+      "log": ".ai/reports/T-2026-10-22-002/lint.log",
+      "status": "red",
+      "tree": "d7f5d6b5b8d7a2724ee07c689930783c2057d603"
+    },
+    "plan_sections": {
+      "detail": "inline plan",
+      "status": "not_applicable",
+      "tree": "d7f5d6b5b8d7a2724ee07c689930783c2057d603"
+    },
+    "rescore": {
+      "detail": "tree 3f47f5ea2 is gone (pruned?)",
+      "reasons": [],
+      "status": "unavailable",
+      "tier": "T4",
+      "tree": "d7f5d6b5b8d7a2724ee07c689930783c2057d603"
+    },
+    "tests": {
+      "detail": "verify_command exit 0 in 319s, run 1, log .ai/reports/T-2026-10-22-002/tests-suite-1.log",
+      "log": ".ai/reports/T-2026-10-22-002/tests-suite-1.log",
+      "status": "green",
+      "tree": "d7f5d6b5b8d7a2724ee07c689930783c2057d603"
+    },
+    "traceability": {
+      "detail": "no finished step changed source",
+      "status": "not_applicable",
+      "tree": "d7f5d6b5b8d7a2724ee07c689930783c2057d603"
+    },
+    "typecheck": {
+      "detail": "typecheck_command: none (testing.md)",
+      "status": "not_applicable",
+      "tree": "d7f5d6b5b8d7a2724ee07c689930783c2057d603"
+    }
+  },
+  "task": "T-2026-10-22-002",
+  "tree": "d7f5d6b5b8d7a2724ee07c689930783c2057d603",
+  "verdict": {
+    "all_green": false,
+    "blocking": [
+      "lint: red",
+      "diff: unavailable",
+      "rescore: unavailable",
+      "duplicates: unavailable",
+      "bite: unavailable",
+      "tier T4 is above T3"
+    ],
+    "review": "required"
+  }
+}

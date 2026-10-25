@@ -1,4 +1,4 @@
-<!-- generated from risk-tiers.json sha256:616a6da3c59073926c5ece428efa251fbe539d25a53bcf50be67522f44848368 -->
+<!-- generated from risk-tiers.json sha256:7b96b55a33363347fee45eda6f0ad17956c251ed271c49b1e61c75bb7c8fa747 -->
 <!-- If /ai-status reports this hash as stale, risk-tiers.json changed and this
      mirror did not. The JSON file is the source of truth; update this by hand. -->
 
@@ -23,6 +23,22 @@ that present it, without changing an existing process, is T3.
 | **T4** | shared domain behaviour and processes: shared services, orders, workflows, async processing, an important integration, a schema migration that adds to a table, configuration and dependencies | no — the human reviews it in plan mode | yes | yes, on STRONG | when auth or personal data is touched | yes |
 | **T5** | payments, accounting, tax, fiscal, authentication, authorization, order state transitions, customer data, external financial systems | yes | yes | yes | yes | yes |
 | **T6** | migration strategy, infrastructure, Kubernetes, production deployment, data migration, destructive schema change, cross-system migration | yes | yes | yes | yes | yes |
+
+**In this repository** — the `examples` that start with "this repository:" in
+`risk-tiers.json`. They refine the rows above and win where they speak; "take
+the higher" decides between two generic rows, never over one of these. The
+plugin is a developer tool: a change to its hooks, skills or state machine is
+tiered by what it does to a user project's decisions, never by its being a
+process (constitution C6).
+
+| Tier | In this repository |
+|---|---|
+| **T2** | moves no guard decision and no `state.py` refusal: skill or agent text, `usage-report`, installer paths, performance work that keeps the guard golden byte-identical |
+| **T3** | **adds** a decision or a refusal — a new deny, a new sensor, a new `state.py` check — or changes a deny's reason text, golden re-recorded |
+| **T4** | **allows what was denied** or weakens a refusal; changes the approval path (`approve`, `questions --sync`, `AI_UNATTENDED`, `review_status` transitions); changes how user projects are installed or migrated (`install.sh`, the `project-update` merge, `tools/`) |
+
+The `pipeline` floor is unchanged: `.ai/policies/**`, `.ai/workflows/**`,
+`.claude/**`, `.codex/**`, `CLAUDE.md` and `AGENTS.md` stay T4 by scope.
 
 ## Which model works on it
 

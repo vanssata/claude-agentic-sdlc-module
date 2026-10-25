@@ -426,6 +426,40 @@ grep -q 'duplicates    RED' <<<"$OUT" \
     && pass "a block repeated in two files is red" || fail "duplicates should be red" "$OUT"
 rm -f "$GATE/src/dup1.php" "$GATE/src/dup2.php"
 
+# A runner whose tool is missing exits 1 like a lint failure; it is exit 127 by
+# another name (§2a′). A stub pylint on the PATH plays each part.
+LINTBIN="$TMP/with space/lintbin"; mkdir -p "$LINTBIN"
+lint_as() {  # lint_as <exit> <last line>: the stub prints the line and exits
+  printf '#!/bin/sh\nprintf "%%s\\n" "************* Module app" "%s"\nexit %s\n' "$2" "$1" > "$LINTBIN/pylint"
+  chmod +x "$LINTBIN/pylint"
+}
+set_lint() { python3 - "$GATE" "$1" <<'PY2'
+import re, sys
+p = sys.argv[1] + "/.ai/policies/testing.md"
+s = re.sub(r"(?m)^lint_command:.*\n", "", open(p).read())
+open(p, "w").write(s + "lint_command:        %s\n" % sys.argv[2])
+PY2
+}
+set_lint pylint
+lint_as 0 "Your code has been rated at 10.00/10"
+OUT=$(PATH="$LINTBIN:$PATH" NG check --only lint 2>&1)
+grep -q 'lint          green' <<<"$OUT" && pass "a pylint that runs clean is green" || fail "lint should be green" "$OUT"
+for line in "/usr/bin/python3: No module named pylint" \
+            "npm ERR! could not determine executable to run" \
+            "Could not open input file: vendor/bin/phpcs"; do
+  lint_as 1 "$line"
+  OUT=$(PATH="$LINTBIN:$PATH" NG check --only lint 2>&1)
+  grep -q 'lint          UNAVAIL' <<<"$OUT" && grep -q 'not installed' <<<"$OUT" \
+    && pass "exit 1 with '${line%% *}…' is unavailable, not red" || fail "a missing runner should be unavailable" "$OUT"
+done
+lint_as 127 "pylint: not found"
+OUT=$(PATH="$LINTBIN:$PATH" NG check --only lint 2>&1)
+grep -q 'lint          UNAVAIL' <<<"$OUT" && pass "exit 127 stays unavailable" || fail "127 should be unavailable" "$OUT"
+lint_as 1 "src/app.php:1:0: C0114: Missing module docstring (missing-module-docstring)"
+OUT=$(PATH="$LINTBIN:$PATH" NG check --only lint 2>&1)
+grep -q 'lint          RED' <<<"$OUT" && pass "a real lint failure at exit 1 stays red" || fail "a lint finding should be red" "$OUT"
+set_lint none
+
 echo "== section 8b: a result belongs to the tree it was taken on"
 NG check --no-bite >/dev/null 2>&1
 printf 'moved on\n' >> "$GATE/src/app.php"
