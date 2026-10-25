@@ -157,6 +157,12 @@
  "ai-init/.ai/policies/tooling.md": [
   "2c6afb3518714d35eaf0119bf2ae2154782bbece632dfdbd68988351abde61f5"
  ],
+ "ai-init/.ai/policies/weight.json": [
+  "7f3859c34035fe32abf937eebdd7240ac72ab32d254286cff7d939cf0cf6eaef"
+ ],
+ "ai-init/.ai/policies/weight.md": [
+  "e639e99d3f59015dc21472de081ca7766231135399ac3a6f439e841e458251f4"
+ ],
  "ai-init/.ai/project/architecture.md": [
   "5cbaaabe2c8d0e24582877aab05eeaaf4d53cb5e9515e81cd18368d13d2fe79e"
  ],

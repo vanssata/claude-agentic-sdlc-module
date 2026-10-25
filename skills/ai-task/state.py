@@ -48,6 +48,9 @@ Usage:
                                          (exit 7 RUNTIME_HANDOFF_PENDING from anywhere else)
   state.py profile [--field a.b.c] [--tier FAST|BALANCED|STRONG|EXPERT] [--other] [--json]
                                          the installed plan's tables (read-only, no task needed)
+  state.py weight --files a,b [--goal G] [--declare axis=n:"why"]... [--json|--long]
+  state.py weight --mirror               six axes and a mode, read-only (no task needed);
+                                         --mirror writes .ai/policies/weight.md from weight.json
   state.py events [--last N] [--type t1,t2] [--task ID] [--format lines|jsonl]
   state.py event  <type> [--detail TEXT] [--data JSON]   # for hooks; type must be in EVENT_TYPES
   state.py approve --by NAME [--note TEXT]   # outside the agent: a TTY, or AI_UNATTENDED
@@ -76,6 +79,10 @@ try:
     import sensors                        # measurement only; it never writes this file
 except ImportError:                       # an old install that shipped state.py alone
     sensors = None
+try:
+    import weight                         # pure computation; it writes nothing
+except ImportError:
+    weight = None
 
 STAGES = [
     "discovery", "context", "impact_analysis", "risk_classification",
@@ -565,6 +572,54 @@ def cmd_profile(args, _root):
         print(json.dumps(value, indent=None if args.field else 2, ensure_ascii=False))
     else:
         print(value)
+
+
+def cmd_weight(args, root):
+    """Six axes and a mode from weight.json. Read-only, and it needs no task:
+    the weight is what decides how a task is run, so it comes before one."""
+    if weight is None:
+        die("weight.py is missing beside state.py: reinstall the plugin")
+    try:
+        policy, path = weight.load_policy(root)
+    except (OSError, ValueError) as exc:
+        die("cannot read the weight table: %s" % exc)
+    if args.mirror:
+        own = os.path.join(root, ".ai", "policies", "weight.json")
+        if path != own:
+            die("%s has no .ai/policies/weight.json: the mirror is written beside the project's own table"
+                % root)
+        target = os.path.join(os.path.dirname(own), "weight.md")
+        tmp = "%s.%d.tmp" % (target, os.getpid())
+        try:
+            with open(tmp, "w", encoding="utf-8") as fh:
+                fh.write(weight.mirror(own))
+            os.replace(tmp, target)
+        except OSError as exc:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+            die("cannot write %s: %s" % (target, exc))
+        print(target)
+        return
+    files = _split_files(args.files)
+    if not files:
+        die("weight needs --files: the declared files are what it measures")
+    declared = {}
+    for item in args.declare:
+        m = re.match(r"^(\w+)=(\d{1,3}):(.*\S.*)$", item, re.S)
+        if not m:
+            die("--declare %r: write axis=n:\"evidence\" — a declaration without its evidence is not one"
+                % item)
+        declared[m.group(1)] = (int(m.group(2)), m.group(3).strip())
+    try:
+        result = weight.compute(root, files, declared, args.goal, policy=policy)
+    except ValueError as exc:
+        die(str(exc))
+    except (TypeError, AttributeError) as exc:     # a table whose values have the wrong shape
+        die("%s is malformed: %s" % (path, exc))
+    if args.json:
+        print(json.dumps(dict(result.as_dict(), policy=path), indent=2, ensure_ascii=False))
+    else:
+        print(weight.render(result, long=args.long))
 
 
 DIRECT_MODE_CAP = "T4"
@@ -3065,6 +3120,12 @@ def main():
     p.add_argument("--tier", choices=["FAST", "BALANCED", "STRONG", "EXPERT"])
     p.add_argument("--other", action="store_true"); p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_profile)
+
+    p = sub.add_parser("weight"); p.add_argument("--files", default="")
+    p.add_argument("--goal", default=""); p.add_argument("--declare", action="append", default=[])
+    out = p.add_mutually_exclusive_group()
+    out.add_argument("--json", action="store_true"); out.add_argument("--long", action="store_true")
+    out.add_argument("--mirror", action="store_true"); p.set_defaults(func=cmd_weight)
 
     p = sub.add_parser("note"); p.add_argument("kind"); p.add_argument("text")
     p.add_argument("--why", default=""); p.add_argument("--error", default="")

@@ -1,0 +1,103 @@
+{
+  "checked_at": "2026-10-25T20:36:53Z",
+  "declared_tier": "T3",
+  "rescored_tier": "T3",
+  "schema": 1,
+  "sensors": {
+    "bite": {
+      "detail": "must_fail: 1 test(s), exit 1 at base; tree restored a74a7d907",
+      "must_fail": {
+        "exit": 1,
+        "tests": 1
+      },
+      "must_pass": null,
+      "restored": "a74a7d9078b45da2d07fc4280432413fee12cddb",
+      "status": "green",
+      "tree": "a74a7d9078b45da2d07fc4280432413fee12cddb"
+    },
+    "diff": {
+      "detail": "8 files / 874 lines (T3 task budget 30 / 800) \u2014 budget: over \u2014 874 lines > 800 (advisory)",
+      "enforced": false,
+      "files": 8,
+      "lines": 874,
+      "over": [
+        "874 lines > 800"
+      ],
+      "status": "green",
+      "tree": "a74a7d9078b45da2d07fc4280432413fee12cddb",
+      "unscoped": []
+    },
+    "duplicates": {
+      "blocks": [
+        [
+          "skills/ai-init/templates/.ai/policies/weight.json:2",
+          "skills/project-update/history/blobs/7f3859c34035fe32abf937eebdd7240ac72ab32d254286cff7d939cf0cf6eaef:2"
+        ],
+        [
+          "skills/ai-init/templates/.ai/policies/weight.json:3",
+          "skills/project-update/history/blobs/7f3859c34035fe32abf937eebdd7240ac72ab32d254286cff7d939cf0cf6eaef:3"
+        ],
+        [
+          "skills/ai-init/templates/.ai/policies/weight.json:4",
+          "skills/project-update/history/blobs/7f3859c34035fe32abf937eebdd7240ac72ab32d254286cff7d939cf0cf6eaef:4"
+        ],
+        [
+          "skills/ai-init/templates/.ai/policies/weight.json:5",
+          "skills/project-update/history/blobs/7f3859c34035fe32abf937eebdd7240ac72ab32d254286cff7d939cf0cf6eaef:5"
+        ],
+        [
+          "skills/ai-init/templates/.ai/policies/weight.json:6",
+          "skills/project-update/history/blobs/7f3859c34035fe32abf937eebdd7240ac72ab32d254286cff7d939cf0cf6eaef:6"
+        ]
+      ],
+      "detail": "35 block(s) of >= 8 lines appear twice: skills/ai-init/templates/.ai/policies/weight.json:2 ~ skills/project-update/history/blobs/7f3859c34035fe32abf937eebdd7240ac72ab32d254286cff7d939cf0cf6eaef:2",
+      "status": "red",
+      "tree": "a74a7d9078b45da2d07fc4280432413fee12cddb"
+    },
+    "lint": {
+      "detail": "pylint $(git ls-files '*.py') exited 12, log .ai/reports/T-2026-10-25-004/lint.log",
+      "log": ".ai/reports/T-2026-10-25-004/lint.log",
+      "status": "red",
+      "tree": "a74a7d9078b45da2d07fc4280432413fee12cddb"
+    },
+    "plan_sections": {
+      "detail": "inline plan",
+      "status": "not_applicable",
+      "tree": "a74a7d9078b45da2d07fc4280432413fee12cddb"
+    },
+    "rescore": {
+      "detail": "T3 \u2014 scopes: docs, source, tests",
+      "hints": [],
+      "reasons": [],
+      "status": "green",
+      "tier": "T3",
+      "tree": "a74a7d9078b45da2d07fc4280432413fee12cddb"
+    },
+    "tests": {
+      "detail": "verify_command exit 0 in 336s, run 1, log .ai/reports/T-2026-10-25-004/tests-suite-1.log",
+      "log": ".ai/reports/T-2026-10-25-004/tests-suite-1.log",
+      "status": "green",
+      "tree": "a74a7d9078b45da2d07fc4280432413fee12cddb"
+    },
+    "traceability": {
+      "detail": "1/1 finished steps name tests that exist",
+      "status": "green",
+      "tree": "a74a7d9078b45da2d07fc4280432413fee12cddb"
+    },
+    "typecheck": {
+      "detail": "typecheck_command: none (testing.md)",
+      "status": "not_applicable",
+      "tree": "a74a7d9078b45da2d07fc4280432413fee12cddb"
+    }
+  },
+  "task": "T-2026-10-25-004",
+  "tree": "a74a7d9078b45da2d07fc4280432413fee12cddb",
+  "verdict": {
+    "all_green": false,
+    "blocking": [
+      "lint: red",
+      "duplicates: red"
+    ],
+    "review": "required"
+  }
+}

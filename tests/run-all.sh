@@ -21,6 +21,10 @@ for suite in test-ai-path-guard.sh test-ai-scope-guard.sh test-ai-git-guard.sh t
     bash "$suite" || FAILED="$FAILED $suite"
 done
 
+# The Python suites (tests/test_*.py), one process; the e2e module skips itself without AI_E2E.
+printf '\n--- python3 -m unittest discover\n'
+python3 -I -m unittest discover -s . -p 'test_*.py' || FAILED="$FAILED unittest"
+
 printf '\n'
 if [ -n "$FAILED" ]; then
     printf 'FAILED:%s\n' "$FAILED"
