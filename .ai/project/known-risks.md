@@ -265,3 +265,12 @@ following; each is open unless marked.
 - **How likely / how bad**: likely to confuse, never to weaken a guard beyond what 1.2 already decided.
 - **Suggested fix**: the redesign tasks named above.
 - **Status**: open
+
+## /project-update rewrites rule blocks inside nested git worktrees (found 2026-10-25 by /project-update)
+
+- **Found**: 2026-10-25, `/project-update --adopt --apply`, outside any task
+- **Where**: `skills/project-update/update.py:985` `rendered_rules()` walks the whole project and prunes only `RULES_SKIP` names (`update.py:80`). A worktree under `.claude/worktrees/<name>/` has a `.git` *file*, not a directory, so nothing excludes it.
+- **What could go wrong**: KNOWN FACT — the dry run planned `update` on `.claude/worktrees/docs-readme-wiki/{hooks,skills}/{CLAUDE,AGENTS}.md` ("rule block … no longer renders here"), files tracked on branch `docs/readme-wiki`; `--apply` wrote them and they were restored with `git -C <worktree> restore`. Because they stay pending, `update.py --check` exits 1 for as long as that worktree exists, so `--adopt` refuses its precondition (`plain_pending`) — adopt is blocked in this repository.
+- **How likely / how bad**: certain whenever a nested worktree carries rule blocks the main tree no longer renders; writes into another branch's working copy.
+- **Suggested fix**: in `rendered_rules()` (and any other project walk), prune a non-root directory that contains a `.git` entry — a nested repository or worktree is not this project's. Runs as its own `/ai-task` (project-update merge → T4 per `skills/CLAUDE.md`), with a test: a nested worktree with a stale block is untouched and `--check` exits 0.
+- **Status**: open
