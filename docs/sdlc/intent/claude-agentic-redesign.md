@@ -74,6 +74,22 @@ that the developer has read, and **Open questions** what the spec stage must set
   of generating a knowledge base, and refuses to finish without a `verify_command`.
 - The tier table, now the weight table, lives in one file with one generated mirror; README
   and docs link to it. Agents go from 14 to 7 or 8.
+- The plugin is one language. Every guard and hook (`ai-path-guard.sh`, `ai-git-guard.sh`,
+  `ai-scope-guard.sh`, `hooks/lib/ai-hook-common.sh`, `project-scaffold.sh`,
+  `skills/ai-init/scaffold-ai.sh`) is Python, registered the same way `runtime-gate.py`,
+  `context-guard.py` and `cap-large-read.py` already are; the three PreToolUse guards share
+  one process. The test suite is Python too (`unittest`, run with `python3 -I -m unittest`):
+  the same cases, the same golden files, no `tests/*.sh`. `jq`, `perl`, `rsync` and `patch`
+  stop being runtime dependencies; `python3` is the only one, as it already is for `state.py`.
+- One install command for both runtimes: `npx claude-agentic` (Node, published to npm)
+  replaces `git clone && ./install.sh`. It detects Claude Code and Codex on `PATH`, asks or
+  takes `--plan`/`--codex-plan`, copies the Python hooks, skills and the shared `ai/` tree,
+  renders the managed block, merges `settings*.json`, `~/.codex/config.toml` and
+  `hooks.json`, writes `profile.json`, and is idempotent like `install.sh` is today. The same
+  repository also carries the plugin manifests (`.claude-plugin/plugin.json` and a
+  marketplace entry) so the skills, agents and hooks can be enabled with `/plugin` in Claude
+  Code and from the same marketplace in Codex; `npx` then does only what the plugin format
+  cannot (plan profile, managed block, settings merge, `ai/` tree, migrations).
 
 ## Affected users & systems
 
@@ -85,9 +101,23 @@ that the developer has read, and **Open questions** what the spec stage must set
 - `.ai/policies/risk-tiers.json` schema v4 (`weight`, `modes`), its mirror, the templates
   under `skills/ai-init/templates/`, `ai/workflows/*.md` (merged into one), `ai/agents/*.md`,
   `agents/*.md.tmpl`, `instructions/stub.md` and `routing.md`, README, `docs/`.
-- Hooks only in the optional third phase (`hooks/ai-path-guard.sh`, consolidation into one
-  PreToolUse process); `tests/test-guard-characterization.sh` golden must stay byte-identical
-  for any performance-only change.
+- Every shell file in the plugin: `hooks/ai-path-guard.sh` (1 369 lines), `ai-git-guard.sh`,
+  `ai-scope-guard.sh`, `hooks/lib/ai-hook-common.sh`, `project-scaffold.sh`,
+  `skills/ai-init/scaffold-ai.sh` (about 2 250 lines) become Python modules under `hooks/`;
+  the thirty `tests/*.sh` suites (about 13 000 lines, plus `tests/lib.sh` and `run-all.sh`)
+  become `tests/test_*.py`. `settings.common.json` and `codex/hooks.json` point at the `.py`
+  entries. `tests/fixtures/` golden files are carried over unchanged.
+- `install.sh` (1 154 lines) becomes an npm package (`package.json`, `bin/claude-agentic.js`,
+  Node 18+ standard library only) with the same flags and the same five install suites
+  ported to Python (`test-install-dry-run`, `test-dual-runtime-install`, `test-codex-install`,
+  `test-profiles`, `test-shared-tree`) driving the Node binary. `scripts/resolve-profile.py`,
+  `merge-codex-config.py` and `render-codex-agents.py` are called by it unchanged or folded
+  into it; `README` install section, `docs/`, and the `claude-routing` migration path.
+- New: `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (or an entry in a
+  marketplace repository), so the plugin lists in `/plugin` on Claude Code and in `/plugins`
+  on Codex, which already reads Claude marketplaces (`claude-plugins-official` is registered
+  in `~/.codex/config.toml` here). Skills, agents and hook registration move into the manifest
+  where the format supports them; `npx` keeps the rest.
 - User projects on both runtimes (Claude Code and Codex) through `/project-update`.
 
 ## Constraints
@@ -99,13 +129,34 @@ that the developer has read, and **Open questions** what the spec stage must set
   Codex; agents render from the same templates.
 - No agent commits, pushes or deploys; a guard refusal is never worked around.
 - A golden-file change in the characterization suite is a rule change, never a performance
-  change.
+  change. The port of a guard and a change to its rules are never the same task: the port
+  lands first, byte-identical on the golden files, and the ≈ 250-line rule rewrite is a
+  later task against the Python engine.
+- The shell suites are the specification of the port. Each `tests/test-*.sh` is translated
+  case by case into `tests/test_*.py` with the same case names, inputs and expected output;
+  a case is dropped only when it tests shell mechanics that no longer exist (`jq` parsing,
+  `set -e` traps, `tests/lib.sh` helpers), and the drop is listed in the task's `task.md`.
+  During the port the shell suite keeps running against the Python hooks until its Python
+  twin is green on the same tree; then the `.sh` file is deleted in the same task.
+- Hook latency does not regress: a Python guard answers a 1 KB tool call in at most the
+  measured bash time (path-guard 36–41 ms, git-guard 16, scope-guard 19) and a 20 KB `sh -c`
+  line in under 100 ms (bash: 1 645 ms); the characterization suite gets a timed case at
+  that size.
+- Python 3.10+ standard library only (what `state.py` already requires); no `pip` packages
+  in hooks or tests, because a hook runs before any environment is set up.
 - Old journals must stay readable: `tier` remains a field, holding the computed weight, so
   `/status --cost` and `/usage-report` keep working across the rename.
 
 ## Out of scope
 
-- Hook consolidation and the Python port of the path guard (phase 3, optional).
+- Publishing to the official Anthropic marketplace or to OpenAI's; this intent covers the
+  manifests and a self-hosted marketplace entry (this repository), not the listing process.
+- A Python installer: `npx` starts Node, so the installer is Node; Python stays the language
+  of everything the installer copies.
+- A Go rewrite of the plugin (considered 2026-10-25 and rejected: no measured problem that
+  Go solves, 13 000 working Python lines with their own tests, a binary per platform and a
+  release pipeline for a solo-maintained plugin, and hooks a Codex user can no longer read
+  in `/hooks`).
 - Changing the guards' rules themselves (what is denied) beyond the diet's §4.
 - A local model; the LOCAL tier stays unavailable.
 - New product features for user projects (deploy skills, QA scripts): `/setup` adopts what a
@@ -153,6 +204,32 @@ Confirmed or sharpened by the second analysis (2026-10-24, read by the developer
   abrites-site-v2 10-22-001, this repo's T-2026-10-22-002), because they keep the guards
   armed in four repositories.
 
+Added 2026-10-25 (developer's decision after an assessment of shell → Python, Go, and an
+`npx` installer):
+
+- The guards, hooks and the test suite move to Python and the port is **in scope, phase 3,
+  mandatory**, not optional. Reasons: the plugin is already 13 200 lines of Python against
+  3 500 of production bash; the only measured hook problem is bash regex on long `sh -c`
+  lines (1 645 ms at 20 KB); three of the five BLOCKERs on T-2026-10-20-003 came from
+  `SH_WORD`/`SH_RE` edits in bash; one PreToolUse process instead of three.
+- Order inside phase 3: (1) `ai-hook-common.sh` → `hooks/lib/hookcommon.py` and the three
+  PreToolUse guards as one `hooks/ai-guard.py` with the path, git and scope checks as modules,
+  golden byte-identical; (2) `project-scaffold.sh` and `scaffold-ai.sh`; (3) the suites,
+  one `.sh` → one `.py` per task step, `run-all.sh` → `python3 -I -m unittest discover tests`;
+  (4) only then the ≈ 250-line rule rewrite of the path guard from the second analysis §6.7.
+- Tests stay the specification: no behaviour is changed while a `.sh` suite still exists for
+  it; a Python suite that disagrees with its shell twin is a port bug, never a reason to edit
+  the golden.
+- Installer: `npx claude-agentic` in Node, in scope, phase 3 after the Python port (it must
+  install `.py` hooks only, never both). `install.sh` stays one version as a wrapper that
+  prints the `npx` line and exits non-zero. Go: no.
+- Plugin format for both runtimes: the repository gets `.claude-plugin/plugin.json` and a
+  marketplace entry, and whatever the plugin format carries (skills, agents, hooks) is
+  declared there once; `npx` does the remainder. The two routes must leave an identical
+  tree: a suite installs both ways into scratch `CLAUDE_DIR`/`CODEX_DIR` and diffs them.
+- Node is a build-and-install dependency only: no hook, skill or `state.py` call runs Node,
+  because Claude Code and Codex guarantee Node at install time, not inside a project.
+
 ## Open questions
 
 - Exact point values and thresholds of the seven weight questions, and whether question 2
@@ -199,10 +276,17 @@ Confirmed or sharpened by the second analysis (2026-10-24, read by the developer
 - **Path guard rewrite** (second analysis §6.7): down to about 250 lines — deny secrets,
   write-deny on `.ai/state`, `events.jsonl`, `questions.md`; reads always allowed; no `sh -c` /
   `eval` segmentation; commands over 4 KB refused with one sentence; `task_protected_patterns`
-  only for `.ai/policies` and `.claude/settings*.json`. This intent keeps the rewrite in the
-  optional phase 3; the second analysis puts it in phase 3 too but as a must, with the
-  characterization suite as the net for the deny decisions that remain. T-2026-10-22-002 is
-  the interim fix on the current engine.
+  only for `.ai/policies` and `.claude/settings*.json`. Since 2026-10-25 the Python port of
+  the guard is a mandatory phase 3 step and the rule rewrite follows it on the Python engine,
+  with the characterization suite (ported, golden unchanged) as the net for the deny
+  decisions that remain. Still open: whether the rewrite keeps `sh -c` / `eval` segmentation
+  at all once the engine is Python (the second analysis drops it; T-2026-10-22-002's fixes
+  assume it). T-2026-10-22-002 is the interim fix on the current engine.
+- **Plugin format vs `npx`**: which of the managed block, `profile.json`, the shared `ai/`
+  tree and `settings*.json` merges the plugin format can express today (Claude Code and
+  Codex differ), and whether a plugin-only install without `npx` is a supported degraded
+  mode or refused with the `npx` line. Also whether the npm package name `claude-agentic` is
+  free and whether `project-update`'s migrations run from `npx` or from a skill.
 - **T0–T6 labels**: keep as an output label for report compatibility, or only the three mode
   words with a T-label in the journal for one version (second analysis' proposal).
 - **Team profile and abrites-staging-v2**: nobody on either machine uses the team profile
@@ -423,8 +507,10 @@ intent):
   rewrite.
 - Rollout (§7): phase 1 "stop the bleeding" 1–2 days (`max_suite_runs` 2, size gating off,
   floors → hints, delete stale agents / `.bak` / shims, `/status` as a script, aliases); phase
-  2 new surface, one week; phase 3 cleaning (path guard, agents 22 → 7, reports out of git,
-  migration 0007 `risk-tiers.json` → `weight.json`), one week. Seven metrics with targets:
+  2 new surface, one week; phase 3 cleaning (guards, hooks and tests to Python, then the path
+  guard rule rewrite; `npx` installer and plugin manifests for Claude Code and Codex; agents
+  22 → 7, reports out of git, migration 0007 `risk-tiers.json` → `weight.json`), two to three
+  weeks. Seven metrics with targets:
   procedure tokens ≤ 6 000, stops quick/plan 0 and full 2, one suite run (two with
   remediation), STRONG reviews ≈ 15 %, refused tool calls < 0.3 per 100 and none on reads,
   self-maintenance < 5 %, plan-task median < 1 h.
