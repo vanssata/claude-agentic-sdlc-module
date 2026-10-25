@@ -85,6 +85,30 @@ grep -q "Approval happens outside the agent" <<<"$out" \
 grep -q "AI_UNATTENDED=1 in the launcher" <<<"$out" \
     && pass "including the unattended route and what it costs" || fail "the unattended route should be named"
 
+echo "== ai-path-guard (the human's verdict past the review budget: set … --by)"
+setby() { jq -nc --arg r "$ROOT" --arg c "$1" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,tool_input:{command:$c}}'; }
+SETBY="python3 /home/u/.claude/skills/ai-task/state.py --root . set review_status passed --by ivan"
+rm -f "$ROOT/.ai/state/current.json"
+decide "no task in flight: set --by is none of the guard's business" allow "$(setby "$SETBY")"
+printf '{"current_stage":"implementation","task_id":"T-1"}\n' > "$ROOT/.ai/state/current.json"
+decide "with a task in flight, set review_status … --by is denied like approve" deny "$(setby "$SETBY")"
+for c in "python3 /h/state.py set --by ivan review_status passed" \
+         "python3 /h/state.py set review_status passed --by=ivan" \
+         "python3 /h/state.py set review_status passed --b ivan" \
+         "S=/h/state.py; \$S set review_status passed \"--by\" ivan"; do
+    decide "denied: $c" deny "$(setby "$c")"
+done
+for c in "python3 /home/u/.claude/skills/ai-task/state.py set review_status passed" \
+         "python3 /h/state.py set review_status passed && git log --by-me" \
+         "python3 /h/state.py get --field review_status --by-the-way"; do
+    decide "allowed: $c" allow "$(setby "$c")"
+done
+out=$(setby "$SETBY" | AI_UNATTENDED=1 "$GUARD" 2>&1)
+[ -z "$out" ] && pass "AI_UNATTENDED lets a launcher give the verdict" || fail "the unattended launcher should be allowed" "$out"
+out=$(setby "$SETBY" | "$GUARD" 2>&1)
+grep -q "review_rounds_max" <<<"$out" && pass "and the deny text names the budget and the human's command" || fail "WHY_SET_BY missing" "$out"
+printf '{}\n' > "$ROOT/.ai/state/current.json"
+
 echo "== ai-path-guard (the context guard is the runtime's to run, not the work's)"
 hookrun=$(jq -nc --arg r "$ROOT" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$r,
     tool_input:{command:"python3 /home/u/.claude/hooks/context-guard.py"}}')

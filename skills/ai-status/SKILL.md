@@ -72,6 +72,10 @@ done
      what the scope guard is enforcing right now;
    - completed steps out of total;
    - test, e2e, review and security status;
+   - `reviews: N of <review_rounds_max>` — `reviews` from the state (absent is
+     0), the maximum from `.ai/policies/risk-tiers.json` (absent is 2). When N
+     has reached it, say that the next verdict is the human's
+     (`state.py set review_status <value> --by "<name>"`, in their terminal);
    - open risks;
    - human approval: required, and whether granted and by whom. When
      `human_approval.via` is `unattended`, or a `gate_approved` event carries

@@ -62,10 +62,11 @@ summary where the two disagree — it is rendered from the state, not remembered
   handoff. If `cross_vendor_review` (`$STATE get --field cross_vendor_review`)
   is `requested` with `to` = this runtime, go straight to **ADVERSARIAL
   REVIEW** with this runtime's own reviewer on the STRONG tier, record it with
-  `$STATE set review_status <passed|blockers_open>` (that marks the review
-  `done` and stores your verdict as its `result`; an owner's `blockers_open`
-  stays), then hand it back: `$STATE handoff --to <from>`. The verdict maps as
-  in ADVERSARIAL REVIEW, and the pass is one of the task's two.
+  `$STATE set review_status <passed|passed_with_findings|blockers_open>` (that
+  marks the review `done` and stores your verdict as its `result`; an owner's
+  `blockers_open` stays), then hand it back: `$STATE handoff --to <from>`. The
+  verdict maps as in ADVERSARIAL REVIEW, and it counts as one of the task's
+  `review_rounds_max` passes.
 - **It says `Handed to <the other runtime>`**: do not work on it here. Every
   state change exits 7 `RUNTIME_HANDOFF_PENDING` until that runtime resumes it.
   Tell the user where to resume; take it back with `$STATE handoff --to <this
@@ -154,52 +155,60 @@ Skip `$STATE init` above for T0–T4; direct mode has its own single call.
    step, and say so in the note:
 
    ```bash
-   $STATE quick --goal "<one sentence>" --workflow <workflow> --tier T3 --files "<a>,<b>" --note "<trigger>"
-   $STATE quick --goal "<one sentence>" --workflow <workflow> --tier T4 --files "<a>,<b>,<c>" --note "<trigger>; plan approved in plan mode"
+   $STATE quick --goal "<one sentence>" --workflow <workflow> --tier T3 --files "<a>,<b>" --tests "<t>" --note "<trigger>"
+   $STATE quick --goal "<one sentence>" --workflow <workflow> --tier T4 --files "<a>,<b>,<c>" --tests "<t>" --note "<trigger>; plan approved in plan mode"
    ```
 
+   `--tests` names the step's own tests. A bugfix always names its failing
+   test (C2). A change without a test leaves `--tests` out and keeps its
+   review — that is the policy working, not failing.
 3. **Implement**, yourself, in this session. `ai-implementer` (BALANCED, low) only
    for a mechanical pattern-copy the human asks for. When you finish a piece of
    work, run **only its own tests** — `step_test_command` from
    `.ai/policies/testing.md` scoped to the files you just touched — and fix
    those failures there. Never the full suite mid-edit, never e2e. A bugfix
    shows its failing test first, that one test.
-4. **Verify once, to the end.** Run the verification command from
-   `.ai/policies/testing.md` with no fail-fast flag, through `tail -40`, or
-   through `log-reader` when the output is long. T0 runs nothing. Collect
-   **every** failure, classify each (new regression, existing, environment),
-   then fix all new regressions in **one** remediation step and run once more:
+4. **Verify once, to the end.** One call runs the verification command with no
+   fail-fast flag and, only when it is green, `e2e_command`, each to the end,
+   and records both; T0 runs nothing, and at T0/T1 run the commands yourself.
+   When the change cannot reach a flow the e2e suite covers, say so in the
+   call instead:
 
    ```bash
-   $STATE step-done 1 && $STATE remediate --files "<failing tests>" --note "<n> regressions"   # T2–T4
+   $STATE test-run --scope all                                    # T2–T4
+   $STATE test-run --scope all --e2e not-applicable "<why>"
    ```
 
-   At T0/T1 there is no state: just fix the batch and re-run. Two rounds at
-   most; a third means the human decides. One failure never restarts the task.
-
-   Then, **once**, after the fast suite is green: `e2e_command`. T0 and T1 skip
-   it. From T2 to T4 run it when the change can reach a flow the e2e suite
-   covers; when it cannot, say so in one line instead. It never runs inside
-   step 3.
+   On a red run hand `ai-tester` the log path, classify **every** failure (new
+   regression, existing, environment), fix all new regressions in **one**
+   remediation step and run `test-run --scope all` once more. `remediate`
+   finishes the open step first, as `step-done` would:
 
    ```bash
-   $STATE set e2e_status <passing|failing|not_applicable>   # T2–T4
+   $STATE remediate --files "<failing tests>" --note "<n> regressions"   # T2–T4
    ```
-5. **Review — T2, T3 and T4.** After the tests pass, `$STATE review-gate`
-   first. T2 and T3: all green is the review (`skipped_green`); a red sensor
-   costs one review over `git diff` on the BALANCED tier — `ai-reviewer` with
+
+   Two rounds at most; a third means the human decides. One failure never
+   restarts the task.
+5. **Review — T2, T3 and T4.** `close` runs the review gate itself. T2 and T3:
+   all green is the review (`skipped_green`); a red sensor costs one review over
+   `git diff` on the BALANCED tier — `ai-reviewer` with
    `model: $($STATE profile --tier BALANCED)` on Claude Code,
    `ai-reviewer-balanced` on Codex — no ledger and no probe. T4: `ai-reviewer`
    on STRONG (`model: $($STATE profile --tier STRONG)`, `ai-reviewer` under
    Codex), always; add `ai-security` only when the diff touches authentication,
-   authorization or personal data. Fix BLOCKER and
-   HIGH findings as one batch (`$STATE remediate`), re-run the verification
-   command, and ask for one scoped re-review only when a BLOCKER was fixed.
+   authorization or personal data. Save its FINDINGS and VERDICT to
+   `.ai/reports/<task-id>/review-report.md` (one file, a section per pass) and
+   record the verdict as in ADVERSARIAL REVIEW. Fix BLOCKER and HIGH findings as
+   one batch — `$STATE remediate --closes "<labels>"` after
+   `passed_with_findings` — then `test-run --scope all` once; one scoped
+   re-review only after `blockers_open`.
 6. **Close.** Print what changed, the verification command and its result, the
    review verdict and the rollback (`git revert`), as the commit message body.
-   Then stop for the human. At T2 and T3: `$STATE close`. At T4 the human approves the
-   result as well: `$STATE stage human_approval` after the summary is shown,
-   and the task closes once they have.
+   Then `$STATE close`: it finishes the open step, runs the review gate, and
+   exits 2 naming what is still owed. At T2 and T3 it archives the task. At T4
+   it requests the human's approval and stops; once they have approved in their
+   own terminal, `$STATE close` again archives it.
 
 That is the whole path. The sections below are for T5 and above, and for the
 `team` profile. A T4 whose diff is re-scored to T5 by the sensors leaves direct
@@ -477,13 +486,17 @@ included; when both are spent, the next verdict is the human's, not a third
 pass. Full rules: `.ai/policies/review-economy.md`.
 
 ```bash
-$STATE set review_status <passed|blockers_open>
+$STATE set review_status <passed|passed_with_findings|blockers_open>
 ```
 
-The reviewer's `verdict: pass` is `passed`; `blockers_open` is `blockers_open`,
-and so is `pass_with_findings` (an in-scope HIGH, no BLOCKER) — the closest
-value `set` accepts today. It stays `blockers_open` after its remediation; the
-close summary names the labels the remediation closed.
+The reviewer's `verdict: pass` is `passed`, `pass_with_findings` (an in-scope
+HIGH, no BLOCKER) is `passed_with_findings`, and `blockers_open` is
+`blockers_open`. Each verdict counts. The one that would exceed
+`review_rounds_max` exits 6 `REVIEW_BUDGET`, and the next verdict is the
+human's, in their own terminal: `state.py set review_status <value> --by
+"<name>"`. A remediation opened with `--closes "<labels>"` (each label a finding
+in `review-report.md`) turns `passed_with_findings` into `passed` on the first
+green suite run after it, journalled as `findings_closed`.
 
 Every BLOCKER and HIGH is fixed together, in one `$STATE remediate` step, then
 the verification command runs once. After `blockers_open` one scoped re-review

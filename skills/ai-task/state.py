@@ -86,7 +86,11 @@ TIERS = ["T0", "T1", "T2", "T3", "T4", "T5", "T6"]
 WORKFLOWS = ["feature", "bugfix", "refactoring", "hotfix", "investigation"]
 TEST_STATUS = ["not_run", "passing", "existing_failure", "new_regression", "env_failure", "unknown"]
 E2E_STATUS = ["not_run", "passing", "failing", "not_applicable"]
-REVIEW_STATUS = ["not_started", "in_progress", "blockers_open", "passed", "skipped_green"]
+REVIEW_STATUS = ["not_started", "in_progress", "blockers_open", "passed_with_findings", "passed",
+                 "skipped_green"]
+# The values a review writes. Each one is a pass, and a task gets
+# review_rounds_max of them before the next verdict is the human's (§3b).
+REVIEW_VERDICTS = ("blockers_open", "passed_with_findings", "passed")
 SECURITY_STATUS = ["not_applicable", "not_started", "in_progress", "passed", "failed"]
 
 # The journal vocabulary (I3): flat, append-only, one type per command that
@@ -96,7 +100,7 @@ EVENT_TYPES = [
     "scope_change", "step_started", "step_done", "field_set", "question_asked",
     "question_answered", "gate_requested", "gate_approved", "gate_rejected", "note",
     "handoff_written", "runtime_handoff", "model_fallback", "missed_reroute", "schema_migrated",
-    "task_closed",
+    "task_closed", "findings_closed", "review_budget_refused", "human_set",
 ]
 # The types `event` will not write: each is the record of an authorization or a
 # lifecycle decision, and is emitted by the transition that made it. `event` is
@@ -858,8 +862,25 @@ def load_policy(root):
     if policy is None:                    # no sensors module: budgets cannot bite
         policy = {"diff_budget": {"per_step": {}, "per_task": {}, "exclude": [],
                                   "unbudgeted_scopes": []},
-                  "path_scopes": [], "sensors": {}, "remediation_rounds": 2}
+                  "path_scopes": [], "sensors": {}, "remediation_rounds": 2,
+                  "review_rounds_max": 2, "tiers": {}}
     return policy
+
+
+# What a tier asks of close when the policy has no `tiers` table to say it: the
+# shipped table's answer — a review from T2, a human's approval from T4.
+TIER_GATE_FROM = {"adversarial_review": "T2", "human_approval": "T4"}
+
+
+def tier_requires(policy, tier, gate):
+    """Whether `tier` has `gate` (adversarial_review, human_approval). A
+    sentence — T2's "the sensors … one review only when one is red" — is a yes:
+    close then runs the review gate, which is what the sentence describes."""
+    entry = (policy.get("tiers") or {}).get(tier)
+    if isinstance(entry, dict) and gate in entry:
+        return bool(entry[gate])
+    tier = tier if tier in TIERS else "T2"
+    return TIERS.index(tier) >= TIERS.index(TIER_GATE_FROM[gate])
 
 
 def measure_diff(root, from_tree, to_tree, tier, allowed, scope, deferred_to=None,
@@ -1004,7 +1025,15 @@ def cmd_step_done(args, root):
     match = [s for s in steps if s["step_id"] == args.step_id]
     if not match:
         die("no step '%s' in the approved plan" % args.step_id)
-    step = match[0]
+    finish_step(root, state, match[0], args.force)
+
+
+def finish_step(root, state, step, force=False):
+    """What step-done does to one step: measure it, refuse it (exit 6), or mark
+    it done, re-score the task and save. remediate and close call it for every
+    step still open, so the direct path needs no step-done of its own."""
+    steps = state.get("approved_plan", {}).get("steps", [])
+    step_id = step["step_id"]
 
     # The gate. Measured before anything is marked done, so a refusal leaves the
     # step exactly where it was: in progress, with a way out that keeps the work.
@@ -1019,22 +1048,22 @@ def cmd_step_done(args, root):
                                      step.get("allowed_files"), "step",
                                      deferred_to=elsewhere,
                                      not_mine=step.get("forbidden_files"))
-    if measured["status"] == "red" and measured["unscoped"] and not args.force:
+    if measured["status"] == "red" and measured["unscoped"] and not force:
         die("SCOPE_CHANGE_REQUIRED step %s changed %s outside its files — amend the plan, or "
             "move them with:\n  state.py step-split %s --files %s"
-            % (args.step_id, ", ".join(measured["unscoped"][:5]), args.step_id,
+            % (step_id, ", ".join(measured["unscoped"][:5]), step_id,
                shlex.quote(",".join(measured["unscoped"][:5]))), 6)
-    if measured["over"] and not args.force:
+    if measured["over"] and not force:
         if measured.get("enforced"):
             die("DIFF_BUDGET_EXCEEDED step %s: %s. A step this size is reviewed as one thing and "
                 "should not be — split it:\n  state.py step-split %s --files \"<the part that is "
                 "its own step>\""
-                % (args.step_id, "; ".join(measured["over"]), args.step_id), 6)
+                % (step_id, "; ".join(measured["over"]), step_id), 6)
         # Advisory by default: the size of a change is a warning, never its
         # tier and never a refusal — the scope decides both (SCOPE_CHANGE_REQUIRED above).
         print("budget: over — step %s: %s (advisory). Split it when that helps the review:\n"
               "  state.py step-split %s --files \"<the part that is its own step>\""
-              % (args.step_id, "; ".join(measured["over"]), args.step_id), file=sys.stderr)
+              % (step_id, "; ".join(measured["over"]), step_id), file=sys.stderr)
     seq = 1 + max([_seq(s.get("diff")) for s in steps] or [0])
     step["diff"] = {"tree_after": after, "seq": seq,
                     "paths": [path for path, _l, _n, _t in measured.get("per_file", [])],
@@ -1044,13 +1073,13 @@ def cmd_step_done(args, root):
                     "binary": measured["binary"], "status": measured["status"]}
 
     for s in steps:
-        if s["step_id"] == args.step_id:
+        if s["step_id"] == step_id:
             s["status"] = "done"
-    if args.step_id not in state["completed_steps"]:
-        state["completed_steps"].append(args.step_id)
-    if state["approved_plan"].get("current_step_id") == args.step_id:
+    if step_id not in state["completed_steps"]:
+        state["completed_steps"].append(step_id)
+    if state["approved_plan"].get("current_step_id") == step_id:
         state["approved_plan"]["current_step_id"] = None
-    emit(root, state, "step_done", args.step_id, {"step_id": args.step_id},
+    emit(root, state, "step_done", step_id, {"step_id": step_id},
          legacy="step_completed")
     task_measured, scored = rescore_task(root, state, after)
     set_resume_point(state)
@@ -1058,15 +1087,15 @@ def cmd_step_done(args, root):
     save(root, state)
     if measured["status"] == "unavailable":
         print("step %s diff: unavailable (%s)"
-              % (args.step_id, measured.get("detail") or "not measured"))
+              % (step_id, measured.get("detail") or "not measured"))
     else:
-        print(budget_line("step %s diff" % args.step_id, measured)
+        print(budget_line("step %s diff" % step_id, measured)
               + (" — budget: over — %s%s" % ("; ".join(measured["over"]),
                                              "" if measured.get("enforced") else " (advisory)")
                  if measured["over"] else " — ok"))
     if from_base and measured["status"] != "unavailable" and completed_before(state, step):
         print("step %s measured from the task's base tree: it has no tree_before and no "
-              "finished step recorded where the tree stood" % args.step_id)
+              "finished step recorded where the tree stood" % step_id)
     if task_measured["status"] != "unavailable":
         print(budget_line("task diff", task_measured)
               + ("; rescored %s" % scored["tier"] if scored else ""))
@@ -1074,7 +1103,7 @@ def cmd_step_done(args, root):
         print("tier raised %s -> %s: %s"
               % (tier, scored["tier"], "; ".join(scored["reasons"][:3])))
     remaining = [s["step_id"] for s in steps if s["status"] != "done"]
-    print("step %s done; remaining: %s" % (args.step_id, ", ".join(remaining) or "none"))
+    print("step %s done; remaining: %s" % (step_id, ", ".join(remaining) or "none"))
     if not remaining:
         print("last step: run verify_command once, to the end, then e2e_command once")
 
@@ -1191,7 +1220,7 @@ def cmd_quick(args, root):
     step = {
         "step_id": "1", "description": args.goal, "allowed_files": files,
         "forbidden_files": [], "forbidden_reason": "not part of this task",
-        "required_tests": [], "status": "in_progress",
+        "required_tests": _split_files(args.tests), "status": "in_progress",
     }
     state["approved_plan"] = {"ref": "inline", "current_step_id": "1", "steps": [step]}
     emit(root, state, "plan_registered", "1 step, inline (quick)",
@@ -1208,24 +1237,47 @@ def cmd_quick(args, root):
     advise(state)
 
 
+LABEL_RE = re.compile(r"^[A-Z][0-9]+$")
+
+
+def review_report_path(root, state):
+    return os.path.join(root, ".ai", "reports", state["task_id"], "review-report.md")
+
+
+def check_closes(root, state, labels):
+    """--closes names findings a review wrote down, or nothing. A label is
+    found when a finding row carries it after its severity: `- [HIGH] H1 …`."""
+    bad = [label for label in labels if not LABEL_RE.match(label)]
+    if bad:
+        die("--closes takes finding labels like H1 or M2, not: %s" % ", ".join(bad))
+    path = review_report_path(root, state)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            report = fh.read()
+    except OSError:
+        die("--closes needs the review's findings in %s, and there is none. Save the reviewer's "
+            "FINDINGS and VERDICT there first." % os.path.relpath(path, root))
+    missing = [label for label in labels
+               if not re.search(r"\]\s+%s(\s|$)" % re.escape(label), report, re.M)]
+    if missing:
+        die("--closes names %s, which %s not a finding in %s"
+            % (", ".join(missing), "is" if len(missing) == 1 else "are",
+               os.path.relpath(path, root)))
+
+
 def cmd_remediate(args, root):
     """One extra step for the whole batch of fixes after the test run or the
     review — never one step per failure. Its scope is the union of every step
-    already done plus the files named (usually the failing tests)."""
+    already done plus the files named (usually the failing tests). A step still
+    open is finished first, as step-done would, so a red run on the direct path
+    goes straight to its fix."""
     state = load(root)
     steps = state.get("approved_plan", {}).get("steps", [])
     if not steps:
         die("no approved plan to remediate; register one with plan or quick first")
-    if any(s["status"] == "in_progress" for s in steps):
-        die("a step is still in progress; finish it with step-done before remediating")
-    allowed = []
-    for s in steps:
-        for f in s.get("allowed_files", []):
-            if f not in allowed:
-                allowed.append(f)
-    for f in _split_files(args.files):
-        if f not in allowed:
-            allowed.append(f)
+    closes = _split_files(args.closes)
+    if closes:
+        check_closes(root, state, closes)
     n = 1 + sum(1 for s in steps if str(s["step_id"]).startswith("R"))
     rounds = load_policy(root).get("remediation_rounds", 2)
     if isinstance(rounds, int) and n > rounds and not (args.by and human_present()):
@@ -1236,17 +1288,33 @@ def cmd_remediate(args, root):
             "them run:\n  python3 %s --root %s remediate --files %s --by \"<name>\"%s"
             % (n, rounds, shlex.quote(os.path.abspath(__file__)), shlex.quote(root),
                shlex.quote(args.files or ""), refused_because()), 5)
+    for open_step in [s for s in steps if s["status"] == "in_progress"]:
+        finish_step(root, state, open_step)
+    allowed = []
+    for s in steps:
+        for f in s.get("allowed_files", []):
+            if f not in allowed:
+                allowed.append(f)
+    for f in _split_files(args.files) + _split_files(args.tests):
+        if f not in allowed:
+            allowed.append(f)
     step_id = "R%d" % n
     step = {
         "step_id": step_id,
         "description": args.note or "remediation batch %d" % n,
         "allowed_files": allowed, "forbidden_files": [],
-        "forbidden_reason": "not part of this task", "required_tests": [],
+        "forbidden_reason": "not part of this task", "required_tests": _split_files(args.tests),
         "status": "in_progress",
         # Taken now, like cmd_step does: the batch is measured from here, not
         # from the task's base tree, or it carries every finished step's diff.
         "tree_before": safe_sensor(sensors.snapshot_tree, root),
     }
+    if closes:
+        # The findings this batch fixes, and how many runs came before it: the
+        # first green suite after it, on a tree it changed, closes them (§3a).
+        step["closes"] = closes
+        step["runs_before"] = len(state["tests"]["runs"])
+        step["opened_at_event"] = len(state.get("history") or [])
     steps.append(step)
     state["approved_plan"]["current_step_id"] = step_id
     state["current_stage"] = "implementation"
@@ -1260,49 +1328,88 @@ def cmd_remediate(args, root):
     write_handoff(root, state, "stage")
     save(root, state)
     print("step %s armed for %s" % (step_id, ", ".join(allowed)))
+    if closes:
+        print("closes %s: a green test-run after this batch records them closed"
+              % ", ".join(closes))
 
 
 def cmd_test_run(args, root):
     """One run of one scope, recorded. Why this and not the agent running it:
     a run's own exit code is the verdict when it is green, so a green run costs
     no model at all; and the cap, the one environment retry and the log file
-    live where the record does, not in a prompt an agent may read loosely."""
+    live where the record does, not in a prompt an agent may read loosely.
+
+    `--scope all` is the direct path's one verification call: the suite, then
+    e2e only when the suite is green, each recorded exactly as its own scope."""
     state = load(root)
     policy = load_policy(root)
     config = (policy.get("sensors") or {}).get("tests") or {}
     max_runs = config.get("max_suite_runs", 5)
     tests = state["tests"]
-    if args.scope == "suite" and isinstance(max_runs, int) and tests["suite_runs"] >= max_runs:
+    if args.scope == "all" and args.files:
+        die("--files narrows one scope; --scope all runs the whole suite and e2e")
+    if args.e2e and args.scope != "all":
+        die("--e2e is for --scope all; for a single scope run 'state.py set e2e_status "
+            "not_applicable'")
+    if args.e2e and (args.e2e[0] != "not-applicable" or not args.e2e[1].strip()):
+        die('--e2e takes: not-applicable "<why the change cannot reach an e2e flow>"')
+    if args.scope in ("suite", "all") and isinstance(max_runs, int) \
+            and tests["suite_runs"] >= max_runs:
         die("run budget exhausted: %d suite runs, the policy allows %d. Running it again is not "
             "the next move — the human decides what is." % (tests["suite_runs"], max_runs), 6)
     if args.env_retry and state.get("test_status") != "env_failure":
         die("--env-retry is for a run already classified as a TEST ENVIRONMENT FAILURE; "
             "this task's test_status is '%s'. Classify the failure first." % state.get("test_status"))
 
-    command = safe_sensor(sensors.command_for, root, args.scope) or ""
+    if args.scope != "all":
+        exit_code = run_scope(root, state, args.scope, args, config)
+        if exit_code == 0 and args.scope == "suite":
+            close_findings(root, state)
+        sys.exit(0 if exit_code == 0 else 1)
+
+    if run_scope(root, state, "suite", args, config) != 0:
+        print("e2e: not run — the suite is red")
+        sys.exit(1)
+    if args.e2e:
+        e2e_not_applicable(root, state, args.e2e[1])
+    else:
+        command = (safe_sensor(sensors.command_for, root, "e2e") or "").strip()
+        if command == "none":
+            e2e_not_applicable(root, state, "e2e_command: none in .ai/policies/testing.md")
+        elif run_scope(root, state, "e2e", args, config) != 0:
+            sys.exit(1)
+    close_findings(root, state)
+
+
+def run_scope(root, state, scope, args, config):
+    """Run one scope's command to the end, record it and print its six lines.
+    Returns the exit code; the caller decides what a red one means."""
+    tests = state["tests"]
+    max_runs = config.get("max_suite_runs", 5)
+    command = safe_sensor(sensors.command_for, root, scope) or ""
     if not command:
         die("no command for scope '%s' in .ai/policies/testing.md — write it down first"
-            % args.scope)
+            % scope)
     files = _split_files(args.files)
     if files:
         command = safe_sensor(sensors.expand_files, command, files) or command
-    n = len([r for r in tests["runs"] if r.get("scope") == args.scope]) + 1
+    n = len([r for r in tests["runs"] if r.get("scope") == scope]) + 1
     log = os.path.join(root, ".ai", "reports", state["task_id"],
-                       "tests-%s-%d.log" % (args.scope, n))
+                       "tests-%s-%d.log" % (scope, n))
     result = safe_sensor(sensors.run_command, root, command, log,
                          config.get("timeout_seconds", 1800),
                          config.get("log_max_bytes", 2097152))
     if result is None:
         die("sensors.py is not installed beside state.py — run the project's command yourself")
 
-    tests["runs"].append({"n": n, "scope": args.scope, "command": command,
+    tests["runs"].append({"n": n, "scope": scope, "command": command,
                           "tree": safe_sensor(sensors.snapshot_tree, root),
                           "exit": result["exit"], "duration_s": result["duration_s"],
                           "log": os.path.relpath(log, root), "at": now(),
                           "env_retry": bool(args.env_retry)})
-    if args.scope == "suite":
+    if scope == "suite":
         tests["suite_runs"] += 1
-    field = "e2e_status" if args.scope == "e2e" else "test_status"
+    field = "e2e_status" if scope == "e2e" else "test_status"
     previous = state.get(field)
     if result["exit"] == 0:
         # Green needs no interpretation, and this is where the model step goes
@@ -1313,24 +1420,72 @@ def cmd_test_run(args, root):
     elif previous in (None, "not_run", "passing"):
         state[field] = "unknown" if field == "test_status" else "failing"
     emit(root, state, "field_set", "%s = %s (%s run %d, exit %s)"
-         % (field, state[field], args.scope, n, result["exit"]),
+         % (field, state[field], scope, n, result["exit"]),
          {"field": field, "from": previous, "value": state[field],
-          "scope": args.scope, "exit": result["exit"], "log": os.path.relpath(log, root)})
+          "scope": scope, "exit": result["exit"], "log": os.path.relpath(log, root)})
     write_handoff(root, state, "stage")
     save(root, state)
 
-    print("%s run %d: exit %s in %ds" % (args.scope, n, result["exit"], result["duration_s"]))
+    print("%s run %d: exit %s in %ds" % (scope, n, result["exit"], result["duration_s"]))
     print("command: %s" % command)
     print("log: %s" % os.path.relpath(log, root))
     if result["detail"]:
         print(result["detail"])
     if result["exit"] == 0:
         print("%s = passing" % field)
-        return
+        return 0
     print("classify: hand ai-tester the log path above — it reads the file, it never re-runs")
-    if args.scope == "suite" and isinstance(max_runs, int):
+    if scope == "suite" and isinstance(max_runs, int):
         print("suite runs used: %d of %d" % (tests["suite_runs"], max_runs))
-    sys.exit(1)
+    return 1 if result["exit"] is None else result["exit"]
+
+
+def e2e_not_applicable(root, state, why):
+    """The one-call spelling of `set e2e_status not_applicable`, with its reason."""
+    previous = state.get("e2e_status")
+    state["e2e_status"] = "not_applicable"
+    emit(root, state, "field_set", "e2e_status = not_applicable (%s)" % one_line(why, 200),
+         {"field": "e2e_status", "from": previous, "value": "not_applicable", "why": why},
+         legacy="set")
+    write_handoff(root, state, "stage")
+    save(root, state)
+    print("e2e_status = not_applicable: %s" % one_line(why, 200))
+
+
+def close_findings(root, state):
+    """§3a: a review that found something but no blocker is closed by the
+    remediation that names its findings and the green run after it — not by a
+    second review. Only on a tree that remediation changed: a batch that fixed
+    nothing closes nothing."""
+    if state.get("review_status") != "passed_with_findings":
+        return
+    batches = [s for s in state.get("approved_plan", {}).get("steps", []) if s.get("closes")]
+    if not batches:
+        return
+    batch = batches[-1]
+    if (batch.get("opened_at_event") or 0) <= (state.get("findings_verdict_at") or 0):
+        # The batch answers an earlier verdict. A later passed_with_findings
+        # brought findings no --closes has named, so no run closes them.
+        return
+    runs = state["tests"]["runs"]
+    suite = [i for i, r in enumerate(runs) if r.get("scope") == "suite"]
+    if not suite or suite[-1] < (batch.get("runs_before") or 0) or runs[suite[-1]].get("exit") != 0:
+        return
+    run = runs[suite[-1]]
+    if not run.get("tree") or run["tree"] == batch.get("tree_before"):
+        print("findings %s stay open: the tree is where %s began, so nothing was fixed yet"
+              % (", ".join(batch["closes"]), batch["step_id"]))
+        return
+    state["review_status"] = "passed"
+    emit(root, state, "findings_closed", "%s closed by suite run %d on %s"
+         % (", ".join(batch["closes"]), run["n"], run["tree"][:9]),
+         {"labels": batch["closes"], "step_id": batch["step_id"], "run": run["n"],
+          "tree": run["tree"]})
+    emit(root, state, "field_set", "review_status = passed (findings closed by a green run)",
+         {"field": "review_status", "from": "passed_with_findings", "value": "passed"})
+    write_handoff(root, state, "stage")
+    save(root, state)
+    print("review_status = passed: %s closed by suite run %d" % (", ".join(batch["closes"]), run["n"]))
 
 
 def cmd_review_gate(args, root):
@@ -1344,10 +1499,17 @@ def cmd_review_gate(args, root):
     attached so the reviewer does not re-derive what is already settled.
     """
     state = load(root)
+    if not review_gate(root, state, args.no_bite):
+        sys.exit(2)
+
+
+def review_gate(root, state, no_bite=False):
+    """Run the sensors, record what they found, and answer whether they stand
+    in for the review: True after writing skipped_green, False when it is owed."""
     if sensors is None:
         die("sensors.py is not installed beside state.py — run the review the tier asks for")
     policy = load_policy(root)
-    report = safe_sensor(sensors.check, root, state, policy, args.no_bite, None)
+    report = safe_sensor(sensors.check, root, state, policy, no_bite, None)
     if report is None:
         die("the sensors could not run — run the review the tier asks for")
     safe_sensor(sensors.write_report, root, state, report, None)
@@ -1365,7 +1527,7 @@ def cmd_review_gate(args, root):
         save(root, state)
         print("the ledger has what the sensors settled: %s"
               % os.path.relpath(sensors.ledger_file(root, state), root))
-        sys.exit(2)
+        return False
 
     previous = state.get("review_status")
     state["review_status"] = "skipped_green"
@@ -1376,9 +1538,92 @@ def cmd_review_gate(args, root):
           "tree": report["tree"], "tier": state.get("risk_tier")})
     write_handoff(root, state, "stage")
     save(root, state)
+    return True
+
+
+def at_base_tree(root, state):
+    """Nothing changed since the task began — measured, never assumed."""
+    base = (state.get("diff") or {}).get("base_tree")
+    return bool(base) and safe_sensor(sensors.snapshot_tree, root) == base
+
+
+def approved_since_last_step(state):
+    """A grant counts for close only when it came after the last finished step:
+    an approval of the plan is not an approval of the work done after it."""
+    approval = state.get("human_approval") or {}
+    if not approval.get("granted") or not approval.get("granted_at"):
+        return False
+    done = [h.get("at") or "" for h in state.get("history") or []
+            if h.get("event") in ("step_completed", "step_done")]
+    return not done or approval["granted_at"] >= max(done)
+
+
+def close_summary(root, state):
+    measured = (state.get("diff") or {}).get("task") or {}
+    print("%s %s ready for approval: %s" % (state["task_id"], state.get("risk_tier"),
+                                            state.get("goal")))
+    print("steps done: %s; task diff: %s files, %s lines"
+          % (", ".join(state.get("completed_steps") or []) or "none",
+             measured.get("files", "?"), measured.get("lines", "?")))
+    print("tests: %s; e2e: %s; review: %s (%d of %s verdicts)"
+          % (state.get("test_status"), state.get("e2e_status"), state.get("review_status"),
+             state.get("reviews") or 0, load_policy(root).get("review_rounds_max", 2)))
+    closed = [label for s in state.get("approved_plan", {}).get("steps", [])
+              for label in s.get("closes") or []]
+    if closed:
+        print("findings closed by remediation: %s" % ", ".join(closed))
+    print("approve in your own terminal, then run close again:\n  python3 %s --root %s approve "
+          "--by \"<name>\"" % (shlex.quote(os.path.abspath(__file__)), shlex.quote(root)))
 
 
 def cmd_close(args, root):
+    """The direct path's exit (§5b), stopping at the first thing still owed.
+    Exits 4 and 5 (a pending question, a rejection) were decided in main()."""
+    state = load(root)
+    if not state.get("completed_steps") and at_base_tree(root, state):
+        # The escalation exit: a record nothing was done under — a quick task
+        # that turned out to be T5 — closes as it always did.
+        cmd_done(args, root)
+        cmd_archive(args, root)
+        return
+    for step in [s for s in state.get("approved_plan", {}).get("steps", [])
+                 if s["status"] == "in_progress"]:
+        finish_step(root, state, step)
+    tier = state.get("risk_tier") or "T2"
+    policy = load_policy(root)
+    if tier_requires(policy, tier, "adversarial_review") and state.get("review_status") != "passed":
+        ceiling = (policy.get("sensors") or {}).get("skip_review_at_or_below", "T3")
+        status = state.get("review_status")
+        # A review's own findings are never overwritten by the sensors; below
+        # them the gate runs afresh, and a skipped_green from an older tree is
+        # not reused.
+        may_skip = tier in TIERS and ceiling in TIERS \
+            and TIERS.index(tier) <= TIERS.index(ceiling) \
+            and status not in ("blockers_open", "passed_with_findings")
+        if not (may_skip and review_gate(root, state)):
+            status = state.get("review_status")
+            if status == "passed_with_findings":
+                how = ("fix the findings in one 'state.py remediate --closes \"<labels>\"' batch, "
+                       "run 'state.py test-run --scope all' once more, then close again")
+            elif status == "blockers_open":
+                how = ("fix the blockers in one 'state.py remediate' batch, run the suite, get one "
+                       "scoped re-review, 'state.py set review_status <verdict>', then close again")
+            else:
+                how = "run the tier's reviewer, 'state.py set review_status <verdict>', then close again"
+            die("review required (%s, review_status %s) — %s. To drop this record instead: "
+                "'state.py done --abandon' then 'state.py archive'." % (tier, status, how), 2)
+    if tier_requires(policy, tier, "human_approval") and not approved_since_last_step(state):
+        previous = state["current_stage"]
+        state["current_stage"] = "human_approval"
+        emit(root, state, "stage_started", "%s -> human_approval: close" % previous,
+             {"from": previous, "to": "human_approval", "note": "close"}, legacy="stage")
+        request_gate(root, state, "human_approval")
+        state["next_action"] = "the human approves in their own terminal, then close again"
+        set_resume_point(state)
+        write_handoff(root, state, "stage")
+        save(root, state)
+        close_summary(root, state)
+        return
     cmd_done(args, root)
     cmd_archive(args, root)
 
@@ -1392,7 +1637,14 @@ def cmd_set(args, root):
             "Run: state.py review-gate")
     if allowed and args.value not in allowed:
         die("%s must be one of: %s" % (args.field, ", ".join(allowed)))
+    if args.by and args.field != "review_status":
+        die("--by is for review_status: the verdict a human gives when the review budget is spent")
     state = load(root)
+    if args.by:
+        cmd_set_by_human(args, root, state)
+        return
+    if args.field == "review_status" and args.value in REVIEW_VERDICTS:
+        count_review(root, state, args.value)
     previous = state.get(args.field)
     state[args.field] = args.value
     review = state.get("cross_vendor_review")
@@ -1408,11 +1660,62 @@ def cmd_set(args, root):
                   "this verdict is recorded as the cross-vendor result")
         if args.value not in ("not_started", "in_progress"):
             review.update({"status": "done", "by_runtime": RUNTIME, "done_at": now(), "result": args.value})
+    if args.field == "review_status":
+        mark_findings_verdict(state)
     emit(root, state, "field_set", "%s = %s" % (args.field, args.value),
          {"field": args.field, "from": previous, "value": args.value}, legacy="set")
     write_handoff(root, state, "stage")
     save(root, state)
     print("%s = %s" % (args.field, args.value))
+
+
+def mark_findings_verdict(state):
+    """Where in the history a passed_with_findings verdict was written: only a
+    --closes batch opened after it may close it (close_findings)."""
+    if state.get("review_status") == "passed_with_findings":
+        state["findings_verdict_at"] = len(state.get("history") or [])
+
+
+def count_review(root, state, value):
+    """§3b: every verdict a review writes is one pass — the cross-vendor one
+    included — and the one past review_rounds_max is the human's to give."""
+    limit = load_policy(root).get("review_rounds_max", 2)
+    reviews = state.get("reviews") or 0
+    if isinstance(limit, int) and not isinstance(limit, bool) and reviews >= limit:
+        emit(root, state, "review_budget_refused",
+             "review_status %s refused: %d of %d verdicts used" % (value, reviews, limit),
+             {"reviews": reviews, "max": limit, "value": value})
+        save(root, state)
+        die("REVIEW_BUDGET — this task has had %d review verdicts and the policy allows %d "
+            "(review_rounds_max). Another pass is not the next move: show the human the "
+            "findings and let them decide, in their own terminal:\n"
+            "  python3 %s --root %s set review_status %s --by \"<name>\"\n"
+            "or, at the approval gate, approve --by \"<name>\"."
+            % (reviews, limit, shlex.quote(os.path.abspath(__file__)), shlex.quote(root),
+               value), 6)
+    state["reviews"] = reviews + 1
+
+
+def cmd_set_by_human(args, root, state):
+    """The human's verdict past the budget: not a review, so not counted and not
+    refused by it — and, like approve, only from outside the agent."""
+    via, why = human_route()
+    if via is None:
+        die("APPROVAL_REFUSED — a verdict with --by is the human's, given outside the agent. "
+            "Run it in your own terminal:\n  python3 %s --root %s set review_status %s --by %s"
+            "\nRefused because %s."
+            % (shlex.quote(os.path.abspath(__file__)), shlex.quote(root), args.value,
+               shlex.quote(args.by), why), 5)
+    previous = state.get("review_status")
+    state["review_status"] = args.value
+    mark_findings_verdict(state)
+    emit(root, state, "human_set", "review_status = %s by %s via %s" % (args.value, args.by, via),
+         {"field": "review_status", "from": previous, "value": args.value, "by": args.by,
+          "via": via, "unattended": via == "unattended"},
+         actor="human" if via == "terminal" else "agent")
+    write_handoff(root, state, "stage")
+    save(root, state)
+    print("review_status = %s (by %s via %s)" % (args.value, args.by, via))
 
 
 def cmd_risks(args, root):
@@ -2692,6 +2995,7 @@ def main():
     p = sub.add_parser("quick"); p.add_argument("--goal", required=True)
     p.add_argument("--workflow", required=True); p.add_argument("--tier", required=True)
     p.add_argument("--files", required=True); p.add_argument("--note", default="")
+    p.add_argument("--tests", default="", help="the step's own tests: its required_tests")
     p.add_argument("--context", default=""); p.add_argument("--task-id")
     p.add_argument("--force", action="store_true"); p.set_defaults(func=cmd_quick)
 
@@ -2699,6 +3003,9 @@ def main():
     p.add_argument("--steps", required=True); p.set_defaults(func=cmd_plan)
 
     p = sub.add_parser("remediate"); p.add_argument("--files", default="")
+    p.add_argument("--tests", default="", help="the batch's own tests: its required_tests")
+    p.add_argument("--closes", default="",
+                   help="finding labels from review-report.md this batch fixes (H1,M2)")
     p.add_argument("--by", default="", help="required, with a terminal, past remediation_rounds")
     p.add_argument("--note", default=""); p.set_defaults(func=cmd_remediate)
 
@@ -2712,8 +3019,10 @@ def main():
                    help="skip the slow sensor; it then blocks the skip as unavailable")
     p.set_defaults(func=cmd_review_gate)
     p = sub.add_parser("test-run")
-    p.add_argument("--scope", required=True, choices=["step", "suite", "e2e"])
+    p.add_argument("--scope", required=True, choices=["step", "suite", "e2e", "all"])
     p.add_argument("--files", default="")
+    p.add_argument("--e2e", nargs=2, metavar=("not-applicable", "WHY"),
+                   help="with --scope all: run the suite only and record e2e as not applicable")
     p.add_argument("--env-retry", action="store_true", dest="env_retry")
     p.set_defaults(func=cmd_test_run)
     p = sub.add_parser("step-split"); p.add_argument("step_id")
@@ -2721,6 +3030,8 @@ def main():
     p.set_defaults(func=cmd_step_split)
 
     p = sub.add_parser("set"); p.add_argument("field"); p.add_argument("value")
+    p.add_argument("--by", default="",
+                   help="review_status only: the human's verdict, from a terminal, past the budget")
     p.set_defaults(func=cmd_set)
 
     p = sub.add_parser("risks"); p.add_argument("--add"); p.add_argument("--clear", action="store_true")

@@ -193,4 +193,53 @@ echo "== no application code was touched by any of this"
 changed=$(git -C "$REPO" status --porcelain -- src | wc -l)
 [ "$changed" = 0 ] && pass "src/ is untouched" || fail "src/ was modified" "$(git -C "$REPO" status --porcelain -- src)"
 
+echo "== direct mode in three calls: quick, test-run --scope all, close (§5)"
+LIB="$TMP/lib"; mkdir -p "$LIB/src" "$LIB/tests"
+git -C "$LIB" init -q -b main
+git -C "$LIB" config user.email t@example.com; git -C "$LIB" config user.name t
+printf 'def fee(x):\n    return x\n' > "$LIB/src/fee.py"
+printf '__pycache__/\n' > "$LIB/.gitignore"
+CLAUDE_AGENTIC_TEMPLATES="$DIR/skills/ai-init/templates" bash "$DIR/skills/ai-init/scaffold-ai.sh" "$LIB" >/dev/null
+cat > "$LIB/.ai/policies/testing.md" <<'MD'
+# Testing policy
+verify_command:      for t in tests/*_test.py; do python3 "$t" || exit 1; done
+step_test_command:   python3 {files}
+e2e_command:         python3 -c 'import sys; sys.path.insert(0, "src"); from fee import fee; assert fee(3) == 6'
+lint_command:        none
+typecheck_command:   none
+MD
+git -C "$LIB" add -A && git -C "$LIB" commit -qm base
+L() { python3 "$DIR/skills/ai-task/state.py" --root "$LIB" "$@"; }
+
+L quick --goal "fee doubles the amount" --workflow bugfix --tier T2 \
+  --files "src/fee.py,tests/fee_test.py" --tests tests/fee_test.py >/dev/null 2>&1 \
+  && pass "call 1: quick names the files and the failing test" || fail "quick failed"
+printf 'import sys; sys.path.insert(0, "src")\nfrom fee import fee\nassert fee(2) == 4\n' > "$LIB/tests/fee_test.py"
+printf 'def fee(x):\n    return x * 2\n' > "$LIB/src/fee.py"
+out=$(L test-run --scope all 2>&1); rc=$?
+[ $rc = 0 ] && [ "$(L get --field test_status)" = passing ] && [ "$(L get --field e2e_status)" = passing ] \
+  && pass "call 2: test-run --scope all runs the suite and e2e, both green" || fail "test-run --scope all" "rc=$rc $out"
+out=$(L close 2>&1); rc=$?
+ARCHIVED=$(tail -1 <<<"$out")
+[ $rc = 0 ] && [ -f "$ARCHIVED" ] && [ ! -f "$LIB/.ai/state/current.json" ] \
+  && pass "call 3: close finishes the step, runs the gate and archives" || fail "close" "rc=$rc $out"
+jq -e '.review_status == "skipped_green" and .current_stage == "done" and .completed_steps == ["1"]' "$ARCHIVED" >/dev/null \
+  && pass "every sensor green: the archived task ends skipped_green" || fail "archived state" "$(jq -c '{review_status, current_stage, completed_steps}' "$ARCHIVED" 2>&1)"
+
+# Review L4: green sensors never overwrite a review's own findings.
+git -C "$LIB" add -A && git -C "$LIB" commit -qm "fee doubles"
+L quick --goal "no negative fee" --workflow bugfix --tier T2 \
+  --files "src/fee.py,tests/neg_test.py" --tests tests/neg_test.py >/dev/null 2>&1
+printf 'import sys; sys.path.insert(0, "src")\nfrom fee import fee\nassert fee(-1) == 0\n' > "$LIB/tests/neg_test.py"
+printf 'def fee(x):\n    return max(x, 0) * 2\n' > "$LIB/src/fee.py"
+L test-run --scope all >/dev/null 2>&1
+L set review_status passed_with_findings >/dev/null
+out=$(L close 2>&1); rc=$?
+[ $rc = 2 ] && [ "$(L get --field review_status)" = passed_with_findings ] \
+  && pass "close keeps a review's passed_with_findings although every sensor is green" || fail "findings overwritten" "rc=$rc $out"
+L set review_status in_progress >/dev/null
+out=$(L close 2>&1); rc=$?
+[ $rc = 0 ] && jq -e '.review_status == "skipped_green"' "$(tail -1 <<<"$out")" >/dev/null \
+  && pass "and the same tree with no verdict on it does close skipped_green" || fail "control close" "rc=$rc $out"
+
 summary "end-to-end"

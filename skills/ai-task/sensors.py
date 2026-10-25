@@ -415,6 +415,8 @@ def load_policy(root):
     return {"diff_budget": merged_budget, "path_scopes": scopes,
             "sensors": sensor_config, "legacy_tiers": legacy,
             "remediation_rounds": data.get("remediation_rounds", 2),
+            "review_rounds_max": data.get("review_rounds_max", 2),
+            "tiers": data.get("tiers") if isinstance(data.get("tiers"), dict) else {},
             "source": policy_path(root) if data else "defaults"}
 
 
@@ -881,6 +883,31 @@ def sensor_tests(root, state, tree):
             "log": last.get("log")}
 
 
+# What a runner prints when the tool it was asked to start is not there: `python3
+# -m <tool>` without the module, `npx <tool>` without the package, `php
+# vendor/bin/<tool>` without composer's install. Each exits 1, which reads as a
+# lint failure; it is the same thing as exit 127 — the tool never ran.
+MISSING_RUNNER_MARKERS = ("No module named", "could not determine executable to run",
+                          "Could not open input file")
+
+
+def missing_runner(log, last_lines=5):
+    """The marker line when one of the log's last non-empty lines says the tool
+    never started, else None. Only the tail: a lint report that quotes such a
+    line among its findings is still a lint report."""
+    try:
+        with open(log, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            fh.seek(max(0, fh.tell() - 4096))
+            tail = fh.read().decode("utf-8", "replace")
+    except OSError:
+        return None
+    for line in [l.strip() for l in tail.splitlines() if l.strip()][-last_lines:]:
+        if any(marker in line for marker in MISSING_RUNNER_MARKERS):
+            return line[:200]
+    return None
+
+
 def sensor_command(root, kind, policy, task_id):
     """lint and typecheck: the same shape, and the same refusal to guess."""
     field = "%s_command" % kind
@@ -907,6 +934,10 @@ def sensor_command(root, kind, policy, task_id):
         return {"status": UNAVAILABLE, "detail": run["detail"] or "could not run %s" % value}
     if run["exit"] == 127:
         return {"status": UNAVAILABLE, "detail": "%s: command not found" % value}
+    missing = missing_runner(log)
+    if missing:
+        return {"status": UNAVAILABLE, "detail": "%s: the tool is not installed (%s)" % (value, missing),
+                "log": os.path.relpath(log, root)}
     return {"status": RED, "detail": "%s exited %s, log %s"
             % (value, run["exit"], os.path.relpath(log, root)),
             "log": os.path.relpath(log, root)}
