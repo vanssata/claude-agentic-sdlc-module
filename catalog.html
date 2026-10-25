@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>claude-agentic catalog</title>
+<meta name="description" content="Every command, agent, hook, risk tier, workflow and plan in claude-agentic, one card per job, with what it does and when it runs.">
+<meta name="theme-color" content="#221A15">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23221A15'/%3E%3Cpath d='M32 8H41a10 10 0 0 1 0 20H32M32 8H23a10 10 0 0 0 0 20H32M32 8V56M32 28L47 56M32 28L17 56M8 46H56' fill='none' stroke='%23E39B6B' stroke-width='5'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+
+/* Boxes and buttons follow the ABR Design System (square corners, the frame, primary/secondary/ghost); the accent is the Claude orange. */
+:root{
+  --accent:#E39B6B; --abr-black:#221A15; --abr-white:#FBF7F1;
+  --m50:#f3ede4; --m100:#e6ddd0; --m200:#d6cbbb; --m300:#b8ab99; --m400:#8a7e6f; --m600:#5f5549; --m700:#463e35; --m800:#312b24; --m900:#231e19;
+  --abr-focus:#2563eb; --scrim-muted:#221A1533;
+  --bg:var(--abr-white); --fg:var(--abr-black); --muted:var(--m600); --line:var(--m200); --action:var(--abr-black);
+  --font:Inter,Arial,sans-serif; --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+  --stroke:2px; --gut:clamp(16px,4vw,72px); --max:1296px;
+}
+*{box-sizing:border-box;border-radius:0}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:300 18px/1.5 var(--font);overflow-x:hidden}
+b,strong{font-weight:600}
+a{color:inherit}
+::selection{background:var(--accent);color:var(--abr-black)}
+:focus-visible{outline:3px solid var(--abr-focus);outline-offset:4px}
+.wrap{max-width:calc(var(--max) + 2 * var(--gut));margin:0 auto;padding:0 var(--gut)}
+.mono{font-family:var(--mono)}
+code{font-family:var(--mono);font-size:.84em;background:var(--m50);border:1px solid var(--m100);padding:.05em .35em}
+.skip{position:fixed;left:12px;top:-60px;background:var(--accent);color:var(--abr-black);padding:10px 14px;z-index:99;font-weight:700}.skip:focus{top:12px}
+
+/* section grounds: base, subtle, inverse, accent */
+.dark{--bg:var(--abr-black);--fg:var(--abr-white);--muted:var(--m200);--line:var(--m800);--action:var(--accent);background:var(--abr-black);color:var(--abr-white)}
+.dark code{background:var(--m900);border-color:var(--m800);color:var(--abr-white)}
+.subtle{--bg:var(--m50);background:var(--m50)}
+
+/* the frame: 2px rails top and bottom with corner ticks at 25% height */
+.frame{--frame:currentColor;position:relative;border-block:var(--stroke) solid var(--frame);border-inline:0}
+.frame::before{content:"";position:absolute;z-index:2;inset-block:calc(-1 * var(--stroke));inset-inline:0;pointer-events:none;
+  background:linear-gradient(var(--frame),var(--frame)) left top/var(--stroke) 25% no-repeat,linear-gradient(var(--frame),var(--frame)) left bottom/var(--stroke) 25% no-repeat,linear-gradient(var(--frame),var(--frame)) right top/var(--stroke) 25% no-repeat,linear-gradient(var(--frame),var(--frame)) right bottom/var(--stroke) 25% no-repeat;transition:background-size .15s ease}
+
+/* buttons: primary yellow fill, secondary framed, ghost underline */
+.btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 24px;border:0;background:none;color:var(--action);font:700 18px/1 var(--font);text-decoration:none;white-space:nowrap;cursor:pointer;isolation:isolate;transition:color .15s ease}
+.btn.primary{background:var(--accent);color:var(--abr-black)}
+.btn.primary::after{content:"";position:absolute;inset:0;pointer-events:none;background:transparent;transition:background-color .15s ease}
+.btn.primary:hover::after{background:var(--scrim-muted)}
+.btn.secondary{--frame:currentColor;border-block:var(--stroke) solid currentColor}
+.btn.secondary::before{content:"";position:absolute;inset-block:calc(-1 * var(--stroke));inset-inline:0;pointer-events:none;
+  background:linear-gradient(currentColor,currentColor) left top/var(--stroke) 25% no-repeat,linear-gradient(currentColor,currentColor) left bottom/var(--stroke) 25% no-repeat,linear-gradient(currentColor,currentColor) right top/var(--stroke) 25% no-repeat,linear-gradient(currentColor,currentColor) right bottom/var(--stroke) 25% no-repeat;transition:background-size .15s ease}
+.btn.secondary:hover::before{background-size:var(--stroke) 100%}
+.btn.ghost{height:auto;padding:8px 0;font-weight:400;border-bottom:2px solid transparent}
+.btn.ghost:hover{border-bottom-color:currentColor}
+
+/* header: always dark */
+.rail{position:fixed;inset:0 0 auto 0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:16px;height:72px;padding:0 var(--gut);background:var(--abr-black);color:var(--abr-white);--action:var(--accent)}
+.rail::after{content:"";position:absolute;left:0;bottom:0;height:3px;width:100%;background:var(--accent);transform-origin:0 50%;transform:scaleX(var(--read,0))}
+.brand{display:flex;align-items:center;gap:12px;font-weight:700;font-size:18px;text-decoration:none;color:var(--abr-white)}
+.brand svg{width:32px;height:32px}.brand .wm{letter-spacing:-.01em}.brand .wm span{font-weight:400}.brand .wm i{font-style:normal;color:var(--accent)}
+.rail nav{display:flex;gap:28px;font-size:16px;font-weight:400}
+.rail nav a{text-decoration:none;color:var(--m200);padding:8px 0;border-bottom:2px solid transparent;transition:color .15s ease}
+.rail nav a:hover{color:var(--abr-white);border-bottom-color:currentColor}
+.rail .btn{height:40px;padding:0 16px;font-size:16px}
+
+
+h1{font:700 clamp(40px,6vw,84px)/1.04 var(--font);letter-spacing:-.03em;margin:0 0 20px;max-width:16ch}
+em{font-style:normal;background:var(--accent);color:var(--abr-black);padding:0 .12em}
+.kicker{display:inline-flex;gap:10px;align-items:center;font:400 16px var(--font);color:var(--muted);margin:0 0 24px}
+.sub{max-width:680px;color:var(--muted);font-size:18px;margin:0}
+.intro{padding-top:140px;padding-bottom:36px}
+.bar{position:sticky;top:72px;z-index:5;background:var(--bg);padding:18px 0 14px;border-bottom:1px solid var(--line)}
+.bar .wrap{display:flex;flex-wrap:wrap;gap:14px 20px;align-items:center}
+.search{flex:1 1 320px;display:flex;align-items:center;gap:10px;height:48px;padding:0 16px;border-block:var(--stroke) solid var(--abr-black);background:var(--abr-white)}
+.search input{flex:1;border:0;outline:0;background:transparent;font:400 17px var(--font);color:var(--abr-black)}
+.search kbd{font:500 12px var(--mono);color:var(--m600);border:1px solid var(--m200);padding:1px 6px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip-f{height:40px;padding:0 14px;border:0;border-block:var(--stroke) solid var(--abr-black);background:transparent;font:400 15px var(--font);color:var(--abr-black);cursor:pointer}
+.chip-f span{font:500 12px var(--mono);color:var(--m600);margin-left:6px}
+.chip-f[aria-pressed="true"]{background:var(--accent);font-weight:700}
+.chip-f[aria-pressed="true"] span{color:var(--abr-black)}
+.count{font:500 13px var(--mono);color:var(--m600);margin:22px 0 14px}
+.grid-c{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;padding-bottom:110px}
+.cc{--frame:var(--abr-black);background:var(--abr-white);padding:22px 22px 20px;display:flex;flex-direction:column;gap:10px;text-decoration:none;color:inherit}
+.cc:hover{background:var(--m50)}
+.cc .k{display:flex;justify-content:space-between;gap:12px;font:500 12px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--m600)}
+.cc .k .t{color:var(--abr-black);background:var(--m100);padding:1px 6px}
+.cc .k .t.FAST{background:#cfe3c6}.cc .k .t.BALANCED{background:#c9d9ee}.cc .k .t.STRONG{background:var(--accent)}.cc .k .t.EXPERT{background:#d9cdee}
+.cc h2{margin:0;font:700 20px/1.25 var(--mono);letter-spacing:-.01em;word-break:break-word}
+.cc p{margin:0;color:var(--m600);font-size:15.5px;line-height:1.5}
+.cc .uw{margin-top:auto;padding-top:10px;border-top:1px solid var(--m200);font-size:14.5px}
+.cc .uw b{font-weight:600}
+.cc .mt{font:500 12.5px var(--mono);color:var(--m600)}
+.empty{padding:60px 0 120px;font-size:18px;color:var(--m600)}
+.empty button{font:700 16px var(--font);background:none;border:0;border-bottom:2px solid currentColor;cursor:pointer;padding:4px 0;margin-left:8px}
+footer{background:var(--abr-black);color:var(--m200);padding:28px 0}
+footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;font:400 15px var(--font)}
+footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid transparent}footer a:hover{border-bottom-color:var(--accent)}
+.tm{margin-top:12px;font-size:13px;color:var(--m400)}
+footer .cols{display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:32px;padding-top:28px;padding-bottom:8px}
+footer .cols h4{margin:0 0 10px;font:600 14px var(--font);color:var(--abr-white)}
+footer .cols ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+/* footer link groups */
+footer .cols{display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:32px;padding-top:28px;padding-bottom:8px}
+footer .cols h4{margin:0 0 10px;font:600 14px var(--font);color:var(--abr-white)}
+footer .cols ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+
+@media (max-width:1023px){.rail nav{display:none}footer .cols{grid-template-columns:1fr 1fr}}
+@media (max-width:767px){.rail{height:64px}.bar{top:64px}.intro{padding-top:112px}footer .cols{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="rail" id="rail">
+  <a class="brand" href="./" aria-label="RiskRail home">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 8H41a10 10 0 0 1 0 20H32M32 8H23a10 10 0 0 0 0 20H32M32 8V56M32 28L47 56M32 28L17 56M8 46H56" fill="none" stroke="#E39B6B" stroke-width="5"/></svg>
+    <span class="wm"><span>Risk</span>R<i>ai</i>l</span>
+  </a>
+  <nav aria-label="Sections">
+    <a href="./#lifecycle">Lifecycle</a><a href="./#router">Risk tiers</a><a href="./#guards">Guards</a><a href="catalog.html" aria-current="page">Catalog</a><a href="demo.html">Demo</a><a href="benchmark.html">Benchmark</a><a href="./">Home</a>
+  </nav>
+  <a class="btn secondary" href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub ↗</a>
+</header>
+<main id="main">
+<section class="wrap intro">
+  <p class="kicker">Catalog · v2.0.2</p>
+  <h1>Everything in the plugin, <em>one card</em> per job.</h1>
+  <p class="sub">Ten commands, fourteen agents, seven hooks, seven risk tiers, five workflows and the plans that decide which model each tier runs on. Every card says what it does and when it runs, and links to its contract.</p>
+</section>
+<div class="bar">
+  <div class="wrap">
+    <label class="search"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3a7 7 0 1 0 4.2 12.6l5.1 5.1 1.4-1.4-5.1-5.1A7 7 0 0 0 10 3zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10z" fill="currentColor"/></svg><input id="q" type="search" placeholder="Search: review, payments, Codex, secrets…" aria-label="Search the catalog" autocomplete="off"><kbd>/</kbd></label>
+    <div class="chips" role="group" aria-label="Filter by kind" id="chips"></div>
+  </div>
+</div>
+<section class="wrap" aria-live="polite">
+  <p class="count" id="count"></p>
+  <div class="grid-c" id="grid"></div>
+  <p class="empty" id="empty" hidden>Nothing matches that search.<button type="button" id="clear">Clear</button></p>
+</section>
+</main>
+<footer>
+  <div class="wrap cols">
+    <div><span>claude-agentic v2.0.2</span><div class="tm">Claude is a trademark of Anthropic, Codex of OpenAI. An independent project. MIT.</div></div>
+    <div><h4>Product</h4><ul><li><a href="catalog.html">Catalog</a></li><li><a href="demo.html">Demo</a></li><li><a href="benchmark.html">Benchmark</a></li><li><a href="./#install">Install</a></li></ul></div>
+    <div><h4>Learn</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki">Wiki</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Lifecycle">Lifecycle</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Workflows-and-Risk-Tiers">Risk tiers</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Troubleshooting">Troubleshooting</a></li></ul></div>
+    <div><h4>Repository</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/tree/main/docs">Docs</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/releases">Releases</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/issues">Issues</a></li></ul></div>
+  </div>
+</footer>
+<script>
+(() => {
+  'use strict';
+  const ITEMS = [{"kind": "command", "group": "Set up", "name": "/ai-init", "desc": "Surveys an existing production codebase and builds .ai/ around it: knowledge base, policies, risk tiers, workflows, agent contracts and the three test commands, then an initial assessment. Never touches application code.", "ul": "Use when", "use": "before the first /ai-task in a repository", "meta": "--survey light | full", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/skills/ai-init/SKILL.md"}, {"kind": "command", "group": "Set up", "name": "/ai-audit", "desc": "Inventories your AI configuration and scores it 0–3, with citations, against the twelve plays of the AI-native SDLC playbook. Writes docs/ai-sdlc-adoption-plan.md and nothing else.", "ul": "Use when", "use": "you want to know what your current setup is missing", "meta": "read-only but one file", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/skills/ai-audit/SKILL.md"}, {"kind": "command", "group": "Set up", "name": "/project-init", "desc": "Scaffolds docs/sdlc/ (intent, specs, plans, adr), the runtime directory, .gitignore entries and an instruction-file skeleton, then fills it from the codebase.", "ul": "Use when", "use": "you want the SDLC layout without the agentic pipeline", "meta": "--runtime claude | codex | gemini | junie | both", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/skills/project-init/SKILL.md"}, {"kind": "command", "group": "Set up", "name": "/project-update", "desc": "Brings .ai/, the managed block and the templates up to date. Untouched files are replaced, edited Markdown is three-way merged, JSON policies are merged key by key, conflicts are never overwritten.", "ul": "Use when", "use": "after reinstalling the plugin, or when /ai-status says the project is behind", "meta": "--apply · --adopt [--mode coexist]", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/skills/project-update/SKILL.md"}, {"kind": "command", "group": "Define", "name": "/sdlc-intent", "desc": "A short, one-question-at-a-time brainstorm into docs/sdlc/intent/<slug>.md: problem, outcome, affected users and systems, constraints, open questions.", "ul": "Use when", "use": "starting a feature whose problem is not agreed yet", "meta": "<topic>", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/skills/sdlc-intent/SKILL.md"}, {"kind": "command", "group": "Define", "name": "/sdlc-spec", "desc": "A requirements and design spec that applies the project's conventions and principles (C<n>) as policy and ends with explicitly flagged concerns.", "ul": "Use when", "use": "the intent is agreed and the design is not", "meta": "<intent path>", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/skills/sdlc-spec/SKILL.md"}, {"kind": "command", "group": "Define", "name": "/sdlc-plan", "desc": "An ordered implementation plan: files that change, order of work, risks, proof and rollback, ready to hand to /ai-task.", "ul": "Use when", "use": "the spec is agreed", "meta": "<spec path>", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/skills/sdlc-plan/SKILL.md"}, {"kind": "command", "group": "Build", "name": "/ai-task", "desc": "Classifies the change into a workflow and a tier, runs T0–T4 in direct mode and T5–T6 through the full pipeline, verifies once to the end, reviews, and stops at your approval.", "ul": "Use when", "use": "every change in a repository that has .ai/", "meta": "<request> · --resume · --abandon", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/skills/ai-task/SKILL.md"}, {"kind": "command", "group": "Observe", "name": "/ai-status", "desc": "Which .ai/ root governs this directory; the task's stage, step, allowed files, test, review and security status, open risks; the models each tier resolves to; the quota; whether the project is behind.", "ul": "Use when", "use": "“where are we”, “why did a guard fire here”", "meta": "read-only", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/skills/ai-status/SKILL.md"}, {"kind": "command", "group": "Observe", "name": "/usage-report", "desc": "Tokens and cost per session, day, project, model and task, from local transcripts, for Claude Code and Codex, at zero model cost.", "ul": "Use when", "use": "“what did this cost”, “which model spent the most”", "meta": "--task <id> · --no-cache", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/skills/usage-report/SKILL.md"}, {"kind": "agent", "group": "FAST", "name": "Explore", "desc": "Finds files and code and returns file:line excerpts, never the file.", "ul": "Runs", "use": "a file is not found in a few grep calls, or is too large to open", "meta": "FAST", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "agent", "group": "FAST", "name": "log-reader", "desc": "Reads logs, test output, stack traces and CI output; returns only the errors and a short diagnosis.", "ul": "Runs", "use": "output is too long to read inline", "meta": "FAST", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "agent", "group": "FAST", "name": "ai-indexer", "desc": "The cheapest inventory: file listings, symbol extraction, git-log summaries, counts.", "ul": "Runs", "use": "before a discovery fan-out on a large area", "meta": "FAST", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "agent", "group": "FAST", "name": "ai-tester", "desc": "Classifies a red run — pass, existing failure, new regression, environment, unknown — with every failure in one report. Never edits a test.", "ul": "Runs", "use": "only when a test run is red", "meta": "FAST", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "agent", "group": "BALANCED", "name": "ai-discovery", "desc": "Traces an implementation, its callers, tests, configuration and hidden coupling. Labelled facts with file:line, never a solution.", "ul": "Runs", "use": "T6, or an area you say is unfamiliar", "meta": "BALANCED", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "agent", "group": "BALANCED", "name": "ai-context", "desc": "Compresses discovery into the one structured task context every later agent reads instead of the repository.", "ul": "Runs", "use": "T5–T6, after discovery", "meta": "BALANCED", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "agent", "group": "BALANCED", "name": "ai-implementer", "desc": "Implements one approved, mechanical, pattern-copying step. Answers SCOPE_CHANGE_REQUIRED rather than touch anything else.", "ul": "Runs", "use": "you ask for it", "meta": "BALANCED", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "agent", "group": "BALANCED", "name": "ai-release", "desc": "Assembles the release report from the task's files: what changed, what was preserved, tests, reviews, rollback, what you approve.", "ul": "Runs", "use": "T5–T6", "meta": "BALANCED", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "agent", "group": "STRONG", "name": "ai-reviewer", "desc": "Adversarial review that assumes the change is wrong: behaviour drift, hidden coupling, races, idempotency, contract breaks, scope creep, weakened checks.", "ul": "Runs", "use": "always from T4; on BALANCED at T2–T3 when a sensor is red", "meta": "STRONG", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "agent", "group": "STRONG", "name": "ai-risk", "desc": "Assigns exactly one tier, T0–T6, from risk-tiers.json and names the trigger that decided it.", "ul": "Runs", "use": "T5–T6", "meta": "STRONG", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "agent", "group": "STRONG", "name": "ai-planner", "desc": "Steps, the files each may touch, compatibility, tests, migration impact, rollback, observability, risks. Never writes code.", "ul": "Runs", "use": "T5; at T4 only on a delegate_anyway_when trigger", "meta": "STRONG", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "agent", "group": "STRONG", "name": "ai-security", "desc": "Authentication, authorization, secrets, personal and payment data, webhooks, injection, SSRF, IDOR, deserialization, dependencies, AI context safety.", "ul": "Runs", "use": "T5–T6, or any diff touching auth or personal data", "meta": "STRONG", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "agent", "group": "STRONG", "name": "architect", "desc": "Architecture and design decisions before implementation; returns a design and an ordered plan. Fable 5.1 on Max plans.", "ul": "Runs", "use": "design questions outside a task", "meta": "STRONG", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "agent", "group": "EXPERT", "name": "ai-expert", "desc": "Last-resort reasoning: conflicting constraints, a T6 migration or infrastructure decision, several irreversible designs.", "ul": "Runs", "use": "T6, or what STRONG could not settle; asks before it starts", "meta": "EXPERT", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/agents.md"}, {"kind": "hook", "group": "both runtimes", "name": "ai-git-guard", "desc": "Refuses force push, remote branch delete, history rewrite, push or merge to a protected branch, gh pr merge, --no-verify, staging a secret and production deploy commands.", "ul": "Fires", "use": "every Bash call, in every repository", "meta": "both runtimes", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/hooks.md"}, {"kind": "hook", "group": "both runtimes", "name": "ai-path-guard", "desc": "Refuses reading or writing .env, secrets/, keys, dumps and production logs; edits to the guards' config, task state, journal, questions and handoff; cp/mv/install/rm onto them, including inside sh -c and eval; state.py approve from an agent session.", "ul": "Fires", "use": "where .ai/ exists", "meta": "both runtimes", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/hooks.md"}, {"kind": "hook", "group": "both runtimes", "name": "ai-scope-guard", "desc": "Refuses an edit to a file the approved step does not name, with SCOPE_CHANGE_REQUIRED. Checks every path of a Codex apply_patch separately.", "ul": "Fires", "use": "during an implementation step", "meta": "both runtimes", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/hooks.md"}, {"kind": "hook", "group": "Claude Code", "name": "cap-large-read", "desc": "Refuses an unbounded Read over 4,000 lines or 250 KB. An explicit limit passes: large reads stay possible, but deliberate.", "ul": "Fires", "use": "every session", "meta": "Claude Code", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/hooks.md"}, {"kind": "hook", "group": "both runtimes", "name": "context-guard", "desc": "Warns from 80% of the compaction point, holds a prompt back once from 120%, snapshots what to keep before compaction, and injects the handoff and pending questions on session start.", "ul": "Fires", "use": "every prompt, compaction and session start", "meta": "both runtimes", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/hooks.md"}, {"kind": "hook", "group": "both runtimes", "name": "runtime-gate", "desc": "Sends the top model's launches one tier down while it is rate-limited, asks before an EXPERT launch or a fan-out past the plan's budget, records the quota, journals model_fallback.", "ul": "Fires", "use": "every agent launch", "meta": "both runtimes", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/hooks.md"}, {"kind": "hook", "group": "Claude Code", "name": "project-scaffold", "desc": "Creates the docs/sdlc/ and runtime layout when you run /init.", "ul": "Fires", "use": "Setup:init", "meta": "Claude Code", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/hooks.md"}, {"kind": "tier", "group": "direct mode", "name": "T0", "desc": "Documentation, comments. Runs in direct mode: name the files, edit.", "ul": "Review", "use": "no review, no state file", "meta": "", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Workflows-and-Risk-Tiers"}, {"kind": "tier", "group": "direct mode", "name": "T1", "desc": "Formatting, a label, a template or stylesheet tweak with no logic. Runs in direct mode, then the verification command.", "ul": "Review", "use": "no review, no state file", "meta": "", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Workflows-and-Risk-Tiers"}, {"kind": "tier", "group": "direct mode", "name": "T2", "desc": "An isolated screen or form, a new field, a small feature that changes no process. Runs in direct mode, one state.py quick record.", "ul": "Review", "use": "the sensors; BALANCED reviewer only on a red sensor", "meta": "", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Workflows-and-Risk-Tiers"}, {"kind": "tier", "group": "direct mode", "name": "T3", "desc": "CRUD and presentation: a new resource with its screens, a non-critical API extension. Runs in direct mode, one state.py quick record.", "ul": "Review", "use": "the sensors; BALANCED reviewer only on a red sensor", "meta": "", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Workflows-and-Risk-Tiers"}, {"kind": "tier", "group": "direct mode", "name": "T4", "desc": "Shared domain behaviour and processes: orders, workflows, async, integrations, an additive migration, config. Runs in direct mode; the plan in plan mode, approved by you.", "ul": "Review", "use": "STRONG review always; your approval", "meta": "", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Workflows-and-Risk-Tiers"}, {"kind": "tier", "group": "full pipeline", "name": "T5", "desc": "Payments, accounting, tax, fiscal, auth, order state, customer data. Runs in full pipeline: STRONG risk and plan, plan review.", "ul": "Review", "use": "STRONG review, security review, your approval", "meta": "", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Workflows-and-Risk-Tiers"}, {"kind": "tier", "group": "full pipeline", "name": "T6", "desc": "Migration strategy, infrastructure, production architecture, destructive or data migrations. Runs in full pipeline; discovery delegated, plan by EXPERT.", "ul": "Review", "use": "STRONG review, security review, your approval", "meta": "", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Workflows-and-Risk-Tiers"}, {"kind": "workflow", "group": "workflow", "name": "feature", "desc": "Adds the requested behaviour and names what must stay unaffected.", "ul": "Use for", "use": "new behaviour", "meta": "", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/workflows.md"}, {"kind": "workflow", "group": "workflow", "name": "bugfix", "desc": "Reproduces first: the failing test is written and shown failing before the fix.", "ul": "Use for", "use": "something is wrong today", "meta": "", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/workflows.md"}, {"kind": "workflow", "group": "workflow", "name": "refactoring", "desc": "Characterization tests first, one mechanical transformation per step, identical behaviour after. Shared code is T4 minimum; the plan is always reviewed.", "ul": "Use for", "use": "changing shape, not behaviour", "meta": "", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/workflows.md"}, {"kind": "workflow", "group": "workflow", "name": "hotfix", "desc": "Production is broken now: stages get shorter, none disappears, urgency never lowers the tier.", "ul": "Use for", "use": "an incident", "meta": "", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/workflows.md"}, {"kind": "workflow", "group": "workflow", "name": "investigation", "desc": "An evidence-backed answer, with no implementation.", "ul": "Use for", "use": "you need to know, not change", "meta": "", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/workflows.md"}, {"kind": "plan", "group": "Claude Code", "name": "pro · team-pro", "desc": "Session opusplan: Opus in plan mode, Sonnet when executing. ai-expert and architect pinned to opus.", "ul": "Install", "use": "./install.sh --plan pro | team-pro", "meta": "Claude Code", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Model-Routing-and-Context"}, {"kind": "plan", "group": "Claude Code", "name": "max · team-max", "desc": "Session Opus 5.5 [1m] at medium, compacting near 767k. Fable 5.1 on architect only.", "ul": "Install", "use": "./install.sh --plan max | team-max", "meta": "Claude Code", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Model-Routing-and-Context"}, {"kind": "plan", "group": "Claude Code", "name": "max20", "desc": "Max's settings with larger budgets: six agents at once, EXPERT without asking.", "ul": "Install", "use": "./install.sh --plan max20", "meta": "Claude Code", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Model-Routing-and-Context"}, {"kind": "plan", "group": "Claude Code", "name": "balanced-max", "desc": "Only the session is strong (Opus 5.5, 200k); readers on Haiku, judgement on Sonnet, reviews on Opus, no Fable, no xhigh.", "ul": "Install", "use": "./install.sh --plan balanced-max", "meta": "Claude Code", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Model-Routing-and-Context"}, {"kind": "plan", "group": "Codex", "name": "codex pro", "desc": "Sol at high, six agent threads, Astra at xhigh for ai-expert.", "ul": "Install", "use": "./install.sh --codex-plan pro", "meta": "Codex", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Model-Routing-and-Context"}, {"kind": "plan", "group": "Codex", "name": "codex plus", "desc": "Sol at medium, three agent threads, Astra at high; xhigh never used.", "ul": "Install", "use": "./install.sh --codex-plan plus", "meta": "Codex", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Model-Routing-and-Context"}, {"kind": "plan", "group": "Codex", "name": "codex balanced-max", "desc": "Pro's budgets, Sol session, FAST readers on Luna, Astra at high.", "ul": "Install", "use": "./install.sh --codex-plan balanced-max", "meta": "Codex", "href": "https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Model-Routing-and-Context"}];
+  const KINDS = [["all", "All"], ["command", "Commands"], ["agent", "Agents"], ["hook", "Hooks"], ["tier", "Risk tiers"], ["workflow", "Workflows"], ["plan", "Plans"]];
+  const LABEL = {command:'command', agent:'agent', hook:'hook', tier:'risk tier', workflow:'workflow', plan:'plan'};
+  const $ = s => document.querySelector(s);
+  const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+  const grid = $('#grid'), q = $('#q'), chips = $('#chips');
+  let kind = 'all';
+  chips.innerHTML = KINDS.map(([k, l]) => `<button type="button" class="chip-f" data-k="${k}" aria-pressed="${k === 'all'}">${l}<span>${k === 'all' ? ITEMS.length : ITEMS.filter(i => i.kind === k).length}</span></button>`).join('');
+  grid.innerHTML = ITEMS.map((it, i) => {
+    const tag = it.kind === 'agent' ? `<span class="t ${it.group}">${it.group}</span>` : `<span>${esc(it.group)}</span>`;
+    return `<a class="cc frame" href="${it.href}" data-i="${i}"><div class="k"><span>${LABEL[it.kind]}</span>${tag}</div><h2>${esc(it.name)}</h2><p>${esc(it.desc)}</p>${it.meta && it.kind === 'command' ? `<div class="mt">${esc(it.meta)}</div>` : ''}<div class="uw"><b>${it.ul}</b> ${esc(it.use)}</div></a>`;
+  }).join('');
+  const cards = [...grid.children];
+  const hay = ITEMS.map(it => [it.kind, it.group, it.name, it.desc, it.use, it.meta].join(' ').toLowerCase());
+  const apply = () => {
+    const terms = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+    let n = 0;
+    cards.forEach((c, i) => {
+      const ok = (kind === 'all' || ITEMS[i].kind === kind) && terms.every(t => hay[i].includes(t));
+      c.hidden = !ok; if (ok) n++;
+    });
+    $('#count').textContent = `${n} of ${ITEMS.length}`;
+    $('#empty').hidden = n > 0;
+    [...chips.children].forEach(b => b.setAttribute('aria-pressed', b.dataset.k === kind));
+  };
+  const fromHash = () => { const h = location.hash.slice(1); kind = KINDS.some(([k]) => k === h) ? h : 'all'; apply(); };
+  chips.addEventListener('click', e => { const b = e.target.closest('.chip-f'); if (!b) return; kind = b.dataset.k;
+    history.replaceState(null, '', kind === 'all' ? location.pathname : '#' + kind); apply(); });
+  q.addEventListener('input', apply);
+  $('#clear').addEventListener('click', () => { q.value = ''; kind = 'all'; history.replaceState(null, '', location.pathname); apply(); q.focus(); });
+  addEventListener('keydown', e => { if (e.key === '/' && document.activeElement !== q) { e.preventDefault(); q.focus(); } });
+  addEventListener('hashchange', fromHash);
+  fromHash();
+})();
+</script>
+</body>
+</html>

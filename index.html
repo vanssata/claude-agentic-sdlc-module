@@ -6,7 +6,7 @@
 <title>claude-agentic</title>
 <meta name="description" content="Model routing, risk-tiered reviews and enforced guardrails for Claude Code and Codex, built for production codebases you cannot afford to break.">
 <meta property="og:title" content="claude-agentic: pay for thinking, not for re-reading">
-<meta property="og:description" content="One .ai/ tree, two runtimes, six risk tiers, hooks that refuse the dangerous stuff. Measured on real work: 8.3% cheaper per request.">
+<meta property="og:description" content="One .ai/ tree, two runtimes, seven risk tiers, hooks that refuse the dangerous stuff. Measured on real work: 8.3% cheaper per request.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#221A15">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23221A15'/%3E%3Cpath d='M32 8H41a10 10 0 0 1 0 20H32M32 8H23a10 10 0 0 0 0 20H32M32 8V56M32 28L47 56M32 28L17 56M8 46H56' fill='none' stroke='%23E39B6B' stroke-width='5'/%3E%3C/svg%3E">
@@ -224,14 +224,15 @@ h2{font:700 clamp(34px,4.6vw,64px)/1.1 var(--font);letter-spacing:-.025em;margin
 
 /* TIERS STAIRCASE */
 .stairs{padding:clamp(80px,10vw,140px) 0}
-.steps{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;align-items:end;margin-top:52px;height:440px}
+.steps{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;align-items:end;margin-top:52px;height:440px}
 .step{background:var(--abr-black);color:var(--abr-white);padding:18px 16px;display:flex;flex-direction:column;height:calc(var(--h) * 1%);transform-origin:50% 100%;transform:scaleY(0);transition:transform .9s cubic-bezier(.2,.8,.2,1)}
 .steps.in .step{transform:none}
-.step:nth-child(2){transition-delay:.07s}.step:nth-child(3){transition-delay:.14s}.step:nth-child(4){transition-delay:.21s}.step:nth-child(5){transition-delay:.28s}.step:nth-child(6){transition-delay:.35s}
+.step:nth-child(2){transition-delay:.07s}.step:nth-child(3){transition-delay:.14s}.step:nth-child(4){transition-delay:.21s}.step:nth-child(5){transition-delay:.28s}.step:nth-child(6){transition-delay:.35s}.step:nth-child(7){transition-delay:.42s}
 .step .n{font:700 36px/1 var(--font);color:var(--accent)}
 .step p{margin:10px 0 0;font-size:14px;line-height:1.4;color:var(--m200);font-weight:400}
+.step{overflow:hidden}
 .step.hot{background:var(--accent);color:var(--abr-black)}.step.hot .n{color:var(--abr-black)}.step.hot p{color:var(--abr-black)}
-.legend{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-top:14px;font:400 14px/1.4 var(--font);color:var(--muted)}
+.legend{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-top:14px;font:400 14px/1.4 var(--font);color:var(--muted)}
 
 /* MORE */
 .more{padding:clamp(80px,10vw,140px) 0}
@@ -259,9 +260,9 @@ h2{font:700 clamp(34px,4.6vw,64px)/1.1 var(--font);letter-spacing:-.025em;margin
 .dots i.on{background:var(--abr-black);border-color:var(--abr-black)}
 .pole.heavy .dots i.on{background:var(--accent);border-color:var(--accent)}
 .dots span{margin-left:12px;font:500 13px var(--mono);color:var(--m600)}
-.span6{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin:0 0 10px}
+.span6{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:0 0 10px}
 .span6 b{height:10px;background:var(--m200);transform-origin:0 50%;transform:scaleX(0);transition:transform .7s cubic-bezier(.2,.8,.2,1)}
-.span6 b:nth-child(n+4){background:var(--m700)}.span6 b:nth-child(n+5){background:var(--accent)}
+.span6 b:nth-child(n+5){background:var(--m700)}.span6 b:nth-child(n+6){background:var(--accent)}
 .span6.in b{transform:none}
 .span6 b:nth-child(2){transition-delay:.06s}.span6 b:nth-child(3){transition-delay:.12s}.span6 b:nth-child(4){transition-delay:.18s}.span6 b:nth-child(5){transition-delay:.24s}.span6 b:nth-child(6){transition-delay:.3s}
 .spanlab{display:flex;justify-content:space-between;font:500 13px var(--mono);color:var(--m600);margin-bottom:28px}
@@ -306,6 +307,60 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
 .toggle button[aria-pressed="true"] .ico{fill:var(--abr-black)}
 .ask[aria-pressed="true"],.btn.primary{color:var(--abr-black)}
 .tm{margin-top:12px;font-size:13px;color:var(--m400)}
+
+
+/* numbered section label, as in a table of contents */
+.sn{display:flex;gap:12px;align-items:baseline;font:500 13px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 18px}
+.sn b{font:700 13px var(--mono);background:var(--accent);padding:2px 6px;color:var(--abr-black)}
+.dark .sn{color:var(--m200)}
+
+/* 01 lifecycle */
+.life{padding:clamp(80px,10vw,140px) 0}
+.life .top{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:end;margin-bottom:48px}
+.flow{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,1fr);counter-reset:ph;border-top:var(--stroke) solid var(--abr-black)}
+.flow li{counter-increment:ph;padding:22px 20px 26px 20px;display:flex;flex-direction:column;gap:10px;border-bottom:1px solid var(--m200);border-left:1px solid var(--m200)}
+.flow li:nth-child(4n+1){padding-left:0;border-left:0}
+.flow li::before{content:counter(ph,decimal-leading-zero);font:700 15px var(--mono);color:var(--m400)}
+.flow li.you::before{color:var(--abr-black);background:var(--accent);align-self:flex-start;padding:0 6px}
+.flow h3{margin:0;font:700 22px/1.2 var(--font);letter-spacing:-.01em}
+.flow p{margin:0;color:var(--m600);font-size:16px}
+.flow .cm{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:8px}
+.flow .cm code{font-size:13px}
+.life .modes{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:40px}
+.mode-c{--frame:var(--abr-black);padding:24px 28px;background:var(--abr-white)}
+.mode-c.ink{background:var(--abr-black);color:var(--abr-white);--frame:var(--accent)}
+.mode-c .tag{font:500 13px var(--mono);letter-spacing:.04em;color:var(--m600);margin-bottom:10px}
+.mode-c.ink .tag,.mode-c.ink p{color:var(--m200)}
+.mode-c.ink code{background:var(--m900);border-color:var(--m800);color:var(--abr-white)}
+.mode-c h3{margin:0 0 10px;font:700 24px/1.2 var(--font)}
+.mode-c p{margin:0;color:var(--m600);font-size:16px}
+
+/* 02 commands and 05 agents: filterable cards */
+.cmds-s,.agents-s{padding:clamp(80px,10vw,140px) 0}
+.cmds-s .top,.agents-s .top{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:end;margin-bottom:32px}
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 28px}
+.chip-f{position:relative;height:40px;padding:0 16px;border:0;border-block:var(--stroke) solid var(--abr-black);background:transparent;font:400 15px var(--font);color:var(--abr-black);cursor:pointer}
+.chip-f span{font:500 12px var(--mono);color:var(--m600);margin-left:6px}
+.chip-f[aria-pressed="true"]{background:var(--accent);font-weight:700}
+.chip-f[aria-pressed="true"] span{color:var(--abr-black)}
+.grid-c{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px}
+.cc{--frame:var(--abr-black);background:var(--abr-white);padding:22px 22px 24px;display:flex;flex-direction:column;gap:10px}
+.cc[hidden]{display:none}
+.cc .k{display:flex;justify-content:space-between;gap:12px;font:500 12px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--m600)}
+.cc .k .t{color:var(--abr-black);background:var(--m100);padding:1px 6px}
+.cc .k .t.FAST{background:#cfe3c6}.cc .k .t.BALANCED{background:#c9d9ee}.cc .k .t.STRONG{background:var(--accent)}.cc .k .t.EXPERT{background:#d9cdee}
+.cc h3{margin:0;font:700 19px/1.25 var(--mono);letter-spacing:-.01em;word-break:break-word}
+.cc p{margin:0;color:var(--m600);font-size:15.5px;line-height:1.5}
+.cc .uw{margin-top:auto;padding-top:10px;border-top:1px solid var(--m200);font-size:14.5px;color:var(--abr-black)}
+.cc .uw b{font-weight:600}
+.more-link{margin-top:32px;display:flex;gap:24px;flex-wrap:wrap;align-items:center}
+
+/* footer link groups */
+footer .cols{display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:32px;padding-top:28px;padding-bottom:8px}
+footer .cols h4{margin:0 0 10px;font:600 14px var(--font);color:var(--abr-white)}
+footer .cols ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+@media (max-width:1023px){.life .top,.cmds-s .top,.agents-s .top,.life .modes{grid-template-columns:1fr}.flow{grid-template-columns:1fr 1fr}.flow li{padding-left:20px;border-left:1px solid var(--m200)}.flow li:nth-child(odd){padding-left:0;border-left:0}footer .cols{grid-template-columns:1fr 1fr}}
+@media (max-width:600px){.flow{grid-template-columns:1fr}.flow li{padding-left:0;border-left:0}footer .cols{grid-template-columns:1fr}}
 
 /* responsive */
 @media (max-width:1023px){
@@ -359,7 +414,7 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
     <span class="wm"><span>Risk</span>R<i>ai</i>l</span>
   </a>
   <nav aria-label="Sections">
-    <a href="#why">Why</a><a href="#routing">Routing</a><a href="#proof">Measured</a><a href="#fleet">Two months</a><a href="#router">Risk tiers</a><a href="#guards">Guards</a><a href="#risks">Risks</a><a href="#install">Install</a><a href="demo.html">Demo</a><a href="benchmark.html">Benchmark</a>
+    <a href="#lifecycle">Lifecycle</a><a href="#commands">Commands</a><a href="#router">Risk tiers</a><a href="#routing">Routing</a><a href="#agents">Agents</a><a href="#guards">Guards</a><a href="#proof">Measured</a><a href="#risks">Risks</a><a href="catalog.html">Catalog</a><a href="demo.html">Demo</a><a href="benchmark.html">Benchmark</a>
   </nav>
   <a class="btn secondary" href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub ↗</a>
 </header>
@@ -368,12 +423,12 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
 
 <!-- HERO -->
 <section class="hero" id="top" aria-labelledby="h1">
-  <div class="plane p-back" data-depth="0.15"><div class="grid"></div><div class="tiers" aria-hidden="true">T0 T5</div></div>
+  <div class="plane p-back" data-depth="0.15"><div class="grid"></div><div class="tiers" aria-hidden="true">T0 T6</div></div>
   <div class="plane p-mid" data-depth="0.4" aria-hidden="true">
     <div class="chip frame" style="right:9%;top:22%"><svg class="ico cl" aria-hidden="true"><use href="#i-claude"/></svg>FAST <b>haiku · low</b></div>
     <div class="chip frame hide-s" style="right:24%;top:40%"><svg class="ico cl" aria-hidden="true"><use href="#i-claude"/></svg>BALANCED <b>sonnet</b></div>
     <div class="chip dark hide-s" style="right:6%;top:58%"><svg class="ico" aria-hidden="true"><use href="#i-openai"/></svg>STRONG <b>opus · high</b></div>
-    <div class="chip yl hide-s" style="right:30%;top:74%">tests <b>2,179 assertions passing</b></div>
+    <div class="chip yl hide-s" style="right:30%;top:74%">tests <b>3,185 assertions passing</b></div>
   </div>
   <div class="wrap hero-copy">
     <p class="kicker"><svg class="ico cl" aria-hidden="true"><use href="#i-claude"/></svg><svg class="ico" aria-hidden="true"><use href="#i-openai"/></svg>v2.0.2 · Claude Code + Codex</p>
@@ -381,7 +436,8 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
     <p class="lede">claude-agentic routes every job to the cheapest model that can do it well, classifies every change by risk before it is planned, and <strong>puts hooks in front of the commands that break production</strong>. Built for codebases with legacy code and customers who depend on them today.</p>
     <div class="cta-row">
       <a class="btn primary" href="#install">Install it</a>
-      <a class="btn secondary" href="#proof">See today’s numbers</a>
+      <a class="btn secondary" href="catalog.html">Browse the catalog</a>
+      <a class="btn ghost" href="demo.html">Watch a task run →</a>
     </div>
     <div class="runtimes"><span><svg class="ico cl" aria-hidden="true"><use href="#i-claude"/></svg>Claude Code</span><span><svg class="ico" aria-hidden="true"><use href="#i-openai"/></svg>Codex</span><span>one shared .ai/</span></div>
   </div>
@@ -399,8 +455,8 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
       <p class="sub" data-rv>Most agent setups pick one speed: fast and loose, or careful and slow for everything. claude-agentic sizes the process to the change, keeps you in charge of the decisions that are yours, and gets more useful the harder the codebase is.</p>
     </div>
 
-    <div class="span6" data-rv id="why-span" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b></div>
-    <div class="spanlab" aria-hidden="true"><span>T0 · a typo</span><span>T5 · a migration</span></div>
+    <div class="span6" data-rv id="why-span" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b></div>
+    <div class="spanlab" aria-hidden="true"><span>T0 · a typo</span><span>T6 · a migration</span></div>
 
     <div class="poles">
       <div class="pole" data-rv>
@@ -408,22 +464,22 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
         <h3>Quick when the job is small.</h3>
         <p>A typo, a colour token or one admin screen is T0 or T1. The session names the files, edits them, runs the check once and stops. There is no plan document, no state file, no reviewer and no fan-out of agents, so a two-minute fix stays a two-minute fix.</p>
         <ul>
-          <li><span>Direct mode up to T3: edit, one verification run, every failure fixed as one batch.</span></li>
+          <li><span>Direct mode up to T4: edit, one verification run, every failure fixed as one batch. At T4 you approve the plan in plan mode.</span></li>
           <li><span>Searching and log reading go to the FAST tier at low effort, not to the expensive session model.</span></li>
-          <li><span>At T2, green sensors (linter, types, tests) can stand in for the review.</span></li>
+          <li><span>Up to T3, green sensors (linter, types, tests, the re-scored diff) stand in for the review.</span></li>
         </ul>
         <div class="dots" aria-label="T0 runs 1 of 11 pipeline stages"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span>T0 · 1 of 11 stages</span></div>
       </div>
       <div class="pole heavy" data-rv>
         <div class="tag">02 · SERIOUS TASKS</div>
         <h3>Safe and controlled when it matters.</h3>
-        <p>Payments, tax, auth, customer data and migrations are T4 or T5 by policy, not by mood, and the tier is re-scored from the real diff. They get the full pipeline: discovery, a reviewed plan, adversarial and security review, a release report and your sign-off. Only a human can lower a tier.</p>
+        <p>Payments, tax, auth, customer data and migrations are T5 or T6 by policy, not by mood, and the tier is re-scored from the real diff. They get the full pipeline: discovery, a reviewed plan, adversarial and security review, a release report and your sign-off. Only a human can lower a tier.</p>
         <ul>
           <li><span>Hooks refuse force pushes, writes into <code>vendor/</code>, secret reads and self-approval.</span></li>
           <li><span>Each step names the files it may touch; anything else is <code>SCOPE_CHANGE_REQUIRED</code>.</span></li>
           <li><span>STRONG and EXPERT models are spent here, on plans and reviews, one at a time.</span></li>
         </ul>
-        <div class="dots" aria-label="T5 runs all 11 pipeline stages"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><span>T5 · 11 of 11</span></div>
+        <div class="dots" aria-label="T6 runs all 11 pipeline stages"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><span>T6 · 11 of 11</span></div>
       </div>
     </div>
 
@@ -431,7 +487,7 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
       <div class="pillar ink frame" data-rv>
         <div class="tag">03 · FOR THE DEVELOPER</div>
         <h3>You steer the work without drowning in it.</h3>
-        <p>The agent does not hand you a wall of generated code and wait for a nod. It stops at the gates that are yours (the T3 plan, the T4 release) and puts everything in between on the record, so you review decisions and a small diff instead of re-reading generated code.</p>
+        <p>The agent does not hand you a wall of generated code and wait for a nod. It stops at the gates that are yours (the T4 plan, the T5 release) and puts everything in between on the record, so you review decisions and a small diff instead of re-reading generated code.</p>
         <ul>
           <li><span>A diff budget per tier, and a refactor is never mixed with a feature change.</span></li>
           <li><span>The release report lists what changed, what was deliberately left alone, the tests, the reviews and what you are asked to approve.</span></li>
@@ -451,6 +507,67 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
         <div class="proofline">./install.sh &amp;&amp; /ai-init <b>→ .ai/ knowledge, policies, risk tiers</b></div>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- 01 LIFECYCLE -->
+<section class="life subtle" id="lifecycle" aria-labelledby="life-h">
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <p class="sn" data-rv><b>01</b>The lifecycle</p>
+        <h2 id="life-h" data-rv>From one line to <em>your</em> sign-off.</h2>
+      </div>
+      <p class="sub" data-rv>Set up once, define when the problem is not agreed yet, then every change runs through <code>/ai-task</code>. The stages are the same in Claude Code and Codex; the tier decides which of them run.</p>
+    </div>
+    <ol class="flow" data-rv>
+      <li><h3>Set up</h3><p>Survey the codebase into <code>.ai/</code>: knowledge, policies, risk tiers and the three test commands. Application code is never touched.</p><div class="cm"><code>/ai-init</code><code>/ai-audit</code></div></li>
+      <li><h3>Define</h3><p>When the problem is not agreed yet: an intent, a spec that applies your conventions, an ordered plan with proof and rollback.</p><div class="cm"><code>/sdlc-intent</code><code>/sdlc-spec</code><code>/sdlc-plan</code></div></li>
+      <li><h3>Triage</h3><p>One tier, T0 to T6, from what the change reaches, never from its size. Until it is known, the task acts as T2.</p><div class="cm"><code>/ai-task &lt;request&gt;</code></div></li>
+      <li><h3>Plan</h3><p>Steps, each naming the files it may touch. A few lines up to T3, plan mode at T4, a STRONG planner and a plan review from T5.</p><div class="cm"><code>state.py quick</code><code>state.py plan</code></div></li>
+      <li><h3>Build</h3><p>The session implements, one step at a time. An edit outside the step is refused with <code>SCOPE_CHANGE_REQUIRED</code>, and the diff is re-scored after every step.</p><div class="cm"><code>state.py step</code><code>step-done</code></div></li>
+      <li><h3>Verify</h3><p>The suite once, to the end, then e2e once. Every failure is classified and fixed as one batch; two rounds, then you decide.</p><div class="cm"><code>test-run --scope all</code><code>remediate</code></div></li>
+      <li><h3>Review</h3><p>Deterministic sensors first. Up to T3 all green is the review; from T4 a STRONG reviewer, plus security at T5 and T6.</p><div class="cm"><code>review-gate</code><code>ai-reviewer</code><code>ai-security</code></div></li>
+      <li class="you"><h3>Approve</h3><p>The task prints the approval command for your own terminal and stops. No agent commits, pushes, merges or deploys.</p><div class="cm"><code>state.py approve --by you</code></div></li>
+    </ol>
+    <div class="modes">
+      <div class="mode-c frame" data-rv><div class="tag">T0 – T4 · DIRECT MODE</div><h3>No ceremony for the everyday change.</h3><p>Name the files, edit, verify once. No state file below T2, one <code>state.py quick</code> record from T2, cheap readers only. At T4 the plan is written in plan mode and accepting it is the approval.</p></div>
+      <div class="mode-c ink frame" data-rv><div class="tag">T5 – T6 · FULL PIPELINE</div><h3>Every stage, on the record.</h3><p>Discovery, context, impact, a STRONG risk call and plan, a plan review, scope-guarded steps, adversarial and security review, a release report, and your approval. Each stage is journalled in <code>events.jsonl</code>.</p></div>
+    </div>
+    <div class="more-link" data-rv><a class="btn ghost" href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Lifecycle">The lifecycle, stage by stage →</a><a class="btn ghost" href="demo.html">Watch a task run →</a></div>
+  </div>
+</section>
+
+<!-- 02 COMMANDS -->
+<section class="cmds-s" id="commands" aria-labelledby="cmd-h">
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <p class="sn" data-rv><b>02</b>The commands</p>
+        <h2 id="cmd-h" data-rv>Ten commands, <em>one</em> per job.</h2>
+      </div>
+      <p class="sub" data-rv>The same skills in Claude Code and Codex. A change starts at <code>/ai-task</code>; the <code>/sdlc-*</code> chain is for work that needs an agreed intent and spec first.</p>
+    </div>
+    <div class="chips" role="group" aria-label="Filter commands by phase" id="cmd-chips">
+      <button type="button" class="chip-f" aria-pressed="true" data-f="all">All<span>10</span></button>
+      <button type="button" class="chip-f" aria-pressed="false" data-f="setup">Set up<span>4</span></button>
+      <button type="button" class="chip-f" aria-pressed="false" data-f="define">Define<span>3</span></button>
+      <button type="button" class="chip-f" aria-pressed="false" data-f="build">Build<span>1</span></button>
+      <button type="button" class="chip-f" aria-pressed="false" data-f="observe">Observe<span>2</span></button>
+    </div>
+    <div class="grid-c" id="cmd-grid">
+      <article class="cc frame" data-ph="setup"><div class="k"><span>Set up</span><span>both runtimes</span></div><h3>/ai-init</h3><p>Surveys an existing codebase and builds <code>.ai/</code>: knowledge base, policies, risk tiers, workflows and the test commands, then an initial assessment.</p><div class="uw"><b>Use when</b> before the first <code>/ai-task</code> in a repository</div></article>
+      <article class="cc frame" data-ph="setup"><div class="k"><span>Set up</span><span>both runtimes</span></div><h3>/ai-audit</h3><p>Scores your AI setup 0–3, with citations, against the twelve plays of the AI-native SDLC playbook and writes one adoption plan.</p><div class="uw"><b>Use when</b> you want to know what your current setup is missing</div></article>
+      <article class="cc frame" data-ph="setup"><div class="k"><span>Set up</span><span>both runtimes</span></div><h3>/project-update</h3><p>Brings <code>.ai/</code>, the managed block and templates up to date; three-way merges edits; <code>--adopt</code> moves Spec Kit, Kiro, Cursor or Copilot in.</p><div class="uw"><b>Use when</b> after reinstalling, or when <code>/ai-status</code> says behind</div></article>
+      <article class="cc frame" data-ph="setup"><div class="k"><span>Set up</span><span>both runtimes</span></div><h3>/project-init</h3><p>Scaffolds <code>docs/sdlc/</code> and the runtime directory for Claude Code, Codex, Gemini or Junie, without the pipeline.</p><div class="uw"><b>Use when</b> you want the SDLC layout alone</div></article>
+      <article class="cc frame" data-ph="define"><div class="k"><span>Define</span><span>both runtimes</span></div><h3>/sdlc-intent</h3><p>A one-question-at-a-time brainstorm into an intent: problem, outcome, affected users, constraints, open questions.</p><div class="uw"><b>Use when</b> the problem is not agreed yet</div></article>
+      <article class="cc frame" data-ph="define"><div class="k"><span>Define</span><span>both runtimes</span></div><h3>/sdlc-spec</h3><p>A requirements and design spec that applies your conventions and principles as policy, ending with flagged concerns.</p><div class="uw"><b>Use when</b> the intent is agreed, the design is not</div></article>
+      <article class="cc frame" data-ph="define"><div class="k"><span>Define</span><span>both runtimes</span></div><h3>/sdlc-plan</h3><p>An ordered plan: files that change, order of work, risks, proof and rollback, ready to hand to <code>/ai-task</code>.</p><div class="uw"><b>Use when</b> the spec is agreed</div></article>
+      <article class="cc frame" data-ph="build"><div class="k"><span>Build</span><span>both runtimes</span></div><h3>/ai-task</h3><p>Classifies the change, runs it in direct mode (T0–T4) or the full pipeline (T5–T6), verifies once, reviews, and stops at your approval.</p><div class="uw"><b>Use when</b> every change in a repository with <code>.ai/</code></div></article>
+      <article class="cc frame" data-ph="observe"><div class="k"><span>Observe</span><span>both runtimes</span></div><h3>/ai-status</h3><p>Stage, step, allowed files, test and review status, open risks, what each tier resolves to on your plan, and the quota.</p><div class="uw"><b>Use when</b> “where are we”, “why did a guard fire”</div></article>
+      <article class="cc frame" data-ph="observe"><div class="k"><span>Observe</span><span>both runtimes</span></div><h3>/usage-report</h3><p>Tokens and cost per session, day, project, model and task, for both runtimes, from local transcripts, at zero model cost.</p><div class="uw"><b>Use when</b> “what did this cost”</div></article>
+    </div>
+    <div class="more-link"><a class="btn secondary" href="catalog.html">Open the full catalog</a><a class="btn ghost" href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Commands">Every option, on the wiki →</a></div>
   </div>
 </section>
 
@@ -474,11 +591,47 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
   </div>
 </section>
 
+<!-- ROUTER: signature -->
+<section class="router" id="router" aria-labelledby="rt-h">
+  <div class="wrap">
+    <div class="top">
+      <div><p class="sn"><b>03</b>Risk tiers</p>
+      <h2 id="rt-h">Every change gets a tier <em>before</em> a plan.</h2></div>
+      <p class="sub">The tier decides who plans it, who reviews it, and whether a human signs it off. Pick a request and watch what <code>/ai-task</code> would run. Nothing is skipped silently: the profile only changes who does each stage.</p>
+    </div>
+    <div class="asks" id="asks" role="group" aria-label="Example requests"></div>
+    <div class="console" aria-live="polite">
+      <div class="verdict"><div class="tier" id="vt">T2</div><div class="what" id="vw"></div><div class="mode frame" id="vm"></div></div>
+      <ul class="stages" id="stages"></ul>
+      <div class="consolefoot" id="vf"></div>
+    </div>
+  </div>
+</section>
+
+<!-- TIERS STAIRCASE -->
+<section class="stairs" aria-labelledby="s-h">
+  <div class="wrap">
+    <h2 id="s-h" data-rv>Seven tiers. The ceremony <em>scales</em> with the blast radius.</h2>
+    <p class="sub" data-rv>T0 to T4 run in direct mode: name the files, edit, one verification run at the end, every failure fixed as one batch; at T4 you approve the plan in plan mode. T5 and T6 run the full pipeline. A change that reaches <code>**/Payment/**</code> is re-scored from the real diff, and only a human lowers a tier.</p>
+    <div class="steps" id="steps" role="img" aria-label="Staircase of risk tiers T0 to T6, each adding more review.">
+      <div class="step" style="--h:18"><span class="n">T0</span><p>docs, comments</p></div>
+      <div class="step" style="--h:26"><span class="n">T1</span><p>formatting, a label</p></div>
+      <div class="step" style="--h:36"><span class="n">T2</span><p>an isolated screen or field · sensors</p></div>
+      <div class="step" style="--h:47"><span class="n">T3</span><p>CRUD, a new resource · sensors</p></div>
+      <div class="step" style="--h:62"><span class="n">T4</span><p>shared processes · you approve the plan · STRONG review</p></div>
+      <div class="step hot" style="--h:82"><span class="n">T5</span><p>payments, tax, auth, customer data · security review</p></div>
+      <div class="step hot" style="--h:100"><span class="n">T6</span><p>migrations, infrastructure · plan by EXPERT</p></div>
+    </div>
+    <div class="legend"><span data-t="T0">no review</span><span data-t="T1">verify only</span><span data-t="T2">sensors</span><span data-t="T3">sensors</span><span data-t="T4">you approve</span><span data-t="T5">full pipeline</span><span data-t="T6">full + expert</span></div>
+  </div>
+</section>
+
 <!-- LADDER -->
 <section class="ladder subtle" id="routing" aria-labelledby="lad-h">
   <div class="stick">
     <div class="wrap">
       <div>
+        <p class="sn"><b>04</b>Model routing</p>
         <h2 id="lad-h">Four tiers. <em>Named,</em> not guessed.</h2>
         <p class="sub">Prompts name a tier, never a model. Your plan decides what each tier resolves to, and one profile file holds the whole contract. A STRONG or EXPERT agent runs only when a named trigger fires.</p>
         <div class="toggle" role="group" aria-label="Runtime">
@@ -489,12 +642,80 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
       <div>
         <div class="rungs" id="rungs">
           <div class="rung frame"><span class="t">FAST</span><p><b>Reading and running.</b> File search, inventories, logs, test output.</p><span class="m"><svg class="ico cl rt" aria-hidden="true"><use href="#i-claude"/></svg><span data-claude="haiku · low" data-codex="Terra · low">haiku · low</span></span></div>
-          <div class="rung frame"><span class="t">BALANCED</span><p><b>Discovery, context, mechanical edits.</b> The T2 review. Multi-hop traces through <code>vendor/</code>.</p><span class="m"><svg class="ico cl rt" aria-hidden="true"><use href="#i-claude"/></svg><span data-claude="sonnet" data-codex="Terra · medium">sonnet</span></span></div>
-          <div class="rung frame"><span class="t">STRONG</span><p><b>Adversarial and security review</b> from T3, T4 risk and planning, root cause after a failed first diagnosis.</p><span class="m"><svg class="ico cl rt" aria-hidden="true"><use href="#i-claude"/></svg><span data-claude="opus · high" data-codex="Sol · high">opus · high</span></span></div>
-          <div class="rung frame"><span class="t">EXPERT</span><p><b>Last resort.</b> T5, irreversible design, what STRONG could not settle. Asks before it launches.</p><span class="m"><svg class="ico cl rt" aria-hidden="true"><use href="#i-claude"/></svg><span data-claude="opus · xhigh" data-codex="Astra · xhigh">opus · xhigh</span></span></div>
+          <div class="rung frame"><span class="t">BALANCED</span><p><b>Discovery, context, mechanical edits.</b> The T2 and T3 review, only on a red sensor. Multi-hop traces through <code>vendor/</code>.</p><span class="m"><svg class="ico cl rt" aria-hidden="true"><use href="#i-claude"/></svg><span data-claude="sonnet" data-codex="Terra · medium">sonnet</span></span></div>
+          <div class="rung frame"><span class="t">STRONG</span><p><b>Adversarial and security review</b> from T4, T5 risk and planning, root cause after a failed first diagnosis.</p><span class="m"><svg class="ico cl rt" aria-hidden="true"><use href="#i-claude"/></svg><span data-claude="opus · high" data-codex="Sol · high">opus · high</span></span></div>
+          <div class="rung frame"><span class="t">EXPERT</span><p><b>Last resort.</b> T6, irreversible design, what STRONG could not settle. Asks before it launches.</p><span class="m"><svg class="ico cl rt" aria-hidden="true"><use href="#i-claude"/></svg><span data-claude="opus · xhigh" data-codex="Astra · xhigh">opus · xhigh</span></span></div>
         </div>
         <div class="session"><span>The session implements</span><span class="who"><svg class="ico cl rt" aria-hidden="true"><use href="#i-claude"/></svg><span class="mono" id="sess" data-claude="Opus 5.5 [1m] on Max · opusplan on Pro" data-codex="Sol · high on Pro · medium on Plus">Opus 5.5 [1m] on Max · opusplan on Pro</span></span></div>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- 05 AGENTS -->
+<section class="agents-s" id="agents" aria-labelledby="ag-h">
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <p class="sn" data-rv><b>05</b>The agents</p>
+        <h2 id="ag-h" data-rv>Specialists, each on the tier <em>its</em> job needs.</h2>
+      </div>
+      <p class="sub" data-rv>The session implements. Every other role has its own context window, a pinned tier and an output contract. STRONG and EXPERT run one at a time, on a named trigger, and an agent never asks you a question: it returns <code>QUESTIONS_NEEDED</code> and stops.</p>
+    </div>
+    <div class="grid-c">
+      <article class="cc frame"><div class="k"><span>agent</span><span class="t FAST">FAST</span></div><h3>Explore</h3><p>Finds files and code; returns <code>file:line</code> excerpts, never the file.</p><div class="uw"><b>Runs</b> a file is not found in a few <code>grep</code> calls</div></article>
+      <article class="cc frame"><div class="k"><span>agent</span><span class="t FAST">FAST</span></div><h3>log-reader</h3><p>Reads logs, test and CI output; returns the errors and a short diagnosis.</p><div class="uw"><b>Runs</b> output is too long to read inline</div></article>
+      <article class="cc frame"><div class="k"><span>agent</span><span class="t FAST">FAST</span></div><h3>ai-tester</h3><p>Classifies a red run: new regression, existing failure, environment.</p><div class="uw"><b>Runs</b> only when a run is red</div></article>
+      <article class="cc frame"><div class="k"><span>agent</span><span class="t FAST">FAST</span></div><h3>ai-indexer</h3><p>File listings, symbols and git-log summaries, before a fan-out.</p><div class="uw"><b>Runs</b> a discovery area is large</div></article>
+      <article class="cc frame"><div class="k"><span>agent</span><span class="t BALANCED">BALANCED</span></div><h3>ai-discovery</h3><p>Traces an area: callers, tests, configuration, hidden coupling, as labelled facts.</p><div class="uw"><b>Runs</b> T6, or an area you call unfamiliar</div></article>
+      <article class="cc frame"><div class="k"><span>agent</span><span class="t BALANCED">BALANCED</span></div><h3>ai-implementer</h3><p>One mechanical, pattern-copying step, and nothing outside it.</p><div class="uw"><b>Runs</b> you ask for it</div></article>
+      <article class="cc frame"><div class="k"><span>agent</span><span class="t STRONG">STRONG</span></div><h3>ai-reviewer</h3><p>Assumes the change is wrong: behaviour drift, coupling, races, idempotency, scope creep.</p><div class="uw"><b>Runs</b> always from T4; BALANCED at T2–T3 on a red sensor</div></article>
+      <article class="cc frame"><div class="k"><span>agent</span><span class="t STRONG">STRONG</span></div><h3>ai-security</h3><p>Auth, secrets, personal and payment data, webhooks, injection, SSRF, IDOR.</p><div class="uw"><b>Runs</b> T5–T6, or any diff touching auth or personal data</div></article>
+      <article class="cc frame"><div class="k"><span>agent</span><span class="t STRONG">STRONG</span></div><h3>ai-risk</h3><p>Assigns exactly one tier and names the trigger that decided it.</p><div class="uw"><b>Runs</b> T5–T6</div></article>
+      <article class="cc frame"><div class="k"><span>agent</span><span class="t STRONG">STRONG</span></div><h3>ai-planner</h3><p>Steps, files per step, tests, migration impact, rollback, observability.</p><div class="uw"><b>Runs</b> T5</div></article>
+      <article class="cc frame"><div class="k"><span>agent</span><span class="t EXPERT">EXPERT</span></div><h3>ai-expert</h3><p>Last resort for T6 and what STRONG could not settle. Asks before it starts.</p><div class="uw"><b>Runs</b> T6, on a named trigger</div></article>
+      <article class="cc frame"><div class="k"><span>agent</span><span class="t STRONG">STRONG</span></div><h3>architect</h3><p>Design questions outside a task; Fable 5.1 on Max.</p><div class="uw"><b>Runs</b> on request</div></article>
+    </div>
+    <div class="more-link"><a class="btn ghost" href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Agents">The full roster and its rules →</a></div>
+  </div>
+</section>
+
+<!-- GUARDS -->
+<section class="guards subtle" id="guards" aria-labelledby="g-h">
+  <div class="wrap head">
+    <div><p class="sn" data-rv><b>06</b>The guards</p>
+    <h2 id="g-h" data-rv>It is harder to <em>damage</em> the project than to change it safely.</h2></div>
+    <p class="sub" data-rv>Hooks run before the tool call, in both runtimes, including every file in a Codex <code>apply_patch</code>. A refusal is a signal to take the right path, not a hint to reword.</p>
+  </div>
+  <div class="pan" id="pan">
+    <div class="card"><div class="hk"><span>ai-git-guard</span><span>every repo</span></div><div class="cmd">git push --force origin main</div><div class="no">refused: force push to a protected branch</div></div>
+    <div class="card paper frame"><div class="hk"><span>ai-scope-guard</span><span>during a step</span></div><div class="cmd">edit src/Checkout/Tax.php</div><div class="no">SCOPE_CHANGE_REQUIRED: the approved step does not name this file</div></div>
+    <div class="card"><div class="hk"><span>ai-path-guard</span><span>where .ai/ exists</span></div><div class="cmd">cat .env.production</div><div class="no">refused: secrets, keys, dumps and production logs</div></div>
+    <div class="card"><div class="hk"><span>ai-path-guard</span><span>approval</span></div><div class="cmd">state.py approve</div><div class="no">refused from an agent session: approval is a human’s to give</div></div>
+    <div class="card"><div class="hk"><span>ai-path-guard</span><span>sh -c, eval, movers</span></div><div class="cmd">sh -c 'cp notes.json .ai/state/current.json'</div><div class="no">refused: the segment inside sh -c is read, and cp onto task state is a write</div></div>
+    <div class="card paper frame"><div class="hk"><span>cap-large-read</span><span>Claude Code</span></div><div class="cmd">Read var/log/prod.log</div><div class="no">refused: over 4,000 lines. Pass an explicit limit, or let a FAST reader return file:line</div></div>
+    <div class="card"><div class="hk"><span>runtime-gate</span><span>both runtimes</span></div><div class="cmd">spawn ai-expert (top model rate-limited)</div><div class="no">rerouted one tier down, and journalled as model_fallback</div></div>
+    <div class="card paper frame"><div class="hk"><span>context-guard</span><span>both runtimes</span></div><div class="cmd">prompt at 120% of the compaction point</div><div class="no">held back once. Before compaction a snapshot keeps files, instructions verbatim and task state</div></div>
+  </div>
+  <div class="wrap"><p class="caveat" data-rv>Honest about the limit: the guards are regex tripwires for the ordinary mistake, not a sandbox. Server-side branch protection and human review stay the real backstops, and the <a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks">wiki lists every known gap</a>.</p></div>
+</section>
+
+<!-- MORE -->
+<section class="more" aria-labelledby="m-h">
+  <div class="wrap">
+    <div>
+      <h2 id="m-h" data-rv>The rest of the <em>machinery.</em></h2>
+      <p class="sub" data-rv>Everything runs on deterministic tools first. No model writes or reads the task state.</p>
+    </div>
+    <div>
+      <div class="feat" data-rv><h3>One .ai/ tree, two runtimes</h3><p>Start a task in Claude Code, resume it in Codex. The state, the journal, the open questions and a thirty-line handoff are plain files both read. <code>state.py handoff --to codex</code> moves it on purpose.</p></div>
+      <div class="feat" data-rv><h3>/ai-init on legacy code</h3><p>Surveys an existing codebase and writes a knowledge base, policies and test commands. It never touches application code: problems go to <code>known-risks.md</code>, not into a fix.</p></div>
+      <div class="feat" data-rv><h3>Sensors before reviewers</h3><p><code>review-gate</code> runs your linter, type checker, the diff budget, a re-score and whether the named tests fail without the change. Up to T3, all green means the sensors are the review. A model answers <code>pass</code>, <code>pass_with_findings</code> or <code>blockers_open</code>, and a task gets two passes. <span class="new">new</span></p></div>
+      <div class="feat" data-rv><h3>One shared policy tree</h3><p>Policies, agent contracts, workflows and templates install once under <code>~/.claude/claude-agentic/ai/</code> and every project reads them from there; a file under <code>.ai/</code> is an override. <code>ai-path</code> prints the copy that applies. Schema 6 deletes nothing until you confirm. <span class="new">new</span></p></div>
+      <div class="feat" data-rv><h3>A harder path guard</h3><p>It reads the destinations of <code>cp</code>, <code>mv</code>, <code>install</code> and <code>rm</code>, the segments inside <code>sh -c</code> and <code>eval</code>, quotes and heredocs, a parent directory of a protected path, and stays inside the hook timeout on padded lines. <span class="new">new</span></p></div>
+      <div class="feat" data-rv><h3>/project-update keeps your edits</h3><p>Every template version ever shipped is in the plugin, so an update replaces untouched files, three-way merges edited ones and never overwrites a real conflict. <code>--adopt</code> moves Spec Kit, Kiro, Cursor or Copilot setups in, with no line lost.</p></div>
+      <div class="feat" data-rv><h3>/usage-report at zero cost</h3><p>Tokens and cost per session, day, project, model and task, from local transcripts, for both runtimes. The numbers above came from it.</p></div>
+      <div class="feat" data-rv><h3>Tested like infrastructure</h3><p>27 suites and 3,185 assertions, including an end-to-end run that drives a T5 task from Claude and then from Codex over one state. No suite touches your real home directory.</p></div>
     </div>
   </div>
 </section>
@@ -503,6 +724,7 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
 <section class="proof dark" id="proof" aria-labelledby="proof-h">
   <div class="wrap">
     <span class="stamp frame" data-rv>MEASURED · 23 SEP 2026</span>
+    <p class="sn" data-rv><b>07</b>Measured</p>
     <h2 id="proof-h" data-rv>Reinstalled at lunch. <em>Cheaper</em> by the afternoon.</h2>
     <p class="sub" data-rv>The plugin was updated at 12:30 today with the BalancedMax profile, T3 in direct mode and reading routed by difficulty. <code>/usage-report</code> then compared every request before and after, from local transcripts, at zero model cost.</p>
     <div class="hero-num" data-rv>
@@ -521,6 +743,7 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
     </div>
     <p class="fine">One developer, one Max seat, real work in two repositories. Dollars are list-price equivalents from <code>/usage-report</code>, not an invoice: the plan is a subscription. The before window is 15 Sep to 23 Sep 12:30 UTC (5,270 requests, $598.47), the after window is the rest of that day to 19:15 UTC (1,784 requests, $185.88). An early reading at 924 requests showed −19%; the full afternoon settled at −8.3%. Your numbers will differ. The report that produced these runs on your machine too.</p>
   </div>
+  <div class="wrap"><p class="tm" data-rv>Measured in September and October, on the six-tier scale then in force. Since then T3 is its own tier for CRUD and presentation, and the shared-process, payment and migration tiers moved up one, to T4, T5 and T6.</p></div>
 </section>
 
 <!-- FLEET: the whole machine, not one afternoon -->
@@ -553,94 +776,26 @@ footer a{text-decoration:none;color:var(--abr-white);border-bottom:2px solid tra
   </div>
 </section>
 
-<!-- ROUTER: signature -->
-<section class="router" id="router" aria-labelledby="rt-h">
-  <div class="wrap">
-    <div class="top">
-      <h2 id="rt-h">Every change gets a tier <em>before</em> a plan.</h2>
-      <p class="sub">The tier decides who plans it, who reviews it, and whether a human signs it off. Pick a request and watch what <code>/ai-task</code> would run. Nothing is skipped silently: the profile only changes who does each stage.</p>
-    </div>
-    <div class="asks" id="asks" role="group" aria-label="Example requests"></div>
-    <div class="console" aria-live="polite">
-      <div class="verdict"><div class="tier" id="vt">T2</div><div class="what" id="vw"></div><div class="mode frame" id="vm"></div></div>
-      <ul class="stages" id="stages"></ul>
-      <div class="consolefoot" id="vf"></div>
-    </div>
-  </div>
-</section>
-
-<!-- GUARDS -->
-<section class="guards subtle" id="guards" aria-labelledby="g-h">
-  <div class="wrap head">
-    <h2 id="g-h" data-rv>It is harder to <em>damage</em> the project than to change it safely.</h2>
-    <p class="sub" data-rv>Hooks run before the tool call, in both runtimes, including every file in a Codex <code>apply_patch</code>. A refusal is a signal to take the right path, not a hint to reword.</p>
-  </div>
-  <div class="pan" id="pan">
-    <div class="card"><div class="hk"><span>ai-git-guard</span><span>every repo</span></div><div class="cmd">git push --force origin main</div><div class="no">refused: force push to a protected branch</div></div>
-    <div class="card paper frame"><div class="hk"><span>ai-scope-guard</span><span>during a step</span></div><div class="cmd">edit src/Checkout/Tax.php</div><div class="no">SCOPE_CHANGE_REQUIRED: the approved step does not name this file</div></div>
-    <div class="card"><div class="hk"><span>ai-path-guard</span><span>where .ai/ exists</span></div><div class="cmd">cat .env.production</div><div class="no">refused: secrets, keys, dumps and production logs</div></div>
-    <div class="card"><div class="hk"><span>ai-path-guard</span><span>approval</span></div><div class="cmd">state.py approve</div><div class="no">refused from an agent session: approval is a human’s to give</div></div>
-    <div class="card paper frame"><div class="hk"><span>cap-large-read</span><span>Claude Code</span></div><div class="cmd">Read var/log/prod.log</div><div class="no">refused: over 4,000 lines. Pass an explicit limit, or let a FAST reader return file:line</div></div>
-    <div class="card"><div class="hk"><span>runtime-gate</span><span>both runtimes</span></div><div class="cmd">spawn ai-expert (top model rate-limited)</div><div class="no">rerouted one tier down, and journalled as model_fallback</div></div>
-    <div class="card paper frame"><div class="hk"><span>context-guard</span><span>both runtimes</span></div><div class="cmd">prompt at 120% of the compaction point</div><div class="no">held back once. Before compaction a snapshot keeps files, instructions verbatim and task state</div></div>
-  </div>
-  <div class="wrap"><p class="caveat" data-rv>Honest about the limit: the guards are regex tripwires for the ordinary mistake, not a sandbox. Server-side branch protection and human review stay the real backstops, and the README lists every known gap.</p></div>
-</section>
-
-<!-- TIERS STAIRCASE -->
-<section class="stairs" aria-labelledby="s-h">
-  <div class="wrap">
-    <h2 id="s-h" data-rv>Six tiers. The ceremony <em>scales</em> with the blast radius.</h2>
-    <p class="sub" data-rv>T0 to T3 run in direct mode: name the files, edit, one verification run at the end, every failure fixed as one batch. T4 and T5 run the full pipeline. A change that reaches <code>**/Payment/**</code> is re-scored from the real diff, and only a human lowers a tier.</p>
-    <div class="steps" id="steps" role="img" aria-label="Staircase of risk tiers T0 to T5, each adding more review.">
-      <div class="step" style="--h:14"><span class="n">T0</span><p>docs, comments</p></div>
-      <div class="step" style="--h:24"><span class="n">T1</span><p>formatting, one admin screen</p></div>
-      <div class="step" style="--h:40"><span class="n">T2</span><p>isolated feature · one review</p></div>
-      <div class="step" style="--h:58"><span class="n">T3</span><p>shared domain · human plan · STRONG review</p></div>
-      <div class="step hot" style="--h:80"><span class="n">T4</span><p>payments, tax, auth, customer data · security review</p></div>
-      <div class="step hot" style="--h:100"><span class="n">T5</span><p>migrations, infrastructure · plan by EXPERT</p></div>
-    </div>
-    <div class="legend"><span data-t="T0">no review</span><span data-t="T1">verify only</span><span data-t="T2">BALANCED review</span><span data-t="T3">you approve</span><span data-t="T4">full pipeline</span><span data-t="T5">full + expert</span></div>
-  </div>
-</section>
-
-<!-- MORE -->
-<section class="more subtle" aria-labelledby="m-h">
-  <div class="wrap">
-    <div>
-      <h2 id="m-h" data-rv>The rest of the <em>machinery.</em></h2>
-      <p class="sub" data-rv>Everything runs on deterministic tools first. No model writes or reads the task state.</p>
-    </div>
-    <div>
-      <div class="feat" data-rv><h3>One .ai/ tree, two runtimes</h3><p>Start a task in Claude Code, resume it in Codex. The state, the journal, the open questions and a thirty-line handoff are plain files both read. <code>state.py handoff --to codex</code> moves it on purpose.</p></div>
-      <div class="feat" data-rv><h3>/ai-init on legacy code</h3><p>Surveys an existing codebase and writes a knowledge base, policies and test commands. It never touches application code: problems go to <code>known-risks.md</code>, not into a fix.</p></div>
-      <div class="feat" data-rv><h3>Sensors before reviewers</h3><p><code>review-gate</code> runs your linter, type checker, the diff budget, a re-score and whether the named tests fail without the change. At T2, all green means the sensors are the review.</p></div>
-      <div class="feat" data-rv><h3>/project-update keeps your edits</h3><p>Every template version ever shipped is in the plugin, so an update replaces untouched files, three-way merges edited ones and never overwrites a real conflict. <code>--adopt</code> moves Spec Kit, Kiro, Cursor or Copilot setups in, with no line lost.</p></div>
-      <div class="feat" data-rv><h3>/usage-report at zero cost</h3><p>Tokens and cost per session, day, project, model and task, from local transcripts, for both runtimes. The numbers above came from it.</p></div>
-      <div class="feat" data-rv><h3>Tested like infrastructure</h3><p>25 suites and 2,179 assertions, including an end-to-end run that drives a T4 task from Claude and then from Codex over one state. No suite touches your real home directory.</p></div>
-    </div>
-  </div>
-</section>
-
 <!-- KNOWN RISKS -->
-<section class="more risks" id="risks" aria-labelledby="k-h">
+<section class="more risks subtle" id="risks" aria-labelledby="k-h">
   <div class="wrap">
     <div>
+      <p class="sn" data-rv><b>08</b>Known risks</p>
       <h2 id="k-h" data-rv>What 2.0.2 does <em>not</em> protect against.</h2>
-      <p class="sub" data-rv>Eleven known gaps, each accepted or deferred with a written reason. None is a secret. The README gives the why, the limits and the source for every one.</p>
+      <p class="sub" data-rv>Eleven known gaps, each accepted or deferred with a written reason. None is a secret. The <a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks">wiki</a> says what to do about each; the repository gives the why, the limits and the source.</p>
     </div>
     <div>
-      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module#the-guards-are-a-tripwire-not-a-sandbox">A tripwire, not a sandbox</a></h3><p>Every guard rule is a regex over a command line or a path. It stops the honest mistake; a process that wants past it can get past it. Keep secrets off the machine and protect branches server-side.</p></div>
-      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module#human-approval-can-be-forged-by-a-determined-process">Approval can be forged</a></h3><p>An obfuscated call that slips the regex and allocates a pty can still run <code>state.py approve</code>. Every approval is journalled: read <code>state.py events</code> before merging T3–T5.</p></div>
-      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module#the-deletion-gate-stops-an-agents-command-not-an-agents-script">Deletion gate: command, not script</a></h3><p>The hook matches spellings of <code>--confirm-delete</code>, so a script file, a variable or a renamed copy gets past it; <code>adopt.py</code> still refuses unless the agent-session markers are deliberately stripped. Run it in your own terminal. <span class="new">new in 2.0.2</span></p></div>
-      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module#ai_unattended1-turns-the-human-gates-off"><code>AI_UNATTENDED=1</code> opens the gates</a></h3><p>Meant for CI and cron. In an interactive shell it silently disables approval and deletion gates for every session it starts.</p></div>
-      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module#the-routing-hooks-are-less-protected-than-the-guards">Routing hooks are less protected</a></h3><p><code>runtime-gate.py</code> and <code>context-guard.py</code> are not yet on the path guard’s list. Review any diff under <code>hooks/</code> by hand.</p></div>
-      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module#the-compaction-snapshot-runs-git-in-the-working-directory">Snapshot runs <code>git</code> here</a></h3><p>A hostile repository can run its own code through local git config. Do not run agent sessions in repositories you do not trust.</p></div>
-      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module#codex-runs-only-hooks-you-re-approved">Codex skips unapproved hooks</a></h3><p>After an upgrade changes a hook entry, Codex silently skips it until you approve it again in <code>/hooks</code>.</p></div>
-      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module#codex-facts-are-observed-not-guaranteed">Codex facts are observed</a></h3><p>Spawn names and model precedence come from live probes. After a Codex upgrade, check <code>state.py events --type missed_reroute</code>.</p></div>
-      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module#budgets-and-quota-are-advice-not-limits">Budgets are advice</a></h3><p>Quota can be stale and the running-agent count can drift after a crash. None of them ever blocks work.</p></div>
-      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module#--adopt-edge-cases-fail-safe-not-smoothly"><code>--adopt</code> fails safe, not smoothly</a></h3><p>Run it on a clean, committed tree, read the dry run first, and keep <code>original/</code> until you have checked the result.</p></div>
-      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module#the-usage-reports-parse-cache-trusts-mtime-and-size">Usage cache trusts mtime and size</a></h3><p>A transcript rewritten in place could be counted twice. <code>--no-cache</code> tells you within one run. <span class="new">new in 2.0.2</span></p></div>
+      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks">A tripwire, not a sandbox</a></h3><p>Every guard rule is a regex over a command line or a path. It stops the honest mistake; a process that wants past it can get past it. Keep secrets off the machine and protect branches server-side.</p></div>
+      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks">Approval can be forged</a></h3><p>An obfuscated call that slips the regex and allocates a pty can still run <code>state.py approve</code>. Every approval is journalled: read <code>state.py events</code> before merging T4–T6.</p></div>
+      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks">Deletion gate: command, not script</a></h3><p>The hook matches spellings of <code>--confirm-delete</code>, so a script file, a variable or a renamed copy gets past it; <code>adopt.py</code> still refuses unless the agent-session markers are deliberately stripped. Run it in your own terminal. <span class="new">new in 2.0.2</span></p></div>
+      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks"><code>AI_UNATTENDED=1</code> opens the gates</a></h3><p>Meant for CI and cron. In an interactive shell it silently disables approval and deletion gates for every session it starts.</p></div>
+      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks">Routing hooks are less protected</a></h3><p><code>runtime-gate.py</code> and <code>context-guard.py</code> are not yet on the path guard’s list. Review any diff under <code>hooks/</code> by hand.</p></div>
+      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks">Snapshot runs <code>git</code> here</a></h3><p>A hostile repository can run its own code through local git config. Do not run agent sessions in repositories you do not trust.</p></div>
+      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks">Codex skips unapproved hooks</a></h3><p>After an upgrade changes a hook entry, Codex silently skips it until you approve it again in <code>/hooks</code>.</p></div>
+      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks">Codex facts are observed</a></h3><p>Spawn names and model precedence come from live probes. After a Codex upgrade, check <code>state.py events --type missed_reroute</code>.</p></div>
+      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks">Budgets are advice</a></h3><p>Quota can be stale and the running-agent count can drift after a crash. None of them ever blocks work.</p></div>
+      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks"><code>--adopt</code> fails safe, not smoothly</a></h3><p>Run it on a clean, committed tree, read the dry run first, and keep <code>original/</code> until you have checked the result.</p></div>
+      <div class="feat" data-rv><h3><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks">Usage cache trusts mtime and size</a></h3><p>A transcript rewritten in place could be counted twice. <code>--no-cache</code> tells you within one run. <span class="new">new in 2.0.2</span></p></div>
     </div>
   </div>
 </section>
@@ -662,16 +817,19 @@ cd claude-agentic-sdlc-module && ./install.sh
     </div>
     <div class="cta-row">
       <a class="btn secondary" href="https://github.com/vanssata/claude-agentic-sdlc-module">Star it on GitHub ↗</a>
-      <a class="btn ghost" href="https://github.com/vanssata/claude-agentic-sdlc-module#known-risks">Read the known risks</a>
+      <a class="btn ghost" href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki">Read the wiki</a>
+      <a class="btn ghost" href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Known-Risks">Read the known risks</a>
     </div>
   </div>
 </section>
 </main>
 
 <footer>
-  <div class="wrap">
-    <span>claude-agentic v2.0.2<br><span class="tm">Claude is a trademark of Anthropic, Codex of OpenAI. An independent project.</span></span>
-    <span><a href="https://github.com/vanssata/claude-agentic-sdlc-module/tree/main/docs">Docs</a> · <a href="https://github.com/vanssata/claude-agentic-sdlc-module/releases">Releases</a> · <a href="https://github.com/vanssata/claude-agentic-sdlc-module/issues">Issues</a></span>
+  <div class="wrap cols">
+    <div><span>claude-agentic v2.0.2</span><div class="tm">Claude is a trademark of Anthropic, Codex of OpenAI. An independent project. MIT.</div></div>
+    <div><h4>Product</h4><ul><li><a href="catalog.html">Catalog</a></li><li><a href="demo.html">Demo</a></li><li><a href="benchmark.html">Benchmark</a></li><li><a href="#install">Install</a></li></ul></div>
+    <div><h4>Learn</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki">Wiki</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Lifecycle">Lifecycle</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Workflows-and-Risk-Tiers">Risk tiers</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/wiki/Troubleshooting">Troubleshooting</a></li></ul></div>
+    <div><h4>Repository</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/tree/main/docs">Docs</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/releases">Releases</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/issues">Issues</a></li></ul></div>
   </div>
 </footer>
 
@@ -748,30 +906,30 @@ cd claude-agentic-sdlc-module && ./install.sh
   // signature: the request router
   const STAGES = [
     ['Discovery', 'ai-discovery', 5], ['Risk tier', 'ai-risk', 0], ['Impact', 'discovery agents', 5], ['Plan', 'you, in plan mode', 3],
-    ['Plan review', 'plan review · STRONG', 4], ['Implement', 'the session', 0], ['Verify once', 'state.py test-run', 1],
-    ['Adversarial review', 'ai-reviewer', 2], ['Security review', 'ai-security', 4], ['Release report', 'ai-release', 4], ['Human approval', 'you', 3]
+    ['Plan review', 'ai-reviewer · STRONG', 4], ['Implement', 'the session', 0], ['Verify once', 'state.py test-run', 1],
+    ['Adversarial review', 'ai-reviewer', 2], ['Security review', 'ai-security', 4], ['Release report', 'ai-release', 4], ['Human approval', 'you, in your terminal', 3]
   ];
   const ASKS = [
-    { t: 0, q: 'Fix a typo in the README', w: 'Documentation or comments.', m: 'direct mode', f: 'Say which files, edit, done. No state file, no review.' },
-    { t: 1, q: 'Tidy the admin product grid', w: 'Formatting, one isolated admin screen.', m: 'direct mode', f: 'Edit, then one verification run. Nothing delegated.' },
-    { t: 2, q: 'Add a CSV export to reports', w: 'A normal isolated feature.', m: 'direct mode', f: 'Plan is a few lines. One BALANCED review, or none if every sensor is green.' },
-    { t: 3, q: 'Queue order e-mails asynchronously', w: 'Shared domain behaviour, orders, async.', m: 'direct mode', f: 'You approve the plan in plan mode. Characterization tests first, one STRONG review.' },
-    { t: 4, q: 'Change VAT rounding at checkout', w: 'Payments, tax, auth, order state, customer data.', m: 'full pipeline', f: 'Every stage recorded. Security review is mandatory. Nothing merges without you.' },
-    { t: 5, q: 'Split the customer address table', w: 'Migrations, infrastructure, production architecture.', m: 'full pipeline', f: 'Discovery and impact up front. The plan goes to the EXPERT tier.' }
+    { t: 0, q: 'Fix a typo in the README', w: 'Documentation or comments.', m: 'direct mode', f: 'Say which files, edit, done. No state file, no review: the commit is the record.' },
+    { t: 1, q: 'Tidy the admin product grid', w: 'Formatting, a label, a template tweak.', m: 'direct mode', f: 'Edit, then one verification run. Nothing delegated.' },
+    { t: 2, q: 'Add a field to the customer form', w: 'An isolated screen or form, a new field.', m: 'direct mode', f: 'One state.py quick record arms the scope guard. All sensors green is the review; a BALANCED reviewer only if one is red.' },
+    { t: 3, q: 'Add a CSV export to reports', w: 'CRUD and presentation: a new resource with its screens.', m: 'direct mode', f: 'A few lines of plan in the chat. The same sensors decide whether a model reviews at all.' },
+    { t: 4, q: 'Queue order e-mails asynchronously', w: 'Shared processes: orders, workflows, async, integrations, config.', m: 'direct mode', f: 'You approve the plan in plan mode. Characterization tests first, one STRONG review, your approval at the end.' },
+    { t: 5, q: 'Change VAT rounding at checkout', w: 'Payments, accounting, tax, auth, order state, customer data.', m: 'full pipeline', f: 'Every stage recorded. STRONG risk and plan, a plan review, a mandatory security review. Nothing merges without you.' },
+    { t: 6, q: 'Split the customer address table', w: 'Migration strategy, infrastructure, destructive data migrations.', m: 'full pipeline', f: 'Discovery and impact delegated up front. The plan goes to the EXPERT tier.' }
   ];
   const on = t => { const s = new Set(['Implement']);
     if (t >= 1) s.add('Verify once');
-    if (t >= 2) { s.add('Risk tier'); s.add('Adversarial review'); }
-    if (t >= 2) s.add('Plan');
-    if (t >= 3) s.add('Human approval');
-    if (t >= 4) { s.add('Plan review'); s.add('Security review'); s.add('Release report'); s.add('Discovery'); }
-    if (t >= 5) { s.add('Impact'); }
+    if (t >= 2) { s.add('Risk tier'); s.add('Plan'); s.add('Adversarial review'); }
+    if (t >= 4) s.add('Human approval');
+    if (t >= 5) { s.add('Plan review'); s.add('Security review'); s.add('Release report'); s.add('Discovery'); }
+    if (t >= 6) s.add('Impact');
     return s; };
   const who = (name, t) => {
-    if (name === 'Plan') return t >= 5 ? 'ai-expert' : t === 4 ? 'ai-planner · STRONG' : t === 3 ? 'you, in plan mode' : 'a few lines, in chat';
-    if (name === 'Adversarial review') return t === 2 ? 'ai-reviewer · BALANCED' : 'ai-reviewer · STRONG';
-    if (name === 'Risk tier') return t >= 4 ? 'ai-risk' : 'the session';
-    if (name === 'Discovery' && t === 4) return 'the session + grep';
+    if (name === 'Plan') return t >= 6 ? 'ai-expert' : t === 5 ? 'ai-planner · STRONG' : t === 4 ? 'you, in plan mode' : 'a few lines, in chat';
+    if (name === 'Adversarial review') return t <= 3 ? 'sensors · BALANCED if red' : 'ai-reviewer · STRONG';
+    if (name === 'Risk tier') return t >= 5 ? 'ai-risk · STRONG' : 'the session';
+    if (name === 'Discovery' && t === 5) return 'the session + grep';
     if (name === 'Discovery') return 'ai-discovery';
     return STAGES.find(s => s[0] === name)[1];
   };
@@ -787,13 +945,21 @@ cd claude-agentic-sdlc-module && ./install.sh
     timers.forEach(clearTimeout); timers = [];
     $$('.stage', ul).forEach((li, k) => {
       li.classList.remove('on'); const n = li.dataset.s;
-      if (n === 'Plan') li.classList.toggle('human', a.t === 3);
+      if (n === 'Plan') li.classList.toggle('human', a.t === 4);
       $('.who', li).textContent = s.has(n) ? who(n, a.t) : 'skipped';
       if (s.has(n)) timers.push(setTimeout(() => li.classList.add('on'), reduce ? 0 : 90 * k));
     });
   };
   asks.addEventListener('click', e => { const b = e.target.closest('.ask'); if (b) pick(+b.dataset.i); });
   pick(2);
+
+  // command filter
+  const cg = $('#cmd-grid');
+  $('#cmd-chips').addEventListener('click', e => {
+    const b = e.target.closest('.chip-f'); if (!b) return;
+    $$('#cmd-chips .chip-f').forEach(x => x.setAttribute('aria-pressed', x === b));
+    $$('.cc', cg).forEach(c => c.hidden = b.dataset.f !== 'all' && c.dataset.ph !== b.dataset.f);
+  });
 
   // copy
   $('#copy').addEventListener('click', async e => {

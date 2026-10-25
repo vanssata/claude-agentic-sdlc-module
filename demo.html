@@ -61,6 +61,12 @@ h1{font:700 clamp(36px,5.4vw,72px)/1.02 var(--font);letter-spacing:-.035em;margi
 .lede{max-width:62ch;color:var(--m200);margin:0}
 
 .stage{padding:24px 0 16px}
+.scen{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 16px}
+.sc{height:44px;padding:0 16px;border:1px solid var(--m700);background:var(--m900);color:var(--m200);font:400 15px var(--font);cursor:pointer}
+.sc b{font:700 13px var(--mono);color:var(--accent);margin-right:8px}
+.sc:hover{border-color:var(--m400)}
+.sc[aria-pressed="true"]{background:var(--accent);color:var(--abr-black);border-color:var(--accent)}
+.sc[aria-pressed="true"] b{color:var(--abr-black)}
 .canvas-wrap{position:relative;width:100%}
 #demo{display:block;width:100%;height:auto;background:var(--abr-black)}
 
@@ -100,21 +106,25 @@ footer{border-top:1px solid var(--m800);padding:28px 0 40px;color:var(--m400);fo
     <span class="wm"><span>Risk</span>R<i>ai</i>l</span>
   </a>
   <nav aria-label="Sections">
-    <a href="./#routing">Routing</a><a href="./#router">Risk tiers</a><a href="./#guards">Guards</a><a href="demo.html" aria-current="page">Demo</a><a href="benchmark.html">Benchmark</a><a href="./">Home</a>
+    <a href="./#lifecycle">Lifecycle</a><a href="./#router">Risk tiers</a><a href="./#guards">Guards</a><a href="catalog.html">Catalog</a><a href="demo.html" aria-current="page">Demo</a><a href="benchmark.html">Benchmark</a><a href="./">Home</a>
   </nav>
   <a class="btn secondary" href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub ↗</a>
 </header>
 
 <main id="main">
 <section class="wrap intro">
-  <p class="kicker">Demo · one task, start to finish</p>
+  <p class="kicker">Demo · two tasks, start to finish</p>
   <h1>You type one line. The plugin routes the work.</h1>
-  <p class="lede">A payment change goes through <code>/ai-task</code> in Claude Code. Cheap readers fan out on FAST, the risk tier picks the pipeline, STRONG plans and reviews, the guards keep every edit inside its step, and the change stops at your approval. Time is compressed about 6×.</p>
+  <p class="lede">Pick a task. A payment change is <b>T5</b>: STRONG decides the tier, plans and reviews, the plan is reviewed before any code, the guards keep every edit inside its step, and the change stops at your approval. A CSV export is <b>T3</b>: direct mode, no subagent, and green sensors are the review. Time is compressed about 6×.</p>
 </section>
 
 <section class="wrap stage" aria-label="Animated terminal demo">
+  <div class="scen" role="group" aria-label="Choose a task" id="scen">
+    <button type="button" class="sc" aria-pressed="true" data-s="full"><b>T5</b>Payment webhook · full pipeline</button>
+    <button type="button" class="sc" aria-pressed="false" data-s="direct"><b>T3</b>CSV export · direct mode</button>
+  </div>
   <div class="canvas-wrap" id="wrap">
-    <canvas id="demo" role="img" aria-label="Animated Claude Code terminal running /ai-task on a payment webhook change: parallel FAST discovery, a T4 risk tier, a STRONG plan approved by the user, implementation with a scope-guard refusal, a red test run fixed as one batch, STRONG adversarial and security reviews, and a release report waiting for human approval."></canvas>
+    <canvas id="demo" role="img" aria-label="Animated Claude Code terminal running /ai-task. The payment task: FAST readers, a STRONG T5 risk call, a STRONG plan reviewed before any code and approved by the user, scope-guarded steps with one refusal, a red run fixed as one batch, sensors then STRONG adversarial and security reviews, and an approval command for the user's own terminal. The CSV task: T3 direct mode, one quick record, edits inside the named files, one verification run, and green sensors as the review."></canvas>
   </div>
   <div class="controls">
     <button class="ctl" id="play" type="button" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="playIcon" d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
@@ -125,16 +135,17 @@ footer{border-top:1px solid var(--m800);padding:28px 0 40px;color:var(--m400);fo
   <ol class="sr" id="chapterList"></ol>
 </section>
 
-<section class="wrap legend" aria-label="What each tier did in this run">
-  <div class="tier frame"><div class="h"><i style="background:var(--fast)"></i>FAST</div><div class="m">haiku · low</div><p>Three discovery readers in parallel, the red-test classifier, the release report. Reading is cheap, so it is done cheaply.</p></div>
-  <div class="tier frame"><div class="h"><i style="background:var(--balanced)"></i>BALANCED</div><div class="m">sonnet</div><p>Compressed the findings into one task context and did the mechanical step that copies an existing pattern.</p></div>
-  <div class="tier frame"><div class="h"><i style="background:var(--strong)"></i>STRONG</div><div class="m">opus · high</div><p>Risk tier, plan, adversarial review, security review. One agent at a time, only where being wrong is expensive.</p></div>
-  <div class="tier frame"><div class="h"><i style="background:var(--expert)"></i>EXPERT</div><div class="m">opus · xhigh</div><p>Not launched. It is the last resort for T5 and for what STRONG cannot settle, and it asks before it starts.</p></div>
+<section class="wrap legend" aria-label="What each tier does in these runs">
+  <div class="tier frame"><div class="h"><i style="background:var(--fast)"></i>FAST</div><div class="m">haiku · low</div><p>Readers in parallel and the red-run classifier. Reading is cheap, so it is done cheaply, and only excerpts reach the session.</p></div>
+  <div class="tier frame"><div class="h"><i style="background:var(--balanced)"></i>BALANCED</div><div class="m">sonnet</div><p>The mechanical step that copies an existing pattern, and the release report. At T2 and T3, the review, but only when a sensor is red.</p></div>
+  <div class="tier frame"><div class="h"><i style="background:var(--strong)"></i>STRONG</div><div class="m">opus · high</div><p>From T5: the risk call, the plan, the plan review, the adversarial and the security review. One agent at a time, only where being wrong is expensive.</p></div>
+  <div class="tier frame"><div class="h"><i style="background:var(--expert)"></i>EXPERT</div><div class="m">opus · xhigh</div><p>Not launched. The last resort for T6 and for what STRONG cannot settle, and it asks before it starts.</p></div>
 </section>
 
 <section class="wrap cta">
-  <p>Every stage in the run is a file under <code>.ai/reports/&lt;task-id&gt;/</code>. No agent commits, pushes or merges. The pipeline ends with you.</p>
+  <p>Every stage of the T5 run is a line in <code>.ai/reports/&lt;task-id&gt;/events.jsonl</code>; the T3 run leaves one quick record. No agent commits, pushes or merges. The pipeline ends with you.</p>
   <a class="btn primary" href="./#install">Install it</a>
+  <a class="btn secondary" href="catalog.html">Browse the catalog</a>
   <a class="btn secondary" href="benchmark.html">See the benchmark</a>
 </section>
 </main>
@@ -164,18 +175,27 @@ const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", 
 const SANS = 'Inter, Arial, sans-serif';
 const COLS = 84, ROWS = 25;
 const TIME_SCALE = 6;           // on-screen clocks run ~6x faster than the animation
-const TASK = '2026-09-23-webhook-retry';
-
-const CHAPTERS = [
-  'You type one line',
-  'Cheap readers fan out on FAST',
-  'Risk decides the pipeline',
-  'STRONG plans, you approve',
-  'Implementation stays inside the scope',
-  'Red tests, fixed as one batch',
-  'Reviews on STRONG, one at a time',
-  'You approve. No agent commits.'
-];
+let SCN = new URLSearchParams(location.search).get('task') === 'direct' ? 'direct' : 'full';
+const CHAPTER_SETS = {
+  full: [
+    'You type one line',
+    'Cheap readers fan out on FAST',
+    'STRONG decides the tier: T5',
+    'A STRONG plan, reviewed, then yours',
+    'Steps stay inside their scope',
+    'Verify once, fix as one batch',
+    'Sensors first, then STRONG reviews',
+    'The approval is yours. No agent commits.'
+  ],
+  direct: [
+    'You type one line',
+    'Tier first: T3, direct mode',
+    'Edits inside the named files',
+    'Verify once, to the end',
+    'Green sensors are the review'
+  ]
+};
+let CHAPTERS = CHAPTER_SETS[SCN];
 const STAGES = ['Discovery','Context','Impact','Risk tier','Plan','Plan review','Implementation','Test','Adversarial review','Security review','Release report','Human approval'];
 
 // ---------- state ----------
@@ -275,18 +295,25 @@ function submit(){
 }
 
 // ---------- the scenario ----------
-async function scenario(){
-  const g = gen;
-  resetState();
-  chapter(0);
+function scenario(){ return SCN === 'full' ? scenarioFull() : scenarioDirect(); }
+
+function welcome(){
   const BW = 56;
   const box = (...segs) => L(s('│ ', C.accent), ...segs, s(' '.repeat(Math.max(0, BW - 3 - len(segs))) + '│', C.accent));
   L(s('╭' + '─'.repeat(BW - 2) + '╮', C.accent));
   box(s('✻', C.accent), s(' Welcome to ', C.fg), s('Claude Code', C.fg, {b:true}));
   box(s('  cwd: ~/work/shop-api', C.dim));
-  box(s('  plugin: claude-agentic 2.0.1 · profile solo', C.dim));
+  box(s('  plugin: claude-agentic 2.0.2 · profile solo', C.dim));
   L(s('╰' + '─'.repeat(BW - 2) + '╯', C.accent));
   L();
+}
+
+async function scenarioFull(){
+  const g = gen;
+  const TASK = 'T-2026-10-25-004';
+  resetState();
+  chapter(0);
+  welcome();
   await sleep(1400);
   await typeInput('/ai-task Retry failed payment webhooks with idempotency keys');
   await sleep(700);
@@ -294,19 +321,19 @@ async function scenario(){
   submit();
   setStatus('Routing');
   await sleep(700);
-  await tool('Read', '.ai/AGENTS.md', [s('Read 142 lines · routes to 6 policies', C.dim)], 1000);
-  await say([s('Tier unknown until triage, so I act as T2. Discovery first, cheapest tier.')], 600);
+  await tool('Read', '.ai/AGENTS.md', [s('Read 58 lines · routes to the policy for each job', C.dim)], 1000);
+  await say([s('Tier unknown until triage, so I act as T2. Readers first, on the cheapest tier.')], 600);
 
   // 2 — discovery on FAST
   chapter(1);
   stage('Discovery', 'run');
   setStatus('Discovering');
-  await say([s('Fanning out '), s('3 readers', C.fg, {b:true}), s(' in parallel, one question each:')], 400);
+  await say([s('Sending '), s('3 readers', C.fg, {b:true}), s(' in parallel, one question each:')], 400);
   L();
   await Promise.all([
     agent('Explore', 'Trace the webhook entrypoint', 'FAST',
-      ['Grep("webhook", src/Payment)', 'Read(StripeWebhookController.php)', 'Read(HandlePaymentEventHandler.php)', 'Grep("HandlePaymentEvent")'],
-      'Done (11 tool uses · 18.4k tokens · 34s)', 18400, 5200),
+      ['Grep("webhook", src/Payment)', 'Read(StripeWebhookController.php:30-80)', 'Grep("HandlePaymentEvent")'],
+      'Done (9 tool uses · 16.1k tokens · 31s)', 16100, 5000),
     agent('Explore', 'Find retries and queue config', 'FAST',
       ['Read(config/packages/messenger.yaml)', 'Grep("retry_strategy")', 'Grep("idempot", src/)'],
       'Done (8 tool uses · 11.2k tokens · 22s)', 11200, 3900),
@@ -323,70 +350,76 @@ async function scenario(){
   await sayMore([elbow(), s('  No idempotency check: a replayed event captures twice', C.red)], 700);
   stage('Discovery', 'done');
 
-  // 3 — context, impact, risk
+  // 3 — context, impact, risk on STRONG
   chapter(2);
-  stage('Context', 'run'); setStatus('Compressing context');
-  L();
-  await agent('ai-context', 'Compress findings into task-context.md', 'BALANCED',
-    ['Read(discovery ×3)', 'Write(.ai/reports/…/task-context.md)'],
-    'Done (4 tool uses · 9.8k tokens · 21s)', 9800, 2600);
+  stage('Context', 'run'); setStatus('Writing the context');
+  await tool('Write', `.ai/reports/${TASK}/task-context.md`, [s('entry points · callers · what must stay unaffected', C.dim)], 900, {tok:1800});
   stage('Context', 'done'); stage('Impact', 'run');
-  await tool('Write', `.ai/reports/${TASK}/impact.md`, [s('2 modules · 1 migration · no public API change', C.dim)], 900, {tok:1400});
+  await tool('Write', `.ai/reports/${TASK}/impact.md`, [s('2 modules · 1 additive migration · no public API change', C.dim)], 900, {tok:1400});
   stage('Impact', 'done'); stage('Risk tier', 'run'); setStatus('Classifying risk');
   await agent('ai-risk', 'Assign one tier from risk-tiers.json', 'STRONG',
     ['Read(.ai/policies/risk-tiers.json)', 'Read(task-context.md)', 'Read(impact.md)'],
     'Done (5 tool uses · 12.7k tokens · 29s)', 12700, 3400);
   if (!alive(g)) return;
-  panel.tier = 'T4';
-  stage('Risk tier', 'done', 'T4');
+  panel.tier = 'T5';
+  stage('Risk tier', 'done', 'T5');
   L();
-  await say([s('Risk tier '), s(' T4 ', C.page, {bg: C.accent, b:true}), s(' decided by '), s('path_scopes: **/Payment/**', C.yellow), s(' (money moves).')], 250);
-  await sayMore([s('T4 runs the full pipeline: STRONG plan, plan review, security review,', C.dim)], 120);
-  await sayMore([s('and your approval at the end. EXPERT stays off; that is for T5.', C.dim)], 500);
-  await tool('Bash', `state.py init --tier T4 --workflow sdlc`, [s('guards armed: ', C.dim), s('scope', C.green), s(' · ', C.dim), s('vendor-write', C.green), s(' · ', C.dim), s('no-commit', C.green)], 1000);
+  await say([s('Risk tier '), s(' T5 ', C.page, {bg: C.accent, b:true}), s(' decided by '), s('path_scopes: **/Payment/**', C.yellow), s(' (money moves).')], 250);
+  await sayMore([s('T5 leaves direct mode: STRONG plan, a plan review, a security review,', C.dim)], 120);
+  await sayMore([s('and your approval. EXPERT stays off; that is for T6.', C.dim)], 500);
+  await tool('Bash', `state.py risk T5 --note "path_scopes **/Payment/**"`, [s('journalled · ', C.dim), s('scope', C.green), s(' · ', C.dim), s('path', C.green), s(' · ', C.dim), s('git', C.green), s(' guards armed', C.dim)], 1000);
 
-  // 4 — plan
+  // 4 — plan, plan review, your approval
   chapter(3);
   mode = 'plan';
   stage('Plan', 'run'); setStatus('Planning');
-  await agent('ai-planner', 'Plan the change in plan mode', 'STRONG',
+  await agent('ai-planner', 'Plan the change', 'STRONG',
     ['Read(task-context.md)', 'Read(src/Shipping/Idempotency/KeyStore.php)', 'Read(migrations/…)', 'Write(implementation-plan.md)'],
     'Done (19 tool uses · 31.2k tokens · 1m 48s)', 31200, 5600);
   if (!alive(g)) return;
   L();
   const P = (segs) => L(s('│ ', C.accent), ...segs);
   P([s('Implementation plan', C.fg, {b:true}), s(' · 4 steps · rollback: PAYMENT_WEBHOOK_RETRY=0', C.dim)]); await sleep(260);
-  P([s('1  Idempotency store + migration  ', C.fg), s('src/Payment/Idempotency/*    ', C.dim), s('BALANCED', C.blue)]); await sleep(260);
-  P([s('2  Dedupe events in the handler   ', C.fg), s('HandlePaymentEventHandler    ', C.dim), s('session', C.fg)]); await sleep(260);
-  P([s('3  Retry 5× exponential backoff   ', C.fg), s('config/…/messenger.yaml      ', C.dim), s('session', C.fg)]); await sleep(260);
-  P([s('4  Tests: replay, PSP timeout     ', C.fg), s('tests/Payment/Webhook/*      ', C.dim), s('session', C.fg)]); await sleep(260);
+  P([s("1  Pin today's capture behaviour  ", C.fg), s('tests/Payment/Webhook/*      ', C.dim), s('session', C.fg)]); await sleep(260);
+  P([s('2  Idempotency store + migration  ', C.fg), s('src/Payment/Idempotency/*    ', C.dim), s('BALANCED', C.blue)]); await sleep(260);
+  P([s('3  Dedupe events in the handler   ', C.fg), s('HandlePaymentEventHandler    ', C.dim), s('session', C.fg)]); await sleep(260);
+  P([s('4  Retry 5× exponential backoff   ', C.fg), s('config/…/messenger.yaml      ', C.dim), s('session', C.fg)]); await sleep(260);
   P([s('Risks: ', C.yellow), s('key TTL vs the PSP retry window · migration on a hot table', C.dim)]);
-  stage('Plan', 'done'); stage('Plan review', 'run', 'you');
+  stage('Plan', 'done');
+  stage('Plan review', 'run');
+  await agent('ai-reviewer', 'Review the plan before any code', 'STRONG',
+    ['Read(implementation-plan.md)', 'Read(task-context.md)', 'Grep("payment_events", migrations/)'],
+    'Done (8 tool uses · 14.6k tokens · 41s) · verdict: pass', 14600, 3600);
+  if (!alive(g)) return;
+  await tool('Bash', 'state.py stage human_approval', [s('gate ', C.dim), s('G1', C.yellow, {b:true}), s(' requested · plan and review shown to you', C.dim)], 800);
   status = null;
   L();
-  L(s('Would you like to proceed?', C.fg, {b:true}));
+  L(s('Approve the plan (G1)?', C.fg, {b:true}));
   const o1 = L(s('  ', C.fg), s('1. Yes, approve the plan', C.fg));
   const o2 = L(s('  ', C.fg), s('2. No, keep planning', C.dim));
   await sleep(1200);
   o1.segs = [s('❯ ', C.accent), s('1. Yes, approve the plan', C.accent, {b:true})];
   await sleep(1300);
   o2.segs = [s('  2. No, keep planning', C.faint)];
-  L(s('  ✓ ', C.green), s('Plan approved by you', C.green), s(' · recorded before the first edit', C.dim));
+  L(s('  ✓ ', C.green), s('G1 answered by you', C.green), s(' · recorded before the first edit', C.dim));
   stage('Plan review', 'done', 'you');
   mode = 'normal';
   L();
   await sleep(700);
 
-  // 5 — implementation
+  // 5 — implementation, scope-guarded
   chapter(4);
   stage('Implementation', 'run'); setStatus('Implementing');
-  await say([s('Step 1 copies the pattern in '), s('src/Shipping/Idempotency', C.blue), s(': mechanical, so BALANCED.')], 300);
-  await agent('ai-implementer', 'Step 1 · idempotency store', 'BALANCED',
-    ['Read(src/Shipping/Idempotency/KeyStore.php)', 'Write(src/Payment/Idempotency/KeyStore.php)', 'Write(KeyStoreInterface.php)', 'Write(migrations/Version20260923101500.php)'],
+  await tool('Bash', 'state.py step 1', [s('scope guard armed · ', C.dim), s('tests/Payment/Webhook/*', C.blue)], 700);
+  await tool('Write', 'tests/Payment/Webhook/CurrentCaptureTest.php', [s('Pins today: one capture per delivered event · 3 cases', C.dim)], 900, {tok:2600});
+  await say([s('Step 2 copies the pattern in '), s('src/Shipping/Idempotency', C.blue), s(': mechanical, so BALANCED.')], 300);
+  await agent('ai-implementer', 'Step 2 · idempotency store', 'BALANCED',
+    ['Read(src/Shipping/Idempotency/KeyStore.php)', 'Write(src/Payment/Idempotency/KeyStore.php)', 'Write(KeyStoreInterface.php)', 'Write(migrations/Version20261025101500.php)'],
     'Done (9 tool uses · 14.2k tokens · 52s)', 14200, 4400);
   if (!alive(g)) return;
   L();
-  await say([s('Step 2, in this session.')], 250);
+  await tool('Bash', 'state.py step-done 2', [s('measured: 3 files, inside the step · re-scored: ', C.dim), s('T5', C.accent, {b:true}), s(' (unchanged)', C.dim)], 800);
+  await say([s('Step 3, in this session.')], 250);
   await tool('Update', 'src/Payment/Handler/HandlePaymentEventHandler.php', [s('Updated with ', C.dim), s('18 additions', C.green), s(' and ', C.dim), s('3 removals', C.red)], 1200, {
     tok: 4200, after: 700,
     more: [
@@ -395,40 +428,45 @@ async function scenario(){
       [s(' 53 ', C.faint), s('+    }                                           ', C.green, {bg: C.addBg})]
     ]
   });
-  await tool('Update', 'src/Order/OrderMailer.php', [s('✗ scope-guard: ', C.red, {b:true}), s('not in step 2 allowed_files → ', C.red), s('SCOPE_CHANGE_REQUIRED', C.red, {b:true})], 900, {error:true, after:500});
+  await tool('Update', 'src/Order/OrderMailer.php', [s('✗ scope-guard: ', C.red, {b:true}), s('not in step 3 allowed_files → ', C.red), s('SCOPE_CHANGE_REQUIRED', C.red, {b:true})], 900, {error:true, after:500});
   panel.refusals++;
-  await say([s('Outside the step, so it is not edited. Logged in '), s('handoff.md', C.blue), s(' as a follow-up.')], 600);
+  await say([s('Outside the step, so it is not edited. Written to '), s('known-risks.md', C.blue), s(' as a follow-up.')], 600);
   await tool('Update', 'config/packages/messenger.yaml', [s('max_retries: ', C.dim), s('0', C.red), s(' → ', C.dim), s('5', C.green), s(' · delay 2s · multiplier 3', C.dim)], 900, {tok:1800});
   await tool('Write', 'tests/Payment/Webhook/ReplayedEventTest.php', [s('Wrote 64 lines', C.dim)], 1000, {tok:3600});
   stage('Implementation', 'done', '4 steps');
 
-  // 6 — tests
+  // 6 — verify once, fix as one batch
   chapter(5);
   stage('Test', 'run'); setStatus('Running the suite');
-  await tool('Bash', 'state.py test-run', [s('1,284 passed', C.green), s(' · ', C.dim), s('2 failed', C.red, {b:true}), s(' · log capped to var/test-run.log', C.dim)], 3000, {error:true, after:500});
+  await tool('Bash', 'state.py test-run --scope all', [s('suite: ', C.dim), s('1,284 passed', C.green), s(' · ', C.dim), s('2 failed', C.red, {b:true}), s(' · log in tests-all-1.log, not in context', C.dim)], 3000, {error:true, after:500});
   await agent('ai-tester', 'Classify the red run', 'FAST',
-    ['Read(var/test-run.log)', 'Grep("FAILED")', 'Bash(phpunit --filter Replay at base tree)'],
+    ['Read(tests-all-1.log:1-40)', 'Grep("FAILED")', 'Bash(phpunit --filter Replay at base tree)'],
     'Done (7 tool uses · 8.9k tokens · 31s)', 8900, 3400);
   if (!alive(g)) return;
   L();
   await say([s('NEW REGRESSION ×2', C.red, {b:true}), s(', one cause: fixtures send events without an id.')], 250);
-  await sayMore([s('Both fixed as one batch, then one re-run.', C.dim)], 400);
+  await sayMore([s('Both fixed in one remediation step, then one more run.', C.dim)], 400);
+  await tool('Bash', 'state.py remediate --files "tests/Fixtures/…" --note "2 regressions"', [s('step R1 armed', C.dim)], 800);
   await tool('Update', 'tests/Fixtures/payment_events.yaml', [s('Added 2 event ids', C.dim)], 900, {tok:900});
-  await tool('Bash', 'state.py test-run', [s('1,286 passed', C.green, {b:true}), s(' · 0 failed · 41.3s', C.dim)], 3000);
+  await tool('Bash', 'state.py test-run --scope all', [s('suite: ', C.dim), s('1,286 passed', C.green, {b:true}), s(' · e2e: ', C.dim), s('14 passed', C.green, {b:true}), s(' · 58.4s', C.dim)], 3000);
   stage('Test', 'done', 'green');
 
-  // 7 — reviews
+  // 7 — sensors, then reviews
   chapter(6);
-  stage('Adversarial review', 'run'); setStatus('Reviewing');
+  stage('Adversarial review', 'run'); setStatus('Measuring');
+  await tool('Bash', 'state.py review-gate', [s('lint ✓ · types ✓ · diff in budget ✓ · tier T5 · tests fail without it ✓', C.dim)], 1400, {more: [[s('review: required', C.yellow, {b:true}), s(' — from T4 a model always reviews', C.dim)]]});
+  setStatus('Reviewing');
   await agent('ai-reviewer', 'Assume the diff is wrong', 'STRONG',
     ['Bash(git diff --stat)', 'Read(HandlePaymentEventHandler.php)', 'Read(KeyStore.php)', 'Grep("PSP_RETRY_WINDOW")'],
     'Done (16 tool uses · 27.5k tokens · 1m 12s)', 27500, 5000);
   if (!alive(g)) return;
   L();
-  await say([s('1 medium: ', C.yellow, {b:true}), s('key TTL 24h is shorter than the PSP retry window of 72h.')], 200);
-  await sayMore([s('A late replay would pass the check.', C.dim)], 400);
+  await say([s('pass_with_findings', C.yellow, {b:true}), s(' · H1: key TTL 24h < the PSP retry window of 72h.')], 200);
+  await sayMore([s('A late replay would pass the check. No BLOCKER.', C.dim)], 400);
+  await tool('Bash', 'state.py remediate --closes "H1"', [s('step R2 armed', C.dim)], 700);
   await tool('Update', 'src/Payment/Idempotency/KeyStore.php', [s('TTL ', C.dim), s('24h', C.red), s(' → ', C.dim), s('7d', C.green)], 900, {tok:1200});
-  stage('Adversarial review', 'done', '1 fixed');
+  await tool('Bash', 'state.py test-run --scope all', [s('green · ', C.green), s('findings_closed: H1 · review: passed', C.dim)], 2400);
+  stage('Adversarial review', 'done', 'H1 fixed');
   stage('Security review', 'run');
   await agent('ai-security', 'Webhook auth, replay, data exposure', 'STRONG',
     ['Read(StripeWebhookController.php)', 'Grep("signature")', 'Grep("logger->")'],
@@ -441,7 +479,7 @@ async function scenario(){
   // 8 — release and approval
   chapter(7);
   stage('Release report', 'run'); setStatus('Writing the release report');
-  await agent('ai-release', 'Assemble the release report', 'FAST',
+  await agent('ai-release', 'Assemble the release report', 'BALANCED',
     ['Read(.ai/reports/…/*.md)', 'Bash(git diff --stat)', 'Write(release-report.md)'],
     'Done (6 tool uses · 7.4k tokens · 19s)', 7400, 3000);
   if (!alive(g)) return;
@@ -450,9 +488,85 @@ async function scenario(){
   status = null;
   L();
   await say([s('Ready for your approval.', C.fg, {b:true})], 250);
-  await sayMore([s('T4 · 4 steps · 1,286 tests green · 1 review finding fixed · 1 scope refusal', C.dim)], 200);
+  await sayMore([s('T5 · 4 steps · 1,286 tests + 14 e2e green · H1 fixed · 1 scope refusal', C.dim)], 200);
   await sayMore([s('Report: ', C.dim), s(`.ai/reports/${TASK}/release-report.md`, C.blue)], 200);
+  await sayMore([s('Run this in your own terminal:', C.fg)], 200);
+  L(s('    python3 …/ai-task/state.py --root ~/work/shop-api approve --by "you"', C.yellow));
+  await sleep(300);
   await sayMore([s('Nothing was committed. ', C.accent, {b:true}), s('Commit, push and merge are yours.', C.fg)], 200);
+  L();
+  if (ff !== null){ ff = null; snap = true; updateCaption(); return; }
+  await sleep(9000);
+  if (!alive(g)) return;
+  restart();
+}
+
+async function scenarioDirect(){
+  const g = gen;
+  const TASK = 'T-2026-10-25-005';
+  resetState();
+  for (const n of ['Plan review', 'Security review', 'Human approval']) stage(n, 'wait', 'skipped');
+  chapter(0);
+  welcome();
+  await sleep(1400);
+  await typeInput('/ai-task Add a CSV export to the reports screen');
+  await sleep(700);
+  if (!alive(g)) return;
+  submit();
+  setStatus('Routing');
+  await sleep(700);
+  await tool('Read', '.ai/AGENTS.md', [s('Read 58 lines · routes to the policy for each job', C.dim)], 1000);
+
+  // 2 — tier first
+  chapter(1);
+  stage('Discovery', 'run'); setStatus('Confirming the entry points');
+  await tool('Bash', 'grep -n "function index" src/Report/Controller/ReportController.php', [s('ReportController.php:41', C.blue), s(' · index renders report/index.html.twig', C.dim)], 900, {tok:1100});
+  await tool('Bash', 'grep -rln "CsvExporter" src/', [s('src/Order/Export/OrderCsvExporter.php', C.blue), s(' · the pattern to copy', C.dim)], 800, {tok:900});
+  stage('Discovery', 'done', 'grep'); stage('Context', 'done', 'in chat'); stage('Impact', 'done', 'in chat');
+  stage('Risk tier', 'run'); setStatus('Classifying risk');
+  await sleep(500);
+  panel.tier = 'T3';
+  stage('Risk tier', 'done', 'T3');
+  L();
+  await say([s('Risk tier '), s(' T3 ', C.page, {bg: C.accent, b:true}), s(' — CRUD and presentation, no process changes.')], 250);
+  await sayMore([s('A new export on an existing resource. Direct mode, four files:', C.dim)], 150);
+  await sayMore([s('CsvExporter.php · ReportController.php · index.html.twig · the test', C.dim)], 400);
+  stage('Plan', 'done', '4 lines');
+  await tool('Bash', `state.py quick --tier T3 --files "…4 files" --tests "CsvExporterTest"`, [s('task ', C.dim), s(TASK, C.fg), s(' · scope guard armed on 4 files', C.green)], 1000);
+
+  // 3 — edit inside the named files
+  chapter(2);
+  stage('Implementation', 'run'); setStatus('Implementing');
+  await tool('Write', 'src/Report/Export/CsvExporter.php', [s('Wrote 58 lines · copies OrderCsvExporter: streamed, UTF-8 BOM', C.dim)], 1100, {tok:3400});
+  await tool('Update', 'src/Report/Controller/ReportController.php', [s('Updated with ', C.dim), s('14 additions', C.green)], 1000, {
+    tok: 2100, after: 600,
+    more: [
+      [s(' 63 ', C.faint), s("+    #[Route('/reports/{id}/export.csv')]          ", C.green, {bg: C.addBg})],
+      [s(' 64 ', C.faint), s('+    public function exportCsv(Report $report)     ', C.green, {bg: C.addBg})]
+    ]
+  });
+  await tool('Update', 'templates/report/index.html.twig', [s('Added the “Export CSV” button', C.dim)], 800, {tok:900});
+  await tool('Write', 'tests/Report/CsvExporterTest.php', [s('Wrote 71 lines · 6 cases: headers, quoting, empty report, BOM', C.dim)], 1000, {tok:2800});
+  await tool('Bash', 'phpunit tests/Report/CsvExporterTest.php', [s('6 passed', C.green), s(" · the step's own tests only", C.dim)], 1400);
+  stage('Implementation', 'done', '4 files');
+
+  // 4 — verify once
+  chapter(3);
+  stage('Test', 'run'); setStatus('Running the suite');
+  await tool('Bash', 'state.py test-run --scope all', [s('suite: ', C.dim), s('1,292 passed', C.green, {b:true}), s(' · e2e: ', C.dim), s('14 passed', C.green, {b:true}), s(' · 52.1s', C.dim)], 3000);
+  stage('Test', 'done', 'green');
+
+  // 5 — sensors are the review
+  chapter(4);
+  stage('Adversarial review', 'run'); setStatus('Measuring');
+  await tool('Bash', 'state.py close', [s('review-gate: lint ✓ · types ✓ · 143 lines, in budget ✓ · re-scored T3 ✓', C.dim)], 1600, {more: [[s('named test fails without the change ✓', C.dim)]]});
+  L(s('     ', C.fg), s('review: skipped_green', C.green, {b:true}), s(' — the sensors are the review · task archived', C.dim));
+  stage('Adversarial review', 'done', 'sensors');
+  stage('Release report', 'done', 'commit body');
+  status = null;
+  L();
+  await say([s('Done.', C.fg, {b:true}), s(' T3 · 1,292 tests + 14 e2e green · no subagent, no model review', C.dim)], 250);
+  await sayMore([s('Nothing was committed: ', C.accent, {b:true}), s('the commit is yours.', C.fg)], 200);
   L();
   if (ff !== null){ ff = null; snap = true; updateCaption(); return; }
   await sleep(9000);
@@ -592,7 +706,7 @@ function drawTerminal(){
     ? [s('⏸ plan mode on', C.blue), s(' (shift+tab to cycle)', C.faint)]
     : [s('⏵⏵ accept edits on', C.violet), s(' (shift+tab to cycle)', C.faint)];
   drawSegs(left, x0, y);
-  const right = 'Opus 5.5 [1m] · Max · claude-agentic 2.0.1';
+  const right = 'Opus 5.5 [1m] · Max · claude-agentic 2.0.2';
   drawSegs([s(right, C.faint)], x0 + (COLS - right.length) * cw, y);
 }
 
@@ -651,7 +765,7 @@ function drawPanel(){
     ctx.fillRect(px, y + 16, pw * Math.min(1, u.tok / maxTok), 5);
     ctx.globalAlpha = 1;
     ctx.font = `400 11px ${MONO}`; ctx.fillStyle = u.runs ? C.dim : C.faint;
-    ctx.fillText(name === 'EXPERT' && !u.runs ? 'not needed at T4' : `${u.runs} run${u.runs === 1 ? '' : 's'} · ${fmtTok(u.tok)} tokens${u.live ? ' · running' : ''}`, px, y + 32);
+    ctx.fillText(name === 'EXPERT' && !u.runs ? `not needed at ${panel.tier || 'this tier'}` : `${u.runs} run${u.runs === 1 ? '' : 's'} · ${fmtTok(u.tok)} tokens${u.live ? ' · running' : ''}`, px, y + 32);
     y += 46;
   }
   // session row
@@ -668,7 +782,7 @@ function drawPanel(){
     y += 22;
   };
   guard('Scope refusals', String(panel.refusals), panel.refusals ? C.red : C.faint);
-  guard('vendor/ writes', '0', C.faint);
+  guard('Protected writes', '0', C.faint);
   guard('Agent commits', String(panel.commits), C.green);
 }
 
@@ -699,14 +813,28 @@ function frame(now){
 // ---------- controls ----------
 const capN = document.getElementById('capN'), capT = document.getElementById('capT');
 const chaptersEl = document.getElementById('chapters'), listEl = document.getElementById('chapterList');
-const fills = CHAPTERS.map((t, i) => {
-  const b = document.createElement('button');
-  b.type = 'button'; b.title = `${i + 1}. ${t}`; b.setAttribute('aria-label', `Jump to chapter ${i + 1}: ${t}`);
-  const f = document.createElement('span'); f.className = 'fill'; b.appendChild(f);
-  b.addEventListener('click', () => seek(i));
-  chaptersEl.appendChild(b);
-  const li = document.createElement('li'); li.textContent = t; listEl.appendChild(li);
-  return f;
+let fills = [];
+function buildChapters(){
+  chaptersEl.innerHTML = ''; listEl.innerHTML = '';
+  chaptersEl.style.gridTemplateColumns = `repeat(${CHAPTERS.length},1fr)`;
+  fills = CHAPTERS.map((t, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.title = `${i + 1}. ${t}`; b.setAttribute('aria-label', `Jump to chapter ${i + 1}: ${t}`);
+    const f = document.createElement('span'); f.className = 'fill'; b.appendChild(f);
+    b.addEventListener('click', () => seek(i));
+    chaptersEl.appendChild(b);
+    const li = document.createElement('li'); li.textContent = t; listEl.appendChild(li);
+    return f;
+  });
+}
+buildChapters();
+document.querySelectorAll('#scen .sc').forEach(x => x.setAttribute('aria-pressed', x.dataset.s === SCN));
+document.getElementById('scen').addEventListener('click', e => {
+  const b = e.target.closest('.sc'); if (!b || b.dataset.s === SCN) return;
+  SCN = b.dataset.s; CHAPTERS = CHAPTER_SETS[SCN];
+  document.querySelectorAll('#scen .sc').forEach(x => x.setAttribute('aria-pressed', x === b));
+  buildChapters();
+  if (reduced){ restart(CHAPTERS.length); } else seek(0);
 });
 function updateCaption(){
   capN.textContent = String(chapterIdx + 1).padStart(2, '0') + ' / ' + String(CHAPTERS.length).padStart(2, '0');
