@@ -23,6 +23,7 @@ Exit codes: 0 ok, 1 drift / over budget / unresolved placeholder, 2 usage.
 import argparse
 import json
 import os
+import posixpath
 import re
 import sys
 from pathlib import Path
@@ -349,6 +350,11 @@ def parse_rule(slug, text, where=None):
         if directory.startswith("/") or ".." in directory.split("/"):
             raise RenderError("%s: dirs: must stay inside the project: %s"
                               % (where, directory))
+    # Spelled the way the take-back walk reports a path (./lib, lib//x and
+    # lib/./y are lib, lib/x and lib/y): a target the walk never names is
+    # created on one run and removed on the next. A repeat is dropped too; it
+    # would only plan the same file twice.
+    dirs = list(dict.fromkeys(posixpath.normpath(d) for d in dirs))
     body = text[match.end():].strip("\n")
     if not body.strip():
         raise RenderError("%s: the body is empty — a rule with no text renders nothing"

@@ -585,6 +585,39 @@ grep -q 'claude-agentic:rule:sub:start' "$RW/libs/CLAUDE.md" 2>/dev/null \
 out=$(python3 "$UPDATE" "$RW" --check 2>&1); rc=$?
 [ $rc -eq 0 ] && pass "--check exits 0: a hint is not a pending update" || fail "--check exits $rc" "$out"
 
+echo "== a dirs: entry spelled with ./ or // targets the file the take-back walks (M1)"
+RS="$TMP/rules-spelling"; cp -r "$RD" "$RS"
+mkdir -p "$RS/lib/x" "$RS/lib/y"
+printf -- '---\ndirs: ["./lib", "lib//x", "lib/./y", lib]\n---\n# Lib rules\n- lib text\n' > "$RS/.ai/rules/lib.md"
+printf -- '---\ndirs: ["./"]\n---\n# Root rules\n- root text\n' > "$RS/.ai/rules/top.md"
+out=$(python3 "$UPDATE" "$RS" 2>&1)
+for t in lib/CLAUDE.md lib/x/CLAUDE.md lib/y/CLAUDE.md; do
+    grep -qE "^  create +$t " <<<"$out" \
+        && pass "the dry run plans create $t" || fail "no create $t" "$out"
+done
+grep -qE '^  [a-z?]+ +[^ ]*(\./|//)' <<<"$out" \
+    && fail "the dry run names a target spelled with ./ or //" "$out" || pass "no planned target is spelled with ./ or //"
+[ "$(grep -cE '^  create +lib/CLAUDE.md ' <<<"$out")" = 1 ] \
+    && pass "./lib and lib plan lib/CLAUDE.md once" || fail "lib/CLAUDE.md is planned more than once" "$out"
+grep -qE '^  update +CLAUDE.md ' <<<"$out" \
+    && pass 'dirs: ["./"] still targets the root CLAUDE.md' || fail "the root target is not planned" "$out"
+out=$(python3 "$UPDATE" "$RS" --apply 2>&1); rc=$?
+[ $rc -eq 0 ] && pass "--apply exits 0" || fail "--apply exits $rc" "$out"
+out=$(python3 "$UPDATE" "$RS" 2>&1)
+grep -q '^0 automatic, 0 conflict' <<<"$out" \
+    && pass "the run after --apply is up to date: no create/remove alternation" || fail "the spelled rule is not idempotent" "$out"
+out=$(python3 "$UPDATE" "$RS" --check 2>&1); rc=$?
+[ $rc -eq 0 ] && pass "--check exits 0 after --apply" || fail "--check exits $rc" "$out"
+n=$(grep -c 'claude-agentic:rule:lib:start' "$RS/lib/CLAUDE.md" 2>/dev/null)
+[ "$n" = 1 ] && pass "lib/CLAUDE.md holds one lib block: ./lib and lib collapse" || fail "lib/CLAUDE.md holds $n lib blocks"
+grep -q 'claude-agentic:rule:top:start' "$RS/CLAUDE.md" \
+    && pass "--apply renders the ./ rule into the root CLAUDE.md" || fail "the root CLAUDE.md has no top block"
+RX="$TMP/rules-spelling-escape"; cp -r "$RD" "$RX"
+printf -- '---\ndirs: [a/../b]\n---\n# Escape\n- text\n' > "$RX/.ai/rules/esc.md"
+out=$(python3 "$UPDATE" "$RX" 2>&1)
+grep -q 'must stay inside the project: a/../b' <<<"$out" \
+    && pass "dirs: [a/../b] is still refused before it is normalised" || fail "a/../b was not refused" "$out"
+
 echo "== every key in the template history is accounted for"
 python3 - "$PLUGIN_ROOT" <<'PY'
 import json, os, sys

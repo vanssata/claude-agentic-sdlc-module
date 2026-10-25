@@ -79,8 +79,8 @@ RULES_DIR = ".ai/rules"
 # file is not ours (the path guard refuses it too), and .git is not text.
 # A child holding a .git entry (worktree, nested repository, submodule) is pruned
 # too, by the take-back walk (rendered_rules) and by the writer (nested_tree). The
-# two still disagree on a dirs: entry under a RULES_SKIP name, through a symlinked
-# directory, or spelled with ./ or // (.ai/project/known-risks.md).
+# two still disagree on a dirs: entry under a RULES_SKIP name or through a
+# symlinked directory (.ai/project/known-risks.md).
 RULES_SKIP = {".git", ".ai", "vendor", "node_modules", "bower_components",
               "third_party", "Pods", "site-packages", ".venv", ".pnpm", ".yarn"}
 START, END = "<!-- claude-agentic:start -->", "<!-- claude-agentic:end -->"
@@ -1011,8 +1011,8 @@ def nested_tree(root, rel_dir):
     """The first directory below the root on the way to `rel_dir`, `rel_dir`
     included, that holds a .git entry (a worktree, a nested repository, a
     submodule), or None. The same predicate rendered_rules() prunes on."""
-    # "." and "" are the root itself (dirs: [./src] reaches here as "./src"),
-    # whose own .git is not a nested tree.
+    # "." and "" are the root itself (dirs: ["."] reaches here as ""), whose
+    # own .git is not a nested tree.
     parts = [p for p in rel_dir.split("/") if p not in ("", ".")]
     for i in range(1, len(parts) + 1):
         candidate = "/".join(parts[:i])
