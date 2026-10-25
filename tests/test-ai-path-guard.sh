@@ -735,6 +735,71 @@ for c in "ruby -e 'f = File.new(\".ai/state/handoff.md\", \"w\"); f.puts \"x\"'"
     decide_home "a writing one-liner is denied: $c" deny "$c"
 done
 
+echo "== ai-path-guard (M2, L4 of T-2026-10-22-002)"
+# M2: a switch that only starts with an in-place letter, a str.replace and a
+# quoted 'a' after any comma are reads. HEAD denied the first five.
+for c in "ruby -rdigest -e 'puts Digest::SHA256.hexdigest(File.read(\".ai/state/current.json\"))'" \
+         "perl -mio -e 'print 1' .ai/reports/T-1/notes.md" \
+         "python3 -c \"from pathlib import Path; print(Path('.ai/state/current.json').read_text().replace('a','b'))\"" \
+         "python3 -c \"import json; d=json.load(open('.ai/state/current.json')); print(d.get('x', 'a'))\"" \
+         "python3 -c \"print('x', '|y', open('.ai/state/current.json').read())\"" \
+         "perl -Mstrict -e 'print 1' .ai/reports/T-1/notes.md" \
+         "python3 -c \"print(', '.join(open('.ai/state/current.json').read().split()))\""; do
+    decide_home "a read is allowed: $c" allow "$c"
+done
+# L4: Path.copy, copy_into and move_into (Python 3.14) write their target.
+for c in "python3 -c \"from pathlib import Path; Path('/tmp/x').copy('.ai/state/current.json')\"" \
+         "python3 -c \"from pathlib import Path; t='.ai/state/current.json'; Path('/tmp/x').copy(t, follow_symlinks=False)\"" \
+         "python3 -c \"from pathlib import Path; Path('/tmp/x').copy_into('.ai/state/')\"" \
+         "python3 -c \"from pathlib import Path; Path('/tmp/x').move_into('.ai/state/')\""; do
+    decide_home "a writing one-liner is denied: $c" deny "$c"
+done
+# Writes that the tightened indicators must still see; ruby -r json -i is a
+# miss on HEAD, the separate argument ended the option loop.
+for c in "perl -pie 's/a/b/' .ai/reports/T-1/notes.md" \
+         "perl -i.bak -pe 's/a/b/' .ai/reports/T-1/notes.md" \
+         "perl -0777 -pi -e 's/a/b/' .ai/reports/T-1/notes.md" \
+         "perl -I lib -i -pe 's/a/b/' .ai/reports/T-1/notes.md" \
+         "ruby -i2 -pe 'sub(/a/, \"b\")' .ai/reports/T-1/notes.md" \
+         "ruby -r json -i -pe 'sub(/a/, \"b\")' .ai/reports/T-1/notes.md" \
+         "python3 -c \"import os; a='.ai/state/'; b='handoff.md'; print('x', file=open(os.path.join(a, b), 'w'))\"" \
+         "node -e \"const fs=require('fs'); fs.openSync('.ai/state/current.json', 'a')\"" \
+         "perl -e 'open my \$fh, \">\", \".ai/state/handoff.md\"; print \$fh \"x\"'" \
+         "perl -e 'my \$f=\".ai/state/handoff.md\"; open(F, \">>\$f\"); print F \"x\"'" \
+         "python3 -c \"from pathlib import Path; f=Path('.ai/state/handoff.md').open('w'); print('x', file=f)\"" \
+         "python3 -c \"print('x', file=open('.ai/state/handoff.md', mode='w'))\"" \
+         "python3 -c \"from pathlib import Path; p=Path('/tmp/c'); t=Path('.ai/state/current.json'); p.replace(str(t))\""; do
+    decide_home "a writing one-liner is still denied: $c" deny "$c"
+done
+# Review of T-2026-10-25-001, H1, L1: the first-argument walk reads three
+# levels of parens, quoted strings and new Class(; HEAD denied all of these.
+for c in "python3 -c \"import os; open(os.path.join(os.getcwd(), '.ai/state/current.json'), 'w').close()\"" \
+         "python3 -c \"from pathlib import Path; f=open(str(Path.cwd() / '.ai/reports/T-1/notes.md'), 'a'); print('x', file=f)\"" \
+         "node -e \"const fs=require('fs'), path=require('path'); const fd=fs.openSync(path.join(process.cwd(), '.ai/state/current.json'), 'w'); fs.writeSync(fd, '{}')\"" \
+         "ruby -e \"File.open(File.expand_path(File.join(Dir.pwd, '.ai/state/current.json')), 'w') { |f| f.puts 'x' }\"" \
+         "php -c x.ini -e \"\\\$h = fopen(dirname(getcwd()) . '/.ai/reports/T-1/notes.md', 'a'); fprintf(\\\$h, 'x');\"" \
+         "perl -MIO::File -e 'my \$fh = new IO::File(\".ai/reports/T-1/notes.md\", \"w\"); print \$fh \"x\"'" \
+         "php -c x.ini -e \"\\\$f = new SplFileObject('.ai/state/current.json', 'w');\"" \
+         "python3 -c \"print('x', file=open('.ai/reports/T-1/a,b.md', 'w'))\"" \
+         "python3 -c \"print('x', file=open(\\\".ai/reports/T-1/n.md\\\", \\\"a\\\"))\"" \
+         "python3 -c \"import os; from pathlib import Path; p=Path('/tmp/a'); p.replace(os.path.join('.ai/state/', 'b'))\"" \
+         "perl -gpi -e 's/a/b/' .ai/reports/T-1/notes.md" \
+         "perl -tpi -e 's/a/b/' .ai/reports/T-1/notes.md" \
+         "ruby -vpi -e 'sub(/a/, \"b\")' .ai/reports/T-1/notes.md" \
+         "ruby -E utf-8 -i -pe 'sub(/a/, \"b\")' .ai/reports/T-1/notes.md"; do
+    decide_home "a writing one-liner is still denied: $c" deny "$c"
+done
+# L2: a copy.copy and a str.replace whose string holds a paren are reads.
+for c in "python3 -c \"import copy, json; from pathlib import Path; d=copy.copy(json.loads(Path('.ai/state/current.json').read_text())); print(d)\"" \
+         "python3 -c \"from pathlib import Path; print(Path('.ai/state/current.json').read_text().replace(')', ''))\""; do
+    decide_home "a read is allowed: $c" allow "$c"
+done
+# The mode indicator walks the first argument with a nested group: a long line
+# of commas and parens goes to grep (ere_match), measured at 40 KB.
+pad=$(rep '(a, b),' 5800)
+timed "a 40 KB one-liner of commas and parens that reads the state is allowed" allow \
+    "$(printf "python3 -c \"print(open('.ai/state/current.json').read())\" # open(%s" "$pad" | bash_stdin)" 1000
+
 echo "== ai-path-guard (project WITHOUT .ai/ — every guard must be inert)"
 BARE="$TMP/bare"; mkdir -p "$BARE"; printf 'SECRET=1\n' > "$BARE/.env"
 out=$(jq -nc --arg r "$BARE" '{hook_event_name:"PreToolUse",tool_name:"Read",cwd:$r,tool_input:{file_path:($r+"/.env")}}' | "$GUARD")

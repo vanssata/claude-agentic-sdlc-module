@@ -1124,7 +1124,10 @@ case "$AI_TOOL" in
         CONTROL_TEXT_RE='\.ai/state/|\.ai/reports/'
         # perl/ruby with an in-place flag cluster (-i, -pi, -i.bak; not -I or
         # -MFile): the file is an argument, not text in the code (review L2).
-        INPLACE_RE='(^|[|;&[:space:]])(perl|ruby)([[:space:]]+-[^[:space:]]+)*[[:space:]]+-[a-z]*i'
+        # The i counts only after switches that take no argument, so -rdigest
+        # and -mio are no -i; -C, -E, -I, -M, -m and -r may take a separate
+        # one, so ruby -r json -i still is (M2 of T-2026-10-22-002).
+        INPLACE_RE='(^|[|;&[:space:]])(perl|ruby)([[:space:]]+-([CEIMmr][[:space:]]*[^[:space:]]+|[^[:space:]]+))*[[:space:]]+-[acdfghlnpsStTuUvwWXy]*i'
         matches_joined "$cmd" "$LOOSE_PATTERNS" \
             || ere_match '(^|[|;&[:space:]])(ln|eval)([[:space:]]|$)' "$cmd" \
             || { ere_match "$CONTROL_TEXT_RE" "$cmd" \
@@ -1316,15 +1319,23 @@ case "$AI_TOOL" in
         #    command, in any of the five languages (WRITE_CALL_RE), once
         #    stdout.write and stderr.write are taken out (review M1: a read
         #    that prints is no write); copy( only bare, as PHP spells it, not
-        #    a dict's .copy();
+        #    a dict's .copy(); copy_into( and move_into( (Python 3.14);
         #  - a name that does the same without a call: subprocess, shutil,
         #    child_process, FileUtils, the O_ write flags, os.replace,
         #    fileinput's inplace, a backtick, $( ), %x and qx (WRITE_WORD_RE);
-        #  - Path(…).replace( (WRITE_PATHREPL_RE, with Path on the line);
+        #  - with Path on the line, a .replace(target) with one argument
+        #    (WRITE_PATHREPL_RE; str.replace(old, new) has two) and a
+        #    .copy(target) with an argument other than copy.copy(x)
+        #    (WRITE_PATHCOPY_RE, Path.copy in 3.14; a dict's .copy() has none)
+        #    (M2, L4 of T-2026-10-22-002);
         #  - open, new or FileIO on the line and a quoted mode with w, a, x or
-        #    + that follows a comma, mode= or open( — the second argument, not
-        #    any 'a' on the line (count('a') is a read) — or a Perl mode in the
-        #    same place: >, +, |- or -| (WRITE_MODE_RE);
+        #    + right after the first argument of open*, new, new Class or
+        #    FileIO, after mode= or right after open*( — not any 'a' after a
+        #    comma (count('a'), d.get('x', 'a') are reads) — or a Perl mode in
+        #    the same place: >, +, |- or -| (WRITE_MODE_RE). The first argument
+        #    (FIRST_ARG, also PATHREPL's one argument) is plain characters,
+        #    quoted strings and parentheses three deep counting the call's own:
+        #    a comma inside a string or a paren does not end it;
         #  - a shell redirect or a tee whose target is under those paths.
         # Deliberate obfuscation (a computed mode, getattr, base64) is not read:
         # the guards defend against mistakes (direct-mode-diet D4c).
@@ -1333,15 +1344,19 @@ case "$AI_TOOL" in
                 deny "Refusing an interpreter one-liner that writes the task's own control files.$WHY_APPROVE"
             fi
             if [ -n "$is_interp" ]; then
-                WRITE_CALL_RE='(^|[^A-Za-z0-9_])(write|writelines|write_text|write_bytes|write_file|writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|binwrite|syswrite|fwrite|fputs|file_put_contents|dump|unlink|unlinkSync|remove|removedirs|rename|renames|renameSync|rmdir|rmdirSync|rm|rmSync|rmtree|mkdir|mkdirSync|makedirs|mkdtemp|truncate|truncateSync|ftruncate|symlink|symlinkSync|symlink_to|hardlink_to|link|linkSync|link_to|touch|chmod|chown|utime|utimes|copyFile|copyFileSync|cp|cpSync|move|delete|system|exec|execSync|execFile|execFileSync|spawn|spawnSync|popen|passthru|shell_exec|proc_open|fork|eval)([[:space:]]*\(|[[:space:]]+['\''"$])|(^|[^A-Za-z0-9_.])copy[[:space:]]*\('
+                WRITE_CALL_RE='(^|[^A-Za-z0-9_])(write|writelines|write_text|write_bytes|write_file|writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|binwrite|syswrite|fwrite|fputs|file_put_contents|dump|unlink|unlinkSync|remove|removedirs|rename|renames|renameSync|rmdir|rmdirSync|rm|rmSync|rmtree|mkdir|mkdirSync|makedirs|mkdtemp|truncate|truncateSync|ftruncate|symlink|symlinkSync|symlink_to|hardlink_to|link|linkSync|link_to|touch|chmod|chown|utime|utimes|copyFile|copyFileSync|cp|cpSync|move|delete|system|exec|execSync|execFile|execFileSync|spawn|spawnSync|popen|passthru|shell_exec|proc_open|fork|eval|copy_into|move_into)([[:space:]]*\(|[[:space:]]+['\''"$])|(^|[^A-Za-z0-9_.])copy[[:space:]]*\('
                 WRITE_WORD_RE='subprocess|shutil|child_process|FileUtils|Open3|O_(WRONLY|RDWR|CREAT|APPEND|TRUNC)|os\.replace|inplace|`|\$\(|%x[^A-Za-z0-9_[:space:]]|(^|[^A-Za-z0-9_])qx[^A-Za-z0-9_[:space:]]'
-                WRITE_PATHREPL_RE='\.replace[[:space:]]*\('
-                WRITE_MODE_RE='(,|mode[[:space:]]*=|open[[:space:]]*\()[[:space:]]*\\?['\''"]([rbtU]*[wax+][rbtU+]*\\?['\''"]|>|\+|-?\|[^[:space:]|])'
+                FIRST_ARG='([^,()'\''"]|'\''[^'\'']*'\''|"[^"]*"|\(([^()]|\([^()]*\))*\))*'
+                WRITE_PATHREPL_RE='\.replace[[:space:]]*\('"$FIRST_ARG"'\)'
+                WRITE_PATHCOPY_RE='\.copy[[:space:]]*\([[:space:]]*[^)[:space:]]'
+                WRITE_MODE_RE='((open[A-Za-z]*|new([[:space:]]+[A-Za-z_][A-Za-z0-9_:]*)?|FileIO)[[:space:]]*(\(|[[:space:]])'"$FIRST_ARG"',|mode[[:space:]]*=|open[A-Za-z]*[[:space:]]*\()[[:space:]]*\\?['\''"]([rbtU]*[wax+][rbtU+]*\\?['\''"]|>|\+|-?\|[^[:space:]|])'
                 WRITE_REDIR_RE='>[>|]?[[:space:]]*['\''"]?[^[:space:]'\''"|;&<>]*\.ai/(state|reports)/|(^|[^A-Za-z0-9_.-])tee[[:space:]][^|;&]*\.ai/(state|reports)/'
                 scan=${cmd//stdout.write/ }; scan=${scan//stderr.write/ }
+                pscan=${cmd//copy.copy(/ }
                 if ere_match "$WRITE_CALL_RE" "$scan" \
                    || ere_match "$WRITE_WORD_RE" "$cmd" \
-                   || { ere_match 'Path' "$cmd" && ere_match "$WRITE_PATHREPL_RE" "$cmd"; } \
+                   || { ere_match 'Path' "$cmd" \
+                        && { ere_match "$WRITE_PATHREPL_RE" "$cmd" || ere_match "$WRITE_PATHCOPY_RE" "$pscan"; }; } \
                    || { ere_match 'open|new|FileIO' "$cmd" && ere_match "$WRITE_MODE_RE" "$cmd"; } \
                    || ere_match "$WRITE_REDIR_RE" "$cmd"; then
                     deny "Refusing an interpreter one-liner that writes the task's own control files.$WHY_APPROVE"

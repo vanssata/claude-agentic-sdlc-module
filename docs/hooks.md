@@ -290,20 +290,32 @@ indicators are matched in process over the whole line:
   `writeFileSync(`, `File.delete(`, `file_put_contents(`, `write_file(`,
   `system(`, `exec(` and the like. `stdout.write` and `stderr.write` print, so
   they do not count. `copy(` counts only bare, as PHP spells it, not a dict's
-  `.copy()`;
+  `.copy()`; `copy_into(` and `move_into(` (Python 3.14) count anywhere;
 - a name that does the same without a call: `subprocess`, `shutil`,
   `child_process`, `FileUtils`, the `O_WRONLY`-style flags, `os.replace`,
   `fileinput`'s `inplace`, a backtick, `$( )`, `%x` and `qx`;
-- `Path(…).replace(` on a line that says `Path`;
+- on a line that says `Path`, a `.replace(target)` with one argument — a
+  `str.replace(old, new)` has two and is no write — or a `.copy(target)` with
+  an argument (`Path.copy`, Python 3.14) — a dict's `.copy()` has none, and
+  `copy.copy(x)` does not count;
 - `open`, `new` or `FileIO` on the line, with a quoted mode that holds `w`, `a`,
-  `x` or `+` right after a comma, `mode=` or `open(`, or a Perl mode in the
-  same place (`">"`, `"+<"`, `"|-"`). A `count('a')` elsewhere on the line is
-  no mode;
+  `x` or `+` right after the first argument of `open…`, `new`, `new Class` or
+  `FileIO`, after `mode=` or right after `open…(`, or a Perl mode in the same
+  place (`">"`, `"+<"`, `"|-"`). The first argument is read as plain
+  characters, quoted strings and parentheses three deep counting the call's
+  own, so `open(os.path.join(os.getcwd(), p), 'w')`, `open('a,b.md', 'w')`
+  and `new IO::File(p, "w")` are seen; a fourth level of parentheses, or a
+  string holding its own kind of quote escaped, is not. A `count('a')` or a
+  `d.get('x', 'a')` elsewhere on the line is no mode;
 - a shell redirect or a `tee` whose target is under those paths.
 
 An `eval` that mentions them is refused as before, because its body is opaque.
-So is `perl -i` or `ruby -i` (any lowercase flag cluster with an `i`, such as
-`-pi`), because it rewrites the files it is given. Deliberate obfuscation, such
+So is `perl -i` or `ruby -i` (an `i` in a cluster of switches that take no
+argument, such as `-pi`, `-ni`, `-gpi` or `-i.bak`; also after `-C`, `-E`,
+`-I`, `-M`, `-m` or `-r`, which may take a separate argument, as in
+`ruby -r json -i`), because it
+rewrites the files it is given. `ruby -rdigest` and `perl -mio` load a library
+and are no `-i`. Deliberate obfuscation, such
 as a computed mode, `getattr` or base64, is not read: the guards defend against
 mistakes, not against a command built to pass them.
 

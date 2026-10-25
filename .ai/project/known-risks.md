@@ -186,3 +186,15 @@ following; each is open unless marked.
 - **Suggested fix**: the movers pass's one-step strip (`quote_tail`). Its own hooks task.
 - **Status**: open
 
+
+## Interpreter tripwire residuals after M2/L4 (found 2026-10-25 while scoping T-2026-10-25-001)
+- **Where**: `hooks/ai-path-guard.sh`, the control-file tripwire: `INPLACE_RE` and the `WRITE_*_RE` indicators (`FIRST_ARG`). Not changed by T-2026-10-25-001 beyond M2 and L4 of T-2026-10-22-002 and its review's H1, L1, L2.
+- **What could go wrong**: INFERENCE from the regexes, each spelling dry-run against them, unless marked —
+  - the head `(perl|ruby)` is not anchored to a command position, so `grep perl -i .ai/reports/T-1/notes.md` counts as an in-place edit: a false deny;
+  - `perl -e 'code' -i file` is a miss: the option loop stops at the quoted code, as it did at HEAD ada69e3;
+  - the mode is found only after a first argument the walk can read (`FIRST_ARG`): a fourth level of parentheses (`open(str(Path(os.getcwd()) / p), 'w')`), a string holding its own kind of quote escaped (`open('it\'s', 'w')`), or a `)` inside a string two levels deep end it early: a miss when the mode is the line's only write indicator. HEAD ada69e3 saw these, through any comma before a quoted mode, and denied every `d.get('x', 'a')` with them. The same walk bounds `Path(…).replace(target)`; `x.replace(y.strip(), z)` and `datetime.now().replace(microsecond=0)` on a line that says `Path` are false denies;
+  - KNOWN FACT (probe at a1dee72ac) — `Path('.ai/state/x').copy(Path('/tmp/y'))`, a copy *out of* the state, is a false deny, as `shutil.copy` is; `php -r "fopen('.ai/state/current.json', 'w');"` is a miss at HEAD ada69e3 and after: `INTERP_RE` knows `-c`/`-e`, not PHP's `-r`;
+  - KNOWN FACT (review of T-2026-10-25-001, I1) — `WRITE_CALL_RE` has no Node `writeSync`/`writevSync`, PHP `fprintf`, or Ruby `puts`/`<<` on a handle, so an `openSync(p, 'w')` + `writeSync` pair rests on the mode indicator alone. Older than this task.
+- **How likely / how bad**: unusual spellings, each needing the mode to be the line's only write indicator. A miss is a write into `.ai/state|reports` that nothing else stops: the protected-file patterns do not read interpreter code, so for a one-liner the tripwire is the only check, `.ai/state/current.json` included. A false deny costs a Read-tool call.
+- **Suggested fix**: anchor the head to a command position the way `segments_of` does; read `-i` from the parsed argv rather than a regex; add the I1 write calls. Its own hooks task.
+- **Status**: open
