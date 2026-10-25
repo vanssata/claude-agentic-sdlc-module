@@ -696,6 +696,45 @@ decide_home "echo x > ~/.claude/hooks/ai-path-guard.sh is denied" deny 'echo x >
 decide_home "in a task: cp into ~/.claude/claude-agentic/ai/ is denied" deny 'cp /tmp/x ~/.claude/claude-agentic/ai/policies/git.md'
 rm -rf "$TMP/rootlink"
 
+echo "== ai-path-guard (review of T-2026-10-22-002: nested roots, reads HEAD allowed, missed writes)"
+# B1: a cwd inside a nested .ai/ tree (a fixture, the ai-init templates, a
+# worktree) must not unprotect the outer project's control files: every
+# ancestor that holds .ai/ is a root. HEAD denied all of these.
+NEST="$TMP/nest"; mkdir -p "$NEST/.ai/state" "$NEST/.ai/policies" "$NEST/.ai/reports/T-1" "$NEST/sub/fix/.ai/policies"
+printf '{}\n' > "$NEST/.ai/state/current.json"; printf '{}\n' > "$NEST/.ai/policies/path-guard.json"
+nest_tool() { jq -nc --arg c "$NEST/sub/fix" --arg t "$1" --arg p "$2" '{hook_event_name:"PreToolUse",tool_name:$t,cwd:$c,tool_input:{file_path:$p,content:"{}"}}'; }
+nest_bash() { jq -nc --arg c "$NEST/sub/fix" --arg x "$1" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$c,tool_input:{command:$x}}'; }
+decide "cwd in a nested .ai/ tree: Write to the outer root's state file is denied" deny "$(nest_tool Write "$NEST/.ai/state/current.json")"
+decide "cwd in a nested .ai/ tree: Write to the outer root's handoff is denied" deny "$(nest_tool Write "$NEST/.ai/state/handoff.md")"
+decide "cwd in a nested .ai/ tree: Edit of the outer root's policy file is denied" deny "$(nest_tool Edit "$NEST/.ai/policies/path-guard.json")"
+decide "cwd in a nested .ai/ tree: Write to the outer root's journal is denied" deny "$(nest_tool Write "$NEST/.ai/reports/T-1/events.jsonl")"
+decide "cwd in a nested .ai/ tree: echo >> ../../.ai/state/handoff.md is denied" deny "$(nest_bash 'echo x >> ../../.ai/state/handoff.md')"
+decide "cwd in a nested .ai/ tree: cp onto the outer root's policy file is denied" deny "$(nest_bash "cp /tmp/x $NEST/.ai/policies/path-guard.json")"
+decide "cwd in a nested .ai/ tree: its own policy file is still the nearest root's" deny "$(nest_tool Write "$NEST/sub/fix/.ai/policies/path-guard.json")"
+decide "cwd in a nested .ai/ tree: an ordinary file of the outer root is allowed" allow "$(nest_tool Write "$NEST/src.txt")"
+# M1: reads of report files that HEAD allowed at the fast path stay allowed:
+# incidental words (a count('a'), sys.stdout.write, re.compile, .copy(), a '|')
+# are no write.
+for c in "python3 -c \"print(open('.ai/reports/T-1/notes.md').read().count('a'))\"" \
+         "python3 -c \"import sys; sys.stdout.write(open('.ai/reports/T-1/review-report.md').read())\"" \
+         "python3 -c \"import re; r=re.compile('BLOCKER'); print(len(r.findall(open('.ai/reports/T-1/review-report.md').read())))\"" \
+         "python3 -c \"import json; d=json.load(open('.ai/reports/T-1/sensors.json')).copy(); print(d)\"" \
+         "python3 -c \"print('|'.join(open('.ai/reports/T-1/plan.md').read().split()))\"" \
+         "ls .ai/reports/T-1/ && python3 -c \"import sys; sys.stdout.write('ok')\""; do
+    decide_home "a read HEAD allowed stays allowed: $c" allow "$c"
+done
+# L1, L2: write spellings the first indicators missed.
+for c in "ruby -e 'f = File.new(\".ai/state/handoff.md\", \"w\"); f.puts \"x\"'" \
+         "python3 -c \"from pathlib import Path; Path('/tmp/c.json').replace('.ai/state/current.json')\"" \
+         "python3 -c \"import fileinput; [print(l) for l in fileinput.input('.ai/state/handoff.md', inplace=True)]\"" \
+         "python3 -c \"import io; io.FileIO('.ai/state/current.json', 'w')\"" \
+         "perl -MFile::Slurp -e 'write_file(\".ai/state/handoff.md\", \"x\")'" \
+         "perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md" \
+         "perl -i -pe 's/a/b/' .ai/reports/T-1/notes.md" \
+         "ruby -i -pe 'sub(/a/, \"b\")' .ai/reports/T-1/notes.md"; do
+    decide_home "a writing one-liner is denied: $c" deny "$c"
+done
+
 echo "== ai-path-guard (project WITHOUT .ai/ — every guard must be inert)"
 BARE="$TMP/bare"; mkdir -p "$BARE"; printf 'SECRET=1\n' > "$BARE/.env"
 out=$(jq -nc --arg r "$BARE" '{hook_event_name:"PreToolUse",tool_name:"Read",cwd:$r,tool_input:{file_path:($r+"/.env")}}' | "$GUARD")
