@@ -245,3 +245,12 @@ following; each is open unless marked.
 - **How likely / how bad**: certain; one avoidable review per T2/T3 task.
 - **Suggested fix**: fix the three messages (none changes behaviour) — `sensors.py` inside diet task 4, the other two in a T1 task — or a human decides in `.pylintrc`.
 - **Status**: open
+
+## `docs/getting-started.md` still walks the six-tier scale (found 2026-10-25 while rewriting the README and wiki)
+
+- **Found**: 2026-10-25, the README/wiki rewrite for master (branch `docs/readme-wiki`)
+- **Where**: `docs/getting-started.md:105-110` (the T1 example records a `triage` call) and `:128-148` (payments are "T4", and "T4 is where `solo` leaves direct mode")
+- **What could go wrong**: KNOWN FACT — `skills/ai-task/SKILL.md` and `.ai/policies/risk-tiers.json` (version 4) put payments at T5, run T0–T4 in direct mode and keep no state file at T0/T1; the worked examples say otherwise. A first-hour reader learns the old gates. The wiki's "Installation and First Task" page and the new README follow the current scale.
+- **How likely / how bad**: certain for every new reader; documentation only, no gate changes.
+- **Suggested fix**: a T0 task that renumbers the two worked examples to the seven-tier scale.
+- **Status**: open

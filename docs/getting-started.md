@@ -30,8 +30,8 @@ previous version is kept as `config.toml.bak`.
 > point of the routing, not an accident: the session model is the single largest
 > cost, and Astra stays one escalation away.
 
-If you had `claude-routing` installed, this run migrates its block away; see the
-migration section of the README.
+If you had `claude-routing` installed, this run migrates its block away; see
+[Migrating from claude-routing](installation.md#migrating-from-claude-routing).
 
 Restart the runtime, then check:
 

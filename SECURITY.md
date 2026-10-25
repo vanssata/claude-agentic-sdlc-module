@@ -27,7 +27,7 @@ Codex. These are in scope:
 - anything that sends user data to a place the user did not configure
 
 These are **not** vulnerabilities, because they are documented limits. See
-[Known risks](README.md#known-risks):
+[Known risks](docs/known-risks.md):
 
 - bypassing a guard on purpose through obfuscation. The guards are a tripwire,
   not a sandbox.
