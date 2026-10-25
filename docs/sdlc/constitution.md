@@ -8,7 +8,7 @@ C2. A bugfix starts with the failing test; legacy behaviour gets a characterizat
 C3. A refactoring changes no behaviour and is never mixed with a feature.
 C4. Every step names its files; scope grows only by amending the plan.
 C5. No agent commits, merges or deploys; a human approves outside the agent.
-C6. This plugin is a developer tool. A change to its hooks, skills or state machine is classified by what it does to a user project's decisions — allow where it denied, change approval, change install — never by its being a process.
+C6. Tier a change to this plugin's hooks, skills or state machine by what it does to a user project's decisions — allow a deny, change approval or install — never by its being a process.
 C7. <!-- project principle -->
 C8. <!-- project principle -->
 C9. <!-- project principle -->
