@@ -405,7 +405,7 @@ following; each is open unless marked.
 - **What could go wrong**: INFERENCE — if 2.4 removes or renames `profile` with the twins, the two skills spawn the agent without a model and it runs at its default tier.
 - **How likely / how bad**: only if 2.4 changes `profile`; the review would run on the session's model.
 - **Suggested fix**: 2.4 keeps `profile --tier` or rewrites the two lines with the agent template's own tier.
-- **Status**: open
+- **Status**: closed 2026-10-26 by T-2026-10-26-003 (redesign 2.4) — `profile --tier` is kept; `tests/test-ai-task-state.sh` still covers `--tier` and `--field`.
 
 ## The new surface's human-only routes have no path-guard rule (found 2026-10-26 by the T-2026-10-26-001 review, M1, out of scope)
 
@@ -432,4 +432,37 @@ following; each is open unless marked.
 - **What could go wrong**: KNOWN FACT (reviewer-verified) — `/rr-status` shows `questions: 1 pending` for an answered question, and an agent may stop to ask it again. `/rr-status` now says the count can lag and points at `handoff --print`.
 - **How likely / how bad**: every question answered through the file; one needless stop.
 - **Suggested fix**: `status_lines()` re-parses the questions file as `guard_pending()` does — in 2.6, together with the gate's file route above.
+- **Status**: open
+
+## Redesign 2.4 leaves names of the nine retired agents in place (found 2026-10-26 by T-2026-10-26-003, deferred)
+
+- **Found**: 2026-10-26, T-2026-10-26-003 (redesign 2.4, agents 14 → 5). Decisions 1 and Q1 of that task.
+- **Where**: KNOWN FACT, each still names a retired agent (`ai-context`, `ai-expert`, `ai-implementer`, `ai-indexer`, `ai-planner`, `ai-release`, `ai-risk`, `ai-security`, `ai-tester`) or a removed budget:
+  - `skills/ai-init/templates/.ai/policies/risk-tiers.json` and `.md` (and this repository's `.ai/policies/risk-tiers.*`): the old tier template;
+  - `skills/ai-task/state.py:1506` — `test-run` tells the session to hand the log to `ai-tester` (2.6 removes `test-run`);
+  - `skills/ai-task/state.py:646` `DIRECT_MODE_CAP` and exit code 8: the cap of the old `quick`, read from `risk-tiers.json`, not from the profile (2.6 removes `quick`);
+  - `hooks/ai-git-guard.sh:13`, a comment ("ai-reviewer and ai-release check it");
+  - `ai/agents/{context,implementer,planner,release,risk,security,tester}.md` — kept on purpose (Q1=A): migration 0006 refuses (`update.py:458-472`, `require_shared`) to drop an unedited project copy whose shared fallback is missing, so deleting them would make `/project-update` exit 2 for every project below schema 6. Nothing names them any more; `reviewer.md` §Security now carries the security checklist;
+  - `README.md` and `docs/*` (agent tables, the Codex twins, the fan-out ask).
+- **What could go wrong**: INFERENCE — a reader of those texts looks for an agent that is no longer installed; on an upgraded home the agent sits in `backups/<date>/agents/`. No code path launches one: the `rr-*` skills name only the five.
+- **How likely / how bad**: not prose only — `ai/policies/model-routing.md` still sends the session to `risk-tiers.json` for "which stages spawn an agent", and that file names `ai-tester`, `ai-planner`, `ai-security`, `ai-release` and `ai-expert` (template `risk-tiers.json:41-60, 87-88, 163-164, 386-400`): a session that follows it launches an agent this install no longer has, and the call fails. The `rr-*` skills do not read it. Same file, line 27: the `solo` direct-mode sentence is old tier vocabulary (STRONG review I1/L3 of T-2026-10-26-003).
+- **Suggested fix**: 2.6 rewrites `risk-tiers.*`, `test-run`, `quick` and the guard comment with the old subcommands; the seven role files go when `update.py` learns a retired-shared set (a project copy with no fallback is dropped, not refused) — its own task, behaviour 2; README and `docs/*` in 3.6.
+- **Status**: open
+
+## The Claude EXPERT tier collapses to STRONG without Fable (found 2026-10-26 by the T-2026-10-26-003 review, M1)
+
+- **Found**: 2026-10-26, STRONG review M1 of T-2026-10-26-003 (redesign 2.4).
+- **Where**: `install.sh` (the EXPERT branch of the plan logic), `profiles/max.json` `tiers.EXPERT` (`opus`/`xhigh`), `ai/policies/model-routing.md` EXPERT row, `hooks/runtime-gate.py` `budget_pre_tool_use`.
+- **What could go wrong**: KNOWN FACT — until 2.4 `ai-expert` pinned `opus` at `xhigh` on max/team-max/max20 and `opus` at `high` on balanced-max. The only EXPERT agent is now `architect`. It pins `fable[1m]`/`xhigh` with Fable, `opus`/`high` on pro, and otherwise inherits the session at `high`. On `--fable no` and balanced-max, EXPERT therefore runs as the STRONG reviewer does, and on Sonnet under a Sonnet session (the JetBrains ACP case). `state.py profile --tier EXPERT` still prints `opus` (`xhigh` in the profile), and the gate still asks before such an `architect` launch as "EXPERT".
+- **How likely / how bad**: every EXPERT question on those plans; the last-resort answer costs and weighs no more than a STRONG one, while the record says EXPERT.
+- **Suggested fix**: a human decision — either pin `architect` to `opus` at the EXPERT effort when Fable is off (a model change on an agent, R18), or accept it and make the profile's EXPERT row and the policy say so; then drop the dead `EXPERT_MODEL_LINE`/`RENDER_EXPERT_MODEL_LINE`.
+- **Status**: open
+
+## A Codex EXPERT question is a role-less spawn without a read-only sandbox (found 2026-10-26 by the T-2026-10-26-003 review, M2)
+
+- **Found**: 2026-10-26, STRONG review M2 of T-2026-10-26-003 (redesign 2.4).
+- **Where**: `instructions/routing.md` (Codex tier table, EXPERT row and triggers), `ai/policies/model-routing.md` "Codex agent precedence".
+- **What could go wrong**: KNOWN FACT — the retired `ai-expert.toml` carried `sandbox_mode = "read-only"` and a "does not implement" body. An EXPERT question on Codex is now a spawn with no agent named and `model` on the call, which takes the parent's sandbox (normally workspace-write) and only the brief the session writes. INFERENCE — whether `spawn_agent` accepts a per-call sandbox is not verified. The gate's reroute of such a spawn works (reviewer-verified).
+- **How likely / how bad**: each Codex EXPERT question; the most expensive agent could edit the tree, against "the session implements".
+- **Suggested fix**: a read-only EXPERT role on Codex (e.g. an `architect` variant on the EXPERT tier via `variant_of`) or a per-call sandbox if Codex accepts one, decided with the M1 fix above.
 - **Status**: open

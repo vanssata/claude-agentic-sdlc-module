@@ -14,16 +14,17 @@ Facts are collected cheaply; thinking is paid for. Session model {{SESSION_MODEL
 <!-- stub: runtime=claude -->
 | Tier | Model / effort | Used for |
 |---|---|---|
-| FAST | `{{FAST_MODEL}}` / `{{FAST_EFFORT}}` | reading and running: file search, listings, counting, logs and test output, running a command and reporting it (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
-| BALANCED | `{{BALANCED_MODEL}}` / `low`–`{{BALANCED_EFFORT}}` | discovery with judgement, context compression, mechanical edits, release assembly, the T2/T3 review when a sensor is red (`ai-discovery`, `ai-context`, `ai-implementer`, `ai-release`, `ai-reviewer` at T2/T3) |
-| STRONG | `{{STRONG_MODEL}}` / `{{STRONG_EFFORT}}` | delegated planning and plan review at T5+, the diff review from T4, adversarial review, security review (`ai-planner`, `ai-reviewer`, `ai-security`) |
-| EXPERT | {{EXPERT_ROW}} | design (`architect`) and `ai-expert`, only when STRONG said it cannot settle the question |
+| FAST | `{{FAST_MODEL}}` / `{{FAST_EFFORT}}` | reading and running: file search, listings, counting, logs and test output, running a command and reporting it (`Explore`, `log-reader`) |
+| BALANCED | `{{BALANCED_MODEL}}` / `low`–`{{BALANCED_EFFORT}}` | discovery with judgement, the review in guarded mode (`ai-discovery`, `ai-reviewer` in guarded mode) |
+| STRONG | `{{STRONG_MODEL}}` / `{{STRONG_EFFORT}}` | the review in full mode, adversarial and security review (`ai-reviewer`, with a `focus: security` brief when domain is 2) |
+| EXPERT | {{EXPERT_ROW}} | design (`architect`), only when STRONG said it cannot settle the question |
 
 <!-- stub: runtime=claude -->
 {{PLAN_SPECIFIC_ROUTING}}
 - Every agent definition and Workflow `agent()` call declares `model:` and `effort:`. Readers and runners never go above `low`. Forks inherit the session and take no `model`.
 - Five or more parallel agents never run on `{{STRONG_MODEL}}`. Escalate one task at a time on a stated trigger, never the whole fleet; never retry a failed thinking task on a cheaper model.
 - {{EFFORT_RULE}}
+- Planning, the weight, the test run and the release are the session's work, not an agent's: `/rr-plan`, `state.py weight`, `state.py verify`, `/rr-ship`.
 - Implement in the main session. Delegate reading: logs and test output to `log-reader`, wide searches to `Explore` — both on `{{FAST_MODEL}}`. Nothing below T4 runs on `{{STRONG_MODEL}}`. The conclusion a human reads is written here, never delegated.
 - Split code reading by how many hops it needs. A lookup — where X is, one route, service id, config key or template — goes to `Explore` on `{{FAST_MODEL}}`. A trace of how the *installed* third-party code behaves (`vendor/`, `node_modules/`: decorators, compiler passes, service or template overrides, event subscribers) goes to a BALANCED reader at `low` — `ai-discovery`, or `Explore` spawned with `model: {{BALANCED_MODEL}}` where there is no `.ai/` — because a FAST reader stops at the first plausible match, and there a wrong answer reads like a right one.
 
@@ -57,20 +58,20 @@ Applies everywhere a model can be chosen: an explicit spawn request, a custom ag
 <!-- stub: runtime=codex -->
 | Tier | Model | Effort | Role |
 |---|---|---|---|
-| FAST | `{{FAST_MODEL_ID}}` | `{{FAST_EFFORT}}` | verbatim extraction, file and symbol inventories, listings, counting, logs and test output, running a command and reporting it (`ai-indexer`, `Explore`, `log-reader`, `ai-tester`) |
-| BALANCED — default for agents | `{{BALANCED_MODEL_ID}}` | `{{BALANCED_EFFORT}}` | discovery with judgement (at `low`), context compression, planning up to T3, release assembly, mechanical edits (`ai-discovery`, `ai-context`, `ai-risk`, `ai-planner`, `ai-release`, `ai-implementer`) |
-| STRONG | `{{STRONG_MODEL_ID}}` | `{{STRONG_EFFORT}}` | the {{STRONG_MODEL}} triggers below (`ai-reviewer`, `ai-security`, `architect`, `ai-risk-strong`, `ai-planner-strong`) |
-| EXPERT | `{{EXPERT_MODEL_ID}}` | `{{EXPERT_EFFORT}}` | the EXPERT triggers below (`ai-expert`) |
+| FAST | `{{FAST_MODEL_ID}}` | `{{FAST_EFFORT}}` | verbatim extraction, file and symbol inventories, listings, counting, logs and test output, running a command and reporting it (`Explore`, `log-reader`) |
+| BALANCED — default for agents | `{{BALANCED_MODEL_ID}}` | `{{BALANCED_EFFORT}}` | discovery with judgement, at `low` (`ai-discovery`) |
+| STRONG | `{{STRONG_MODEL_ID}}` | `{{STRONG_EFFORT}}` | the {{STRONG_MODEL}} triggers below (`ai-reviewer`, `architect`) |
+| EXPERT | `{{EXPERT_MODEL_ID}}` | `{{EXPERT_EFFORT}}` | the EXPERT triggers below: a spawn with no agent named and `model` set to `{{EXPERT_MODEL_ID}}`, with a brief |
 
 <!-- stub: runtime=codex -->
-The main session itself runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}` and does the implementation; the tiers above are for agents.
+The main session itself runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}` and does the implementation; the tiers above are for agents. Planning, the weight, the test run and the release are the session's work: `/rr-plan`, `state.py weight`, `state.py verify`, `/rr-ship`.
 
 <!-- stub: runtime=codex -->
 ## {{STRONG_MODEL}} (STRONG) — only on one of these triggers
 
 <!-- stub: runtime=codex -->
-1. **Review** of a finished change before a commit is proposed: `ai-reviewer`. Add `ai-security` for authentication, authorization, secrets, payments, personal data, webhooks, and any T5/T6 change.
-2. **Risk and plan**: `ai-risk` on {{BALANCED_MODEL}} answered T4+ or `confidence: uncertain` — re-run it as `ai-risk-strong`; use `ai-planner-strong` at T5 (at T4 the session plans in plan mode; `ai-planner-strong` only on the T4 trigger in `delegate_anyway_when`).
+1. **Review** of a finished change before a commit is proposed: `ai-reviewer`. Brief it with `focus: security` for authentication, authorization, secrets, payments, personal data, webhooks — a full-mode task whose domain is 2.
+2. **Plan**: a full-mode plan whose design is open — `architect`. The session plans everything else, and the weight is `state.py weight`, never an agent.
 3. **Root cause** after a first diagnosis in the session already failed once (the fix did not hold, or competing hypotheses remain), or a bug in concurrency, retries/idempotency, caching or data integrity.
 4. **Reversible design** with two or more viable options that are costly to change later — module structure, service boundaries, a library choice: `architect`.
 
@@ -78,9 +79,9 @@ The main session itself runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}` and does 
 ## {{EXPERT_MODEL}} (EXPERT) — only on one of these triggers
 
 <!-- stub: runtime=codex -->
-1. **T6**: a migration, infrastructure or production-architecture decision — `ai-expert` plans it.
+1. **T6**: a migration, infrastructure or production-architecture decision — the session plans it and puts the open decision to EXPERT.
 2. **STRONG could not settle it**: {{STRONG_MODEL}} answered `confidence: uncertain`, or two STRONG results contradict each other (plan against review).
-3. **Irreversible design** with several viable options — core data model, public API or event contract, service split: `ai-expert`.
+3. **Irreversible design** with several viable options — core data model, public API or event contract, service split: an EXPERT spawn with the options as its brief.
 4. **Final check** of a T6 plan, or of a production-incident root cause, before a human acts on it.
 
 <!-- stub: runtime=codex -->
@@ -89,7 +90,7 @@ The main session itself runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}` and does 
 <!-- stub: runtime=codex -->
 - Name the trigger when escalating ("{{STRONG_MODEL}} — root cause, second failed fix"). No trigger, no escalation: never "just in case", never the whole fleet. An agent may raise a tier; only the user lowers one.
 - One {{STRONG_MODEL}} or EXPERT agent per question, and one EXPERT agent per task unless the user asks for more. Never fan out on them: a sweep of three or more parallel agents runs on {{FAST_MODEL}}.
-- Collect first, cheaply. {{FAST_MODEL}} gathers the facts; the expensive agent then gets a compact brief — the `ai-context` summary, `file:line` facts, the question and the options — never "explore the repository".
+- Collect first, cheaply. {{FAST_MODEL}} gathers the facts; the expensive agent then gets a compact brief — the task's context summary, `file:line` facts, the question and the options — never "explore the repository".
 - Never retry a failed *thinking* task on a cheaper model; downgrading is for mechanical work.
 - Every subagent pays its own start-up. Spawn one to keep hundreds of lines of reading out of the main context, not for what one `rg` answers.
 - Ask for a named agent (`ai-reviewer`, `ai-discovery`, …) rather than "spawn a subagent". A spawn with no agent named resolves to `agents.default_subagent_model` — {{BALANCED_MODEL}} — never the tier the role needs.
@@ -101,8 +102,8 @@ The main session itself runs {{SESSION_MODEL}} at `{{SESSION_EFFORT}}` and does 
 # Model routing (Codex)
 
 <!-- stub: runtime=codex -->
-- Session model is {{SESSION_MODEL_ID}} at `{{SESSION_EFFORT}}`. Implement code yourself in the main conversation; `ai-implementer` is for mechanical pattern-copying steps or when the user asks.
-- Do not switch a running session to a stronger model for one hard question. Send the question to `architect` or `ai-expert` with a brief instead, and keep the session where it is.
+- Session model is {{SESSION_MODEL_ID}} at `{{SESSION_EFFORT}}`. Implement code yourself in the main conversation.
+- Do not switch a running session to a stronger model for one hard question. Send the question to `architect`, or to an EXPERT spawn, with a brief instead, and keep the session where it is.
 {{CODEX_PLAN_RULE}} Readers never go above `low`.
 - `runtime-gate` checks {{EXPERT_MODEL}} at run time. After a rate-limit or model-unavailable failure from an {{EXPERT_MODEL}} subagent, the gate sends every EXPERT launch to {{STRONG_MODEL}} until the record expires, and says so in the agent's context. `~/.codex/hooks/runtime-gate.py status` shows the gate; `clear` re-enables {{EXPERT_MODEL}} early. An ordinary low-confidence or wrong answer never activates it.
 - `{{SUBAGENT_EFFORT}}` is the default effort for agents. Raise to `high` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; above `high` only per the rule above.
@@ -130,7 +131,7 @@ The main session re-reads its whole context every turn, so context length — mo
 
 <!-- stub: runtime=codex -->
 - `ai-git-guard` runs in every repository: no force push, history rewrite, push or merge to a protected branch, `--no-verify`, staged secret or production deploy. `ai-path-guard` and `ai-scope-guard` arm only where `.ai/` exists. All three see `Bash` and `apply_patch`; run `/hooks` once after installing to review and trust them, or they are skipped. No agent commits, merges or deploys on its own; the pipeline ends at human approval.
-- `architect` is for design questions outside a task, or in a repository without `.ai/`. Inside a task, `ai-planner`/`ai-planner-strong` plans and `ai-expert` is the escalation.
+- `architect` is for design questions outside a task, in a repository without `.ai/`, and in a full-mode task whose design is open (`/rr-plan`). Otherwise the session plans, and an EXPERT spawn is the escalation.
 
 <!-- stub: runtime=claude,codex -->
 - Shared `.ai/` files — policies, agent contracts, workflows, templates — are installed once in `{{AI_SHARED}}/`. A project's own regular file at the same path under `.ai/` overrides it; `{{AI_RESOLVER}} <path>` prints the one to read.

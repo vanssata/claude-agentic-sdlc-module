@@ -46,10 +46,10 @@ echo "== pro: opusplan session, EXPERT tier pinned to opus"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan pro --dry-run 2>&1)
 grep -q '"model": "opusplan"' <<<"$out" && pass "pro sets the session model to opusplan" || fail "pro should set opusplan" "$out"
 grep -q 'Opus 5 in plan mode' <<<"$out" && pass "pro names opusplan in the CLAUDE.md block" || fail "block should explain opusplan" "$out"
-grep -q '^model: opus' <<<"$out" && pass "pro pins model: opus on the EXPERT agents" || fail "EXPERT agents should pin opus on pro" "$out"
+grep -q '^model: opus' <<<"$out" && pass "pro pins model: opus on architect, the EXPERT agent" || fail "architect should pin opus on pro" "$out"
 grep -q '/rr-build <request>' <<<"$out" && pass "the block routes every change through /rr-build" || fail "block should name /rr-build" "$out"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable yes --dry-run 2>&1)
-grep -qx 'model: opus' <<<"$out" && pass "max pins opus on ai-expert" || fail "ai-expert should pin opus on max" "$out"
+grep -qxF 'model: fable[1m]' <<<"$out" && pass "max+fable pins fable[1m] on architect" || fail "architect should pin fable[1m] on max+fable" "$out"
 grep -qx 'effort: xhigh' <<<"$out" && pass "max renders the EXPERT tier at xhigh" || fail "EXPERT effort should be xhigh on max" "$out"
 
 echo "== team-pro and team-max share the pro and max profiles"
@@ -115,7 +115,7 @@ for plan in pro team-pro team-max max max20; do
 done
 printf '%s' "$out20" | sed -n '/^== profile.json/,/^== would install/p' | sed '1d;$d' \
     | jq -e '.plan == "max20" and .label == "Max 20x" and .runtime == "claude" and .fable == true
-             and .budgets.fan_out.max_parallel_agents == 6 and (.plugin_version | length > 0) and (.written_at | length > 0)' >/dev/null \
+             and .budgets.expert.max_per_task == 2 and (.budgets | has("fan_out") | not) and (.plugin_version | length > 0) and (.written_at | length > 0)' >/dev/null \
     && pass "max20 profile.json carries plan, runtime, fable and the max20 budgets" || fail "max20 profile.json content"
 printf '{"oauthAccount":{"organizationType":"claude_max","organizationRateLimitTier":"default_claude_max_20x"}}' > "$HOME_T/.claude.json"
 out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
@@ -133,16 +133,17 @@ grep -q 'plan=max20' <<<"$out" && pass "an undetectable account falls back to th
 
 echo "== R16/R18: every installed agent's model and effort, per plan"
 # Captured from the installer before the agent sources became templates (WP5
-# step 3). The twelve tier agents are the same on every plan; only the EXPERT
-# pair differs. A change here is a model or effort change, which R18 forbids.
-COMMON="ai-context sonnet low;ai-discovery sonnet low;ai-implementer sonnet low;ai-indexer haiku low;ai-planner sonnet medium;ai-release sonnet low;ai-reviewer opus high;ai-risk sonnet medium;ai-security opus high;ai-tester haiku low;Explore haiku low;log-reader haiku low"
-for combo in "pro no|ai-expert opus high;architect opus high" \
-             "team-pro no|ai-expert opus high;architect opus high" \
-             "max yes|ai-expert opus xhigh;architect fable[1m] xhigh" \
-             "max no|ai-expert opus xhigh;architect - high" \
-             "team-max yes|ai-expert opus xhigh;architect fable[1m] xhigh" \
-             "team-max no|ai-expert opus xhigh;architect - high" \
-             "max20 yes|ai-expert opus xhigh;architect fable[1m] xhigh"; do
+# step 3); since redesign 2.4 five agents are left. The four tier agents are
+# the same on every plan; only architect differs. A change here is a model or
+# effort change, which R18 forbids.
+COMMON="ai-discovery sonnet low;ai-reviewer opus high;Explore haiku low;log-reader haiku low"
+for combo in "pro no|architect opus high" \
+             "team-pro no|architect opus high" \
+             "max yes|architect fable[1m] xhigh" \
+             "max no|architect - high" \
+             "team-max yes|architect fable[1m] xhigh" \
+             "team-max no|architect - high" \
+             "max20 yes|architect fable[1m] xhigh"; do
     args="${combo%%|*}"; set -- $args
     D="$TMP/fm-$1-$2"; mkdir -p "$D"
     CLAUDE_DIR="$D" bash "$INSTALL" --target claude --plan "$1" --fable "$2" >/dev/null 2>&1 </dev/null
@@ -150,7 +151,7 @@ for combo in "pro no|ai-expert opus high;architect opus high" \
               awk -v n="$(basename "$f" .md)" 'NR>1 && /^---$/{exit} /^model:/{m=$2} /^effort:/{e=$2} END{print n, (m==""?"-":m), e}' "$f"
           done | sort | paste -sd';')
     want=$(printf '%s' "$COMMON;${combo#*|}" | tr ';' '\n' | sort | paste -sd';')
-    [ "$got" = "$want" ] && pass "--plan $1 --fable $2: all 14 agents keep their model and effort" \
+    [ "$got" = "$want" ] && pass "--plan $1 --fable $2: all 5 agents keep their model and effort" \
         || fail "--plan $1 --fable $2: agent frontmatter changed" "$(diff <(tr ';' '\n' <<<"$want") <(tr ';' '\n' <<<"$got") | head -6)"
     bad=""
     for t in "$PLUGIN_ROOT"/agents/*.md.tmpl; do
@@ -183,7 +184,7 @@ jq -e '.plan == "max" and .runtime == "claude" and .fable == true' "$DIR/claude-
 [ "$(stat -c %a "$DIR/claude-agentic/profile.json" 2>/dev/null)" = 644 ] && pass "profile.json is mode 0644" || fail "profile.json mode"
 jq -e 'has("claude_agentic") | not' "$DIR/settings.json" >/dev/null && pass "settings.json has no claude_agentic" || fail "claude_agentic leaked into settings.json"
 
-for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Explore.md \
+for f in agents/ai-discovery.md agents/ai-reviewer.md agents/architect.md agents/Explore.md \
          agents/log-reader.md hooks/ai-git-guard.sh hooks/lib/ai-hook-common.sh \
          hooks/cap-large-read.py hooks/project-scaffold.sh hooks/ai-git-guard.json \
          skills/ai-init/SKILL.md skills/ai-init/scaffold-ai.sh skills/ai-task/state.py \
@@ -208,21 +209,21 @@ done
 [ -x "$DIR/claude-agentic/ai-path" ] && pass "ai-path is executable" || fail "ai-path should be executable"
 grep -qF "$DIR/claude-agentic/ai/" "$DIR/claude-agentic/routing.md" && pass "routing.md names the installed shared tree" || fail "routing.md should name $DIR/claude-agentic/ai/"
 grep -qF "$DIR/claude-agentic/ai-path <path>" "$DIR/claude-agentic/routing.md" && pass "routing.md names the resolver" || fail "routing.md should name the resolver"
-for a in ai-context ai-discovery ai-expert ai-implementer ai-planner ai-release ai-reviewer ai-risk ai-security ai-tester; do
+for a in ai-discovery ai-reviewer; do
     grep -qF "$DIR/claude-agentic/ai/<path>" "$DIR/agents/$a.md" && pass "$a names the installed shared tree" || fail "$a should name $DIR/claude-agentic/ai/<path>"
 done
 [ -x "$DIR/skills/ai-init/scaffold-ai.sh" ] && pass "scaffold-ai.sh is executable" || fail "scaffold should be executable"
-grep -qx 'effort: xhigh' "$DIR/agents/ai-expert.md" && pass "ai-expert renders at xhigh on max" || fail "expert effort wrong"
-grep -qx 'model: opus' "$DIR/agents/ai-expert.md" && pass "ai-expert pins opus so a Sonnet session cannot weaken it" || fail "ai-expert should pin model: opus on max"
+RETIRED_24="ai-context ai-expert ai-implementer ai-indexer ai-planner ai-release ai-risk ai-security ai-tester"
+got=$(cd "$DIR/agents" && ls *.md | sed 's/\.md$//' | LC_ALL=C sort | paste -sd' ')
+[ "$got" = "Explore ai-discovery ai-reviewer architect log-reader" ] && pass "exactly the five agents are installed (redesign 2.4)" || fail "installed agents" "$got"
 grep -q '^model: fable\[1m\]' "$DIR/agents/architect.md" && pass "architect alone is pinned to fable[1m] on max+fable" || fail "architect should pin fable[1m]"
 grep -q 'effort: xhigh' "$DIR/agents/architect.md" && pass "architect runs at xhigh on Fable" || fail "architect effort wrong"
 
 echo "== real pro install"
 DIRP="$TMP/claude-pro"; mkdir -p "$DIRP"
 CLAUDE_DIR="$DIRP" bash "$INSTALL" --plan pro >/dev/null 2>&1 && pass "pro install exits 0" || fail "pro install should exit 0"
-grep -q '^model: opus' "$DIRP/agents/ai-expert.md" && pass "pro: ai-expert pins opus" || fail "pro: ai-expert should pin opus"
 grep -q '^model: opus' "$DIRP/agents/architect.md" && pass "pro: architect pins opus" || fail "pro: architect should pin opus"
-grep -q '^effort: high' "$DIRP/agents/ai-expert.md" && pass "pro: ai-expert runs at high" || fail "pro: expert effort wrong"
+grep -q '^effort: high' "$DIRP/agents/architect.md" && pass "pro: architect runs at high" || fail "pro: expert effort wrong"
 [ -e "$DIRP/bin/claude-1m" ] && fail "pro has no opus[1m]; the launcher must not be installed" || pass "pro: no opus[1m] launcher"
 [ "$(jq -r .model "$DIRP/settings.json")" = "opusplan" ] && pass "pro: settings.json model is opusplan" || fail "pro: model not opusplan"
 [ "$(jq -r '.fallbackModel[0]' "$DIRP/settings.json")" = "sonnet" ] && pass "pro: fallback is sonnet" || fail "pro: fallback wrong"
@@ -293,10 +294,10 @@ mkdir -p "$DIR/skills/legacy.bak"
 CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 [ ! -d "$DIR/skills/legacy.bak" ] && pass "a backup left by an older installer is moved out" || fail "stale .bak skill not cleaned up"
 
-echo "== an older install: its *.bak files, the seven stale agents and the shim move to backups/<date>/"
+echo "== an older install: its *.bak files, the stale agents (2026-09-02 and redesign 2.4) and the shim move to backups/<date>/"
 DAY=$(date +%F)
 STALE="code-implementer qa-runner qa-fixer db-migrator doc-lookup log-inspector sylius-i18n-keys"
-for a in $STALE; do printf -- '---\nname: %s\n---\nold\n' "$a" > "$DIR/agents/$a.md"; done
+for a in $STALE $RETIRED_24; do printf -- '---\nname: %s\n---\nold\n' "$a" > "$DIR/agents/$a.md"; done
 printf 'mine\n' > "$DIR/agents/x.md"; printf 'old mine\n' > "$DIR/agents/x.md.bak"
 printf 'orphan\n' > "$DIR/agents/gone.md.bak"
 printf 'old\n' > "$DIR/hooks/ai-git-guard.sh.bak"; printf 'old\n' > "$DIR/hooks/lib/ai-hook-common.sh.bak"
@@ -311,7 +312,7 @@ out=$(CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes 2>&1)
     && pass "an installed skills/status is retired into backups/<date>/skills/" || fail "skills/status not retired" "$out"
 [ ! -e "$DIR/bin/claude-1m.bak" ] && [ -f "$DIR/backups/$DAY/bin/claude-1m.bak" ] \
     && pass "bin/claude-1m.bak is swept too" || fail "bin/*.bak not swept" "$out"
-for a in $STALE; do
+for a in $STALE $RETIRED_24; do
     [ ! -e "$DIR/agents/$a.md" ] && [ -f "$DIR/backups/$DAY/agents/$a.md" ] \
         && grep -q "retired: agents/$a.md -> backups/$DAY/agents/$a.md" <<<"$out" \
         && pass "agents/$a.md is retired into backups/<date>/agents/" || fail "agents/$a.md not retired" "$out"

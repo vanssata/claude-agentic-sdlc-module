@@ -12,10 +12,10 @@ not settle — never for fact collection.
 | Tier | Model | Used for |
 |---|---|---|
 | **LOCAL** | *not available* | see the note below |
-| **FAST** | the plan's FAST model, effort `low` | reading and running: file search, inventories, counting, logs and test output, running a command and reporting it (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
-| **BALANCED** — default for agents | the plan's BALANCED model, effort `low`–`medium` | discovery with judgment, context compression, planning up to T3, mechanical edits, release assembly, the T2/T3 review when a sensor is red |
-| **STRONG** | the plan's STRONG model, effort `high` | the STRONG triggers below |
-| **EXPERT** | `ai-expert`, pinned to the plan's EXPERT model — `xhigh` where the plan allows it, `high` elsewhere; `architect` may pin a model of its own | the EXPERT triggers below |
+| **FAST** | the plan's FAST model, effort `low` | reading and running: file search, inventories, counting, logs and test output, running a command and reporting it (`Explore`, `log-reader`) |
+| **BALANCED** — default for agents | the plan's BALANCED model, effort `low`–`medium` | discovery with judgment (`ai-discovery`), the review in guarded mode (`ai-reviewer`; under Codex its file pins STRONG) |
+| **STRONG** | the plan's STRONG model, effort `high` | the STRONG triggers below (`ai-reviewer` in full mode, `architect`) |
+| **EXPERT** | the plan's EXPERT model — `xhigh` where the plan allows it, `high` elsewhere; `architect` may pin a model of its own | the EXPERT triggers below |
 
 Which model a tier is depends on the plan and the runtime: the installed profile
 decides it, `state.py profile --tier <TIER>` prints it for the runtime you are in,
@@ -23,7 +23,9 @@ and `/ai-status` shows all four. This file names tiers only, so it is true on
 every plan.
 
 The main session runs the model the installed profile sets and does the
-implementation itself. Which stages spawn an agent at all
+implementation itself. Planning, the weight, the test run and the release are
+its work too, not an agent's: `/rr-plan`, `state.py weight`, `state.py verify`,
+`/rr-ship`. Which stages spawn an agent at all
 is decided by `pipeline_profile` in `risk-tiers.json`: in `solo`, T0–T4 run in
 direct mode — nothing on STRONG below T4, a BALANCED review at T2/T3 only when
 a sensor is red, one STRONG review at T4 — and tests run once
@@ -38,25 +40,24 @@ stop at the first plausible match, and there a wrong answer reads exactly
 like a right one.
 
 **Codex agent precedence.** A value written into a Codex agent file wins over the
-model asked for when the agent is spawned. So "re-run `ai-risk` on a stronger
-model" cannot work there; the STRONG re-runs use the dedicated `ai-risk-strong`
-and `ai-planner-strong` agents, which pin the STRONG model in their own files. Same tier, same
-trigger, different mechanism.
+model asked for when the agent is spawned. So "the same agent on a stronger
+model" cannot work there: a named agent runs on the tier its file pins, and an
+EXPERT question is a spawn with no agent named and the EXPERT model on the
+call. Same tier, same trigger, different mechanism.
 
 **On LOCAL.** The original design of this system assumed a local model for
 indexing and repetitive inspection. Neither runtime has a local-model backend, so
 that work is done by deterministic tools (`rg`, `git`, `jq`, the framework CLI)
-plus `ai-indexer` on the cheapest hosted model. Nothing in this infrastructure
+plus `Explore` on the cheapest hosted model. Nothing in this infrastructure
 depends on a local model; if one becomes available it slots in at the FAST tier.
 
 ## STRONG triggers
 
-1. Review of a finished change before a commit is proposed (`ai-reviewer`), and
-   `ai-security` for authentication, authorization, secrets, payments, personal
-   data, webhooks and any T5/T6 change.
-2. `ai-risk` on the BALANCED tier answered T4+ or `confidence: uncertain` — re-run
-   it at STRONG; `ai-planner` at STRONG for T5, and for a T4 plan only on a
-   `delegate_anyway_when` trigger.
+1. Review of a finished change before a commit is proposed (`ai-reviewer`), with
+   a `focus: security` brief for authentication, authorization, secrets,
+   payments, personal data and webhooks — a full-mode task whose domain is 2.
+2. A full-mode plan whose design is open (`architect`). The session plans
+   everything else, and the weight is `state.py weight`, never an agent.
 3. Root cause after a BALANCED diagnosis already failed once, or a bug in
    concurrency, retries/idempotency, caching or data integrity.
 4. A reversible but costly design choice with two or more viable options

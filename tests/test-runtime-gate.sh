@@ -23,6 +23,10 @@ mkdir -p "$CL/hooks" "$CL/agents" "$CX/hooks" "$CX/agents"
 for d in "$CL/hooks" "$CX/hooks"; do cp "$PLUGIN_ROOT/hooks/runtime-gate.py" "$d/"; done
 printf -- '---\nname: architect\nmodel: fable[1m]\n---\nbody\n' > "$CL/agents/architect.md"
 python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$CX/agents" >/dev/null
+# No shipped role pins EXPERT on Codex since redesign 2.4; the reroute is
+# generic, so an EXPERT role and its STRONG twin are fixtures here.
+printf 'name = "ai-expert"\nmodel = "gpt-6-astra"\nmodel_reasoning_effort = "xhigh"\n' > "$CX/agents/ai-expert.toml"
+printf 'name = "ai-expert-strong"\nmodel = "gpt-5.6-sol"\nmodel_reasoning_effort = "high"\n' > "$CX/agents/ai-expert-strong.toml"
 printf 'model = "gpt-5.6-sol"\n\n[agents]\ndefault_subagent_model = "gpt-5.6-terra"\n' > "$CX/config.toml"
 
 claude_call() { jq -nc '{hook_event_name:"PreToolUse",tool_name:"Agent",cwd:"/nonexistent",tool_input:{subagent_type:"architect",prompt:"p"}}' | "$@"; }
@@ -157,17 +161,19 @@ launch() {  # launch <home-hook> <subagent_type> [session] [model] -> stdout
           tool_input:({subagent_type:$a,prompt:"p"} + (if $m == "" then {} else {model:$m} end))}' | python3 "$1"
 }
 decision() { jq -r '.hookSpecificOutput.permissionDecision // "none"' 2>/dev/null <<<"${1:-{\}}"; }
-out=$(launch "$CL/hooks/runtime-gate.py" ai-expert)
+out=$(launch "$CL/hooks/runtime-gate.py" architect)
 [ "$(decision "$out")" = ask ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("EXPERT agents run only when asked on Max")' >/dev/null \
     && pass "max: an EXPERT launch asks, with the reason" || fail "max EXPERT should ask" "$out"
 out=$(launch "$CL/hooks/runtime-gate.py" ai-reviewer)
-[ -z "$out" ] && pass "max: a STRONG launch within the fan-out goes through silently" || fail "STRONG launch should be silent" "$out"
+[ -z "$out" ] && pass "max: a STRONG launch goes through silently" || fail "STRONG launch should be silent" "$out"
+out=$(launch "$CL/hooks/runtime-gate.py" architect s1 sonnet)
+[ -z "$out" ] && pass "an explicit model on the call decides the tier: architect with model: sonnet does not ask" || fail "explicit model should decide the tier" "$out"
 out=$(AI_UNATTENDED=1 launch "$CL/hooks/runtime-gate.py" architect)
 [ "$(decision "$out")" = none ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | test("unattended")' >/dev/null \
     && pass "AI_UNATTENDED=1: allowed and explained, never asked" || fail "unattended EXPERT" "$out"
 python3 "$RESOLVE" max20 --fable yes --print agentic > "$CL/claude-agentic/profile.json"
 rm -rf "$CL/state"
-o1=$(launch "$CL/hooks/runtime-gate.py" ai-expert); o2=$(launch "$CL/hooks/runtime-gate.py" ai-expert); o3=$(launch "$CL/hooks/runtime-gate.py" ai-expert)
+o1=$(launch "$CL/hooks/runtime-gate.py" architect); o2=$(launch "$CL/hooks/runtime-gate.py" architect); o3=$(launch "$CL/hooks/runtime-gate.py" architect)
 [ -z "$o1$o2" ] && pass "max20: two EXPERT launches in a task need no question" || fail "max20 first two should be silent" "$o1$o2"
 [ "$(decision "$o3")" = ask ] && printf '%s' "$o3" | jq -e --arg t "$TASK" '.hookSpecificOutput.permissionDecisionReason | test($t)' >/dev/null \
     && pass "max20: the third asks, naming the task" || fail "max20 third EXPERT should ask" "$o3"
@@ -177,30 +183,18 @@ out=$(jq -r '.payload' "$FIX/30-agent-expert-launch.json" | sed "s|__ROOT__|$TMP
     && printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | test("Codex cannot ask")' >/dev/null \
     && pass "codex-plus: an EXPERT spawn is allowed and explained, never asked" || fail "codex EXPERT budget" "$out"
 
-echo "== budgets: running agents and the fan-out (R19)"
+echo "== no fan-out budget and no agent count (redesign 2.4)"
 python3 "$RESOLVE" max --fable yes --print agentic > "$CL/claude-agentic/profile.json"
 rm -rf "$CL/state"
-sub() {  # sub <hook> <Start|Stop> <agent_type> <agent_id> [session]
-    jq -nc --arg e "Subagent$2" --arg a "$3" --arg i "$4" --arg s "${5:-s1}" \
-        '{hook_event_name:$e,session_id:$s,agent_type:$a,agent_id:$i}' | python3 "$1"
-}
 G="$CL/hooks/runtime-gate.py"
-sub "$G" Start Explore a1; sub "$G" Start log-reader a2; sub "$G" Start ai-tester a3
-out=$(launch "$G" ai-indexer)
-[ "$(decision "$out")" = ask ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("3 agent\\(s\\) already running, the Max fan-out is 3")' >/dev/null \
-    && pass "max: a fourth parallel launch asks" || fail "fan-out ask" "$out"
-out=$(launch "$G" ai-indexer s2)
-[ -z "$out" ] && pass "running agents are counted per session" || fail "another session should not count" "$out"
-sub "$G" Stop Explore a1
-out=$(launch "$G" ai-indexer)
-[ -z "$out" ] && pass "a SubagentStop frees a slot" || fail "stop did not free a slot" "$out"
-sub "$G" Stop log-reader a2; sub "$G" Stop ai-tester a3
-sub "$G" Start ai-reviewer r1; sub "$G" Start ai-security r2
-out=$(launch "$G" ai-reviewer)
-[ "$(decision "$out")" = ask ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("STRONG/EXPERT")' >/dev/null \
-    && pass "max: a third STRONG agent asks (max_parallel_on_strong 2)" || fail "on-strong ask" "$out"
-out=$(launch "$G" ai-reviewer s1 sonnet)
-[ -z "$out" ] && pass "the same agent with model: sonnet counts as BALANCED and goes through" || fail "explicit model should decide the tier" "$out"
+for i in 1 2 3 4 5 6; do out=$(launch "$G" Explore batch); [ -z "$out" ] || fail "launch $i of a batch should be silent" "$out"; done
+pass "six parallel launches of one session: no question"
+for e in SubagentStart SubagentStop; do
+    out=$(jq -nc --arg e "$e" '{hook_event_name:$e,session_id:"s1",agent_type:"Explore",agent_id:"a1"}' | python3 "$G"); rc=$?
+    [ $rc = 0 ] && [ -z "$out" ] && pass "Claude Code $e is a no-op, exit 0" || fail "$e should be a no-op" "rc=$rc $out"
+done
+[ ! -e "$CL/state/runtime-gate.json" ] || ! jq -e 'has("running_agents") or has("pending_launches")' "$CL/state/runtime-gate.json" >/dev/null \
+    && pass "nothing counts running or pending agents" || fail "an agent count was written" "$(cat "$CL/state/runtime-gate.json")"
 
 # Codex 0.155 multi-agent v2: spawn_agent sits in the `collaboration` namespace,
 # and hooks see namespace + name with no separator (traced live 2026-09-22).
@@ -216,13 +210,6 @@ v2() {  # v2 <event> <tool_input json> [session] [tool_name] [extra json] -> std
         --argjson x "${5:-{\}}" '{hook_event_name:$e,tool_name:$t,session_id:$s,turn_id:"u",cwd:$c,tool_input:$i} + $x' | python3 "$CXG"
 }
 upd() { jq -c '.hookSpecificOutput.updatedInput // null' 2>/dev/null <<<"${1:-{\}}"; }
-rm -rf "$CX/state"
-s1=$(v2 PreToolUse '{"task_name":"t","agent_type":"Explore","message":"m"}')
-s2=$(v2 PreToolUse '{"task_name":"t","agent_type":"log-reader","message":"m"}')
-[ -z "$s1" ] && printf '%s' "$s2" | jq -e '.hookSpecificOutput.additionalContext | test("1 agent\\(s\\) already running, the .* fan-out is 1")' >/dev/null \
-    && pass "codex-plus: the second collaborationspawn_agent of a batch is explained" || fail "v2 fan-out" "$s1|$s2"
-[ "$(decision "$s2")" = none ] && pass "and never asked or allowed: Codex cannot ask" || fail "v2 budget decision" "$s2"
-
 rm -rf "$CX/state"; python3 "$CXG" set 600 rate_limit >/dev/null
 EV="$PROJ/.ai/reports/$TASK/events.jsonl"
 before=$(grep -c '"model_fallback"' "$EV" 2>/dev/null || true)
@@ -272,22 +259,21 @@ printf 'name = "ai-expert"\nmodel = "gpt-5.6-sol"\n' > "$PROJ/.codex/agents/ai-e
 rm -rf "$CX/state"
 out=$(jq -nc --arg c "$PROJ/sub" '{hook_event_name:"PreToolUse",tool_name:"collaborationspawn_agent",session_id:"ov",cwd:$c,
       tool_input:{agent_type:"ai-expert",message:"m"}}' | python3 "$CXG")
-[ -z "$out" ] && jq -e '[.pending_launches.ov[].tier] == ["STRONG"]' "$CX/state/runtime-gate.json" >/dev/null \
+[ -z "$out" ] && ! jq -e '.expert_launches' "$CX/state/runtime-gate.json" >/dev/null 2>&1 \
     && pass "a project file re-pinning ai-expert to Sol (from a subdirectory) is rated STRONG by the budget too" \
-    || fail "project override rating" "$out $(jq -c .pending_launches "$CX/state/runtime-gate.json")"
+    || fail "project override rating" "$out $(cat "$CX/state/runtime-gate.json" 2>/dev/null)"
 rm -rf "$PROJ/.git" "$PROJ/.codex" "$PROJ/sub"
 v2 PostToolUse '{"agent_type":"ai-expert","message":"m"}' p1 collaborationspawn_agent '{"tool_response":"429 Too Many Requests"}' >/dev/null
 python3 "$CXG" status | grep -q '^active' && pass "PostToolUse on collaborationspawn_agent records the outage" || fail "v2 PostToolUse" "$(python3 "$CXG" status)"
 
-echo "== codex: SubagentStart takes the tier from the resolved model"
+echo "== codex: SubagentStart is the missed-reroute backstop only"
 rm -rf "$CX/state"
 st() {  # st <agent_type> <model> <agent_id> [session] -> stdout
     jq -nc --arg a "$1" --arg m "$2" --arg i "$3" --arg s "${4:-st}" --arg c "$PROJ" \
         '{hook_event_name:"SubagentStart",session_id:$s,turn_id:"u",cwd:$c,agent_id:$i,agent_type:$a,model:$m}' | python3 "$CXG"
 }
-st worker gpt-5.6-sol w1 >/dev/null; st Explore gpt-5.6-terra w2 >/dev/null
-jq -e '[.running_agents.st[].tier] == ["STRONG", "FAST"]' "$CX/state/runtime-gate.json" >/dev/null \
-    && pass "a STRONG model decides the tier; a Terra one (FAST or BALANCED) leaves it to the name" || fail "start tier" "$(jq -c .running_agents "$CX/state/runtime-gate.json")"
+out=$(st worker gpt-5.6-sol w1)
+[ -z "$out" ] && [ ! -e "$CX/state/runtime-gate.json" ] && pass "a STRONG start is silent and records nothing" || fail "start recorded state" "$out"
 out=$(st ai-expert gpt-6-astra w3)
 [ -z "$out" ] && pass "no outage: an EXPERT start is silent" || fail "backstop fired without an outage" "$out"
 python3 "$CXG" set 600 rate_limit >/dev/null
@@ -304,35 +290,19 @@ out=$(AI_RUNTIME_GATE_MODE=context st ai-expert gpt-6-astra w5)
     && pass "context mode chose not to reroute: nothing is reported as missed" || fail "backstop in context mode" "$out"
 python3 "$CXG" clear >/dev/null
 
-echo "== budgets: one message that launches several agents (WP5 review)"
+echo "== budgets: an EXPERT ask is attended only"
 rm -rf "$CL/state"
-b1=$(launch "$G" Explore batch); b2=$(launch "$G" log-reader batch); b3=$(launch "$G" ai-tester batch)
-b4=$(launch "$G" ai-indexer batch)
-[ -z "$b1$b2$b3" ] && [ "$(decision "$b4")" = ask ] \
-    && pass "the fourth launch of one batch asks before any SubagentStart" || fail "batch fan-out" "$b1|$b2|$b3|$b4"
-jq -e '.pending_launches.batch | length == 3' "$CL/state/runtime-gate.json" >/dev/null \
-    && pass "the launch that asked holds no slot" || fail "pending count" "$(jq -c .pending_launches "$CL/state/runtime-gate.json")"
-sub "$G" Start Explore x1 batch; sub "$G" Start log-reader x2 batch; sub "$G" Start ai-tester x3 batch
-jq -e '(.pending_launches.batch // [] | length) == 0 and (.running_agents.batch | length) == 3' "$CL/state/runtime-gate.json" >/dev/null \
-    && pass "each SubagentStart claims its launch, nothing is counted twice" || fail "claim" "$(jq -c '{pending_launches,running_agents}' "$CL/state/runtime-gate.json")"
-python3 "$G" clear >/dev/null
-jq -e '.running_agents == null and .pending_launches == null' "$CL/state/runtime-gate.json" >/dev/null \
-    && pass "clear empties the count" || fail "clear left the count"
 out=$(CLAUDE_CODE_SESSION_ATTENDED=0 launch "$G" architect)
 [ "$(decision "$out")" = none ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | test("unattended")' >/dev/null \
     && pass "claude -p (CLAUDE_CODE_SESSION_ATTENDED=0) is unattended: explained, never asked" || fail "headless ask" "$out"
 out=$(CLAUDE_CODE_SESSION_ATTENDED=1 launch "$G" architect)
 [ "$(decision "$out")" = ask ] && pass "an attended session still asks" || fail "attended should ask" "$out"
-jq '.running_agents.s1 |= map(.started_at = 1000)' "$CL/state/runtime-gate.json" > "$TMP/s.json" && mv "$TMP/s.json" "$CL/state/runtime-gate.json"
-out=$(launch "$G" ai-reviewer)
-[ -z "$out" ] && pass "an entry older than the agent TTL (a lost SubagentStop) no longer counts" || fail "stale entries still counted" "$out"
-rm -rf "$CX/state"
-sub "$CX/hooks/runtime-gate.py" Start ai-indexer c1 cs
-out=$(launch "$CX/hooks/runtime-gate.py" Explore cs)
-[ "$(decision "$out")" = none ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | test("fan-out is 1 and serial")' >/dev/null \
-    && pass "codex-plus: a second parallel launch is allowed and explained" || fail "codex fan-out" "$out"
-sub "$CX/hooks/runtime-gate.py" Stop ai-indexer c1 cs
-jq -e '.running_agents | has("cs") | not' "$CX/state/runtime-gate.json" >/dev/null && pass "codex SubagentStop removes the entry too" || fail "codex stop"
+python3 "$G" set 600 test >/dev/null
+jq '.running_agents = {"s1": [{"tier": "STRONG", "started_at": 1}]} | .pending_launches = {"s1": []}' "$CL/state/runtime-gate.json" > "$TMP/s.json" \
+    && mv "$TMP/s.json" "$CL/state/runtime-gate.json"
+python3 "$G" clear >/dev/null
+jq -e '(has("unavailable") or has("running_agents") or has("pending_launches") | not) and .expert_launches' "$CL/state/runtime-gate.json" >/dev/null \
+    && pass "clear ends the outage, drops a pre-2.4 agent count and keeps the EXPERT count" || fail "clear" "$(cat "$CL/state/runtime-gate.json")"
 
 echo "== model_fallback is journaled on a rewrite (R9)"
 ln -sfn "$PLUGIN_ROOT/skills" "$CL/skills"          # where install.sh puts state.py
@@ -368,19 +338,17 @@ grep -q '"deny"' "$SRC_GATE" && fail "runtime-gate.py must never emit deny" || p
 
 echo "== parallel hooks do not lose each other's writes (WP5 review)"
 LS="$TMP/lock-state.json"; rm -f "$LS"
-ev() { jq -nc --arg e "$1" --arg id "$2" '{hook_event_name:$e,session_id:"par",agent_id:$id,agent_type:"Explore",cwd:"/nonexistent"}' \
-       | AI_RUNTIME_GATE_STATE="$LS" python3 "$CL/hooks/runtime-gate.py" >/dev/null; }
-for i in $(seq 1 20); do ev SubagentStart "a$i" & done; wait
-n=$(jq '.running_agents.par | length' "$LS")
-[ "$n" = 20 ] && pass "20 parallel SubagentStart record 20 agents" || fail "parallel starts recorded $n of 20"
-for i in $(seq 1 20); do ev SubagentStop "a$i" & done
+ev() { jq -nc --arg c "$PROJ" '{hook_event_name:"PreToolUse",tool_name:"Agent",session_id:"par",cwd:$c,tool_input:{subagent_type:"architect",prompt:"p"}}' \
+       | AI_UNATTENDED=1 AI_RUNTIME_GATE_STATE="$LS" python3 "$CL/hooks/runtime-gate.py" >/dev/null; }
+for i in $(seq 1 20); do ev & done
 AI_RUNTIME_GATE_STATE="$LS" python3 "$CL/hooks/runtime-gate.py" set 600 rate_limit >/dev/null & wait
-[ "$(jq '.running_agents.par // [] | length' "$LS")" = 0 ] && pass "20 parallel SubagentStop leave none running" || fail "stops left $(jq -c '.running_agents' "$LS")"
-jq -e '.unavailable.until' "$LS" >/dev/null && pass "an outage recorded during the stops survives" || fail "outage record lost in the race"
+n=$(jq --arg t "$TASK" '.expert_launches[$t] // 0' "$LS")
+[ "$n" = 20 ] && pass "20 parallel EXPERT launches count 20" || fail "parallel launches counted $n of 20"
+jq -e '.unavailable.until' "$LS" >/dev/null && pass "an outage recorded during the launches survives" || fail "outage record lost in the race"
 
 echo "== settings that do not parse or do not fit keep the default"
-out=$(AI_RUNTIME_GATE_AGENT_TTL=30m AI_RUNTIME_GATE_STATE="$LS" python3 "$CL/hooks/runtime-gate.py" status 2>&1); rc=$?
-[ $rc -eq 0 ] && pass "AGENT_TTL=30m does not crash the gate" || fail "bad number crashed (rc $rc)" "$out"
+out=$(AI_RUNTIME_GATE_TTL=30m AI_RUNTIME_GATE_STATE="$LS" python3 "$CL/hooks/runtime-gate.py" status 2>&1); rc=$?
+[ $rc -eq 0 ] && pass "TTL=30m does not crash the gate" || fail "bad number crashed (rc $rc)" "$out"
 python3 "$CL/hooks/runtime-gate.py" set 600 test >/dev/null
 out=$(AI_RUNTIME_GATE_FALLBACK=gpt-5.6-sol claude_call python3 "$CL/hooks/runtime-gate.py")
 [ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model')" = opus ] \

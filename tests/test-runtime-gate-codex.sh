@@ -19,6 +19,10 @@ mkdir -p "$(dirname "$GATE")"; cp "$PLUGIN_ROOT/hooks/runtime-gate.py" "$GATE"; 
 HOME_DIR="$TMP/codex"
 mkdir -p "$HOME_DIR/agents"
 python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$HOME_DIR/agents" >/dev/null
+# No shipped role pins EXPERT since redesign 2.4; the reroute is generic, so an
+# EXPERT role and its STRONG twin are fixtures here.
+printf 'name = "ai-expert"\nmodel = "gpt-6-astra"\nmodel_reasoning_effort = "xhigh"\n' > "$HOME_DIR/agents/ai-expert.toml"
+printf 'name = "ai-expert-strong"\nmodel = "gpt-5.6-sol"\nmodel_reasoning_effort = "high"\n' > "$HOME_DIR/agents/ai-expert-strong.toml"
 printf 'model = "gpt-5.6-sol"\n\n[agents]\ndefault_subagent_model = "gpt-5.6-terra"\n' > "$HOME_DIR/config.toml"
 
 STATE="$TMP/state.json"

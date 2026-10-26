@@ -1,6 +1,6 @@
 # Review report: {{TASK_ID}}
 
-reviewer: ai-reviewer | ai-security
+reviewer: ai-reviewer [focus: security]
 scope: <the diff or commit range reviewed>
 
 ## Findings

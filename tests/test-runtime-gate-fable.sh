@@ -277,7 +277,6 @@ jq -e '.hooks.PreToolUse[] | select(.hooks[0].command | test("runtime-gate")) | 
 [ ! -e "$D/hooks/fable-gate.py" ] && pass "the fable-gate.py shim is not installed" || fail "fable-gate.py shim still installed"
 [ "$(old_count "$D/settings.json")" = 0 ] && pass "no fable-gate command is registered" || fail "fable-gate still registered"
 grep -qxF 'model: fable[1m]' "$D/agents/architect.md" && pass "architect keeps model: fable[1m] (the gate reroutes at run time)" || fail "architect should stay pinned to fable[1m]"
-grep -qx 'model: opus' "$D/agents/ai-expert.md" && pass "ai-expert is pinned to opus on max, outside the gate" || fail "ai-expert should pin model: opus on max"
 CLAUDE_DIR="$D" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 [ "$(gate_count "$D/settings.json")" = 5 ] && pass "a re-install does not duplicate the gate's five entries" || fail "gate duplicated: $(gate_count "$D/settings.json")"
 

@@ -83,6 +83,7 @@ done
 pass "every agent declares effort:"
 grep -q '{{ARCHITECT_MODEL_LINE}}' "$PLUGIN_ROOT/agents/architect.md.tmpl" && pass "architect's model line is rendered per plan" || fail "architect.md.tmpl should carry the ARCHITECT model placeholder"
 grep -qE '^model: fable\[1m\]' "$DIR4/agents/architect.md" && pass "on max with Fable, architect alone is pinned to fable[1m]" || fail "architect should pin fable[1m] on max+fable"
-grep -qx 'model: opus' "$DIR4/agents/ai-expert.md" && pass "on max, ai-expert is pinned to opus" || fail "on max, ai-expert should pin model: opus"
+grep -qx 'model: opus' "$DIR4/agents/ai-reviewer.md" && pass "on max, ai-reviewer is pinned to opus" || fail "on max, ai-reviewer should pin model: opus"
+[ ! -e "$DIR4/agents/ai-expert.md" ] && pass "ai-expert is not installed (redesign 2.4)" || fail "ai-expert installed"
 
 summary "merge migration"

@@ -1,6 +1,6 @@
 # Task context: {{TASK_ID}}
 
-<!-- Produced by ai-context. This is what every later agent reads instead of the
+<!-- Written by the session. This is what every later agent reads instead of the
      repository. Keep it under two pages; if it does not fit, split the task. -->
 
 task:

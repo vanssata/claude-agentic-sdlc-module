@@ -24,14 +24,44 @@ usually a review that read the diff instead of the system.
 
 ## Boundary
 
-In direct mode — T0 to T4, the tier the brief names — the review's inputs are
+In light and guarded mode — the mode the brief names — the review's inputs are
 the task goal, the diff, the tests the step names, and the project's own
 fixture corpus and threat model (`.ai/policies/safety.md`, the guards'
 `*-defaults.json`, the test fixtures). The list above is worked inside them. A
 finding that needs an input outside them is reported as `[INFO]` with
 `in_scope: no`, naming the severity it would carry inside the boundary; it goes
-to `known-risks.md`, never to a remediation, and does not move the verdict. At
-T5 and T6 the list applies unbounded.
+to `known-risks.md`, never to a remediation, and does not move the verdict. In
+full mode the list applies unbounded.
+
+## Security
+
+A brief that says `focus: security` — a full-mode task whose domain is 2:
+identity, personal data, money — asks for this review instead of the list
+above. Work through `policies/security.md` and report against it explicitly. Tag
+every finding with the checklist item it came from, so a reader can see what
+was examined and found clean, not only what failed.
+
+```
+## FINDINGS
+- [BLOCKER] B1 (authorization) <what> (`file:line`)  in_scope: yes
+  attack: <how it is exploited, concretely>
+  suggested direction: <one sentence>
+- [HIGH] H1 (secrets) …
+- [INFO] I1 (audit-logging) …
+
+## EXAMINED AND CLEAN
+- authentication: <what you checked>
+- injection: <what you checked>
+- …
+
+## VERDICT
+verdict: pass | pass_with_findings | blockers_open
+ai_context_safety: <was any sensitive path read during this task>
+```
+
+- Never write a proof-of-concept exploit into the repository.
+- Never paste a real secret into a finding, even a partial one. Cite the location.
+- "No findings" needs the EXAMINED AND CLEAN section to be credible.
 
 ## Output
 

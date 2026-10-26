@@ -11,7 +11,7 @@
 #          and printed on stderr. --plan skips the question.
 #          balanced-max is never detected, only chosen: a Max account where only the session
 #          runs Opus 5.5 (200k window) — readers stay on Haiku, judgement on Sonnet, reviews on
-#          Opus, ai-expert on Opus at high; no Fable, no xhigh. It also selects the Codex
+#          Opus, architect on the Opus session; no Fable, no xhigh. It also selects the Codex
 #          balanced-max profile unless --codex-plan is given.
 # --fable  Claude only. auto = yes on max, max20 and team-max, no on pro and team-pro. On max the
 #          session runs Opus 5.5 [1m] (1M window) either way; yes pins Fable 5.1 [1m] on architect alone.
@@ -23,13 +23,13 @@
 # --dry-run prints everything that would be written, per runtime, and writes nothing.
 #
 # Claude Code (~/.claude): model, effort and context settings for the detected
-# plan (each agent pins its own tier); the ai-* pipeline agents plus architect,
-# Explore and log-reader; six hooks plus runtime-gate (Fable branch on a Fable install); the
+# plan (each agent pins its own tier); five agents — Explore, log-reader,
+# ai-discovery, ai-reviewer and architect; six hooks plus runtime-gate (Fable branch on a Fable install); the
 # skills; and one managed block in ~/.claude/CLAUDE.md.
 #
 # Codex (~/.codex): the same pipeline on the Terra -> Sol -> Astra ladder, sized
 # per ChatGPT plan (profiles/codex-{plus,pro}.json). Pro: session gpt-5.6-sol at
-# high, six agent threads, ai-expert on gpt-6-astra at xhigh. Plus: Sol at medium,
+# high, six agent threads, xhigh only for an EXPERT question on gpt-6-astra. Plus: Sol at medium,
 # three threads, Astra at high and xhigh off. Subagents default to gpt-5.6-terra,
 # the agents are rendered as custom-agent TOML files, the guards are registered
 # in ~/.codex/hooks.json, and one managed block is written to ~/.codex/AGENTS.md.
@@ -38,7 +38,7 @@
 # pro and team-pro (a Team Standard seat has Pro's models and limits): session model
 # `opusplan` — Opus in plan mode, Sonnet when executing — and the EXPERT tier pinned to opus.
 # max and team-max (a Team Premium seat has Max's models): session model Opus 5.5 [1m] (1M window
-# by default, pinned as claude-opus-5-5[1m]; `/model opus` for a 200k session), ai-expert pinned to opus at xhigh, architect alone on Fable.
+# by default, pinned as claude-opus-5-5[1m]; `/model opus` for a 200k session), architect alone on Fable.
 #
 # This plugin supersedes claude-routing. On the first run it migrates that
 # plugin's managed block into this one's, so the two never coexist.
@@ -331,15 +331,15 @@ FALLBACK_HUMAN=$(jq -r '.fallbackModel | if type=="array" then .[] else . end' "
 # set, because before Claude Code v2.1.251 (still bundled by the JetBrains ACP
 # adapter) it overrides both the frontmatter and the per-call model, and from
 # v2.1.251 it would send an agent that omits `model:` on purpose (architect with
-# --fable no) to Sonnet instead of the session. The EXPERT-tier agents
-# are rendered per tier: on pro/team-pro both pin opus (an inherited model would
-# be Sonnet outside plan mode); on max/team-max ai-expert pins opus at xhigh and
-# architect alone is pinned to fable[1m] when Fable is enabled.
+# --fable no) to Sonnet instead of the session. architect, the EXPERT-tier
+# agent, is rendered per tier: on pro/team-pro it pins opus (an inherited model
+# would be Sonnet outside plan mode); on max/team-max it is pinned to fable[1m]
+# when Fable is enabled and inherits the session otherwise.
 # fallbackModel applies to pinned subagents too, so a Fable outage still falls back.
 if [ "$TIER" = pro ]; then
   EXPERT_EFFORT="high"
   # On opusplan a subagent that omits `model:` inherits Sonnet outside plan mode,
-  # so both EXPERT-tier agents pin opus explicitly on this plan.
+  # so architect pins opus explicitly on this plan.
   EXPERT_MODEL_LINE="model: opus"
   ARCHITECT_MODEL_LINE="model: opus"
   ARCHITECT_EFFORT="high"
@@ -347,27 +347,29 @@ if [ "$TIER" = pro ]; then
   PLAN_SPECIFIC="- Session model is \`opusplan\`: Opus 5 in plan mode, Sonnet 5 when executing. Use plan mode for T3+ and for a T2 that spans several modules — that is where Opus is paid for. Fable is off this plan; never request it. \`xhigh\`/\`max\` are unavailable. STRONG and EXPERT both pin \`model: opus\` explicitly."
   EFFORT_RULE="Raise to \`high\` only for architecture, root-cause analysis and adversarial verification, and say that you are raising it."
 else
-  # Pinned rather than inherited: a session may run on Sonnet (the JetBrains ACP
-  # agent's Model setting, or /model), and the last-resort tier must not drop below
-  # the opus reviewer it escalates from. xhigh is what separates it from STRONG,
-  # which is already opus/high; fallbackModel still applies to a pinned agent.
+  # Until redesign 2.4 ai-expert pinned opus at xhigh here, so a Sonnet session
+  # could not weaken the last-resort tier. architect is the only EXPERT agent
+  # now: pinned to fable[1m] with Fable, inheriting the session without it — so
+  # on --fable no and balanced-max the EXPERT tier is the session model at high
+  # (known-risks: "the Claude EXPERT tier collapses to STRONG without Fable").
+  # EXPERT_MODEL_LINE has no template left that reads it.
   EXPERT_EFFORT="$(tier_field EXPERT effort)"
   EXPERT_MODEL_LINE="model: opus"
   if [ "$FABLE" = yes ]; then
     ARCHITECT_MODEL_LINE="model: fable[1m]"
     ARCHITECT_EFFORT="xhigh"
-    EXPERT_ROW="\`opus\` / \`xhigh\`, pinned so a Sonnet session cannot weaken it; \`architect\` alone pins \`fable[1m]\` / \`xhigh\`"
-    PLAN_SPECIFIC="- Session model is ${SESSION_HUMAN} by default, compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}). A large context is not free: every turn re-reads it, so keep \`/clear\` between tasks. ${ONE_M_RULE} \`ai-expert\` pins \`opus\` at \`xhigh\` rather than inheriting the session: a session may run on Sonnet (the IDE agent's Model setting), and the last-resort tier must not drop below the \`opus\` reviewer it escalates from. Fable 5.1 [1m] is pinned on \`architect\` (\`model: fable[1m]\`, \`xhigh\`) and is the session only when the user starts one with \`claude-1m fable\` — never pick it for a reader, a reviewer or \`ai-expert\`. \`max\` stays off.
+    EXPERT_ROW="\`fable[1m]\` / \`xhigh\`, pinned on \`architect\`"
+    PLAN_SPECIFIC="- Session model is ${SESSION_HUMAN} by default, compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}). A large context is not free: every turn re-reads it, so keep \`/clear\` between tasks. ${ONE_M_RULE} Fable 5.1 [1m] is pinned on \`architect\` (\`model: fable[1m]\`, \`xhigh\`) and is the session only when the user starts one with \`claude-1m fable\` — never pick it for a reader or a reviewer. \`max\` stays off.
 - \`runtime-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/runtime-gate.py status\` shows the gate; \`clear\` re-enables Fable early."
   else
     ARCHITECT_MODEL_LINE="# model: intentionally omitted — inherits the session model (${SESSION_HUMAN}, Fable disabled in this install)"
     ARCHITECT_EFFORT="high"
-    EXPERT_ROW="\`opus\` / \`${EXPERT_EFFORT}\`, pinned so a Sonnet session cannot weaken it"
-    PLAN_SPECIFIC="- Session model is ${SESSION_HUMAN} by default, compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}). ${ONE_M_RULE} Fable is disabled in this install (\`--fable no\`). Do not request \`model: fable\` anywhere. \`ai-expert\` alone pins \`model: opus\` at \`xhigh\`, so a Sonnet session cannot weaken the last-resort tier; \`xhigh\` stays off everywhere else and \`max\` stays off."
+    EXPERT_ROW="the session model at \`${ARCHITECT_EFFORT}\` — \`architect\` inherits it"
+    PLAN_SPECIFIC="- Session model is ${SESSION_HUMAN} by default, compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}). ${ONE_M_RULE} Fable is disabled in this install (\`--fable no\`). Do not request \`model: fable\` anywhere. \`xhigh\` and \`max\` stay off."
   fi
   if [ "$PLAN" = balanced-max ]; then
     ARCHITECT_MODEL_LINE="# model: intentionally omitted — inherits the session model (Opus 5.5; no Fable on BalancedMax)"
-    PLAN_SPECIFIC="- BalancedMax: only the session runs the strong model. Session model is Opus 5.5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); it plans and implements. Agents keep their cheap tiers — readers and runners (\`Explore\`, \`log-reader\`, \`ai-tester\`, \`ai-indexer\`) on \`$(tier_field FAST model)\` / \`$(tier_field FAST effort)\`, judgement on \`$(tier_field BALANCED model)\`, \`ai-reviewer\` and \`ai-security\` on \`$(tier_field STRONG model)\`. \`ai-expert\` pins \`opus\` at \`${EXPERT_EFFORT}\` and \`architect\` inherits the session. \`opus[1m]\` is a per-task choice, never the default. ${ONE_M_RULE} Fable is off on this plan; never request \`model: fable\`. \`xhigh\` and \`max\` stay off."
+    PLAN_SPECIFIC="- BalancedMax: only the session runs the strong model. Session model is Opus 5.5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); it plans and implements. Agents keep their cheap tiers — readers (\`Explore\`, \`log-reader\`) on \`$(tier_field FAST model)\` / \`$(tier_field FAST effort)\`, judgement (\`ai-discovery\`) on \`$(tier_field BALANCED model)\`, \`ai-reviewer\` on \`$(tier_field STRONG model)\`, and \`architect\` inherits the session. \`opus[1m]\` is a per-task choice, never the default. ${ONE_M_RULE} Fable is off on this plan; never request \`model: fable\`. \`xhigh\` and \`max\` stay off."
   fi
   EFFORT_RULE="Raise to \`high\` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; readers stay at \`low\`."
 fi
@@ -498,10 +500,8 @@ claude_dry_run() {
   statusline_gate "$CLAUDE_DIR/settings.json" on dry | sed 's/^/== /'
   echo "== settings snippet (merged into $CLAUDE_DIR/settings.json):"
   jq . "$TMP/settings.snippet.json"
-  echo "== agents/ai-expert.md (rendered head):"
-  sed -n '1,10p' "$TMP/agents/ai-expert.md"
   echo "== agents/architect.md (rendered head):"
-  sed -n '1,8p' "$TMP/agents/architect.md"
+  sed -n '1,10p' "$TMP/agents/architect.md"
   echo "== CLAUDE.md managed block:"
   cat "$TMP/CLAUDE.block.md"
   echo "== routing.md (on demand): $CLAUDE_DIR/claude-agentic/routing.md"
@@ -569,9 +569,16 @@ sweep_bak() {
 # The seven agents the 2026-09-02 install shipped, which nothing installs any
 # more. Moved, not deleted: one mv out of backups/<date>/agents/ brings one back.
 STALE_AGENTS="code-implementer qa-runner qa-fixer db-migrator doc-lookup log-inspector sylius-i18n-keys"
+# Redesign 2.4: the agents went from 14 to 5 (Explore, log-reader, ai-discovery,
+# ai-reviewer, architect), and the Codex roster lost its -strong/-balanced twins.
+# Moved the same way; `mv` back out of backups/<date>/agents/ restores one.
+STALE_AGENTS="$STALE_AGENTS ai-context ai-expert ai-implementer ai-indexer ai-planner ai-release ai-risk ai-security ai-tester"
+STALE_CODEX_TWINS="ai-reviewer-balanced ai-risk-strong ai-planner-strong ai-expert-strong"
 retire_stale_agents() {  # retire_stale_agents <root> <md|toml>
   local name
   for name in $STALE_AGENTS; do retire "$1" "agents/$name.$2"; done
+  [ "$2" = toml ] || return 0
+  for name in $STALE_CODEX_TWINS; do retire "$1" "agents/$name.$2"; done
 }
 
 install_file() {  # install_file <src> <dst> [root] — back up on a real change, then copy
@@ -886,8 +893,7 @@ Done (Claude Code).
   plan tables     $CLAUDE_DIR/claude-agentic/profile.json
   session model   $SESSION_MODEL ($SESSION_HUMAN), effort $EFFORT
   fallback        $FALLBACK
-  EXPERT tier     ai-expert on opus, pinned, at effort $EXPERT_EFFORT;
-                  architect on $( [ "$TIER" = pro ] && echo "opus, pinned" || { [ "$FABLE" = yes ] && echo "fable[1m], pinned" || echo "the session model"; } ) at effort $ARCHITECT_EFFORT
+  EXPERT tier     architect on $( [ "$TIER" = pro ] && echo "opus, pinned" || { [ "$FABLE" = yes ] && echo "fable[1m], pinned" || echo "the session model"; } ) at effort $ARCHITECT_EFFORT
   compaction      near $COMPACT_AT tokens on this $((MODEL_WINDOW / 1000))k session (autoCompactWindow $COMPACT,
                   capped at the model's window); context-guard warns from
                   $((COMPACT_AT * 80 / 100)) and holds a prompt back once from $((COMPACT_AT * 120 / 100))
@@ -1180,14 +1186,12 @@ Done (Codex).
   plan            $CODEX_PLAN  ($CODEX_PLAN_LABEL)
   session model   $CODEX_SESSION_MODEL at effort $CODEX_SESSION_EFFORT
   subagent default $CODEX_SUBAGENT_MODEL at $CODEX_SUBAGENT_EFFORT, at most $CODEX_MAX_THREADS threads at once
-  FAST tier       $CODEX_FAST at $CODEX_FAST_EFFORT (ai-indexer, Explore, log-reader, ai-tester)
-  BALANCED tier   $CODEX_BALANCED at $CODEX_BALANCED_EFFORT (ai-discovery at low, ai-context, ai-risk, ai-planner, ai-release, ai-implementer,
-                  ai-reviewer-balanced for the T2 review)
-  STRONG tier     $CODEX_STRONG at $CODEX_STRONG_EFFORT (ai-reviewer, ai-security, architect, ai-risk-strong, ai-planner-strong,
-                  ai-expert-strong: the gate's stand-in for ai-expert)
-  EXPERT tier     $CODEX_EXPERT at $CODEX_EXPERT_EFFORT (ai-expert)
+  FAST tier       $CODEX_FAST at $CODEX_FAST_EFFORT (Explore, log-reader)
+  BALANCED tier   $CODEX_BALANCED at $CODEX_BALANCED_EFFORT (ai-discovery at low)
+  STRONG tier     $CODEX_STRONG at $CODEX_STRONG_EFFORT (ai-reviewer, architect)
+  EXPERT tier     $CODEX_EXPERT at $CODEX_EXPERT_EFFORT (no agent pins it)
   runtime gate    sends EXPERT work to $CODEX_STRONG while $CODEX_EXPERT is rate-limited or
-                  unavailable, explains launches past the plan's budgets, reads the quota
+                  unavailable, explains an EXPERT launch past the plan's budget, reads the quota
                   from the session rollouts; 'runtime-gate.py status' / 'quota' show it
   agents          $(ls "$TMP/codex-agents" | sed 's/\.toml$//' | paste -sd' ')
   hooks           ai-git-guard (global), ai-path-guard + ai-scope-guard (active where .ai/ exists),

@@ -232,7 +232,7 @@ PY
     || fail "add_router_rows on the new router" "$rows"
 
 echo "== consumers name the rule"
-for a in ai-context ai-discovery ai-expert ai-implementer ai-planner ai-release ai-reviewer ai-risk ai-security ai-tester; do
+for a in ai-discovery ai-reviewer; do
     [ "$(grep -c '{{AI_SHARED}}/<path>' "agents/$a.md.tmpl")" -eq 1 ] && pass "agents/$a.md.tmpl states the rule once" || fail "agents/$a.md.tmpl should state the shared-path rule once"
 done
 grep -qF '"$AI_HOME/claude-agentic/ai-path" <path>' skills/rr-build/SKILL.md && pass "rr-build names the resolver" || fail "rr-build SKILL.md should name the resolver"

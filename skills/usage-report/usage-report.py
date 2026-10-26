@@ -598,14 +598,9 @@ def print_budgets() -> int:
         if not isinstance(budgets, dict):
             continue
         found = True
-        fan = budgets.get("fan_out") or {}
         expert = budgets.get("expert") or {}
         tokens = (budgets.get("tokens") or {}).get("per_task") or {}
         print(f"{runtime}: {prof.get('label') or prof.get('plan')} ({prof.get('plan')})")
-        print(f"  fan-out        {fan.get('max_parallel_agents')} agents, "
-              f"{fan.get('max_parallel_on_strong')} on STRONG/EXPERT"
-              + (", serial" if fan.get("serial") else ""))
-        print(f"  direct mode    up to {(budgets.get('direct_mode') or {}).get('max_tier')}")
         print(f"  EXPERT         {'without asking' if expert.get('without_asking') else 'asks first'}, "
               f"at most {expert.get('max_per_task')} per task")
         print("  tokens / task  " + "  ".join(f"{t} {v}M" for t, v in sorted(tokens.items())))

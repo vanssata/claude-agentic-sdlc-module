@@ -1395,7 +1395,7 @@ python3 "$RP" max --fable yes --print agentic > "$CLH/claude-agentic/profile.jso
 [ "$(cd "$W5" && S5 --runtime claude profile --tier STRONG)" = opus ] && pass "profile --tier STRONG prints this runtime's model" || fail "profile --tier claude"
 [ "$(cd "$W5" && S5 --runtime codex profile --tier STRONG)" = gpt-5.6-sol ] && pass "and Codex's under codex" || fail "profile --tier codex"
 [ "$(cd "$W5" && S5 --runtime claude profile --other --tier EXPERT)" = gpt-6-astra ] && pass "--other reads the other runtime's plan" || fail "profile --other"
-[ "$(cd "$W5" && S5 --runtime claude profile --field budgets.fan_out.max_parallel_agents)" = 3 ] && pass "--field walks a dotted path" || fail "profile --field"
+[ "$(cd "$W5" && S5 --runtime claude profile --field budgets.expert.max_per_task)" = 1 ] && pass "--field walks a dotted path" || fail "profile --field"
 (cd "$W5" && CLAUDE_CONFIG_DIR="$W5/nowhere" python3 "$STATE" --runtime claude profile >/dev/null 2>&1); rc=$?
 [ $rc = 1 ] && pass "no profile: exit 1, and no .ai/ is needed" || fail "profile without a file: rc=$rc"
 

@@ -4,11 +4,6 @@
     "plan": "max20",
     "label": "Max 20x",
     "budgets": {
-      "fan_out": {
-        "max_parallel_agents": 6,
-        "max_parallel_on_strong": 4,
-        "serial": false
-      },
       "expert": {
         "without_asking": true,
         "max_per_task": 2

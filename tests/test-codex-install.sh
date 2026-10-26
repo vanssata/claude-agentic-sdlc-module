@@ -65,8 +65,7 @@ out=$(CODEX_DIR="$DIR" bash "$INSTALL" --target codex 2>&1); rc=$?
 
 grep -q 'plan            pro' <<<"$out" && pass "the summary names the plan" || fail "summary should name the plan" "$out"
 
-for f in agents/ai-expert.toml agents/ai-reviewer.toml agents/ai-risk-strong.toml \
-         agents/ai-planner-strong.toml agents/ai-expert-strong.toml agents/architect.toml agents/Explore.toml \
+for f in agents/ai-discovery.toml agents/ai-reviewer.toml agents/log-reader.toml agents/architect.toml agents/Explore.toml \
          hooks/ai-git-guard.sh hooks/ai-path-guard.sh hooks/ai-scope-guard.sh \
          hooks/runtime-gate.py hooks/context-guard.py hooks/lib/ai-hook-common.sh hooks/ai-git-guard.json \
          hooks/ai-path-guard-defaults.json hooks.json config.toml AGENTS.md \
@@ -139,8 +138,10 @@ DAY=$(date +%F)
 printf '#!/usr/bin/env python3\n# the old shim\n' > "$UP/hooks/codex-model-gate.py"
 mkdir -p "$UP/skills/status"; printf -- '---\nname: status\n---\nold\n' > "$UP/skills/status/SKILL.md"
 STALE="code-implementer qa-runner qa-fixer db-migrator doc-lookup log-inspector sylius-i18n-keys"
-for a in $STALE; do printf 'name = "%s"\n' "$a" > "$UP/agents/$a.toml"; done
-printf 'old\n' > "$UP/agents/ai-expert.toml"; printf 'older\n' > "$UP/agents/ai-expert.toml.bak"
+# Redesign 2.4: nine agents and the four tier twins are no longer installed.
+RETIRED_24="ai-context ai-expert ai-implementer ai-indexer ai-planner ai-release ai-risk ai-security ai-tester ai-reviewer-balanced ai-risk-strong ai-planner-strong ai-expert-strong"
+for a in $STALE $RETIRED_24; do printf 'name = "%s"\n' "$a" > "$UP/agents/$a.toml"; done
+printf 'old\n' > "$UP/agents/ai-reviewer.toml"; printf 'older\n' > "$UP/agents/ai-reviewer.toml.bak"
 OLD='"$HOME/.codex/hooks/codex-model-gate.py"'
 jq -n --arg c "$OLD" '{hooks:{PreToolUse:[{matcher:"Agent",hooks:[{type:"command",command:$c,timeout:5}]}],
     PostToolUse:[{matcher:"Agent",hooks:[{type:"command",command:$c,timeout:5}]}],
@@ -166,10 +167,17 @@ for a in $STALE; do
     [ ! -e "$UP/agents/$a.toml" ] && [ -f "$UP/backups/$DAY/agents/$a.toml" ] || fail "agents/$a.toml not retired" "$out"
 done
 pass "the seven stale agents are retired into backups/<date>/agents/"
+for a in $RETIRED_24; do
+    [ ! -e "$UP/agents/$a.toml" ] && [ -f "$UP/backups/$DAY/agents/$a.toml" ] \
+        && grep -q "retired: agents/$a.toml -> backups/$DAY/agents/$a.toml" <<<"$out" || fail "agents/$a.toml not retired (2.4)" "$out"
+done
+pass "the nine agents and four twins of redesign 2.4 are retired into backups/<date>/agents/"
+got=$(cd "$UP/agents" && ls *.toml | sed 's/\.toml$//' | LC_ALL=C sort | paste -sd' ')
+[ "$got" = "Explore ai-discovery ai-reviewer architect log-reader" ] && pass "and exactly the five agents are left" || fail "codex agents after the upgrade" "$got"
 [ ! -e "$UP/skills/status" ] && [ -f "$UP/backups/$DAY/skills/status/SKILL.md" ] \
     && grep -q "retired: skills/status -> backups/$DAY/skills/status" <<<"$out" \
     && pass "skills/status is retired into backups/<date>/skills/ on the Codex home" || fail "skills/status not retired" "$out"
-[ ! -e "$UP/agents/ai-expert.toml.bak" ] && [ "$(cat "$UP/backups/$DAY/agents/ai-expert.toml.bak")" = older ] \
+[ ! -e "$UP/agents/ai-reviewer.toml.bak" ] && [ "$(cat "$UP/backups/$DAY/agents/ai-reviewer.toml.bak")" = older ] \
     && pass "a *.bak beside a live agent moves to backups/<date>/agents/" || fail "agent .bak not swept" "$out"
 [ -z "$(cd "$UP" && find . -path ./backups -prune -o -name '*.bak' -print)" ] \
     && pass "no *.bak is left outside backups/" || fail "*.bak left" "$(cd "$UP" && find . -path ./backups -prune -o -name '*.bak' -print)"

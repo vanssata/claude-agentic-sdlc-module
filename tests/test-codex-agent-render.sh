@@ -18,8 +18,11 @@ echo "== render"
 out=$(python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$OUT" 2>&1)
 if [ $? -eq 0 ]; then pass "renderer exits 0"; else fail "renderer should exit 0" "$out"; fi
 
-count=$(ls "$OUT"/*.toml 2>/dev/null | wc -l)
-[ "$count" -ge 17 ] && pass "rendered $count agents" || fail "expected at least 17 agents, got $count"
+echo "== R11: exactly the five agents, no -strong/-balanced twins"
+got=$(cd "$OUT" && ls *.toml 2>/dev/null | sed 's/\.toml$//' | LC_ALL=C sort | tr '\n' ' ')
+[ "$got" = "Explore ai-discovery ai-reviewer architect log-reader " ] \
+    && pass "rendered Explore, ai-discovery, ai-reviewer, architect, log-reader" || fail "the rendered roster is wrong" "$got"
+ls "$OUT" | grep -qE -- '-(strong|balanced)\.toml$' && fail "a tier twin was rendered" "$(ls "$OUT")" || pass "no tier twin is rendered"
 
 echo "== every file is valid TOML with the three required fields"
 bad=$(python3 - "$OUT" <<'PY'
@@ -48,70 +51,42 @@ PY
 # field <agent> <key>
 field() { python3 -c 'import sys,tomllib;print(tomllib.load(open(sys.argv[1],"rb")).get(sys.argv[2],""))' "$OUT/$1.toml" "$2"; }
 
-echo "== readers and mechanical workers resolve to Terra"
-for a in ai-indexer Explore ai-discovery log-reader; do
+echo "== readers resolve to Terra at low effort"
+for a in Explore ai-discovery log-reader; do
     [ "$(field "$a" model)" = "gpt-5.6-terra" ] && pass "$a runs on Terra" || fail "$a should run on Terra, got $(field "$a" model)"
     [ "$(field "$a" model_reasoning_effort)" = "low" ] && pass "$a runs at low effort" || fail "$a should run at low effort"
 done
-for a in ai-context ai-risk ai-planner ai-release ai-implementer; do
-    [ "$(field "$a" model)" = "gpt-5.6-terra" ] && pass "$a runs on Terra" || fail "$a should run on Terra, got $(field "$a" model)"
-    [ "$(field "$a" model_reasoning_effort)" = "medium" ] && pass "$a runs at medium effort" || fail "$a should run at medium effort"
-done
 
-echo "== strong reviewers and designers resolve to Sol"
-for a in ai-reviewer ai-security architect ai-risk-strong ai-planner-strong ai-expert-strong; do
+echo "== the reviewer and the designer resolve to Sol"
+for a in ai-reviewer architect; do
     [ "$(field "$a" model)" = "gpt-5.6-sol" ] && pass "$a runs on Sol" || fail "$a should run on Sol, got $(field "$a" model)"
     [ "$(field "$a" model_reasoning_effort)" = "high" ] && pass "$a runs at high effort" || fail "$a should run at high effort"
 done
-
-echo "== the expert resolves to Astra"
-[ "$(field ai-expert model)" = "gpt-6-astra" ] && pass "ai-expert runs on Astra" || fail "ai-expert should run on Astra"
-[ "$(field ai-expert model_reasoning_effort)" = "xhigh" ] && pass "ai-expert runs at xhigh" || fail "ai-expert should run at xhigh"
+field ai-reviewer developer_instructions | grep -q '^## Focus: security' \
+    && pass "ai-reviewer carries the security focus" || fail "ai-reviewer is missing its Focus: security section"
 
 echo "== the plus profile keeps xhigh off"
 OUTP="$TMP/plus"
 python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$OUTP" --profile "$PLUGIN_ROOT/profiles/codex-plus.json" >/dev/null 2>&1 \
   && pass "the plus profile renders" || fail "the plus profile should render"
-grep -q '^model_reasoning_effort = "xhigh"' "$OUTP/ai-expert.toml" && fail "ai-expert must not run at xhigh on plus" || pass "ai-expert stays below xhigh on plus"
-grep -q '^model = "gpt-6-astra"' "$OUTP/ai-expert.toml" && pass "ai-expert still runs on Astra on plus" || fail "ai-expert should run on Astra on plus"
 grep -rq 'xhigh' "$OUTP" && fail "no plus agent may run at xhigh" || pass "no plus agent runs at xhigh"
-for p in codex-plus codex-pro; do
+for p in codex-plus codex-pro codex-balanced-max; do
     diff <(jq -S .roles "$PLUGIN_ROOT/profiles/$p.json") <(jq -S .roles "$PLUGIN_ROOT/profiles/codex-pro.json") >/dev/null \
       && pass "$p has the same roster as codex-pro" || fail "$p roster differs from codex-pro"
 done
 
-echo "== the strong variants exist so an escalation cannot be pinned back to Terra"
-field ai-risk-strong developer_instructions | grep -q 'STRONG re-run' \
-    && pass "ai-risk-strong says it is the escalation" || fail "ai-risk-strong is missing its escalation note"
-field ai-planner-strong developer_instructions | grep -q 'T3 or T4' \
-    && pass "ai-planner-strong names the tiers it serves" || fail "ai-planner-strong is missing its escalation note"
-field ai-risk-strong developer_instructions | grep -q 'You classify risk' \
-    && pass "ai-risk-strong reuses the shared ai-risk body" || fail "ai-risk-strong should reuse the shared prompt body"
-field ai-expert-strong developer_instructions | grep -q 'EXPERT model is unavailable' \
-    && pass "ai-expert-strong says it stands in for the EXPERT model" || fail "ai-expert-strong is missing its stand-in note"
-python3 -c 'import sys,tomllib;a,b=(tomllib.load(open(f,"rb"))["developer_instructions"] for f in sys.argv[1:]);sys.exit(not a.endswith("\n\n"+b))' "$OUT/ai-expert-strong.toml" "$OUT/ai-expert.toml" 2>/dev/null \
-    && pass "ai-expert-strong reuses the shared ai-expert body" || fail "ai-expert-strong should reuse the ai-expert body"
-[ "$(field ai-expert-strong sandbox_mode)" = read-only ] && pass "ai-expert-strong is read-only" || fail "ai-expert-strong should be read-only"
-grep -q '^model = "gpt-5.6-sol"' "$OUTP/ai-expert-strong.toml" \
-    && pass "ai-expert-strong runs on Sol on plus too" || fail "plus ai-expert-strong should run on Sol"
-
-echo "== the T2 review runs on BALANCED (R20)"
-for p in plus pro; do
-    d="$TMP/r20-$p"
-    python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$d" --profile "$PLUGIN_ROOT/profiles/codex-$p.json" >/dev/null 2>&1
-    want=$(jq -r '"\(.tiers.BALANCED.model) \(.tiers.BALANCED.effort)"' "$PLUGIN_ROOT/profiles/codex-$p.json")
-    got=$(python3 -c 'import sys,tomllib;d=tomllib.load(open(sys.argv[1],"rb"));print(d["model"],d["model_reasoning_effort"],d.get("sandbox_mode"))' "$d/ai-reviewer-balanced.toml" 2>&1)
-    [ "$got" = "$want read-only" ] && pass "codex-$p: ai-reviewer-balanced is read-only on BALANCED" || fail "codex-$p: ai-reviewer-balanced got '$got', want '$want read-only'"
-done
-field ai-reviewer-balanced developer_instructions | grep -q 'You review as an adversary' \
-    && pass "ai-reviewer-balanced reuses the shared ai-reviewer body" || fail "ai-reviewer-balanced should reuse the ai-reviewer body"
+echo "== a variant_of role still renders: the mechanism stays, no profile ships one"
+jq '.roles["ai-reviewer-strong"] = {"variant_of": "ai-reviewer", "tier": "EXPERT", "sandbox_mode": "read-only",
+      "description_prefix": "Twin.", "escalation_note": "You are the twin."}' \
+   "$PLUGIN_ROOT/profiles/codex-pro.json" > "$TMP/variant.json"
+python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$TMP/variant" --profile "$TMP/variant.json" >/dev/null 2>&1 \
+    && python3 -c 'import sys,tomllib;a,b=(tomllib.load(open(f,"rb")) for f in sys.argv[1:]);sys.exit(not (a["developer_instructions"]=="You are the twin.\n\n"+b["developer_instructions"] and a["model"]=="gpt-6-astra"))' \
+         "$TMP/variant/ai-reviewer-strong.toml" "$TMP/variant/ai-reviewer.toml" 2>/dev/null \
+    && pass "a variant reuses its parent's body, on its own tier" || fail "variant_of no longer renders"
 
 echo "== read-only roles get a read-only sandbox"
-for a in ai-reviewer ai-security ai-expert ai-discovery Explore ai-risk ai-planner architect ai-context ai-indexer ai-tester log-reader ai-reviewer-balanced; do
+for a in ai-reviewer ai-discovery Explore architect log-reader; do
     [ "$(field "$a" sandbox_mode)" = "read-only" ] && pass "$a is sandboxed read-only" || fail "$a should be read-only, got $(field "$a" sandbox_mode)"
-done
-for a in ai-implementer ai-release; do
-    [ "$(field "$a" sandbox_mode)" = "workspace-write" ] && pass "$a may write in the workspace" || fail "$a should be workspace-write"
 done
 
 echo "== rendering twice produces identical files"
@@ -120,7 +95,7 @@ python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out
 diff -rq "$OUT" "$OUT2" >/dev/null && pass "the renderer is deterministic" || fail "two renders differ"
 
 echo "== --ai-shared fills {{AI_SHARED}}"
-READERS="ai-context ai-discovery ai-expert ai-implementer ai-planner ai-release ai-reviewer ai-risk ai-security ai-tester"
+READERS="ai-discovery ai-reviewer"
 python3 "$PLUGIN_ROOT/scripts/render-codex-agents.py" --src "$PLUGIN_ROOT" --out "$TMP/ai1" --ai-shared /opt/x/ai >/dev/null 2>&1 \
     || fail "render with --ai-shared should exit 0"
 for a in $READERS; do

@@ -23,7 +23,7 @@ agent merges the pull request that leads there.
 
 ## The release report
 
-Assembled by `ai-release` from the task's own artifacts under
+Assembled by the session at `/rr-ship` from the task's own artifacts under
 `.ai/reports/<task-id>/`, using the template in `.ai/templates/release-report.md`.
 It exists so that the human approving the change can see, in one page, what
 changed, what deliberately did not, what was tested, what was reviewed, what
@@ -34,8 +34,9 @@ written carefully.
 
 ## What blocks a release
 
-- an open BLOCKER or HIGH finding from `ai-reviewer` or `ai-security`;
-- a NEW REGRESSION from `ai-tester`;
+- an open BLOCKER or HIGH finding from `ai-reviewer`, including its
+  `focus: security` pass;
+- a new regression in the last `state.py verify` run;
 - a destructive database operation without its own named approval;
 - a T3+ change with no rollback section;
 - an unanswered blocking question in the plan.

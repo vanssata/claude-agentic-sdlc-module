@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # profiles/*.json and scripts/resolve-profile.py: every plan carries the plugin's
 # own tables under `claude_agentic`, max20 is max plus budgets and nothing else,
-# and the budgets respect the global rules (one serial agent on the small plans,
-# never five or more on the STRONG tier, never more than Codex itself allows).
+# and the budgets carry no fan-out and no direct-mode cap since redesign 2.4 —
+# what is left is the EXPERT rule and the token table.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -55,26 +55,17 @@ mkdir -p "$TMP/src/profiles" && cp "$TMP"/loop-*.json "$TMP/src/profiles/"
 python3 "$RESOLVE" loop-a --src "$TMP/src" >/dev/null 2>&1; rc=$?
 [ "$rc" = 2 ] && pass "an inheritance cycle exits 2" || fail "cycle exit $rc"
 
-echo "== R2: budgets"
-for name in pro codex-plus; do
-    jq -e '.budgets.fan_out | .max_parallel_agents == 1 and .serial == true' "$TMP/$name.json" >/dev/null \
-        && pass "$name: one agent, serial" || fail "$name should be 1 / serial"
+echo "== R2/R29: budgets carry no fan_out and no direct_mode"
+python3 "$RESOLVE" pro --plan team-pro --print agentic > "$TMP/team-pro.json"
+for name in pro team-pro max max20 balanced-max codex-plus codex-pro codex-balanced-max; do
+    jq -e '.budgets | has("fan_out") or has("direct_mode") | not' "$TMP/$name.json" >/dev/null \
+        && pass "$name: budgets.fan_out and budgets.direct_mode are gone" || fail "$name still carries fan_out or direct_mode" "$(jq -c .budgets "$TMP/$name.json")"
+    jq -e '.budgets.expert | (.without_asking | type) == "boolean" and .max_per_task >= 1' "$TMP/$name.json" >/dev/null \
+        && pass "$name: the EXPERT rule stays" || fail "$name: budgets.expert"
 done
-out=$(python3 "$RESOLVE" pro --plan team-pro --print agentic | jq -c .budgets.fan_out)
-[ "$(jq -r '"\(.max_parallel_agents)|\(.serial)"' <<<"$out")" = "1|true" ] \
-    && pass "team-pro: one agent, serial" || fail "team-pro fan_out: $out"
-for name in pro max max20 balanced-max codex-plus codex-pro codex-balanced-max; do
-    jq -e '.budgets.fan_out.max_parallel_on_strong <= 4
-           and .budgets.fan_out.max_parallel_on_strong <= .budgets.fan_out.max_parallel_agents' \
-        "$TMP/$name.json" >/dev/null \
-        && pass "$name: at most 4 on STRONG" || fail "$name: max_parallel_on_strong too high"
-    jq -e '.budgets.direct_mode.max_tier == "T3"' "$TMP/$name.json" >/dev/null \
-        && pass "$name: direct mode up to T3" || fail "$name: direct_mode.max_tier"
-done
+grep -l '"fan_out"\|"direct_mode"' "$PLUGIN_ROOT"/profiles/*.json && fail "a profile source still names fan_out or direct_mode" \
+    || pass "no profile source names fan_out or direct_mode"
 for name in codex-plus codex-pro; do
-    jq -e '.claude_agentic.budgets.fan_out.max_parallel_agents <= .agents.max_concurrent_threads_per_session' \
-        "$PLUGIN_ROOT/profiles/$name.json" >/dev/null \
-        && pass "$name: fan_out within Codex's own thread limit" || fail "$name: fan_out above max_concurrent_threads_per_session"
     jq -e '.preferred_runtime.by_workflow == {} and .runtime == "codex"' "$TMP/$name.json" >/dev/null \
         && pass "$name: codex runtime, no workflow preference" || fail "$name: runtime/by_workflow"
     jq -e --slurpfile p "$PLUGIN_ROOT/profiles/$name.json" \
@@ -91,8 +82,8 @@ echo "== R16: each agent template's tier is its tier everywhere"
 for t in "$PLUGIN_ROOT"/agents/*.md.tmpl; do
     n=$(basename "$t" .md.tmpl)
     tier=$(sed -n 's/^model: {{\([A-Z]*\)_MODEL}}$/\1/p' "$t")
-    # ai-expert and architect carry a whole model line rendered per plan
-    # (EXPERT_MODEL_LINE, ARCHITECT_MODEL_LINE), not a tier placeholder.
+    # architect carries a whole model line rendered per plan
+    # (ARCHITECT_MODEL_LINE), not a tier placeholder.
     [ -n "$tier" ] || continue
     grep -qE '^model: [a-z]' "$t" && fail "$n names a model in its source"
     for p in codex-plus codex-pro; do

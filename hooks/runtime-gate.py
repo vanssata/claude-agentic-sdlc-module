@@ -30,16 +30,12 @@ Codex (EXPERT model -> STRONG model); an agent launch is `spawn_agent`, or
 
 Budgets (from <home>/claude-agentic/profile.json; no profile, no budget):
   PreToolUse:Agent   an EXPERT launch without `expert.without_asking`, or past
-                     `expert.max_per_task` for the task in flight, and a launch past
-                     `fan_out.max_parallel_agents` (or past `max_parallel_on_strong`
-                     for a STRONG/EXPERT agent) asks on Claude Code; Codex cannot
-                     ask, so there — and under AI_UNATTENDED=1 or `claude -p`
-                     (CLAUDE_CODE_SESSION_ATTENDED=0) — it allows and explains.
-                     A launch that goes ahead counts at once, so one message
-                     launching several agents meets the fan-out too
-  SubagentStart / SubagentStop   keep the per-session count of running agents;
-                     a start claims its launch; an entry older than AGENT_TTL
-                     (1800 s), or a launch unclaimed for 60 s, no longer counts
+                     `expert.max_per_task` for the task in flight, asks on Claude
+                     Code; Codex cannot ask, so there — and under AI_UNATTENDED=1
+                     or `claude -p` (CLAUDE_CODE_SESSION_ATTENDED=0) — it allows
+                     and explains. Parallel agents are not counted: the fan-out
+                     budget went with redesign 2.4, and Claude Code's
+                     SubagentStart/SubagentStop reach the gate as no-ops
 A rewrite made while a task is in flight is journaled as `model_fallback`
 through that project's state.py.
 
@@ -61,7 +57,7 @@ else -> Claude Code); the shims name theirs. State lives in
 Environment, new name before the old one of that runtime before the default:
 AI_RUNTIME_GATE=off (CLAUDE_FABLE_GATE, CODEX_MODEL_GATE) disables every check;
 AI_RUNTIME_GATE_STATE, _TTL, _NOT_FOUND_TTL, _OVERLOAD_TTL, _LAUNCH_WINDOW,
-_WEEKLY_PCT, _FALLBACK, _EXPERT, _FALLBACK_EFFORT, _MODE, _AGENT_TTL tune it.
+_WEEKLY_PCT, _FALLBACK, _EXPERT, _FALLBACK_EFFORT, _MODE tune it.
 """
 import contextlib
 import datetime as dt
@@ -88,7 +84,6 @@ HOME = STATE = LEGACY_STATE = QUOTA_STATE = ""
 LIMIT_TTL = NOT_FOUND_TTL = OVERLOAD_TTL = LAUNCH_WINDOW = 0
 WEEKLY_PCT = 0.0
 EXPERT = FALLBACK = FALLBACK_EFFORT = MODE = ""
-AGENT_TTL = 1800
 RESPONSE = {}
 TTL_BY_ERROR = {}
 
@@ -112,7 +107,7 @@ def setting(name, default, runtime=None, fits=None):
 
 def number_setting(name, default, kind=int):
     """A numeric setting; a value that does not parse keeps the default, so a
-    typo such as AGENT_TTL=30m cannot crash the gate (or the statusline it wraps)."""
+    typo such as TTL=30m cannot crash the gate (or the statusline it wraps)."""
     try:
         return kind(setting(name, str(default)))
     except ValueError:
@@ -154,7 +149,7 @@ def configure(runtime):
     """Bind every setting for one runtime."""
     # pylint: disable=global-statement
     global RUNTIME, HOME, STATE, LEGACY_STATE, QUOTA_STATE, LIMIT_TTL, NOT_FOUND_TTL, OVERLOAD_TTL
-    global LAUNCH_WINDOW, WEEKLY_PCT, EXPERT, FALLBACK, FALLBACK_EFFORT, MODE, TTL_BY_ERROR, AGENT_TTL
+    global LAUNCH_WINDOW, WEEKLY_PCT, EXPERT, FALLBACK, FALLBACK_EFFORT, MODE, TTL_BY_ERROR
     RUNTIME = runtime
     if runtime == "codex":
         HOME = os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")
@@ -174,7 +169,6 @@ def configure(runtime):
     LAUNCH_WINDOW = number_setting("LAUNCH_WINDOW", 300)
     WEEKLY_PCT = number_setting("WEEKLY_PCT", 90, float)
     MODE = setting("MODE", "rewrite")
-    AGENT_TTL = number_setting("AGENT_TTL", 1800)
     if runtime == "codex":
         EXPERT = setting("EXPERT", profile_tier(HOME, "EXPERT", "model", "gpt-6-astra"), fits=codex_model)
         FALLBACK = setting("FALLBACK", profile_tier(HOME, "STRONG", "model", "gpt-5.6-sol"), fits=codex_model)
@@ -241,9 +235,9 @@ def save(data, path=None):
 @contextlib.contextmanager
 def locked(path=None):
     """Hold an exclusive lock on <state>.lock for one load -> change -> save.
-    save() alone is atomic, but parallel hooks (a fan-out's SubagentStart and
-    SubagentStop next to a StopFailure) each loaded the old file and the last
-    save won, dropping the others' writes. Not re-entrant: never nest it.
+    save() alone is atomic, but parallel hooks (several EXPERT launches in one
+    message next to a StopFailure) each loaded the old file and the last save
+    won, dropping the others' writes. Not re-entrant: never nest it.
     Fails open: without a lock file the write goes ahead unlocked."""
     path = path or STATE
     try:
@@ -965,53 +959,6 @@ def journal_fallback(payload, agent, from_model, to_model, rec):
                                               "to": to_model, "reason": fallback_reason(rec)})
 
 
-def running(data, session, now):
-    """Live entries of one session, expired ones dropped."""
-    agents = (data.get("running_agents") or {}).get(session) or []
-    return [a for a in agents if isinstance(a, dict) and now - float(a.get("started_at") or 0) < AGENT_TTL]
-
-
-PENDING_TTL = 60
-
-
-def pending(data, session, now):
-    """Launches PreToolUse let through that no SubagentStart has claimed yet.
-    One message that launches five agents runs five PreToolUse hooks before
-    the first SubagentStart, so without these each saw the same empty count.
-    A launch the user declined leaves one behind for at most PENDING_TTL."""
-    entries = (data.get("pending_launches") or {}).get(session) or []
-    return [p for p in entries if isinstance(p, dict) and now - float(p.get("at") or 0) < PENDING_TTL]
-
-
-def put_session(data, key, session, entries):
-    table = data.get(key) if isinstance(data.get(key), dict) else {}
-    table[session] = entries
-    data[key] = {k: v for k, v in table.items() if v}
-
-
-def subagent_start(payload):
-    tiers = profile().get("tiers") or {}
-    name = payload.get("agent_type") or payload.get("subagent_type") or ""
-    # Codex's payload carries the model the child resolved to. It decides the
-    # tier when it names STRONG or EXPERT; FAST and BALANCED can share a model,
-    # so below that the name still does.
-    tier = model_tier(payload.get("model"), tiers) if RUNTIME == "codex" else None
-    if tier not in ("STRONG", "EXPERT"):
-        tier = launch_tier({"subagent_type": name, "agent_type": name}, payload, tiers) if name else None
-    now = time.time()
-    session = str(payload.get("session_id") or "unknown")
-    with locked():
-        data = load()
-        live = running(data, session, now)
-        live.append({"agent_id": str(payload.get("agent_id") or ""), "tier": tier, "started_at": int(now)})
-        put_session(data, "running_agents", session, live)
-        waiting = pending(data, session, now)
-        if waiting:                             # the start claims its launch: same tier first, else the oldest
-            waiting.pop(next((i for i, p in enumerate(waiting) if p.get("tier") == tier), 0))
-        put_session(data, "pending_launches", session, waiting)
-        save(data)
-
-
 def codex_missed_reroute(payload):
     """Backstop: a child that resolved to EXPERT while EXPERT is out was not
     rerouted (an untrusted hook entry, a missing twin, a shape the gate does not
@@ -1027,32 +974,6 @@ def codex_missed_reroute(payload):
         f"runtime-gate: you run on {model}, which is unavailable ({rec.get('reason', 'unknown')}) until "
         f"{hhmm(float(rec['until']))}; this launch was not rerouted to {FALLBACK}. If you hit a rate limit "
         "or an unavailable model, stop and say so instead of retrying.")}})
-
-
-def codex_subagent_start(payload):
-    for step in (subagent_start, codex_missed_reroute):
-        try:
-            step(payload)
-        except Exception:  # pylint: disable=broad-exception-caught
-            pass
-
-
-def subagent_stop(payload):
-    session = str(payload.get("session_id") or "unknown")
-    agent_id = str(payload.get("agent_id") or "")
-    with locked():
-        data = load()
-        table = data.get("running_agents")
-        if not isinstance(table, dict) or session not in table:
-            return
-        live = running(data, session, time.time())
-        for i, entry in enumerate(live):
-            if not agent_id or entry.get("agent_id") == agent_id:
-                del live[i]                     # one stop removes one entry
-                break
-        table[session] = live
-        data["running_agents"] = {k: v for k, v in table.items() if v}
-        save(data)
 
 
 def unattended():
@@ -1093,44 +1014,24 @@ def budget_pre_tool_use(payload):
     plan = prof.get("label") or prof.get("plan") or "this plan"
     reasons = []
 
-    task = project_task(payload.get("cwd"))[1] if tier == "EXPERT" else None
-    session = str(payload.get("session_id") or "unknown")
-    now = time.time()
-    with locked():                              # one read and one write: parallel launches see each other
-        data = load()
-        used = 0
-        if task:
+    if tier != "EXPERT":
+        return
+    task = project_task(payload.get("cwd"))[1]
+    used = 0
+    if task:
+        with locked():                          # one read and one write: parallel launches see each other
+            data = load()
             counts = data.get("expert_launches") if isinstance(data.get("expert_launches"), dict) else {}
             used = int(counts.get(task, 0))
             counts[task] = used + 1
             data["expert_launches"] = counts
-        waiting = pending(data, session, now)
-        live = running(data, session, now) + waiting
-
-        if tier == "EXPERT":
-            expert = budgets.get("expert") or {}
-            limit = int(expert.get("max_per_task") or 0)
-            if not expert.get("without_asking"):
-                reasons.append(f"EXPERT agents run only when asked on {plan}")
-            elif task and limit and used >= limit:
-                reasons.append(f"task {task} already launched {used} EXPERT agent(s), the {plan} budget is {limit}")
-        fan = budgets.get("fan_out") or {}
-        most = int(fan.get("max_parallel_agents") or 0)
-        if most and len(live) >= most:
-            reasons.append(f"{len(live)} agent(s) already running, the {plan} fan-out is {most}"
-                           + (" and serial" if fan.get("serial") else ""))
-        strong = [a for a in live if a.get("tier") in ("STRONG", "EXPERT")]
-        most_strong = int(fan.get("max_parallel_on_strong") or 0)
-        if tier in ("STRONG", "EXPERT") and most_strong and len(strong) >= most_strong:
-            reasons.append(f"{len(strong)} STRONG/EXPERT agent(s) already running, the {plan} limit is {most_strong}")
-
-        # A launch that goes ahead now counts at once; one that asks does not —
-        # declined, it would hold a slot for PENDING_TTL; approved, its
-        # SubagentStart counts it.
-        if not (reasons and will_ask()):
-            waiting.append({"tier": tier, "at": int(now)})
-        put_session(data, "pending_launches", session, waiting)
-        save(data)
+            save(data)
+    expert = budgets.get("expert") or {}
+    limit = int(expert.get("max_per_task") or 0)
+    if not expert.get("without_asking"):
+        reasons.append(f"EXPERT agents run only when asked on {plan}")
+    elif task and limit and used >= limit:
+        reasons.append(f"task {task} already launched {used} EXPERT agent(s), the {plan} budget is {limit}")
     if reasons:
         ask_or_explain("; ".join(reasons))
 
@@ -1144,21 +1045,12 @@ def pre_tool_use(payload):
             pass
 
 
-def codex_stop(payload):
-    for step in (codex_subagent_stop, subagent_stop):
-        try:
-            step(payload)
-        except Exception:  # pylint: disable=broad-exception-caught
-            pass
-
-
 # ------------------------------------------------------------------ entry points
 HANDLERS = {
     "claude": {"PreToolUse": pre_tool_use, "PostToolUse": claude_post_tool_use,
-               "StopFailure": claude_stop_failure,
-               "SubagentStart": subagent_start, "SubagentStop": subagent_stop},
+               "StopFailure": claude_stop_failure},
     "codex": {"PreToolUse": pre_tool_use, "PostToolUse": codex_post_tool_use,
-              "SubagentStart": codex_subagent_start, "SubagentStop": codex_stop},
+              "SubagentStart": codex_missed_reroute, "SubagentStop": codex_subagent_stop},
 }
 
 
@@ -1192,8 +1084,10 @@ def cli(argv):
     if cmd == "clear":
         with locked():
             data = load()
+            # running_agents and pending_launches: the agent count before
+            # redesign 2.4, dropped from an older state file.
             for key in ("unavailable", "running_agents", "pending_launches"):
-                data.pop(key, None)             # the count too, as docs/hooks.md promises
+                data.pop(key, None)
             save(data)
         print("cleared")
         return 0

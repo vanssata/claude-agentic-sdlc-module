@@ -91,7 +91,8 @@ python3 "$PLUGIN_ROOT/scripts/resolve-profile.py" codex-plus --fable no --print 
 out=$(CLAUDE_CONFIG_DIR="$H/.claude" CODEX_HOME="$H/.codex" python3 "$SCRIPT" --budgets 2>&1)
 grep -q '^claude: Max (max)' <<<"$out" && grep -q '^codex: Plus (plus)' <<<"$out" \
     && pass "both runtimes' plans are listed" || fail "budgets header" "$out"
-grep -q 'fan-out        1 agents, 1 on STRONG/EXPERT, serial' <<<"$out" && pass "with the fan-out" || fail "fan-out line" "$out"
+grep -q 'EXPERT         asks first, at most 1 per task' <<<"$out" && pass "with the EXPERT rule" || fail "EXPERT line" "$out"
+grep -qE 'fan-out|direct mode' <<<"$out" && fail "the fan-out and direct-mode lines went with 2.4" "$out" || pass "no fan-out or direct-mode line (2.4)"
 grep -q 'tokens / task  T0 0.4M  T1 0.8M  T2 2M  T3 6M  T4 10M  T5 16M' <<<"$out" && pass "and the token table" || fail "token table" "$out"
 out=$(CLAUDE_CONFIG_DIR="$TMP/none" CODEX_HOME="$TMP/none" python3 "$SCRIPT" --budgets 2>&1); rc=$?
 [ $rc = 1 ] && pass "no profile installed: exit 1" || fail "budgets without a profile: rc=$rc"

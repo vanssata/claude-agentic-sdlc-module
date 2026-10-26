@@ -17,12 +17,12 @@ an escalation could silently resolve back to the Terra default. Pinning the
 model *in the file* is what makes the tier real, because a value set in the file
 takes precedence over everything resolved before it.
 
-The same reasoning produces the ``ai-risk-strong``, ``ai-planner-strong`` and
-``ai-expert-strong`` variants: Codex has no per-call ``model`` override that
-survives a custom agent file, so "re-run ai-risk on the STRONG tier" has to be a
-different agent. ``ai-expert-strong`` is the one runtime-gate reroutes an
-``ai-expert`` spawn to, by rewriting ``agent_type``, while the EXPERT model is
-unavailable.
+The same reasoning is behind a ``variant_of`` role: Codex has no per-call
+``model`` override that survives a custom agent file, so "the same agent on
+another tier" has to be a different agent. No shipped profile declares one
+since the roster went to five agents; runtime-gate still reroutes a launch to
+``<role>-strong`` by rewriting ``agent_type`` when such a file is installed,
+while the EXPERT model is unavailable.
 
   render-codex-agents.py --src <repo-root> --out <dir> [--profile <path>]
 """
