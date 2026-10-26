@@ -1,0 +1,4 @@
+{"ts":"2026-09-01T10:00:00.000Z","task":"T-FIXTURE","event":"task_started","actor":"agent","runtime":"claude","stage":"discovery","detail":"","data":{}}
+{"ts":"2026-09-01T10:05:00.000Z","task":"T-FIXTURE","event":"tier_set","actor":"agent","runtime":"claude","stage":"risk_classification","detail":"T3","data":{"tier":"T3"}}
+{"ts":"2026-09-01T10:10:00.000Z","task":"T-FIXTURE","event":"tier_raised","actor":"agent","runtime":"claude","stage":"implementation","detail":"T3 -> T4","data":{"from":"T3","to":"T4"}}
+{"ts":"2026-09-01T11:00:00.000Z","task":"T-FIXTURE","event":"task_closed","actor":"agent","runtime":"claude","stage":"done","detail":"","data":{"abandoned":false}}

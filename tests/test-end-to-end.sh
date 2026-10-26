@@ -242,4 +242,10 @@ out=$(L close 2>&1); rc=$?
 [ $rc = 0 ] && jq -e '.review_status == "skipped_green"' "$(tail -1 <<<"$out")" >/dev/null \
   && pass "and the same tree with no verdict on it does close skipped_green" || fail "control close" "rc=$rc $out"
 
+echo "== the schema-7 surface: tests/test_end_to_end.py (light = three calls, both runtimes; guarded boundaries)"
+# discover, not `-m unittest tests.test_end_to_end`: -I keeps the cwd off sys.path.
+out=$(AI_E2E=1 python3 -I -m unittest discover -s "$PLUGIN_ROOT/tests" -p test_end_to_end.py 2>&1); rc=$?
+[ $rc = 0 ] && grep -q '^OK$' <<<"$out" && ! grep -q 'skipped' <<<"$out" \
+  && pass "test_end_to_end.py: $(grep -oE '^Ran [0-9]+ tests?' <<<"$out")" || fail "test_end_to_end.py" "$out"
+
 summary "end-to-end"

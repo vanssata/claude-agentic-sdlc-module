@@ -54,9 +54,10 @@ echo "== the migration itself"
 [ "$N" -eq 29 ] && pass "the shared tree holds 29 files" || fail "the shared tree holds $N files, expected 29"
 grep -nE 'claude|codex' "$MIG" >/dev/null && fail "0006 names a runtime in lowercase (L1)" "$(grep -nE 'claude|codex' "$MIG")" \
     || pass "0006 names no runtime (L1)"
-[ "$(python3 -c "import sys; sys.path.insert(0, '$PLUGIN_ROOT/skills/project-update'); import migrations; print(migrations.CURRENT)")" = 6 ] \
-    && pass "the registry reaches schema 6" || fail "CURRENT is not 6"
-[ "$(cat "$PLUGIN_ROOT/skills/ai-init/templates/.ai/VERSION")" = 6 ] && pass "a fresh scaffold starts at schema 6" || fail "the VERSION template is not 6"
+# A schema-5 project ends at the plugin's schema, which later migrations raise (0007).
+CUR=$(python3 -c "import sys; sys.path.insert(0, '$PLUGIN_ROOT/skills/project-update'); import migrations; print(migrations.CURRENT)")
+[ "$CUR" -ge 6 ] && pass "the registry reaches schema 6 or later ($CUR)" || fail "CURRENT is $CUR, below 6"
+[ "$(cat "$PLUGIN_ROOT/skills/ai-init/templates/.ai/VERSION")" = "$CUR" ] && pass "a fresh scaffold starts at the plugin's schema" || fail "the VERSION template is not $CUR"
 
 echo "== R1: the shipped schema-5 router; dry run and the gate"
 R1="$W/r1"; v5_project "$R1"
@@ -64,7 +65,7 @@ chmod 755 "$R1/.ai/templates/review-report.md"; "${G[@]}" -C "$R1" commit -qam "
 before=$(tree_sum "$R1")
 out=$(upd "$R1" 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$before" = "$(tree_sum "$R1")" ] && pass "the dry run exits 0 and writes nothing" || fail "dry run: rc=$rc or files changed" "$out"
-grep -q '^  schema    5 -> 6 ' <<<"$out" && pass "the dry run names the schema step" || fail "no schema line" "$out"
+grep -q "^  schema    5 -> $CUR " <<<"$out" && pass "the dry run names the schema step" || fail "no schema line" "$out"
 [ "$(printf '%s\n' "$out" | grep -c '^  delete? ')" -eq 29 ] && pass "all 29 shipped copies are proposed, the oldest versions too" \
     || fail "expected 29 delete? lines" "$(printf '%s\n' "$out" | grep '^  delete? ')"
 grep -q '^  update  *\.ai/AGENTS\.md  *\[0006\] unchanged since it was installed' <<<"$out" \
@@ -73,7 +74,7 @@ grep -qE 'policies/(safety|security)\.md' <<<"$out" && fail "safety.md or securi
     || pass "safety.md and security.md are never named"
 grep -q 'commit .ai/ first' <<<"$out" && fail "a clean .ai/ gets the commit-first hint" || pass "a committed .ai/ gets no commit-first hint"
 out=$(upd "$R1" --check); rc=$?
-[ $rc -eq 1 ] && grep -qE '^project is behind the installed plugin: schema 5 -> 6, (.*, )?29 deletion\(s\) a human must confirm, the schema stays at 5 until they are settled — run /project-update$' <<<"$out" \
+[ $rc -eq 1 ] && grep -qE "^project is behind the installed plugin: schema 5 -> $CUR, "'(.*, )?29 deletion\(s\) a human must confirm, the schema stays at 5 until they are settled — run /project-update$' <<<"$out" \
     && pass "--check names the deletions and the held schema" || fail "--check: rc=$rc" "$out"
 upd "$R1" --apply >/dev/null 2>&1
 [ "$(cat "$R1/.ai/VERSION")" = 5 ] && [ "$(sections "$R1")" = 1 ] && [ "$(present "$R1")" = 29 ] \
@@ -84,7 +85,7 @@ out=$(CLAUDECODE=1 python3 "$UPDATE" "$R1" --apply --confirm-delete tester </dev
     || fail "agent session: rc=$rc" "$out"
 out=$(confirm "$R1" 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$(present "$R1")" = 0 ] && pass "the confirmed run deletes all 29" || fail "confirmed: rc=$rc, $(present "$R1") left" "$out"
-[ "$(cat "$R1/.ai/VERSION")" = 6 ] && pass "and the schema reaches 6" || fail "VERSION is $(cat "$R1/.ai/VERSION")"
+[ "$(cat "$R1/.ai/VERSION")" = "$CUR" ] && pass "and the schema reaches $CUR" || fail "VERSION is $(cat "$R1/.ai/VERSION")"
 bad=""
 for f in $SHARED; do
     "${G[@]}" -C "$R1" show "HEAD:$f" | cmp -s - "$R1/$REPORT/original/$f" || bad="$bad $f"
@@ -93,11 +94,11 @@ done
 [ "$(stat -c %a "$R1/$REPORT/original/.ai/templates/review-report.md")" = 755 ] && pass "with its mode" || fail "the original lost its mode"
 rec="$R1/$REPORT/migration.json"
 [ "$(jq '.deletions | length' "$rec")" = 29 ] && [ "$(jq -r '[.deletions[].confirmed_by] | unique | join(",")' "$rec")" = tester ] \
-    && [ "$(jq -r '[.deletions[].via] | unique | join(",")' "$rec")" = unattended ] && [ "$(jq -r .to "$rec")" = 6 ] \
+    && [ "$(jq -r '[.deletions[].via] | unique | join(",")' "$rec")" = unattended ] && [ "$(jq -r .to "$rec")" = "$CUR" ] \
     && pass "migration.json records each deletion, who confirmed it and how" || fail "migration.json" "$(cat "$rec")"
 out=$(upd "$R1" 2>&1)
 grep -q '^0 automatic, 0 conflict' <<<"$out" && pass "a second run has nothing to do" || fail "second run" "$out"
-upd "$R1" --check >/dev/null && pass "--check exits 0 at schema 6" || fail "--check should exit 0 at schema 6"
+upd "$R1" --check >/dev/null && pass "--check exits 0 at schema $CUR" || fail "--check should exit 0 at schema $CUR"
 
 echo "== L5: the empty directories stay, and the shared copy applies"
 [ -d "$R1/.ai/agents" ] && [ -z "$(ls -A "$R1/.ai/agents")" ] && pass "an empty .ai/agents/ remains" || fail ".ai/agents/ should remain, empty"
@@ -114,7 +115,7 @@ grep -qE '^  delete\?  *\.ai/policies/git\.md  *\[shared\] identical to a shippe
     && pass "an edited copy is named once, as an override" || fail "no aggregated override hint" "$out"
 grep -q 'commit .ai/ first' <<<"$out" && pass "an uncommitted .ai/ gets the commit-first hint (M4)" || fail "no commit-first hint" "$out"
 upd "$R1" --apply >/dev/null 2>&1
-[ "$(cat "$R1/.ai/VERSION")" = 6 ] && [ -f "$R1/.ai/policies/git.md" ] && pass "VERSION stays 6 and nothing is deleted unconfirmed" \
+[ "$(cat "$R1/.ai/VERSION")" = "$CUR" ] && [ -f "$R1/.ai/policies/git.md" ] && pass "VERSION stays $CUR and nothing is deleted unconfirmed" \
     || fail "M6 plain apply changed VERSION or deleted"
 confirm "$R1" >/dev/null 2>&1
 [ ! -e "$R1/.ai/policies/git.md" ] && grep -q 'our own rule' "$R1/.ai/policies/tooling.md" \
@@ -139,7 +140,7 @@ confirm "$E" >/dev/null 2>&1
     || fail "the CRLF original changed"
 [ "$(cat "$E/.ai/workflows/custom.md")" = ours ] && [ "$(cat "$E/.ai/policies/adopted/x.md")" = adopted ] \
     && pass "a project-only workflow and an adopted policy are untouched" || fail "project-only files touched"
-[ "$(cat "$E/.ai/VERSION")" = 6 ] && pass "an override does not hold the schema" || fail "VERSION is $(cat "$E/.ai/VERSION")"
+[ "$(cat "$E/.ai/VERSION")" = "$CUR" ] && pass "an override does not hold the schema" || fail "VERSION is $(cat "$E/.ai/VERSION")"
 out=$(upd "$E" 2>&1)
 grep -q '^0 automatic, 0 conflict' <<<"$out" && grep -q 'no longer receive its changes: .ai/policies/git.md' <<<"$out" \
     && pass "a second run changes nothing and names the override" || fail "second run on the edited project" "$out"
@@ -175,7 +176,7 @@ grep -q 'Shared files section added; your router edits kept' <<<"$out" && pass "
     || fail "r2: no insertion" "$out"
 for d in "$R2" "$R3" "$R4" "$R5"; do
     confirm "$d" >/dev/null 2>&1
-    [ "$(sections "$d")" = 1 ] && [ "$(present "$d")" = 0 ] && [ "$(cat "$d/.ai/VERSION")" = 6 ] \
+    [ "$(sections "$d")" = 1 ] && [ "$(present "$d")" = 0 ] && [ "$(cat "$d/.ai/VERSION")" = "$CUR" ] \
         && pass "$(basename "$d"): after the confirmed run the section is there exactly once" \
         || fail "$(basename "$d"): sections $(sections "$d"), present $(present "$d"), VERSION $(cat "$d/.ai/VERSION")"
 done
@@ -225,7 +226,7 @@ open(p, "w", encoding="utf-8").write(t)
 PY
     "${G[@]}" -C "$d" add -A && "${G[@]}" -C "$d" commit -qm "$kind"
     confirm "$d" >/dev/null 2>&1
-    [ "$(sections "$d")" = 1 ] && [ "$(cat "$d/.ai/VERSION")" = 6 ] && pass "r8-$kind: migrated, one section" \
+    [ "$(sections "$d")" = 1 ] && [ "$(cat "$d/.ai/VERSION")" = "$CUR" ] && pass "r8-$kind: migrated, one section" \
         || fail "r8-$kind: sections $(sections "$d"), VERSION $(cat "$d/.ai/VERSION")"
     "${G[@]}" -C "$d" add -A && "${G[@]}" -C "$d" commit -qm migrated
     for run in 1 2; do
@@ -424,7 +425,7 @@ first=$(upd "$RB" 2>&1 | grep '^  delete? ' | LC_ALL=C sort)
 confirm "$RB" >/dev/null 2>&1
 mkdir -p "$W/reg5"; cp "$PLUGIN_ROOT/skills/project-update/migrations/000"[1-5]_*.py "$W/reg5/"
 CLAUDE_AGENTIC_MIGRATIONS="$W/reg5" python3 "$UPDATE" "$RB" --check >/dev/null 2>&1; rc=$?
-[ $rc -eq 2 ] && pass "a 0001-0005 plugin refuses the migrated project (exit 2)" || fail "old registry on schema 6: rc=$rc"
+[ $rc -eq 2 ] && pass "a 0001-0005 plugin refuses the migrated project (exit 2)" || fail "old registry on schema $CUR: rc=$rc"
 "${G[@]}" -C "$RB" checkout -q HEAD -- .ai
 [ "$snap" = "$(tracked "$RB")" ] && pass "git checkout restores every file byte- and exec-bit-identical, router included" \
     || fail "the git route did not restore the tree" "$(diff <(printf '%s\n' "$snap") <(tracked "$RB") | head -5)"
@@ -439,7 +440,7 @@ for d in "$RB"/.ai/reports/project-update-*/; do
 done
 [ "$(present "$RB")" = 29 ] && "${G[@]}" -C "$RB" diff --quiet -- $(cd "$RB" && printf '%s ' $SHARED) \
     && pass "the jq fallback restores every deletion" || fail "the jq fallback did not restore the copies"
-[ "$(sections "$RB")" = 1 ] && [ "$(cat "$RB/.ai/VERSION")" = 6 ] \
-    && pass "but leaves the router new and VERSION 6 — its limit: git is the rollback" || fail "jq fallback: router or VERSION"
+[ "$(sections "$RB")" = 1 ] && [ "$(cat "$RB/.ai/VERSION")" = "$CUR" ] \
+    && pass "but leaves the router new and VERSION $CUR — its limit: git is the rollback" || fail "jq fallback: router or VERSION"
 
 summary "migration 0006"

@@ -91,7 +91,9 @@ grep -q 'policy .*+ pipeline_profile$' <<<"$out" && pass "policy changes are lis
 grep -q 'pipeline_profiles\.' <<<"$out" && fail "a new subtree should be listed once, at its top" "$out" || pass "a new subtree is listed once"
 out=$(python3 "$UPDATE" "$P" --check); [ $? -eq 1 ] && pass "--check exits 1 while an update is pending" || fail "--check should exit 1"
 # The exact shape /ai-status reads: one line, the reasons, the command (R21 keeps it byte-identical).
-[ "$(printf '%s\n' "$out" | wc -l)" -eq 1 ] && grep -qE '^project is behind the installed plugin: schema 0 -> [0-9]+, [0-9]+ file\(s\) to update, 1 need a manual merge — run /project-update$' <<<"$out" \
+# Two manual merges: the state README edit, and weight.json, which carries the T0 example
+# migration 0007 converts from risk-tiers.json and has no older shipped version to merge against.
+[ "$(printf '%s\n' "$out" | wc -l)" -eq 1 ] && grep -qE '^project is behind the installed plugin: schema 0 -> [0-9]+, [0-9]+ file\(s\) to update, 2 need a manual merge — run /project-update$' <<<"$out" \
     && pass "the plain --check line keeps its exact shape" || fail "the plain --check line changed" "$out"
 
 echo "== apply"
@@ -122,11 +124,11 @@ grep -q 'verify_command is empty' <<<"$out" && pass "an empty verify_command is 
 echo "== idempotent"
 snap=$(cd "$P" && find . -path ./.git -prune -o -type f -print | sort | xargs md5sum | md5sum)
 out=$(python3 "$UPDATE" "$P" --apply 2>&1)
-grep -q '^0 automatic, 1 conflict' <<<"$out" && pass "a second run has nothing automatic left" || fail "second run not clean" "$out"
+grep -q '^0 automatic, 2 conflict' <<<"$out" && pass "a second run has nothing automatic left" || fail "second run not clean" "$out"
 [ "$snap" = "$(cd "$P" && find . -path ./.git -prune -o -type f -print | sort | xargs md5sum | md5sum)" ] \
     && pass "a second run changes nothing" || fail "second run changed files"
 out=$(python3 "$UPDATE" "$P" --check) && pass "--check exits 0 once only a hand-merge choice remains" || fail "--check should exit 0"
-[ "$out" = "project matches the installed plugin (1 file(s) differ by hand-merge choice)" ] \
+[ "$out" = "project matches the installed plugin (2 file(s) differ by hand-merge choice)" ] \
     && pass "the plain --check line is byte-identical" || fail "the plain --check line changed" "$out"
 
 echo "== a stale mirror stays stale"

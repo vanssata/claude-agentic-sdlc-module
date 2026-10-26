@@ -58,6 +58,22 @@ Usage:
   state.py done   [--abandon]
   state.py archive                       # move current.json into .ai/reports/<task_id>/state.json
   state.py close                         # done + archive in one call
+
+The schema-7 surface (redesign 2.2a), beside the commands above until 2.6. Only
+`start` writes "schema": 7, and close, step-done and approve take the new path
+only for such a task; every other state keeps the commands above, unchanged:
+  state.py start  --goal G --workflow W --files a,b [--tests t] [--declare axis=n:"why"]...
+                  [--mode M --by WHO [--why TEXT]] [--steps "id:a,b:t;..." | --plan-file F.json]
+  state.py start  --amend --files "+c,+d" --why TEXT     widen the task in place (R25)
+  state.py verify --scope step|suite|e2e|all [--files a,b] [--expect fail]
+                  [--e2e not-applicable WHY] [--after-fix WHAT] [--by WHO]
+  state.py review --verdict pass|pass_with_findings|blockers_open --tier BALANCED|STRONG
+                  --report -|FILE [--focus security] [--by WHO]  |  review --closes "H1,M2"
+  state.py close  [--abandon]            two facts, the mode table, the gate, the archive
+  state.py step-done <id>                a multi-step guarded or full task
+  state.py status [--json]               what /status prints
+  approve --by WHO [--confirm "<what it does>"]   full_irreversible: the confirm names every
+                                                  operation (DROP, ALTER …) as a word
 """
 
 import argparse
@@ -108,12 +124,15 @@ EVENT_TYPES = [
     "question_answered", "gate_requested", "gate_approved", "gate_rejected", "note",
     "handoff_written", "runtime_handoff", "model_fallback", "missed_reroute", "schema_migrated",
     "task_closed", "findings_closed", "review_budget_refused", "human_set",
+    # schema 7 (redesign 2.2a): the weight model's surface.
+    "weight_set", "weight_raised", "mode_set", "verify_run", "review_verdict",
 ]
 # The types `event` will not write: each is the record of an authorization or a
 # lifecycle decision, and is emitted by the transition that made it. `event` is
 # for a hook reporting something that happened outside the state machine.
 FORGEABLE_EVENTS = {"gate_requested", "gate_approved", "gate_rejected",
-                    "task_started", "task_closed"}
+                    "task_started", "task_closed", "weight_set", "weight_raised", "mode_set",
+                    "verify_run", "review_verdict"}
 NOTE_KINDS = ["decision", "rejected", "failed"]
 
 # The questions file is written by state.py and never by a model (R1). One regex
@@ -150,7 +169,7 @@ OPTION_HEAD_RE = re.compile(r"^([A-Za-z0-9]{1,3})\s*[:.]\s")
 # how an unanswerable question is closed.
 BLOCKING_COMMANDS = {
     "stage", "triage", "plan", "step", "step-done", "step-split", "test-run", "remediate",
-    "approve", "done", "close",
+    "approve", "done", "close", "verify",
 }
 RUNTIMES = ["claude", "codex"]
 
@@ -165,7 +184,7 @@ RUNTIME = "unknown"
 MUTATING_COMMANDS = {
     "init", "stage", "risk", "triage", "quick", "plan", "remediate", "step", "step-done",
     "step-split", "test-run", "review-gate", "set", "risks", "modules", "ask", "answer",
-    "done", "close",
+    "done", "close", "start", "verify", "review",
 }
 MUTATING = False
 
@@ -328,6 +347,8 @@ def apply_defaults(state):
     """Schema 2 keys (I6) in memory, so a v1 state answers every command before
     migration 0002 has run; save() then persists them. A reader that opens
     current.json directly — update.py does — sees the file, not these."""
+    if is_v7(state):
+        return apply_defaults_v7(state)
     task_id = state.get("task_id") or ""
     state.setdefault("owner_runtime", None)
     state.setdefault("resume_point", None)
@@ -2504,7 +2525,8 @@ def handoff_lines(root, state, reason):
     # collapsed like every other free text before they reach the frame.
     step = " · step %s/%d" % (one_line(plan.get("current_step_id"), 40) or "-", len(steps)) if steps else ""
     out = ["# Handoff — %s (%s, %s) · stage %s%s · owner %s · written %s (%s)"
-           % (state.get("task_id"), state.get("workflow"), state.get("risk_tier") or "untiered",
+           % (state.get("task_id"), state.get("workflow"),
+              state.get("risk_tier") or state.get("mode") or "untiered",
               state.get("current_stage"), step, state.get("owner_runtime") or "unknown",
               now(), reason),
            "Goal: %s" % one_line(state.get("goal"))[:160]]
@@ -3015,6 +3037,1252 @@ def cmd_archive(_args, root):
     print(target)
 
 
+# ---------------------------------------------- the schema-7 surface (redesign 2.2a)
+#
+# Beside the commands above, not instead of them: /ai-task calls those until the
+# skills move (2.3), and they are deleted only in 2.6. Only `start` writes
+# "schema": 7, and main() sends close, step-done and approve here only for such
+# a task, so a task in flight on the old surface — migration 0007 patched or
+# not — keeps the old bodies untouched (D1). The legacy keys the scope guard
+# reads (current_stage, approved_plan) are written beside the new ones, as one
+# synthetic step "task" holding every file of the task (D2).
+
+SCHEMA = 7
+MODES = ["light", "guarded", "full", "full_irreversible"]
+# tier_set compat (R18): the old budget tables price a task by its T-label.
+MODE_TIER = {"light": "T2", "guarded": "T4", "full": "T5", "full_irreversible": "T6"}
+REVIEW_TIERS = ["BALANCED", "STRONG"]
+VERDICT_STATUS = {"pass": "passed", "pass_with_findings": "passed_with_findings",
+                  "blockers_open": "blockers_open"}
+FINDING_RE = re.compile(r"\[(BLOCKER|HIGH|MEDIUM|LOW|INFO)\]\s+([A-Z][0-9]+)\b")
+OUT_OF_SCOPE_RE = re.compile(r"in_scope:\s*no\b", re.I)
+SCHEMA_ONLY = {"start", "verify", "review", "status"}
+V7_ROUTED = {"close", "step-done", "approve"}
+# The old surface's own commands: on a schema-7 task they would read keys it
+# does not keep, so they refuse rather than half-work.
+OLD_ONLY = {"init", "stage", "risk", "triage", "quick", "plan", "remediate", "step",
+            "step-split", "test-run", "review-gate", "set", "risks", "modules", "done", "archive"}
+
+
+def is_v7(state):
+    return isinstance(state, dict) and state.get("schema") == SCHEMA
+
+
+def apply_defaults_v7(state):
+    """The keys every shared helper reads (questions, handoff, the gate) and the
+    schema-7 ones; none of the old surface's own keys, so a schema-7 file holds
+    only what its commands use."""
+    task_id = state.get("task_id") or ""
+    state.setdefault("owner_runtime", None)
+    state.setdefault("resume_point", None)
+    state.setdefault("cross_vendor_review", None)
+    if not isinstance(state.get("questions"), dict):
+        state["questions"] = {"file": ".ai/reports/%s/questions.md" % task_id, "pending": []}
+    if not isinstance(state.get("handoff"), dict):
+        state["handoff"] = {"file": ".ai/state/handoff.md", "written_at": None, "reason": None}
+    state["handoff"].setdefault("pending_to", None)
+    state["handoff"].setdefault("pending_since", None)
+    if not isinstance(state.get("human_approval"), dict):
+        state["human_approval"] = {"required": False, "granted": False,
+                                   "granted_by": None, "granted_at": None}
+    for key, default in (("requested_at", None), ("gate_id", None), ("requested_session", None),
+                         ("rejected_at", None), ("via", None), ("unattended", False)):
+        state["human_approval"].setdefault(key, default)
+    for key, default in (("files", []), ("tests", []), ("steps", []), ("amendments", []),
+                         ("findings", []), ("diff", {}), ("gate", None), ("mode_override", None)):
+        if not isinstance(state.get(key), type(default)) and not (default is None and key in state):
+            state[key] = default
+    if not isinstance(state.get("verify"), dict):
+        state["verify"] = {}
+    for key, default in (("status", "not_run"), ("e2e", "not_run"), ("suite_runs", 0), ("runs", [])):
+        state["verify"].setdefault(key, default)
+    if not isinstance(state.get("review"), dict):
+        state["review"] = {}
+    for key, default in (("status", "not_started"), ("passes", 0), ("tier", None),
+                         ("findings", []), ("tree", None), ("log", []), ("closed", [])):
+        state["review"].setdefault(key, default)
+    return state
+
+
+def load_v7(root):
+    state = load(root)
+    if not is_v7(state):
+        die("task %s runs on the old surface (schema %s): it keeps test-run, set and close until "
+            "it closes; the schema-7 commands start with 'state.py start'"
+            % (state.get("task_id"), state.get("schema") or "<7"))
+    return state
+
+
+def weight_policy(root):
+    if weight is None:
+        die("weight.py is missing beside state.py: reinstall the plugin")
+    try:
+        return weight.load_policy(root)[0]
+    except (OSError, ValueError) as exc:
+        die("cannot read the weight table: %s" % exc)
+    return None                           # unreachable: die() exits
+
+
+def mode_for(axes, policy, irreversible=False):
+    """The mode six axis values earn under `policy`'s thresholds — weight.compute's
+    rule, applied to re-scored axes; an irreversible_content hit is
+    full_irreversible whatever the sum."""
+    modes = policy.get("modes") or {}
+    full = modes.get("full") or {}
+    hard = full.get("hard_axes") or ["reversibility", "domain"]
+    light_max = int((modes.get("light") or {}).get("max_w", 2))
+    guarded_max = int((modes.get("guarded") or {}).get("max_w", 7))
+    w = sum(int(axes.get(a) or 0) for a in weight.AXES)
+    if irreversible or all(int(axes.get(a) or 0) >= 2 for a in hard):
+        return "full_irreversible"
+    if w >= int(full.get("min_w", guarded_max + 1)) or any(int(axes.get(a) or 0) >= 2 for a in hard):
+        return "full"
+    return "light" if w <= light_max else "guarded"
+
+
+def higher_mode(a, b):
+    return max(a, b, key=lambda m: MODES.index(m) if m in MODES else -1)
+
+
+def mode_setting(policy, mode, key, default=None):
+    """modes.<mode>.<key>; full_irreversible inherits what it does not say from full."""
+    modes = policy.get("modes") or {}
+    for name in ([mode, "full"] if mode == "full_irreversible" else [mode]):
+        if key in (modes.get(name) or {}):
+            return modes[name][key]
+    return default
+
+
+def read_text(root, rel):
+    try:
+        with open(os.path.join(root, rel), "rb") as fh:
+            data = fh.read(1 << 20)
+    except OSError:
+        return ""
+    return "" if b"\0" in data[:8192] else data.decode("utf-8", "replace")
+
+
+def added_lines(root, base_tree, rel):
+    """The lines `rel` gained since `base_tree` — all of them for a new file — so
+    content that was already there never raises a re-score."""
+    before = ""
+    if base_tree and sensors is not None:
+        code, text = sensors.git(root, ["cat-file", "-p", "%s:%s" % (base_tree, rel)])
+        before = text if code == 0 and "\0" not in text[:8192] else ""
+    seen = {}
+    for line in before.splitlines():
+        seen[line] = seen.get(line, 0) + 1
+    out = []
+    for line in read_text(root, rel).splitlines():
+        if seen.get(line):
+            seen[line] -= 1
+        else:
+            out.append(line)
+    return out
+
+
+def rescore(root, base_tree, files, current, policy):
+    """Reversibility and domain from the diff's `files`, only upward (R26).
+
+    It lives here, not in weight.py, because weight.py is at the spec's 300-line
+    cap; the rules it applies are weight.json's, through weight.match. Returns
+    {"axes", "raised": [{axis, from, to, evidence}], "operations", "irreversible"}.
+    A pattern of `irreversible_content` in the lines a `needs_step` file gained is
+    reversibility 2 and full_irreversible. The patterns are case-sensitive, as
+    the SQL keywords they name are written: `rename()` in Python is not RENAME."""
+    spec = policy.get("axes") or {}
+    rules = policy.get("rules") or {}
+    rev, dom = spec.get("reversibility") or {}, spec.get("domain") or {}
+    axes = dict(current or {})
+    found, operations = {}, []
+    files = [f for f in dict.fromkeys(files or []) if f]
+    for rel in files:
+        hit = weight.match(rel, rev.get("irreversible"))
+        if hit:
+            found["reversibility"] = (2, "%s matches irreversible %s" % (rel, hit))
+        elif weight.match(rel, rev.get("needs_step")):
+            gained = added_lines(root, base_tree, rel)
+            for pattern in rev.get("irreversible_content") or []:
+                try:
+                    rx = re.compile(pattern)
+                except re.error:
+                    continue
+                line = next((ln for ln in gained if rx.search(ln)), None)
+                if line is not None:
+                    # The operation's keyword (DROP, ALTER …), not the pattern's
+                    # source: it is what a human names in approve --confirm.
+                    operations.append(rx.search(line).group(0).split()[0].upper())
+                    if found.get("reversibility", (0,))[0] < 2:
+                        found["reversibility"] = (2, "%s adds %r (irreversible_content %r)"
+                                                  % (rel, line.strip()[:60], pattern))
+            found.setdefault("reversibility", (1, "%s matches needs_step %s"
+                                               % (rel, weight.match(rel, rev.get("needs_step")))))
+        for value, key, said in ((2, "modules", "matches modules"), (1, "customer_visible", "is customer-visible:")):
+            hit = weight.match(rel, dom.get(key))
+            if hit and value > found.get("domain", (0,))[0]:
+                found["domain"] = (value, "%s %s %s" % (rel, said, hit))
+                break
+    for hint in policy.get("hints") or []:
+        hit = next((f for f in files if weight.match(f, hint.get("paths"))), None)
+        if hit and hint.get("axis") == "domain":
+            value, why = found.get("domain", (0, ""))
+            found["domain"] = (min(2, value + int(rules.get("hint_raises_by", 1))),
+                               "%shint %s (%s)" % (why + "; " if why else "", hint.get("note", ""), hit))
+            break
+    raised = []
+    for axis in rules.get("rescore_axes") or ["reversibility", "domain"]:
+        if axis not in found:
+            continue
+        value, why = found[axis]
+        if value > int(axes.get(axis) or 0):
+            raised.append({"axis": axis, "from": int(axes.get(axis) or 0), "to": value, "evidence": why})
+            axes[axis] = value
+    return {"axes": axes, "raised": raised, "operations": sorted(set(operations)),
+            "irreversible": bool(operations)}
+
+
+def task_files(state):
+    """Every file and glob the task may touch: its files, its tests, every step's."""
+    out = list(state.get("files") or []) + list(state.get("tests") or [])
+    for step in state.get("steps") or []:
+        out += list(step.get("files") or []) + list(step.get("tests") or [])
+    return list(dict.fromkeys(out))
+
+
+def arm_scope(state):
+    """The legacy view ai-scope-guard.sh reads (D2): stage implementation and one
+    step holding every file of the task, for as long as the task is open."""
+    state["current_stage"] = "implementation"
+    state["approved_plan"] = {"ref": "inline", "current_step_id": "task", "steps": [{
+        "step_id": "task", "description": state.get("goal"), "allowed_files": task_files(state),
+        "forbidden_files": [], "forbidden_reason": "not part of this task",
+        "required_tests": list(state.get("tests") or []), "status": "in_progress"}]}
+
+
+def current_tree(root):
+    return safe_sensor(sensors.snapshot_tree, root)
+
+
+def logs_dir(root, task_id):
+    return os.path.join(root, ".ai", "state", "logs", task_id)
+
+
+def ensure_logs(root, task_id):
+    """.ai/state/logs/<task>/, ignored by its own .gitignore (D4), so the shipped
+    gitignore snippet stays as it is."""
+    base = os.path.join(root, ".ai", "state", "logs")
+    os.makedirs(os.path.join(base, task_id), exist_ok=True)
+    ignore = os.path.join(base, ".gitignore")
+    if not os.path.exists(ignore):
+        with open(ignore, "w", encoding="utf-8") as fh:
+            fh.write("*\n")
+
+
+def task_md_path(root, state):
+    return os.path.join(root, ".ai", "reports", state["task_id"], "task.md")
+
+
+def parse_steps(text, plan_file):
+    """--steps "id:a,b:t;id2:c" or --plan-file F.json ([{id, files, tests}])."""
+    raw = []
+    if plan_file:
+        try:
+            with open(plan_file, encoding="utf-8") as fh:
+                raw = json.load(fh)
+        except (OSError, ValueError) as exc:
+            die("--plan-file %s: %s" % (plan_file, exc))
+        if not isinstance(raw, list) or not all(isinstance(s, dict) for s in raw):
+            die("--plan-file holds a JSON list of {\"id\", \"files\", \"tests\"}")
+        raw = [(str(s.get("id") or ""), ",".join(s.get("files") or []), ",".join(s.get("tests") or []))
+               for s in raw]
+    for chunk in [c for c in (text or "").split(";") if c.strip()]:
+        parts = chunk.split(":")
+        raw.append((parts[0], parts[1] if len(parts) > 1 else "", parts[2] if len(parts) > 2 else ""))
+    steps = []
+    for step_id, files, tests in raw:
+        step_id = one_line(step_id, 40)
+        if not step_id or not _split_files(files):
+            die("a step is id:files[:tests], with at least one file: %r" % ":".join((step_id, files, tests)))
+        if step_id in [s["id"] for s in steps]:
+            die("step id %s appears twice" % step_id)
+        steps.append({"id": step_id, "files": _split_files(files), "tests": _split_files(tests),
+                      "status": "pending", "tree_before": None, "tree_after": None})
+    return steps
+
+
+def parse_declares(items):
+    declared = {}
+    for item in items or []:
+        m = re.match(r"^(\w+)=(\d{1,3}):(.*\S.*)$", item, re.S)
+        if not m:
+            die("--declare %r: write axis=n:\"evidence\" — a declaration without its evidence is not one"
+                % item)
+        declared[m.group(1)] = (int(m.group(2)), m.group(3).strip())
+    return declared
+
+
+def next_action_for(state):
+    return {
+        "light": "edit, then 'state.py verify --scope all', then 'state.py close'",
+        "guarded": "edit, 'state.py verify --scope all', one review ('state.py review'), then 'state.py close'",
+        "full": "edit, 'state.py verify --scope all', one STRONG review, then 'state.py close' "
+                "requests the human's approval",
+        "full_irreversible": "edit, 'state.py verify --scope all', one STRONG review, then 'state.py close'; "
+                             "the human approves with --confirm \"<operation>\"",
+    }.get(state.get("mode"), "edit, verify, close")
+
+
+def cmd_start(args, root):
+    """The task, its weight and its mode in one call; the scope guard is armed."""
+    if args.amend:
+        start_amend(args, root)
+        return
+    missing = [flag for flag, value in (("--goal", args.goal), ("--workflow", args.workflow),
+                                        ("--files", args.files)) if not value]
+    if missing:
+        die("start needs %s (or --amend to widen the task in flight)" % ", ".join(missing))
+    if args.workflow not in WORKFLOWS:
+        die("workflow must be one of: %s" % ", ".join(WORKFLOWS))
+    existing = load(root, required=False, claim=False)
+    if existing and existing.get("current_stage") != "done":
+        die("task %s is in flight: finish it with 'state.py close' (or 'close --abandon'), or widen it "
+            "with 'state.py start --amend --files \"+a\" --why \"…\"'" % existing.get("task_id"))
+    files, tests = _split_files(args.files), _split_files(args.tests)
+    if not files:
+        # An empty list would arm a scope guard that allows everything.
+        die("--files must name at least one file or glob the task may touch")
+    if current_tree(root) is None:
+        die("start needs a git repository: the two facts close decides by are measured on its tree")
+    steps = parse_steps(args.steps, args.plan_file)
+    policy = weight_policy(root)
+    concrete = [f for f in files if not any(c in f for c in "*?[")]
+    try:
+        result = weight.compute(root, concrete, parse_declares(args.declare), args.goal, policy=policy)
+    except ValueError as exc:
+        die(str(exc))
+    except (TypeError, AttributeError) as exc:
+        die("the weight table is malformed: %s" % exc)
+    mode, override = result.mode, None
+    if args.mode:
+        if args.mode not in MODES:
+            die("--mode takes one of: %s" % ", ".join(MODES))
+        if not args.by:
+            die("--mode needs --by \"<who>\": an override is journaled with its author")
+        if args.mode == mode:
+            args.mode = None              # the weight already says so: nothing to override
+    if args.mode:
+        if MODES.index(args.mode) < MODES.index(mode):
+            via, why = human_route()
+            if via is None:
+                die("APPROVAL_REFUSED — lowering the mode from %s to %s is a human's decision. Run it in "
+                    "your own terminal:\n  python3 %s --root %s start … --mode %s --by %s\nRefused because %s."
+                    % (mode, args.mode, shlex.quote(os.path.abspath(__file__)), shlex.quote(root),
+                       args.mode, shlex.quote(args.by), why), 5)
+        override = {"from": mode, "to": args.mode, "by": args.by, "why": args.why, "ts": now()}
+        mode = args.mode
+    task_id = valid_task_id(args.task_id) if args.task_id else next_task_id(root)
+    base_tree = current_tree(root)
+    state = {
+        "schema": SCHEMA, "task_id": task_id, "goal": args.goal, "workflow": args.workflow,
+        "mode": mode, "weight": dict(result.as_dict(), lines=weight.render(result).split("\n"),
+                                     tree=base_tree, computed_at=now(), rescores=[], operations=[]),
+        "mode_override": override, "stage": "build", "files": files, "tests": tests,
+        "steps": steps, "amendments": [], "findings": [],
+        "diff": {"base_tree": base_tree, "base_commit": safe_sensor(sensors.head_commit, root)},
+        "gate": None, "owner_runtime": RUNTIME if RUNTIME in RUNTIMES else None,
+        "created": now(), "created_at": now(), "history": [],
+    }
+    apply_defaults_v7(state)
+    if steps:
+        steps[0].update(status="in_progress", tree_before=base_tree)
+    arm_scope(state)
+    state["next_action"] = next_action_for(state)
+    emit(root, state, "task_started", one_line(args.goal, 200),
+         {"goal": args.goal, "workflow": args.workflow, "mode": mode, "schema": SCHEMA})
+    emit(root, state, "weight_set", "W %d → %s" % (result.w, result.mode),
+         {"w": result.w, "mode": result.mode, "axes": result.axes, "hints": result.hints,
+          "unknown": result.unknown})
+    if override:
+        emit(root, state, "mode_set", "%s -> %s by %s" % (override["from"], mode, args.by),
+             {"from": override["from"], "to": mode, "by": args.by, "why": args.why},
+             actor="human" if MODES.index(mode) < MODES.index(override["from"]) else "agent")
+    emit(root, state, "tier_set", "%s (mode %s, compat)" % (MODE_TIER[mode], mode),
+         {"tier": MODE_TIER[mode], "mode": mode, "w": result.w})
+    set_resume_point(state)
+    write_handoff(root, state, "start")
+    save(root, state)
+    write_task_md(root, state)
+    print(weight.render(result))
+    if override:
+        print("mode: %s (override of %s by %s)" % (mode, override["from"], args.by))
+    advice = int((policy.get("rules") or {}).get("steps_advice_over", 8))
+    if len(steps) > advice:
+        print("advice: %d steps, over %d — fewer, larger steps cost fewer handoffs (not a gate)"
+              % (len(steps), advice))
+    print("%s started: %s · %d files in scope · %s"
+          % (task_id, mode, len(task_files(state)), os.path.relpath(task_md_path(root, state), root)))
+    print("next: %s" % state["next_action"])
+    advise(state)
+
+
+def start_amend(args, root):
+    """R25: the task's files grow in place, journaled, never back to a plan."""
+    state = load_v7(root)
+    added = [f.lstrip("+").strip() for f in _split_files(args.files)]
+    added = [f for f in added if f]
+    if not added or not (args.why or "").strip():
+        die("--amend needs --files \"+a,+b\" and --why \"<why the task needs them>\"")
+    new = [f for f in added if f not in state["files"]]
+    if not new:
+        print("scope unchanged: %s already in the task" % ", ".join(added))
+        return
+    state["files"] += new
+    state["amendments"].append({"ts": now(), "added": new, "why": args.why})
+    arm_scope(state)
+    emit(root, state, "scope_change", "+%s — %s" % (", ".join(new), one_line(args.why, 200)),
+         {"added": new, "why": args.why})
+    save(root, state)
+    write_task_md(root, state)
+    print("scope amended: +%s (%d files in scope)" % (", ".join(new), len(task_files(state))))
+
+
+def rescore_v7(root, state, policy, at):
+    """R26 at verify and close: raises are applied, journaled and printed; the
+    task never restarts and the other four axes are not recomputed."""
+    if sensors is None:
+        return
+    diff = safe_sensor(sensors.diff_files, root, state["diff"].get("base_tree"), current_tree(root))
+    if not diff:
+        return
+    current = state["weight"].get("axes") or {}
+    got = rescore(root, state["diff"].get("base_tree"), [d["path"] for d in diff], current, policy)
+    before = state["mode"]
+    ops = sorted(set(state["weight"].get("operations") or []) | set(got["operations"]))
+    # Only what the diff moved can move the mode: an unchanged measurement must
+    # not undo a mode a human lowered (R27).
+    was = mode_for(current, policy, bool(state["weight"].get("operations")))
+    now_measured = mode_for(got["axes"], policy, bool(ops))
+    mode = higher_mode(before, now_measured) if now_measured != was else before
+    if not got["raised"] and mode == before and ops == (state["weight"].get("operations") or []):
+        return
+    state["weight"].update(axes=got["axes"], w=sum(got["axes"].values()), operations=ops)
+    state["mode"] = mode
+    for r in got["raised"]:
+        emit(root, state, "weight_raised", "%s %d -> %d at %s: %s" % (r["axis"], r["from"], r["to"], at,
+                                                                     one_line(r["evidence"], 200)),
+             dict(r, mode_from=before, mode_to=mode))
+        state["weight"]["rescores"].append("%s at %s: %s %d → %d — %s"
+                                           % (now(), at, r["axis"], r["from"], r["to"], r["evidence"]))
+        print("re-score: %s %d → %d — %s" % (r["axis"], r["from"], r["to"], one_line(r["evidence"], 120)))
+    if mode != before:
+        state["weight"]["rescores"].append("%s at %s: mode %s → %s%s" % (
+            now(), at, before, mode, " (irreversible: %s)" % ", ".join(ops) if got["irreversible"] else ""))
+        emit(root, state, "tier_set", "%s (mode %s, compat)" % (MODE_TIER[mode], mode),
+             {"tier": MODE_TIER[mode], "mode": mode, "w": state["weight"]["w"]})
+        state["next_action"] = next_action_for(state)
+        print("mode: %s → %s — %s" % (before, mode, state["next_action"]))
+
+
+def full_suite(run):
+    """A run of the whole suite: one narrowed with --files proves only those files."""
+    return run.get("scope") == "suite" and not run.get("expected_fail") and not run.get("files")
+
+
+def suite_green(state):
+    return any(full_suite(r) and r.get("exit") == 0 for r in state["verify"]["runs"])
+
+
+def run_v7(root, state, scope, args, tcfg):
+    """One scope's command, to the end, logged under .ai/state/logs/; returns the run."""
+    command = safe_sensor(sensors.command_for, root, scope) or ""
+    if not command:
+        die("no command for scope '%s' in .ai/policies/testing.md — write it down first" % scope)
+    files = _split_files(args.files)
+    if files:
+        command = safe_sensor(sensors.expand_files, command, files) or command
+    runs = state["verify"]["runs"]
+    n = len(runs) + 1
+    ensure_logs(root, state["task_id"])
+    log = os.path.join(logs_dir(root, state["task_id"]), "%s-%d.log" % (scope, n))
+    before = current_tree(root)
+    result = safe_sensor(sensors.run_command, root, command, log, tcfg.get("timeout_seconds", 1800),
+                         tcfg.get("log_max_bytes", 2097152))
+    if result is None:
+        die("sensors.py is not installed beside state.py — run the project's command yourself")
+    after = current_tree(root)
+    # A tree that moved during the run was not the tree the run tested: the run
+    # is kept in the record, but stands for no tree at all.
+    run = {"n": n, "scope": scope, "exit": result["exit"], "tree": after if after == before else None,
+           "tree_moved": after != before,
+           "log": os.path.relpath(log, root), "ts": now(), "expected_fail": args.expect == "fail",
+           "runtime": RUNTIME, "command": command, "duration_s": result["duration_s"],
+           "after_fix": args.after_fix or None, "files": files}
+    runs.append(run)
+    if scope == "suite":
+        state["verify"]["suite_runs"] += 1
+        state["verify"]["status"] = ("passing" if run["exit"] == 0 else
+                                     "env_failure" if run["exit"] is None else "failing")
+    elif scope == "e2e":
+        state["verify"]["e2e"] = "passing" if run["exit"] == 0 else "failing"
+        state["verify"]["e2e_tree"] = run["tree"]
+    if run["tree_moved"]:
+        print("tree moved during the run: run %d stands for no tree — run it again on a still tree" % n)
+    emit(root, state, "verify_run", "%s run %d: exit %s" % (scope, n, run["exit"]),
+         {k: run[k] for k in ("n", "scope", "exit", "tree", "log", "expected_fail")})
+    if full_suite(run) and run["exit"] is not None and run["tree"]:
+        other = [r for r in runs[:-1] if full_suite(r) and r.get("tree") == run["tree"]
+                 and r.get("runtime") != RUNTIME and (r.get("exit") == 0) != (run["exit"] == 0)
+                 and r.get("exit") is not None]
+        red, green = (run, other[-1]) if other and run["exit"] != 0 else \
+            (other[-1], run) if other else (None, None)
+        if red:
+            # R19: the same tree green under one runtime and red under the other, in
+            # either order, goes into task.md. A red under Codex is best effort and
+            # never a gate; a red under any other runtime is the change's, and the
+            # green elsewhere does not answer it (two_facts).
+            state["findings"].append("%s: suite red under %s (run %d) and green under %s (run %d) on %s"
+                                     % (now(), red.get("runtime"), red["n"], green.get("runtime"),
+                                        green["n"], run["tree"][:9]))
+            if red.get("runtime") == "codex":
+                print("finding: red under %s on a tree green under %s — recorded in task.md, close is not "
+                      "blocked" % (red.get("runtime"), green.get("runtime")))
+            else:
+                print("red under %s on a tree green under %s — recorded in task.md; the red is the change's "
+                      "and close is blocked until it is green under %s"
+                      % (red.get("runtime"), green.get("runtime"), red.get("runtime")))
+    print("%s run %d: exit %s in %ds" % (scope, n, run["exit"], run["duration_s"]))
+    print("command: %s" % command)
+    print("log: %s" % run["log"])
+    if result.get("detail"):
+        print(result["detail"])
+    return run
+
+
+def e2e_na_refusal(root, state):
+    """Why e2e cannot be declared not applicable now, or None. The last e2e run
+    decides, on whatever tree it ran: a red flow is fixed and run again, never
+    declared away by an edit and a declaration; a run that could not finish
+    (exit None) is run again."""
+    runs = [r for r in state["verify"]["runs"] if r.get("scope") == "e2e"]
+    if not runs or runs[-1].get("exit") == 0:
+        return None
+    last, tree = runs[-1], current_tree(root)
+    if last.get("exit") is None:
+        return ("e2e run %d did not finish: run it again with 'verify --scope e2e' — an environment "
+                "failure is not a reason to declare e2e not applicable" % last["n"])
+    where = "on this tree" if tree and last.get("tree") == tree else \
+        "on %s, and no e2e run since has passed" % (last.get("tree") or "a moving tree")[:9]
+    return ("e2e run %d is red %s: a failing flow is fixed and 'verify --scope e2e' run again, not "
+            "declared not applicable" % (last["n"], where))
+
+
+def e2e_na(root, state, why):
+    refusal = e2e_na_refusal(root, state)
+    if refusal:
+        die(refusal)
+    tree = current_tree(root)
+    state["verify"]["e2e_tree"] = tree
+    state["verify"]["e2e"] = "not_applicable"
+    state["verify"]["e2e_why"] = why
+    emit(root, state, "verify_run", "e2e not applicable: %s" % one_line(why, 200),
+         {"scope": "e2e", "exit": None, "not_applicable": True, "why": why})
+    print("e2e: not applicable — %s" % one_line(why, 200))
+
+
+E2E_NONE = "e2e_command: none in .ai/policies/testing.md"
+
+
+def e2e_none(root):
+    return (safe_sensor(sensors.command_for, root, "e2e") or "").strip() == "none"
+
+
+def cmd_verify(args, root):
+    """Run, record, re-score up; exit 0 green, 1 red, 6 SUITE_BUDGET (R20)."""
+    state = load_v7(root)
+    policy = weight_policy(root)
+    tcfg = policy.get("tests") or {}
+    scope = args.scope
+    if args.expect and (scope != "step" or not args.files):
+        die("--expect fail is for one test shown failing before the fix: --scope step --files <test>")
+    if args.e2e and (scope not in ("all", "e2e") or args.e2e[0] != "not-applicable"
+                     or not args.e2e[1].strip()):
+        die('--e2e takes: not-applicable "<why the change cannot reach an e2e flow>", with --scope all or e2e')
+    if scope == "all" and args.files:
+        die("--files narrows one scope; --scope all runs the whole suite and e2e")
+    if args.e2e and e2e_na_refusal(root, state):
+        die(e2e_na_refusal(root, state))         # before the suite runs, not after (N3)
+    max_runs = int(tcfg.get("max_suite_runs", 2))
+    if scope in ("suite", "all") and state["verify"]["suite_runs"] >= max_runs:
+        if not args.by:
+            die("SUITE_BUDGET — %d suite runs; weight.json allows %d (tests.max_suite_runs). Running it "
+                "again is not the next move: the human decides. In their own terminal:\n  python3 %s "
+                "--root %s verify --scope %s --by \"<name>\""
+                % (state["verify"]["suite_runs"], max_runs, shlex.quote(os.path.abspath(__file__)),
+                   shlex.quote(root), scope), 6)
+        via, why = human_route()
+        if via is None:
+            die("APPROVAL_REFUSED — a run past the suite budget is the human's, from their own terminal."
+                "\nRefused because %s." % why, 5)
+        emit(root, state, "human_set", "suite run %d past the budget by %s via %s"
+             % (state["verify"]["suite_runs"] + 1, args.by, via),
+             {"field": "suite_runs", "value": state["verify"]["suite_runs"] + 1, "by": args.by,
+              "via": via, "unattended": via == "unattended"},
+             actor="human" if via == "terminal" else "agent")
+    green_before = suite_green(state)
+    state["stage"] = "verify"
+    code = 0
+    if scope == "e2e" and args.e2e:
+        e2e_na(root, state, args.e2e[1])
+    elif scope == "e2e" and e2e_none(root):
+        e2e_na(root, state, E2E_NONE)            # `none` is a declaration, not a command (N1)
+    else:
+        run = run_v7(root, state, "suite" if scope == "all" else scope, args, tcfg)
+        code = run["exit"]
+        if args.expect == "fail":
+            run["bites"] = code not in (0, None)
+            print("expected fail: %s" % ("the test fails without the fix — it bites" if run["bites"]
+                                         else "the test passes without the fix — it does not bite yet"))
+            code = 0 if run["bites"] else 1
+        elif scope == "all" and code == 0:
+            if args.e2e:
+                e2e_na(root, state, args.e2e[1])
+            elif not mode_setting(policy, state["mode"], "e2e", False):
+                state["verify"]["e2e"] = "not_required"
+                print("e2e: not required in %s mode" % state["mode"])
+            elif e2e_none(root):
+                e2e_na(root, state, E2E_NONE)
+            else:
+                code = run_v7(root, state, "e2e", args, tcfg)["exit"]
+        elif scope == "all":
+            print("e2e: not run — the suite is red")
+    rescore_v7(root, state, policy, "verify")
+    if not green_before and suite_green(state):
+        write_handoff(root, state, "verify")
+    save(root, state)
+    write_task_md(root, state)
+    if scope in ("suite", "all"):
+        print("suite runs used: %d of %d" % (state["verify"]["suite_runs"], max_runs))
+    sys.exit(0 if code == 0 else 1)
+
+
+def read_report(source):
+    if not source:
+        return ""
+    if source == "-":
+        return sys.stdin.read()
+    try:
+        with open(source, encoding="utf-8") as fh:
+            return fh.read()
+    except OSError as exc:
+        die("--report %s: %s" % (source, exc))
+    return ""                             # unreachable: die() exits
+
+
+def open_findings(text, severities=("BLOCKER", "HIGH")):
+    """Labels of `severities` whose block does not say in_scope: no."""
+    hits = list(FINDING_RE.finditer(text or ""))
+    out = []
+    for i, m in enumerate(hits):
+        block = text[m.start():hits[i + 1].start() if i + 1 < len(hits) else len(text)]
+        if m.group(1) in severities and not OUT_OF_SCOPE_RE.search(block):
+            out.append(m.group(2))
+    return out
+
+
+# "VERDICT pass", "VERDICT: pass", "## VERDICT pass" and the shipped reviewer's
+# "## VERDICT" section with its "verdict: pass" line (ai/agents/reviewer.md).
+VERDICT_LINE_RE = re.compile(r"^(?:#+[ \t]*)?verdict[ \t]*:?[ \t]*(pass_with_findings|blockers_open|pass)\b",
+                             re.M | re.I)
+
+
+def verdict_matches_findings(verdict, text):
+    """The verdict a reviewer's FINDINGS block allows: an in-scope BLOCKER is
+    blockers_open, an in-scope HIGH is not a pass, and a VERDICT line in the
+    block is the verdict. The block is the evidence; a verdict without it is a
+    claim nobody can audit."""
+    if not (text or "").strip() or "FINDINGS" not in text:
+        die("review needs the reviewer's FINDINGS block: --report - (stdin) or --report FILE")
+    blockers, highs = (open_findings(text, (sev,)) for sev in ("BLOCKER", "HIGH"))
+    said = VERDICT_LINE_RE.search(text)
+    if said and said.group(1) != verdict:
+        die("--verdict %s, but the report's VERDICT line says %s" % (verdict, said.group(1)))
+    if blockers and verdict != "blockers_open":
+        die("the report has an in-scope BLOCKER (%s): the verdict is blockers_open, not %s"
+            % (", ".join(blockers), verdict))
+    if highs and verdict == "pass":
+        die("the report has an in-scope HIGH (%s): the verdict is pass_with_findings or blockers_open"
+            % ", ".join(highs))
+
+
+def cmd_review(args, root):
+    """One pass recorded; the pass past review_rounds_max is the human's (exit 6)."""
+    state = load_v7(root)
+    policy = weight_policy(root)
+    review = state["review"]
+    if args.closes:
+        review_closes(root, state, _split_files(args.closes))
+        return
+    if not args.verdict or not args.tier:
+        die("review needs --verdict pass|pass_with_findings|blockers_open and --tier BALANCED|STRONG")
+    rounds = int(policy.get("review_rounds_max", 2))
+    by_human = None
+    if review["passes"] >= rounds:
+        if not args.by:
+            die("REVIEW_BUDGET — %d review passes; weight.json allows %d (review_rounds_max). The next "
+                "verdict is the human's, in their own terminal:\n  python3 %s --root %s review --verdict "
+                "<verdict> --tier %s --by \"<name>\"" % (review["passes"], rounds,
+                                                         shlex.quote(os.path.abspath(__file__)),
+                                                         shlex.quote(root), args.tier), 6)
+        via, why = human_route()
+        if via is None:
+            die("APPROVAL_REFUSED — a verdict past the review budget is the human's, from their own "
+                "terminal.\nRefused because %s." % why, 5)
+        by_human = (args.by, via)
+    wanted = mode_setting(policy, state["mode"], "reviewer", "BALANCED")
+    if wanted in REVIEW_TIERS and REVIEW_TIERS.index(args.tier) < REVIEW_TIERS.index(wanted):
+        die("%s mode needs a %s review (weight.json modes.%s.reviewer); this one was %s"
+            % (state["mode"], wanted, state["mode"], args.tier))
+    text = read_report(args.report)
+    if not by_human:
+        verdict_matches_findings(args.verdict, text)
+    labels = [m.group(2) for m in FINDING_RE.finditer(text)]
+    status = VERDICT_STATUS[args.verdict]
+    tree = current_tree(root)
+    review.update(status=status, passes=review["passes"] + (0 if by_human else 1), tier=args.tier,
+                  findings=open_findings(text), tree=tree, ts=now(),
+                  runs_at=len(state["verify"]["runs"]))
+    review["log"].append({"n": len(review["log"]) + 1, "tier": args.tier, "verdict": args.verdict,
+                          "focus": args.focus, "text": text[:20000], "tree": tree, "ts": now(),
+                          "runtime": RUNTIME, "by": by_human[0] if by_human else None})
+    state["stage"] = "review"
+    if by_human:
+        emit(root, state, "human_set", "review %s by %s via %s" % (args.verdict, by_human[0], by_human[1]),
+             {"field": "review", "value": status, "by": by_human[0], "via": by_human[1],
+              "unattended": by_human[1] == "unattended"},
+             actor="human" if by_human[1] == "terminal" else "agent")
+    emit(root, state, "review_verdict", "%s on %s (pass %d)" % (args.verdict, args.tier, review["passes"]),
+         {"verdict": args.verdict, "tier": args.tier, "pass_n": review["passes"], "labels": labels,
+          "focus": args.focus})
+    state["next_action"] = ("fix the blockers, 'state.py verify --scope all --after-fix \"…\"', one scoped "
+                            "re-review" if status == "blockers_open" else "'state.py close'")
+    write_handoff(root, state, "review")
+    save(root, state)
+    write_task_md(root, state)
+    print("review: %s (%s, pass %d of %d)%s" % (status, args.tier, review["passes"], rounds,
+                                               " — open: %s" % ", ".join(review["findings"])
+                                               if review["findings"] else ""))
+
+
+def review_closes(root, state, labels):
+    """passed_with_findings → passed once a green suite run after the verdict, on
+    a tree the fix changed, is the tree now (§3a, without a second review)."""
+    review = state["review"]
+    if review["status"] != "passed_with_findings":
+        die("--closes is for a passed_with_findings review; this one is %s" % review["status"])
+    unknown = [l for l in labels if l not in review["findings"]]
+    if not labels or unknown:
+        die("--closes names open findings (%s); not open: %s"
+            % (", ".join(review["findings"]) or "none", ", ".join(unknown) or "none given"))
+    tree = current_tree(root)
+    runs = [r for r in state["verify"]["runs"][review.get("runs_at") or 0:]
+            if full_suite(r) and r.get("exit") == 0]
+    if not runs or runs[-1].get("tree") != tree or tree == review.get("tree"):
+        die("findings %s stay open: they close on a green 'state.py verify --scope suite|all --after-fix "
+            "\"…\"' after the verdict, on a tree the fix changed, which is the tree now" % ", ".join(labels))
+    review["findings"] = [l for l in review["findings"] if l not in labels]
+    review["closed"] = list(review.get("closed") or []) + labels
+    if not review["findings"]:
+        review["status"] = "passed"
+    emit(root, state, "findings_closed", "%s closed by suite run %d on %s"
+         % (", ".join(labels), runs[-1]["n"], tree[:9]),
+         {"labels": labels, "run": runs[-1]["n"], "tree": tree})
+    save(root, state)
+    write_task_md(root, state)
+    print("findings closed: %s; review %s" % (", ".join(labels), review["status"]))
+
+
+def two_facts(root, state, tree):
+    """R6: (a) a green suite on the tree as it is now; (b) the diff since the base
+    tree inside the task's files. Each is (green, why)."""
+    runs = [r for r in state["verify"]["runs"] if full_suite(r)]
+    here = [r for r in runs if tree and r.get("tree") == tree]
+    green = [r for r in here if r.get("exit") == 0]
+    if not tree:
+        a = (False, "the tree cannot be measured (not a git repository)")
+    elif not runs:
+        a = (False, "no whole-suite 'verify --scope suite|all' has run")
+    elif not here:
+        a = (False, "the tree changed after the last verify (run %d on %s, now %s)"
+             % (runs[-1]["n"], (runs[-1].get("tree") or "?")[:9], tree[:9]))
+    elif not green:
+        a = (False, "the suite is red on this tree (run %d, exit %s)" % (here[-1]["n"], here[-1].get("exit")))
+    else:
+        # R19: a red under Codex on a tree green under another runtime is waived,
+        # in either order (Codex is best effort). Any other red stands until a
+        # later green under its own runtime: a green elsewhere does not answer it.
+        others = any(g.get("runtime") != "codex" for g in green)
+
+        def answered(r):
+            return (r.get("runtime") == "codex" and others) or any(
+                g["n"] > r["n"] and g.get("runtime") == r.get("runtime") for g in green)
+        unwaived = [r for r in here if r.get("exit") != 0 and not answered(r)]
+        before = [g for g in green if unwaived and g["n"] < unwaived[-1]["n"]]
+        if unwaived and before:
+            a = (False, "the suite went red on this tree after run %d (run %d under %s)"
+                 % (before[-1]["n"], unwaived[-1]["n"], unwaived[-1].get("runtime")))
+        elif unwaived:
+            a = (False, "the suite is red on this tree under %s (run %d); green under %s (run %d) does "
+                        "not answer it" % (unwaived[-1].get("runtime"), unwaived[-1]["n"],
+                                           green[-1].get("runtime"), green[-1]["n"]))
+        else:
+            a = (True, "suite green on %s (run %d)" % (tree[:9], green[-1]["n"]))
+    diff = safe_sensor(sensors.diff_files, root, state["diff"].get("base_tree"), tree)
+    allowed = task_files(state)
+    outside = [d["path"] for d in diff or [] if not sensors.scope_any(d["path"], allowed)]
+    if diff is None:
+        b = (False, "the diff since the base tree cannot be measured")
+    elif outside:
+        b = (False, "outside the task's files: %s" % ", ".join(outside[:5])
+             + (" (+%d more)" % (len(outside) - 5) if len(outside) > 5 else ""))
+    else:
+        b = (True, "%d changed files, all in the task's files" % len(diff))
+    return {"a": a, "b": b, "diff": diff or [], "outside": outside}
+
+
+def close_owed(state, facts, tree, policy):
+    """What the mode table still asks for, in order (D7), as (kind, text) with
+    kind "review" or "verify"; empty means close."""
+    review, mode = state["review"], state["mode"]
+    reviewed = review["passes"] > 0 and review["status"] != "blockers_open"
+    on_tree = bool(reviewed and tree and review.get("tree") == tree)
+    red = [why for ok, why in (facts["a"], facts["b"]) if not ok]
+    owed = []
+    if mode == "light":
+        if red and not on_tree:
+            owed.append(("review", "a review, because %s — or make the facts green ('verify --scope all'; "
+                                   "'start --amend' for a file the task needs)" % "; ".join(red)))
+        return owed
+    if review["status"] == "blockers_open":
+        owed.append(("review", "the blockers fixed, 'verify --scope all --after-fix \"…\"', one scoped re-review"))
+    elif not reviewed:
+        owed.append(("review", "one review verdict (%s mode: %s)"
+                               % (mode, mode_setting(policy, mode, "reviewer", "BALANCED"))))
+    elif red and not on_tree:
+        owed.append(("review", "a fresh 'verify --scope all' or a review of this tree, because %s"
+                               % "; ".join(red)))
+    e2e = state["verify"].get("e2e")
+    if e2e not in ("passing", "not_applicable"):
+        owed.append(("verify", "e2e green, or 'verify --scope all --e2e not-applicable \"<why>\"' (e2e is %s)"
+                               % e2e))
+    elif not tree or state["verify"].get("e2e_tree") != tree:
+        owed.append(("verify", "e2e on this tree: 'verify --scope e2e'%s (it was %s on %s)"
+                               % (" or 'verify --scope e2e --e2e not-applicable \"<why>\"'"
+                                  if e2e == "not_applicable" else "",
+                                  e2e, (state["verify"].get("e2e_tree") or "?")[:9])))
+    return owed
+
+
+def confirm_names(confirm, ops):
+    """Every operation keyword (DROP, ALTER …) appears as a word in the confirm text."""
+    words = set(re.findall(r"[A-Za-z]+", (confirm or "").upper()))
+    return bool((confirm or "").strip()) and all(op.upper() in words for op in ops)
+
+
+def gate_approved_for(state, tree):
+    """The approval close accepts, whichever route granted it (terminal or the
+    questions file): granted after the gate was requested, for the tree the gate
+    was requested on — which must be the tree now — and, for full_irreversible,
+    with a confirm that names every operation."""
+    gate, approval = state.get("gate") or {}, state["human_approval"]
+    if not (approval.get("granted") and tree and gate.get("tree") == tree
+            and (approval.get("granted_at") or "") >= (gate.get("requested_at") or "~")):
+        return False
+    if state["mode"] == "full_irreversible":
+        return confirm_names(gate.get("confirm"), state["weight"].get("operations") or [])
+    return True
+
+
+def approve_command(root, state):
+    ops = state["weight"].get("operations") or []
+    confirm = (" --confirm \"<what it does, naming %s>\"" % (" and ".join(ops) or "the operation")
+               if state["mode"] == "full_irreversible" else "")
+    return "python3 %s --root %s approve --by \"<name>\"%s" % (
+        shlex.quote(os.path.abspath(__file__)), shlex.quote(root), confirm)
+
+
+def cmd_close_v7(args, root):
+    """Two facts, the mode table, the gate, the archive; exits 2 naming what is owed."""
+    state = load_v7(root)
+    if args.abandon:
+        archive_v7(root, state, current_tree(root), "abandoned")
+        return
+    policy = weight_policy(root)
+    tree = current_tree(root)
+    if state["human_approval"].get("rejected_at"):
+        # A rejection is answered by changing the work, not by asking again: on the
+        # tree the human rejected, close refuses; on a changed one it asks anew.
+        if (state.get("gate") or {}).get("tree") == tree:
+            die("APPROVAL_REFUSED — rejected at %s and nothing changed since. Address the rejection, "
+                "'verify --scope all', then close again; or 'state.py close --abandon'."
+                % state["human_approval"]["rejected_at"], 5)
+        state["human_approval"]["rejected_at"] = None
+    for step in state["steps"]:
+        if step.get("status") == "in_progress":
+            step.update(status="done", tree_after=tree)
+            emit(root, state, "step_done", "%s (finished by close)" % step["id"],
+                 {"step_id": step["id"], "by": "close"}, legacy="step_completed")
+    rescore_v7(root, state, policy, "close")
+    facts = two_facts(root, state, tree)
+    state["facts"] = {"a": list(facts["a"]), "b": list(facts["b"]), "tree": tree, "at": now()}
+    owed = close_owed(state, facts, tree, policy)
+    if owed:
+        state["next_action"] = owed[0][1]
+        set_resume_point(state)
+        write_handoff(root, state, "close")
+        save(root, state)
+        write_task_md(root, state)
+        die("%s required (%s mode) — %s. To drop the task instead: 'state.py close --abandon'."
+            % ("review" if any(k == "review" for k, _ in owed) else "verify", state["mode"],
+               " · ".join(text for _, text in owed)), 2)
+    if state["mode"] in ("full", "full_irreversible") and not gate_approved_for(state, tree):
+        if state["human_approval"].get("granted") and (state.get("gate") or {}).get("tree") == tree:
+            print("the approval on record does not cover this task: full_irreversible needs approve "
+                  "--confirm naming %s — asking again" % " and ".join(state["weight"].get("operations") or
+                                                                      ["the operation"]))
+        request_gate(root, state, "human_approval")
+        state["gate"] = {"requested_at": state["human_approval"]["requested_at"],
+                         "gate_id": state["human_approval"]["gate_id"], "tree": tree,
+                         "approved_by": None, "approved_at": None, "approved_tree": None, "via": None,
+                         "confirm": None, "operations": list(state["weight"].get("operations") or [])}
+        state["stage"] = "ship"
+        state["next_action"] = "the human approves in their own terminal, then 'state.py close' again"
+        set_resume_point(state)
+        write_handoff(root, state, "close")
+        save(root, state)
+        write_task_md(root, state)
+        print("%s %s ready for approval: %s" % (state["task_id"], state["mode"], state.get("goal")))
+        print("facts: (a) %s · (b) %s" % (facts["a"][1], facts["b"][1]))
+        print("approve in your own terminal, then run close again:\n  %s" % approve_command(root, state))
+        return
+    if state.get("gate") and not state["gate"].get("approved_by"):
+        # The questions-file route grants through human_approval alone.
+        approval = state["human_approval"]
+        state["gate"].update(approved_by=approval.get("granted_by"), approved_at=approval.get("granted_at"),
+                             via=approval.get("via"), approved_tree=state["gate"].get("tree"))
+    archive_v7(root, state, tree, "closed", facts)
+
+
+def archive_v7(root, state, tree, result, facts=None):
+    """§Changes and §Verdict into task.md, the state into .ai/state/logs/<task>/,
+    and nothing else under reports/ (D4, R8)."""
+    base = state["diff"].get("base_tree")
+    stats = {f["path"]: f for f in (safe_sensor(sensors.numstat, root, base, tree) or [])} if base and tree else {}
+    names = (facts or {}).get("diff") or safe_sensor(sensors.diff_files, root, base, tree) or []
+    state["changes"] = [{"path": d["path"], "status": d["status"],
+                         "added": (stats.get(d["path"]) or {}).get("added", 0),
+                         "deleted": (stats.get(d["path"]) or {}).get("deleted", 0),
+                         "binary": (stats.get(d["path"]) or {}).get("binary", False)} for d in names]
+    state["stage"] = "done"
+    state["current_stage"] = "done"
+    state["result"] = result
+    state["closed_at"] = now()
+    state["next_action"] = "none — task %s" % result
+    emit(root, state, "task_closed", "abandoned" if result == "abandoned" else "",
+         {"abandoned": result == "abandoned", "mode": state["mode"], "w": state["weight"].get("w")})
+    write_task_md(root, state)
+    ensure_logs(root, state["task_id"])
+    target = os.path.join(logs_dir(root, state["task_id"]), "state.json")
+    state["updated_at"] = now()
+    with open(target, "w", encoding="utf-8") as fh:
+        json.dump(state, fh, indent=2, ensure_ascii=False)
+        fh.write("\n")
+    with contextlib.suppress(OSError):
+        os.remove(handoff_path(root))
+    os.remove(state_path(root))
+    print("%s %s (%s): %s" % (state["task_id"], result, state["mode"],
+                              os.path.relpath(task_md_path(root, state), root)))
+    print("state: %s" % os.path.relpath(target, root))
+
+
+def cmd_step_done_v7(args, root):
+    """A multi-step task's step is done when its diff stays inside the task."""
+    state = load_v7(root)
+    steps = state["steps"]
+    if not steps:
+        die("step-done is for a multi-step guarded or full task; this one is one scope — verify, then close")
+    step = next((s for s in steps if s["id"] == args.step_id), None)
+    if step is None:
+        die("no step %s (have: %s)" % (args.step_id, ", ".join(s["id"] for s in steps)))
+    if step["status"] == "done":
+        print("step %s already done" % step["id"])
+        return
+    tree = current_tree(root)
+    diff = safe_sensor(sensors.diff_files, root, step.get("tree_before") or state["diff"].get("base_tree"), tree)
+    outside = [d["path"] for d in diff or [] if not sensors.scope_any(d["path"], task_files(state))]
+    if outside:
+        die("SCOPE_CHANGE_REQUIRED — step %s changed %s, outside the task's files. Widen the task in "
+            "place: state.py start --amend --files \"%s\" --why \"…\""
+            % (step["id"], ", ".join(outside), ",".join("+" + p for p in outside)), 6)
+    step.update(status="done", tree_after=tree)
+    emit(root, state, "step_done", "%s: %d files changed" % (step["id"], len(diff or [])),
+         {"step_id": step["id"], "files": len(diff or [])}, legacy="step_completed")
+    following = next((s for s in steps if s["status"] == "pending"), None)
+    if following:
+        following.update(status="in_progress", tree_before=tree)
+        emit(root, state, "step_started", following["id"], {"step_id": following["id"], "kind": "step"})
+    save(root, state)
+    write_task_md(root, state)
+    print("step %s done%s" % (step["id"], "; next: %s" % following["id"] if following else "; all steps done"))
+
+
+def cmd_approve_v7(args, root):
+    """approve, plus the gate's tree and, for full_irreversible, the operation
+    the human names (--confirm). The grant itself is cmd_approve's, unchanged."""
+    state = load_v7(root)
+    ops = state["weight"].get("operations") or []
+    confirm = (args.confirm or "").strip()
+    gate = state.get("gate") or {}
+    if open_gate(state):
+        tree = current_tree(root)
+        if gate.get("tree") != tree:
+            # The work changed after close put it up: approving now would sign
+            # a tree nobody presented.
+            die("APPROVAL_REFUSED — the tree changed after close asked for this approval (%s, now %s). "
+                "Reject it ('reject --by \"<name>\" --why \"the tree changed\"'); the next close asks "
+                "again for the tree as it is." % ((gate.get("tree") or "?")[:9], (tree or "?")[:9]), 5)
+        if state["mode"] == "full_irreversible" and not confirm_names(confirm, ops):
+            die("APPROVAL_REFUSED — full_irreversible needs --confirm \"<what it does>\" naming %s"
+                % (" and ".join(ops) or "the irreversible operation"), 5)
+    cmd_approve(args, root)
+    state = load(root, claim=False)
+    gate = state.get("gate") or {}
+    if state["human_approval"].get("granted") and gate and not gate.get("approved_by"):
+        gate.update(approved_by=args.by, approved_at=state["human_approval"].get("granted_at"),
+                    via=state["human_approval"].get("via"), confirm=confirm or None,
+                    approved_tree=gate.get("tree"))
+        state["gate"] = gate
+        save(root, state)
+        write_task_md(root, state)
+
+
+def status_lines(root, state):
+    """≤ 20 lines; read-only (the facts are measured, nothing is written)."""
+    lines = ["root: %s" % root]
+    if not state or not state.get("task_id"):
+        return lines + ["task: none — no task in flight", schema_line(root)]
+    events, _ = read_journal(root, state["task_id"])
+    last = events[-1] if events else {}
+    pending = (state.get("questions") or {}).get("pending") or []
+    lines.append("task: %s — %s" % (state["task_id"], one_line(state.get("goal"), 140)))
+    if not is_v7(state):
+        lines += ["tier: %s · workflow %s · stage %s" % (state.get("risk_tier") or "?", state.get("workflow"),
+                                                        state.get("current_stage")),
+                  "next: %s" % (one_line(state.get("next_action"), 160) or "?"),
+                  "old surface (schema < 7): /status reads it directly"]
+    else:
+        w = state.get("weight") or {}
+        policy = weight_policy(root)
+        tree = current_tree(root)
+        facts = two_facts(root, state, tree)
+        steps = state.get("steps") or []
+        cur = next((s for s in steps if s.get("status") == "in_progress"), None)
+        review, ver, gate = state["review"], state["verify"], state.get("gate") or {}
+        override = state.get("mode_override") or {}
+        lines += [
+            "mode: %s · W %s · workflow %s%s" % (state["mode"], w.get("w"), state.get("workflow"),
+                                                 " · override %s → %s by %s" % (override.get("from"),
+                                                                               override.get("to"),
+                                                                               override.get("by"))
+                                                 if override else ""),
+            "axes: %s" % " ".join("%s %s" % (a, (w.get("axes") or {}).get(a, "?")) for a in weight.AXES),
+            "stage: %s · next: %s" % (state.get("stage"), one_line(state.get("next_action"), 140)),
+            ("steps: %d of %d done — current %s" % (len([s for s in steps if s["status"] == "done"]), len(steps),
+                                                    cur["id"] if cur else "none")
+             if steps else "steps: one scope"),
+            "files: %d in scope — %s" % (len(task_files(state)), ", ".join(task_files(state)[:4])
+                                         + (" (+%d more)" % (len(task_files(state)) - 4)
+                                            if len(task_files(state)) > 4 else "")),
+            "verify: suite %s · runs %d/%s · e2e %s" % (ver["status"], ver["suite_runs"],
+                                                        (policy.get("tests") or {}).get("max_suite_runs", 2),
+                                                        ver.get("e2e")),
+            "facts: (a) %s — %s" % ("green" if facts["a"][0] else "RED", facts["a"][1]),
+            "       (b) %s — %s" % ("green" if facts["b"][0] else "RED", facts["b"][1]),
+            "review: %s (%d of %s) · tier %s%s" % (review["status"], review["passes"],
+                                                   policy.get("review_rounds_max", 2), review.get("tier") or "-",
+                                                   " · open %s" % ", ".join(review["findings"])
+                                                   if review["findings"] else ""),
+            "gate: %s" % ("approved by %s%s" % (gate["approved_by"], " · confirm \"%s\"" % gate["confirm"]
+                                                if gate.get("confirm") else "")
+                          if gate.get("approved_by") else "requested %s, waiting for the human" % gate.get("gate_id")
+                          if open_gate(state) else "not requested"
+                          if state["mode"] in ("full", "full_irreversible") else "none in %s mode" % state["mode"]),
+            "findings: %d recorded in task.md" % len(state.get("findings") or []),
+        ]
+    lines += ["questions: %d pending%s" % (len(pending), " — %s" % ", ".join(map(str, pending[:4])) if pending else ""),
+              schema_line(root),
+              "last event: %s" % (" ".join(one_line(last.get(k), 80) for k in ("ts", "event", "detail")
+                                           if last.get(k)) or "none")]
+    return lines[:20]
+
+
+def schema_line(root):
+    try:
+        with open(os.path.join(root, ".ai", "VERSION"), encoding="utf-8") as fh:
+            project = fh.read().strip() or "0"
+    except OSError:
+        project = "0"
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        names = os.listdir(os.path.join(here, "project-update", "migrations"))
+    except OSError:
+        names = []
+    numbers = [int(n[:4]) for n in names if re.match(r"\d{4}_", n)]
+    plugin = str(max(numbers)) if numbers else "?"
+    behind = project.isdigit() and plugin.isdigit() and int(project) < int(plugin)
+    return "schema: project %s · plugin %s%s" % (project, plugin, " — behind: run /project-update" if behind else "")
+
+
+def cmd_status(args, root):
+    state = load(root, required=False, claim=False)
+    if args.json:
+        out = {"root": root, "task_id": (state or {}).get("task_id"), "schema": (state or {}).get("schema")}
+        if is_v7(state):
+            tree = current_tree(root)
+            facts = two_facts(root, state, tree)
+            out.update({k: state.get(k) for k in ("goal", "workflow", "mode", "stage", "next_action",
+                                                  "files", "tests", "steps", "verify", "review", "gate",
+                                                  "mode_override", "findings")})
+            out["weight"] = {k: (state.get("weight") or {}).get(k) for k in ("w", "axes", "hints", "unknown",
+                                                                            "operations")}
+            out["facts"] = {"a": list(facts["a"]), "b": list(facts["b"]), "tree": tree}
+            out["questions_pending"] = len((state.get("questions") or {}).get("pending") or [])
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+        return
+    print("\n".join(status_lines(root, state)))
+
+
+def md_cell(text):
+    return one_line(text, 200).replace("|", "\\|")
+
+
+def task_md_lines(root, state):
+    """A pure function of the state and the journal: eight sections (§Interfaces)."""
+    events, _ = read_journal(root, state["task_id"])
+    w = state.get("weight") or {}
+    override = state.get("mode_override")
+    out = ["# %s — %s" % (state["task_id"], one_line(state.get("goal"))), "",
+           "%s · %s · started %s · %s" % (state.get("workflow"), state.get("mode"), state.get("created"),
+                                          state.get("owner_runtime") or "unknown"), "",
+           "## Weight", "", "```"] + list(w.get("lines") or []) + ["```"]
+    if override:
+        out.append("override: %s → %s by %s at %s%s" % (override.get("from"), override.get("to"),
+                                                        override.get("by"), override.get("ts"),
+                                                        " — %s" % one_line(override["why"])
+                                                        if override.get("why") else ""))
+    out += ["re-score %s" % one_line(line, 300) for line in w.get("rescores") or []]
+    out += ["", "## Plan", "", "files: %s" % (", ".join(state.get("files") or []) or "none"),
+            "tests: %s" % (", ".join(state.get("tests") or []) or "none")]
+    for step in state.get("steps") or []:
+        out.append("- %s · %s · %s · %s" % (step["id"], ", ".join(step["files"]),
+                                            ", ".join(step["tests"]) or "no tests", step["status"]))
+    out += ["amended %s: +%s — %s" % (a["ts"], ", ".join(a["added"]), one_line(a["why"]))
+            for a in state.get("amendments") or []]
+    pending = (state.get("questions") or {}).get("pending") or []
+    asked = any(e.get("event") in ("question_asked", "gate_requested") for e in events)
+    out += ["", "## Questions", "",
+            ("[questions.md](questions.md) — %d pending" % len(pending)) if asked or pending else "none"]
+    out += ["", "## Verify", "", "| n | scope | exit | tree | log | expected_fail |", "|---|---|---|---|---|---|"]
+    for r in state["verify"]["runs"]:
+        out.append("| %s | %s | %s | %s | %s | %s |" % (r["n"], r["scope"], r.get("exit"),
+                                                        (r.get("tree") or "-")[:9], md_cell(r.get("log")),
+                                                        "yes" if r.get("expected_fail") else "no"))
+    out.append("")
+    out.append("suite %s · e2e %s%s · suite runs %d" % (
+        state["verify"]["status"], state["verify"].get("e2e"),
+        " (%s)" % one_line(state["verify"]["e2e_why"]) if state["verify"].get("e2e_why") else "",
+        state["verify"]["suite_runs"]))
+    out += ["finding: %s" % one_line(f, 300) for f in state.get("findings") or []]
+    out += ["", "## Review", ""]
+    for p in state["review"]["log"]:
+        out += ["### Pass %d — %s, %s%s%s" % (p["n"], p["tier"], p["verdict"],
+                                             " (focus %s)" % p["focus"] if p.get("focus") else "",
+                                             " by %s" % p["by"] if p.get("by") else ""), ""]
+        # A fence longer than any backtick run in the text, so a report quoting
+        # code cannot close it early.
+        fence = "`" * max([3] + [len(run) + 1 for run in re.findall(r"`+", p.get("text") or "")])
+        out += ([fence] + p["text"].rstrip("\n").split("\n") + [fence]) if p.get("text", "").strip() \
+            else ["no FINDINGS block"]
+        out.append("")
+    if not state["review"]["log"]:
+        out += ["none yet", ""]
+    if state["review"].get("closed"):
+        out += ["closed by a green run: %s" % ", ".join(state["review"]["closed"]), ""]
+    out += ["## Changes", ""]
+    changes = state.get("changes")
+    if changes is None:
+        out.append("measured at close")
+    else:
+        kind = {"A": "New", "D": "Delete"}
+        out += ["| File | Change | New/Edit/Delete |", "|---|---|---|"]
+        out += ["| %s | %s | %s |" % (md_cell(c["path"]), "binary" if c.get("binary") else
+                                      "+%d −%d" % (c["added"], c["deleted"]), kind.get(c["status"], "Edit"))
+                for c in changes]
+        out += ["", "+%d −%d lines, %d files" % (sum(c["added"] for c in changes),
+                                                 sum(c["deleted"] for c in changes), len(changes))]
+    gate, facts = state.get("gate") or {}, state.get("facts") or {}
+    handoffs = len([e for e in events if e.get("event") == "handoff_written"])
+    out += ["", "## Verdict", "",
+            "close: %s" % (state.get("result") or "open — %s" % one_line(state.get("next_action"))),
+            "facts: (a) %s · (b) %s" % tuple(
+                "%s — %s" % ("green" if facts[k][0] else "RED", facts[k][1]) if facts.get(k) else "not measured"
+                for k in ("a", "b")),
+            "gate: %s" % ("requested %s at %s; approved by %s at %s via %s" % (
+                gate.get("gate_id"), gate.get("requested_at"), gate.get("approved_by") or "-",
+                gate.get("approved_at") or "-", gate.get("via") or "-") if gate else "none"),
+            "confirm: %s" % (gate.get("confirm") or "none"),
+            "handoffs: %d · suite runs: %d · review passes: %d" % (handoffs, state["verify"]["suite_runs"],
+                                                                   state["review"]["passes"])]
+    return out
+
+
+def write_task_md(root, state):
+    """Rewritten whole and atomically after every change; best effort, because
+    the state is the contract and task.md is rendered from it."""
+    path = task_md_path(root, state)
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    try:
+        text = "\n".join(task_md_lines(root, state)) + "\n"
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # derived artefact: never fatal
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        print("state.py: task.md not written (%s)" % exc, file=sys.stderr)
+
+
+def route_surface(root, args):
+    """D1: close, step-done and approve take the schema-7 path only for a task
+    `start` wrote; the old surface's own commands refuse such a task, and the
+    new ones refuse a task the old surface started."""
+    if args.command not in V7_ROUTED | OLD_ONLY | SCHEMA_ONLY - {"start", "status"}:
+        return
+    state = load(root, required=False, claim=False)
+    if state is None:
+        return
+    if is_v7(state):
+        if args.command in OLD_ONLY:
+            die("task %s runs on the schema-7 surface: '%s' is the old one — use start, verify, review "
+                "and close" % (state.get("task_id"), args.command))
+        args.v7 = True                    # close handles a rejection itself (cmd_close_v7)
+        args.func = {"close": cmd_close_v7, "step-done": cmd_step_done_v7,
+                     "approve": cmd_approve_v7}.get(args.command, args.func)
+    elif getattr(args, "abandon", False) and args.command == "close":
+        die("close --abandon is for a schema-7 task; this one closes with 'state.py done --abandon' "
+            "then 'state.py archive'")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--root", default=".", help="project directory (default: search upwards for .ai/)")
@@ -3141,7 +4409,9 @@ def main():
     p.set_defaults(func=cmd_events)
 
     p = sub.add_parser("approve"); p.add_argument("--by", required=True)
-    p.add_argument("--note", default=""); p.set_defaults(func=cmd_approve)
+    p.add_argument("--note", default="")
+    p.add_argument("--confirm", default="", help="schema 7: the operation a full_irreversible task performs")
+    p.set_defaults(func=cmd_approve)
 
     p = sub.add_parser("reject"); p.add_argument("--by", required=True)
     p.add_argument("--why", required=True); p.set_defaults(func=cmd_reject)
@@ -3149,7 +4419,32 @@ def main():
     p = sub.add_parser("done"); p.add_argument("--abandon", action="store_true")
     p.set_defaults(func=cmd_done)
     p = sub.add_parser("archive"); p.set_defaults(func=cmd_archive)
-    p = sub.add_parser("close"); p.set_defaults(func=cmd_close)
+    p = sub.add_parser("close")
+    p.add_argument("--abandon", action="store_true", help="schema 7: archive without the checks")
+    p.set_defaults(func=cmd_close)
+
+    p = sub.add_parser("start"); p.add_argument("--goal", default="")
+    p.add_argument("--workflow", default=""); p.add_argument("--files", default="")
+    p.add_argument("--tests", default=""); p.add_argument("--declare", action="append", default=[])
+    p.add_argument("--mode"); p.add_argument("--by", default=""); p.add_argument("--why", default="")
+    p.add_argument("--steps", default=""); p.add_argument("--plan-file", dest="plan_file")
+    p.add_argument("--task-id"); p.add_argument("--amend", action="store_true")
+    p.set_defaults(func=cmd_start)
+
+    p = sub.add_parser("verify")
+    p.add_argument("--scope", required=True, choices=["step", "suite", "e2e", "all"])
+    p.add_argument("--files", default=""); p.add_argument("--expect", choices=["fail"])
+    p.add_argument("--e2e", nargs=2, metavar=("not-applicable", "WHY"))
+    p.add_argument("--after-fix", dest="after_fix", default="")
+    p.add_argument("--by", default=""); p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("review"); p.add_argument("--verdict", choices=sorted(VERDICT_STATUS))
+    p.add_argument("--tier", choices=REVIEW_TIERS); p.add_argument("--focus", choices=["security"])
+    p.add_argument("--report", default=""); p.add_argument("--closes", default="")
+    p.add_argument("--by", default=""); p.set_defaults(func=cmd_review)
+
+    p = sub.add_parser("status"); p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_status)
 
     global RUNTIME, MUTATING              # pylint: disable=global-statement
     args = parser.parse_args()
@@ -3166,10 +4461,12 @@ def main():
     root = find_root(args.root)
     RUNTIME = detect_runtime(args.runtime, root)
     MUTATING = args.command in MUTATING_COMMANDS
+    route_surface(root, args)
     args.stage_argument = getattr(args, "stage", None)
     if args.command in BLOCKING_COMMANDS and not getattr(args, "abandon", False):
         guard_pending(root, args.command)
-    guard_rejected(root, args)
+    if not getattr(args, "v7", False):
+        guard_rejected(root, args)
     args.func(args, root)
 
 

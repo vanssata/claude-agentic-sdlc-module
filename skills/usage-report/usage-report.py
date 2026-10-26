@@ -658,12 +658,14 @@ def task_report(args) -> int:
     start = min(stamps)
     closed = [parse_ts(e.get("ts")) for e in events if e.get("event") == "task_closed"]
     end = max(c for c in closed if c) if any(closed) else dt.datetime.now(dt.timezone.utc)
-    tier = "untiered"
+    tier, mode = "untiered", None
     involved = []
     for e in events:
         data = _obj(e.get("data"))
         if e.get("event") in ("tier_set", "tier_raised"):
             tier = data.get("tier") or data.get("to") or tier
+            # A schema-7 journal's tier_set carries the mode beside its compat T-label (R18).
+            mode = data.get("mode") or mode
         for rt in (e.get("runtime"), data.get("from") if e.get("event") == "runtime_handoff" else None,
                    data.get("to") if e.get("event") == "runtime_handoff" else None):
             if rt in RUNTIMES and rt not in involved:
@@ -692,7 +694,8 @@ def task_report(args) -> int:
         acc[1] += c.cw + c.cr
         acc[2] += c.out
 
-    print(f"task {args.task} tier {tier} window {start.isoformat(timespec='seconds')}"
+    label = f"mode {mode} (tier {tier})" if mode else f"tier {tier}"
+    print(f"task {args.task} {label} window {start.isoformat(timespec='seconds')}"
           f"..{end.isoformat(timespec='seconds')}")
     print("  (by time window: any other session in this project inside it is counted too)")
     for rt in involved or sorted(used):

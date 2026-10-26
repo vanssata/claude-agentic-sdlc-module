@@ -296,3 +296,66 @@ following; each is open unless marked.
 - **How likely / how bad**: needs an unusual `dirs:` entry — rare; a stale rule keeps steering agents there with nothing reporting it.
 - **Suggested fix**: give the writer the walk's skips — a `block` target with a `RULES_SKIP` component or a symlinked directory on its way gets a hint, not a write; have adopt's `report()` print `plan.hints`.
 - **Status**: open
+
+## risk-tiers.json cannot be moved to weight.json while the plugin still ships it (found 2026-10-26 by T-2026-10-25-008)
+
+- **Found**: 2026-10-26, implementing migration 0007 (redesign 2.2a, plan decision D6)
+- **Where**: `tests/test-project-update.sh:651-657` refuses a template shipped at a path a migration moved away; `skills/project-update/update.py:1233` skips a moved-away template only in the run that moved it, and `three_way()` (`:737-739`) creates any template the project lacks; `skills/ai-init/templates/.ai/policies/risk-tiers.{json,md}` are still shipped (the old `/ai-task` surface reads them until 2.6).
+- **What could go wrong**: KNOWN FACT — a draft 0007 with `MOVES = [(risk-tiers.json, weight.json)]` turned the invariant red ("a template is shipped at a path a migration moved away"), and its `delete?` of `risk-tiers.md` held every project at schema 6 until a human ran `--confirm-delete` (18 assertions in `test-project-update.sh` red). INFERENCE from `update.py:1233` and `:737`: after a confirmed deletion, the next run re-creates both files from the templates. Also KNOWN FACT: a fresh schema-6 scaffold already holds `weight.json` (2.1 shipped it), so a move collides there.
+- **How likely / how bad**: certain for every project if 0007 moves or deletes before the templates are retired.
+- **Suggested fix**: 0007 as shipped converts the edits into `weight.json` and leaves `risk-tiers.*` alone; the move and the deletion belong with the template retirement (2.6), in a migration of their own — which renumbers 3.4b's `0008_renames.py`. Decide whether that is the plan, or whether the templates retire in 2.2a after all.
+- **Status**: open — a decision for the human (task.md §Plan of T-2026-10-25-008)
+
+## A template shipped in one version only has no merge base, so any project edit to it is a conflict on every run (found 2026-10-26 by T-2026-10-25-008)
+
+- **Found**: 2026-10-26, migration 0007 on `tests/test-project-update.sh`'s fixture project
+- **Where**: `skills/project-update/update.py:744` drops the current template from the candidate bases, and `:765` falls back to `MISSING` when no other version exists; `merge_json()` (`:313-333`) then reports every differing leaf as a conflict.
+- **What could go wrong**: KNOWN FACT — the fixture's hand-added `T0` example ("Fiscal printer bridge"), carried by 0007 into `weight.json` `examples.light`, is reported on every later run as `conflict .ai/policies/weight.json kept your value for: examples.light`. The project's value is kept and `--check` exits 0, but the word "conflict" sits beside a value the migration itself wrote. The same holds today for any hand edit to `weight.json`. Three exact-count assertions in `tests/test-project-update.sh` (`:95`, `:125`, `:130`) change from one hand-merge choice to two.
+- **How likely / how bad**: every project with a hand-edited risk-tier example or path scope; noise, no data loss.
+- **Suggested fix**: either accept it and update the three counts in `tests/test-project-update.sh` (outside T-2026-10-25-008's files: SCOPE_CHANGE_REQUIRED), or let `three_way()` use the current template as the base when it is the only version ever shipped (the project was installed from it), which makes the carried values merge silently.
+- **Status**: open — a decision for the human
+
+## pylint W0621 in sensors.py fails the pylint workflow on HEAD (found 2026-10-26 by T-2026-10-25-008)
+
+- **Found**: 2026-10-26, `pylint` on the files T-2026-10-25-008 changed
+- **Where**: `skills/ai-task/sensors.py:408` on HEAD (`:422` after this task's `diff_files`): a local `bite` shadows the module function `bite` (`:1074`).
+- **What could go wrong**: KNOWN FACT — `pylint skills/ai-task/sensors.py` on HEAD rates 9.99/10 with this warning; `.github/workflows/pylint.yml` fails on a single warning.
+- **How likely / how bad**: certain on every push; CI red for a reason unrelated to the change being pushed.
+- **Suggested fix**: rename the local; `sensors.py` shrinks in 2.6 anyway.
+- **Status**: open
+
+## The weight model's re-score misses lowercase SQL, and 0007 maps some project scopes below their old tier (found 2026-10-26 by the T-2026-10-25-008 review, I3, out of scope)
+
+- **Found**: 2026-10-26, STRONG review I3 of T-2026-10-25-008 (`in_scope: no`)
+- **Where**: `skills/ai-task/state.py` `rescore()` compiles `irreversible_content` case-sensitively, as the spec writes the patterns; `skills/project-update/migrations/0007_weight_model.py` `convert()` maps a project-added `auth`/`security` scope (old `min_tier` T5) to a +1 domain hint, non-prod `infra` (T6) to `reversibility.needs_step`, and drops an unknown scope below T5 without a hint.
+- **What could go wrong**: INFERENCE (from the code and the spec's table) — `drop table users;` in a migration stays reversibility 1, so a task never reaches full_irreversible on it; a project whose own auth paths were T5 gets guarded unless another axis lifts it.
+- **How likely / how bad**: lowercase SQL is common in hand-written migrations; the mode decides the reviewer tier and the human stops.
+- **Suggested fix**: a spec decision — case-insensitive keyword patterns with word boundaries (`\bDROP\s`), and whether a migrated scope keeps its old floor (auth → domain.modules); then a hint for every dropped scope.
+- **Status**: open — for the spec owner
+
+## Fact (b) and the re-score read the wrong paths when .ai/ sits below the git top level (found 2026-10-26 by the T-2026-10-25-008 review, I4, out of scope)
+
+- **Found**: 2026-10-26, STRONG review I4 of T-2026-10-25-008 (`in_scope: no`)
+- **Where**: `skills/ai-task/sensors.py` `diff_files()` and `numstat()` run `git diff` between trees, which name paths from the git top level; the task's files are relative to the `.ai/` root.
+- **What could go wrong**: INFERENCE (no fixture has this shape) — in a monorepo with `.ai/` in `apps/shop/`, every changed path reads as outside the task, so fact (b) is always red and every light task needs a review; `rescore()` matches globs against top-level paths.
+- **How likely / how bad**: any project whose `.ai/` is not at the repository root; light mode stops working there.
+- **Suggested fix**: `git diff --relative` (or strip `git rev-parse --show-prefix`) in `diff_files`/`numstat`, with a fixture whose `.ai/` sits in a subdirectory.
+- **Status**: open
+
+## A suite that writes an untracked artifact moves the tree on every run (found 2026-10-26 by the T-2026-10-25-008 review, N6, out of scope)
+
+- **Found**: 2026-10-26, STRONG re-review N6 of T-2026-10-25-008 (`in_scope: no`)
+- **Where**: `skills/ai-task/state.py` `run_v7()` snapshots the tree before and after the command (R3, review M3) and a moved tree stands for no tree.
+- **What could go wrong**: INFERENCE — a suite that leaves `.coverage`, `junit.xml` or another untracked, non-ignored file behind moves the tree on every run, so no run ever stands for a tree and fact (a) is never green.
+- **How likely / how bad**: any project whose test runner writes reports into the tree without a `.gitignore` entry; every schema-7 task there needs a review.
+- **Suggested fix**: name the artifact in the "tree moved" line so the human adds it to `.gitignore`, or snapshot only tracked files plus the task's own files.
+- **Status**: open
+
+## A project-added irreversible pattern can yield an operation no confirm can name (found 2026-10-26 by the T-2026-10-25-008 review, N7, out of scope)
+
+- **Found**: 2026-10-26, STRONG re-review N7 of T-2026-10-25-008 (`in_scope: no`)
+- **Where**: `skills/ai-task/state.py` keyword extraction from `irreversible_content` matches (review M6's fix).
+- **What could go wrong**: INFERENCE — a pattern whose match starts with whitespace raises IndexError; one starting with punctuation yields a keyword that `confirm_names()` can never find as a word, so a full_irreversible gate cannot be approved.
+- **How likely / how bad**: only patterns a project adds itself; the shipped ones start with a letter.
+- **Suggested fix**: take the first `[A-Za-z]+` run of the match, and refuse at `weight.json` load a pattern that has none.
+- **Status**: open

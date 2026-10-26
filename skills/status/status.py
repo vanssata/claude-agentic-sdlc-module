@@ -3,9 +3,10 @@
 
   status.py [--root DIR] [--cost]
 
-Read-only and model-free. It reads the files directly — .ai/state/current.json,
-the task's events.jsonl, .ai/policies/risk-tiers.json and .ai/VERSION — instead
-of asking state.py, so it answers in a project whose state.py is older, newer or
+Read-only and model-free. A schema-7 task is described by `state.py status`;
+for any other task, and whenever that call fails, it reads the files directly —
+.ai/state/current.json, the task's events.jsonl, .ai/policies/risk-tiers.json
+and .ai/VERSION — so it answers in a project whose state.py is older, newer or
 broken. The root is found the way the guards find it (find_ai_root in
 hooks/lib/ai-hook-common.sh): the nearest ancestor holding .ai/, not stopping at
 a git root, so a .ai/ inherited from a parent directory shows up here.
@@ -107,13 +108,15 @@ def report(root):
     approval = state.get("human_approval") or {}
     lines += [
         "task: %s — %s" % (state["task_id"], one_line(state.get("goal"))),
-        "tier: %s · workflow %s" % (state.get("risk_tier") or "?", state.get("workflow") or "?"),
+        "tier: %s · workflow %s" % (state.get("risk_tier") or state.get("mode") or "?",
+                                    state.get("workflow") or "?"),
         "stage: %s · next: %s" % (state.get("current_stage") or "?", one_line(state.get("next_action")) or "?"),
         ("step: %s (%d of %d done) — files: %s"
          % (current, done, len(steps), short(step.get("allowed_files"))) if step
          else "step: none current (%d of %d done)" % (done, len(steps))),
         "verify: tests %s · suite runs %s/%s · e2e %s"
-        % (state.get("test_status") or "?", (state.get("tests") or {}).get("suite_runs", 0),
+        % (state.get("test_status") or "?",
+           (state.get("tests") if isinstance(state.get("tests"), dict) else {}).get("suite_runs", 0),
            tests_cfg.get("max_suite_runs", 5), state.get("e2e_status") or "?"),
         "review: %s (%s of %s) · security %s"
         % (state.get("review_status") or "?", state.get("reviews") or 0,
@@ -139,7 +142,17 @@ def main(argv=None):
     if not root:
         print("root: none — no .ai/ in %s or above it; /ai-init sets one up" % os.path.abspath(args.root))
         return 1
-    lines, task_id = report(root)
+    lines, task_id = None, None
+    state = read_json(os.path.join(root, ".ai", "state", "current.json"))
+    if state.get("schema") == 7:
+        # A schema-7 task is state.py's to describe; this file's own read stays for
+        # an older task, and for an install whose state.py cannot answer.
+        done = subprocess.run([sys.executable, "-I", os.path.join(SKILLS, "ai-task", "state.py"),
+                               "--root", root, "status"], capture_output=True, text=True, check=False)
+        if done.returncode == 0 and done.stdout.strip():
+            lines, task_id = done.stdout.rstrip("\n").split("\n")[:20], state.get("task_id")
+    if lines is None:
+        lines, task_id = report(root)
     print("\n".join(lines))
     if args.cost and task_id:
         sys.stdout.flush()

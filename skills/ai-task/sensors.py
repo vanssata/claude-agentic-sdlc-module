@@ -235,7 +235,10 @@ def snapshot_tree(root):
     os.close(handle)
     try:
         if os.path.exists(real_index):
-            shutil.copyfile(real_index, temp_index)
+            # copy2, not copyfile: the copy keeps the index's mtime, which is what
+            # git's racy-entry check compares against. A fresh mtime made a
+            # same-size edit from the index's own second read as unchanged.
+            shutil.copy2(real_index, temp_index)
         else:
             os.remove(temp_index)
         env = {"GIT_INDEX_FILE": temp_index}
@@ -289,6 +292,20 @@ def numstat(root, from_tree, to_tree):
                       "binary": binary})
         i += 1
     return files
+
+
+def diff_files(root, from_tree, to_tree):
+    """[{path, status}] between two trees, status A, M, D or T (name-status,
+    renames off, so a rename is a D plus an A and a deletion is never lost).
+    None when either tree is missing: an unmeasured diff is not an empty one."""
+    if not from_tree or not to_tree:
+        return None
+    code, out = git(root, ["diff", "--name-status", "--no-renames", "-z", from_tree, to_tree])
+    if code != 0:
+        return None
+    fields = [f for f in out.split("\0") if f != ""]
+    return [{"path": path, "status": status[:1]}
+            for status, path in zip(fields[0::2], fields[1::2])]
 
 
 # ------------------------------------------------------------------- matching
