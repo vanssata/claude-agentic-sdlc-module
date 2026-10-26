@@ -23,6 +23,16 @@ fixes the order, names the files per task, and records where it departs from the
   (including light ≤ 2 for D2, plugin-only as a degraded mode for D5, and for A5 the human publishes while the
   git guard denies `npm publish`).
 - **OQ8, OQ9, OQ10:** manual precondition gates G0, G1 and G2 in **Order of work**.
+- **G1 / OQ9 (2026-10-26, developer): option A, one `rr-` prefix for all seven.** `/plan`, `/review` and
+  `/status` are built-in in Claude Code 2.1.310 and Codex 0.164.0 (`/review` is Claude Code's alias of
+  `code-review`); `/setup`, `/spec`, `/build`, `/ship` are free. A `:` cannot be in a skill name (Codex
+  accepts `^[a-z0-9-]+$`), so `riskrails:<name>` would exist only as a Claude Code plugin namespace. The
+  seven are **`rr-setup rr-spec rr-plan rr-build rr-review rr-ship rr-status`**; every `/setup` … `/status`
+  in this plan and in the spec means its `rr-` name. The bare `status` skill shipped in 1.4 is removed in
+  2.3, with no alias (it shadows the built-in in both runtimes); `ai-status` becomes an alias of
+  `rr-status` until 2.6. R1's count is unchanged: `status` is renamed, not kept beside its new name.
+  Open for 2.3: an install that already has `~/.claude/skills/status/` or `~/.codex/skills/status/` keeps
+  it after a reinstall unless the installer removes the directory it shipped.
 
 ## Departures from the spec's task table (this plan's corrections, one review round)
 
@@ -107,7 +117,7 @@ Grouped by task; "new" / "edit" / "delete". Fixtures and history files are liste
 | 2.2a | edit `skills/ai-task/state.py` (new surface beside the old), `skills/ai-task/sensors.py` (`snapshot_tree`, `diff_files` exposed; nothing deleted), `skills/status/status.py` (delegates to `state.py status`), `skills/usage-report/usage-report.py`; new `skills/project-update/migrations/0007_weight_model.py`, `tests/fixtures/project-update/schema-v6/`, `tests/test_ai_task_state.py`, `tests/test_end_to_end.py`, `tests/test_usage_report.py`, `tests/test_project_update.py` (`TestMigration0007`); edit `tests/test-end-to-end.sh` (last line runs the Python e2e) |
 | 2.H | human: `.ai/rules/hooks.md`, `.ai/rules/skills.md`, `docs/sdlc/constitution.md` C6, `CLAUDE.md` lesson 2, `.ai/policies/safety.md` blocker sentence, repo `.ai/policies/weight.json` via `update.py --apply` |
 | G1 | — (human: OQ9) |
-| 2.3 | new `skills/{setup,spec,plan,build,review,ship}/SKILL.md`, `ai/using-riskrails.md`, `tests/test_skills_surface.py`, `tests/test_instruction_budget.py`; edit `skills/status/SKILL.md`, the nine old `skills/*/SKILL.md` → aliases, `ai/workflows/*` (merged), `ai/agents/manager.md` (delete; replaced by `using-riskrails.md`), `instructions/stub.md`, `skills/ai-init/templates/.ai/AGENTS.md`, history/, `tests/test-shared-prompts-model-free.sh` (grep for `light ≤` / `guarded 3`) |
+| 2.3 | new `skills/rr-{setup,spec,plan,build,review,ship}/SKILL.md`, `ai/using-riskrails.md`, `tests/test_skills_surface.py`, `tests/test_instruction_budget.py`; move `skills/status/` to `skills/rr-status/` (no `status` left; `skills/ai-status/SKILL.md` points at `rr-status`), the nine old `skills/*/SKILL.md` → aliases, `ai/workflows/*` (merged), `ai/agents/manager.md` (delete; replaced by `using-riskrails.md`), `instructions/stub.md`, `skills/ai-init/templates/.ai/AGENTS.md`, history/, `tests/test-shared-prompts-model-free.sh` (grep for `light ≤` / `guarded 3`) |
 | 2.4 | delete `agents/{ai-context,ai-expert,ai-implementer,ai-indexer,ai-planner,ai-release,ai-risk,ai-security,ai-tester}.md.tmpl` and the matching `ai/agents/*.md`; edit `agents/ai-reviewer.md.tmpl`, `ai/agents/reviewer.md` (§Security from `security.md`), `scripts/render-codex-agents.py`, `hooks/runtime-gate.py`, `profiles/*.json`, `install.sh` enumerations; edit `tests/test-codex-agent-render.sh`, `test-runtime-gate.sh`, `test-profiles.sh` |
 | 2.5 | new `skills/setup/setup.py`, `tests/test_setup.py`, `tests/fixtures/setup/new-shop-like/`; edit `skills/setup/SKILL.md`, `skills/project-update/adopt-map.json`, `tests/test-project-adopt.sh` |
 | 2.6 | edit `skills/ai-task/state.py` (19 subcommands removed), `skills/ai-task/sensors.py` (≈ 300 lines left); new `tests/test_no_size_tokens.py`; edit `tests/test-ai-task-state.sh`, `tests/test-ai-task-sensors.sh` (cases of removed commands dropped, each listed in `task.md` with its reason) |
@@ -177,7 +187,8 @@ top of `verify_command` once to the end and `e2e_command` once.
   `python3 -I skills/project-update/update.py --apply` (migration 0007 on this repository). Check:
   `/status` shows schema 7.
 - **G1 (human, before 2.3).** OQ9: no built-in or installed-plugin collision for `/plan`, `/review`,
-  `/status`, `/setup`, `/spec`, `/build`, `/ship`, or a decision to document `riskrails:<name>`. `[ ]`
+  `/status`, `/setup`, `/spec`, `/build`, `/ship`, or a decision to document `riskrails:<name>`. `[x]`
+  2026-10-26: three collide; decided `rr-<name>` for all seven and no bare `status` (Decisions, G1 / OQ9).
 - **2.3 Skill text: seven skills, nine aliases, `using-riskrails.md`.** Expected guarded (behaviour 1 hint
   for pipeline + scope 2). Skills call only the 2.2a surface. Proof: R1, R5 (≤ 400 lines), R10 (model-free
   grep), R28 (`test_session_start_cost` ≤ 10 KB), R32.

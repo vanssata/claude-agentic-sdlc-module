@@ -23,7 +23,7 @@
 <!-- Recurring mistakes and their corrections. Grow this list from code review. -->
 
 - A BLOCKER is closed only with a test that pins it; for a regex's running time, a `timed` case at the measured size that fails on the tree before the fix. Reviews of T-2026-10-20-003 found an untested blocker twice, and its BLOCKERs 2, 4 and 5 all came from edits to `SH_WORD`/`SH_RE` in `hooks/ai-path-guard.sh`, where the invariant is: no piece of a word crosses the blank after a match start's `sh`.
-- A change to this plugin's hooks, skills or `state.py` is not T4 for being "a process every call runs through": T-2026-10-21-001, a 51-line guard bugfix, ran as T4 and cost 25.4M tokens and three STRONG reviews. Tier it by what it does to a user project's decisions — the "this repository:" examples in `.ai/policies/risk-tiers.json`, constitution C6.
+- A change to this plugin's hooks, skills or `state.py` does not score behaviour 2 for being "a process every call runs through": T-2026-10-21-001, a 51-line guard bugfix, ran as T4 and cost 25.4M tokens and three STRONG reviews. Weigh it by what it does to a user project's decisions — the "this repository:" examples in `.ai/policies/weight.json`, `docs/weight.md` (Modes and the old tiers), constitution C6.
 
 <!-- claude-agentic:start -->
 ## AI agent workflow
