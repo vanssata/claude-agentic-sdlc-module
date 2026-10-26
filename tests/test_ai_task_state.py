@@ -481,8 +481,8 @@ class TestSurface(Base):
         data = json.loads(self.p.ok("status", "--json").stdout)
         self.assertEqual((data["schema"], data["mode"]), (7, "light"))
         self.assertFalse(data["facts"]["a"][0])
-        # /status hands a schema-7 task to state.py status.
-        status_py = os.path.join(ROOT, "skills", "status", "status.py")
+        # /rr-status hands a schema-7 task to state.py status.
+        status_py = os.path.join(ROOT, "skills", "rr-status", "status.py")
         shown = subprocess.run([sys.executable, "-I", status_py, "--root", self.p.root], capture_output=True,
                                text=True, check=False).stdout
         self.assertIn("mode: light", shown)

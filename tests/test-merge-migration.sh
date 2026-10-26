@@ -61,7 +61,7 @@ for f in docs/sdlc/README.md docs/sdlc/intent/TEMPLATE.md docs/sdlc/specs/TEMPLA
 done
 
 [ "$(grep -c 'claude-agentic:start' "$REPO/CLAUDE.md")" = 1 ] && pass "the project CLAUDE.md carries one agent block" || fail "expected one block in the project CLAUDE.md"
-grep -q '/ai-task' "$REPO/CLAUDE.md" && pass "and points at the pipeline as the default route" || fail "should mention /ai-task"
+grep -q '/rr-build' "$REPO/CLAUDE.md" && pass "and points at the pipeline as the default route" || fail "should mention /rr-build"
 grep -q '.claude/settings.local.json' "$REPO/.gitignore" && pass ".gitignore covers the sdlc layout" || fail "sdlc gitignore entries missing"
 grep -q '.ai/state/\*.json' "$REPO/.gitignore" && pass "and the .ai state file" || fail ".ai gitignore entries missing"
 [ "$(grep -c 'claude-agentic' "$REPO/.gitignore")" = 2 ] && pass "with one section each, not duplicated" || fail "gitignore sections wrong: $(grep -c 'claude-agentic' "$REPO/.gitignore")"

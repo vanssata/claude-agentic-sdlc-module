@@ -26,8 +26,16 @@ grep -q '"fable' <<<"$(sed -n '/^== settings snippet/,/^== agents/p' <<<"$out")"
 echo "== dry run: the shared tree"
 for target in claude codex; do
     out=$(HOME="$TMP/h-$target" CLAUDE_DIR="$TMP/none" CODEX_DIR="$TMP/none-x" bash "$INSTALL" --target "$target" --plan max --codex-plan plus --dry-run 2>&1)
-    n=$(printf '%s\n' "$out" | grep -c '^   shared:  claude-agentic/ai (29 files), claude-agentic/ai-path$')
+    n=$(printf '%s\n' "$out" | grep -c '^   shared:  claude-agentic/ai (31 files), claude-agentic/ai-path$')
     [ "$n" -eq 1 ] && pass "$target: the would-install list names the shared tree once" || fail "$target: shared line count $n" "$out"
+    skills=$(printf '%s\n' "$out" | sed -n 's/^   skills:  //p')
+    missing=""; for s in rr-setup rr-spec rr-plan rr-build rr-review rr-ship rr-status; do
+        grep -qE "(^|,)$s(,|$)" <<<"$skills" || missing="$missing $s"; done
+    [ -z "$missing" ] && ! grep -qE '(^|,)status(,|$)' <<<"$skills" \
+        && pass "$target: the would-install list names the seven rr- skills and no bare status" \
+        || fail "$target: skills line" "missing:$missing — $skills"
+    grep -q '^   retire:  skills/status (now skills/rr-status)' <<<"$out" \
+        && pass "$target: the dry run names the retire of skills/status" || fail "$target: no retire line" "$out"
     span=$(printf '%s\n' "$out" | sed -n '/^== \(CLAUDE\|AGENTS\)\.md managed block:/,/^== profile\.json/p')
     grep -q '^   shared:' <<<"$span" && fail "$target: the shared line is inside the block/routing span" || pass "$target: the shared line is outside the block/routing span"
     grep -qF 'claude-agentic/ai-path <path>' <<<"$span" && pass "$target: routing.md renders the shared-files line" || fail "$target: routing.md lacks the shared-files line" "$span"
@@ -39,7 +47,7 @@ out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan pro --dry-run 2>&1)
 grep -q '"model": "opusplan"' <<<"$out" && pass "pro sets the session model to opusplan" || fail "pro should set opusplan" "$out"
 grep -q 'Opus 5 in plan mode' <<<"$out" && pass "pro names opusplan in the CLAUDE.md block" || fail "block should explain opusplan" "$out"
 grep -q '^model: opus' <<<"$out" && pass "pro pins model: opus on the EXPERT agents" || fail "EXPERT agents should pin opus on pro" "$out"
-grep -q '/ai-task <request>' <<<"$out" && pass "the block routes every change through /ai-task" || fail "block should name /ai-task" "$out"
+grep -q '/rr-build <request>' <<<"$out" && pass "the block routes every change through /rr-build" || fail "block should name /rr-build" "$out"
 out=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --plan max --fable yes --dry-run 2>&1)
 grep -qx 'model: opus' <<<"$out" && pass "max pins opus on ai-expert" || fail "ai-expert should pin opus on max" "$out"
 grep -qx 'effort: xhigh' <<<"$out" && pass "max renders the EXPERT tier at xhigh" || fail "EXPERT effort should be xhigh on max" "$out"
@@ -180,7 +188,7 @@ for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Ex
          hooks/cap-large-read.py hooks/project-scaffold.sh hooks/ai-git-guard.json \
          skills/ai-init/SKILL.md skills/ai-init/scaffold-ai.sh skills/ai-task/state.py \
          skills/ai-audit/SKILL.md skills/ai-status/SKILL.md skills/project-init/SKILL.md \
-         skills/status/SKILL.md skills/status/status.py \
+         skills/rr-status/SKILL.md skills/rr-status/status.py \
          skills/sdlc-intent/SKILL.md skills/sdlc-spec/SKILL.md skills/sdlc-plan/SKILL.md \
          skills/ai-init/templates/.ai/AGENTS.md skills/project-init/templates/intent.md \
          skills/project-update/SKILL.md skills/project-update/update.py skills/project-update/history/index.json \
@@ -192,7 +200,8 @@ for f in agents/ai-expert.md agents/ai-reviewer.md agents/architect.md agents/Ex
     [ -e "$DIR/$f" ] && pass "$f installed" || fail "$f missing"
 done
 [ -x "$DIR/hooks/ai-git-guard.sh" ] && pass "hooks are executable" || fail "hooks should be executable"
-[ -x "$DIR/skills/status/status.py" ] && pass "status.py is executable" || fail "status.py should be executable"
+[ -x "$DIR/skills/rr-status/status.py" ] && pass "rr-status/status.py is executable" || fail "rr-status/status.py should be executable"
+[ ! -e "$DIR/skills/status" ] && pass "skills/status is not installed (redesign 2.3)" || fail "skills/status installed"
 for f in hooks/fable-gate.py hooks/codex-model-gate.py; do
     [ ! -e "$DIR/$f" ] && pass "$f is not installed (redesign 1.3)" || fail "$f installed"
 done
@@ -295,7 +304,11 @@ printf 'old\n' > "$DIR/claude-agentic/routing.md.bak"
 printf '{}\n' > "$DIR/settings.json.bak"; printf 'old\n' > "$DIR/CLAUDE.md.bak"
 printf '#!/usr/bin/env python3\n' > "$DIR/hooks/fable-gate.py"
 printf 'old\n' > "$DIR/bin/claude-1m.bak"
+mkdir -p "$DIR/skills/status"; printf -- '---\nname: status\n---\nold\n' > "$DIR/skills/status/SKILL.md"
 out=$(CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes 2>&1)
+[ ! -e "$DIR/skills/status" ] && [ -f "$DIR/backups/$DAY/skills/status/SKILL.md" ] \
+    && grep -q "retired: skills/status -> backups/$DAY/skills/status" <<<"$out" \
+    && pass "an installed skills/status is retired into backups/<date>/skills/" || fail "skills/status not retired" "$out"
 [ ! -e "$DIR/bin/claude-1m.bak" ] && [ -f "$DIR/backups/$DAY/bin/claude-1m.bak" ] \
     && pass "bin/claude-1m.bak is swept too" || fail "bin/*.bak not swept" "$out"
 for a in $STALE; do

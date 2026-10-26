@@ -20,6 +20,9 @@ export CLAUDE_AGENTIC_SHARED="$PLUGIN_ROOT/ai"
 G=(git -c user.name=tester -c user.email=tester@example.invalid -c commit.gpgsign=false)
 SHARED=$(cd "$PLUGIN_ROOT/ai" && find . -type f | sed 's|^\./|.ai/|' | LC_ALL=C sort)
 N=$(printf '%s\n' "$SHARED" | wc -l)
+# What a schema-5 project carried: the shared set less the two files added to
+# the tree after 0006 shipped (redesign 2.3), which no project ever held.
+CARRIED=$(printf '%s\n' "$SHARED" | grep -vxF -e .ai/using-riskrails.md -e .ai/workflows.md)
 REPORT=".ai/reports/project-update-$(date -u +%Y-%m-%d)"
 
 # v5_project DIR [RUNTIME]: a committed schema-5 project as the cut-over finds
@@ -28,7 +31,7 @@ REPORT=".ai/reports/project-update-$(date -u +%Y-%m-%d)"
 v5_project() {
     local d="$1" rt="${2:-claude}"; mkdir -p "$d"
     bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$d" --runtime "$rt" >/dev/null
-    cp -r "$PLUGIN_ROOT/ai/." "$d/.ai/"
+    cp -r "$PLUGIN_ROOT/ai/." "$d/.ai/"; rm "$d/.ai/using-riskrails.md" "$d/.ai/workflows.md"
     for f in workflows/feature.md agents/manager.md policies/model-routing.md; do cp "$OLDS/$f" "$d/.ai/$f"; done
     cp "$OLDS/AGENTS.v5.md" "$d/.ai/AGENTS.md"
     cp -r "$FIX/schema-v5/.ai/." "$d/.ai/"
@@ -40,7 +43,7 @@ tree_sum() { (cd "$1" && find . -path ./.git -prune -o -type f -print | LC_ALL=C
 # tracked DIR: exec bit, sha and path of every file git holds — what the git
 # route restores (git keeps the exec bit; the rest of a mode is the umask's).
 tracked() { (cd "$1" && git ls-files -z | xargs -0 -I{} sh -c 'printf "%s %s %s\n" "$([ -x "$1" ] && echo x || echo -)" "$(sha256sum < "$1" | cut -c1-64)" "$1"' _ {}); }
-present() { local d="$1" n=0 f; for f in $SHARED; do [ -f "$d/$f" ] && n=$((n + 1)); done; echo "$n"; }
+present() { local d="$1" n=0 f; for f in $CARRIED; do [ -f "$d/$f" ] && n=$((n + 1)); done; echo "$n"; }
 sections() { grep -c '^## Shared files$' "$1/.ai/AGENTS.md"; }
 # router_first OUT: the router's line comes before the first delete? line.
 router_first() {
@@ -51,7 +54,7 @@ router_first() {
 }
 
 echo "== the migration itself"
-[ "$N" -eq 29 ] && pass "the shared tree holds 29 files" || fail "the shared tree holds $N files, expected 29"
+[ "$N" -eq 31 ] && pass "the shared tree holds 31 files" || fail "the shared tree holds $N files, expected 31"
 grep -nE 'claude|codex' "$MIG" >/dev/null && fail "0006 names a runtime in lowercase (L1)" "$(grep -nE 'claude|codex' "$MIG")" \
     || pass "0006 names no runtime (L1)"
 # A schema-5 project ends at the plugin's schema, which later migrations raise (0007).
@@ -87,7 +90,7 @@ out=$(confirm "$R1" 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$(present "$R1")" = 0 ] && pass "the confirmed run deletes all 29" || fail "confirmed: rc=$rc, $(present "$R1") left" "$out"
 [ "$(cat "$R1/.ai/VERSION")" = "$CUR" ] && pass "and the schema reaches $CUR" || fail "VERSION is $(cat "$R1/.ai/VERSION")"
 bad=""
-for f in $SHARED; do
+for f in $CARRIED; do
     "${G[@]}" -C "$R1" show "HEAD:$f" | cmp -s - "$R1/$REPORT/original/$f" || bad="$bad $f"
 done
 [ -z "$bad" ] && pass "every original is kept byte-identical" || fail "originals differ or are missing:" "$bad"
@@ -206,12 +209,21 @@ s, e = t.index("\n## Shared files"), t.index("\n## Doing X → read Y")
 open(p, "w", encoding="utf-8").write(t[:s] + t[e:] + t[s:e])
 PY
 "${G[@]}" -C "$R7" add -A && "${G[@]}" -C "$R7" commit -qm "section moved"
-moved=$(sha256sum < "$R7/.ai/AGENTS.md")
 out=$(upd "$R7" --apply 2>&1)
-! grep -qE '^  (update|merge|conflict)  *\.ai/AGENTS\.md' <<<"$out" \
+! grep -qE '^  (update|conflict)  *\.ai/AGENTS\.md' <<<"$out" \
     && pass "r7: the moved section is neither doubled nor a conflict" || fail "r7: router rewritten or conflicting" "$out"
-[ "$(sha256sum < "$R7/.ai/AGENTS.md")" = "$moved" ] && [ "$(sections "$R7")" = 1 ] \
-    && pass "r7: the human's router is kept, with one section" || fail "r7: the router was rewritten" "$(grep -n '^## ' "$R7/.ai/AGENTS.md")"
+# Since the 2.3 router no shipped base equals the template's rest, so a section
+# moved to the end is merged back before the routing table (put_section's
+# fallback; .ai/project/known-risks.md). What must hold: one section, and every
+# other line of the router as the plugin ships it.
+python3 - "$R7/.ai/AGENTS.md" "$PLUGIN_ROOT/skills/ai-init/templates/.ai/AGENTS.md" <<'PY' \
+    && pass "r7: one section, the rest of the router as shipped" || fail "r7: the router was rewritten" "$(grep -n '^## ' "$R7/.ai/AGENTS.md")"
+import re, sys
+strip = lambda t: re.sub(r"(?ms)^## Shared files$.*?(?=^## |\Z)", "", t).rstrip("\n")
+ours = open(sys.argv[1]).read()
+assert ours.count("\n## Shared files\n") == 1
+assert strip(ours) == strip(open(sys.argv[2]).read())
+PY
 
 echo "== R8: a router with its own non-negotiable, or an edited last line, stays quiet after 0006"
 for kind in appended edited; do
@@ -288,8 +300,8 @@ out=$(CLAUDE_AGENTIC_SHARED="$X" python3 "$UPDATE" "$XP" 2>&1)
 ! grep -qE '^  delete\?  *\.ai/(VERSION|policies/security\.md)' <<<"$out" \
     && pass "a planted policies/security.md or VERSION is not offered for deletion" || fail "project-owned file offered for deletion" "$out"
 grep -q 'outside the shared set, ignored' <<<"$out" && pass "the extra files are named in a hint" || fail "no undeclared-file hint" "$out"
-[ "$(python3 -c "import sys; sys.path.insert(0, '$PLUGIN_ROOT/skills/project-update'); import update; print(len(update.declared_shared()))")" = 29 ] \
-    && pass "the declared shared set is 0006's 29" || fail "declared_shared() is not 29"
+[ "$(python3 -c "import sys; sys.path.insert(0, '$PLUGIN_ROOT/skills/project-update'); import update; print(len(update.declared_shared()))")" = 31 ] \
+    && pass "the declared shared set is 0006's 31" || fail "declared_shared() is not 31"
 
 echo "== R6: a symlinked router stops the confirmed run before any deletion"
 R6="$W/r6"; v5_project "$R6"
@@ -412,7 +424,7 @@ PY
 )
 printf '%s\n' "$sweep" | grep '^hash sweep:' | sed 's/^/  /'
 if [ -n "${M3_LOG:-}" ]; then printf '%s\n' "$sweep" > "$M3_LOG"; fi
-grep -qE '^hash sweep: 29 keys, [0-9]+ versions; 0 not on record; 0 with a blob; bytes: 2 rounds, 3 old fixtures; 0 not deleted; flipped: 0 not an override$' <<<"$sweep" \
+grep -qE '^hash sweep: 31 keys, [0-9]+ versions; 0 not on record; 0 with a blob; bytes: 2 rounds, 3 old fixtures; 0 not deleted; flipped: 0 not an override$' <<<"$sweep" \
     && ! grep -q '^FAIL\|Traceback' <<<"$sweep" \
     && pass "every shared version is on record by hash alone; real bytes are deleted; one flipped byte makes it an override" \
     || fail "hash sweep" "$(printf '%s\n' "$sweep" | head -20)"
@@ -438,7 +450,7 @@ confirm "$RB" >/dev/null 2>&1
 for d in "$RB"/.ai/reports/project-update-*/; do
     jq -r '.deletions[].path' "$d/migration.json" | while IFS= read -r p; do cp -p "$d/original/$p" "$RB/$p"; done
 done
-[ "$(present "$RB")" = 29 ] && "${G[@]}" -C "$RB" diff --quiet -- $(cd "$RB" && printf '%s ' $SHARED) \
+[ "$(present "$RB")" = 29 ] && "${G[@]}" -C "$RB" diff --quiet -- $(cd "$RB" && printf '%s ' $CARRIED) \
     && pass "the jq fallback restores every deletion" || fail "the jq fallback did not restore the copies"
 [ "$(sections "$RB")" = 1 ] && [ "$(cat "$RB/.ai/VERSION")" = "$CUR" ] \
     && pass "but leaves the router new and VERSION $CUR — its limit: git is the rollback" || fail "jq fallback: router or VERSION"

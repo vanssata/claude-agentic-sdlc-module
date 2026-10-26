@@ -36,6 +36,15 @@ else
     fail "model names in shared prompts ($(printf '%s\n' "$found" | wc -l) lines)" "$(printf '%s\n' "$found" | head -40)"
 fi
 
+echo "== the mode thresholds live in the weight table alone (R10)"
+# A threshold copied into a prompt goes stale the day weight.json changes. Only
+# the table, its generated mirror and docs/weight.md (outside this scope) say it.
+found=$(grep -HnE 'light ≤|guarded 3' $files 2>/dev/null | grep -vE '^[^:]*/policies/weight\.(json|md):' | sort -u)
+[ -z "$found" ] && pass "no shared prompt restates a mode threshold" \
+    || fail "mode thresholds outside weight.json / weight.md" "$(printf '%s\n' "$found" | head -10)"
+grep -qE 'light ≤|guarded 3' <<<"light ≤2 · guarded 3–7" && pass "and the pattern catches the weight line's wording" \
+    || fail "the R10 pattern no longer matches the weight line"
+
 echo "== the rendered global block is model-free on every plan"
 for plan in pro team-pro team-max max max20; do
     out=$(CLAUDE_DIR="$TMP/none" bash install.sh --target claude --plan "$plan" --dry-run 2>/dev/null)

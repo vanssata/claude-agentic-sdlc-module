@@ -46,8 +46,9 @@ HEADING = b"\n## Shared files"
 NEXT_SECTION = b"\n## "
 HAS_SECTION = re.compile(rb"(?m)^## Shared files[ \t]*\r?$")
 
-# The shared set, literally: the plugin's tree must equal it (tested), so a
-# file added there later is a decision a new migration makes, not this one.
+# The shared set, literally: the plugin's tree must equal it (tested). A file
+# that projects once held a copy of is added by a new migration, which plans
+# that copy's deletion; one no project ever held needs only its name here.
 SHARED = (
     ".ai/policies/production.md",
     ".ai/policies/database.md",
@@ -78,6 +79,11 @@ SHARED = (
     ".ai/templates/release-report.md",
     ".ai/templates/architecture-decision.md",
     ".ai/templates/implementation-plan.md",
+    # Added after 0006 shipped (redesign 2.3), so declared_shared() knows them.
+    # They were never copied into a project, so a schema < 6 project has
+    # neither and plan() skips both.
+    ".ai/using-riskrails.md",
+    ".ai/workflows.md",
 )
 REASON = "identical to a version the plugin shipped; its shared copy applies"
 

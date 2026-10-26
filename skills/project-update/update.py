@@ -917,6 +917,10 @@ def block_update(plan, history, runtime):
         plan.add("conflict", name, "the managed block was edited here and changed in the plugin",
                  conflict_copy=tpl)
         return
+    if new_block == ours and not legacy:
+        # The merge already holds the plugin's changes: writing it back is no
+        # change, and planning it would keep --check "behind" on every run.
+        return
     plan.add("update", name, note, content=text[:s] + new_block.rstrip(b"\n") + text[e:])
 
 

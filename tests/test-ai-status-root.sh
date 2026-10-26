@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# /status resolves the project the same way the guards do, and stays short.
+# /rr-status resolves the project the same way the guards do, and stays short.
 #
-# skills/status/status.py prints `root:` first. It exists so a reader can see
+# skills/rr-status/status.py prints `root:` first. It exists so a reader can see
 # WHICH .ai/ governs the directory they are in — a .ai/ in an ancestor, or in
 # $HOME, silently arms the path and scope guards for every repository below it,
 # and that is not visible from anywhere else. The line is only worth anything
@@ -11,7 +11,7 @@
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
-STATUS="$PLUGIN_ROOT/skills/status/status.py"
+STATUS="$PLUGIN_ROOT/skills/rr-status/status.py"
 ALIAS="$PLUGIN_ROOT/skills/ai-status/SKILL.md"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
@@ -99,9 +99,10 @@ echo "== ai-status is an alias"
 [ "$(wc -l < "$ALIAS")" -le 12 ] && pass "ai-status/SKILL.md is at most 12 lines" || fail "alias too long" "$(wc -l < "$ALIAS")"
 desc=$(sed -n 's/^description: //p' "$ALIAS")
 [ "$(printf '%s' "$desc" | wc -c)" -le 80 ] && pass "its description is at most 80 bytes" || fail "alias description" "$desc"
-[ "$(awk 'f && NF {print; exit} /^---$/ {c++; if (c == 2) f = 1}' "$ALIAS")" = "deprecated → /status" ] \
-    && pass "its first body line is 'deprecated → /status'" || fail "alias first line"
-[ "$(sed -n 's/^description: //p' "$PLUGIN_ROOT/skills/status/SKILL.md" | wc -c)" -le 1024 ] \
-    && pass "status/SKILL.md's description fits 1024 bytes" || fail "status description too long"
+[ "$(awk 'f && NF {print; exit} /^---$/ {c++; if (c == 2) f = 1}' "$ALIAS")" = "deprecated → /rr-status" ] \
+    && pass "its first body line is 'deprecated → /rr-status'" || fail "alias first line"
+[ "$(sed -n 's/^description: //p' "$PLUGIN_ROOT/skills/rr-status/SKILL.md" | wc -c)" -le 1024 ] \
+    && pass "rr-status/SKILL.md's description fits 1024 bytes" || fail "rr-status description too long"
+[ ! -e "$PLUGIN_ROOT/skills/status" ] && pass "there is no bare skills/status any more" || fail "skills/status is back"
 
 summary "status project root"

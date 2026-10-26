@@ -1,10 +1,9 @@
 ---
 name: ai-status
-description: Deprecated alias of /status — where the current task stands.
+description: Deprecated alias of /rr-status — where the current task stands.
 ---
 
-deprecated → /status
+deprecated → /rr-status
 
-Do exactly what the `status` skill says: run `skills/status/status.py` from the
-install root this skill was loaded from (`~/.claude` or `~/.codex`), with
-`--root "$PWD"`, and print its output verbatim.
+Read `skills/rr-status/SKILL.md` in the install root this skill was loaded from
+(`~/.claude` or `~/.codex`) and follow it with these arguments: $ARGUMENTS

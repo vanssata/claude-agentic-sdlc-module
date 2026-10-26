@@ -359,3 +359,77 @@ following; each is open unless marked.
 - **How likely / how bad**: only patterns a project adds itself; the shipped ones start with a letter.
 - **Suggested fix**: take the first `[A-Za-z]+` run of the match, and refuse at `weight.json` load a pattern that has none.
 - **Status**: open
+
+## Old command names in hook and script messages, README and docs (found 2026-10-26 by T-2026-10-26-001, out of scope)
+
+- **Found**: 2026-10-26, T-2026-10-26-001 (redesign 2.3), out of scope by its plan.
+- **Where**: `/ai-task`, `/ai-init`, `/ai-status`, `/project-update` in `hooks/context-guard.py`, `state.py` advice lines, `skills/ai-init/scaffold-ai.sh` output, `install.sh`'s summary (`/skills lists ai-init …`), `README.md` and `docs/`; `README.md:767` points at "The parse cache" in `skills/usage-report/SKILL.md`, now an alias (the text is condensed into `rr-status --cost`).
+- **What could go wrong**: KNOWN FACT — the messages name the old commands; the ten aliases keep them working for one version, so nothing breaks until the aliases go.
+- **How likely / how bad**: certain, cosmetic while the aliases ship; a dead pointer once they are removed.
+- **Suggested fix**: reword in 2.6 (hook and script messages) and 3.6 (README, docs), before the aliases are deleted.
+- **Also**: the router template (`skills/ai-init/templates/.ai/AGENTS.md`) keeps `/project-update` in the routing table's last row and `/ai-init` in its last line on purpose: adopt appends rows after that row and a human's section or note lands after that line, and `git merge-file` turns a change next to either into a conflict (cases r4, r10 of `tests/test-migration-0006.sh` and the adopt round trip of `tests/test-project-adopt.sh`). They change only together with a merge that tolerates it.
+- **Status**: open
+
+## This repository's own CLAUDE.md block still renders the old stub (found 2026-10-26 by T-2026-10-26-001, human row 3.H)
+
+- **Found**: 2026-10-26, T-2026-10-26-001 (redesign 2.3).
+- **Where**: the managed block in `CLAUDE.md` at the repository root; `instructions/stub.md` and the committed templates changed in this task.
+- **What could go wrong**: KNOWN FACT — sessions in this repository read `/ai-task <request>` and the old reader wording until the block is re-rendered.
+- **How likely / how bad**: certain until the human runs `python3 skills/project-update/update.py . --apply`; the aliases keep the old names working.
+- **Suggested fix**: the human re-renders it (plan row 3.H); no agent edits it.
+- **Status**: open
+
+## The gate's questions-file route depends on a subcommand 2.6 removes (found 2026-10-26 by T-2026-10-26-001, out of scope)
+
+- **Found**: 2026-10-26, T-2026-10-26-001 (redesign 2.3).
+- **Where**: `skills/ai-task/state.py` — a hand-filled `[Answer]: A` on the gate question is picked up only by `questions --sync` (`close_gate_from_file`), one of the 19 subcommands the spec removes; `close` does not sync.
+- **What could go wrong**: KNOWN FACT — `/rr-ship` names only the terminal route (`approve --by` in the human's own shell), because the skills may not call a removed subcommand. Once 2.6 deletes `questions`, the file route for the gate is gone unless something else reads it.
+- **How likely / how bad**: certain at 2.6; a human who approves by editing the file sees `close` keep asking.
+- **Suggested fix**: 2.6 decides — `close` syncs a filled gate answer itself, or the file route is dropped on purpose and the spec's §Questions (phase 3) says so. Plain questions are unaffected: a filled `[Answer]:` line is read directly.
+- **Status**: open
+
+## A Shared files section moved to the end of the router goes back on the next router change (found 2026-10-26 by T-2026-10-26-001, out of scope)
+
+- **Found**: 2026-10-26, T-2026-10-26-001 (redesign 2.3), case r7 of `tests/test-migration-0006.sh`.
+- **Where**: `skills/project-update/update.py` `router_merge()` and `split_shared_section()`: a section at the end of `.ai/AGENTS.md` leaves the newline before it in the rest, so the rest never equals the template's; with no heading after it, `put_section()` falls back to the plugin's position.
+- **What could go wrong**: KNOWN FACT — the 2.3 router is the first template change since 0006. A project whose human moved the section to the end gets one `merge` that puts it back before `## Doing X → read Y`; every other line is kept, nothing conflicts. Before 2.3 the older base's rest equalled the template's and the run was quiet. Case r7 now asserts one section and the rest as shipped, not the move.
+- **How likely / how bad**: only routers whose section was moved to the end; the move is lost once, nothing else.
+- **Suggested fix**: strip the newline before the section in `split_shared_section()`, and keep the section at the end when the project had it there; then restore r7's byte-identical assertion.
+- **Review**: M3 of the T-2026-10-26-001 STRONG review — the test was relaxed instead of the in-scope cause fixed; left for the developer to accept or to fix in a follow-up.
+- **Status**: open
+
+## The new skills read a tier's model through `state.py profile` (found 2026-10-26 by T-2026-10-26-001)
+
+- **Found**: 2026-10-26, T-2026-10-26-001 (redesign 2.3).
+- **Where**: `skills/rr-review/SKILL.md` and `skills/rr-spec/SKILL.md` spawn `ai-reviewer` and `architect` with `model: $($STATE profile --tier <TIER>)`. The spec lists `profile` as internal, "undocumented in SKILL.md".
+- **What could go wrong**: INFERENCE — if 2.4 removes or renames `profile` with the twins, the two skills spawn the agent without a model and it runs at its default tier.
+- **How likely / how bad**: only if 2.4 changes `profile`; the review would run on the session's model.
+- **Suggested fix**: 2.4 keeps `profile --tier` or rewrites the two lines with the agent template's own tier.
+- **Status**: open
+
+## The new surface's human-only routes have no path-guard rule (found 2026-10-26 by the T-2026-10-26-001 review, M1, out of scope)
+
+- **Found**: 2026-10-26, STRONG review M1 of T-2026-10-26-001.
+- **Where**: `hooks/ai-path-guard.sh` denies `approve`, `set … --by` and context-guard.py; `skills/ai-task/state.py` `human_route()` also accepts an `AI_UNATTENDED=1` typed inline by the agent, for `review --by` (past REVIEW_BUDGET), `verify --by` (past SUITE_BUDGET) and `start --mode <lower> --by`.
+- **What could go wrong**: KNOWN FACT (reproduced by the reviewer against the real guard) — an agent can record a passing verdict over an open in-scope BLOCKER (a verdict given with `--by` skips `verdict_matches_findings`), or start a payments task in light mode, with no review and no gate. `.ai/policies/safety.md:25` accepts the inline variable only because the guard's approve rule comes first; `set --by` had that rule, and its replacement `review --by` does not. Lowering the mode was already unguarded under the old `risk --by`.
+- **How likely / how bad**: needs an agent that constructs the bypass (outside safety.md's threat model of mistakes), but the rr- skills now document these routes; the cost is a full-mode task closed without its human.
+- **Suggested fix**: guard deny rules for `review|verify … --by` and `start … --mode … --by`, matching the `set --by` rule, before 2.6 removes `set`; a fixture each.
+- **Status**: open
+
+## state.py still sends a session with no task to the removed `init` (found 2026-10-26 by the T-2026-10-26-001 review, M2, out of scope)
+
+- **Found**: 2026-10-26, STRONG review M2 of T-2026-10-26-001.
+- **Where**: `skills/ai-task/state.py:407` — `handoff --print` with no task in flight exits 1 with "Start one with state.py init"; `load_v7()` (`state.py:3107`) refuses an old-surface task on the new commands.
+- **What could go wrong**: KNOWN FACT — not cosmetic: an agent that follows the message starts an old-surface task, which `verify`, `review` and `start` then refuse. `/rr-build` now warns against it and hands an old-surface task to the human; the message itself is unchanged.
+- **How likely / how bad**: any session that reads the message literally; the task has to be abandoned and restarted.
+- **Suggested fix**: the no-task message names `/rr-plan` (`state.py start`), in 2.6 with the other message rewording.
+- **Status**: open
+
+## `status` keeps a question pending after the human fills `[Answer]:` in the file (found 2026-10-26 by the T-2026-10-26-001 review, L2, out of scope)
+
+- **Found**: 2026-10-26, STRONG review L2 of T-2026-10-26-001.
+- **Where**: `skills/ai-task/state.py` `status_lines()` reads the `questions.pending` cache, which only `questions --sync` (one of the 19 removed subcommands) refreshes; `verify`, `close` and `handoff --print` re-parse the file and see it answered.
+- **What could go wrong**: KNOWN FACT (reviewer-verified) — `/rr-status` shows `questions: 1 pending` for an answered question, and an agent may stop to ask it again. `/rr-status` now says the count can lag and points at `handoff --print`.
+- **How likely / how bad**: every question answered through the file; one needless stop.
+- **Suggested fix**: `status_lines()` re-parses the questions file as `guard_pending()` does — in 2.6, together with the gate's file route above.
+- **Status**: open

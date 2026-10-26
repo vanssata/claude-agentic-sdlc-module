@@ -513,6 +513,7 @@ claude_dry_run() {
   echo "   hooks:   $(ls "$SRC/hooks" | paste -sd,)"
   [ "$TIER" = max ] && echo "   bin:     claude-1m (opus[1m]$( [ "$FABLE" = yes ] && echo " / fable[1m]" ), pins the model at launch; compacts near $ONE_M_AT)"
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
+  echo "   retire:  skills/status (now skills/rr-status), into backups/<date>/ if present"
   shared_line
   echo "   config:  ai-git-guard.json (only if absent)"
   echo "   routing: claude-agentic/routing.md"
@@ -587,6 +588,9 @@ install_file() {  # install_file <src> <dst> [root] — back up on a real change
 # would show up as a second, stale command. Backups go to backups/<date>/skills/.
 install_skills() {
   local root="$1" backups="$1/backups/$BACKUP_DATE/skills" d name dst stale
+  # /status became /rr-status (redesign 2.3); a skills/status left behind would
+  # load as a second status command next to rr-status and the ai-status alias.
+  retire "$root" skills/status
   for d in "$SRC"/skills/*/; do
     name=$(basename "$d")
     dst="$root/skills/$name"
@@ -610,7 +614,7 @@ install_skills() {
   done
   chmod +x "$root/skills/ai-init/scaffold-ai.sh" "$root/skills/ai-task/state.py" \
            "$root/skills/ai-task/sensors.py" "$root/skills/project-update/update.py" \
-           "$root/skills/status/status.py"
+           "$root/skills/rr-status/status.py"
 }
 
 # install_shared <destination-root> — the .ai/ files every project shares, at
@@ -1049,6 +1053,7 @@ codex_dry_run() {
   echo "   agents:  $(ls "$TMP/codex-agents" | sed 's/\.toml$//' | paste -sd,)"
   echo "   hooks:   $(codex_hook_files | xargs -n1 basename | paste -sd,)"
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
+  echo "   retire:  skills/status (now skills/rr-status), into backups/<date>/ if present"
   shared_line
   echo "   config:  ai-git-guard.json (only if absent)"
   echo "   routing: claude-agentic/routing.md"

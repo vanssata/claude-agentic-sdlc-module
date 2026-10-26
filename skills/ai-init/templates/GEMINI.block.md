@@ -5,7 +5,7 @@ This repository runs an agentic pipeline under `.ai/`. Read `.ai/AGENTS.md` firs
 
 - Production behaviour is the source of truth: document problems outside the task, do not fix them.
 
-- Changes run through the pipeline (`/ai-task` in Claude Code or Codex); without it, follow `.ai/policies/safety.md`, touch only the files the current task names, and answer questions in prose or by filling the file.
+- Changes run through the pipeline (`/rr-build` in Claude Code or Codex); without it, follow `.ai/policies/safety.md`, touch only the files the current task names, and answer questions in prose or by filling the file.
 
 - Verify before reporting done: `verify_command` from `.ai/policies/testing.md` once, to the end, then `e2e_command` once; every failure fixed as one batch; show the output.
 - No agent commits, merges or deploys; approval is given by a human outside the agent. When a review flags the same mistake twice, the correction goes into this file.

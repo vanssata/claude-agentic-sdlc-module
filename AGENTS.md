@@ -29,7 +29,7 @@ This repository runs an agentic pipeline under `.ai/`. Read `.ai/AGENTS.md` firs
 
 - Production behaviour is the source of truth: document problems outside the task, do not fix them.
 
-- A change runs through `/ai-task <request>`; `/ai-status` shows where it stands. Each step names the files it may touch — an edit outside them is refused: answer `SCOPE_CHANGE_REQUIRED`. One `apply_patch` is checked file by file: a patch that reaches outside the step is refused whole.
+- A change runs through `/rr-build <request>`; `/rr-status` shows where it stands. Each step names the files it may touch — an edit outside them is refused: answer `SCOPE_CHANGE_REQUIRED`. One `apply_patch` is checked file by file: a patch that reaches outside the step is refused whole.
 
 - Verify before reporting done: `verify_command` from `.ai/policies/testing.md` once, to the end, then `e2e_command` once; every failure fixed as one batch; show the output.
 - No agent commits, merges or deploys; approval is given by a human outside the agent. When a review flags the same mistake twice, the correction goes into this file.

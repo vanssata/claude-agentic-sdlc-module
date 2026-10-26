@@ -137,6 +137,7 @@ echo "== an install from before WP5 is upgraded, not doubled"
 UP="$TMP/codex-upgrade"; mkdir -p "$UP/hooks" "$UP/agents"
 DAY=$(date +%F)
 printf '#!/usr/bin/env python3\n# the old shim\n' > "$UP/hooks/codex-model-gate.py"
+mkdir -p "$UP/skills/status"; printf -- '---\nname: status\n---\nold\n' > "$UP/skills/status/SKILL.md"
 STALE="code-implementer qa-runner qa-fixer db-migrator doc-lookup log-inspector sylius-i18n-keys"
 for a in $STALE; do printf 'name = "%s"\n' "$a" > "$UP/agents/$a.toml"; done
 printf 'old\n' > "$UP/agents/ai-expert.toml"; printf 'older\n' > "$UP/agents/ai-expert.toml.bak"
@@ -165,6 +166,9 @@ for a in $STALE; do
     [ ! -e "$UP/agents/$a.toml" ] && [ -f "$UP/backups/$DAY/agents/$a.toml" ] || fail "agents/$a.toml not retired" "$out"
 done
 pass "the seven stale agents are retired into backups/<date>/agents/"
+[ ! -e "$UP/skills/status" ] && [ -f "$UP/backups/$DAY/skills/status/SKILL.md" ] \
+    && grep -q "retired: skills/status -> backups/$DAY/skills/status" <<<"$out" \
+    && pass "skills/status is retired into backups/<date>/skills/ on the Codex home" || fail "skills/status not retired" "$out"
 [ ! -e "$UP/agents/ai-expert.toml.bak" ] && [ "$(cat "$UP/backups/$DAY/agents/ai-expert.toml.bak")" = older ] \
     && pass "a *.bak beside a live agent moves to backups/<date>/agents/" || fail "agent .bak not swept" "$out"
 [ -z "$(cd "$UP" && find . -path ./backups -prune -o -name '*.bak' -print)" ] \
@@ -175,7 +179,7 @@ echo "== the managed AGENTS.md block"
 grep -q 'gpt-5.6-terra' "$DIR/claude-agentic/routing.md" && pass "routing.md names the BALANCED model" || fail "routing.md should name Terra"
 grep -q 'gpt-6-astra' "$DIR/claude-agentic/routing.md" && pass "routing.md names the EXPERT model" || fail "routing.md should name Astra"
 grep -q 'Models are tiers, not names' "$DIR/AGENTS.md" && pass "the block carries tiers, not model names" || fail "the block should carry tiers, not names"
-grep -q 'ai-task' "$DIR/AGENTS.md" && pass "the block carries the pipeline contract" || fail "the pipeline contract is missing"
+grep -q 'rr-build' "$DIR/AGENTS.md" && pass "the block carries the pipeline contract" || fail "the pipeline contract is missing"
 
 echo "== profile.json (R4)"
 jq -e '.runtime == "codex" and (.plan == "plus" or .plan == "pro") and .fable == false and (.tiers.STRONG.model | length > 0)' \

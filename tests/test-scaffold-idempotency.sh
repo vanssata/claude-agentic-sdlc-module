@@ -100,7 +100,7 @@ bash "$SCAFFOLD" "$ROOT4" --runtime both >/dev/null 2>&1
 grep -q 'claude-agentic:start' "$ROOT4/CLAUDE.md" && pass "CLAUDE.md carries the block" || fail "CLAUDE.md should carry the block"
 grep -q 'claude-agentic:start' "$ROOT4/AGENTS.md" && pass "AGENTS.md carries the block" || fail "AGENTS.md should carry the block"
 [ "$(find "$ROOT4" -maxdepth 1 -name '.ai' | wc -l)" = 1 ] && pass "there is exactly one .ai/ tree" || fail "expected one .ai/ tree"
-grep -q 'ai-task' "$ROOT4/AGENTS.md" && pass "AGENTS.md names the same pipeline entry point" || fail "AGENTS.md should name /ai-task"
+grep -q 'rr-build' "$ROOT4/AGENTS.md" && pass "AGENTS.md names the same pipeline entry point" || fail "AGENTS.md should name /rr-build"
 out=$(bash "$SCAFFOLD" "$ROOT4" --runtime both 2>&1)
 grep -q 'nothing to do' <<<"$out" && pass "a dual-runtime scaffold is idempotent too" || fail "second run should be a no-op" "$out"
 [ "$(grep -c 'claude-agentic:start' "$ROOT4/AGENTS.md")" = 1 ] && pass "the AGENTS.md block is not duplicated" || fail "AGENTS.md block duplicated"

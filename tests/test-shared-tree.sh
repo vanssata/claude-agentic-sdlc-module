@@ -40,12 +40,14 @@ workflows/bugfix.md
 workflows/feature.md
 workflows/hotfix.md
 workflows/investigation.md
-workflows/refactoring.md"
+workflows/refactoring.md
+using-riskrails.md
+workflows.md"
 
 echo "== the shared file set"
-[ "$(printf '%s\n' "$SHARED" | wc -l)" -eq 29 ] && pass "the literal list names 29 files" || fail "the literal list is not 29 files"
+[ "$(printf '%s\n' "$SHARED" | wc -l)" -eq 31 ] && pass "the literal list names 31 files" || fail "the literal list is not 31 files"
 actual=$(cd ai && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
-[ "$actual" = "$(printf '%s\n' "$SHARED" | LC_ALL=C sort)" ] && pass "ai/ holds exactly the 29 shared files" \
+[ "$actual" = "$(printf '%s\n' "$SHARED" | LC_ALL=C sort)" ] && pass "ai/ holds exactly the 31 shared files" \
     || fail "ai/ differs from the shared list" "$(diff <(printf '%s\n' "$SHARED" | LC_ALL=C sort) <(printf '%s\n' "$actual"))"
 for f in policies/safety.md policies/security.md; do
     [ ! -e "ai/$f" ] && pass "$f stays project-owned" || fail "$f must not be shared"
@@ -151,7 +153,7 @@ check(U.sha(old) in h.hashes("ai-init/" + P), "hashes() answers from index.json 
 check(ctx(proj, h).is_shipped(P, old), "is_shipped needs no blob")
 
 files = U.shared_files()
-check(len(files) == 29 and files.get(P) == cur, "shared_files() maps the 29 to .ai/<rel>", len(files))
+check(len(files) == 31 and files.get(P) == cur, "shared_files() maps the 31 to .ai/<rel>", len(files))
 
 paths = sorted(files)
 def refused():
@@ -168,7 +170,7 @@ tree = os.path.join(codex, "claude-agentic", "ai")
 shutil.copytree(U.SHARED, tree)
 os.remove(os.path.join(tree, "policies", "git.md")); os.remove(os.path.join(tree, "agents", "risk.md"))
 msg = refused()
-check(msg is not None and " 2 of the 29 " in msg, "require_shared: a partial tree refuses with the count", msg)
+check(msg is not None and " 2 of the 31 " in msg, "require_shared: a partial tree refuses with the count", msg)
 shutil.rmtree(tree); shutil.copytree(U.SHARED, tree)
 check(refused() is None, "require_shared: a full tree in every installed home passes")
 saved = U.SHARED
@@ -233,7 +235,7 @@ echo "== consumers name the rule"
 for a in ai-context ai-discovery ai-expert ai-implementer ai-planner ai-release ai-reviewer ai-risk ai-security ai-tester; do
     [ "$(grep -c '{{AI_SHARED}}/<path>' "agents/$a.md.tmpl")" -eq 1 ] && pass "agents/$a.md.tmpl states the rule once" || fail "agents/$a.md.tmpl should state the shared-path rule once"
 done
-grep -qF '"$AI_HOME/claude-agentic/ai-path" <path>' skills/ai-task/SKILL.md && pass "ai-task names the resolver" || fail "ai-task SKILL.md should name the resolver"
-grep -q '^### ADVERSARIAL REVIEW' skills/ai-task/SKILL.md && pass "ai-task keeps ADVERSARIAL REVIEW" || fail "ADVERSARIAL REVIEW is gone from ai-task"
+grep -qF '"$AI_HOME/claude-agentic/ai-path" <path>' skills/rr-build/SKILL.md && pass "rr-build names the resolver" || fail "rr-build SKILL.md should name the resolver"
+grep -qF '$STATE review --verdict' skills/rr-review/SKILL.md && pass "rr-review records its verdict through state.py review" || fail "rr-review lost the review call"
 
 summary "shared-tree"

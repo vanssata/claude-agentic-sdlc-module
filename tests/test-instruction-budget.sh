@@ -122,7 +122,7 @@ done
 echo "== the stub alone is enough to work safely (R5)"
 STUB=$(python3 "$RENDER" render --scope global --runtime claude --kind block \
        --var PLAN_LABEL=Max --var READ_LINES=4000)
-for phrase in '/ai-task <request>' '.ai/AGENTS.md' 'SCOPE_CHANGE_REQUIRED' '/ai-init' \
+for phrase in '/rr-build <request>' '.ai/AGENTS.md' 'SCOPE_CHANGE_REQUIRED' '/rr-setup' \
               'human approval' 'source of truth' 'one batch' 'routing.md'; do
     if grep -qF -- "$phrase" <<<"$STUB"; then
         pass "the stub says \"$phrase\""
@@ -153,7 +153,7 @@ else
         && pass "the constitution template is within 15 principles and 4096 B" \
         || fail "the constitution template is over its cap"
 fi
-for f in skills/sdlc-spec/SKILL.md skills/sdlc-plan/SKILL.md agents/ai-planner.md.tmpl; do
+for f in skills/rr-spec/SKILL.md skills/rr-plan/SKILL.md agents/ai-planner.md.tmpl; do
     grep -q 'docs/sdlc/constitution.md' "$PLUGIN_ROOT/$f" \
         && pass "$f reads the constitution" || fail "$f does not read the constitution"
 done
@@ -185,9 +185,9 @@ if [ -f "$ROUTER" ]; then
         fail "the router points at files that do not exist" "$missing"
     fi
     if grep -q 'ADVERSARIAL REVIEW' "$ROUTER"; then
-        fail "the stage diagram is still in the router" "it belongs in skills/ai-task/SKILL.md"
+        fail "the stage diagram is still in the router" "the steps belong in the rr- skills"
     else
-        pass "the router routes; the stage diagram lives in the /ai-task skill"
+        pass "the router routes; the steps live in the rr- skills"
     fi
     # The shared tree is named by an insertion before the routing table, never
     # inside it, so adopt keeps appending rows to the table (H1).
@@ -204,8 +204,8 @@ if [ -f "$ROUTER" ]; then
 else
     fail "the router was not scaffolded"
 fi
-grep -q 'ADVERSARIAL REVIEW' "$PLUGIN_ROOT/skills/ai-task/SKILL.md" \
-    && pass "the stage diagram is in the /ai-task skill" || fail "the stage diagram was lost"
+grep -qF '$STATE review --verdict' "$PLUGIN_ROOT/skills/rr-review/SKILL.md" \
+    && pass "the review pass lives in the /rr-review skill" || fail "the review pass was lost from /rr-review"
 
 echo "== .ai/rules/ renders into the directories it names, and only there (R9)"
 RP="$SPACE/rules"; mkdir -p "$RP"

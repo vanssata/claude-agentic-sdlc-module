@@ -21,13 +21,13 @@
 Rules for every repository; everything else loads on demand. `{{HOME}}/claude-agentic/routing.md` has the model ladder, the context-guard thresholds and the launcher; a project's `.ai/AGENTS.md` routes to its policies.
 
 <!-- stub: scope=global runtime=claude,codex -->
-- With `.ai/`: read `.ai/AGENTS.md` first, run every change through `/ai-task <request>`, treat `.ai/policies/` as binding; `/project-update` after a plugin reinstall. Without `.ai/`: `/ai-init` first.
+- With `.ai/`: read `.ai/AGENTS.md` first, run every change through `/rr-build <request>`, treat `.ai/policies/` as binding; `/rr-setup --update` after a plugin reinstall. Without `.ai/`: `/rr-setup` first.
 - Production behaviour is the source of truth: document problems outside the task, do not fix them. Never mix a refactoring with a feature change.
 - Each step names the files it may touch; an edit outside them is refused — answer `SCOPE_CHANGE_REQUIRED`, do not widen the step.{{MULTI_EDIT}}
 - No agent commits, pushes, merges or deploys; the pipeline ends at human approval, given outside the agent. A guard's refusal is not a hint to reword.{{TRUST}}
 - Verify before reporting done: the verification command once, to the end, every failure fixed as one batch, output shown.
-- Context: `grep -n`, then read the hits; never `cat` logs, lockfiles or generated code; a file over ~{{READ_LINES}} lines is read by a FAST reader (`Explore`, `log-reader`) that returns `file:line` excerpts, never the file. Deterministic tools first. {{NEW_CONTEXT}} between tasks. `/usage-report` shows where tokens went.
-- Models are tiers, not names: readers and runners on FAST at `low`; the session implements; STRONG and EXPERT only on a named trigger, one agent at a time, never a fleet on the top tier; a failed thinking task is never retried on a cheaper model.
+- Context: `grep -n`, then read the hits; never `cat` logs, lockfiles or generated code; a file over ~{{READ_LINES}} lines is read by a FAST reader (`Explore`, `log-reader`) that returns `file:line` excerpts, never the file. Deterministic tools first. {{NEW_CONTEXT}} between tasks. `/rr-status --cost` shows where tokens went.
+- Models are tiers, not names: runners and verbatim extraction on FAST at `low`, readers that judge on BALANCED; the session implements; STRONG and EXPERT only on a named trigger, one agent at a time, never a fleet on the top tier; a failed thinking task is never retried on a cheaper model.
 - On compaction keep decisions and their reasons, rejected options, exact paths and names, failed attempts with the error text, open questions and the latest instruction verbatim; trust `.ai/state/handoff.md`{{SNAPSHOT}} over the summary.
 
 <!-- stub: scope=project runtime=* -->
@@ -40,10 +40,10 @@ This repository runs an agentic pipeline under `.ai/`. Read `.ai/AGENTS.md` firs
 - Production behaviour is the source of truth: document problems outside the task, do not fix them.
 
 <!-- stub: scope=project runtime=claude,codex -->
-- A change runs through `/ai-task <request>`; `/ai-status` shows where it stands. Each step names the files it may touch — an edit outside them is refused: answer `SCOPE_CHANGE_REQUIRED`.{{MULTI_EDIT}}
+- A change runs through `/rr-build <request>`; `/rr-status` shows where it stands. Each step names the files it may touch — an edit outside them is refused: answer `SCOPE_CHANGE_REQUIRED`.{{MULTI_EDIT}}
 
 <!-- stub: scope=project runtime=gemini,junie -->
-- Changes run through the pipeline (`/ai-task` in Claude Code or Codex); without it, follow `.ai/policies/safety.md`, touch only the files the current task names, and answer questions in prose or by filling the file.
+- Changes run through the pipeline (`/rr-build` in Claude Code or Codex); without it, follow `.ai/policies/safety.md`, touch only the files the current task names, and answer questions in prose or by filling the file.
 
 <!-- stub: scope=project runtime=* -->
 - Verify before reporting done: `verify_command` from `.ai/policies/testing.md` once, to the end, then `e2e_command` once; every failure fixed as one batch; show the output.
@@ -84,7 +84,7 @@ This repository runs an agentic pipeline under `.ai/`. Read `.ai/AGENTS.md` firs
 ## Workflow
 
 <!-- stub: scope=skeleton-sdlc runtime=* -->
-`/sdlc-intent` → `/sdlc-spec` → `/sdlc-plan` → `/ai-task`; artefacts in `docs/sdlc/`. Run `/ai-init` if there is no `.ai/`.
+`/rr-spec` → `/rr-plan` → `/rr-build` → `/rr-review` → `/rr-ship`; artefacts in `docs/sdlc/`. Run `/rr-setup` if there is no `.ai/`.
 
 <!-- stub: scope=skeleton,skeleton-sdlc runtime=* -->
 ## Things {{RUNTIME_NAME}} gets wrong

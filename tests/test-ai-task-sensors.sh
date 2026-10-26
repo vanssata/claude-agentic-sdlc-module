@@ -400,6 +400,25 @@ OUT=$(S test-run --scope suite 2>&1); RC=$?
     && pass "the suite cannot be run forever: the cap is the human's cue" \
     || fail "should exhaust the run budget" "$OUT($RC)"
 
+echo "== section 7b: the project command never gets the human's terminal"
+# A human runs 'verify --by' past the budget from their own terminal. The suite
+# must not inherit it: an installer that prompts when stdin is a tty, or a test
+# of the terminal-only approve route, behaves differently there (T-2026-10-26-001 run 17).
+OUT=$(python3 - "$SENSORS" "$TMP/tty.log" <<'PY'
+import importlib.util, os, pty, subprocess, sys
+sensors, log = sys.argv[1], sys.argv[2]
+code = ("import importlib.util, sys; s = importlib.util.spec_from_file_location('sensors', sys.argv[1]); "
+        "m = importlib.util.module_from_spec(s); s.loader.exec_module(m); "
+        "m.run_command('.', 'if [ -t 0 ]; then echo tty; else echo notty; fi; read -r x; echo read=$?', sys.argv[2], 10)")
+master, slave = pty.openpty()
+done = subprocess.run([sys.executable, "-c", code, sensors, log], stdin=slave, timeout=30, check=False)
+os.close(slave); os.close(master)
+print(done.returncode, open(log).read().replace("\n", " ").strip())
+PY
+)
+[ "$OUT" = "0 notty read=1" ] && pass "run_command gives the command /dev/null, not a terminal, as stdin" \
+    || fail "the command saw the caller's terminal" "$OUT"
+
 echo "== section 8: the static sensors"
 NG() { python3 "$SENSORS" --root "$GATE" "$@"; }
 OUT=$(NG check --no-bite 2>&1)

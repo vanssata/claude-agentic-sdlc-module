@@ -664,8 +664,10 @@ def run_command(root, command, log_path, timeout=1800, log_max_bytes=2097152):
         sink = stack.enter_context(open(log_path, "wb")) if log_path else subprocess.DEVNULL
         try:
             # check=False: the exit code is the verdict the caller records.
+            # stdin is /dev/null: a human's 'verify --by' runs from their own
+            # terminal, and a suite must not prompt on it or detect it.
             done = subprocess.run(command, cwd=root, shell=True, timeout=timeout, check=False,
-                                  stdout=sink,
+                                  stdin=subprocess.DEVNULL, stdout=sink,
                                   stderr=subprocess.STDOUT if log_path else subprocess.DEVNULL)
             code = done.returncode
             detail = ""
