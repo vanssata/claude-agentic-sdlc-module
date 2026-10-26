@@ -339,4 +339,45 @@ else
     head -40 "$TMP/diff.txt" | sed 's/^/        /'
 fi
 
+# ------------------------------------------------------------ timed (R14)
+# What one tool call costs in guard time: the median of 5 runs, against a
+# budget scaled by AI_TIMED_FACTOR (default 1; a slow CI runner may set 3).
+# With hooks/ai-guard.py present that is one call to it, every check in one
+# process; on the shell tree it is the guards a runtime runs for that tool, one
+# after the other (Bash: git and path; Edit and Write: path and scope; Read:
+# path). Every payload here is allowed, and each run must say so.
+timed_case() {  # timed_case <label> <budget-ms> <payload> <guard>...
+    local label="$1" budget="$2" payload="$3" i g t0 out denied="" samples=() med limit
+    shift 3
+    [ ! -f "$PLUGIN_ROOT/hooks/ai-guard.py" ] || set -- "$PLUGIN_ROOT/hooks/ai-guard.py"
+    for i in 1 2 3 4 5; do
+        t0=$(date +%s%N)
+        for g in "$@"; do
+            case "$g" in
+                *.py) out=$(printf '%s' "$payload" | python3 -I -S "$g" 2>&1) ;;
+                *)    out=$(printf '%s' "$payload" | "$g" 2>&1) ;;
+            esac
+            [ -z "$out" ] || denied="$out"
+        done
+        samples+=( $(( ($(date +%s%N) - t0) / 1000000 )) )
+    done
+    med=$(printf '%s\n' "${samples[@]}" | sort -n | sed -n 3p)
+    limit=$(awk -v b="$budget" -v f="${AI_TIMED_FACTOR:-1}" 'BEGIN { printf "%d", b * f }')
+    if [ -n "$denied" ]; then
+        fail "timed: $label is allowed" "$(printf '%s' "$denied" | head -c 200)"
+    elif [ "$med" -le "$limit" ]; then
+        pass "timed: $label within $limit ms (median ${med} ms of ${samples[*]})"
+    else
+        fail "timed: $label within $limit ms" "median ${med} ms of ${samples[*]}"
+    fi
+}
+CMD_1K="cd src && ls -la Payment && grep -rn 'TODO' Payment | head -n 20 && git status --short"
+while [ ${#CMD_1K} -lt 1024 ]; do CMD_1K+=" && wc -l Payment/Gateway.php Service.php ../README.md | sort -n"; done
+timed_case "Bash, a 1 KB command" 40 "$(bash_payload "$CMD_1K")" "$GIT_GUARD" "$PATH_GUARD"
+timed_case "Edit inside the step" 25 "$(file_payload Edit file_path "$ROOT/src/Payment/Gateway.php")" "$PATH_GUARD" "$SCOPE_GUARD"
+timed_case "Write inside the step" 25 "$(file_payload Write file_path "$ROOT/tests/Payment/NewTest.php")" "$PATH_GUARD" "$SCOPE_GUARD"
+timed_case "Read of an ordinary file" 25 "$(file_payload Read file_path "$ROOT/src/Service.php")" "$PATH_GUARD"
+timed_case "Bash, the 20 KB sh -c fixture" 100 \
+    "$(bash_payload "$(cat "$PLUGIN_ROOT/tests/fixtures/guard-characterization/sh-c-20k.txt")")" "$GIT_GUARD" "$PATH_GUARD"
+
 summary "guard characterization"

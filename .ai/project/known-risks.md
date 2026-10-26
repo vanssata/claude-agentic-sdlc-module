@@ -511,3 +511,21 @@ following; each is open unless marked.
 - **How likely / how bad**: whenever someone follows the docs; a confusing error, no state damage.
 - **Suggested fix**: a docs edit alongside the template task in the entry above.
 - **Status**: open
+
+## The guard port reproduces bash, glibc, jq and coreutils only as far as the corpus reaches (found 2026-10-26 by T-2026-10-26-006)
+
+- **Found**: 2026-10-26, T-2026-10-26-006 (redesign 3.1), while porting the three shell guards to `hooks/ai-guard.py`.
+- **Where**: `hooks/guard/ere.py` (module docstring), `hooks/guard/paths.py` (`realpath_m`, `find_print`), `hooks/guard/common.py` (`JNum`, `logical_cd`), `hooks/guard/scope.py` (`Glob`).
+- **What could go wrong**: an edge the shell guard decided one way and the port another, none of them reached by the golden corpus, the three guard suites or `tests/test_guard_differential.py`: in a UTF-8 locale `[:upper:]`, `[:lower:]`, `[:punct:]`, `[:print:]` and `[:graph:]` are ASCII here (glibc's are Unicode; no shipped pattern uses them); a multi-character collating element or an equivalence class is the character itself; `realpath -m` follows uutils (this machine) — GNU coreutils may resolve a looping path differently; `find` gives readdir order without gnulib fts' inode sort for a directory over 10000 entries; a JSON number in a deny text (a numeric `task_id` or `forbidden_reason`) is printed as written, where jq 1.8 rewrites an exponent (`1e1000` → `1E+1000`); `CDPATH` is not consulted for a relative payload `cwd`. With no `--only` (not registered before 3.5) each check has its own 6 s clock, as each shell guard had.
+- **How likely / how bad**: rare — each needs a user pattern, a file system or a payload shaped for it; a wrong verdict is one allow or deny where the shell gave the other.
+- **Suggested fix**: a differential case per edge if one turns up in practice; the frozen shell guards stay in `tests/fixtures/guard-port/` until 3.5.
+- **Status**: accepted
+
+## Guard port: five differences the 3.1 review found outside the boundary (found 2026-10-27 by the T-2026-10-26-006 review, I1-I5)
+
+- **Found**: 2026-10-27, T-2026-10-26-006 review (BALANCED, ~150k fuzzed payloads frozen shell vs port).
+- **Where**: `hooks/guard/common.py` (`parse_stream`, `Payload`, `env_b`), `hooks/guard/scope.py` (`_parse`), `hooks/guard/ere.py`, `tests/test_imports.py`.
+- **What could go wrong**: KNOWN FACT, each reproduced: (I1) a payload that starts with a UTF-8 BOM — jq parses it and can deny, the port allows; (I2) a NUL (`\u0000`) in a JSON string — bash printed "ignored null byte" on stderr, the port is silent, and two scope cases with a NUL in `notebook_path` differed; (I3) `HOME` unset — the shell guards died on `set -u` and allowed, the port decides and can deny; (I4) contrived patterns — an unterminated extglob `!(a|b)**(.`, the glibc-invalid `\<*`, `\>?`, `\b+`, `[^ab](^(a|))` against a newline; (I5) R15 says 3.10+, but `scripts/merge-codex-config.py:31` and `scripts/render-codex-agents.py:165` import `tomllib` (3.11+), so `tests/test_imports.py` fails on 3.10 — older than this task.
+- **How likely / how bad**: I1-I4 need a payload or a config no runtime session produces; I1 is the only one that allows where the shell denied. I5 breaks the stated Python floor for two scripts.
+- **Suggested fix**: I1, strip one leading BOM before parsing; I5, a `tomllib` fallback or a 3.11 floor for those scripts (the CI matrix lands in 3.3a).
+- **Status**: open

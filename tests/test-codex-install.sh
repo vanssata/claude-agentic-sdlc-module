@@ -69,10 +69,20 @@ for f in agents/ai-discovery.toml agents/ai-reviewer.toml agents/log-reader.toml
          hooks/ai-git-guard.sh hooks/ai-path-guard.sh hooks/ai-scope-guard.sh \
          hooks/runtime-gate.py hooks/context-guard.py hooks/lib/ai-hook-common.sh hooks/ai-git-guard.json \
          hooks/ai-path-guard-defaults.json hooks.json config.toml AGENTS.md \
-         skills/ai-task/state.py skills/ai-init/scaffold-ai.sh skills/usage-report/usage-report.py; do
+         skills/ai-task/state.py skills/ai-init/scaffold-ai.sh skills/usage-report/usage-report.py \
+         hooks/ai-guard.py hooks/guard/__init__.py hooks/guard/common.py hooks/guard/ere.py \
+         hooks/guard/git.py hooks/guard/paths.py hooks/guard/scope.py; do
     [ -e "$DIR/$f" ] && pass "$f installed" || fail "$f missing"
 done
 [ -x "$DIR/hooks/ai-git-guard.sh" ] && pass "the guards are executable" || fail "guards should be executable"
+# The guards are shims over hooks/ai-guard.py and its guard/ package: the
+# installed copy must run the port, not only hold its files.
+payload() { jq -nc --arg c "$1" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:"/",tool_input:{command:$c}}'; }
+payload "git push --force" | "$DIR/hooks/ai-git-guard.sh" | grep -q '"permissionDecision":"deny"' \
+    && pass "the installed git guard runs the port and denies a force push" \
+    || fail "the installed git guard did not deny a force push"
+[ -z "$(payload ls | "$DIR/hooks/ai-git-guard.sh")" ] \
+    && pass "the installed git guard allows ls" || fail "the installed git guard should allow ls"
 [ -x "$DIR/hooks/runtime-gate.py" ] && pass "the model gate is executable" || fail "the gate should be executable"
 [ -e "$DIR/hooks/codex-model-gate.py" ] && fail "the codex-model-gate.py shim is gone (redesign 1.3)" || pass "the codex-model-gate.py shim is not installed"
 [ -e "$DIR/hooks/cap-large-read.py" ] && fail "cap-large-read has no Codex event to fire on and must not be installed" \

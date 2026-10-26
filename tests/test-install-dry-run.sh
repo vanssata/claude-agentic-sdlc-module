@@ -197,10 +197,20 @@ for f in agents/ai-discovery.md agents/ai-reviewer.md agents/architect.md agents
          skills/usage-report/SKILL.md skills/usage-report/usage-report.py \
          hooks/context-guard.py claude-agentic/routing.md claude-agentic/ai-path \
          claude-agentic/ai/policies/git.md claude-agentic/ai/workflows/feature.md \
-         skills/project-update/render_instructions.py; do
+         skills/project-update/render_instructions.py \
+         hooks/ai-guard.py hooks/guard/__init__.py hooks/guard/common.py hooks/guard/ere.py \
+         hooks/guard/git.py hooks/guard/paths.py hooks/guard/scope.py; do
     [ -e "$DIR/$f" ] && pass "$f installed" || fail "$f missing"
 done
 [ -x "$DIR/hooks/ai-git-guard.sh" ] && pass "hooks are executable" || fail "hooks should be executable"
+# The guards are shims over hooks/ai-guard.py and its guard/ package: the
+# installed copy must run the port, not only hold its files.
+payload() { jq -nc --arg c "$1" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:"/",tool_input:{command:$c}}'; }
+payload "git push --force" | "$DIR/hooks/ai-git-guard.sh" | grep -q '"permissionDecision":"deny"' \
+    && pass "the installed git guard runs the port and denies a force push" \
+    || fail "the installed git guard did not deny a force push"
+[ -z "$(payload ls | "$DIR/hooks/ai-git-guard.sh")" ] \
+    && pass "the installed git guard allows ls" || fail "the installed git guard should allow ls"
 [ -x "$DIR/skills/rr-status/status.py" ] && pass "rr-status/status.py is executable" || fail "rr-status/status.py should be executable"
 [ ! -e "$DIR/skills/status" ] && pass "skills/status is not installed (redesign 2.3)" || fail "skills/status installed"
 for f in hooks/fable-gate.py hooks/codex-model-gate.py; do

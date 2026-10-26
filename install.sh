@@ -706,7 +706,7 @@ PY
 
 claude_apply() {
 
-mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/hooks/lib" "$CLAUDE_DIR/skills"
+mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/hooks/lib" "$CLAUDE_DIR/hooks/guard" "$CLAUDE_DIR/skills"
 sweep_bak "$CLAUDE_DIR" settings.json CLAUDE.md
 
 # ---------------------------------------------------------------- 1. agents
@@ -729,11 +729,14 @@ if [ -e "$STALE" ]; then
 fi
 
 # ---------------------------------------------------------------- 2. hooks
-for f in "$SRC"/hooks/*.sh "$SRC"/hooks/*.py "$SRC"/hooks/lib/*.sh; do
+# hooks/guard/ is the package hooks/ai-guard.py imports; the three ai-*-guard.sh
+# are shims that exec it.
+for f in "$SRC"/hooks/*.sh "$SRC"/hooks/*.py "$SRC"/hooks/lib/*.sh "$SRC"/hooks/guard/*.py; do
   [ -e "$f" ] || continue
   case "$f" in
     */codex-*) continue;;   # Codex-only guards; Claude has no event that fires them
     */lib/*) dst="$CLAUDE_DIR/hooks/lib/$(basename "$f")";;
+    */guard/*) dst="$CLAUDE_DIR/hooks/guard/$(basename "$f")";;
     *)       dst="$CLAUDE_DIR/hooks/$(basename "$f")";;
   esac
   install_file "$f" "$dst"
@@ -1080,12 +1083,13 @@ codex_hook_files() {
     "$SRC/hooks/ai-git-guard.sh" \
     "$SRC/hooks/ai-path-guard.sh" \
     "$SRC/hooks/ai-scope-guard.sh" \
+    "$SRC/hooks/ai-guard.py" \
     "$SRC/hooks/runtime-gate.py" \
     "$SRC/hooks/context-guard.py"
 }
 
 codex_apply() {
-  mkdir -p "$CODEX_DIR/agents" "$CODEX_DIR/hooks/lib" "$CODEX_DIR/skills"
+  mkdir -p "$CODEX_DIR/agents" "$CODEX_DIR/hooks/lib" "$CODEX_DIR/hooks/guard" "$CODEX_DIR/skills"
   sweep_bak "$CODEX_DIR" hooks.json config.toml AGENTS.md
 
   # -------------------------------------------------------------- 1. agents
@@ -1101,6 +1105,9 @@ codex_apply() {
     install_file "$f" "$dst" "$CODEX_DIR"
     chmod +x "$dst"
   done < <(codex_hook_files)
+  for f in "$SRC"/hooks/guard/*.py; do   # the package ai-guard.py imports
+    install_file "$f" "$CODEX_DIR/hooks/guard/$(basename "$f")" "$CODEX_DIR"
+  done
   install_file "$SRC/hooks/lib/ai-hook-common.sh" "$CODEX_DIR/hooks/lib/ai-hook-common.sh" "$CODEX_DIR"
   install_file "$SRC/hooks/ai-path-guard-defaults.json" "$CODEX_DIR/hooks/ai-path-guard-defaults.json" "$CODEX_DIR"
   install_file "$SRC/hooks/ai-git-guard-defaults.json"  "$CODEX_DIR/hooks/ai-git-guard-defaults.json" "$CODEX_DIR"
