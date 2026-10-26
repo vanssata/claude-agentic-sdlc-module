@@ -14,6 +14,7 @@ for AI_HOME in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CODEX_HOME:-$HOME/.codex
 done
 STATE="python3 $AI_HOME/skills/ai-task/state.py"
 UPDATE="python3 $AI_HOME/skills/project-update/update.py $PWD"
+SETUP="python3 $AI_HOME/skills/rr-setup/setup.py"
 ```
 
 `--update`, `--adopt` and `--audit` go to their sections below; anything else
@@ -39,7 +40,12 @@ formatting fix. Problems you find are written down, never fixed. Never read
    without saying so first. If only an instruction file was created (no `.ai/`
    wanted), fill its Commands / Conventions / Architecture from the manifests —
    one line per command, five sentences of architecture — and stop.
-2. **Stack.** A handful of `ls` and `grep -n` calls, not a delegation:
+2. **Stack.** `$SETUP survey` first: the project's own toolbox
+   (`.claude/{skills,commands,rules,agents,hooks}`, `.codex/*`, `bin/*.sh`,
+   Makefile targets) with each item's purpose, the guards a project hook
+   already covers, a proposed `verify_command`, and the superpowers line. It
+   runs nothing and writes nothing. Then a handful of `ls` and `grep -n` calls,
+   not a delegation:
    `composer.json`, `package.json`, `Makefile`, `pyproject.toml`, `go.mod`,
    compose files, CI config, `Chart.yaml`/`argocd/`, test and lint configs
    (`phpunit.xml*`, `phpstan.neon*`, `playwright.config.*` …). For Symfony or
@@ -69,6 +75,12 @@ formatting fix. Problems you find are written down, never fixed. Never read
    - `e2e_command` — the end-to-end suite, or `none` when there is none;
    - two or three lines of what healthy output looks like.
 
+   `verify_command` comes from the human: show the one `$SETUP survey`
+   proposed, ask, and only after a yes in chat write it with
+   `$SETUP verify --set "<command>"` (exit 3: one is already set — the human
+   edits it). `$SETUP check` then exits 0; `VERIFY_COMMAND_MISSING` (exit 1)
+   means setup is not finished, and the report says so.
+
    Copy them under `## Verification` in the project instruction file. Shared
    policies (`database.md`, `tooling.md`, `release.md` …) live in
    `<home>/claude-agentic/ai/` and are never written there; when the project has
@@ -95,11 +107,14 @@ formatting fix. Problems you find are written down, never fixed. Never read
    areas, legacy hotspots, high-risk integrations, test and CI maturity,
    security observations, missing documentation, areas agents must not touch
    casually, the weight-table entries you chose, recommended next improvements —
-   recommendations only, none implemented.
+   recommendations only, none implemented. When the survey found a toolbox,
+   offer **--adopt**'s own-toolbox path.
 9. **Report.** Files created (a tree from the scaffold output), surprising
    findings, the modes and what puts a change in each, the safety restrictions
    in force (hooks versus policy), the tooling the workflows reuse, assumptions,
-   unresolved questions and who can answer them, and the suggested first task:
+   unresolved questions and who can answer them, the survey's superpowers
+   line as printed (the `enabledPlugins` line is the human's to add — never
+   write it), and the suggested first task:
    `/rr-plan <it>`. Claim nothing was validated that was not run. Suggest
    `git add .ai .gitignore docs/sdlc` plus the instruction files created.
 
@@ -133,8 +148,9 @@ it cannot.
    everything project-specific, take the plugin's rules and structure, edit the
    project file, delete the copy. A JSON policy: show both values for each
    listed path and say which the plugin expects and why; the human edits it.
-6. Hints. `verify_command is empty`: ask for the one command and what a green
-   run ends with, and fill the Verification block. `the managed block is N B`:
+6. Hints. `verify_command is empty`: show `$SETUP survey`'s proposal, ask for
+   the one command and what a green run ends with, write it with
+   `$SETUP verify --set`, and fill the rest of the Verification block. `the managed block is N B`:
    *edited here* — offer to move the project's lines out of the markers; *the
    plugin ships it that size* — a plugin bug, report it. A constitution over
    fifteen principles or 4096 B: offer to move policy into `.ai/policies/`.
@@ -147,6 +163,17 @@ it cannot.
    the runtime directories and instruction files.
 
 ## --adopt
+
+**A project's own toolbox** — its `.claude/` skills, commands, rules, agents
+and hooks, `.codex/*`, `bin/*.sh`, Makefile targets — is production behaviour
+(C1), not a foreign structure: it is inventoried in place, never copied or
+moved. `$SETUP adopt` shows `.ai/policies/toolbox.md` (one line per item: link,
+purpose, KNOWN FACT `file:line` or UNKNOWN) and the router rows it appends to
+`.ai/AGENTS.md` — one per skill or command, naming its job and its `/<name>`. A
+project hook doing a plugin guard's job is kept and noted; a guard with none is
+reported. Ask "apply?", then `$SETUP adopt --apply`; it is idempotent. Exit 3:
+`toolbox.md` differs from the inventory (a human edited it) — show both, never
+overwrite. A foreign tool's structure, below, can be present as well.
 
 Every command is `$UPDATE --adopt …`, with `--mode coexist` on each when the team
 still uses the other tool (router rows only, nothing moves). Exit 5

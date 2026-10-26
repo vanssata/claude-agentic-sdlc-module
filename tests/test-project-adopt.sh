@@ -1076,4 +1076,19 @@ out=$(python3 "$UPDATE" "$B" --adopt --check 2>&1); rc=$?
 [ $rc -eq 1 ] && [ "$(printf '%s\n' "$out" | wc -l)" -eq 1 ] && grep -q '^adopt state unreadable' <<<"$out" \
     && pass "and --adopt --check prints one line, exit 1" || fail "--adopt --check on broken decisions (rc=$rc)" "$out"
 
+echo "== a project's own toolbox (redesign 2.5): setup.py inventories it, --adopt leaves it alone"
+out=$(python3 -I -c 'import json, sys; t = json.load(open(sys.argv[1])); print(sorted(t["own"]))' "$PLUGIN_ROOT/skills/project-update/adopt-map.json" 2>&1)
+[ "$out" = "['_doc', 'guards', 'inventory', 'verify']" ] && pass "adopt-map.json carries the own section" || fail "own section" "$out"
+O="$TMP/own toolbox"; FIX="$PLUGIN_ROOT/tests/fixtures/setup" adopt_fixture new-shop-like "$O"
+out=$(python3 "$UPDATE" "$O" --adopt 2>&1); rc=$?
+[ $rc -eq 0 ] && ! grep -q Traceback <<<"$out" && ! grep -qE 'unmapped|\.claude/|bin/' <<<"$out" \
+    && pass "--adopt on the new-shop-like toolbox: the own section is not a foreign tool, nothing unmapped" \
+    || fail "--adopt on an own toolbox (rc=$rc)" "$out"
+out=$(python3 "$UPDATE" "$O" --adopt --apply 2>&1); rc=$?
+[ $rc -eq 0 ] && [ -d "$O/.claude/skills/deploy-staging" ] && [ -f "$O/bin/run-tests.sh" ] && [ ! -e "$O/.ai/policies/toolbox.md" ] \
+    && pass "--adopt --apply keeps .claude/ and bin/ in place and writes no toolbox.md (setup.py's job)" \
+    || fail "--adopt --apply on an own toolbox (rc=$rc)" "$out"
+dirt=$(git -C "$O" status --porcelain --untracked-files=all | grep -vE '^\?\? \.ai/(reports|state)/')
+[ -z "$dirt" ] && pass "and changes no file outside its own record" || fail "--adopt --apply changed the own toolbox" "$dirt"
+
 summary "project-adopt"

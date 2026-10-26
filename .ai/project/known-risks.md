@@ -466,3 +466,12 @@ following; each is open unless marked.
 - **How likely / how bad**: each Codex EXPERT question; the most expensive agent could edit the tree, against "the session implements".
 - **Suggested fix**: a read-only EXPERT role on Codex (e.g. an `architect` variant on the EXPERT tier via `variant_of`) or a per-call sandbox if Codex accepts one, decided with the M1 fix above.
 - **Status**: open
+
+## `setup.py` reads the first comment of a symlinked hook or script into toolbox.md (found 2026-10-26 by the T-2026-10-26-004 review, I1)
+
+- **Found**: 2026-10-26, BALANCED review I1 of T-2026-10-26-004 (redesign 2.5).
+- **Where**: `skills/rr-setup/setup.py` `purpose_of`/`comment_purpose`, the `.claude/hooks/*` and `bin/*.sh` inventory rows.
+- **What could go wrong**: KNOWN FACT — a symlinked file under `.claude/hooks/` or `bin/` is opened and its first comment line is printed by `survey` and written into the committed `.ai/policies/toolbox.md`; a link pointing outside the repository would carry that line in. `.claude/hooks/*` also matches dotfiles. A dangling link is listed as UNKNOWN, no crash (reviewer-verified).
+- **How likely / how bad**: needs a project tree that links a hook to a sensitive file whose first line is a comment; the threat model (`safety.md`) covers agent mistakes, not a hostile tree. Low.
+- **Suggested fix**: skip or label links whose target resolves outside the project root, and skip dotfiles under hooks — a separate task.
+- **Status**: open
