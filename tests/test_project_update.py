@@ -234,9 +234,11 @@ class TestMigration0007(unittest.TestCase):
             p.update("--apply")
             self.assertEqual(p.read("state", "current.json"), first)
             env = dict(p.env, AI_RUNTIME="claude")
-            got = subprocess.run([sys.executable, "-I", STATE, "--root", p.root, "get", "--field", "risk_tier"],
+            self.assertEqual(state["risk_tier"], "T4")
+            got = subprocess.run([sys.executable, "-I", STATE, "--root", p.root, "status"],
                                  env=env, capture_output=True, text=True, check=False)
-            self.assertEqual(got.stdout.strip(), "T4")
+            self.assertEqual(got.returncode, 0, got.stderr)
+            self.assertIn("old surface", got.stdout)
             new = subprocess.run([sys.executable, "-I", STATE, "--root", p.root, "verify", "--scope", "suite"],
                                  env=env, capture_output=True, text=True, check=False)
             self.assertEqual(new.returncode, 1)

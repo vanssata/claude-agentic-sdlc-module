@@ -222,39 +222,39 @@ echo "== a task in flight survives the journey to schema 2 (R14)"
 S7="$TMP/schema1"; mkdir -p "$S7"
 CLAUDE_AGENTIC_TEMPLATES="$OLD/ai-init/templates" bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$S7" >/dev/null
 cp -r "$FIX/schema-v1/.ai" "$S7/"
-# The task is made by the tool, not by the fixture: a hand-written state would
-# have to be kept in step with a shape this migration exists to change.
-T7=$(env -u CLAUDECODE -u AI_RUNTIME python3 "$STATE" --root "$S7" quick \
-       --goal "add the per-line fee" --workflow feature --tier T2 --files "src/Fee.php" | head -1)
-python3 - "$S7/.ai/state/current.json" <<'TOV1'
-import json, sys
-# Back to what schema 1 actually held: state.py applies the v2 keys in memory,
-# so the file it wrote already has them.
-path = sys.argv[1]
-state = json.load(open(path, encoding="utf-8"))
-for key in ("owner_runtime", "resume_point", "questions", "handoff"):
-    state.pop(key, None)
-state["human_approval"] = {k: v for k, v in state["human_approval"].items()
-                           if k in ("required", "granted", "granted_by", "granted_at")}
-json.dump(state, open(path, "w", encoding="utf-8"), indent=2)
-TOV1
-rm -rf "$S7/.ai/reports/$T7/events.jsonl" "$S7/.ai/state/handoff.md"
+# What the old surface's `quick` wrote at schema 1, as a literal: the command
+# that made it was removed in redesign 2.6.
+T7="T-2026-09-20-001"
+mkdir -p "$S7/.ai/state" "$S7/.ai/reports/$T7"
+cat > "$S7/.ai/state/current.json" <<JSON
+{"task_id": "$T7", "goal": "add the per-line fee", "workflow": "feature", "current_stage": "implementation",
+ "risk_tier": "T2", "completed_steps": [], "test_status": "not_run", "review_status": "not_started",
+ "approved_plan": {"ref": "inline", "current_step_id": "1",
+                   "steps": [{"step_id": "1", "description": "add the per-line fee", "allowed_files": ["src/Fee.php"]}]},
+ "human_approval": {"required": false, "granted": false, "granted_by": null, "granted_at": null},
+ "history": [{"at": "2026-09-20T10:00:00Z", "event": "task_started", "detail": "add the per-line fee"},
+             {"at": "2026-09-20T10:00:00Z", "event": "stage", "detail": "intake -> discovery"},
+             {"at": "2026-09-20T10:00:01Z", "event": "risk_classified", "detail": "T2: quick"},
+             {"at": "2026-09-20T10:00:01Z", "event": "stage", "detail": "discovery -> implementation: quick"},
+             {"at": "2026-09-20T10:00:01Z", "event": "plan_approved", "detail": "inline"},
+             {"at": "2026-09-20T10:00:01Z", "event": "step_started", "detail": "1: quick"}]}
+JSON
 printf '1\n' > "$S7/.ai/VERSION"
 
-[ "$(env -u CLAUDECODE python3 "$STATE" --root "$S7" get --field current_stage)" = implementation ] \
-    && pass "the v1 task answers state.py before the migration" || fail "a v1 state should work as it is"
-HIST=$(env -u CLAUDECODE python3 "$STATE" --root "$S7" get --field history | jq 'length')
+env -u CLAUDECODE python3 "$STATE" --root "$S7" status | grep -q "old surface" \
+    && pass "the v1 task answers state.py status before the migration" || fail "a v1 state should be readable as it is"
+HIST=$(jq '.history | length' "$S7/.ai/state/current.json")
 python3 "$UPDATE" "$S7" | grep -q "^  schema    1 -> $CURRENT" && pass "the dry run names the schema step" || fail "no schema line" "$(python3 "$UPDATE" "$S7")"
 [ ! -e "$S7/.ai/reports/$T7/events.jsonl" ] && pass "and writes no journal yet" || fail "the dry run must write nothing"
 python3 "$UPDATE" "$S7" --apply >/dev/null
 [ "$(cat "$S7/.ai/VERSION")" = "$CURRENT" ] && pass "the apply reaches the current schema" || fail "VERSION not written"
-[ "$(env -u CLAUDECODE python3 "$STATE" --root "$S7" get --field current_stage)" = implementation ] \
+[ "$(jq -r .current_stage "$S7/.ai/state/current.json")" = implementation ] \
+  && env -u CLAUDECODE python3 "$STATE" --root "$S7" status >/dev/null \
     && pass "and the task still answers afterwards" || fail "a task in flight must survive the migration"
-env -u CLAUDECODE python3 "$STATE" --root "$S7" get --field questions.file | grep -q "$T7" \
+jq -r .questions.file "$S7/.ai/state/current.json" | grep -q "$T7" \
     && pass "with the schema-2 keys now on disk" || fail "the defaults should be persisted" \
-    "$(env -u CLAUDECODE python3 "$STATE" --root "$S7" get --field questions)"
-env -u CLAUDECODE python3 "$STATE" --root "$S7" get --field human_approval \
-    | jq -e 'has("requested_at") and has("gate_id") and has("unattended")' >/dev/null \
+    "$(jq -c .questions "$S7/.ai/state/current.json")"
+jq -e '.human_approval | has("requested_at") and has("gate_id") and has("unattended")' "$S7/.ai/state/current.json" >/dev/null \
     && pass "including the gate's own" || fail "human_approval should gain its v2 keys"
 
 J="$S7/.ai/reports/$T7/events.jsonl"
@@ -270,15 +270,18 @@ jq -se '[.[] | select(.event=="stage_started")][0] | .data.to=="discovery"' "$J"
     && pass "a stage line keeps both ends of the move" || fail "stage_started data wrong" "$(head -2 "$J")"
 jq -se '[.[] | select(.event=="tier_set")][0] | .data.tier=="T2" and .data.from==null' "$J" >/dev/null \
     && pass "a tier line records what it can, and leaves what it cannot as null" || fail "tier_set wrong"
-env -u CLAUDECODE python3 "$STATE" --root "$S7" events --last 3 | grep -q . \
-    && pass "and state.py events reads it back" || fail "the backfilled journal should be readable"
+python3 -c 'import json, sys; [json.loads(line) for line in open(sys.argv[1], encoding="utf-8")]' "$J" \
+    && pass "and every line of it parses back" || fail "the backfilled journal should be readable"
 
 python3 "$UPDATE" "$S7" | grep -q '^0 automatic' && pass "a second run has nothing to do" || fail "not idempotent" "$(python3 "$UPDATE" "$S7")"
 before=$(md5sum "$J" | cut -d' ' -f1)
 python3 "$UPDATE" "$S7" --apply >/dev/null
 [ "$(md5sum "$J" | cut -d' ' -f1)" = "$before" ] && pass "and never appends to the journal twice" || fail "the backfill must be written once"
-env -u CLAUDECODE python3 "$STATE" --root "$S7" stage test >/dev/null \
-    && pass "the migrated task carries on where it left off" || fail "the task should keep working"
+# Since redesign 2.6 a task the old surface started is read or abandoned, never
+# worked: the commands that would carry it on are gone.
+out=$(env -u CLAUDECODE python3 "$STATE" --root "$S7" verify --scope suite 2>&1); rc=$?
+[ $rc = 1 ] && grep -q "close --abandon" <<<"$out" \
+    && pass "the migrated task names its way out" || fail "an old-surface task should refuse work" "rc=$rc $out"
 
 echo "== schema 3: the pipeline text leaves the instruction files, the human's text stays (R12/R13)"
 # A project at schema 2, both runtimes, from the oldest templates: its root
@@ -423,7 +426,15 @@ check_refused migrations-bad-content  'must be bytes'                 "content t
 echo "== migrations run before the merge, and every operation is listed once"
 S3="$TMP/schemaops"; v0_project "$S3"
 printf '\n## My own rule\nalways reproduce the bug first\n' >> "$S3/.ai/policies/coding.md"
-python3 "$STATE" --root "$S3" quick --goal "a task in flight" --workflow feature --tier T2 --files .ai/policies/coding.md >/dev/null
+# A task in flight as the old surface's `quick` left it (removed in redesign 2.6).
+mkdir -p "$S3/.ai/state"
+cat > "$S3/.ai/state/current.json" <<'JSON'
+{"task_id": "T-2026-09-20-002", "goal": "a task in flight", "workflow": "feature", "current_stage": "implementation",
+ "risk_tier": "T2", "completed_steps": [],
+ "approved_plan": {"ref": "inline", "current_step_id": "1",
+                   "steps": [{"step_id": "1", "description": "a task in flight", "allowed_files": [".ai/policies/coding.md"]}]},
+ "history": [{"at": "2026-09-20T10:00:00Z", "event": "task_started", "detail": "a task in flight"}]}
+JSON
 export CLAUDE_AGENTIC_MIGRATIONS="$SYNTH" CLAUDE_AGENTIC_TEMPLATES="$NEXT"
 out=$(python3 "$UPDATE" "$S3")
 grep -q '^  schema    0 -> 3 ' <<<"$out" && pass "the schema line counts every pending migration" || fail "schema line wrong" "$out"
@@ -463,7 +474,7 @@ out=$(python3 "$UPDATE" "$S3" --check); [ $? -eq 1 ] && grep -q 'the schema stay
 [ "$(jq -r '.approved_plan.steps[0].allowed_files[0]' "$S3/.ai/state/current.json")" = ".ai/policies/code-style.md" ] \
     && pass "the task in flight follows the migration" || fail "the task's allowed_files were not migrated"
 [ "$(jq -r '.history[-1].event' "$S3/.ai/state/current.json")" = "schema_migrated" ] && pass "and the state records why" || fail "no schema_migrated entry"
-[ "$(python3 "$STATE" --root "$S3" get --field current_stage)" = "implementation" ] && pass "state.py still reads the migrated state" || fail "the task state is no longer parseable"
+python3 "$STATE" --root "$S3" status | grep -q "old surface" && pass "state.py still reads the migrated state" || fail "the task state is no longer parseable"
 [ "$(cat "$S3/.ai/project/overview.md" | head -1)" = "# Overview" ] && pass ".ai/project/ is left alone by a migration run" || fail "the knowledge base was touched"
 
 echo "== a human confirms the deletion, and only then is it performed"
@@ -695,29 +706,18 @@ PY2
 [ "$(cat "$S9/.ai/VERSION")" = "$CURRENT" ] && pass "the schema reaches $CURRENT" || fail "VERSION not written"
 python3 "$UPDATE" "$S9" | grep -q '^0 automatic' && pass "a second run has nothing to do" || fail "0004 is not idempotent"
 
-out=$(env -u CLAUDECODE python3 "$STATE" --root "$S9" step-done 2 2>&1); rc=$?
-[ $rc -eq 0 ] && grep -q 'unavailable' <<<"$out" \
-    && pass "a task that started before schema 4 finishes its step, measuring nothing" \
-    || fail "step-done should carry on" "$out($rc)"
+env -u CLAUDECODE python3 "$STATE" --root "$S9" status | grep -q "old surface" \
+    && pass "a task that started before schema 4 is still read after it" || fail "status should read the migrated task"
 
 grep -qiE 'claude|codex' "$PLUGIN_ROOT/skills/project-update/migrations/0004_deterministic_gates.py" \
     && fail "a migration must not name a runtime" || pass "0004 names no runtime"
 
-echo "== schema 5: a task in flight gains the handoff keys and keeps working (R17)"
+echo "== schema 5: a task in flight gains the handoff keys (R17)"
 S10="$TMP/schema4"; mkdir -p "$S10"
 bash "$PLUGIN_ROOT/hooks/project-scaffold.sh" "$S10" --runtime claude >/dev/null
 bash "$PLUGIN_ROOT/skills/ai-init/scaffold-ai.sh" "$S10" --runtime claude >/dev/null
 cp -r "$FIX/schema-v4/.ai" "$S10/"     # VERSION 4 and a task in flight
 [ "$CURRENT" -ge 5 ] && pass "the migrations reach schema 5 or later" || fail "CURRENT is $CURRENT, expected 5 or later"
-env -u CLAUDECODE python3 "$STATE" --root "$S10" set next_action "before 0005" >/dev/null 2>&1 \
-    && pass "a mutating command works at schema 4, defaults filled in memory" || fail "state.py failed on a schema-4 task"
-python3 - "$S10" <<'PY2'
-import json, os, sys
-state = json.load(open(os.path.join(sys.argv[1], ".ai", "state", "current.json")))
-assert state["handoff"]["pending_to"] is None and state["cross_vendor_review"] is None
-PY2
-[ $? -eq 0 ] && pass "and state.py saved the schema-5 defaults with it" || fail "schema-5 defaults not saved by state.py"
-cp -r "$FIX/schema-v4/.ai" "$S10/"     # back to the bare schema-4 task
 python3 "$UPDATE" "$S10" --check >/dev/null; [ $? -eq 1 ] && pass "--check exits 1 at schema 4" || fail "--check should exit 1 at schema 4"
 out=$(python3 "$UPDATE" "$S10")
 grep -q '\[0005\]' <<<"$out" && pass "the dry run names migration 0005" || fail "no 0005 line" "$out"
@@ -735,11 +735,8 @@ PY2
 [ "$(cat "$S10/.ai/VERSION")" = "$CURRENT" ] && pass "the schema reaches $CURRENT" || fail "VERSION not written"
 python3 "$UPDATE" "$S10" | grep -q '^0 automatic' && pass "a second run has nothing to do" || fail "0005 is not idempotent"
 python3 "$UPDATE" "$S10" --check >/dev/null && pass "--check exits 0 once migrated" || fail "--check should exit 0 after 0005"
-env -u CLAUDECODE python3 "$STATE" --root "$S10" get --field history 2>/dev/null \
-    | grep -q '"detail": "0005 ' && pass "schema_migrated 0005 is recorded in the task's history" \
-    || fail "no schema_migrated entry for 0005"
-env -u CLAUDECODE python3 "$STATE" --root "$S10" set next_action "after 0005" >/dev/null 2>&1 \
-    && pass "and a mutating command still works at schema 5" || fail "state.py failed after 0005"
+jq -e '[.history[] | select(.detail | startswith("0005 "))] | length == 1' "$S10/.ai/state/current.json" >/dev/null \
+    && pass "schema_migrated 0005 is recorded in the task's history" || fail "no schema_migrated entry for 0005"
 grep -qiE 'claude|codex' "$PLUGIN_ROOT/skills/project-update/migrations/0005_runtimes_and_plans.py" \
     && fail "a migration must not name a runtime" || pass "0005 names no runtime"
 

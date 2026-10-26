@@ -331,11 +331,17 @@ expect_silent "$(jq -nc '{hook_event_name:"SessionStart",source:"compact",sessio
 # ------------------------------------------------------- the .ai/ project (WP2)
 # A second project, with a task in flight. $PROJECT deliberately has no .ai/, so
 # the cases above keep proving that a plain repository is left alone.
-AIP="$TMP/ai-project"; mkdir -p "$AIP/.ai/state" "$AIP/.ai/reports"
+AIP="$TMP/ai-project"; mkdir -p "$AIP/.ai/state" "$AIP/.ai/reports" "$AIP/src"
+git -C "$AIP" init -q; printf 'x\n' > "$AIP/src/a.php"
+git -C "$AIP" add -A; git -C "$AIP" -c user.email=t@t -c user.name=t commit -qm base
 STATE_PY="$PLUGIN_ROOT/skills/ai-task/state.py"
-TASK=$(python3 "$STATE_PY" --root "$AIP" quick --goal "add the per-line fee" --workflow feature \
-         --tier T2 --files "src/Checkout/*.php" | head -1)
-python3 "$STATE_PY" --root "$AIP" note decision "keep the legacy gateway" --why "two callers" >/dev/null
+python3 "$STATE_PY" --root "$AIP" start --goal "add the per-line fee" --workflow feature \
+    --files "src/Checkout/*.php" --declare behaviour=0:fixture --declare domain=0:fixture \
+    --declare novelty=0:fixture >/dev/null 2>&1
+TASK=$(jq -r .task_id "$AIP/.ai/state/current.json")
+# A decision as the journal holds it (the `note` command went in redesign 2.6).
+python3 "$STATE_PY" --root "$AIP" event note --detail "keep the legacy gateway" \
+    --data '{"kind": "decision", "text": "keep the legacy gateway", "why": "two callers"}' >/dev/null
 ai_event() {    # ai_event <event> [source] [extra-jq-object] -> hook stdout
     jq -nc --arg e "$1" --arg src "${2:-}" --arg t "$T" --arg c "$AIP" \
         '{hook_event_name:$e,session_id:"ai1",transcript_path:$t,cwd:$c,source:$src}' | "$GUARD"
@@ -425,7 +431,7 @@ start=$(date +%s)
 expect_silent "$(jq -nc --arg c "$AIP" '{hook_event_name:"SessionStart",session_id:"f1",cwd:$c,source:"startup"}' | "$FAKE/hooks/context-guard.py")" \
     "a state.py that hangs injects nothing"
 [ $(( $(date +%s) - start )) -le 10 ] && pass "and gives up inside the hook's own timeout" || fail "the 3s timeout should hold"
-python3 "$STATE_PY" --root "$AIP" done >/dev/null; python3 "$STATE_PY" --root "$AIP" archive >/dev/null
+python3 "$STATE_PY" --root "$AIP" close --abandon >/dev/null
 reset_state
 expect_silent "$(ai_event SessionStart startup)" "with the task archived there is nothing to inject"
 

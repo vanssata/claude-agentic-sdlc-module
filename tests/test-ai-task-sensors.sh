@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sensors.py: the deterministic measurements /ai-task gates on.
+# sensors.py: tree snapshots, tree diffs and the project's own commands (R6).
 #
 # The scratch project lives under a path containing a space on purpose — every
 # path this module hands to git or to a project command must survive one.
@@ -48,359 +48,67 @@ UNTRACKED_TREE=$(N snapshot)
 git -C "$ROOT" ls-tree -r --name-only "$UNTRACKED_TREE" | grep -q '^\.ai/state/' \
     && fail "the task's own state must be dropped from the snapshot" \
     || pass "the task's own state is dropped from the snapshot"
-rm -f "$ROOT/src/new.php"
+rm -f "$ROOT/src/new.php" "$ROOT/.ai/state/current.json"
 
-echo "== section 2: diff measurement"
+echo "== section 2: the diff is a file list between two trees"
 printf 'base\nchanged\nagain\n' > "$ROOT/src/app.php"
 printf 'newline in a lock file\n' >> "$ROOT/composer.lock"
 printf '# docs\n' > "$ROOT/docs/guide.md"
 AFTER=$(N snapshot)
 
-OUT=$(N diff --from "$BASE" --to "$AFTER" --tier T2 --scope step --format json)
-[ "$(printf '%s' "$OUT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["files"])')" = 1 ] \
-    && pass "the lock file is excluded and the doc is unbudgeted: 1 counted file" \
-    || fail "should count exactly the one source file" "$OUT"
-[ "$(printf '%s' "$OUT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["lines"])')" = 2 ] \
-    && pass "lines are added + deleted after exclusions" || fail "should count 2 lines" "$OUT"
-grep -q '"excluded_lines": 1' <<<"$OUT" \
-    && pass "the excluded lines are reported, not silently dropped" || fail "excluded_lines should be 1"
-grep -q '"unbudgeted_lines": 1' <<<"$OUT" \
-    && pass "the docs scope is counted but not budgeted" || fail "unbudgeted_lines should be 1"
+OUT=$(N diff --from "$BASE" --to "$AFTER"); RC=$?
+[ $RC -eq 0 ] && [ "$OUT" = "$(printf 'M\tcomposer.lock\nA\tdocs/guide.md\nM\tsrc/app.php')" ] \
+    && pass "every changed file is listed with its status, a lock file included" \
+    || fail "diff should list the three files" "$OUT($RC)"
+OUT=$(N diff --from "$BASE" --to "$AFTER" --format json)
+[ "$(printf '%s' "$OUT" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["files"]))')" = 3 ] \
+    && pass "--format json carries the same list" || fail "json should list three files" "$OUT"
+# git's own list is the reference; a sensor that disagrees with git is wrong.
+[ "$(git -C "$ROOT" diff --name-only "$BASE" "$AFTER" | wc -l)" = 3 ] \
+    && pass "the list matches git diff --name-only" || fail "git disagrees"
 
-# git's own numbers are the reference; a sensor that disagrees with git is wrong.
-GIT_LINES=$(git -C "$ROOT" diff --numstat "$BASE" "$AFTER" -- src/app.php | awk '{print $1+$2}')
-[ "$GIT_LINES" = 2 ] && pass "the count matches git diff --numstat" || fail "git says $GIT_LINES"
-
-N diff --from "$BASE" --to "$AFTER" --tier T2 --allowed "src/**" >/dev/null 2>&1
-[ $? -eq 0 ] && pass "a file inside allowed_files is in scope" || fail "src/** should allow src/app.php"
-OUT=$(N diff --from "$BASE" --to "$AFTER" --tier T2 --allowed "tests/**"); RC=$?
-[ $RC -eq 2 ] && grep -q 'unscoped: src/app.php' <<<"$OUT" \
-    && pass "a file outside allowed_files is red and named" || fail "should be red and name the file" "$OUT($RC)"
+OUT=$(N diff --to "$AFTER"); RC=$?
+[ $RC -eq 3 ] && grep -q 'no base tree recorded' <<<"$OUT" \
+    && pass "no base tree is unavailable, never an empty diff" || fail "should be unavailable" "$OUT($RC)"
 
 # The scope guard's reading of a plan glob, not a stricter one: a file the hook
-# allows must never be refused by the measurement.
-mkdir -p "$ROOT/src/Payment"; printf 'fee\n' > "$ROOT/src/Payment/Fee.php"
-DEEP=$(N snapshot)
-N diff --from "$BASE" --to "$DEEP" --allowed "src/*.php" >/dev/null 2>&1
-[ $? -eq 0 ] && pass "a plan glob reads as the scope guard reads it (* crosses /)" \
-             || fail "src/*.php must match src/Payment/Fee.php, as the hook does"
-
-echo "== section 2b: the budget"
-python3 - "$ROOT" <<'PY'
-import json, sys
-root = sys.argv[1]
-policy = {"version": 3, "diff_budget": {"per_step": {"T2": {"max_lines": 1, "max_files": 1}},
-                                        "per_task": {"T2": {"max_lines": 1, "max_files": 1}},
-                                        "exclude": [], "unbudgeted_scopes": []}}
-with open(root + "/.ai/policies/risk-tiers.json", "w") as fh:
-    json.dump(policy, fh)
+# allows must never be refused by state.py's step-done.
+OUT=$(python3 - "$SENSORS" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("sensors", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+print(bool(m.scope_any("src/Payment/Fee.php", ["src/*.php"])), bool(m.scope_any("src/a/b.php", ["src"])),
+      bool(m.scope_any("tests/x.php", ["src/**"])))
 PY
-OUT=$(N diff --from "$BASE" --to "$AFTER" --tier T2 --scope step); RC=$?
-[ $RC -eq 0 ] && grep -q 'budget: over — ' <<<"$OUT" \
-    && pass "over the per-step budget is reported, by how much, and stays green: size is advisory" \
-    || fail "should be green and say by how much" "$OUT($RC)"
-grep -q '(advisory' <<<"$OUT" \
-    && pass "and the line says it is advisory" || fail "should say advisory" "$OUT"
-grep -q 'budget 1 / 1' <<<"$OUT" \
-    && pass "the project's own numbers are used, not the defaults" || fail "should read the project policy"
-# Since redesign 1.2 `enforce: true` is read and ignored: size never gates.
-python3 - "$ROOT" <<'PY'
-import json, sys
-root = sys.argv[1]
-p = root + "/.ai/policies/risk-tiers.json"
-policy = json.load(open(p)); policy["diff_budget"]["enforce"] = True
-json.dump(policy, open(p, "w"))
-PY
-OUT=$(N diff --from "$BASE" --to "$AFTER" --tier T2 --scope step); RC=$?
-[ $RC -eq 0 ] && grep -q 'budget: over — ' <<<"$OUT" && grep -q '(advisory' <<<"$OUT" \
-    && pass "with diff_budget.enforce true the same diff stays green and advisory" || fail "enforce must not turn size red" "$OUT($RC)"
-rm -f "$ROOT/.ai/policies/risk-tiers.json"
+)
+[ "$OUT" = "True True False" ] \
+    && pass "a plan glob reads as the scope guard reads it (* crosses /, a directory prefixes)" \
+    || fail "scope_any should read globs as ai-scope-guard.sh does" "$OUT"
 
-echo "== section 2c: unavailable is never a refusal"
-BARE="$TMP/with space/bare"; mkdir -p "$BARE/.ai/state"
-OUT=$(python3 "$SENSORS" --root "$BARE" snapshot); RC=$?
-[ $RC -eq 3 ] && grep -qi unavailable <<<"$OUT" \
-    && pass "a non-git root is unavailable (exit 3), not an error" || fail "should exit 3" "$OUT($RC)"
-OUT=$(N diff --from "$BASE" --to 0000000000000000000000000000000000000000); RC=$?
-[ $RC -eq 3 ] && grep -q 'UNAVAIL' <<<"$OUT" \
-    && pass "a tree that is gone is unavailable, not a crash" || fail "should exit 3" "$OUT($RC)"
-
-echo "== section 3: re-scoring and detect"
-OUT=$(N rescore --from "$BASE" --to "$AFTER" --declared T2); RC=$?
-[ $RC -eq 0 ] && grep -q 'green' <<<"$OUT" \
-    && pass "a source-only diff keeps its declared tier" || fail "should stay T2" "$OUT($RC)"
-
-OUT=$(N rescore --from "$BASE" --to "$DEEP" --declared T2); RC=$?
-[ $RC -eq 0 ] && grep -q 'green    T2 ' <<<"$OUT" && ! grep -q -- '->' <<<"$OUT" \
-    && grep -q 'hint: payments (.*) — path_scopes says T5; tier unchanged' <<<"$OUT" \
-    && pass "a diff reaching **/Payment/** keeps T2 and prints a payments hint" || fail "should stay T2 with a hint" "$OUT($RC)"
-[ "$(grep -c 'hint: payments' <<<"$OUT")" = 1 ] \
-    && pass "one hint per scope, however many files reach it" || fail "one hint per scope" "$OUT"
-
-OUT=$(N rescore --from "$BASE" --to "$DEEP" --declared T6)
-grep -q 'T6' <<<"$OUT" \
-    && pass "re-scoring never lowers a declared tier (downgrade_rule)" || fail "must not lower" "$OUT"
-
-# Size never re-scores a tier: a task over its budget is recorded as
-# over_budget and keeps its tier, enforce: true included (redesign 1.2).
-python3 - "$ROOT" <<'PY'
-import json, sys
-root = sys.argv[1]
-policy = {"version": 4,
-          "diff_budget": {"per_step": {"T2": {"max_lines": 1, "max_files": 1}},
-                          "per_task": {"T2": {"max_lines": 1, "max_files": 1}},
-                          "exclude": [], "unbudgeted_scopes": []},
-          "path_scopes": [{"scope": "tests", "min_tier": "T1", "paths": ["tests/**"]}]}
-with open(root + "/.ai/policies/risk-tiers.json", "w") as fh:
-    json.dump(policy, fh)
-PY
-OUT=$(N rescore --from "$BASE" --to "$AFTER" --declared T2); RC=$?
-[ $RC -eq 0 ] && grep -q 'green' <<<"$OUT" \
-    && pass "a task over its budget keeps its tier: the budget is advisory" || fail "size must not raise the tier" "$OUT($RC)"
-python3 - "$ROOT" <<'PY'
-import json, sys
-p = sys.argv[1] + "/.ai/policies/risk-tiers.json"
-policy = json.load(open(p)); policy["diff_budget"]["enforce"] = True
-json.dump(policy, open(p, "w"))
-PY
-OUT=$(N rescore --from "$BASE" --to "$AFTER" --declared T2); RC=$?
-[ $RC -eq 0 ] && grep -q 'green    T2 ' <<<"$OUT" && grep -q 'budget: over' <<<"$OUT" \
-    && pass "with enforce true, over the task budget still keeps the tier and reports the size" \
-    || fail "enforce must not raise the tier" "$OUT($RC)"
-rm -f "$ROOT/.ai/policies/risk-tiers.json"
-
-printf '{"scripts": {"lint": "eslint ."}}\n' > "$ROOT/package.json"
-OUT=$(N detect)
-grep -q 'lint_command: npm run lint' <<<"$OUT" \
-    && pass "detect proposes the command it found" || fail "should propose npm run lint" "$OUT"
-grep -q 'typecheck_command: none' <<<"$OUT" \
-    && pass "nothing detected proposes an explicit none, never a silent green" || fail "should ask for none" "$OUT"
-[ ! -e "$ROOT/node_modules" ] && pass "detect runs nothing it detected" || fail "detect must not run a tool"
-
-echo "== section 4: the step-done gate"
-GATE="$TMP/with space/gate"
-mkdir -p "$GATE/.ai/state" "$GATE/.ai/reports" "$GATE/.ai/policies" "$GATE/src/Payment" "$GATE/tests"
-STATE_PY="$PLUGIN_ROOT/skills/ai-task/state.py"
-S() { python3 "$STATE_PY" --root "$GATE" "$@"; }
-J() { python3 -c 'import json,sys
-d = json.load(open(sys.argv[1]))
-for part in sys.argv[2].split("."):
-    d = d[int(part)] if isinstance(d, list) else (d or {}).get(part)
-print(json.dumps(d) if isinstance(d, (list, dict)) else ("" if d is None else d))' "$GATE/.ai/state/current.json" "$1"; }
-git init -q "$GATE"; git -C "$GATE" config user.email t@example.com
-git -C "$GATE" config user.name Test
-printf 'one\n' > "$GATE/src/app.php"; git -C "$GATE" add -A
-git -C "$GATE" commit -qm base
-# This project wrote `enforce: true`. Before redesign 1.2 that made the budget a
-# gate; now it is read and ignored, and only a file outside the step refuses.
-cat > "$GATE/.ai/policies/risk-tiers.json" <<'JSON'
-{"version": 4,
- "diff_budget": {"enforce": true,
-                 "per_step": {"T2": {"max_lines": 5, "max_files": 5}},
-                 "per_task": {"T2": {"max_lines": 400, "max_files": 15},
-                              "T4": {"max_lines": 400, "max_files": 15}},
-                 "exclude": [], "unbudgeted_scopes": ["docs"]},
- "path_scopes": [{"scope": "tests", "min_tier": "T1", "paths": ["tests/**"]},
-                 {"scope": "payments", "min_tier": "T4", "paths": ["**/Payment/**"]}],
- "remediation_rounds": 2}
-JSON
-
-TASK=$(S init --goal "widen the fee" --workflow feature)
-BASE_TREE=$(S get --field diff.base_tree)
-[ -n "$BASE_TREE" ] && [ "$BASE_TREE" != "None" ] \
-    && pass "init records the tree the task starts from" || fail "init should record a base tree"
-S risk T2 --note "isolated" >/dev/null
-cat > "$TMP/steps.json" <<'JSON'
-[{ "step_id": "1", "description": "widen the fee", "allowed_files": ["src/*.php", "tests/**"],
-   "required_tests": ["tests/FeeTest.php"] }]
-JSON
-S plan --ref ".ai/reports/$TASK/plan.md" --steps "$TMP/steps.json" >/dev/null
-S step 1 >/dev/null
-[ -n "$(J approved_plan.steps.0.tree_before)" ] \
-    && pass "starting a step records the tree it began with" || fail "step should record tree_before"
-
-printf 'one\ntwo\n' > "$GATE/src/app.php"
-mkdir -p "$GATE/lib"; printf 'stray\n' > "$GATE/lib/Other.php"
-OUT=$(S step-done 1 2>&1); RC=$?
-[ $RC -eq 6 ] && grep -q 'SCOPE_CHANGE_REQUIRED' <<<"$OUT" \
-    && pass "a file outside the step's files exits 6 and is named" || fail "should exit 6" "$OUT($RC)"
-grep -q 'step-split' <<<"$OUT" \
-    && pass "the refusal names the way out" || fail "should suggest step-split" "$OUT"
-[ "$(S get --field approved_plan.current_step_id)" = 1 ] \
-    && pass "a refused step stays in progress — no work is lost" || fail "step should stay current"
-rm -f "$GATE/lib/Other.php"
-
-# The step grew a second concern: the payment file is its own step now. The
-# original step's own glob still matches it, so the split must say otherwise.
-# Nothing demands the split any more; it stays the way to a smaller review.
-printf 'one\ntwo\nthree\nfour\nfive\nsix\nseven\n' > "$GATE/src/app.php"
-printf 'fee\ntwo\nthree\nfour\nfive\nsix\n' > "$GATE/src/Payment/Fee.php"
-OUT=$(S step-split 1 --files "src/Payment/*.php" --note "the payment part" 2>&1)
-grep -q '1.2' <<<"$OUT" && pass "step-split makes a sibling step" || fail "should split" "$OUT"
-OUT=$(S step-done 1 2>&1); RC=$?
-[ $RC -eq 0 ] && ! grep -q DIFF_BUDGET_EXCEEDED <<<"$OUT" \
-    && pass "a step over its budget is finished under enforce: true — size never refuses" \
-    || fail "enforce must not refuse a step" "$OUT($RC)"
-grep -q 'budget: over' <<<"$OUT" && grep -q '(advisory)' <<<"$OUT" \
-    && pass "and the size is still reported, as advisory" || fail "should warn advisory" "$OUT"
-grep -q 'step 1 diff' <<<"$OUT" \
-    && pass "step-done reports what it measured" || fail "should print the step diff" "$OUT"
-
-echo "== section 5: a path scope is a hint at the gate"
-[ "$(S get --field risk_tier)" = T2 ] \
-    && pass "the payment file leaves the declared T2 alone" || fail "path must not raise the tier" "$(S get --field risk_tier)"
-! S events --last 20 --format jsonl 2>/dev/null | grep -q '"event": "tier_raised"' \
-    && pass "no tier_raised in the journal" || fail "tier_raised must not be journalled"
-J diff.rescore_hints | jq -r '.[]' | grep -q 'payments (src/Payment/Fee.php) — path_scopes says T4; tier unchanged' \
-    && pass "the hint names the scope, the file and the floor" || fail "rescore_hints should name payments" "$(J diff.rescore_hints)"
-grep -q '^hint: payments (' <<<"$OUT" \
-    && pass "and step-done prints it" || fail "hint should be printed" "$OUT"
-printf 'fee\n' >> "$GATE/src/Payment/Fee.php"
-S step 1.2 >/dev/null; OUT=$(S step-done 1.2 2>&1)
-! grep -q '^hint: payments' <<<"$OUT" \
-    && pass "a hint already printed is not printed again" || fail "hint printed twice" "$OUT"
-
-echo "== section 6: only a human lowers a tier"
-S risk T4 --note "the payment part, by hand" >/dev/null 2>&1 </dev/null
-OUT=$(S risk T2 --note "it is small really" 2>&1 </dev/null); RC=$?
-[ $RC -eq 5 ] && grep -q 'APPROVAL_REFUSED' <<<"$OUT" \
-    && pass "an agent cannot lower a tier (downgrade_rule)" || fail "should exit 5" "$OUT($RC)"
-[ "$(S get --field risk_tier)" = T4 ] && pass "the tier is unchanged by the refusal" || fail "tier moved"
-OUT=$(AI_UNATTENDED=1 S risk T2 --by "Ivan" --note "reviewed by hand" 2>&1 </dev/null); RC=$?
-[ $RC -eq 0 ] && [ "$(S get --field risk_tier)" = T2 ] \
-    && pass "a human with --by lowers it" || fail "should lower with --by" "$OUT($RC)"
-[ "$(S get --field risk_tier_lowered.by)" = "Ivan" ] \
-    && pass "who lowered it, and from what, is recorded" || fail "should record the lowering"
-OUT=$(S risk T5 --note "actually a migration" 2>&1 </dev/null); RC=$?
-[ $RC -eq 0 ] && pass "raising a tier needs nobody's permission" || fail "raising should work" "$OUT"
-
-# --force is the escape hatch a human uses when a refusal is wrong; here it is
-# only bookkeeping, to reach the third remediation round.
-S remediate --files "tests/**" --note "first batch" >/dev/null
-S step-done R1 --force >/dev/null
-S remediate --files "tests/**" --note "second batch" >/dev/null
-S step-done R2 --force >/dev/null
-OUT=$(S remediate --files "tests/**" --note "third batch" 2>&1 </dev/null); RC=$?
-[ $RC -eq 5 ] && grep -q 'round 3' <<<"$OUT" \
-    && pass "a third remediation round needs the human (remediation_rule)" \
-    || fail "should refuse round 3" "$OUT($RC)"
-
-echo "== section 6b: without enforce, the budget warns and the tier comes from the scope"
-ADV="$TMP/with space/advisory"
-mkdir -p "$ADV/.ai/state" "$ADV/.ai/reports" "$ADV/.ai/policies" "$ADV/src"
-A() { python3 "$STATE_PY" --root "$ADV" "$@"; }
-git init -q "$ADV"; git -C "$ADV" config user.email t@example.com; git -C "$ADV" config user.name Test
-printf 'one\n' > "$ADV/src/app.php"; git -C "$ADV" add -A; git -C "$ADV" commit -qm base
-cat > "$ADV/.ai/policies/risk-tiers.json" <<'JSON'
-{"version": 4,
- "diff_budget": {"per_step": {"T2": {"max_lines": 2, "max_files": 5}},
-                 "per_task": {"T2": {"max_lines": 2, "max_files": 5}},
-                 "exclude": [], "unbudgeted_scopes": []},
- "path_scopes": [{"scope": "tests", "min_tier": "T1", "paths": ["tests/**"]}],
- "remediation_rounds": 2}
-JSON
-A quick --goal "a wide but harmless step" --workflow feature --tier T2 --files "src/**" >/dev/null
-printf 'one\ntwo\nthree\nfour\nfive\nsix\nseven\n' > "$ADV/src/app.php"
-OUT=$(A step-done 1 2>&1); RC=$?
-[ $RC -eq 0 ] && pass "a step over its budget is finished, not refused" || fail "should exit 0" "$OUT($RC)"
-grep -q 'budget: over' <<<"$OUT" && grep -q '(advisory)' <<<"$OUT" \
-    && pass "and the warning says by how much, and that it is advisory" || fail "should warn" "$OUT"
-grep -q 'step-split' <<<"$OUT" \
-    && pass "and still names step-split as the way to a smaller review" || fail "should name step-split" "$OUT"
-[ "$(A get --field approved_plan.steps | jq -r '.[0].status')" = done ] \
-    && pass "the step is done" || fail "step should be done"
-[ "$(A get --field risk_tier)" = T2 ] \
-    && pass "the task keeps its tier: size never re-scores it" || fail "size must not raise the tier" "$(A get --field risk_tier)"
-[ "$(A get --field diff.over_budget)" = True ] \
-    && pass "over_budget is recorded for the reviewer to see" || fail "over_budget should be recorded"
-# Since redesign 1.2 size is no reason to keep a reviewer: the gate never
-# names it (R4 phase 1 closes such a task on skipped_green in test-ai-task-state.sh).
-OUT=$(A review-gate 2>&1); RC=$?
-jq -e '.verdict.blocking | map(select(test("budget"))) | length == 0' "$ADV/$(A get --field sensors.file)" >/dev/null \
-    && pass "and the size is not a reason the gate keeps a reviewer" \
-    || fail "over budget must not block skipped_green" "$OUT($RC)"
-rm -rf "$ADV"
-
-echo "== section 6d: the default floors that change a process are hints above the skip ceiling"
-FLOOR="$TMP/with space/floors"; mkdir -p "$FLOOR/.ai/state"
-git init -q "$FLOOR"; git -C "$FLOOR" config user.email t@example.com; git -C "$FLOOR" config user.name Test
-printf 'base\n' > "$FLOOR/README.md"; git -C "$FLOOR" add -A; git -C "$FLOOR" commit -qm base
-F() { python3 "$SENSORS" --root "$FLOOR" "$@"; }
-FBASE=$(F snapshot)
-for spec in "requirements.txt:dependencies" "requirements-dev.txt:dependencies" "composer.json:dependencies" \
-            "config/packages/security.yaml:config" ".env.local:config" "migrations/Version1.php:migrations" \
-            "src/Migrations/Version2.php:migrations" ".ai/policies/testing.md:pipeline" "CLAUDE.md:pipeline"; do
-    path=${spec%%:*}; want=${spec##*:}
-    mkdir -p "$FLOOR/$(dirname "$path")"; printf 'x\n' > "$FLOOR/$path"
-    FTREE=$(F snapshot)
-    OUT=$(F rescore --from "$FBASE" --to "$FTREE" --declared T3); RC=$?
-    [ $RC -eq 0 ] && grep -q 'green    T3 ' <<<"$OUT" \
-        && grep -q "hint: $want ($path) — path_scopes says T4; tier unchanged" <<<"$OUT" \
-        && pass "$path is $want, a T4 hint above the T3 ceiling, tier unchanged" \
-        || fail "$path should hint T4 ($want) and keep T3" "$OUT($RC)"
-    rm -f "$FLOOR/$path"
-done
-printf 'x\n' > "$FLOOR/docs/notes.txt" 2>/dev/null || { mkdir -p "$FLOOR/docs"; printf 'x\n' > "$FLOOR/docs/notes.txt"; }
-FTREE=$(F snapshot)
-OUT=$(F rescore --from "$FBASE" --to "$FTREE" --declared T2); RC=$?
-[ $RC -eq 0 ] && pass "a real text file is still docs" || fail "docs/notes.txt should stay T2" "$OUT($RC)"
-rm -rf "$FLOOR"
-
-echo "== section 6c: a six-tier policy is read on its own scale"
-LEG="$TMP/with space/legacy"; mkdir -p "$LEG/.ai/policies"
-printf '{"version": 3, "tiers": {"T0": {}, "T1": {}, "T2": {}, "T3": {}, "T4": {}, "T5": {}}}' > "$LEG/.ai/policies/risk-tiers.json"
-OUT=$(cd "$PLUGIN_ROOT/skills/ai-task" && python3 -c 'import sys, sensors
-p = sensors.load_policy(sys.argv[1])
-print(p["legacy_tiers"], p["sensors"]["skip_review_at_or_below"], p["sensors"]["bite"]["required_from"])' "$LEG")
-[ "$OUT" = "True T2 T2" ] && pass "no T6 in the table: the skip ceiling and bite stay at T2 for that project" || fail "legacy defaults" "$OUT"
-printf '{"version": 3, "tiers": {"T0": {}, "T5": {}}, "sensors": {"skip_review_at_or_below": "T1"}}' > "$LEG/.ai/policies/risk-tiers.json"
-OUT=$(cd "$PLUGIN_ROOT/skills/ai-task" && python3 -c 'import sys, sensors
-p = sensors.load_policy(sys.argv[1]); print(p["sensors"]["skip_review_at_or_below"])' "$LEG")
-[ "$OUT" = "T1" ] && pass "a ceiling the project wrote is kept as written" || fail "written ceiling" "$OUT"
-printf '{"version": 4, "tiers": {"T0": {}, "T6": {}}}' > "$LEG/.ai/policies/risk-tiers.json"
-OUT=$(cd "$PLUGIN_ROOT/skills/ai-task" && python3 -c 'import sys, sensors
-p = sensors.load_policy(sys.argv[1]); print(p["legacy_tiers"], p["sensors"]["skip_review_at_or_below"])' "$LEG")
-[ "$OUT" = "False T3" ] && pass "a seven-tier policy gets the T3 ceiling" || fail "v2 defaults" "$OUT"
-rm -rf "$LEG"
-
-echo "== section 7: running the tests is the state's job, not an agent's"
-cat > "$GATE/.ai/policies/testing.md" <<'MD'
+echo "== section 3: run is the project's own command, to the end, into a log"
+cat > "$ROOT/.ai/policies/testing.md" <<'MD'
 # Testing policy
 verify_command:      printf 'ok\n'; exit ${FAKE_EXIT:-0}
 step_test_command:   printf 'step %s\n' {files}
 e2e_command:         none
-single_test:         printf 'one %s\n'
-lint_command:        none
-typecheck_command:   none
+single_test:         # the template's comment, not a value
 MD
-OUT=$(S test-run --scope suite 2>&1); RC=$?
-[ $RC -eq 0 ] && pass "a green run needs no agent at all" || fail "green run should exit 0" "$OUT($RC)"
-[ "$(printf '%s\n' "$OUT" | wc -l)" -le 6 ] \
-    && pass "the session sees at most six lines, never the log" || fail "too much output" "$OUT"
-[ "$(S get --field test_status)" = passing ] \
-    && pass "exit 0 records test_status deterministically" || fail "test_status should be passing"
-LOG=$(J tests.runs.0.log)
-[ -f "$GATE/$LOG" ] && pass "the output is in a file: $LOG" || fail "the log should exist" "$LOG"
-[ -n "$(J tests.runs.0.tree)" ] \
-    && pass "the run is bound to the tree it ran on" || fail "a run should record its tree"
+OUT=$(N run --scope suite --log "$TMP/suite.log"); RC=$?
+[ $RC -eq 0 ] && grep -q '^suite *green' <<<"$OUT" && [ "$(cat "$TMP/suite.log")" = ok ] \
+    && pass "a green run exits 0 and its output is in the log" || fail "green run" "$OUT($RC)"
+OUT=$(FAKE_EXIT=1 N run --scope suite --log "$TMP/suite.log"); RC=$?
+[ $RC -eq 2 ] && grep -q 'RED' <<<"$OUT" && pass "a red run exits 2" || fail "red run should exit 2" "$OUT($RC)"
+N run --scope step --files "tests/a b.php" --log "$TMP/step.log" >/dev/null
+[ "$(cat "$TMP/step.log")" = "step tests/a b.php" ] \
+    && pass "{files} takes the step's paths, quoted" || fail "files should expand" "$(cat "$TMP/step.log")"
+OUT=$(N run --scope e2e); RC=$?
+[ $RC -eq 0 ] && grep -q 'n/a' <<<"$OUT" && pass "a command written as none is not applicable" \
+    || fail "none should be n/a" "$OUT($RC)"
+OUT=$(N run --scope single --test x); RC=$?
+[ $RC -eq 3 ] && grep -q 'not written down' <<<"$OUT" \
+    && pass "a comment-only line is not written down yet, which is not none" || fail "single" "$OUT($RC)"
 
-OUT=$(S test-run --scope suite --env-retry 2>&1); RC=$?
-[ $RC -ne 0 ] && grep -q 'classified' <<<"$OUT" \
-    && pass "--env-retry is refused until a failure was classified as one" \
-    || fail "should refuse an unclassified retry" "$OUT($RC)"
-
-FAKE_EXIT=1 S test-run --scope suite >/dev/null 2>&1
-[ "$(S get --field test_status)" != passing ] \
-    && pass "a red run does not report itself as passing" || fail "red run should not be passing"
-S test-run --scope suite >/dev/null 2>&1
-S test-run --scope suite >/dev/null 2>&1
-S test-run --scope suite >/dev/null 2>&1
-OUT=$(S test-run --scope suite 2>&1); RC=$?
-[ $RC -eq 6 ] && grep -q 'run budget exhausted' <<<"$OUT" \
-    && pass "the suite cannot be run forever: the cap is the human's cue" \
-    || fail "should exhaust the run budget" "$OUT($RC)"
-
-echo "== section 7b: the project command never gets the human's terminal"
+echo "== section 3b: the project command never gets the human's terminal"
 # A human runs 'verify --by' past the budget from their own terminal. The suite
 # must not inherit it: an installer that prompts when stdin is a tty, or a test
 # of the terminal-only approve route, behaves differently there (T-2026-10-26-001 run 17).
@@ -419,370 +127,13 @@ PY
 [ "$OUT" = "0 notty read=1" ] && pass "run_command gives the command /dev/null, not a terminal, as stdin" \
     || fail "the command saw the caller's terminal" "$OUT"
 
-echo "== section 8: the static sensors"
-NG() { python3 "$SENSORS" --root "$GATE" "$@"; }
-OUT=$(NG check --no-bite 2>&1)
-grep -q 'lint          n/a' <<<"$OUT" \
-    && pass "lint_command: none is not applicable, and does not block" || fail "none should be n/a" "$OUT"
-grep -q 'traceability  RED' <<<"$OUT" \
-    && pass "a finished step whose named test does not exist is red" || fail "traceability should be red" "$OUT"
-
-# A missing line is unavailable — never green — and says what to write.
-python3 - "$GATE" <<'PY2'
-import sys, re
-p = sys.argv[1] + "/.ai/policies/testing.md"
-s = open(p).read().replace("typecheck_command:   none\n", "")
-open(p, "w").write(s)
-PY2
-printf '{}\n' > "$GATE/tsconfig.json"
-OUT=$(NG check --no-bite 2>&1)
-grep -q 'typecheck     UNAVAIL' <<<"$OUT" \
-    && pass "a missing typecheck_command is unavailable, not green" || fail "should be unavailable" "$OUT"
-grep -q 'npx tsc --noEmit' <<<"$OUT" \
-    && pass "and it proposes the line it found" || fail "should propose tsc" "$OUT"
-grep -q 'review: required' <<<"$OUT" \
-    && pass "one unavailable sensor is enough to keep the review" || fail "review should be required" "$OUT"
-rm -f "$GATE/tsconfig.json"
-
-# The same eight lines in two files is the cheapest half of what a reviewer
-# would have to read the whole diff to find.
-for f in dup1 dup2; do
-  printf 'function a() {\n  one();\n  two();\n  three();\n  four();\n  five();\n  six();\n  seven();\n}\n' \
-      > "$GATE/src/$f.php"
+echo "== section 4: the old sensors are gone (R6)"
+for c in rescore check report bite detect; do
+    N "$c" >/dev/null 2>&1; [ $? -eq 2 ] && pass "sensors.py $c is gone" || fail "sensors.py $c should be gone"
 done
-OUT=$(NG check --only duplicates 2>&1)
-grep -q 'duplicates    RED' <<<"$OUT" \
-    && pass "a block repeated in two files is red" || fail "duplicates should be red" "$OUT"
-rm -f "$GATE/src/dup1.php" "$GATE/src/dup2.php"
-
-# A runner whose tool is missing exits 1 like a lint failure; it is exit 127 by
-# another name (§2a′). A stub pylint on the PATH plays each part.
-LINTBIN="$TMP/with space/lintbin"; mkdir -p "$LINTBIN"
-lint_as() {  # lint_as <exit> <last line>: the stub prints the line and exits
-  printf '#!/bin/sh\nprintf "%%s\\n" "************* Module app" "%s"\nexit %s\n' "$2" "$1" > "$LINTBIN/pylint"
-  chmod +x "$LINTBIN/pylint"
-}
-set_lint() { python3 - "$GATE" "$1" <<'PY2'
-import re, sys
-p = sys.argv[1] + "/.ai/policies/testing.md"
-s = re.sub(r"(?m)^lint_command:.*\n", "", open(p).read())
-open(p, "w").write(s + "lint_command:        %s\n" % sys.argv[2])
-PY2
-}
-set_lint pylint
-lint_as 0 "Your code has been rated at 10.00/10"
-OUT=$(PATH="$LINTBIN:$PATH" NG check --only lint 2>&1)
-grep -q 'lint          green' <<<"$OUT" && pass "a pylint that runs clean is green" || fail "lint should be green" "$OUT"
-for line in "/usr/bin/python3: No module named pylint" \
-            "npm ERR! could not determine executable to run" \
-            "Could not open input file: vendor/bin/phpcs"; do
-  lint_as 1 "$line"
-  OUT=$(PATH="$LINTBIN:$PATH" NG check --only lint 2>&1)
-  grep -q 'lint          UNAVAIL' <<<"$OUT" && grep -q 'not installed' <<<"$OUT" \
-    && pass "exit 1 with '${line%% *}…' is unavailable, not red" || fail "a missing runner should be unavailable" "$OUT"
+for f in --tier --allowed --scope; do
+    N diff --from "$BASE" --to "$AFTER" "$f" x >/dev/null 2>&1
+    [ $? -eq 2 ] && pass "diff takes no $f: size is not measured" || fail "diff should refuse $f"
 done
-lint_as 127 "pylint: not found"
-OUT=$(PATH="$LINTBIN:$PATH" NG check --only lint 2>&1)
-grep -q 'lint          UNAVAIL' <<<"$OUT" && pass "exit 127 stays unavailable" || fail "127 should be unavailable" "$OUT"
-lint_as 1 "src/app.php:1:0: C0114: Missing module docstring (missing-module-docstring)"
-OUT=$(PATH="$LINTBIN:$PATH" NG check --only lint 2>&1)
-grep -q 'lint          RED' <<<"$OUT" && pass "a real lint failure at exit 1 stays red" || fail "a lint finding should be red" "$OUT"
-set_lint none
-
-echo "== section 8b: a result belongs to the tree it was taken on"
-NG check --no-bite >/dev/null 2>&1
-printf 'moved on\n' >> "$GATE/src/app.php"
-OUT=$(NG report 2>&1)
-grep -q 'STALE' <<<"$OUT" \
-    && pass "a report from an older tree reads as stale, not as a pass" || fail "should be stale" "$OUT"
-grep -q 'review: required' <<<"$OUT" \
-    && pass "and stale keeps the review" || fail "stale should keep the review" "$OUT"
-
-LEDGER="$GATE/.ai/reports/$TASK/review-ledger.md"
-[ -f "$LEDGER" ] && grep -q 'sensors.py' "$LEDGER" \
-    && pass "what a sensor settled is written into the review ledger" || fail "ledger should have rows"
-grep -q 'CONFIRMED\|DEFECT' "$LEDGER" \
-    && pass "each row says whether it confirmed or found something" || fail "rows need an outcome"
-
-echo "== section 9: the test must bite"
-BITE="$TMP/with space/bite"
-mkdir -p "$BITE/.ai/state" "$BITE/.ai/reports" "$BITE/.ai/policies" "$BITE/src" "$BITE/tests"
-B() { python3 "$STATE_PY" --root "$BITE" "$@"; }
-NB() { python3 "$SENSORS" --root "$BITE" "$@"; }
-git init -q "$BITE"; git -C "$BITE" config user.email t@example.com
-git -C "$BITE" config user.name Test
-printf 'def fee(x):\n    return x\n' > "$BITE/src/fee.py"
-# The test the plan names: it exercises the NEW behaviour, so it fails without it.
-printf 'import sys; sys.path.insert(0, "src")\nfrom fee import fee\nassert fee(2) == 4\nprint("ok")\n' \
-    > "$BITE/tests/fee_test.py"
-# And one that never reaches the change, however green it looks.
-printf 'print("ok")\n' > "$BITE/tests/blind_test.py"
-git -C "$BITE" add -A; git -C "$BITE" commit -qm base
-cat > "$BITE/.ai/policies/testing.md" <<'MD'
-# Testing policy
-verify_command:      python3 tests/fee_test.py
-step_test_command:   python3 {files}
-e2e_command:         none
-lint_command:        none
-typecheck_command:   none
-MD
-python3 - "$BITE" <<'PY2'
-import json, sys
-policy = {
-    "version": 3,
-    "diff_budget": {"per_step": {"T2": {"max_lines": 50, "max_files": 10}},
-                    "per_task": {"T2": {"max_lines": 50, "max_files": 10}},
-                    "exclude": [], "unbudgeted_scopes": ["docs"]},
-    "path_scopes": [{"scope": "tests", "min_tier": "T1", "paths": ["tests/**"]}],
-    "sensors": {"skip_review_at_or_below": "T2",
-                "required_for_skip": ["tests", "lint", "typecheck", "diff", "rescore",
-                                      "traceability", "duplicates", "bite"],
-                "bite": {"timeout_seconds": 60, "required_from": "T2"},
-                "tests": {"max_suite_runs": 5, "timeout_seconds": 60},
-                "duplicates": {"min_lines": 8, "ignore_scopes": ["tests", "docs"]}},
-    "remediation_rounds": 2}
-json.dump(policy, open(sys.argv[1] + "/.ai/policies/risk-tiers.json", "w"), indent=2)
-PY2
-BTASK=$(B init --goal "double the fee" --workflow feature)
-B risk T2 >/dev/null
-cat > "$TMP/bsteps.json" <<'JSON'
-[{ "step_id": "1", "description": "double it", "allowed_files": ["src/**"],
-   "required_tests": ["tests/fee_test.py"] }]
-JSON
-B plan --ref ".ai/reports/$BTASK/plan.md" --steps "$TMP/bsteps.json" >/dev/null
-B step 1 >/dev/null
-printf 'def fee(x):\n    return x * 2\n' > "$BITE/src/fee.py"
-B step-done 1 >/dev/null
-B test-run --scope suite >/dev/null
-
-TREE_BEFORE_BITE=$(NB snapshot)
-OUT=$(NB bite 2>&1); RC=$?
-[ $RC -eq 0 ] && grep -q 'bite          green' <<<"$OUT" \
-    && pass "a test that fails without the change bites" || fail "bite should be green" "$OUT($RC)"
-[ "$(NB snapshot)" = "$TREE_BEFORE_BITE" ] \
-    && pass "the worktree is byte-identical afterwards" || fail "bite must restore the worktree"
-[ ! -f "$BITE/.ai/state/bite.lock" ] \
-    && pass "the recovery lock is cleared on a clean run" || fail "the lock should be cleared"
-
-# The same green suite, a test that never reaches the change: not evidence.
-python3 - "$BITE" <<'PY2'
-import json, sys
-p = sys.argv[1] + "/.ai/state/current.json"
-state = json.load(open(p))
-state["approved_plan"]["steps"][0]["required_tests"] = ["tests/blind_test.py"]
-json.dump(state, open(p, "w"), indent=2)
-PY2
-OUT=$(NB bite 2>&1); RC=$?
-[ $RC -eq 2 ] && grep -q 'do not reach it' <<<"$OUT" \
-    && pass "a test that passes without the change is red, however green the suite is" \
-    || fail "bite should be red" "$OUT($RC)"
-[ "$(NB snapshot)" = "$TREE_BEFORE_BITE" ] \
-    && pass "and the worktree is restored after a red run too" || fail "must restore after red"
-
-# A characterization step promises the opposite: it describes what is already there.
-python3 - "$BITE" <<'PY2'
-import json, sys
-p = sys.argv[1] + "/.ai/state/current.json"
-state = json.load(open(p))
-step = state["approved_plan"]["steps"][0]
-step["kind"] = "characterization"
-step["required_tests"] = ["tests/blind_test.py"]
-json.dump(state, open(p, "w"), indent=2)
-PY2
-OUT=$(NB bite 2>&1); RC=$?
-[ $RC -eq 0 ] && pass "a characterization test must pass at the base, and does" \
-               || fail "characterization bite should be green" "$OUT($RC)"
-
-echo "== section 9b: an interrupted revert is recoverable"
-python3 - "$BITE" "$TREE_BEFORE_BITE" <<'PY2'
-import json, sys
-root, tree = sys.argv[1], sys.argv[2]
-# What an interruption leaves behind: the lock, and a reverted worktree.
-json.dump({"tree_after": tree, "paths": ["src/fee.py"], "at": "now", "why": "test"},
-          open(root + "/.ai/state/bite.lock", "w"))
-open(root + "/src/fee.py", "w").write("def fee(x):\n    return x\n")
-PY2
-[ "$(NB snapshot)" != "$TREE_BEFORE_BITE" ] || fail "the fixture should leave a reverted worktree"
-OUT=$(NB bite --restore 2>&1)
-[ "$(NB snapshot)" = "$TREE_BEFORE_BITE" ] \
-    && pass "bite --restore puts back what an interrupted run left" || fail "--restore failed" "$OUT"
-[ ! -f "$BITE/.ai/state/bite.lock" ] \
-    && pass "and clears the lock once the tree matches" || fail "the lock should be gone"
-
-echo "== section 10: the review gate"
-python3 - "$BITE" <<'PY2'
-import json, sys
-p = sys.argv[1] + "/.ai/state/current.json"
-state = json.load(open(p))
-step = state["approved_plan"]["steps"][0]
-step["kind"] = "implementation"
-step["required_tests"] = ["tests/fee_test.py"]
-json.dump(state, open(p, "w"), indent=2)
-PY2
-B test-run --scope suite >/dev/null
-OUT=$(B review-gate 2>&1); RC=$?
-[ $RC -eq 0 ] && grep -q 'review: skipped' <<<"$OUT" \
-    && pass "T2 with every sensor green replaces the review (decision 6)" \
-    || fail "should skip the review" "$OUT($RC)"
-[ "$(B get --field review_status)" = skipped_green ] \
-    && pass "and records why, as a verdict nobody asserted" || fail "review_status should be skipped_green"
-[ -f "$BITE/.ai/reports/$BTASK/sensors.json" ] \
-    && pass "the report a human can read is on disk" || fail "sensors.json should exist"
-
-OUT=$(B set review_status skipped_green 2>&1); RC=$?
-[ $RC -ne 0 ] && grep -q 'review-gate' <<<"$OUT" \
-    && pass "no one can assert a skipped review by hand" || fail "set should refuse" "$OUT($RC)"
-
-# One unavailable sensor is enough: a tool nobody wrote down is not a pass.
-python3 - "$BITE" <<'PY2'
-import sys
-p = sys.argv[1] + "/.ai/policies/testing.md"
-s = open(p).read().replace("lint_command:        none\n", "")
-open(p, "w").write(s)
-PY2
-OUT=$(B review-gate 2>&1); RC=$?
-[ $RC -eq 2 ] && grep -q 'review: required' <<<"$OUT" \
-    && pass "a missing linter keeps the review, it does not grant a skip" \
-    || fail "should require the review" "$OUT($RC)"
-python3 - "$BITE" <<'PY2'
-import sys
-p = sys.argv[1] + "/.ai/policies/testing.md"
-open(p, "a").write("lint_command:        none\n")
-PY2
-
-# From T3 the sensors never replace the review, however green they are.
-AI_UNATTENDED=1 B risk T3 --note "shared behaviour after all" >/dev/null
-B test-run --scope suite >/dev/null
-OUT=$(B review-gate 2>&1); RC=$?
-[ $RC -eq 2 ] && grep -q 'above T2' <<<"$OUT" \
-    && pass "at T3 the review always runs — the sensors only feed it" \
-    || fail "T3 should require the review" "$OUT($RC)"
-grep -q 'sensors.py' "$BITE/.ai/reports/$BTASK/review-ledger.md" \
-    && pass "and what they settled is waiting in the ledger for the reviewer" \
-    || fail "the ledger should carry the sensor rows"
-
-echo "== section 12: a remediation step measures only its own fix"
-# Two steps that each fit the per-step budget, together well over it. The fix
-# that follows is one line; it must be measured from where the last step ended,
-# never from the task's base tree.
-REM="$TMP/with space/remediate"
-mkdir -p "$REM/.ai/state" "$REM/.ai/reports" "$REM/.ai/policies" "$REM/src" "$REM/tests"
-R() { python3 "$STATE_PY" --root "$REM" "$@"; }
-RJ() { python3 -c 'import json,sys
-d = json.load(open(sys.argv[1]))
-for part in sys.argv[2].split("."):
-    d = d[int(part)] if isinstance(d, list) else (d or {}).get(part)
-print("" if d is None else d)' "$REM/.ai/state/current.json" "$1"; }
-git init -q "$REM"; git -C "$REM" config user.email t@example.com
-git -C "$REM" config user.name Test
-printf 'a\n' > "$REM/src/a.php"; printf 'b\n' > "$REM/src/b.php"
-git -C "$REM" add -A; git -C "$REM" commit -qm base
-cat > "$REM/.ai/policies/risk-tiers.json" <<'JSON'
-{"version": 3,
- "diff_budget": {"per_step": {"T2": {"max_lines": 5, "max_files": 5}},
-                 "per_task": {"T2": {"max_lines": 400, "max_files": 15}},
-                 "exclude": [], "unbudgeted_scopes": []},
- "path_scopes": [{"scope": "tests", "min_tier": "T1", "paths": ["tests/**"]}],
- "remediation_rounds": 2}
-JSON
-RTASK=$(R init --goal "two halves" --workflow bugfix)
-R risk T2 --note "isolated" >/dev/null
-cat > "$TMP/rem-steps.json" <<'JSON'
-[{ "step_id": "1", "description": "first half", "allowed_files": ["src/a.php"] },
- { "step_id": "2", "description": "second half", "allowed_files": ["src/b.php"] }]
-JSON
-R plan --ref ".ai/reports/$RTASK/plan.md" --steps "$TMP/rem-steps.json" >/dev/null
-R step 1 >/dev/null; printf 'a\n1\n2\n3\n4\n' > "$REM/src/a.php"; R step-done 1 >/dev/null
-R step 2 >/dev/null; printf 'b\n1\n2\n3\n4\n' > "$REM/src/b.php"; R step-done 2 >/dev/null
-
-R remediate --files "tests/**" --note "one regression" >/dev/null
-[ -n "$(RJ approved_plan.steps.2.tree_before)" ] \
-    && pass "remediate records the tree its step begins with" || fail "R1 should have tree_before"
-printf 'a\n1\n2\n3\nfixed\n' > "$REM/src/a.php"
-OUT=$(R step-done R1 2>&1); RC=$?
-[ $RC -eq 0 ] && pass "a one-line fix after an 8-line task passes its step budget" \
-               || fail "step-done R1 should pass" "$OUT($RC)"
-[ "$(RJ approved_plan.steps.2.diff.lines)" = 2 ] && [ "$(RJ approved_plan.steps.2.diff.files)" = 1 ] \
-    && pass "and it measured only the fix: 1 file, 2 lines" \
-    || fail "R1 should measure 1 file, 2 lines" "$(RJ approved_plan.steps.2.diff)"
-
-# A remediation step written before the fix has no tree_before at all: it falls
-# back to where the last finished step ended, not to the base tree.
-R remediate --files "tests/**" --note "older state.py" >/dev/null
-python3 - "$REM/.ai/state/current.json" <<'PY2'
-import json, sys
-p = sys.argv[1]; d = json.load(open(p))
-d["approved_plan"]["steps"][3].pop("tree_before", None)
-json.dump(d, open(p, "w"))
-PY2
-printf 'b\n1\n2\n3\nfixed\n' > "$REM/src/b.php"
-OUT=$(R step-done R2 2>&1); RC=$?
-[ $RC -eq 0 ] && [ "$(RJ approved_plan.steps.3.diff.lines)" = 2 ] \
-    && pass "an R-step without tree_before measures from the last finished step" \
-    || fail "R2 should fall back to R1's tree_after" "$OUT($RC) $(RJ approved_plan.steps.3.diff)"
-
-echo "== section 13: the fallback is the step that finished last, and a base-tree fallback says so"
-# Step 1 is re-done after step 2: it finished last, though completed_steps
-# still lists it first. A step without tree_before starts where step 1 ended.
-ORD="$TMP/with space/order"
-mkdir -p "$ORD/.ai/state" "$ORD/.ai/reports" "$ORD/.ai/policies" "$ORD/src"
-O() { python3 "$STATE_PY" --root "$ORD" "$@"; }
-OJ() { python3 -c 'import json,sys
-d = json.load(open(sys.argv[1]))
-for part in sys.argv[2].split("."):
-    d = d[int(part)] if isinstance(d, list) else (d or {}).get(part)
-print("" if d is None else d)' "$ORD/.ai/state/current.json" "$1"; }
-git init -q "$ORD"; git -C "$ORD" config user.email t@example.com
-git -C "$ORD" config user.name Test
-printf 'a\n' > "$ORD/src/a.php"; printf 'b\n' > "$ORD/src/b.php"
-git -C "$ORD" add -A; git -C "$ORD" commit -qm base
-cp "$REM/.ai/policies/risk-tiers.json" "$ORD/.ai/policies/risk-tiers.json"
-OTASK=$(O init --goal "order" --workflow bugfix)
-O risk T2 --note "isolated" >/dev/null
-O plan --ref ".ai/reports/$OTASK/plan.md" --steps "$TMP/rem-steps.json" >/dev/null
-O step 1 >/dev/null; printf 'a\n1\n2\n' > "$ORD/src/a.php"; O step-done 1 >/dev/null
-O step 2 >/dev/null; printf 'b\n1\n2\n' > "$ORD/src/b.php"; O step-done 2 >/dev/null
-O step 1 >/dev/null; printf 'a\n1\n2\n3\n4\n' > "$ORD/src/a.php"; O step-done 1 >/dev/null
-O remediate --files "tests/**" --note "legacy shape" >/dev/null
-python3 - "$ORD/.ai/state/current.json" <<'PY2'
-import json, sys
-p = sys.argv[1]; d = json.load(open(p))
-d["approved_plan"]["steps"][2].pop("tree_before", None)
-json.dump(d, open(p, "w"))
-PY2
-printf 'b\n1\nfixed\n' > "$ORD/src/b.php"
-OUT=$(O step-done R1 2>&1); RC=$?
-[ $RC -eq 0 ] && [ "$(OJ approved_plan.steps.2.diff.lines)" = 2 ] \
-    && pass "the fallback is the step that finished last, not the last listed" \
-    || fail "R1 should start where the re-done step 1 ended" "$OUT($RC) $(OJ approved_plan.steps.2.diff)"
-
-# Nothing to start from but the base: measured, and said so.
-BAS="$TMP/with space/base"
-mkdir -p "$BAS/.ai/state" "$BAS/.ai/reports" "$BAS/.ai/policies" "$BAS/src"
-git init -q "$BAS"; git -C "$BAS" config user.email t@example.com
-git -C "$BAS" config user.name Test
-printf 'a\n' > "$BAS/src/a.php"; printf 'b\n' > "$BAS/src/b.php"
-git -C "$BAS" add -A; git -C "$BAS" commit -qm base
-cp "$REM/.ai/policies/risk-tiers.json" "$BAS/.ai/policies/risk-tiers.json"
-BTASK2=$(python3 "$STATE_PY" --root "$BAS" init --goal "base" --workflow bugfix)
-python3 "$STATE_PY" --root "$BAS" risk T2 --note "isolated" >/dev/null
-python3 "$STATE_PY" --root "$BAS" plan --ref ".ai/reports/$BTASK2/plan.md" --steps "$TMP/rem-steps.json" >/dev/null
-printf 'a\nfixed\n' > "$BAS/src/a.php"
-OUT=$(python3 "$STATE_PY" --root "$BAS" step-done 1 2>&1)
-grep -q "base tree" <<<"$OUT" \
-    && fail "the first step starts at the base tree; nothing to say" "$OUT" \
-    || pass "the first step measured from the base tree prints no note"
-# Step 1 finished, but its tree was never recorded (snapshot unavailable).
-python3 - "$BAS/.ai/state/current.json" <<'PY2'
-import json, sys
-p = sys.argv[1]; d = json.load(open(p))
-d["approved_plan"]["steps"][0]["diff"]["tree_after"] = None
-json.dump(d, open(p, "w"))
-PY2
-printf 'b\nfixed\n' > "$BAS/src/b.php"
-OUT=$(python3 "$STATE_PY" --root "$BAS" step-done 2 2>&1); RC=$?
-[ $RC -eq 0 ] && grep -q "measured from the task's base tree" <<<"$OUT" \
-    && pass "a later step that falls back to the base tree says so" \
-    || fail "step-done should name the base-tree fallback" "$OUT($RC)"
 
 summary "sensors"

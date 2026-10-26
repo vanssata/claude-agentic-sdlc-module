@@ -5,9 +5,13 @@ Every project here is a scratch git repository in a temp directory. The suite's
 red/green switch is a flag file outside the repository, so flipping it never
 changes the tree the two facts are measured on.
 """
+import contextlib
+import io
 import json
 import shutil
 import os
+import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -32,9 +36,9 @@ class Project:
     """A scratch project with .ai/, a testing.md whose commands read flag files,
     one code file and its test, committed."""
 
-    def __init__(self, files=None):
+    def __init__(self, files=None, name="p"):
         self.tmp = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with  # close() ends it
-        self.root = os.path.join(self.tmp.name, "p")
+        self.root = os.path.join(self.tmp.name, name)
         self.flags = os.path.join(self.tmp.name, "flags")
         os.makedirs(self.flags)
         os.makedirs(os.path.join(self.root, ".ai", "policies"))
@@ -66,13 +70,19 @@ class Project:
         elif os.path.exists(path):
             os.remove(path)
 
-    def run(self, *args, runtime="claude", human=False, stdin=None):
-        env = {k: v for k, v in os.environ.items()
-               if k not in state_mod.AGENT_MARKERS and k not in ("AI_UNATTENDED", "AI_RUNTIME")}
-        env["AI_RUNTIME"] = runtime
+    def run(self, *args, runtime="claude", human=False, stdin=None, env=None, state_py=STATE):
+        """runtime=None leaves AI_RUNTIME unset, so detection decides; env adds
+        variables after the agent markers are removed."""
+        base = {k: v for k, v in os.environ.items()
+                if k not in state_mod.AGENT_MARKERS and k not in ("AI_UNATTENDED", "AI_RUNTIME",
+                                                                   "AI_HANDOFF_NO_PROMPT")}
+        if runtime:
+            base["AI_RUNTIME"] = runtime
         if human:
-            env["AI_UNATTENDED"] = "1"
-        return subprocess.run([sys.executable, "-I", STATE, "--root", self.root] + list(args),
+            base["AI_UNATTENDED"] = "1"
+        base.update(env or {})
+        env = base
+        return subprocess.run([sys.executable, "-I", state_py, "--root", self.root] + list(args),
                               input=stdin if stdin is not None else "", capture_output=True, text=True,
                               env=env, check=False)
 
@@ -141,21 +151,40 @@ class TestStart(Base):
         self.assertEqual(done.returncode, 1)
         self.assertIn("in flight", done.stderr)
 
-    def test_old_and_new_surfaces_refuse_each_other(self):
+    def test_the_old_commands_are_gone(self):
+        # The spec's removed (19) less `questions`, kept until phase 3 (answer 1B).
         self.p.start()
-        done = self.p.run("test-run", "--scope", "suite")
-        self.assertEqual(done.returncode, 1)
-        self.assertIn("schema-7 surface", done.stderr)
+        for command in ("init get stage risk triage quick plan remediate step review-gate test-run "
+                        "step-split set risks modules note events done archive").split():
+            done = self.p.run(command)
+            self.assertEqual(done.returncode, 2, command)
+            self.assertIn("invalid choice", done.stderr, command)
 
-    def test_an_old_task_keeps_the_old_close(self):
-        self.p.ok("quick", "--goal", "g", "--workflow", "feature", "--tier", "T2", "--files", "src/widget.py")
-        done = self.p.run("verify", "--scope", "suite")
-        self.assertEqual(done.returncode, 1)
-        self.assertIn("old surface", done.stderr)
-        self.assertNotIn("schema", self.p.state())
-        # close reaches today's cmd_close: nothing done yet, so it closes the record.
-        self.p.ok("close")
+    def write_old_task(self):
+        """A task the old surface started: no schema key, a tier, a stage."""
+        self.p.write(".ai/state/current.json", json.dumps({
+            "task_id": "T-OLD", "goal": "g", "workflow": "feature", "risk_tier": "T2",
+            "current_stage": "implementation", "approved_plan": {"ref": "inline", "steps": []}}))
+
+    def test_an_old_task_is_read_or_abandoned(self):
+        self.write_old_task()
+        for args in (("verify", "--scope", "suite"), ("close",), ("step-done", "s1"),
+                     ("ask", "q", "--option", "A: a", "--option", "B: b"), ("questions", "--sync"),
+                     ("review", "--verdict", "pass", "--tier", "BALANCED", "--report", "-"),
+                     ("answer", "Q1=A"), ("reject", "--by", "ivan", "--why", "no")):
+            done = self.p.run(*args)
+            self.assertEqual(done.returncode, 1, args)
+            self.assertIn("old surface", done.stderr, args)
+            self.assertIn("close --abandon", done.stderr, args)
+        self.assertEqual(self.p.run("approve", "--by", "ivan", human=True).returncode, 1)
+        self.assertIn("old surface", self.p.ok("status").stdout)
+        self.p.ok("handoff", "--print")
+        self.p.ok("questions")
+        out = self.p.ok("close", "--abandon").stdout
+        self.assertIn("T-OLD abandoned (old surface)", out)
         self.assertFalse(self.p.in_flight())
+        self.assertEqual(self.p.archived("T-OLD")["result"], "abandoned")
+        self.assertEqual(self.p.events("T-OLD")[-1]["event"], "task_closed")
 
 
 class TestModes(Base):
@@ -471,6 +500,10 @@ class TestSurface(Base):
         self.assertEqual(done.returncode, 6)
         self.assertTrue(done.stderr.startswith("state.py: SCOPE_CHANGE_REQUIRED"))
         self.assertIn("--amend", done.stderr)
+        # --force is still accepted, as before 2.6, and still forces nothing
+        done = self.p.run("step-done", "s2", "--force")
+        self.assertEqual(done.returncode, 6)
+        self.assertTrue(done.stderr.startswith("state.py: SCOPE_CHANGE_REQUIRED"))
 
     def test_status(self):
         self.assertIn("task: none", self.p.ok("status").stdout)
@@ -764,7 +797,7 @@ def git_tree(root):
 
 
 class TestRescore(unittest.TestCase):
-    """state.rescore and sensors.diff_files: reversibility and domain from the
+    """state.rescore_weight and sensors.diff_files: reversibility and domain from the
     diff, only upward."""
 
     def setUp(self):
@@ -776,7 +809,7 @@ class TestRescore(unittest.TestCase):
         self.p.close()
 
     def rescore(self, files, current=None):
-        return state_mod.rescore(self.p.root, self.base, files, current or dict.fromkeys(weight.AXES, 0),
+        return state_mod.rescore_weight(self.p.root, self.base, files, current or dict.fromkeys(weight.AXES, 0),
                                  self.policy)
 
     def test_content_already_there_never_raises_past_needs_step(self):
@@ -826,6 +859,823 @@ class TestRescore(unittest.TestCase):
         self.assertEqual(sorted((d["path"], d["status"]) for d in got),
                          [("db/migrations/0001_init.sql", "M"), ("src/new.py", "A"), ("src/widget.py", "D")])
         self.assertIsNone(sensors.diff_files(self.p.root, None, self.base))
+
+
+# ---------------------------------------------------------------------------
+# Ported in redesign 2.6 from tests/test-ai-task-state.sh: the cases whose
+# subject outlives the old surface (the journal, runtime ownership, questions,
+# the gate and its file route, handoff.md, WP5), set up with start and close
+# instead of init, stage and get. The old file keeps only what needs no task.
+
+PTY_RUN = """
+import os, pty, sys
+env = dict(os.environ)
+for name in sys.argv[3].split(","):
+    env.pop(name, None)
+for pair in sys.argv[4].split(",") if sys.argv[4] else []:
+    key, _, value = pair.partition("=")
+    env[key] = value
+os.environ.clear(); os.environ.update(env)
+status = pty.spawn([sys.executable, "-I", sys.argv[1], "--root", sys.argv[2]] + sys.argv[5:])
+sys.exit(os.waitstatus_to_exitcode(status))
+"""
+
+
+class Ported(Base):
+    def qpath(self, task_id=None):
+        return os.path.join(self.p.root, ".ai", "reports", task_id or self.task_id(), "questions.md")
+
+    def qtext(self, task_id=None):
+        with open(self.qpath(task_id), encoding="utf-8") as fh:
+            return fh.read()
+
+    def fill(self, qid, answer, task_id=None):
+        """The human's hand edit: the [Answer]: line of block <qid>."""
+        lines = self.qtext(task_id).split("\n")
+        start = next(i for i, line in enumerate(lines) if line.startswith("## %s." % qid))
+        end = next(i for i in range(start, len(lines)) if lines[i].startswith("[Answer]:"))
+        lines[end] = ("[Answer]: " + answer).rstrip()
+        with open(self.qpath(task_id), "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines))
+
+    def questions(self):
+        return json.loads(self.p.ok("questions", "--format", "json").stdout)
+
+    def of(self, event, task_id=None):
+        return [e for e in self.p.events(task_id or self.task_id()) if e["event"] == event]
+
+    def session(self, **data):
+        self.p.write(".ai/state/session.json", json.dumps(data))
+
+    def approval(self):
+        return self.p.state()["human_approval"]
+
+    def open_gate(self):
+        """A full task, verified and reviewed, whose close has opened the gate."""
+        self.p.start("--mode", "full", "--by", "test")
+        self.p.ok("verify", "--scope", "all")
+        self.p.ok("review", "--verdict", "pass", "--tier", "STRONG", "--report", "-", stdin=CLEAN)
+        self.assertIn("ready for approval", self.p.ok("close").stdout)
+
+    def reopen_gate(self, text):
+        """After a rejection: change the work, verify it, and close asks again."""
+        self.p.write("src/widget.py", text)
+        self.p.ok("verify", "--scope", "suite")
+        self.p.ok("verify", "--scope", "e2e")
+        self.assertIn("ready for approval", self.p.ok("close").stdout)
+
+    def unattended(self, *args):
+        return self.p.run(*args, runtime=None, env={"AI_UNATTENDED": "1"})
+
+    def in_pty(self, *args, set_env=""):
+        """state.py from a pseudo-terminal, every agent marker removed, then set_env set."""
+        markers = ",".join(list(state_mod.AGENT_MARKERS) + ["AI_RUNTIME", "AI_UNATTENDED"])
+        return subprocess.run([sys.executable, "-c", PTY_RUN, STATE, self.p.root, markers, set_env] + list(args),
+                              capture_output=True, text=True, check=False)
+
+
+class TestJournal(Ported):
+    def test_start_opens_the_journal_with_a_typed_line(self):
+        self.p.run("start", "--goal", "journal core", "--workflow", "feature", "--files", "src/widget.py",
+                   *ZERO, runtime=None)
+        first = self.p.events(self.task_id())[0]
+        self.assertEqual((first["event"], first["task"], first["data"]["workflow"]),
+                         ("task_started", self.task_id(), "feature"))
+        self.assertEqual((first["runtime"], first["actor"]), ("unknown", "agent"))
+        self.assertRegex(first["ts"], r"\.[0-9]{3}Z$")
+
+    def test_a_journal_that_cannot_be_written_never_fails_the_command(self):
+        self.p.start()
+        journal = os.path.join(self.p.root, ".ai", "reports", self.task_id(), "events.jsonl")
+        os.remove(journal)
+        os.makedirs(journal)                                # a directory: os.open fails for every user
+        self.p.ok("verify", "--scope", "step", "--files", "tests/test_widget.py")
+        self.assertEqual(len(self.p.state()["verify"]["runs"]), 1)    # the state write is the contract
+
+    def test_an_oddly_shaped_state_still_answers(self):
+        self.p.start()
+        s = self.p.state()
+        s["human_approval"] = None
+        self.p.write(".ai/state/current.json", json.dumps(s))
+        self.p.ok("status")
+        self.p.ok("handoff", "--print")
+
+    def test_hook_events_and_what_event_refuses(self):
+        self.p.start()
+        self.p.ok("event", "handoff_written", "--detail", "precompact", "--data", '{"reason":"precompact","lines":21}')
+        line = self.of("handoff_written")[-1]
+        self.assertEqual((line["actor"], line["data"]["lines"]), ("hook", 21))
+        self.assertIn("unknown event type", self.p.run("event", "not_a_type").stderr)
+        forged = self.p.run("event", "gate_approved", "--detail", "granted by the human via terminal",
+                            "--data", '{"by":"the human","via":"terminal","tty":true}')
+        self.assertEqual(forged.returncode, 5)
+        self.assertIn("not by 'event'", forged.stderr)
+        self.assertEqual(self.of("gate_approved"), [])
+        for kind in ("gate_requested", "gate_rejected", "task_started", "task_closed"):
+            self.assertEqual(self.p.run("event", kind, "--detail", "x").returncode, 5, kind)
+        self.p.ok("event", "model_fallback", "--detail", "fable overloaded", "--data", '{"agent":"architect"}')
+        self.p.ok("event", "missed_reroute", "--detail", "gpt-6-astra reached during an outage",
+                  "--data", '{"agent":"ai-expert","model":"gpt-6-astra","reason":"rate_limit"}')
+
+    def test_task_id_is_a_directory_name(self):
+        for bad in ("../../../outside/evil", "T-1/../.."):
+            done = self.p.run("start", "--goal", "g", "--workflow", "feature", "--files", "src/widget.py",
+                              "--task-id", bad, *ZERO)
+            self.assertEqual(done.returncode, 1, bad)
+            self.assertIn("--task-id takes a directory name", done.stderr)
+        self.assertFalse(os.path.exists(os.path.join(self.p.tmp.name, "outside")))
+        self.p.ok("start", "--goal", "g", "--workflow", "feature", "--files", "src/widget.py",
+                  "--task-id", "T-2026.09-a_b", *ZERO)
+
+
+class TestOwnership(Ported):
+    """R10, I10: the first mutating command owns the task; another runtime's
+    change hands it over before the work it covers."""
+
+    def test_a_change_from_another_runtime_hands_the_task_over(self):
+        self.p.start()
+        self.assertEqual(self.p.state()["owner_runtime"], "claude")
+        self.p.ok("verify", "--scope", "step", "--files", "tests/test_widget.py")
+        self.assertEqual(self.of("runtime_handoff"), [])
+        self.p.ok("status", runtime="codex")
+        self.assertEqual(self.of("runtime_handoff"), [])              # a read hands nothing off
+        self.p.ok("verify", "--scope", "step", "--files", "tests/test_widget.py", runtime="codex")
+        moved = self.of("runtime_handoff")
+        self.assertEqual([(e["data"]["from"], e["data"]["to"], e["data"]["via"]) for e in moved],
+                         [("claude", "codex", "resume")])
+        self.assertEqual(self.p.state()["owner_runtime"], "codex")
+        events = [e["event"] for e in self.p.events(self.task_id())]
+        # by position, not by timestamp: events inside one command share a millisecond
+        self.assertLess(events.index("runtime_handoff"), len(events) - 1, events)
+        self.assertIn("--runtime", self.p.ok("--help").stdout)
+
+    def test_detection_precedence(self):
+        self.p.start()
+        ask = ("ask", "q", "--option", "A: a", "--option", "B: b")
+        self.session(runtime="codex", session_id="s1")
+        self.p.ok(*ask, runtime=None)
+        self.assertEqual(self.p.state()["owner_runtime"], "codex")    # session.json when nothing else
+        self.p.ok(*ask, runtime=None, env={"CLAUDECODE": "1"})
+        self.assertEqual(self.p.state()["owner_runtime"], "claude")   # CLAUDECODE outranks session.json
+        self.p.ok("--runtime", "codex", *ask, runtime=None, env={"CLAUDECODE": "1"})
+        self.assertEqual(self.p.state()["owner_runtime"], "codex")    # --runtime outranks CLAUDECODE
+        os.remove(os.path.join(self.p.root, ".ai", "state", "session.json"))
+        self.p.ok(*ask, runtime=None, env={"CLAUDECODE": "1"})
+        self.assertEqual(self.p.state()["owner_runtime"], "claude")   # CLAUDECODE before unknown
+
+    def test_the_copy_under_codex_home_is_codex(self):
+        home = os.path.join(self.p.tmp.name, "codex-home")
+        shutil.copytree(os.path.dirname(STATE), os.path.join(home, "skills", "ai-task"),
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        copy = os.path.join(home, "skills", "ai-task", "state.py")
+        self.p.start()
+        self.session(runtime="claude", session_id="s2")
+        ask = ("ask", "q", "--option", "A: a", "--option", "B: b")
+        self.p.ok(*ask, runtime=None, env={"CODEX_HOME": home}, state_py=copy)
+        self.assertEqual(self.p.state()["owner_runtime"], "codex")
+        self.p.ok(*ask)
+        self.p.ok(*ask, runtime=None, env={"CODEX_HOME": home, "CLAUDECODE": "1"}, state_py=copy)
+        self.assertEqual(self.p.state()["owner_runtime"], "codex")    # an inherited CLAUDECODE does not win
+
+    def test_two_appenders_lose_and_interleave_nothing(self):
+        pids = []
+        for worker in ("a", "b"):
+            pid = os.fork()
+            if pid == 0:
+                for i in range(200):
+                    state_mod.append_journal(self.p.root, "T-concurrent", state_mod.journal_line(
+                        "T-concurrent", "note", "agent", "test", "%s-%03d" % (worker, i),
+                        {"kind": "decision", "text": "x" * 300}))
+                os._exit(0)                               # pylint: disable=protected-access
+            pids.append(pid)
+        for pid in pids:
+            os.waitpid(pid, 0)
+        with open(os.path.join(self.p.root, ".ai", "reports", "T-concurrent", "events.jsonl"), encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+        self.assertEqual(len(lines), 400)
+        self.assertEqual(len([json.loads(line) for line in lines]), 400)
+
+    def test_a_journal_line_stays_under_the_cap(self):
+        cut = json.loads(state_mod.journal_line("T-x", "note", "agent", "plan", "d" * 5000, {"error": "e" * 9000}))
+        self.assertEqual((len(cut["detail"]), len(cut["data"]["error"])), (500, 1000))
+        huge = state_mod.journal_line("T-x", "note", "agent", "plan", "d", {"text": "x" * 9000})
+        self.assertLessEqual(len(huge.encode()), 4096)
+        self.assertEqual(json.loads(huge)["data"], {"truncated": True})
+
+
+class TestQuestions(Ported):
+    """R1-R5: ask writes the file, never the model; the file is the record."""
+
+    def setUp(self):
+        super().setUp()
+        self.p.start()
+
+    def ask_rounding(self):
+        self.p.ok("ask", "Which rounding rule applies to the per-line fee?",
+                  "--option", "A: Round half up per line", "--option", "B: Round half even per order total",
+                  "--recommend", "A", "--context", "src/Payment/FeeCalculator.php:42",
+                  "--by", "ai-planner via main session")
+
+    def test_ask_writes_the_file(self):
+        self.ask_rounding()
+        q = self.questions()[0]
+        self.assertEqual((q["id"], q["question"], [o["key"] for o in q["options"]], q["recommend"], q["pending"]),
+                         ("Q1", "Which rounding rule applies to the per-line fee?", ["A", "B"], "A", True))
+        self.assertIn("FeeCalculator.php:42", q["context"])
+        self.assertRegex(self.qtext(), r"(?m)^X\. Other — answer as")
+        self.assertEqual(self.p.state()["questions"]["pending"], ["Q1"])
+        self.assertEqual(self.of("question_asked")[0]["data"]["recommended"], "A")
+
+    def test_a_hand_edited_answer_round_trips(self):
+        self.ask_rounding()
+        before = [line for line in self.qtext().split("\n") if not line.startswith("[Answer]")]
+        self.fill("Q1", "B")
+        self.p.ok("questions", "--sync", "--by", "ivan")
+        self.assertEqual([line for line in self.qtext().split("\n") if not line.startswith("[Answer]")], before)
+        self.assertEqual(len(re.findall(r"(?m)^\[Answer\]: B — by ivan via file at ", self.qtext())), 1)
+        answered = self.of("question_answered")
+        self.assertEqual([(e["data"]["via"], e["data"]["choice"], e["actor"]) for e in answered],
+                         [("file", "B", "human")])
+        synced = self.qtext()
+        self.p.ok("questions", "--sync")
+        self.assertEqual((self.qtext(), len(self.of("question_answered"))), (synced, 1))   # idempotent
+
+    def test_an_answer_that_is_not_an_option_stays_pending(self):
+        self.ask_rounding()
+        self.fill("Q1", "F")
+        self.assertIn("Q1: invalid choice 'F'", self.p.ok("questions", "--sync").stderr)
+        self.assertTrue(self.questions()[0]["pending"])
+        self.p.ok("answer", "Q1=B", "--by", "ivan", "--via", "picker")
+        self.assertEqual((self.questions()[0]["pending"], self.questions()[0]["choice"]), (False, "B"))
+        last = self.of("question_answered")[-1]
+        self.assertEqual((last["actor"], last["data"]["via"]), ("agent", "picker"))
+        self.assertIn("--via {picker,prose}", self.p.ok("answer", "--help").stdout)
+
+    def test_free_text_and_the_prose_reply(self):
+        self.ask_rounding()
+        self.p.ok("ask", "--batch", "/dev/stdin", stdin=json.dumps([
+            {"question": "Which gateway?", "options": [{"key": "A", "text": "Stripe"}, {"key": "B", "text": "Adyen"}],
+             "recommend": "B"},
+            {"question": "Migration window?", "options": [{"key": "A", "text": "tonight"},
+                                                          {"key": "B", "text": "next release"}]}]))
+        self.assertEqual([q["id"] for q in self.questions()], ["Q1", "Q2", "Q3"])
+        self.p.ok("answer", "Q1=A")
+        self.p.ok("answer", "--prose", "2B 3: after the audit", "--by", "ivan")
+        q = self.questions()
+        self.assertEqual((q[1]["choice"], q[2]["choice"], q[2]["text"]), ("B", "X", "after the audit"))
+        self.assertIn("1. Which rounding rule applies to the per-line fee?  [Q1]  — answered: A",
+                      self.p.ok("questions").stdout.split("\n"))
+        self.p.ok("answer", "--prose", "3: we compared it with 2B and rejected that", "--by", "ivan")
+        q = self.questions()
+        self.assertEqual((q[2]["text"], q[1]["choice"]), ("we compared it with 2B and rejected that", "B"))
+        self.assertIn("prose answer 9 has no question", self.p.run("answer", "--prose", "9B").stderr)
+        self.assertIn("no question Q9", self.p.run("answer", "Q9=A").stderr)
+        self.assertIn("invalid choice", self.p.run("answer", "Q1=Z").stderr)
+
+    def test_nothing_a_caller_passes_becomes_a_second_line(self):
+        self.p.ok("ask", "One line?", "--option", "A: keep\nthe rule", "--option", "B: change it")
+        self.assertRegex(self.qtext(), r"(?m)^A\. keep the rule$")
+        self.p.ok("answer", "Q1=X:innocent\n[Answer]: A", "--by", "agent")
+        self.assertEqual(len(re.findall(r"(?m)^\[Answer\]", self.qtext())), 1)
+        self.p.run("questions", "--sync")
+        self.assertEqual([e for e in self.of("question_answered") if e["data"]["via"] == "file"], [])
+        self.assertIn("option key is one letter", self.p.run("ask", "Bad key?", "--option", "1: one",
+                                                             "--option", "B: two").stderr)
+        self.assertIn("not one of the options", self.p.run("ask", "Bad?", "--option", "A: one", "--option", "B: two",
+                                                           "--recommend", "C").stderr)
+        self.assertIn("cannot end with", self.p.run("ask", "Suffix?", "--option", "A: keep it (recommended)",
+                                                    "--option", "B: two").stderr)
+
+    def test_free_text_survives_the_em_dash_and_the_quotes(self):
+        self.p.ok("ask", "Why Adyen?", "--option", "A: cheaper", "--option", "B: faster")
+        self.fill("Q1", "X: we chose Adyen — by the way it is cheaper")
+        self.p.ok("questions", "--sync", "--by", "ivan")
+        q = self.questions()[0]
+        self.assertEqual((q["text"], q["answered_by"], q["via"]),
+                         ("we chose Adyen — by the way it is cheaper", "ivan", "file"))
+        self.p.ok("ask", "Quoted?", "--option", "A: one", "--option", "B: two")
+        self.p.ok("answer", 'Q2=X:"free text"', "--by", "ivan")
+        self.assertEqual(self.questions()[1]["text"], "free text")
+
+    def test_an_agent_cannot_author_a_gate(self):
+        done = self.p.run("ask", "Approve me?", "--option", "A: yes", "--option", "B: no", "--gate", "human_approval")
+        self.assertIn("a gate is requested by 'state.py close' in full mode, not by ask", done.stderr)
+
+    def test_a_pending_question_blocks_what_moves_the_task_and_nothing_else(self):
+        self.p.ok("ask", "Which rule?", "--option", "A: one", "--option", "B: two")
+        state_file = os.path.join(self.p.root, ".ai", "state", "current.json")
+        with open(state_file, encoding="utf-8") as fh:
+            before = fh.read()
+        qbefore = self.qtext()
+        for args in (("verify", "--scope", "all"), ("step-done", "task"), ("approve", "--by", "me"), ("close",)):
+            done = self.p.run(*args)
+            self.assertEqual(done.returncode, 4, args)
+            self.assertIn("QUESTIONS_PENDING — 1 unanswered in .ai/reports/%s/questions.md: Q1. Answer with "
+                          "'state.py answer Q1=<letter>'" % self.task_id(), done.stderr, args)
+            with open(state_file, encoding="utf-8") as fh:
+                self.assertEqual(fh.read(), before, args)
+            self.assertEqual(self.qtext(), qbefore, args)
+        for args in (("status",), ("handoff", "--print"), ("questions",), ("event", "model_fallback"),
+                     ("ask", "q", "--option", "A:one", "--option", "B:two")):
+            self.p.ok(*args)
+        self.p.ok("answer", "Q1=A")
+        self.p.ok("answer", "Q2=A")
+        self.p.ok("verify", "--scope", "step", "--files", "tests/test_widget.py")
+
+    def test_close_abandon_is_the_way_out_of_an_unanswerable_question(self):
+        self.p.ok("ask", "Is this reproducible?", "--option", "A: yes", "--option", "B: no")
+        self.assertEqual(self.p.run("close").returncode, 4)
+        self.p.ok("close", "--abandon")
+
+    def test_twelve_asks_at_once_all_land(self):
+        env = {k: v for k, v in os.environ.items() if k not in state_mod.AGENT_MARKERS}
+        env["AI_RUNTIME"] = "claude"
+        procs = [subprocess.Popen([sys.executable, "-I", STATE, "--root", self.p.root, "ask", "Question %d?" % i,  # pylint: disable=consider-using-with
+                                   "--option", "A: one", "--option", "B: two"], env=env,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) for i in range(12)]
+        for proc in procs:
+            proc.wait()
+        self.assertEqual(len(self.questions()), 12)
+        self.assertEqual(len(self.of("question_asked")), 12)
+
+    def test_ask_takes_ownership_and_reading_does_not(self):
+        self.p.ok("ask", "Whose task?", "--option", "A: claude", "--option", "B: codex", runtime="codex")
+        self.assertEqual(self.p.state()["owner_runtime"], "codex")
+        self.assertEqual(self.of("runtime_handoff")[-1]["data"]["to"], "codex")
+        before = self.p.state()["updated_at"]
+        self.p.ok("questions")
+        self.p.ok("questions", "--pending")
+        self.assertEqual(self.p.state()["updated_at"], before)
+
+    def test_ask_ends_an_unattended_turn_with_the_launcher_line(self):
+        out = self.p.ok("ask", "Ship it?", "--option", "A: yes", "--option", "B: no", human=True).stdout
+        self.assertEqual(out.strip().split("\n")[-1],
+                         "WAITING_FOR_ANSWERS .ai/reports/%s/questions.md Q1" % self.task_id())
+        out = self.p.ok("ask", "Second?", "--option", "A: yes", "--option", "B: no").stdout
+        self.assertNotIn("WAITING_FOR_ANSWERS", out)
+
+
+class TestGate(Ported):
+    """R11, R13: approval happens outside the agent, through one of three routes,
+    each recorded as what it was."""
+
+    def test_approve_before_a_gate_is_refused(self):
+        self.p.start("--mode", "full", "--by", "test")
+        done = self.p.run("approve", "--by", "ivan")
+        self.assertEqual(done.returncode, 5)
+        self.assertIn("APPROVAL_REFUSED — no gate was requested: 'state.py close' requests it for a full-mode task.",
+                      done.stderr)
+
+    def test_close_opens_the_gate_and_freezes_the_task(self):
+        self.open_gate()
+        self.assertRegex(self.qtext(), r"(?m)^## G1\. Approve %s for implementation\? \(gate: human_approval\)$"
+                         % re.escape(self.task_id()))
+        self.assertIsNotNone(self.approval()["requested_at"])
+        requested = self.of("gate_requested")[0]["data"]
+        self.assertEqual(requested["gate"], "human_approval")
+        self.assertIsNotNone(requested["requested_at"])
+        self.assertEqual(self.p.run("verify", "--scope", "suite").returncode, 4)
+        self.assertEqual(self.p.run("close").returncode, 4)
+        self.assertEqual(len(re.findall(r"(?m)^## G", self.qtext())), 1)
+
+    def test_a_piped_approve_is_refused_and_names_every_route(self):
+        self.open_gate()
+        with open(os.path.join(self.p.root, ".ai", "state", "current.json"), encoding="utf-8") as fh:
+            before = fh.read()
+        done = self.p.run("approve", "--by", "ivan")
+        self.assertEqual(done.returncode, 5)
+        lines = done.stderr.split("\n")
+        self.assertEqual(lines[0], "state.py: APPROVAL_REFUSED — approval happens outside the agent. "
+                                   "Run in your own terminal:")
+        self.assertRegex(lines[1], r"^  python3 '?.*/skills/ai-task/state\.py'? --root '?%s'? approve --by ivan$"
+                         % re.escape(self.p.root))
+        self.assertIn("set [Answer]: A on G1 in .ai/reports/%s/questions.md and tell the session to sync"
+                      % self.task_id(), done.stderr)
+        self.assertIn("AI_UNATTENDED=1 in the launcher's environment; the journal then records the approval as "
+                      "unattended.", done.stderr)
+        with open(os.path.join(self.p.root, ".ai", "state", "current.json"), encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), before)
+        self.assertFalse(self.approval()["granted"])
+
+    def test_the_printed_command_survives_a_space(self):
+        self.p.close()
+        self.p = Project(name="with space")
+        self.open_gate()
+        printed = self.p.run("approve", "--by", "the human").stderr.split("\n")[1]
+        argv = shlex.split(printed)
+        self.assertEqual(argv[argv.index("--root") + 1], self.p.root)
+        self.assertEqual(argv[-3:], ["approve", "--by", "the human"])
+
+    def test_a_terminal_inside_an_agent_session_is_not_a_human(self):
+        self.open_gate()
+        for marker in ("CLAUDECODE=1", "CODEX_THREAD_ID=x"):
+            done = self.in_pty("approve", "--by", "ivan", set_env=marker)
+            self.assertEqual(done.returncode, 5, marker)
+            self.assertIn(marker.split("=")[0], done.stdout)
+            self.assertIn("not through the `!` prefix", done.stdout)
+            self.assertFalse(self.approval()["granted"])
+
+    def test_a_terminal_is_what_the_gate_is_looking_for(self):
+        self.open_gate()
+        done = self.in_pty("approve", "--by", "ivan")
+        self.assertEqual(done.returncode, 0, done.stdout)
+        a = self.approval()
+        self.assertEqual((a["granted"], a["via"], a["unattended"]), (True, "terminal", False))
+        approved = self.of("gate_approved")
+        self.assertEqual([(e["actor"], e["data"]["via"], e["data"]["tty"]) for e in approved],
+                         [("human", "terminal", True)])
+        self.assertRegex(self.qtext(), r"(?m)^\[Answer\]: A — by ivan via terminal at ")
+        self.assertIn("already approved by ivan", self.unattended("approve", "--by", "someone-else").stdout)
+        self.assertEqual(len(self.of("gate_approved")), 1)
+        self.p.ok("close")                                  # the gate's own question blocks nothing now
+        self.assertFalse(self.p.in_flight())
+
+    def test_the_unattended_route_is_allowed_and_never_invisible(self):
+        for env in ({"AI_UNATTENDED": "1"}, {"AI_UNATTENDED": "1", "CLAUDECODE": "1"}):
+            self.open_gate()
+            self.p.ok("approve", "--by", "launcher", runtime=None, env=env)
+            a = self.approval()
+            self.assertEqual((a["granted"], a["via"], a["unattended"]), (True, "unattended", True), env)
+            line = self.of("gate_approved")[-1]
+            self.assertEqual((line["actor"], line["data"]["via"], line["data"]["unattended"], line["data"]["tty"]),
+                             ("agent", "unattended", True, False))
+            self.p.ok("close")
+
+    def test_a_pending_question_comes_first_and_the_gates_own_does_not(self):
+        self.open_gate()
+        self.assertEqual(self.p.run("approve", "--by", "ivan").returncode, 5)     # past the pending check
+        self.p.ok("ask", "Which rule?", "--option", "A: one", "--option", "B: two")
+        done = self.p.run("approve", "--by", "ivan")
+        self.assertEqual(done.returncode, 4)
+        self.assertIn("QUESTIONS_PENDING", done.stderr)
+
+    def test_reject_records_the_refusal_and_consumes_the_request(self):
+        self.open_gate()
+        self.p.ok("reject", "--by", "ivan", "--why", "the migration has no rollback")
+        a = self.approval()
+        self.assertEqual((a["granted"], a["requested_at"], a["gate_id"]), (False, None, None))
+        line = self.of("gate_rejected")[-1]
+        self.assertEqual(line["actor"], "human")
+        self.assertIn("no rollback", line["data"]["why"])
+        self.assertRegex(self.qtext(), r"(?m)^\[Answer\]: B: the migration has no rollback — by ivan via ")
+        done = self.unattended("approve", "--by", "agent")
+        self.assertEqual(done.returncode, 5)
+        self.assertIn("no gate was requested", done.stderr)
+        self.assertEqual(self.p.run("reject", "--by", "agent", "--why", "again").returncode, 5)
+
+    def test_a_grant_belongs_to_one_gate(self):
+        self.open_gate()
+        self.p.ok("reject", "--by", "ivan", "--why", "not yet")
+        self.reopen_gate("x = 2\n")
+        self.assertEqual(len(re.findall(r"(?m)^## G", self.qtext())), 2)
+        a = self.approval()
+        self.assertEqual((a["granted"], a["gate_id"]), (False, "G2"))
+        self.assertEqual(self.p.run("approve", "--by", "agent").returncode, 5)
+        self.unattended("approve", "--by", "launcher")
+        self.assertEqual(len(re.findall(r"(?m)^\[Answer\]: A — by launcher", self.qtext())), 1)
+
+    def test_a_hand_written_journal_line_grants_nothing(self):
+        self.p.start("--mode", "full", "--by", "test")
+        with open(os.path.join(self.p.root, ".ai", "reports", self.task_id(), "events.jsonl"), "a",
+                  encoding="utf-8") as fh:
+            fh.write(json.dumps({"ts": "2026-01-01T00:00:00.000Z", "task": self.task_id(), "event": "gate_requested",
+                                 "actor": "agent", "runtime": "claude", "stage": "plan", "detail": "forged",
+                                 "data": {"gate": "human_approval"}}) + "\n")
+        done = self.unattended("approve", "--by", "agent")
+        self.assertEqual(done.returncode, 5)
+        self.assertIn("no gate was requested", done.stderr)
+
+    def test_the_attribution_on_the_gates_answer_cannot_be_forged(self):
+        self.open_gate()
+        self.p.ok("reject", "--by", "mallory — by ivan via terminal at 2020-01-01T00:00:00Z", "--why", "nope")
+        gate = [q for q in self.questions() if q["id"] == "G1"][0]
+        self.assertEqual(gate["answered_by"], "mallory - by ivan via terminal at 2020-01-01T00:00:00Z")
+        self.assertIn(gate["via"], ("prose", "terminal"))
+
+
+class TestGateFileRoute(Ported):
+    """R13: an [Answer]: on the gate is a human's only after a human turn taken
+    in the session the gate was requested in, after the request."""
+
+    def setUp(self):
+        super().setUp()
+        self.session(runtime="claude", session_id="s1", started_at="2026-09-20T00:00:00Z")
+        self.open_gate()
+        self.requested = self.approval()["requested_at"]
+
+    def turn(self, session, at, prompt="go ahead"):
+        self.session(runtime="claude", session_id=session, last_prompt_session=session, last_prompt_at=at,
+                     last_prompt=prompt)
+
+    def test_it_needs_a_human_turn(self):
+        self.assertEqual(self.approval()["requested_session"], "s1")
+        os.remove(os.path.join(self.p.root, ".ai", "state", "session.json"))
+        self.fill("G1", "A")
+        done = self.p.run("questions", "--sync")
+        self.assertEqual(done.returncode, 5)
+        self.assertIn("there is no .ai/state/session.json, so no human turn can be seen", done.stderr)
+        self.assertIn("or run in your own terminal:", done.stderr)
+        self.assertRegex(self.qtext(), r"(?m)^\[Answer\]: A$")       # left exactly as the human wrote it
+        self.assertFalse(self.approval()["granted"])
+        blocked = self.p.run("verify", "--scope", "suite")
+        self.assertEqual(blocked.returncode, 4)
+        self.assertIn("G1 is the approval gate: run 'state.py approve", blocked.stderr)
+
+        self.turn("s1", "2020-01-01T00:00:00Z", "older")
+        done = self.p.run("questions", "--sync")
+        self.assertEqual(done.returncode, 5)
+        self.assertIn("is older than the approval request (%s)" % self.requested, done.stderr)
+        self.turn("window-2", self.requested, "whats the weather")
+        done = self.p.run("questions", "--sync")
+        self.assertEqual(done.returncode, 5)
+        self.assertIn("came from another session (window-2, not s1, which is where the gate was requested)",
+                      done.stderr)
+        self.assertFalse(self.approval()["granted"])
+
+        self.turn("s1", self.requested, "yes, approve it")         # the same second is a turn on the plan
+        self.assertRegex(self.p.ok("questions", "--sync", "--by", "ivan").stdout, r"gate approved by .* via the file")
+        a = self.approval()
+        self.assertEqual((a["granted"], a["via"], a["unattended"]), (True, "file", False))
+        line = self.of("gate_approved")[-1]
+        self.assertEqual((line["actor"], line["data"]["via"], line["data"]["tty"]), ("human", "file", False))
+        self.assertRegex(self.qtext(), r"(?m)^\[Answer\]: A — by .* via file at ")
+        self.assertNotIn("gate approved", self.p.ok("questions", "--sync").stdout)
+        self.assertEqual(len(self.of("gate_approved")), 1)
+        task = self.task_id()
+        self.p.ok("close")
+        self.assertEqual(self.p.archived(task)["gate"]["via"], "file")
+
+    def test_it_can_reject(self):
+        self.fill("G1", "B: the migration has no rollback")
+        self.turn("s1", self.requested)
+        self.assertRegex(self.p.ok("questions", "--sync").stdout, r"gate rejected by .* via the file")
+        a = self.approval()
+        self.assertEqual((a["granted"], a["requested_at"]), (False, None))
+        line = self.of("gate_rejected")[-1]
+        self.assertEqual(line["actor"], "human")
+        self.assertIn("no rollback", line["data"]["why"])
+
+    def test_it_can_run_unattended_as_the_agent_it_is(self):
+        os.remove(os.path.join(self.p.root, ".ai", "state", "session.json"))
+        self.fill("G1", "A")
+        self.unattended("questions", "--sync", "--by", "launcher")
+        a = self.approval()
+        self.assertEqual((a["granted"], a["via"], a["unattended"]), (True, "file", True))
+        line = self.of("gate_approved")[-1]
+        self.assertEqual((line["actor"], line["data"]["unattended"]), ("agent", True))
+        evidence = line["data"].get("evidence") or {}
+        self.assertTrue(evidence.get("session") is not None or evidence.get("unattended") is True)
+
+    def test_free_text_on_the_gate_is_not_a_rejection(self):
+        self.turn("s1", self.requested)
+        self.fill("G1", "yes, go ahead — but check the rollback")
+        self.assertIn("is the approval gate: answer it A or B", self.p.ok("questions", "--sync").stderr)
+        self.assertIsNotNone(self.approval()["requested_at"])
+
+    def test_a_refused_sync_still_records_the_answers_it_wrote(self):
+        self.p.ok("ask", "Second?", "--option", "A: one", "--option", "B: two")
+        self.fill("G1", "A")
+        self.fill("Q1", "B")
+        self.turn("another", self.requested)
+        self.assertEqual(self.p.run("questions", "--sync").returncode, 5)
+        self.assertNotIn("Q1", self.p.state()["questions"]["pending"])
+
+    def test_it_takes_ownership_like_any_other_change(self):
+        self.fill("G1", "A")
+        self.turn("s1", self.requested)
+        self.p.ok("questions", "--sync", "--by", "ivan", runtime="codex")
+        self.assertEqual(self.p.state()["owner_runtime"], "codex")
+        self.assertEqual(self.of("runtime_handoff")[-1]["data"]["to"], "codex")
+
+    def test_a_terminal_rejection_beats_a_sync_already_under_way(self):
+        state = state_mod.load(self.p.root, claim=False)
+        self.turn("s1", self.requested)
+        self.fill("G1", "A")
+
+        class Args:                                    # what cmd_questions would pass
+            by, sync, pending, topic, format = "the agent", True, False, None, "prose"
+        lines, questions = state_mod.parse_questions(self.qpath())
+        gates = [q for q in state_mod.sync_answers(self.p.root, state, self.qpath(), lines, questions, Args)
+                 if q["kind"] == "G"]
+        self.assertTrue(gates)
+        self.p.ok("reject", "--by", "ivan", "--why", "no rollback plan")      # in those seconds
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            try:
+                state_mod.close_gate_from_file(self.p.root, state, gates[0], "the agent")
+            except SystemExit:
+                pass
+        self.assertFalse(self.approval()["granted"])
+        self.assertEqual(self.of("gate_approved"), [])
+        self.assertEqual(self.of("gate_rejected")[-1]["data"]["by"], "ivan")
+
+    def test_a_gate_opened_with_no_session_cannot_close_from_the_file(self):
+        self.p.ok("reject", "--by", "ivan", "--why", "again")
+        os.remove(os.path.join(self.p.root, ".ai", "state", "session.json"))
+        self.reopen_gate("x = 2\n")
+        self.assertIsNone(self.approval()["requested_session"])
+        self.fill("G2", "A")
+        self.session(runtime="claude", last_prompt_session="s9", last_prompt_at="2099-01-01T00:00:00Z")
+        self.p.run("questions", "--sync")
+        self.assertFalse(self.approval()["granted"])
+
+
+class TestHandoffFile(Ported):
+    """R6: handoff.md is what a session needs first, in at most thirty lines,
+    derived from the state, so nothing about it can fail a command."""
+
+    def handoff_md(self):
+        with open(os.path.join(self.p.root, ".ai", "state", "handoff.md"), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_what_it_carries(self):
+        self.p.start(files="src/widget.py,src/Payment/Fee.php")
+        self.session(runtime="claude", session_id="s", last_prompt_at="2026-09-20T10:11:50Z",
+                     last_prompt="make the fee configurable " * 40)
+        self.p.ok("ask", "Rounding?", "--option", "A: up", "--option", "B: even")
+        out = self.p.ok("handoff", "--print").stdout
+        self.assertLessEqual(len(out.splitlines()), 30)
+        for part in ("# Handoff — %s (feature, %s)" % (self.task_id(), self.p.state()["mode"]), "Goal: tweak the widget", "Next: ",
+                     "Pending questions: Q1 — .ai/reports/%s/questions.md" % self.task_id(),
+                     "## Decisions (latest 3)", "## Rejected (latest 3)", "## Failed attempts (latest 3)",
+                     "## Latest user instruction (verbatim,"):
+            self.assertIn(part, out)
+        prompt = "".join(line for line in out.splitlines() if line.startswith("> "))
+        self.assertTrue(100 <= len(prompt) <= 305, len(prompt))
+        self.assertIn("← resume point (step task: src/widget.py, src/Payment/Fee.php", out)
+        self.assertEqual(self.p.state()["resume_point"]["runtime"], "claude")
+
+    def test_it_is_a_file_rewritten_by_the_commands_that_move_the_task(self):
+        self.p.start()
+        self.p.ok("ask", "Which rule?", "--option", "A: one", "--option", "B: two")
+        self.assertRegex(self.handoff_md(), r"(?m)^Pending questions: Q1 — ")
+        self.p.ok("answer", "Q1=A")
+        self.assertRegex(self.handoff_md(), r"(?m)^Pending questions: none$")
+        self.assertTrue(self.handoff_md().split("\n")[0].endswith(" (stage)"))
+        self.p.ok("handoff")
+        self.assertTrue(self.handoff_md().split("\n")[0].endswith(" (manual)"))
+        self.p.ok("handoff", "--reason", "precompact")
+        self.assertTrue(self.handoff_md().split("\n")[0].endswith(" (precompact)"))
+        line = self.of("handoff_written")[-1]
+        self.assertEqual(line["data"]["reason"], "precompact")
+        self.assertGreater(line["data"]["lines"], 10)
+        self.assertEqual(self.p.state()["handoff"]["file"], ".ai/state/handoff.md")
+        before = self.p.state()["updated_at"]
+        self.p.ok("handoff", "--reason", "precompact")
+        self.assertEqual(self.p.state()["updated_at"], before)        # handoff alone never writes current.json
+        render = lambda: self.p.ok("handoff", "--print").stdout.split("\n")[1:]   # noqa: E731
+        self.assertEqual(render(), render())
+
+    def test_what_it_says_when_there_is_nothing_to_say(self):
+        self.p.start()
+        out = self.p.ok("handoff", "--print").stdout
+        self.assertEqual(out.count("\n- none\n"), 3)
+        self.assertEqual(out.rstrip().split("\n")[-1], "> none recorded")
+        out = self.p.ok("handoff", "--print", env={"AI_HANDOFF_NO_PROMPT": "1"}).stdout
+        self.assertIn("omitted (AI_HANDOFF_NO_PROMPT=1)", out.rstrip().split("\n")[-1])
+        self.assertIn("--to", self.p.ok("handoff", "--help").stdout)
+
+    def test_close_takes_it_away_and_a_new_task_rewrites_it(self):
+        self.p.start()
+        self.p.ok("close", "--abandon")
+        self.assertFalse(os.path.exists(os.path.join(self.p.root, ".ai", "state", "handoff.md")))
+        self.p.ok("start", "--goal", "task B about search", "--workflow", "feature", "--files", "src/widget.py", *ZERO)
+        self.assertIn("task B about search", self.handoff_md())
+
+    def test_nothing_about_it_can_fail_a_command(self):
+        self.p.start()
+        self.session(runtime="claude", last_prompt=12345, last_prompt_at=42)
+        self.p.ok("verify", "--scope", "step", "--files", "tests/test_widget.py")
+        self.assertEqual(self.p.ok("handoff", "--print").stdout.rstrip().split("\n")[-1], "> 12345")
+        self.p.ok("event", "note", "--data", '{"kind":"decision","text":{"nested":1}}')
+        with open(os.path.join(self.p.root, ".ai", "reports", self.task_id(), "events.jsonl"), "a",
+                  encoding="utf-8") as fh:
+            fh.write("not json at all\n")
+        self.p.ok("ask", "q", "--option", "A: a", "--option", "B: b")
+        handoff = os.path.join(self.p.root, ".ai", "state", "handoff.md")
+        os.remove(handoff)
+        os.makedirs(handoff)                                    # unwritable: best effort
+        self.p.ok("answer", "Q1=A")
+        self.assertEqual(self.p.state()["questions"]["pending"], [])
+
+
+class TestWP5(Ported):
+    """WP5: handoff --to moves a task on purpose; exit 7 until the other runtime
+    resumes it; the advisory line names the preferred runtime."""
+
+    def setUp(self):
+        super().setUp()
+        homes = os.path.join(self.p.tmp.name, "homes")
+        self.homes = {"CLAUDE_CONFIG_DIR": os.path.join(homes, "claude"), "CODEX_HOME": os.path.join(homes, "codex")}
+        resolve = os.path.join(ROOT, "scripts", "resolve-profile.py")
+        for home, plan in ((self.homes["CLAUDE_CONFIG_DIR"], ["max", "--fable", "yes"]),
+                           (self.homes["CODEX_HOME"], ["codex-pro", "--fable", "no"])):
+            os.makedirs(os.path.join(home, "skills", "ai-task"))
+            os.makedirs(os.path.join(home, "claude-agentic"))
+            open(os.path.join(home, "skills", "ai-task", "state.py"), "w", encoding="utf-8").close()  # pylint: disable=consider-using-with
+            profile = subprocess.run([sys.executable, resolve] + plan + ["--print", "agentic"], capture_output=True,
+                                     text=True, check=True).stdout
+            with open(os.path.join(home, "claude-agentic", "profile.json"), "w", encoding="utf-8") as fh:
+                fh.write(profile)
+
+    def s(self, runtime, *args, env=None):
+        merged = dict(self.homes)
+        merged.update(env or {})
+        return self.p.run("--runtime", runtime, *args, runtime=None, env=merged)
+
+    def start5(self, workflow="feature"):
+        return self.s("claude", "start", "--goal", "move it", "--workflow", workflow, "--files", "src/widget.py", *ZERO)
+
+    def test_handoff_to_and_exit_7(self):
+        self.assertEqual(self.start5().returncode, 0)
+        done = self.s("claude", "handoff", "--to", "codex", "--why", "claude quota")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertRegex(done.stdout, r"Handed .* to codex \(manual\)")
+        self.assertRegex(done.stdout, r"headless \(not run\): cd .* && codex exec '/ai-task'")
+        s = self.p.state()
+        self.assertEqual((s["owner_runtime"], s["resume_point"]["runtime"], s["handoff"]["pending_to"]),
+                         ("codex", "codex", "codex"))
+        line = self.of("runtime_handoff")[-1]
+        self.assertEqual((line["data"]["from"], line["data"]["to"], line["data"]["via"], line["data"]["tty"],
+                          line["data"]["reason"], line["actor"]),
+                         ("claude", "codex", "manual", False, "claude quota", "agent"))
+        with open(os.path.join(self.p.root, ".ai", "state", "handoff.md"), encoding="utf-8") as fh:
+            self.assertRegex(fh.read(), r"(?m)^Handed to codex at .* resume there with /ai-task")
+        self.assertEqual(self.s("claude", "handoff", "--to", "codex").returncode, 2)
+        ask = ("ask", "q", "--option", "A: a", "--option", "B: b")
+        refused = self.s("claude", *ask)
+        self.assertEqual(refused.returncode, 7)
+        self.assertTrue(refused.stderr.startswith("state.py: RUNTIME_HANDOFF_PENDING"))
+        self.assertEqual(self.s("claude", "status").returncode, 0)         # a read is fine
+        moved = len(self.of("runtime_handoff"))
+        self.assertEqual(self.s("codex", *ask).returncode, 0)
+        self.assertIsNone(self.p.state()["handoff"]["pending_to"])
+        self.assertEqual(len(self.of("runtime_handoff")), moved)          # no second event on resume
+        self.assertEqual(self.s("codex", "handoff", "--to", "claude", "--why", "back").returncode, 0)
+        self.assertEqual(self.s("claude", *ask).returncode, 0)
+        self.assertEqual(self.p.state()["owner_runtime"], "claude")
+        self.assertEqual(self.s("claude", "handoff", "--to", "codex").returncode, 0)   # pending questions do not block
+        shell = self.p.run("ask", "q", "--option", "A: a", "--option", "B: b", runtime=None,
+                           env=dict(self.homes, AI_RUNTIME=""))
+        self.assertEqual(shell.returncode, 7)
+        self.assertIn("--runtime claude handoff --to claude", shell.stderr)
+
+    def test_a_runtime_that_is_not_installed_is_refused(self):
+        self.start5()
+        done = self.s("claude", "handoff", "--to", "codex", env={"CODEX_HOME": os.path.join(self.p.tmp.name, "nowhere")})
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("not installed", done.stderr)
+
+    def test_a_self_handoff_on_an_unowned_task_is_refused(self):
+        self.start5()
+        s = self.p.state()
+        s["owner_runtime"] = None
+        self.p.write(".ai/state/current.json", json.dumps(s))
+        self.assertEqual(self.s("claude", "handoff", "--to", "claude").returncode, 2)
+        self.assertIsNone(self.p.state()["handoff"]["pending_to"])
+
+    def test_a_review_handoff_below_the_threshold_is_noted_not_recorded(self):
+        self.start5()
+        done = self.s("claude", "handoff", "--to", "codex", "--for", "review")
+        self.assertEqual(done.returncode, 0)
+        self.assertIn("below cross_vendor_review_from", done.stdout)
+        self.assertIsNone(self.p.state()["cross_vendor_review"])
+
+    def test_the_advisory_line(self):
+        done = self.start5("refactoring")
+        self.assertIn("preferred runtime: codex (plan table: refactoring -> codex)", done.stderr.split("\n"))
+        with open(os.path.join(self.p.root, ".ai", "state", "handoff.md"), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("preferred runtime: codex (plan table: refactoring -> codex)", text.split("\n"))
+        self.assertLessEqual(len(text.splitlines()), 30)
+        self.assertEqual(self.p.state()["owner_runtime"], "claude")       # nothing moves by itself
+
+    def test_no_advice_when_the_other_runtime_is_not_installed(self):
+        done = self.s("claude", "start", "--goal", "g", "--workflow", "refactoring", "--files", "src/widget.py", *ZERO,
+                      env={"CODEX_HOME": os.path.join(self.p.tmp.name, "nowhere")})
+        self.assertNotIn("preferred runtime", done.stderr)
+
+    def test_quota_advice(self):
+        now = int(time.time())
+        gate = os.path.join(self.homes["CLAUDE_CONFIG_DIR"], "state")
+        os.makedirs(gate)
+        with open(os.path.join(gate, "runtime-gate.json"), "w", encoding="utf-8") as fh:
+            json.dump({"quota": {"weekly_pct": 95, "seen_at": now, "resets_at": now + 3600, "source": "statusline"}}, fh)
+        self.assertIn("preferred runtime: codex (quota 95% >= 90%)", self.start5().stderr.split("\n"))
+
+
+class TestSensorsSurface(unittest.TestCase):
+    """R6: sensors.py is the tree snapshot and diff and the command runner; the
+    budget, the re-score and the static sensors are gone."""
+
+    def test_only_the_diff_and_the_runner_are_left(self):
+        for name in ("snapshot_tree", "diff_files", "numstat", "run_command", "command_for", "expand_files",
+                     "scope_any"):
+            self.assertTrue(callable(getattr(sensors, name, None)), name)
+        for name in ("measure", "rescore", "check", "bite", "detect", "sensor_duplicates",
+                     "sensor_traceability", "sensor_plan_sections", "load_policy", "run_at_base"):
+            self.assertFalse(hasattr(sensors, name), name)
+        commands = sensors.build_parser()._subparsers._group_actions[0].choices  # pylint: disable=protected-access
+        self.assertEqual(sorted(commands), ["diff", "run", "snapshot"])
 
 
 if __name__ == "__main__":

@@ -152,8 +152,11 @@ RESOLVE="$PLUGIN_ROOT/scripts/resolve-profile.py"
 python3 "$RESOLVE" max --fable yes --print agentic > "$CL/claude-agentic/profile.json"
 python3 "$RESOLVE" codex-plus --fable no --print agentic > "$CX/claude-agentic/profile.json" 2>/dev/null \
     || { mkdir -p "$CX/claude-agentic"; python3 "$RESOLVE" codex-plus --fable no --print agentic > "$CX/claude-agentic/profile.json"; }
-PROJ="$TMP/proj"; mkdir -p "$PROJ/.ai"
-python3 "$PLUGIN_ROOT/skills/ai-task/state.py" --root "$PROJ" init --goal g --workflow feature >/dev/null 2>&1
+PROJ="$TMP/proj"; mkdir -p "$PROJ/.ai" "$PROJ/src"
+git -C "$PROJ" init -q; printf 'x\n' > "$PROJ/src/a.py"
+git -C "$PROJ" add -A; git -C "$PROJ" -c user.email=t@t -c user.name=t commit -qm base
+python3 "$PLUGIN_ROOT/skills/ai-task/state.py" --root "$PROJ" start --goal g --workflow feature --files src/a.py \
+    --declare behaviour=0:fixture --declare domain=0:fixture --declare novelty=0:fixture >/dev/null 2>&1
 TASK=$(jq -r .task_id "$PROJ/.ai/state/current.json")
 launch() {  # launch <home-hook> <subagent_type> [session] [model] -> stdout
     jq -nc --arg a "$2" --arg s "${3:-s1}" --arg m "${4:-}" --arg c "$PROJ" \

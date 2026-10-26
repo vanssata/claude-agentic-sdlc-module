@@ -47,36 +47,14 @@ echo "== the path guard is now live in this project"
     && pass "reading source is unaffected" || fail "source reads should be allowed"
 
 echo "== a task through the pipeline"
-TASK=$(S init --goal "add a handling fee to the payment gateway" --workflow feature)
-case "$TASK" in T-*) pass "task $TASK started at discovery";; *) fail "init failed" "$TASK";; esac
-
-S stage context --note "context summary written" >/dev/null
-S stage impact_analysis >/dev/null
-S stage risk_classification >/dev/null
-S risk T5 --note "payments: T5 by default" >/dev/null
-[ "$(S get --field risk_tier)" = T5 ] && pass "classified T5" || fail "tier should be T5"
-
-TIERS="$REPO/.ai/policies/risk-tiers.json"
-[ "$(jq -r '.tiers.T5.security_review' "$TIERS")" = true ] \
-    && pass "the tier table demands a security review for T5" || fail "T5 should require security review"
-[ "$(jq -r '.tiers.T5.human_approval' "$TIERS")" = true ] \
-    && pass "and human approval" || fail "T5 should require human approval"
-
-S stage plan >/dev/null
-cat > "$TMP/steps.json" <<'JSON'
-[
-  { "step_id": "1", "description": "add the fee to the gateway",
-    "allowed_files": ["src/Payment/Gateway.php", "tests/Payment/*.php"],
-    "forbidden_files": ["src/Payment/LegacyGateway.php"],
-    "forbidden_reason": "legacy gateway behaviour is frozen for this task",
-    "required_tests": ["tests/Payment/FeeTest.php"] }
-]
-JSON
-S plan --ref ".ai/reports/$TASK/implementation-plan.md" --steps "$TMP/steps.json" >/dev/null
-S stage plan_review >/dev/null
-S stage implementation >/dev/null
-S step 1 >/dev/null
-pass "plan registered and step 1 armed"
+STATE_FILE="$REPO/.ai/state/current.json"
+S start --goal "add a handling fee to the payment gateway" --workflow feature \
+  --files "src/Payment/Gateway.php,tests/Payment/*.php" --tests tests/Payment/FeeTest.php \
+  --declare behaviour=1:"a fee on every payment" --declare novelty=0:"an existing gateway" >/dev/null 2>&1 \
+  && pass "start registers the task and arms the scope guard" || fail "start failed"
+TASK=$(jq -r .task_id "$STATE_FILE")
+[ "$(jq -r .mode "$STATE_FILE")" = full ] && pass "a payment path weighs in at full mode" \
+  || fail "src/Payment/** should be domain 2" "$(jq -c .weight.lines "$STATE_FILE")"
 
 echo "== the scope guard enforces the step"
 [ "$(decide "$SCOPE_GUARD" Edit '{"file_path":"'"$REPO"'/src/Payment/Gateway.php"}')" = allow ] \
@@ -86,7 +64,7 @@ echo "== the scope guard enforces the step"
 [ "$(decide "$SCOPE_GUARD" Edit '{"file_path":"'"$REPO"'/src/Order/OrderProcessor.php"}')" = deny ] \
     && pass "editing an out-of-scope file is refused" || fail "out-of-scope edit should be refused"
 [ "$(decide "$SCOPE_GUARD" Edit '{"file_path":"'"$REPO"'/src/Payment/LegacyGateway.php"}')" = deny ] \
-    && pass "editing a forbidden file is refused" || fail "forbidden file should be refused"
+    && pass "a file beside the task's, unnamed, is refused" || fail "an unnamed file should be refused"
 
 out=$(jq -nc --arg r "$REPO" '{hook_event_name:"PreToolUse",tool_name:"Edit",cwd:$r,tool_input:{file_path:($r+"/src/Order/OrderProcessor.php")}}' | "$SCOPE_GUARD")
 printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -q SCOPE_CHANGE_REQUIRED \
@@ -114,10 +92,10 @@ CODEX_PATH="$CDIR/hooks/ai-path-guard.sh"
 CODEX_GIT="$CDIR/hooks/ai-git-guard.sh"
 
 # The state the Claude half of this test wrote is the state Codex reads.
-[ "$(python3 "$CDIR/skills/ai-task/state.py" --root "$REPO" get | jq -r '.approved_plan.current_step_id')" = 1 ] \
-    && pass "Codex reads the step the Claude session armed" || fail "state is not shared between runtimes"
-[ "$(python3 "$CDIR/skills/ai-task/state.py" --root "$REPO" get --field risk_tier)" = T5 ] \
-    && pass "and the same risk tier" || fail "tier should be shared"
+python3 "$CDIR/skills/ai-task/state.py" --root "$REPO" status | grep -q "^task: $TASK" \
+    && pass "Codex reads the task the Claude session started" || fail "state is not shared between runtimes"
+python3 "$CDIR/skills/ai-task/state.py" --root "$REPO" status --json | jq -e '.mode == "full"' >/dev/null \
+    && pass "and the same mode" || fail "mode should be shared" "$(python3 "$CDIR/skills/ai-task/state.py" --root "$REPO" status --json)"
 
 mkpatch() {  # mkpatch <path> [second-path] -> one apply_patch payload, one or two files
     printf '*** Begin Patch\n*** Update File: %s\n@@\n-old\n+new\n' "$1"
@@ -140,7 +118,7 @@ ap() {  # ap <guard> <patch-text>
 [ "$(ap "$CODEX_SCOPE" "$(mkpatch "$REPO/src/Payment/Gateway.php" "$REPO/src/Order/OrderProcessor.php")")" = deny ] \
     && pass "one out-of-scope file rejects the whole patch" || fail "mixed patch should be refused"
 [ "$(ap "$CODEX_SCOPE" "$(mkpatch "$REPO/src/Payment/LegacyGateway.php")")" = deny ] \
-    && pass "a forbidden file is refused through apply_patch too" || fail "forbidden file should be refused"
+    && pass "an unnamed file is refused through apply_patch too" || fail "an unnamed file should be refused"
 
 out=$(jq -nc --arg r "$REPO" --arg c "$(mkpatch "$REPO/src/Order/OrderProcessor.php")" \
     '{hook_event_name:"PreToolUse",tool_name:"apply_patch",cwd:$r,tool_input:{command:$c}}' | "$CODEX_SCOPE")
@@ -153,19 +131,10 @@ printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep
     && pass "the git guard refuses a force push from Codex as well" || fail "force push should be refused"
 
 echo "== finishing the task"
-S step-done 1 >/dev/null
-S stage test >/dev/null;             S set test_status passing >/dev/null
-S stage adversarial_review >/dev/null; S set review_status passed >/dev/null
-S stage security_review >/dev/null;  S set security_status passed >/dev/null
-S stage release_report >/dev/null
-S stage human_approval >/dev/null
-out=$(S approve --by "the human" 2>&1); rc=$?
-[ "$rc" = 5 ] && grep -q "approval happens outside the agent" <<<"$out" \
-  && pass "approval is refused to a session whose stdin is a pipe" || fail "approve should exit 5 under a pipe" "exit $rc: $out"
-# What a launcher does, and what the journal must then say it was.
-AI_UNATTENDED=1 python3 "$DIR/skills/ai-task/state.py" --root "$REPO" approve --by "the human" >/dev/null
-S done >/dev/null
-[ "$(S get --field current_stage)" = done ] && pass "the task reached done" || fail "task should be done"
+# The full path to the gate needs a verify_command this fixture does not have;
+# tests/test_end_to_end.py and test_ai_task_state.py::TestGate drive it.
+S close --abandon >/dev/null && [ ! -f "$STATE_FILE" ] \
+  && pass "close --abandon ends the task" || fail "the task should be closed"
 
 echo "== the scope guard disarms when no step is current"
 [ "$(decide "$SCOPE_GUARD" Edit '{"file_path":"'"$REPO"'/src/Order/OrderProcessor.php"}')" = allow ] \
@@ -182,65 +151,16 @@ echo "== the git guard still refuses the dangerous half"
     && pass "ordinary git commands are unaffected" || fail "git status should be allowed"
 
 echo "== the audit trail survives"
-ARCHIVED=$(S archive)
-[ -f "$ARCHIVED" ] && pass "the closed task is archived under .ai/reports/" || fail "archive failed"
-jq -e '.history | length >= 12' "$ARCHIVED" >/dev/null && pass "its history records every stage" || fail "history too short"
-jq -e '.human_approval.granted == true' "$ARCHIVED" >/dev/null && pass "and who approved it" || fail "approval not recorded"
-jq -e '.human_approval.unattended == true and .human_approval.via == "unattended"' "$ARCHIVED" >/dev/null \
-    && pass "and that no human was at a terminal for it" || fail "the unattended approval should be visible for ever"
+ARCHIVED="$REPO/.ai/state/logs/$TASK/state.json"
+[ -f "$ARCHIVED" ] && jq -e '.result == "abandoned"' "$ARCHIVED" >/dev/null \
+    && pass "the closed task's state is kept under .ai/state/logs/" || fail "archive failed"
+jq -se '.[-1].event == "task_closed" and .[-1].data.abandoned == true' "$REPO/.ai/reports/$TASK/events.jsonl" >/dev/null \
+    && pass "and the journal says how it ended" || fail "task_closed missing"
+[ -f "$REPO/.ai/reports/$TASK/task.md" ] && pass "and task.md is the record" || fail "task.md missing"
 
 echo "== no application code was touched by any of this"
 changed=$(git -C "$REPO" status --porcelain -- src | wc -l)
 [ "$changed" = 0 ] && pass "src/ is untouched" || fail "src/ was modified" "$(git -C "$REPO" status --porcelain -- src)"
-
-echo "== direct mode in three calls: quick, test-run --scope all, close (§5)"
-LIB="$TMP/lib"; mkdir -p "$LIB/src" "$LIB/tests"
-git -C "$LIB" init -q -b main
-git -C "$LIB" config user.email t@example.com; git -C "$LIB" config user.name t
-printf 'def fee(x):\n    return x\n' > "$LIB/src/fee.py"
-printf '__pycache__/\n' > "$LIB/.gitignore"
-CLAUDE_AGENTIC_TEMPLATES="$DIR/skills/ai-init/templates" bash "$DIR/skills/ai-init/scaffold-ai.sh" "$LIB" >/dev/null
-cat > "$LIB/.ai/policies/testing.md" <<'MD'
-# Testing policy
-verify_command:      for t in tests/*_test.py; do python3 "$t" || exit 1; done
-step_test_command:   python3 {files}
-e2e_command:         python3 -c 'import sys; sys.path.insert(0, "src"); from fee import fee; assert fee(3) == 6'
-lint_command:        none
-typecheck_command:   none
-MD
-git -C "$LIB" add -A && git -C "$LIB" commit -qm base
-L() { python3 "$DIR/skills/ai-task/state.py" --root "$LIB" "$@"; }
-
-L quick --goal "fee doubles the amount" --workflow bugfix --tier T2 \
-  --files "src/fee.py,tests/fee_test.py" --tests tests/fee_test.py >/dev/null 2>&1 \
-  && pass "call 1: quick names the files and the failing test" || fail "quick failed"
-printf 'import sys; sys.path.insert(0, "src")\nfrom fee import fee\nassert fee(2) == 4\n' > "$LIB/tests/fee_test.py"
-printf 'def fee(x):\n    return x * 2\n' > "$LIB/src/fee.py"
-out=$(L test-run --scope all 2>&1); rc=$?
-[ $rc = 0 ] && [ "$(L get --field test_status)" = passing ] && [ "$(L get --field e2e_status)" = passing ] \
-  && pass "call 2: test-run --scope all runs the suite and e2e, both green" || fail "test-run --scope all" "rc=$rc $out"
-out=$(L close 2>&1); rc=$?
-ARCHIVED=$(tail -1 <<<"$out")
-[ $rc = 0 ] && [ -f "$ARCHIVED" ] && [ ! -f "$LIB/.ai/state/current.json" ] \
-  && pass "call 3: close finishes the step, runs the gate and archives" || fail "close" "rc=$rc $out"
-jq -e '.review_status == "skipped_green" and .current_stage == "done" and .completed_steps == ["1"]' "$ARCHIVED" >/dev/null \
-  && pass "every sensor green: the archived task ends skipped_green" || fail "archived state" "$(jq -c '{review_status, current_stage, completed_steps}' "$ARCHIVED" 2>&1)"
-
-# Review L4: green sensors never overwrite a review's own findings.
-git -C "$LIB" add -A && git -C "$LIB" commit -qm "fee doubles"
-L quick --goal "no negative fee" --workflow bugfix --tier T2 \
-  --files "src/fee.py,tests/neg_test.py" --tests tests/neg_test.py >/dev/null 2>&1
-printf 'import sys; sys.path.insert(0, "src")\nfrom fee import fee\nassert fee(-1) == 0\n' > "$LIB/tests/neg_test.py"
-printf 'def fee(x):\n    return max(x, 0) * 2\n' > "$LIB/src/fee.py"
-L test-run --scope all >/dev/null 2>&1
-L set review_status passed_with_findings >/dev/null
-out=$(L close 2>&1); rc=$?
-[ $rc = 2 ] && [ "$(L get --field review_status)" = passed_with_findings ] \
-  && pass "close keeps a review's passed_with_findings although every sensor is green" || fail "findings overwritten" "rc=$rc $out"
-L set review_status in_progress >/dev/null
-out=$(L close 2>&1); rc=$?
-[ $rc = 0 ] && jq -e '.review_status == "skipped_green"' "$(tail -1 <<<"$out")" >/dev/null \
-  && pass "and the same tree with no verdict on it does close skipped_green" || fail "control close" "rc=$rc $out"
 
 echo "== the schema-7 surface: tests/test_end_to_end.py (light = three calls, both runtimes; guarded boundaries)"
 # discover, not `-m unittest tests.test_end_to_end`: -I keeps the cwd off sys.path.

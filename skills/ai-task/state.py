@@ -16,52 +16,6 @@ the command that emitted it, and nothing here depends on it being lossless.
 history[] keeps its exact shape and its original event names beside it.
 
 Usage:
-  state.py init   --goal G --workflow W [--task-id ID] [--root DIR]
-  state.py get    [--field current_stage] [--root DIR]
-  state.py stage  <stage> [--note TEXT]
-  state.py risk   <T0..T6> [--note TEXT] [--by NAME]   # --by, outside the agent, to LOWER one
-  state.py triage <T0..T6> [--note TEXT] [--context TEXT]   discovery+context+impact+risk in one call
-  state.py quick  --goal G --workflow W --tier <T0..T4> --files a,b [--note TEXT] [--context TEXT]
-                                         init+triage+one-step plan in one call: the direct path below T5
-  state.py plan   --ref PATH --steps STEPS.json
-  state.py remediate --files a,b [--note TEXT]   one extra step R<n> for the batch of test/review fixes;
-                                         allowed = every finished step's files + the ones named
-  state.py step   <step_id>
-  state.py step-done <step_id> [--force]    measures the step's diff against its allowed files
-                                         (exit 6 asks for a split) and against the tier's budget,
-                                         always a warning; a path scope above the tier is a hint
-  state.py step-split <step_id> --files a,b [--note TEXT]   move part of a step into its own
-  state.py review-gate                   # all sensors green at or below T3 -> review_status=skipped_green
-  state.py test-run --scope step|suite|e2e [--files a,b] [--env-retry]
-                                         runs the project's own command to the end, records it,
-                                         and puts the output in a file instead of the context
-  state.py set    <field> <value>        # test_status, e2e_status, review_status, security_status, next_action
-  state.py risks  --add TEXT | --clear
-  state.py ask    "<question>" --option "A: text" [--option ...] [--recommend A] [--gate G] [--topic S]
-  state.py ask    --batch FILE.json [--topic SLUG]
-  state.py answer Q1=B [Q2=X:"text"] [--by NAME] [--via picker|prose|file] | --prose "1B 2A 3: text"
-  state.py questions [--pending] [--sync] [--format md|prose|json] [--topic SLUG]
-  state.py note   decision|rejected|failed "<text>" [--why TEXT] [--error TEXT]
-  state.py handoff [--print] [--reason stage|precompact|manual|session-start]
-  state.py handoff --to claude|codex [--for continue|review] [--why TEXT]
-                                         move the task to the other runtime: it must resume there
-                                         (exit 7 RUNTIME_HANDOFF_PENDING from anywhere else)
-  state.py profile [--field a.b.c] [--tier FAST|BALANCED|STRONG|EXPERT] [--other] [--json]
-                                         the installed plan's tables (read-only, no task needed)
-  state.py weight --files a,b [--goal G] [--declare axis=n:"why"]... [--json|--long]
-  state.py weight --mirror               six axes and a mode, read-only (no task needed);
-                                         --mirror writes .ai/policies/weight.md from weight.json
-  state.py events [--last N] [--type t1,t2] [--task ID] [--format lines|jsonl]
-  state.py event  <type> [--detail TEXT] [--data JSON]   # for hooks; type must be in EVENT_TYPES
-  state.py approve --by NAME [--note TEXT]   # outside the agent: a TTY, or AI_UNATTENDED
-  state.py reject  --by NAME --why TEXT
-  state.py done   [--abandon]
-  state.py archive                       # move current.json into .ai/reports/<task_id>/state.json
-  state.py close                         # done + archive in one call
-
-The schema-7 surface (redesign 2.2a), beside the commands above until 2.6. Only
-`start` writes "schema": 7, and close, step-done and approve take the new path
-only for such a task; every other state keeps the commands above, unchanged:
   state.py start  --goal G --workflow W --files a,b [--tests t] [--declare axis=n:"why"]...
                   [--mode M --by WHO [--why TEXT]] [--steps "id:a,b:t;..." | --plan-file F.json]
   state.py start  --amend --files "+c,+d" --why TEXT     widen the task in place (R25)
@@ -71,9 +25,31 @@ only for such a task; every other state keeps the commands above, unchanged:
                   --report -|FILE [--focus security] [--by WHO]  |  review --closes "H1,M2"
   state.py close  [--abandon]            two facts, the mode table, the gate, the archive
   state.py step-done <id>                a multi-step guarded or full task
-  state.py status [--json]               what /status prints
-  approve --by WHO [--confirm "<what it does>"]   full_irreversible: the confirm names every
-                                                  operation (DROP, ALTER …) as a word
+  state.py status [--json]               what /rr-status prints
+  state.py ask    "<question>" --option "A: text" [--option ...] [--recommend A] [--topic S]
+  state.py ask    --batch FILE.json [--topic SLUG]
+  state.py answer Q1=B [Q2=X:"text"] [--by NAME] [--via picker|prose] | --prose "1B 2A 3: text"
+  state.py questions [--pending] [--sync] [--format md|prose|json] [--topic SLUG]
+                                         --sync records the [Answer]: lines a human filled,
+                                         the gate's file route among them (kept until phase 3)
+  state.py handoff [--print] [--reason stage|precompact|manual|session-start]
+  state.py handoff --to claude|codex [--for continue|review] [--why TEXT]
+                                         move the task to the other runtime: it must resume there
+                                         (exit 7 RUNTIME_HANDOFF_PENDING from anywhere else)
+  state.py profile [--field a.b.c] [--tier FAST|BALANCED|STRONG|EXPERT] [--other] [--json]
+                                         the installed plan's tables (read-only, no task needed)
+  state.py weight --files a,b [--goal G] [--declare axis=n:"why"]... [--json|--long]
+  state.py weight --mirror               six axes and a mode, read-only (no task needed);
+                                         --mirror writes .ai/policies/weight.md from weight.json
+  state.py event  <type> [--detail TEXT] [--data JSON]   # for hooks; type must be in EVENT_TYPES
+  state.py approve --by NAME [--confirm "<what it does>"] [--note TEXT]
+                                         outside the agent: a TTY, or AI_UNATTENDED;
+                                         full_irreversible: the confirm names every operation
+  state.py reject  --by NAME --why TEXT
+
+A task the old surface started (schema < 7; its commands were removed in
+redesign 2.6) answers status, handoff and questions, and close --abandon drops
+it; every other command refuses it.
 """
 
 import argparse
@@ -100,21 +76,8 @@ try:
 except ImportError:
     weight = None
 
-STAGES = [
-    "discovery", "context", "impact_analysis", "risk_classification",
-    "plan", "plan_review", "implementation", "test", "adversarial_review",
-    "security_review", "release_report", "human_approval", "done",
-]
 TIERS = ["T0", "T1", "T2", "T3", "T4", "T5", "T6"]
 WORKFLOWS = ["feature", "bugfix", "refactoring", "hotfix", "investigation"]
-TEST_STATUS = ["not_run", "passing", "existing_failure", "new_regression", "env_failure", "unknown"]
-E2E_STATUS = ["not_run", "passing", "failing", "not_applicable"]
-REVIEW_STATUS = ["not_started", "in_progress", "blockers_open", "passed_with_findings", "passed",
-                 "skipped_green"]
-# The values a review writes. Each one is a pass, and a task gets
-# review_rounds_max of them before the next verdict is the human's (§3b).
-REVIEW_VERDICTS = ("blockers_open", "passed_with_findings", "passed")
-SECURITY_STATUS = ["not_applicable", "not_started", "in_progress", "passed", "failed"]
 
 # The journal vocabulary (I3): flat, append-only, one type per command that
 # changes something. A new type is added only when it has its own reader.
@@ -133,7 +96,6 @@ EVENT_TYPES = [
 FORGEABLE_EVENTS = {"gate_requested", "gate_approved", "gate_rejected",
                     "task_started", "task_closed", "weight_set", "weight_raised", "mode_set",
                     "verify_run", "review_verdict"}
-NOTE_KINDS = ["decision", "rejected", "failed"]
 
 # The questions file is written by state.py and never by a model (R1). One regex
 # per line (I2), so a hand edit that keeps the shape round-trips exactly.
@@ -165,12 +127,9 @@ OPTION_KEY_RE = re.compile(r"^[A-W]$")
 OPTION_HEAD_RE = re.compile(r"^([A-Za-z0-9]{1,3})\s*[:.]\s")
 
 # A pending question stops a stage from moving; it never stops a command that
-# records, reads or answers (R3). done --abandon is exempt: abandoning a task is
+# records, reads or answers (R3). close --abandon is exempt: abandoning a task is
 # how an unanswerable question is closed.
-BLOCKING_COMMANDS = {
-    "stage", "triage", "plan", "step", "step-done", "step-split", "test-run", "remediate",
-    "approve", "done", "close", "verify",
-}
+BLOCKING_COMMANDS = {"step-done", "approve", "close", "verify"}
 RUNTIMES = ["claude", "codex"]
 
 JOURNAL_MAX_BYTES = 4096
@@ -181,27 +140,12 @@ ERROR_MAX = 1000
 RUNTIME = "unknown"
 # The commands that change the task. Only these take ownership of it: reading a
 # task from the other runtime, or writing a note about it, is not a handoff.
-MUTATING_COMMANDS = {
-    "init", "stage", "risk", "triage", "quick", "plan", "remediate", "step", "step-done",
-    "step-split", "test-run", "review-gate", "set", "risks", "modules", "ask", "answer",
-    "done", "close", "start", "verify", "review",
-}
+MUTATING_COMMANDS = {"step-done", "ask", "answer", "close", "start", "verify", "review"}
+# The commands that work on the task in flight; a task the old surface started
+# refuses them all but close --abandon (route_surface).
+TASK_COMMANDS = {"step-done", "ask", "answer", "questions", "approve", "reject", "close", "verify",
+                 "review"}
 MUTATING = False
-
-# `skipped_green` is missing on purpose: it is a verdict review-gate reaches from
-# measurements, never a value anybody may assert. A review nobody did and nobody
-# measured would otherwise be one `set` away.
-SETTABLE_REVIEW_STATUS = [v for v in REVIEW_STATUS if v != "skipped_green"]
-
-SETTABLE = {
-    "test_status": TEST_STATUS,
-    "e2e_status": E2E_STATUS,
-    "review_status": SETTABLE_REVIEW_STATUS,
-    "security_status": SECURITY_STATUS,
-    "next_action": None,
-    "context_summary_ref": None,
-    "goal": None,
-}
 
 
 def now():
@@ -227,8 +171,7 @@ def find_root(start):
 
 def die(message, code=1):
     """1 validation · 2 argparse · 4 QUESTIONS_PENDING · 5 APPROVAL_REFUSED ·
-    6 SCOPE_CHANGE_REQUIRED / run budget / REVIEW_BUDGET (I1, WP4 I4; no
-    DIFF_BUDGET_EXCEEDED since redesign 1.2) ·
+    6 SCOPE_CHANGE_REQUIRED / run budget / REVIEW_BUDGET (I1, WP4 I4) ·
     7 RUNTIME_HANDOFF_PENDING · 8 DIRECT_MODE_CAP (WP5 I4; one meaning per code)."""
     print("state.py: %s" % message, file=sys.stderr)
     sys.exit(code)
@@ -365,38 +308,16 @@ def apply_defaults(state):
     for key, default in (("requested_at", None), ("gate_id", None), ("requested_session", None),
                          ("rejected_at", None), ("via", None), ("unattended", False)):
         state["human_approval"].setdefault(key, default)
-    # Schema 4 (WP4 I2). A task that started before the gates existed answers
-    # every command; its diff simply reads `unavailable`, because the tree it
-    # started from was never recorded and cannot be invented afterwards.
+    # Schema 4 (WP4 I2): a task that started before the gates existed has no
+    # tree to measure from, and one cannot be invented afterwards.
     if not isinstance(state.get("diff"), dict):
         state["diff"] = {}
     state["diff"].setdefault("base_commit", None)
     state["diff"].setdefault("base_tree", None)
-    if not isinstance(state["diff"].get("task"), dict):
-        state["diff"]["task"] = {"files": 0, "added": 0, "deleted": 0, "lines": 0,
-                                 "excluded_lines": 0, "unbudgeted_lines": 0, "tree": None,
-                                 "measured_at": None, "status": "not_measured"}
-    state["diff"].setdefault("rescored_tier", None)
-    state["diff"].setdefault("rescore_reasons", [])
-    state["diff"].setdefault("rescore_hints", [])
-    state["diff"].setdefault("over_budget", False)
-    if not isinstance(state.get("sensors"), dict):
-        state["sensors"] = {"file": ".ai/reports/%s/sensors.json" % task_id,
-                            "tree": None, "verdict": None, "checked_at": None}
-    if not isinstance(state.get("tests"), dict):
-        state["tests"] = {"runs": [], "suite_runs": 0}
-    if not isinstance(state.get("risk_tier_lowered"), dict):
-        state["risk_tier_lowered"] = {"by": None, "at": None, "from": None}
     # Schema 5 (WP5 I4): a task handed to the other runtime, and a review asked of it.
     state["handoff"].setdefault("pending_to", None)
     state["handoff"].setdefault("pending_since", None)
     state.setdefault("cross_vendor_review", None)
-    for step in ((state.get("approved_plan") or {}).get("steps") or []):
-        if isinstance(step, dict):
-            step.setdefault("kind", "remediation"
-                            if str(step.get("step_id", "")).startswith("R") else "implementation")
-            step.setdefault("tree_before", None)
-            step.setdefault("diff", None)
     return state
 
 
@@ -404,7 +325,7 @@ def load(root, required=True, claim=None):
     path = state_path(root)
     if not os.path.exists(path):
         if required:
-            die("no task in flight (%s does not exist). Start one with state.py init." % path)
+            die("no task in flight (%s does not exist). Start one with state.py start." % path)
         return None
     try:
         with open(path, encoding="utf-8") as fh:
@@ -646,265 +567,6 @@ def cmd_weight(args, root):
 DIRECT_MODE_CAP = "T4"
 
 
-def direct_mode_cap(root, tier):
-    """quick reaches only as far as the active pipeline profile allows. The cap
-    is the project's, not the plan's — the tier comes from the scope of a
-    change, and so does the mode it runs in — and it is read in this order:
-    `pipeline_profiles.<profile>.direct_mode_cap` when written (a value that is
-    not a tier is an error, never an open gate); else the highest tier whose
-    `mode` is "direct" in that profile, counted as the unbroken run from T0;
-    else T4 for `solo` and no cap for a profile that declares no direct mode
-    at all, as before. A file that still describes the six-tier table caps
-    every profile at T3, which was quick's limit when that table was written.
-    A malformed file is an error, never an open gate."""
-    profile_name, cap = "solo", None
-    try:
-        with open(os.path.join(root, ".ai", "policies", "risk-tiers.json"), encoding="utf-8") as fh:
-            policy = json.load(fh)
-    except OSError:
-        policy = None
-    except ValueError as exc:
-        die("risk-tiers.json is not valid JSON: %s" % exc)
-    if policy is None:
-        cap = DIRECT_MODE_CAP
-    else:
-        try:
-            if not isinstance(policy, dict):
-                raise TypeError("the policy is not an object")
-            profile_name = policy.get("pipeline_profile") or "solo"
-            profiles = policy.get("pipeline_profiles") or {}
-            profile = profiles.get(profile_name) or {}
-            if not isinstance(profile, dict):
-                raise TypeError("pipeline_profiles.%s is not an object" % profile_name)
-            legacy = (sensors.legacy_six_tier(policy) if sensors is not None
-                      else isinstance(policy.get("tiers"), dict) and "T6" not in policy["tiers"])
-            explicit = profile.get("direct_mode_cap")
-            modes = profile.get("mode") if isinstance(profile.get("mode"), dict) else {}
-            if explicit is not None:
-                if explicit not in TIERS:
-                    die("direct_mode_cap %r in risk-tiers.json (profile %s) is not a tier T0..T6"
-                        % (explicit, profile_name))
-                cap = explicit
-            elif legacy:
-                cap = "T3"
-            elif modes:
-                for t in TIERS:                 # the unbroken direct run from T0
-                    if modes.get(t) != "direct":
-                        break
-                    cap = t
-                cap = cap or "T0"
-            elif profile_name == "solo":
-                cap = DIRECT_MODE_CAP
-        except (AttributeError, TypeError) as exc:
-            die("risk-tiers.json is malformed (%s): fix it before quick" % exc)
-    if cap is None or tier not in TIERS:
-        return
-    if TIERS.index(tier) > TIERS.index(cap):
-        die("DIRECT_MODE_CAP %s (profile %s): use init, triage and a reviewed plan"
-            % (cap, profile_name), 8)
-
-
-def cmd_init(args, root):
-    if args.workflow not in WORKFLOWS:
-        die("workflow must be one of: %s" % ", ".join(WORKFLOWS))
-    existing = load(root, required=False, claim=False)
-    if existing and existing.get("current_stage") != "done" and not args.force:
-        die("task %s is still at stage '%s'. Finish it, archive it, or pass --force."
-            % (existing.get("task_id"), existing.get("current_stage")))
-    pending = ((existing or {}).get("handoff") or {}).get("pending_to") if existing else None
-    if pending in RUNTIMES and pending != RUNTIME and existing.get("current_stage") != "done":
-        die("RUNTIME_HANDOFF_PENDING: task %s was handed to %s; --force here would discard it. "
-            "Take it back first: state.py handoff --to %s" % (existing.get("task_id"), pending,
-                                                                RUNTIME if RUNTIME in RUNTIMES else "<claude|codex>"), 7)
-    task_id = valid_task_id(args.task_id) if args.task_id else next_task_id(root)
-    state = {
-        "task_id": task_id,
-        "goal": args.goal,
-        "workflow": args.workflow,
-        "risk_tier": None,
-        "current_stage": "discovery",
-        "affected_modules": [],
-        "context_summary_ref": None,
-        "approved_plan": {"ref": None, "current_step_id": None, "steps": []},
-        "completed_steps": [],
-        "test_status": "not_run",
-        "e2e_status": "not_run",
-        "review_status": "not_started",
-        "security_status": "not_started",
-        "open_risks": [],
-        "next_action": "run DISCOVERY",
-        "human_approval": {"required": True, "granted": False, "granted_by": None, "granted_at": None},
-        "created_at": now(),
-        "updated_at": now(),
-        "history": [],
-    }
-    apply_defaults(state)
-    record_base_tree(root, state)         # the tree every later measurement is against
-    claim_runtime(root, state)
-    os.makedirs(os.path.join(root, ".ai", "reports", task_id), exist_ok=True)
-    emit(root, state, "task_started", "%s (%s)" % (args.goal, args.workflow),
-         {"goal": args.goal, "workflow": args.workflow})
-    set_resume_point(state)
-    # Otherwise the previous task's goal, step and file scope are what a session
-    # start injects until the first stage-moving command runs.
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print(task_id)
-    if not getattr(args, "quiet_advice", False):
-        advise(state)
-
-
-def cmd_get(args, root):
-    state = load(root, required=not args.quiet)
-    if state is None:
-        print("no task in flight")
-        return
-    if args.field:
-        value = state
-        for part in args.field.split("."):
-            if isinstance(value, dict):
-                value = value.get(part)
-            else:
-                value = None
-        print(json.dumps(value) if isinstance(value, (dict, list)) else ("" if value is None else value))
-    else:
-        json.dump(state, sys.stdout, indent=2, ensure_ascii=False)
-        print()
-
-
-def emit_tier(root, state, previous, tier, note):
-    """tier_raised where a tier went up, tier_set otherwise — both keep history's
-    'risk_classified' name, and both record the previous value, which is the one
-    thing a journal line cannot be backfilled with later."""
-    detail = "%s%s" % (tier, ": " + note if note else "")
-    if previous in TIERS and TIERS.index(tier) > TIERS.index(previous):
-        emit(root, state, "tier_raised", detail,
-             {"from": previous, "to": tier, "note": note}, legacy="risk_classified")
-        return
-    direction = "set"
-    if previous in TIERS:
-        direction = "unchanged" if previous == tier else "lowered"
-    emit(root, state, "tier_set", detail,
-         {"tier": tier, "from": previous, "note": note, "direction": direction},
-         legacy="risk_classified")
-
-
-def emit_inline_stages(root, state, previous):
-    """The four stages a small task passes through in one call: recorded one by
-    one so the audit trail still shows each of them. current_stage advances with
-    them, because a journal line's `stage` names the stage the event put the task
-    into (I3) — and these lines are never rewritten."""
-    for stage in ("discovery", "context", "impact_analysis", "risk_classification"):
-        state["current_stage"] = stage
-        emit(root, state, "stage_started", "%s -> %s: inline" % (previous, stage),
-             {"from": previous, "to": stage, "note": "inline"}, legacy="stage")
-        previous = stage
-
-
-def cmd_stage(args, root):
-    if args.stage not in STAGES:
-        die("stage must be one of: %s" % ", ".join(STAGES))
-    state = load(root)
-    previous = state["current_stage"]
-    state["current_stage"] = args.stage
-    emit(root, state, "stage_started",
-         "%s -> %s%s" % (previous, args.stage, ": " + args.note if args.note else ""),
-         {"from": previous, "to": args.stage, "note": args.note}, legacy="stage")
-    if args.stage == "human_approval":
-        request_gate(root, state, "human_approval")
-    set_resume_point(state)
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print("%s -> %s" % (previous, args.stage))
-
-
-def guard_lowering(root, state, tier, by):
-    """downgrade_rule, as an exit code rather than a sentence: an agent may
-    propose a lower tier with evidence, it may not apply one. Re-scoring is what
-    makes this bite — a task raised to T4 by its own diff has an obvious motive
-    to call itself T2 again."""
-    previous = state.get("risk_tier")
-    if previous not in TIERS or TIERS.index(tier) >= TIERS.index(previous):
-        return
-    if not (by and human_present()):
-        refuse_approval_free(root, previous, tier)
-    state["risk_tier_lowered"] = {"by": by, "at": now(), "from": previous}
-    record(state, "risk_lowered", "%s -> %s by %s" % (previous, tier, by))
-
-
-def refuse_approval_free(root, previous, tier):
-    die("APPROVAL_REFUSED — only a human lowers a risk tier, in writing (downgrade_rule). "
-        "The task is %s and you asked for %s. Propose it with evidence and let the human run, "
-        "in their own terminal:\n  python3 %s --root %s risk %s --by \"<name>\" --note \"<why>\"%s"
-        % (previous, tier, shlex.quote(os.path.abspath(__file__)), shlex.quote(root), tier,
-           refused_because()), 5)
-
-
-def cmd_risk(args, root):
-    if args.tier not in TIERS:
-        die("risk tier must be one of: %s" % ", ".join(TIERS))
-    state = load(root)
-    previous = state.get("risk_tier")
-    guard_lowering(root, state, args.tier, args.by)
-    state["risk_tier"] = args.tier
-    emit_tier(root, state, previous, args.tier, args.note)
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print(args.tier)
-    advise(state)
-
-
-def cmd_triage(args, root):
-    """The four inline stages of a small task, recorded in one call so the audit
-    trail still shows each of them without four round trips."""
-    if args.tier not in TIERS:
-        die("risk tier must be one of: %s" % ", ".join(TIERS))
-    state = load(root)
-    previous = state["current_stage"]
-    emit_inline_stages(root, state, previous)
-    state["current_stage"] = "risk_classification"
-    previous_tier = state.get("risk_tier")
-    guard_lowering(root, state, args.tier, args.by)
-    state["risk_tier"] = args.tier
-    if args.context:
-        state["context_summary_ref"] = "inline: " + args.context
-    emit_tier(root, state, previous_tier, args.tier, args.note)
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print("%s, triaged inline through risk_classification" % args.tier)
-
-
-def cmd_plan(args, root):
-    state = load(root)
-    try:
-        with open(args.steps, encoding="utf-8") as fh:
-            steps = json.load(fh)
-    except (OSError, ValueError) as exc:
-        die("cannot read steps file %s (%s)" % (args.steps, exc))
-    if not isinstance(steps, list) or not steps:
-        die("steps file must contain a non-empty JSON array")
-    for step in steps:
-        for field in ("step_id", "description", "allowed_files"):
-            if field not in step:
-                die("step %s is missing '%s'" % (step.get("step_id", "?"), field))
-        step.setdefault("forbidden_files", [])
-        step.setdefault("forbidden_reason", "not part of this step")
-        step.setdefault("required_tests", [])
-        step.setdefault("status", "pending")
-        # `characterization` is not decoration: it inverts what the must-bite
-        # check expects of the step's tests at the base tree.
-        step.setdefault("kind", "implementation")
-        step.setdefault("tree_before", None)
-        step.setdefault("diff", None)
-    state["approved_plan"] = {"ref": args.ref, "current_step_id": None, "steps": steps}
-    set_resume_point(state)               # the old one may name a step this plan does not have
-    emit(root, state, "plan_registered", "%d steps, %s" % (len(steps), args.ref),
-         {"ref": args.ref, "steps": len(steps)}, legacy="plan_approved")
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print("%d steps recorded" % len(steps))
-
-
 # --------------------------------------------------------------------- the gates
 # Everything below measures through sensors.py and decides; sensors.py itself
 # decides nothing. A sensor that cannot measure says so and the task carries on:
@@ -912,9 +574,6 @@ def cmd_plan(args, root):
 # work a human asked for. The one thing it does refuse is a step that grew past
 # its tier's budget or reached outside its own files — and both of those are
 # answered by splitting the step, not by abandoning it.
-
-def sensors_available():
-    return sensors is not None
 
 
 def safe_sensor(call, *args, **kwargs):
@@ -926,98 +585,6 @@ def safe_sensor(call, *args, **kwargs):
         return call(*args, **kwargs)
     except Exception:                     # pylint: disable=broad-except
         return None
-
-
-def record_base_tree(root, state):
-    """The tree the task started from. Taken once, at init, because a base taken
-    later would quietly exclude everything already changed."""
-    state["diff"]["base_commit"] = safe_sensor(sensors.head_commit, root)
-    state["diff"]["base_tree"] = safe_sensor(sensors.snapshot_tree, root)
-
-
-def load_policy(root):
-    policy = safe_sensor(sensors.load_policy, root)
-    if policy is None:                    # no sensors module: budgets cannot bite
-        policy = {"diff_budget": {"per_step": {}, "per_task": {}, "exclude": [],
-                                  "unbudgeted_scopes": []},
-                  "path_scopes": [], "sensors": {}, "remediation_rounds": 2,
-                  "review_rounds_max": 2, "tiers": {}}
-    return policy
-
-
-# What a tier asks of close when the policy has no `tiers` table to say it: the
-# shipped table's answer — a review from T2, a human's approval from T4.
-TIER_GATE_FROM = {"adversarial_review": "T2", "human_approval": "T4"}
-
-
-def tier_requires(policy, tier, gate):
-    """Whether `tier` has `gate` (adversarial_review, human_approval). A
-    sentence — T2's "the sensors … one review only when one is red" — is a yes:
-    close then runs the review gate, which is what the sentence describes."""
-    entry = (policy.get("tiers") or {}).get(tier)
-    if isinstance(entry, dict) and gate in entry:
-        return bool(entry[gate])
-    tier = tier if tier in TIERS else "T2"
-    return TIERS.index(tier) >= TIERS.index(TIER_GATE_FROM[gate])
-
-
-def measure_diff(root, from_tree, to_tree, tier, allowed, scope, deferred_to=None,
-                 not_mine=None):
-    policy = load_policy(root)
-    measurement = safe_sensor(sensors.measure, root, from_tree, to_tree, policy,
-                              tier=tier, allowed=allowed or None, scope=scope,
-                              deferred_to=deferred_to or None, not_mine=not_mine or None)
-    if measurement is None:
-        measurement = {"status": "unavailable", "detail": "sensors.py unavailable",
-                       "files": 0, "added": 0, "deleted": 0, "lines": 0,
-                       "excluded_lines": 0, "unbudgeted_lines": 0, "unscoped": [],
-                       "deferred": [],
-                       "binary": [], "scopes": [], "over": [], "per_file": [],
-                       "budget": {"max_lines": None, "max_files": None},
-                       "measured_at": now(), "scope": scope, "tier": tier}
-    return policy, measurement
-
-
-def budget_line(prefix, measurement):
-    budget = measurement.get("budget") or {}
-    return ("%s: %d files, +%d/-%d = %d lines (%s budget %s/%s)"
-            % (prefix, measurement["files"], measurement["added"], measurement["deleted"],
-               measurement["lines"], measurement.get("tier"),
-               budget.get("max_files"), budget.get("max_lines")))
-
-
-def rescore_task(root, state, to_tree):
-    """What the change turned out to be, against what it was called at the start.
-    Since redesign 1.2 it never moves the tier: a path scope whose min_tier sits
-    above the declared tier is stored in `diff.rescore_hints` and printed once,
-    to stderr. A tier is raised by a human or `state.py risk`, not by a path."""
-    declared = state.get("risk_tier") or "T0"
-    _policy, measurement = measure_diff(root, state["diff"].get("base_tree"), to_tree,
-                                        declared, None, "task")
-    task = state["diff"]["task"]
-    task.update({"files": measurement["files"], "added": measurement["added"],
-                 "deleted": measurement["deleted"], "lines": measurement["lines"],
-                 "excluded_lines": measurement["excluded_lines"],
-                 "unbudgeted_lines": measurement["unbudgeted_lines"],
-                 "tree": to_tree, "measured_at": now(),
-                 "status": measurement["status"]})
-    state["diff"]["over_budget"] = bool(measurement.get("over"))
-    scored = safe_sensor(sensors.rescore, declared, measurement, _policy)
-    if not scored or scored.get("status") == "unavailable":
-        state["diff"]["rescored_tier"] = None
-        state["diff"]["rescore_reasons"] = []
-        return measurement, None
-    state["diff"]["rescored_tier"] = scored["tier"]
-    state["diff"]["rescore_reasons"] = scored["reasons"]
-    # A hint names its scope before " (": the first file of a scope can change
-    # between steps, the scope cannot, so a scope is printed once per task.
-    hints = scored.get("hints") or []
-    shown = {h.split(" (", 1)[0] for h in state["diff"].get("rescore_hints") or []}
-    for hint in hints:
-        if hint.split(" (", 1)[0] not in shown:
-            print("hint: %s" % hint, file=sys.stderr)
-    state["diff"]["rescore_hints"] = hints
-    return measurement, scored
 
 
 # Set by the runtimes in every process they start, the `!` prefix's shell
@@ -1050,790 +617,8 @@ def human_route():
     return None, "this run has no terminal"
 
 
-def human_present():
-    """The condition every human-only command uses: a terminal outside any
-    agent session, or a launcher that declared the run unattended."""
-    return human_route()[0] is not None
-
-
-def refused_because():
-    """The line a human-only refusal ends with, so a human who did run it in a
-    terminal — through the `!` prefix — learns which marker refused them."""
-    why = human_route()[1]
-    return "\nRefused because %s." % why if why else ""
-
-
-def refuse_without_human(what, how):
-    die("APPROVAL_REFUSED — %s happens outside the agent. Run it in your own terminal:\n  %s"
-        % (what, how), 5)
-
-
-def cmd_step(args, root):
-    state = load(root)
-    steps = state.get("approved_plan", {}).get("steps", [])
-    match = [s for s in steps if s["step_id"] == args.step_id]
-    if not match:
-        die("no step '%s' in the approved plan (have: %s)"
-            % (args.step_id, ", ".join(s["step_id"] for s in steps) or "none"))
-    for s in steps:
-        if s["step_id"] == args.step_id:
-            s["status"] = "in_progress"
-            # Taken once: a step resumed after a crash keeps the tree it began
-            # with, and a step split off a bigger one inherits its sibling's.
-            if not s.get("tree_before"):
-                s["tree_before"] = safe_sensor(sensors.snapshot_tree, root)
-    state["approved_plan"]["current_step_id"] = args.step_id
-    emit(root, state, "step_started", "%s: %s" % (args.step_id, match[0]["description"]),
-         {"step_id": args.step_id, "kind": "step"})
-    set_resume_point(state)
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print("step %s: %s" % (args.step_id, match[0]["description"]))
-    print("allowed: %s" % ", ".join(match[0]["allowed_files"]))
-    if match[0]["forbidden_files"]:
-        print("forbidden: %s" % ", ".join(match[0]["forbidden_files"]))
-    # Only this step's own tests run inside it; the full suite runs once after
-    # the last step and the e2e suite once after that.
-    print("step tests: %s" % (", ".join(match[0].get("required_tests") or []) or "none"))
-
-
-def cmd_step_done(args, root):
-    state = load(root)
-    steps = state.get("approved_plan", {}).get("steps", [])
-    match = [s for s in steps if s["step_id"] == args.step_id]
-    if not match:
-        die("no step '%s' in the approved plan" % args.step_id)
-    finish_step(root, state, match[0], args.force)
-
-
-def finish_step(root, state, step, force=False):
-    """What step-done does to one step: measure it, refuse it (exit 6), or mark
-    it done, re-score the task and save. remediate and close call it for every
-    step still open, so the direct path needs no step-done of its own."""
-    steps = state.get("approved_plan", {}).get("steps", [])
-    step_id = step["step_id"]
-
-    # The gate. Measured before anything is marked done, so a refusal leaves the
-    # step exactly where it was: in progress, with a way out that keeps the work.
-    tier = state.get("risk_tier") or "T2"
-    after = safe_sensor(sensors.snapshot_tree, root)
-    before = step.get("tree_before") or _last_tree_after(state, step)
-    from_base = not before
-    before = before or state["diff"].get("base_tree")
-    elsewhere = [f for other in steps if other is not step
-                 for f in (other.get("allowed_files") or [])]
-    _policy, measured = measure_diff(root, before, after, tier,
-                                     step.get("allowed_files"), "step",
-                                     deferred_to=elsewhere,
-                                     not_mine=step.get("forbidden_files"))
-    if measured["status"] == "red" and measured["unscoped"] and not force:
-        die("SCOPE_CHANGE_REQUIRED step %s changed %s outside its files — amend the plan, or "
-            "move them with:\n  state.py step-split %s --files %s"
-            % (step_id, ", ".join(measured["unscoped"][:5]), step_id,
-               shlex.quote(",".join(measured["unscoped"][:5]))), 6)
-    if measured["over"] and not force:
-        # The size of a change is a warning, never its tier and never a refusal,
-        # `enforce: true` included (redesign 1.2); only the scope refuses, above.
-        print("budget: over — step %s: %s (advisory). Split it when that helps the review:\n"
-              "  state.py step-split %s --files \"<the part that is its own step>\""
-              % (step_id, "; ".join(measured["over"]), step_id), file=sys.stderr)
-    seq = 1 + max([_seq(s.get("diff")) for s in steps] or [0])
-    step["diff"] = {"tree_after": after, "seq": seq,
-                    "paths": [path for path, _l, _n, _t in measured.get("per_file", [])],
-                    "files": measured["files"],
-                    "added": measured["added"], "deleted": measured["deleted"],
-                    "lines": measured["lines"], "unscoped": measured["unscoped"],
-                    "binary": measured["binary"], "status": measured["status"]}
-
-    for s in steps:
-        if s["step_id"] == step_id:
-            s["status"] = "done"
-    if step_id not in state["completed_steps"]:
-        state["completed_steps"].append(step_id)
-    if state["approved_plan"].get("current_step_id") == step_id:
-        state["approved_plan"]["current_step_id"] = None
-    emit(root, state, "step_done", step_id, {"step_id": step_id},
-         legacy="step_completed")
-    task_measured, scored = rescore_task(root, state, after)
-    set_resume_point(state)
-    write_handoff(root, state, "stage")
-    save(root, state)
-    if measured["status"] == "unavailable":
-        print("step %s diff: unavailable (%s)"
-              % (step_id, measured.get("detail") or "not measured"))
-    else:
-        print(budget_line("step %s diff" % step_id, measured)
-              + (" — budget: over — %s (advisory)" % "; ".join(measured["over"])
-                 if measured["over"] else " — ok"))
-    if from_base and measured["status"] != "unavailable" and completed_before(state, step):
-        print("step %s measured from the task's base tree: it has no tree_before and no "
-              "finished step recorded where the tree stood" % step_id)
-    if task_measured["status"] != "unavailable":
-        print(budget_line("task diff", task_measured)
-              + ("; rescored %s" % scored["tier"] if scored else ""))
-    remaining = [s["step_id"] for s in steps if s["status"] != "done"]
-    print("step %s done; remaining: %s" % (step_id, ", ".join(remaining) or "none"))
-    if not remaining:
-        print("last step: run verify_command once, to the end, then e2e_command once")
-
-
-def _last_tree_after(state, step):
-    """Where the last finished step left the tree. A step with no tree_before of
-    its own (a remediation recorded before remediate took one) began there, not
-    at the task's base tree — measuring from the base would charge it with the
-    whole task's diff. "Last" is by when step-done ran (diff.seq): a step done
-    again keeps its first place in completed_steps. Steps recorded before seq
-    existed fall back to that list's order, and rank below any that have one."""
-    steps = state.get("approved_plan", {}).get("steps", [])
-    by_id = {s["step_id"]: s for s in steps}
-    best, best_key = None, None
-    for i, step_id in enumerate(state.get("completed_steps") or []):
-        done = by_id.get(step_id)
-        if done is None or done is step:
-            continue
-        diff = done.get("diff") or {}
-        if not diff.get("tree_after"):
-            continue
-        key = (_seq(diff), i)
-        if best_key is None or key > best_key:
-            best, best_key = diff["tree_after"], key
-    return best
-
-
-def _seq(diff):
-    """A step's finishing order; 0 for one recorded before it existed, or hand-edited."""
-    seq = (diff or {}).get("seq")
-    return seq if isinstance(seq, int) and not isinstance(seq, bool) else 0
-
-
-def completed_before(state, step):
-    """Whether any other step had finished — the case where measuring from the
-    base tree is a fallback worth naming rather than the obvious start."""
-    return any(sid != step["step_id"] for sid in state.get("completed_steps") or [])
-
-
 def _split_files(text):
     return [f.strip() for f in (text or "").split(",") if f.strip()]
-
-
-def cmd_step_split(args, root):
-    """The way out of a refused step-done: the part that has grown into its own
-    step becomes one. Nothing is undone and nothing is lost — the files move,
-    the sibling inherits the tree the original started from, and both halves are
-    then measured against their own budget."""
-    state = load(root)
-    steps = state.get("approved_plan", {}).get("steps", [])
-    match = [s for s in steps if s["step_id"] == args.step_id]
-    if not match:
-        die("no step '%s' in the approved plan" % args.step_id)
-    step = match[0]
-    files = _split_files(args.files)
-    if not files:
-        die("--files must name at least one file or glob to move into the new step")
-    existing = {s["step_id"] for s in steps}
-    n = 2
-    while "%s.%d" % (args.step_id, n) in existing:
-        n += 1
-    new_id = "%s.%d" % (args.step_id, n)
-    sibling = {
-        "step_id": new_id,
-        "description": args.note or ("split off %s" % args.step_id),
-        "allowed_files": files,
-        "forbidden_files": list(step.get("forbidden_files") or []),
-        "forbidden_reason": step.get("forbidden_reason") or "not part of this step",
-        "required_tests": [], "status": "pending",
-        "kind": step.get("kind", "implementation"),
-        "tree_before": step.get("tree_before"), "diff": None,
-    }
-    step["allowed_files"] = [f for f in (step.get("allowed_files") or []) if f not in files]
-    # A step's own glob usually still matches what it gave away (`src/**` covers
-    # `src/Payment/*.php`), so the split says so explicitly. This is also what
-    # the scope guard reads, so the original step can no longer write them.
-    forbidden = step.setdefault("forbidden_files", [])
-    for pattern in files:
-        if pattern not in forbidden:
-            forbidden.append(pattern)
-    step["forbidden_reason"] = "moved to step %s" % new_id
-    steps.insert(steps.index(step) + 1, sibling)
-    emit(root, state, "scope_change", "%s -> %s: %s" % (args.step_id, new_id, ", ".join(files)),
-         {"kind": "split", "from": args.step_id, "step_id": new_id, "files": files})
-    set_resume_point(state)
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print("step %s split: %s now covers %s" % (args.step_id, new_id, ", ".join(files)))
-    print("finish %s, then run: state.py step %s" % (args.step_id, new_id))
-
-
-def cmd_quick(args, root):
-    """The direct path for T0–T4 (T4 after the human approved the plan in plan
-    mode): one call records the task, the four inline
-    triage stages and a single step whose allowed files are the ones named, so
-    the scope guard is armed without a plan file, a task.md or four round trips."""
-    if args.tier not in ("T0", "T1", "T2", "T3", "T4"):
-        die("quick is for T0 to T4; from T5 the task needs init, triage and a reviewed plan")
-    direct_mode_cap(root, args.tier)
-    files = _split_files(args.files)
-    if not files:
-        die("--files must name at least one file or glob the step may touch")
-    args.quiet_advice = True              # said once, below, after the step line
-    cmd_init(args, root)
-    state = load(root)
-    previous = state["current_stage"]
-    emit_inline_stages(root, state, previous)
-    state["current_stage"] = "risk_classification"
-    previous_tier = state.get("risk_tier")
-    state["risk_tier"] = args.tier
-    if args.context:
-        state["context_summary_ref"] = "inline: " + args.context
-    emit_tier(root, state, previous_tier, args.tier, args.note)
-    step = {
-        "step_id": "1", "description": args.goal, "allowed_files": files,
-        "forbidden_files": [], "forbidden_reason": "not part of this task",
-        "required_tests": _split_files(args.tests), "status": "in_progress",
-    }
-    state["approved_plan"] = {"ref": "inline", "current_step_id": "1", "steps": [step]}
-    emit(root, state, "plan_registered", "1 step, inline (quick)",
-         {"ref": "inline", "steps": 1}, legacy="plan_approved")
-    state["current_stage"] = "implementation"
-    emit(root, state, "stage_started", "risk_classification -> plan -> implementation: quick",
-         {"from": "risk_classification", "to": "implementation", "note": "quick"}, legacy="stage")
-    emit(root, state, "step_started", "1: %s" % args.goal, {"step_id": "1", "kind": "step"})
-    state["next_action"] = "implement (step tests only), then the verification command once, then e2e once"
-    set_resume_point(state)
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print("%s %s: step 1 armed for %s" % (state["task_id"], args.tier, ", ".join(files)))
-    advise(state)
-
-
-LABEL_RE = re.compile(r"^[A-Z][0-9]+$")
-
-
-def review_report_path(root, state):
-    return os.path.join(root, ".ai", "reports", state["task_id"], "review-report.md")
-
-
-def check_closes(root, state, labels):
-    """--closes names findings a review wrote down, or nothing. A label is
-    found when a finding row carries it after its severity: `- [HIGH] H1 …`."""
-    bad = [label for label in labels if not LABEL_RE.match(label)]
-    if bad:
-        die("--closes takes finding labels like H1 or M2, not: %s" % ", ".join(bad))
-    path = review_report_path(root, state)
-    try:
-        with open(path, encoding="utf-8") as fh:
-            report = fh.read()
-    except OSError:
-        die("--closes needs the review's findings in %s, and there is none. Save the reviewer's "
-            "FINDINGS and VERDICT there first." % os.path.relpath(path, root))
-    missing = [label for label in labels
-               if not re.search(r"\]\s+%s(\s|$)" % re.escape(label), report, re.M)]
-    if missing:
-        die("--closes names %s, which %s not a finding in %s"
-            % (", ".join(missing), "is" if len(missing) == 1 else "are",
-               os.path.relpath(path, root)))
-
-
-def cmd_remediate(args, root):
-    """One extra step for the whole batch of fixes after the test run or the
-    review — never one step per failure. Its scope is the union of every step
-    already done plus the files named (usually the failing tests). A step still
-    open is finished first, as step-done would, so a red run on the direct path
-    goes straight to its fix."""
-    state = load(root)
-    steps = state.get("approved_plan", {}).get("steps", [])
-    if not steps:
-        die("no approved plan to remediate; register one with plan or quick first")
-    closes = _split_files(args.closes)
-    if closes:
-        check_closes(root, state, closes)
-    n = 1 + sum(1 for s in steps if str(s["step_id"]).startswith("R"))
-    rounds = load_policy(root).get("remediation_rounds", 2)
-    if isinstance(rounds, int) and n > rounds and not (args.by and human_present()):
-        # remediation_rule: at most two rounds before the human decides. A third
-        # round is where a fix starts causing the next regression (review-economy §5).
-        die("APPROVAL_REFUSED — this is remediation round %d and the policy allows %d. "
-            "Name the invariant behind the repeated failure, show it to the human, and let "
-            "them run:\n  python3 %s --root %s remediate --files %s --by \"<name>\"%s"
-            % (n, rounds, shlex.quote(os.path.abspath(__file__)), shlex.quote(root),
-               shlex.quote(args.files or ""), refused_because()), 5)
-    for open_step in [s for s in steps if s["status"] == "in_progress"]:
-        finish_step(root, state, open_step)
-    allowed = []
-    for s in steps:
-        for f in s.get("allowed_files", []):
-            if f not in allowed:
-                allowed.append(f)
-    for f in _split_files(args.files) + _split_files(args.tests):
-        if f not in allowed:
-            allowed.append(f)
-    step_id = "R%d" % n
-    step = {
-        "step_id": step_id,
-        "description": args.note or "remediation batch %d" % n,
-        "allowed_files": allowed, "forbidden_files": [],
-        "forbidden_reason": "not part of this task", "required_tests": _split_files(args.tests),
-        "status": "in_progress",
-        # Taken now, like cmd_step does: the batch is measured from here, not
-        # from the task's base tree, or it carries every finished step's diff.
-        "tree_before": safe_sensor(sensors.snapshot_tree, root),
-    }
-    if closes:
-        # The findings this batch fixes, and how many runs came before it: the
-        # first green suite after it, on a tree it changed, closes them (§3a).
-        step["closes"] = closes
-        step["runs_before"] = len(state["tests"]["runs"])
-        step["opened_at_event"] = len(state.get("history") or [])
-    steps.append(step)
-    state["approved_plan"]["current_step_id"] = step_id
-    state["current_stage"] = "implementation"
-    # Two lines for one step, matching the two history entries and the mapping
-    # migration 0002 backfills with: a reader counts data.kind, not the type.
-    emit(root, state, "step_started", "%s: %s" % (step_id, step["description"]),
-         {"step_id": step_id, "kind": "remediation"}, legacy="remediation")
-    emit(root, state, "step_started", "%s: %s" % (step_id, step["description"]),
-         {"step_id": step_id, "kind": "step"})
-    set_resume_point(state)
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print("step %s armed for %s" % (step_id, ", ".join(allowed)))
-    if closes:
-        print("closes %s: a green test-run after this batch records them closed"
-              % ", ".join(closes))
-
-
-def cmd_test_run(args, root):
-    """One run of one scope, recorded. Why this and not the agent running it:
-    a run's own exit code is the verdict when it is green, so a green run costs
-    no model at all; and the cap, the one environment retry and the log file
-    live where the record does, not in a prompt an agent may read loosely.
-
-    `--scope all` is the direct path's one verification call: the suite, then
-    e2e only when the suite is green, each recorded exactly as its own scope."""
-    state = load(root)
-    policy = load_policy(root)
-    config = (policy.get("sensors") or {}).get("tests") or {}
-    max_runs = config.get("max_suite_runs", 5)
-    tests = state["tests"]
-    if args.scope == "all" and args.files:
-        die("--files narrows one scope; --scope all runs the whole suite and e2e")
-    if args.e2e and args.scope != "all":
-        die("--e2e is for --scope all; for a single scope run 'state.py set e2e_status "
-            "not_applicable'")
-    if args.e2e and (args.e2e[0] != "not-applicable" or not args.e2e[1].strip()):
-        die('--e2e takes: not-applicable "<why the change cannot reach an e2e flow>"')
-    if args.scope in ("suite", "all") and isinstance(max_runs, int) \
-            and tests["suite_runs"] >= max_runs:
-        die("run budget exhausted: %d suite runs, the policy allows %d. Running it again is not "
-            "the next move — the human decides what is." % (tests["suite_runs"], max_runs), 6)
-    if args.env_retry and state.get("test_status") != "env_failure":
-        die("--env-retry is for a run already classified as a TEST ENVIRONMENT FAILURE; "
-            "this task's test_status is '%s'. Classify the failure first." % state.get("test_status"))
-
-    if args.scope != "all":
-        exit_code = run_scope(root, state, args.scope, args, config)
-        if exit_code == 0 and args.scope == "suite":
-            close_findings(root, state)
-        sys.exit(0 if exit_code == 0 else 1)
-
-    if run_scope(root, state, "suite", args, config) != 0:
-        print("e2e: not run — the suite is red")
-        sys.exit(1)
-    if args.e2e:
-        e2e_not_applicable(root, state, args.e2e[1])
-    else:
-        command = (safe_sensor(sensors.command_for, root, "e2e") or "").strip()
-        if command == "none":
-            e2e_not_applicable(root, state, "e2e_command: none in .ai/policies/testing.md")
-        elif run_scope(root, state, "e2e", args, config) != 0:
-            sys.exit(1)
-    close_findings(root, state)
-
-
-def run_scope(root, state, scope, args, config):
-    """Run one scope's command to the end, record it and print its six lines.
-    Returns the exit code; the caller decides what a red one means."""
-    tests = state["tests"]
-    max_runs = config.get("max_suite_runs", 5)
-    command = safe_sensor(sensors.command_for, root, scope) or ""
-    if not command:
-        die("no command for scope '%s' in .ai/policies/testing.md — write it down first"
-            % scope)
-    files = _split_files(args.files)
-    if files:
-        command = safe_sensor(sensors.expand_files, command, files) or command
-    n = len([r for r in tests["runs"] if r.get("scope") == scope]) + 1
-    log = os.path.join(root, ".ai", "reports", state["task_id"],
-                       "tests-%s-%d.log" % (scope, n))
-    result = safe_sensor(sensors.run_command, root, command, log,
-                         config.get("timeout_seconds", 1800),
-                         config.get("log_max_bytes", 2097152))
-    if result is None:
-        die("sensors.py is not installed beside state.py — run the project's command yourself")
-
-    tests["runs"].append({"n": n, "scope": scope, "command": command,
-                          "tree": safe_sensor(sensors.snapshot_tree, root),
-                          "exit": result["exit"], "duration_s": result["duration_s"],
-                          "log": os.path.relpath(log, root), "at": now(),
-                          "env_retry": bool(args.env_retry)})
-    if scope == "suite":
-        tests["suite_runs"] += 1
-    field = "e2e_status" if scope == "e2e" else "test_status"
-    previous = state.get(field)
-    if result["exit"] == 0:
-        # Green needs no interpretation, and this is where the model step goes
-        # away: nothing is delegated, nothing is pasted, the exit code is it.
-        state[field] = "passing"
-    elif result["exit"] is None:
-        state[field] = "env_failure" if field == "test_status" else "not_run"
-    elif previous in (None, "not_run", "passing"):
-        state[field] = "unknown" if field == "test_status" else "failing"
-    emit(root, state, "field_set", "%s = %s (%s run %d, exit %s)"
-         % (field, state[field], scope, n, result["exit"]),
-         {"field": field, "from": previous, "value": state[field],
-          "scope": scope, "exit": result["exit"], "log": os.path.relpath(log, root)})
-    write_handoff(root, state, "stage")
-    save(root, state)
-
-    print("%s run %d: exit %s in %ds" % (scope, n, result["exit"], result["duration_s"]))
-    print("command: %s" % command)
-    print("log: %s" % os.path.relpath(log, root))
-    if result["detail"]:
-        print(result["detail"])
-    if result["exit"] == 0:
-        print("%s = passing" % field)
-        return 0
-    print("classify: hand ai-tester the log path above — it reads the file, it never re-runs")
-    if scope == "suite" and isinstance(max_runs, int):
-        print("suite runs used: %d of %d" % (tests["suite_runs"], max_runs))
-    return 1 if result["exit"] is None else result["exit"]
-
-
-def e2e_not_applicable(root, state, why):
-    """The one-call spelling of `set e2e_status not_applicable`, with its reason."""
-    previous = state.get("e2e_status")
-    state["e2e_status"] = "not_applicable"
-    emit(root, state, "field_set", "e2e_status = not_applicable (%s)" % one_line(why, 200),
-         {"field": "e2e_status", "from": previous, "value": "not_applicable", "why": why},
-         legacy="set")
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print("e2e_status = not_applicable: %s" % one_line(why, 200))
-
-
-def close_findings(root, state):
-    """§3a: a review that found something but no blocker is closed by the
-    remediation that names its findings and the green run after it — not by a
-    second review. Only on a tree that remediation changed: a batch that fixed
-    nothing closes nothing."""
-    if state.get("review_status") != "passed_with_findings":
-        return
-    batches = [s for s in state.get("approved_plan", {}).get("steps", []) if s.get("closes")]
-    if not batches:
-        return
-    batch = batches[-1]
-    if (batch.get("opened_at_event") or 0) <= (state.get("findings_verdict_at") or 0):
-        # The batch answers an earlier verdict. A later passed_with_findings
-        # brought findings no --closes has named, so no run closes them.
-        return
-    runs = state["tests"]["runs"]
-    suite = [i for i, r in enumerate(runs) if r.get("scope") == "suite"]
-    if not suite or suite[-1] < (batch.get("runs_before") or 0) or runs[suite[-1]].get("exit") != 0:
-        return
-    run = runs[suite[-1]]
-    if not run.get("tree") or run["tree"] == batch.get("tree_before"):
-        print("findings %s stay open: the tree is where %s began, so nothing was fixed yet"
-              % (", ".join(batch["closes"]), batch["step_id"]))
-        return
-    state["review_status"] = "passed"
-    emit(root, state, "findings_closed", "%s closed by suite run %d on %s"
-         % (", ".join(batch["closes"]), run["n"], run["tree"][:9]),
-         {"labels": batch["closes"], "step_id": batch["step_id"], "run": run["n"],
-          "tree": run["tree"]})
-    emit(root, state, "field_set", "review_status = passed (findings closed by a green run)",
-         {"field": "review_status", "from": "passed_with_findings", "value": "passed"})
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print("review_status = passed: %s closed by suite run %d" % (", ".join(batch["closes"]), run["n"]))
-
-
-def cmd_review_gate(args, root):
-    """The one place the sensor set can replace a model review.
-
-    It replaces it only at or below `skip_review_at_or_below`, only when every
-    required sensor measured something and that something was green, and only on
-    the tree as it is right now. Anything else — a red sensor, a tool nobody
-    wrote down, a result from an older tree, a declared tier above the
-    ceiling — and the review runs exactly as it did before, with the sensor rows
-    attached so the reviewer does not re-derive what is already settled.
-    """
-    state = load(root)
-    if not review_gate(root, state, args.no_bite):
-        sys.exit(2)
-
-
-def review_gate(root, state, no_bite=False):
-    """Run the sensors, record what they found, and answer whether they stand
-    in for the review: True after writing skipped_green, False when it is owed."""
-    if sensors is None:
-        die("sensors.py is not installed beside state.py — run the review the tier asks for")
-    policy = load_policy(root)
-    report = safe_sensor(sensors.check, root, state, policy, no_bite, None)
-    if report is None:
-        die("the sensors could not run — run the review the tier asks for")
-    safe_sensor(sensors.write_report, root, state, report, None)
-    state["sensors"] = {"file": os.path.relpath(sensors.sensors_file(root, state), root),
-                        "tree": report["tree"], "verdict": report["verdict"]["review"],
-                        "checked_at": report["checked_at"]}
-    sensors.print_report(report)
-
-    if not report["verdict"]["all_green"]:
-        state["next_action"] = "run the adversarial review the tier requires"
-        emit(root, state, "field_set", "sensors: review required",
-             {"field": "sensors", "value": report["verdict"]["review"],
-              "blocking": report["verdict"]["blocking"]})
-        write_handoff(root, state, "stage")
-        save(root, state)
-        print("the ledger has what the sensors settled: %s"
-              % os.path.relpath(sensors.ledger_file(root, state), root))
-        return False
-
-    previous = state.get("review_status")
-    state["review_status"] = "skipped_green"
-    state["next_action"] = "finish the task: the sensors stand in for the review at this tier"
-    emit(root, state, "field_set", "review_status = skipped_green (every sensor green on %s)"
-         % (report["tree"] or "?")[:9],
-         {"field": "review_status", "from": previous, "value": "skipped_green",
-          "tree": report["tree"], "tier": state.get("risk_tier")})
-    write_handoff(root, state, "stage")
-    save(root, state)
-    return True
-
-
-def at_base_tree(root, state):
-    """Nothing changed since the task began — measured, never assumed."""
-    base = (state.get("diff") or {}).get("base_tree")
-    return bool(base) and safe_sensor(sensors.snapshot_tree, root) == base
-
-
-def approved_since_last_step(state):
-    """A grant counts for close only when it came after the last finished step:
-    an approval of the plan is not an approval of the work done after it."""
-    approval = state.get("human_approval") or {}
-    if not approval.get("granted") or not approval.get("granted_at"):
-        return False
-    done = [h.get("at") or "" for h in state.get("history") or []
-            if h.get("event") in ("step_completed", "step_done")]
-    return not done or approval["granted_at"] >= max(done)
-
-
-def close_summary(root, state):
-    measured = (state.get("diff") or {}).get("task") or {}
-    print("%s %s ready for approval: %s" % (state["task_id"], state.get("risk_tier"),
-                                            state.get("goal")))
-    print("steps done: %s; task diff: %s files, %s lines"
-          % (", ".join(state.get("completed_steps") or []) or "none",
-             measured.get("files", "?"), measured.get("lines", "?")))
-    print("tests: %s; e2e: %s; review: %s (%d of %s verdicts)"
-          % (state.get("test_status"), state.get("e2e_status"), state.get("review_status"),
-             state.get("reviews") or 0, load_policy(root).get("review_rounds_max", 2)))
-    closed = [label for s in state.get("approved_plan", {}).get("steps", [])
-              for label in s.get("closes") or []]
-    if closed:
-        print("findings closed by remediation: %s" % ", ".join(closed))
-    print("approve in your own terminal, then run close again:\n  python3 %s --root %s approve "
-          "--by \"<name>\"" % (shlex.quote(os.path.abspath(__file__)), shlex.quote(root)))
-
-
-def cmd_close(args, root):
-    """The direct path's exit (§5b), stopping at the first thing still owed.
-    Exits 4 and 5 (a pending question, a rejection) were decided in main()."""
-    state = load(root)
-    if not state.get("completed_steps") and at_base_tree(root, state):
-        # The escalation exit: a record nothing was done under — a quick task
-        # that turned out to be T5 — closes as it always did.
-        cmd_done(args, root)
-        cmd_archive(args, root)
-        return
-    for step in [s for s in state.get("approved_plan", {}).get("steps", [])
-                 if s["status"] == "in_progress"]:
-        finish_step(root, state, step)
-    tier = state.get("risk_tier") or "T2"
-    policy = load_policy(root)
-    if tier_requires(policy, tier, "adversarial_review") and state.get("review_status") != "passed":
-        ceiling = (policy.get("sensors") or {}).get("skip_review_at_or_below", "T3")
-        status = state.get("review_status")
-        # A review's own findings are never overwritten by the sensors; below
-        # them the gate runs afresh, and a skipped_green from an older tree is
-        # not reused.
-        may_skip = tier in TIERS and ceiling in TIERS \
-            and TIERS.index(tier) <= TIERS.index(ceiling) \
-            and status not in ("blockers_open", "passed_with_findings")
-        if not (may_skip and review_gate(root, state)):
-            status = state.get("review_status")
-            if status == "passed_with_findings":
-                how = ("fix the findings in one 'state.py remediate --closes \"<labels>\"' batch, "
-                       "run 'state.py test-run --scope all' once more, then close again")
-            elif status == "blockers_open":
-                how = ("fix the blockers in one 'state.py remediate' batch, run the suite, get one "
-                       "scoped re-review, 'state.py set review_status <verdict>', then close again")
-            else:
-                how = "run the tier's reviewer, 'state.py set review_status <verdict>', then close again"
-            die("review required (%s, review_status %s) — %s. To drop this record instead: "
-                "'state.py done --abandon' then 'state.py archive'." % (tier, status, how), 2)
-    if tier_requires(policy, tier, "human_approval") and not approved_since_last_step(state):
-        previous = state["current_stage"]
-        state["current_stage"] = "human_approval"
-        emit(root, state, "stage_started", "%s -> human_approval: close" % previous,
-             {"from": previous, "to": "human_approval", "note": "close"}, legacy="stage")
-        request_gate(root, state, "human_approval")
-        state["next_action"] = "the human approves in their own terminal, then close again"
-        set_resume_point(state)
-        write_handoff(root, state, "stage")
-        save(root, state)
-        close_summary(root, state)
-        return
-    cmd_done(args, root)
-    cmd_archive(args, root)
-
-
-def cmd_set(args, root):
-    if args.field not in SETTABLE:
-        die("settable fields: %s" % ", ".join(sorted(SETTABLE)))
-    allowed = SETTABLE[args.field]
-    if args.field == "review_status" and args.value == "skipped_green":
-        die("review_status 'skipped_green' is written only by review-gate, from the sensors. "
-            "Run: state.py review-gate")
-    if allowed and args.value not in allowed:
-        die("%s must be one of: %s" % (args.field, ", ".join(allowed)))
-    if args.by and args.field != "review_status":
-        die("--by is for review_status: the verdict a human gives when the review budget is spent")
-    state = load(root)
-    if args.by:
-        cmd_set_by_human(args, root, state)
-        return
-    if args.field == "review_status" and args.value in REVIEW_VERDICTS:
-        count_review(root, state, args.value)
-    previous = state.get(args.field)
-    state[args.field] = args.value
-    review = state.get("cross_vendor_review")
-    if args.field == "review_status" and isinstance(review, dict) and review.get("status") == "requested" \
-            and RUNTIME == review.get("to"):
-        # A second review adds to the first; it never clears it. The other
-        # vendor's verdict lives in cross_vendor_review.result, and review_status
-        # — the field the gates read — keeps the owner's blockers until the
-        # owner's own review clears them.
-        if previous == "blockers_open":
-            state[args.field] = previous
-            print("note: review_status stays blockers_open (the task's own review); "
-                  "this verdict is recorded as the cross-vendor result")
-        if args.value not in ("not_started", "in_progress"):
-            review.update({"status": "done", "by_runtime": RUNTIME, "done_at": now(), "result": args.value})
-    if args.field == "review_status":
-        mark_findings_verdict(state)
-    emit(root, state, "field_set", "%s = %s" % (args.field, args.value),
-         {"field": args.field, "from": previous, "value": args.value}, legacy="set")
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print("%s = %s" % (args.field, args.value))
-
-
-def mark_findings_verdict(state):
-    """Where in the history a passed_with_findings verdict was written: only a
-    --closes batch opened after it may close it (close_findings)."""
-    if state.get("review_status") == "passed_with_findings":
-        state["findings_verdict_at"] = len(state.get("history") or [])
-
-
-def count_review(root, state, value):
-    """§3b: every verdict a review writes is one pass — the cross-vendor one
-    included — and the one past review_rounds_max is the human's to give."""
-    limit = load_policy(root).get("review_rounds_max", 2)
-    reviews = state.get("reviews") or 0
-    if isinstance(limit, int) and not isinstance(limit, bool) and reviews >= limit:
-        emit(root, state, "review_budget_refused",
-             "review_status %s refused: %d of %d verdicts used" % (value, reviews, limit),
-             {"reviews": reviews, "max": limit, "value": value})
-        save(root, state)
-        die("REVIEW_BUDGET — this task has had %d review verdicts and the policy allows %d "
-            "(review_rounds_max). Another pass is not the next move: show the human the "
-            "findings and let them decide, in their own terminal:\n"
-            "  python3 %s --root %s set review_status %s --by \"<name>\"\n"
-            "or, at the approval gate, approve --by \"<name>\"."
-            % (reviews, limit, shlex.quote(os.path.abspath(__file__)), shlex.quote(root),
-               value), 6)
-    state["reviews"] = reviews + 1
-
-
-def cmd_set_by_human(args, root, state):
-    """The human's verdict past the budget: not a review, so not counted and not
-    refused by it — and, like approve, only from outside the agent."""
-    via, why = human_route()
-    if via is None:
-        die("APPROVAL_REFUSED — a verdict with --by is the human's, given outside the agent. "
-            "Run it in your own terminal:\n  python3 %s --root %s set review_status %s --by %s"
-            "\nRefused because %s."
-            % (shlex.quote(os.path.abspath(__file__)), shlex.quote(root), args.value,
-               shlex.quote(args.by), why), 5)
-    previous = state.get("review_status")
-    state["review_status"] = args.value
-    mark_findings_verdict(state)
-    emit(root, state, "human_set", "review_status = %s by %s via %s" % (args.value, args.by, via),
-         {"field": "review_status", "from": previous, "value": args.value, "by": args.by,
-          "via": via, "unattended": via == "unattended"},
-         actor="human" if via == "terminal" else "agent")
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print("review_status = %s (by %s via %s)" % (args.value, args.by, via))
-
-
-def cmd_risks(args, root):
-    state = load(root)
-    previous = list(state.get("open_risks", []))
-    if args.clear:
-        state["open_risks"] = []
-        emit(root, state, "field_set", "",
-             {"field": "open_risks", "from": previous, "value": []}, legacy="risks_cleared")
-    elif args.add:
-        state["open_risks"].append(args.add)
-        emit(root, state, "field_set", args.add,
-             {"field": "open_risks", "from": previous, "value": state["open_risks"]},
-             legacy="risk_added")
-    else:
-        die("pass --add TEXT or --clear")
-    save(root, state)
-    print("%d open risk(s)" % len(state["open_risks"]))
-
-
-def cmd_modules(args, root):
-    state = load(root)
-    previous = list(state.get("affected_modules", []))
-    for module in args.module:
-        if module not in state["affected_modules"]:
-            state["affected_modules"].append(module)
-    emit(root, state, "field_set", ", ".join(args.module),
-         {"field": "affected_modules", "from": previous, "value": state["affected_modules"]},
-         legacy="modules")
-    save(root, state)
-    print(", ".join(state["affected_modules"]))
-
-
-def cmd_note(args, root):
-    """A decision, a rejected option or a failed attempt. It goes to the journal
-    only: these are the facts a compaction loses, not state the guards enforce,
-    so current.json does not grow with them."""
-    if args.kind not in NOTE_KINDS:
-        die("note kind must be one of: %s" % ", ".join(NOTE_KINDS))
-    state = load(root)
-    data = {"kind": args.kind, "text": args.text}
-    if args.why:
-        data["why"] = args.why
-    if args.error:
-        data["error"] = args.error
-    append_journal(root, state["task_id"], journal_line(
-        state["task_id"], "note", "agent", state.get("current_stage"),
-        "%s: %s" % (args.kind, args.text), data))
-    print("noted (%s)" % args.kind)
 
 
 def cmd_event(args, root):
@@ -1861,47 +646,6 @@ def cmd_event(args, root):
     append_journal(root, state["task_id"], journal_line(
         state["task_id"], args.type, "hook", state.get("current_stage"), args.detail, data))
     print("%s recorded" % args.type)
-
-
-def latest_task_id(root):
-    """The journal outlives current.json, which archive removes — so the reader
-    falls back to the newest journal rather than reporting no task in flight."""
-    reports = os.path.join(root, ".ai", "reports")
-    candidates = []
-    for name in os.listdir(reports) if os.path.isdir(reports) else []:
-        path = os.path.join(reports, name, "events.jsonl")
-        if os.path.exists(path):
-            candidates.append((os.path.getmtime(path), name))
-    return sorted(candidates)[-1][1] if candidates else None
-
-
-def cmd_events(args, root):
-    task_id = args.task
-    if not task_id:
-        state = load(root, required=False)
-        task_id = state["task_id"] if state else latest_task_id(root)
-    if not task_id:
-        die("no task in flight and no journal under .ai/reports/")
-    if args.type:
-        for wanted in _split_files(args.type):
-            # "legacy" is not emitted by anything: it is what migration 0002
-            # calls a history entry whose event name this vocabulary never had.
-            if wanted not in EVENT_TYPES and wanted != "legacy":
-                die("unknown event type '%s' (have: %s)" % (wanted, ", ".join(EVENT_TYPES)))
-    events, skipped = read_journal(root, task_id)
-    if args.type:
-        wanted = _split_files(args.type)
-        events = [e for e in events if e.get("event") in wanted]
-    if args.last > 0:
-        events = events[-args.last:]
-    for event in events:
-        if args.format == "jsonl":
-            print(json.dumps(event, ensure_ascii=False))
-        else:
-            print("%s  %-16s %s" % (event.get("ts", ""), event.get("event", ""), event.get("detail", "")))
-    if skipped:
-        print("state.py: events: skipped %d unparseable line(s) in %s"
-              % (skipped, journal_path(root, task_id)), file=sys.stderr)
 
 
 def find_docs_root(start):
@@ -2243,7 +987,7 @@ def cmd_ask(args, root):
     if args.gate:
         # A gate the agent can author is a gate the agent can have signed: the
         # human would approve whichever G was pending last.
-        die("a gate is requested by 'state.py stage human_approval', not by ask")
+        die("a gate is requested by 'state.py close' in full mode, not by ask")
     state = None if args.topic else load(root)
     path = questions_path(root, state, args.topic)
     stage = "intent" if args.topic else state["current_stage"]
@@ -2638,7 +1382,7 @@ def handoff_to(args, root):
             state.get("task_id"), args.to,
             " (handed over, waiting for it to resume)" if (state.get("handoff") or {}).get("pending_to") else ""), 2)
     if state.get("current_stage") == "done":
-        die("task %s is closed; start a new one with init" % state.get("task_id"), 2)
+        die("task %s is closed; start a new one with start" % state.get("task_id"), 2)
     if not installed(args.to):
         die("%s is not installed here (%s has no skills/ai-task/state.py); run install.sh --target %s"
             % (args.to, runtime_home(args.to), args.to), 2)
@@ -2691,31 +1435,6 @@ def cmd_handoff(args, root):
             print(line)
     else:
         print(os.path.relpath(handoff_path(root), root))
-
-
-CLOSING_COMMANDS = {"done", "close"}
-
-
-def guard_rejected(root, args):
-    """A rejection is a wall, not a cleared flag.
-
-    reject consumes the request, so without this the very next command could
-    finish the task the human just refused. It stops only the commands that
-    would close it — going back to implementation to address the rejection is
-    the whole point — and a new `stage human_approval` clears it, because asking
-    again is how a rejection is answered.
-    """
-    if args.command not in CLOSING_COMMANDS and args.stage_argument != "done":
-        return
-    if getattr(args, "abandon", False):
-        return                            # abandoning a refused task is allowed
-    state = load(root, required=False, claim=False)
-    if not state or not (state.get("human_approval") or {}).get("rejected_at"):
-        return
-    die("APPROVAL_REFUSED — this task was rejected at %s and has not been approved since. "
-        "Address the rejection and run 'state.py stage human_approval' to ask again, or close "
-        "it with 'state.py done --abandon'."
-        % state["human_approval"]["rejected_at"], 5)
 
 
 def guard_pending(root, command):
@@ -2951,8 +1670,8 @@ def cmd_approve(args, root):
                      state["human_approval"].get("granted_at"),
                      state["human_approval"].get("via")))
             return
-        die("APPROVAL_REFUSED — no gate was requested: run 'state.py stage human_approval' "
-            "after presenting the plan.", 5)
+        die("APPROVAL_REFUSED — no gate was requested: 'state.py close' requests it for a full-mode "
+            "task.", 5)
     tty = os.isatty(0)
     # A terminal is the stronger evidence: a launcher variable left in a human's
     # shell must not downgrade an approval they gave in person.
@@ -2988,8 +1707,8 @@ def cmd_reject(args, root):
     state = load(root)
     gate_id = open_gate(state)
     if gate_id is None:
-        die("APPROVAL_REFUSED — no gate was requested: run 'state.py stage human_approval' "
-            "after presenting the plan.", 5)
+        die("APPROVAL_REFUSED — no gate was requested: 'state.py close' requests it for a full-mode "
+            "task.", 5)
     claim_runtime(root, state)
     state["human_approval"].update({
         "required": True, "granted": False, "granted_by": None, "granted_at": None,
@@ -3008,42 +1727,11 @@ def cmd_reject(args, root):
     print("rejected by %s; stage stays at %s" % (args.by, state["current_stage"]))
 
 
-def cmd_done(args, root):
-    abandoned = bool(getattr(args, "abandon", False))
-    state = load(root)
-    state["current_stage"] = "done"
-    state["next_action"] = "none — task abandoned" if abandoned else "none — task closed"
-    emit(root, state, "task_closed", "abandoned" if abandoned else "",
-         {"abandoned": abandoned})
-    set_resume_point(state)
-    write_handoff(root, state, "stage")
-    save(root, state)
-    print("%s %s" % (state["task_id"], "abandoned" if abandoned else "closed"))
-
-
-def cmd_archive(_args, root):
-    state = load(root)
-    target_dir = os.path.join(root, ".ai", "reports", state["task_id"])
-    os.makedirs(target_dir, exist_ok=True)
-    target = os.path.join(target_dir, "state.json")
-    with open(target, "w", encoding="utf-8") as fh:
-        json.dump(state, fh, indent=2, ensure_ascii=False)
-        fh.write("\n")
-    try:
-        os.remove(handoff_path(root))     # before the point of no return, and never fatal
-    except OSError:
-        pass
-    os.remove(state_path(root))
-    print(target)
-
-
 # ---------------------------------------------- the schema-7 surface (redesign 2.2a)
 #
-# Beside the commands above, not instead of them: /ai-task calls those until the
-# skills move (2.3), and they are deleted only in 2.6. Only `start` writes
-# "schema": 7, and main() sends close, step-done and approve here only for such
-# a task, so a task in flight on the old surface — migration 0007 patched or
-# not — keeps the old bodies untouched (D1). The legacy keys the scope guard
+# The old surface's commands were deleted in 2.6. Only `start` writes
+# "schema": 7; a task in flight on the old surface — migration 0007 patched or
+# not — is read or abandoned, never worked (route_surface). The legacy keys the scope guard
 # reads (current_stage, approved_plan) are written beside the new ones, as one
 # synthetic step "task" holding every file of the task (D2).
 
@@ -3056,14 +1744,6 @@ VERDICT_STATUS = {"pass": "passed", "pass_with_findings": "passed_with_findings"
                   "blockers_open": "blockers_open"}
 FINDING_RE = re.compile(r"\[(BLOCKER|HIGH|MEDIUM|LOW|INFO)\]\s+([A-Z][0-9]+)\b")
 OUT_OF_SCOPE_RE = re.compile(r"in_scope:\s*no\b", re.I)
-SCHEMA_ONLY = {"start", "verify", "review", "status"}
-V7_ROUTED = {"close", "step-done", "approve"}
-# The old surface's own commands: on a schema-7 task they would read keys it
-# does not keep, so they refuse rather than half-work.
-OLD_ONLY = {"init", "stage", "risk", "triage", "quick", "plan", "remediate", "step",
-            "step-split", "test-run", "review-gate", "set", "risks", "modules", "done", "archive"}
-
-
 def is_v7(state):
     return isinstance(state, dict) and state.get("schema") == SCHEMA
 
@@ -3107,9 +1787,7 @@ def apply_defaults_v7(state):
 def load_v7(root):
     state = load(root)
     if not is_v7(state):
-        die("task %s runs on the old surface (schema %s): it keeps test-run, set and close until "
-            "it closes; the schema-7 commands start with 'state.py start'"
-            % (state.get("task_id"), state.get("schema") or "<7"))
+        die(old_surface_refusal(state))
     return state
 
 
@@ -3181,7 +1859,7 @@ def added_lines(root, base_tree, rel):
     return out
 
 
-def rescore(root, base_tree, files, current, policy):
+def rescore_weight(root, base_tree, files, current, policy):
     """Reversibility and domain from the diff's `files`, only upward (R26).
 
     It lives here, not in weight.py, because weight.py is at the spec's 300-line
@@ -3455,7 +2133,7 @@ def rescore_v7(root, state, policy, at):
     if not diff:
         return
     current = state["weight"].get("axes") or {}
-    got = rescore(root, state["diff"].get("base_tree"), [d["path"] for d in diff], current, policy)
+    got = rescore_weight(root, state["diff"].get("base_tree"), [d["path"] for d in diff], current, policy)
     before = state["mode"]
     ops = sorted(set(state["weight"].get("operations") or []) | set(got["operations"]))
     # Only what the diff moved can move the mode: an unchanged measurement must
@@ -4262,25 +2940,45 @@ def write_task_md(root, state):
         print("state.py: task.md not written (%s)" % exc, file=sys.stderr)
 
 
+def old_surface_refusal(state):
+    return ("task %s runs on the old surface (schema %s), whose commands were removed in redesign 2.6: "
+            "finish it with the plugin version that started it, or drop it with 'state.py close --abandon'"
+            % (state.get("task_id"), state.get("schema") or "<7"))
+
+
+def abandon_old(_args, root):
+    """close --abandon for a task the old surface started: the record moves to
+    .ai/state/logs/<task>/state.json as it is, and nothing else is measured."""
+    state = load(root)
+    state["result"] = "abandoned"
+    state["closed_at"] = now()
+    emit(root, state, "task_closed", "abandoned", {"abandoned": True, "surface": "old"})
+    ensure_logs(root, state["task_id"])
+    target = os.path.join(logs_dir(root, state["task_id"]), "state.json")
+    state["updated_at"] = now()
+    with open(target, "w", encoding="utf-8") as fh:
+        json.dump(state, fh, indent=2, ensure_ascii=False)
+        fh.write("\n")
+    with contextlib.suppress(OSError):
+        os.remove(handoff_path(root))
+    os.remove(state_path(root))
+    print("%s abandoned (old surface)" % state["task_id"])
+    print("state: %s" % os.path.relpath(target, root))
+
+
 def route_surface(root, args):
-    """D1: close, step-done and approve take the schema-7 path only for a task
-    `start` wrote; the old surface's own commands refuse such a task, and the
-    new ones refuse a task the old surface started."""
-    if args.command not in V7_ROUTED | OLD_ONLY | SCHEMA_ONLY - {"start", "status"}:
+    """A task the old surface started (schema < 7) is read (status, handoff,
+    questions without --sync) or dropped (close --abandon); every command that
+    works on it refuses."""
+    if args.command not in TASK_COMMANDS:
         return
     state = load(root, required=False, claim=False)
-    if state is None:
+    if state is None or is_v7(state) or (args.command == "questions" and not args.sync):
         return
-    if is_v7(state):
-        if args.command in OLD_ONLY:
-            die("task %s runs on the schema-7 surface: '%s' is the old one — use start, verify, review "
-                "and close" % (state.get("task_id"), args.command))
-        args.v7 = True                    # close handles a rejection itself (cmd_close_v7)
-        args.func = {"close": cmd_close_v7, "step-done": cmd_step_done_v7,
-                     "approve": cmd_approve_v7}.get(args.command, args.func)
-    elif getattr(args, "abandon", False) and args.command == "close":
-        die("close --abandon is for a schema-7 task; this one closes with 'state.py done --abandon' "
-            "then 'state.py archive'")
+    if args.command == "close" and args.abandon:
+        args.func = abandon_old
+        return
+    die(old_surface_refusal(state))
 
 
 def main():
@@ -4290,70 +2988,10 @@ def main():
                         help="overrides AI_RUNTIME and detection for this call")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("init"); p.add_argument("--goal", required=True)
-    p.add_argument("--workflow", required=True); p.add_argument("--task-id")
-    p.add_argument("--force", action="store_true"); p.set_defaults(func=cmd_init)
-
-    p = sub.add_parser("get"); p.add_argument("--field")
-    p.add_argument("--quiet", action="store_true"); p.set_defaults(func=cmd_get)
-
-    p = sub.add_parser("stage"); p.add_argument("stage"); p.add_argument("--note", default="")
-    p.set_defaults(func=cmd_stage)
-
-    p = sub.add_parser("risk"); p.add_argument("tier"); p.add_argument("--note", default="")
-    p.add_argument("--by", default="", help="required, with a terminal, to LOWER a tier")
-    p.set_defaults(func=cmd_risk)
-
-    p = sub.add_parser("triage"); p.add_argument("tier"); p.add_argument("--note", default="")
-    p.add_argument("--by", default="", help="required, with a terminal, to LOWER a tier")
-    p.add_argument("--context", default=""); p.set_defaults(func=cmd_triage)
-
-    p = sub.add_parser("quick"); p.add_argument("--goal", required=True)
-    p.add_argument("--workflow", required=True); p.add_argument("--tier", required=True)
-    p.add_argument("--files", required=True); p.add_argument("--note", default="")
-    p.add_argument("--tests", default="", help="the step's own tests: its required_tests")
-    p.add_argument("--context", default=""); p.add_argument("--task-id")
-    p.add_argument("--force", action="store_true"); p.set_defaults(func=cmd_quick)
-
-    p = sub.add_parser("plan"); p.add_argument("--ref", required=True)
-    p.add_argument("--steps", required=True); p.set_defaults(func=cmd_plan)
-
-    p = sub.add_parser("remediate"); p.add_argument("--files", default="")
-    p.add_argument("--tests", default="", help="the batch's own tests: its required_tests")
-    p.add_argument("--closes", default="",
-                   help="finding labels from review-report.md this batch fixes (H1,M2)")
-    p.add_argument("--by", default="", help="required, with a terminal, past remediation_rounds")
-    p.add_argument("--note", default=""); p.set_defaults(func=cmd_remediate)
-
-    p = sub.add_parser("step"); p.add_argument("step_id"); p.set_defaults(func=cmd_step)
     p = sub.add_parser("step-done"); p.add_argument("step_id")
     p.add_argument("--force", action="store_true",
-                   help="record the step although the diff gate refused it; say why in the plan")
-    p.set_defaults(func=cmd_step_done)
-    p = sub.add_parser("review-gate")
-    p.add_argument("--no-bite", action="store_true", dest="no_bite",
-                   help="skip the slow sensor; it then blocks the skip as unavailable")
-    p.set_defaults(func=cmd_review_gate)
-    p = sub.add_parser("test-run")
-    p.add_argument("--scope", required=True, choices=["step", "suite", "e2e", "all"])
-    p.add_argument("--files", default="")
-    p.add_argument("--e2e", nargs=2, metavar=("not-applicable", "WHY"),
-                   help="with --scope all: run the suite only and record e2e as not applicable")
-    p.add_argument("--env-retry", action="store_true", dest="env_retry")
-    p.set_defaults(func=cmd_test_run)
-    p = sub.add_parser("step-split"); p.add_argument("step_id")
-    p.add_argument("--files", required=True); p.add_argument("--note", default="")
-    p.set_defaults(func=cmd_step_split)
-
-    p = sub.add_parser("set"); p.add_argument("field"); p.add_argument("value")
-    p.add_argument("--by", default="",
-                   help="review_status only: the human's verdict, from a terminal, past the budget")
-    p.set_defaults(func=cmd_set)
-
-    p = sub.add_parser("risks"); p.add_argument("--add"); p.add_argument("--clear", action="store_true")
-    p.set_defaults(func=cmd_risks)
-
-    p = sub.add_parser("modules"); p.add_argument("module", nargs="+"); p.set_defaults(func=cmd_modules)
+                   help="accepted for older callers; it forces nothing")
+    p.set_defaults(func=cmd_step_done_v7)
 
     who = os.environ.get("USER") or "unknown"
     p = sub.add_parser("ask"); p.add_argument("question", nargs="?")
@@ -4395,33 +3033,20 @@ def main():
     out.add_argument("--json", action="store_true"); out.add_argument("--long", action="store_true")
     out.add_argument("--mirror", action="store_true"); p.set_defaults(func=cmd_weight)
 
-    p = sub.add_parser("note"); p.add_argument("kind"); p.add_argument("text")
-    p.add_argument("--why", default=""); p.add_argument("--error", default="")
-    p.set_defaults(func=cmd_note)
-
     p = sub.add_parser("event"); p.add_argument("type"); p.add_argument("--detail", default="")
     p.add_argument("--data"); p.set_defaults(func=cmd_event)
 
-    p = sub.add_parser("events"); p.add_argument("--last", type=int, default=20,
-                                                 help="0 prints every line")
-    p.add_argument("--type"); p.add_argument("--task")
-    p.add_argument("--format", choices=["lines", "jsonl"], default="lines")
-    p.set_defaults(func=cmd_events)
-
     p = sub.add_parser("approve"); p.add_argument("--by", required=True)
     p.add_argument("--note", default="")
-    p.add_argument("--confirm", default="", help="schema 7: the operation a full_irreversible task performs")
-    p.set_defaults(func=cmd_approve)
+    p.add_argument("--confirm", default="", help="the operation a full_irreversible task performs")
+    p.set_defaults(func=cmd_approve_v7)
 
     p = sub.add_parser("reject"); p.add_argument("--by", required=True)
     p.add_argument("--why", required=True); p.set_defaults(func=cmd_reject)
 
-    p = sub.add_parser("done"); p.add_argument("--abandon", action="store_true")
-    p.set_defaults(func=cmd_done)
-    p = sub.add_parser("archive"); p.set_defaults(func=cmd_archive)
     p = sub.add_parser("close")
-    p.add_argument("--abandon", action="store_true", help="schema 7: archive without the checks")
-    p.set_defaults(func=cmd_close)
+    p.add_argument("--abandon", action="store_true", help="archive without the checks")
+    p.set_defaults(func=cmd_close_v7)
 
     p = sub.add_parser("start"); p.add_argument("--goal", default="")
     p.add_argument("--workflow", default=""); p.add_argument("--files", default="")
@@ -4462,11 +3087,8 @@ def main():
     RUNTIME = detect_runtime(args.runtime, root)
     MUTATING = args.command in MUTATING_COMMANDS
     route_surface(root, args)
-    args.stage_argument = getattr(args, "stage", None)
     if args.command in BLOCKING_COMMANDS and not getattr(args, "abandon", False):
         guard_pending(root, args.command)
-    if not getattr(args, "v7", False):
-        guard_rejected(root, args)
     args.func(args, root)
 
 

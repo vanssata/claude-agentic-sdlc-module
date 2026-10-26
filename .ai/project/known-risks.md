@@ -475,3 +475,39 @@ following; each is open unless marked.
 - **How likely / how bad**: needs a project tree that links a hook to a sensitive file whose first line is a comment; the threat model (`safety.md`) covers agent mistakes, not a hostile tree. Low.
 - **Suggested fix**: skip or label links whose target resolves outside the project root, and skip dotfiles under hooks — a separate task.
 - **Status**: open
+
+## Shipped texts still name the state.py commands redesign 2.6 removed (found 2026-10-26 by T-2026-10-26-005)
+
+- **Found**: 2026-10-26, T-2026-10-26-005 (redesign 2.6), the caller-grep precondition.
+- **Where**: `skills/ai-init/templates/.ai/policies/testing.md:56` (`remediate`), `skills/ai-init/templates/.ai/state/README.md:19` (`archive`), `skills/ai-init/templates/.ai/policies/risk-tiers.json` and `risk-tiers.md` (`quick`, `review-gate`, `remediate`, `test-run`, `step-split`, `set`, `risk`, `triage`), `ai/policies/review-economy.md:75,181,194`, `skills/project-update/update.py:1258-1259` (`sensors.py detect`), `hooks/context-guard.py:409` (`Resume with: /ai-task --resume`), `hooks/ai-path-guard.sh:167,828` (comment on `archive`; the deny of `state.py set … --by`, now a rule for a command that no longer exists).
+- **What could go wrong**: KNOWN FACT — an agent reading a user project's `testing.md` or `risk-tiers.*` is told to run a command that now exits 2 (argparse); the 2.3 skills no longer send it there, so it reaches these only by reading the policy texts. The path-guard rule is dead, not unsafe.
+- **How likely / how bad**: whenever an agent follows the old policy prose; a wasted call and a confusing error, no state damage.
+- **Suggested fix**: a template task that rewrites `testing.md`/`state/README.md` and retires `risk-tiers.*` (with `tools/build-template-history.py` and a migration), plus a text edit of `review-economy.md` and `update.py`; the guard line goes in the 3.1 port.
+- **Status**: open
+
+## A schema-7 task never records a cross-vendor review (found 2026-10-26 by T-2026-10-26-005)
+
+- **Found**: 2026-10-26, T-2026-10-26-005, porting the WP5 cases of `tests/test-ai-task-state.sh`.
+- **Where**: `skills/ai-task/state.py` `handoff_to` (`tier = state.get("risk_tier")`), since 2.2a.
+- **What could go wrong**: KNOWN FACT — `start` writes no `risk_tier`, so `handoff --to <rt> --for review` on a schema-7 task always prints "an untiered task … not recorded as a cross-vendor review", whatever the mode. The old `set review_status` that marked such a review done went with the old surface in 2.6; `review` never did it.
+- **How likely / how bad**: every `--for review` handoff of a full task; the cross-vendor review R11 (WP5) describes is not recorded, so nothing shows it happened.
+- **Suggested fix**: derive the tier from the mode (`MODE_TIER`) in `handoff_to` and close the request from `cmd_review` under the other runtime — a behaviour change, its own task.
+- **Status**: open
+
+## `test_ai_task_state.py` and `test_end_to_end.py` do not run under `step_test_command` (found 2026-10-26 by T-2026-10-26-005)
+
+- **Found**: 2026-10-26, T-2026-10-26-005, `verify --scope step --files tests/test_ai_task_state.py`.
+- **Where**: `tests/test_ai_task_state.py:1`, `tests/test_end_to_end.py:1` — no `"""exec" python3 -I "$0" "$@"` line, which `tests/test_skills_surface.py:2` and `tests/test_no_size_tokens.py:2` carry.
+- **What could go wrong**: KNOWN FACT — `step_test_command` hands every path to bash, so these two files fail as shell scripts (`import: command not found`); a step's own tests cannot be run through `state.py verify --scope step`. `run-all.sh` runs them through `unittest discover`, so the whole-suite verify is unaffected.
+- **How likely / how bad**: every task whose step tests are these files; the step check has to be run by hand.
+- **Suggested fix**: add the two-line bash re-exec header both files' neighbours use.
+- **Status**: open
+
+## Project docs still name the state.py commands redesign 2.6 removed (found 2026-10-26 by T-2026-10-26-005 review)
+
+- **Found**: 2026-10-26, T-2026-10-26-005, review finding I2.
+- **Where**: `docs/faq.md` (`plan`, `risk`, `step`), `README.md` and `docs/hooks.md` (`events`).
+- **What could go wrong**: KNOWN FACT — a reader following these docs runs a command that now exits 2 (argparse). `tests/test_no_size_tokens.py` does not scan `docs/` or `README.md`, so nothing catches it.
+- **How likely / how bad**: whenever someone follows the docs; a confusing error, no state damage.
+- **Suggested fix**: a docs edit alongside the template task in the entry above.
+- **Status**: open
