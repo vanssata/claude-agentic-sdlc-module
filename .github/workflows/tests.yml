@@ -11,13 +11,17 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 joins once the suite is green on it (known-risks: "The suite is red on Python 3.10")
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Python
+    - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
-        # tomllib (3.11+) is needed; older versions make the Codex suites skip
-        python-version: '3.12'
+        python-version: ${{ matrix.python-version }}
     - name: Check required tools
       run: |
         for tool in bash jq git python3 patch diff; do

@@ -539,3 +539,12 @@ following; each is open unless marked.
 - **How likely / how bad**: rare; each needs an argument or a file system shaped for it, and the worst outcome is a different message or one file not created.
 - **Suggested fix**: a differential case per edge if one turns up; the frozen shell scaffolds stay in `tests/fixtures/scaffold-port/` until 3.6. The Codex gap belongs to 3.5 (manifests and entries).
 - **Status**: accepted
+
+## The suite is red on Python 3.10, so the CI matrix starts at 3.11 (found 2026-10-27 by T-2026-10-27-001)
+
+- **Found**: 2026-10-27, T-2026-10-27-001 (redesign 3.3a), by one diagnostic `bash tests/run-all.sh` with `python3` pointed at CPython 3.10 (uv), before the CI matrix was set. Decided Q1=B: `.github/workflows/tests.yml` runs 3.11, 3.12 and 3.13; 3.10 is left out until the suite is green on it.
+- **Where**: `tests/test-install-dry-run.sh` (5 checks: the codex shared-files, skills and retire lines, `routing.md`, "codex FAST should be Luna"), `tests/test-usage-report.sh` (3: window tokens, budget line, a relative cache path under `--task`), `tests/test-instruction-budget.sh` (3: install codex-plus, install codex-pro, the 20 KiB AGENTS.md advisory), `tests/test_imports.py` (`scripts/merge-codex-config.py:31` and `scripts/render-codex-agents.py:165` import `tomllib`, 3.11+ — the I5 of "Guard port: five differences the 3.1 review found").
+- **What could go wrong**: KNOWN FACT: the plan's floor ("Python stdlib only, 3.10+", R15) is not what the code meets; the Codex install and render paths need `tomllib`. INFERENCE: the shell-suite failures share that cause (each is a Codex path), not checked one by one. The five guard twins of 3.3a pass on 3.10.
+- **How likely / how bad**: certain on a 3.10 interpreter; a Codex install or render there fails, the Claude Code paths the twins cover do not.
+- **Suggested fix**: a `tomllib` fallback or a declared 3.11 floor for those scripts, in its own task; then add "3.10" back to the matrix.
+- **Status**: open

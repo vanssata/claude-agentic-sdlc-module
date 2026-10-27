@@ -610,7 +610,7 @@ through the old names, every event, with synthetic payloads — including
 malformed input, an unwritable state directory, expiry and explicit-model
 precedence — and install each plan and `--fable` option into scratch directories,
 including switching Fable off and on and upgrading an install from before the
-rename. `tests/test-runtime-gate.sh` covers what is new: the runtime read from the
+rename. `tests/test_runtime_gate.py` covers what is new: the runtime read from the
 home, new names over old, the one-time import, the quota from a statusline
 payload and a rollout, the EXPERT and fan-out budgets on both runtimes, and the
 `model_fallback` journal line.
