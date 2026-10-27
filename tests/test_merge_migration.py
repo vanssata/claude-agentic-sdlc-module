@@ -5,7 +5,7 @@ superseded agent, the legacy unmarked CLAUDE.md section, and the two scaffolds
 composing into one project layout without duplicating anything.
 
 Every install goes into a temp CLAUDE_DIR with a pinned HOME, through
-`bash install.sh` as the shell suite drove it.
+`node bin/riskrails.js`.
 """
 import glob
 import hashlib

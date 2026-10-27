@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """exec" python3 -I "$0" "$@"
 The shared prompts name tiers, never models (WP5 R15, I8). A model is a plan's
-choice: profiles/*.json decide it, install.sh renders it, and at run time
+choice: profiles/*.json decide it, the installer renders it, and at run time
 `state.py profile --tier <TIER>` prints it. A model name written into a prompt
 is wrong on every other plan and every other runtime, so the prompts carry
 FAST / BALANCED / STRONG / EXPERT and the placeholders that install fills in.
 
-The dry runs go through `bash install.sh` as the shell suite drove them, with a
+The dry runs go through `node bin/riskrails.js`, with a
 pinned HOME and a CLAUDE_DIR / CODEX_DIR that does not exist.
 """
 import glob

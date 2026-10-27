@@ -185,7 +185,7 @@ def scope_match(path, pattern):
     """The scope guard's semantics, exactly: bash `[[ $path == $pattern ]]`,
     where `*` crosses `/`, plus the directory-prefix rule. A file the guard
     allows must never be refused here, so this reads the plan the same way
-    hooks/ai-scope-guard.sh does — a second reading would be a second policy."""
+    hooks/guard/scope.py does — a second reading would be a second policy."""
     if fnmatch.fnmatchcase(path, pattern):
         return True
     directory = pattern.rstrip("/")

@@ -453,13 +453,13 @@ def installed(runtime):
 
 def profile_file(home):
     """<home>/riskrails/profile.json, or <home>/claude-agentic/profile.json where
-    install.sh has not run since 3.4b (R35, one version)."""
+    the installer has not run since 3.4b (R35, one version)."""
     path = os.path.join(home, "riskrails", "profile.json")
     return path if os.path.exists(path) else os.path.join(home, "claude-agentic", "profile.json")
 
 
 def read_profile(runtime=None):
-    """<home>/riskrails/profile.json, written by install.sh; {} when absent,
+    """<home>/riskrails/profile.json, written by the installer; {} when absent,
     which turns every plan budget into a no-op."""
     try:
         with open(profile_file(runtime_home(runtime or own_runtime())), encoding="utf-8") as fh:
@@ -520,7 +520,7 @@ def cmd_profile(args, _root):
     runtime = other_runtime() if args.other else own_runtime()
     prof = read_profile(runtime)
     if not prof:
-        die("no plan profile for %s (%s/riskrails/profile.json); install.sh writes it"
+        die("no plan profile for %s (%s/riskrails/profile.json); npx riskrails writes it"
             % (runtime, runtime_home(runtime)))
     if args.tier:
         model = ((prof.get("tiers") or {}).get(args.tier) or {}).get("model")
@@ -1464,7 +1464,7 @@ def handoff_to(args, root):
     if state.get("current_stage") == "done":
         die("task %s is closed; start a new one with start" % state.get("task_id"), 2)
     if not installed(args.to):
-        die("%s is not installed here (%s has no skills/ai-task/state.py); run install.sh --target %s"
+        die("%s is not installed here (%s has no skills/ai-task/state.py); run npx riskrails --target %s"
             % (args.to, runtime_home(args.to), args.to), 2)
     tier = state.get("risk_tier")
     via = "review" if args.for_ == "review" else "manual"
@@ -2007,7 +2007,7 @@ def task_files(state):
 
 
 def arm_scope(state):
-    """The legacy view ai-scope-guard.sh reads (D2): stage implementation and one
+    """The legacy view the scope guard (hooks/guard/scope.py) reads (D2): stage implementation and one
     step holding every file of the task, for as long as the task is open."""
     state["current_stage"] = "implementation"
     state["approved_plan"] = {"ref": "inline", "current_step_id": "task", "steps": [{

@@ -521,10 +521,16 @@ def real_path(p, cwd):
 
 
 def runtime_hook_config(name, hook_dir):
-    """The live config next to the guard, else in a runtime home."""
+    """The live config next to the guard, else in a runtime home — the home
+    the guard runs from first (a plugin cache lies under it), then Claude's."""
     home = env_b("HOME")
-    for d in (hook_dir, (env_b("CLAUDE_CONFIG_DIR") or home + "/.claude") + "/hooks",
-              (env_b("CODEX_HOME") or home + "/.codex") + "/hooks"):
+    claude = env_b("CLAUDE_CONFIG_DIR") or home + "/.claude"
+    codex = env_b("CODEX_HOME") or home + "/.codex"
+    homes = [claude, codex]
+    here, cx = realpath_strict(hook_dir) if hook_dir else None, realpath_strict(codex)
+    if here and cx and here.startswith(cx + "/"):
+        homes.reverse()
+    for d in (hook_dir,) + tuple(h + "/hooks" for h in homes):
         if d and is_file(d + "/" + name):
             return d + "/" + name
     return None

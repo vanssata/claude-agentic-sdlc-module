@@ -16,7 +16,7 @@ W 8 → full   hints novelty +1 · unknown none · light ≤2 · guarded 3–7 �
 
 ## Plan
 
-files: tests/install_harness.py, tests/test_install_dry_run.py, tests/test_dual_runtime_install.py, tests/test_codex_install.py, tests/test_profiles.py, tests/test_shared_tree.py, package.json, bin/riskrails.js, install.sh, tests/test-install-dry-run.sh, tests/test-dual-runtime-install.sh, tests/test-codex-install.sh, tests/test-profiles.sh, tests/test-shared-tree.sh, tests/run-all.sh, settings.common.json, codex/hooks.json, hooks/ai-git-guard.sh, hooks/ai-path-guard.sh, hooks/ai-scope-guard.sh, tests/test_ai_git_guard.py, tests/test_ai_path_guard.py, tests/test_ai_scope_guard.py, tests/test_end_to_end.py, tests/test_guard_characterization.py, tests/test-guard-characterization.sh, .claude-plugin/plugin.json, .claude-plugin/marketplace.json, .codex-plugin/plugin.json, .agents/plugins/marketplace.json, hooks/hooks.json, hooks/codex-hooks.json, tests/test_install_routes.py, hooks/guard/git.py, hooks/ai-git-guard-defaults.json, tests/fixtures/guard-characterization/golden.txt, README.md, tests/test-scaffold-idempotency.sh, .ai/project/known-risks.md, tests/guard_harness.py, tests/test_merge_migration.py, tests/test_instruction_budget.py, tests/test_shared_prompts_model_free.py, tests/test-runtime-gate-fable.sh, hooks/ai-path-guard-defaults.json
+files: tests/install_harness.py, tests/test_install_dry_run.py, tests/test_dual_runtime_install.py, tests/test_codex_install.py, tests/test_profiles.py, tests/test_shared_tree.py, package.json, bin/riskrails.js, install.sh, tests/test-install-dry-run.sh, tests/test-dual-runtime-install.sh, tests/test-codex-install.sh, tests/test-profiles.sh, tests/test-shared-tree.sh, tests/run-all.sh, settings.common.json, codex/hooks.json, hooks/ai-git-guard.sh, hooks/ai-path-guard.sh, hooks/ai-scope-guard.sh, tests/test_ai_git_guard.py, tests/test_ai_path_guard.py, tests/test_ai_scope_guard.py, tests/test_end_to_end.py, tests/test_guard_characterization.py, tests/test-guard-characterization.sh, .claude-plugin/plugin.json, .claude-plugin/marketplace.json, .codex-plugin/plugin.json, .agents/plugins/marketplace.json, hooks/hooks.json, hooks/codex-hooks.json, tests/test_install_routes.py, hooks/guard/git.py, hooks/ai-git-guard-defaults.json, tests/fixtures/guard-characterization/golden.txt, README.md, tests/test-scaffold-idempotency.sh, .ai/project/known-risks.md, tests/guard_harness.py, tests/test_merge_migration.py, tests/test_instruction_budget.py, tests/test_shared_prompts_model_free.py, tests/test-runtime-gate-fable.sh, hooks/ai-path-guard-defaults.json, hooks/guard/common.py, skills/ai-task/sensors.py, skills/ai-task/state.py, .ai/policies/testing.md
 tests: tests/test_install_dry_run.py, tests/test_dual_runtime_install.py, tests/test_codex_install.py, tests/test_profiles.py, tests/test_shared_tree.py, tests/test_suite_parity.py, tests/test_ai_git_guard.py, tests/test_ai_path_guard.py, tests/test_ai_scope_guard.py, tests/test_guard_characterization.py, tests/test_install_routes.py, tests/test_guard_differential.py, tests/test_scaffold_idempotency.py
 - s1 · tests/install_harness.py, tests/test_install_dry_run.py, tests/test_dual_runtime_install.py, tests/test_codex_install.py, tests/test_profiles.py, tests/test_shared_tree.py · tests/test_install_dry_run.py, tests/test_dual_runtime_install.py, tests/test_codex_install.py, tests/test_profiles.py, tests/test_shared_tree.py, tests/test_suite_parity.py · done
 - s2 · package.json, bin/riskrails.js, install.sh, tests/install_harness.py, tests/test_install_dry_run.py, tests/test_dual_runtime_install.py, tests/test_codex_install.py, tests/test_profiles.py, tests/test_shared_tree.py, tests/test-install-dry-run.sh, tests/test-dual-runtime-install.sh, tests/test-codex-install.sh, tests/test-profiles.sh, tests/test-shared-tree.sh, tests/run-all.sh · tests/test_install_dry_run.py, tests/test_dual_runtime_install.py, tests/test_codex_install.py, tests/test_profiles.py, tests/test_shared_tree.py, tests/test_suite_parity.py · done
@@ -27,10 +27,11 @@ tests: tests/test_install_dry_run.py, tests/test_dual_runtime_install.py, tests/
 amended 2026-10-27T21:27:44Z: +tests/guard_harness.py — s3: the shims are gone, so the guard suites run 'python3 -I -S hooks/ai-guard.py --only <check>' (the shims' exact command); run() must take a command list
 amended 2026-10-27T21:42:28Z: +tests/test_merge_migration.py, tests/test_instruction_budget.py, tests/test_shared_prompts_model_free.py, tests/test-runtime-gate-fable.sh — whole-suite verify (run 9): these four still run 'bash install.sh', now the npx wrapper that exits 2; they switch to 'node bin/riskrails.js', nothing else changes
 amended 2026-10-27T22:21:22Z: +hooks/ai-path-guard-defaults.json — Review pass 1 (blockers_open), re-plan of s4 accepted by the human: H2 — the plugin route moves the guard code and state.py into <home>/plugins/cache/<m>/riskrails/<ver>/, which no protected pattern covers; the plugin cache dir joins protected_config_patterns and installed_plugins.json joins task_protected_patterns. Same batch fixes B1 (skills keep scripts, only SKILL.md withheld), H1 (plugin active only when recorded user-scope and enabled), M1, M2, L2, L5, L6 in bin/riskrails.js and, accepted too, M3/L1 in hooks/guard/git.py.
+amended 2026-10-27T22:53:31Z: +hooks/guard/common.py, skills/ai-task/sensors.py, skills/ai-task/state.py, .ai/policies/testing.md — Review pass 1, human asked to fix the remaining findings: L3 — runtime_hook_config must search the home whose plugin cache holds the guard first (common.py); L4 — stale references to the deleted shims and 'install.sh' in sensors.py/state.py docstrings and messages and in testing.md's suite rows
 
 ## Questions
 
-none
+[questions.md](questions.md) — 1 pending
 
 ## Verify
 
@@ -53,8 +54,16 @@ none
 | 15 | step | 1 | 766e1d4de | .ai/state/logs/T-2026-10-27-007/step-15.log | yes |
 | 16 | step | 1 | 2e9e93da3 | .ai/state/logs/T-2026-10-27-007/step-16.log | no |
 | 17 | step | 0 | 72908b4cc | .ai/state/logs/T-2026-10-27-007/step-17.log | no |
+| 18 | suite | 0 | 592c2da2f | .ai/state/logs/T-2026-10-27-007/suite-18.log | no |
+| 19 | e2e | 0 | 592c2da2f | .ai/state/logs/T-2026-10-27-007/e2e-19.log | no |
+| 20 | step | 1 | 48f36c771 | .ai/state/logs/T-2026-10-27-007/step-20.log | yes |
+| 21 | step | 0 | ee9ff6d77 | .ai/state/logs/T-2026-10-27-007/step-21.log | no |
+| 22 | suite | 0 | ee9ff6d77 | .ai/state/logs/T-2026-10-27-007/suite-22.log | no |
+| 23 | e2e | 0 | ee9ff6d77 | .ai/state/logs/T-2026-10-27-007/e2e-23.log | no |
+| 24 | suite | 0 | 12a8550a8 | .ai/state/logs/T-2026-10-27-007/suite-24.log | no |
+| 25 | e2e | 0 | 12a8550a8 | .ai/state/logs/T-2026-10-27-007/e2e-25.log | no |
 
-suite passing · e2e passing · suite runs 2
+suite passing · e2e passing · suite runs 5
 
 ## Review
 
@@ -96,14 +105,40 @@ verdict: blockers_open
 scope_assessment: The change stays within the plan's files. The plugin route (s4) is incomplete, though: it breaks skill path resolution (B1), switches every guard off on a cache directory alone (H1), and leaves the moved guard code unprotected (H2). Fixing H2, and probably B1, needs files outside the step lists (`hooks/ai-path-guard-defaults.json`, `skills/rr-*/SKILL.md`), so those fixes need SCOPE_CHANGE_REQUIRED.
 ```
 
+### Pass 2 — STRONG, pass
+
+```
+## FINDINGS
+- [MEDIUM] M4 `bin/riskrails.js:681-693`, `:919-923`. **Introduced by the B1 fix; reasoned, not run.** On the plugin route each skill is now split in two. Its `SKILL.md` comes from the plugin cache, which `/plugin update` refreshes. Its scripts (`state.py`, `sensors.py`, `ai-path`, `update.py`) come from the npx copy under `~/.claude/skills/`, which changes only when npx runs again. The guard also runs from the cache. Nothing checks that the two versions match: `pluginLine` prints `plugin.version` and never compares it with `PLUGIN_VERSION` (`:280-281`). README:141-143 tells the user to run `npx riskrails@3.0.0`, a pinned version, so following it after a plugin update reinstalls the old scripts. Scenario: the plugin updates to a 3.x whose SKILL.md calls a new `state.py` subcommand or writes a new state shape. The skill then fails against the 3.0.0 `state.py`, the same kind of breakage as B1. Nothing is wrong today because 3.0.0 is the only version. Suggested direction: warn, or stop, when `plugin.version !== PLUGIN_VERSION`, and say in the README that npx must run again at the plugin's version after each plugin update. · in_scope: yes
+- [LOW] L7 `bin/riskrails.js:584-585`, `:1258-1259`. **L5 is only partly closed; verified.** On a plugin-route home the dry run still prints the whole `settings.json` snippet with its hooks (Claude) and every `codex/hooks.json` entry under "merged into …/hooks.json" (Codex). Apply registers none of those hooks (the Codex `hooks.json` ends up `{"hooks": {}}`). The `plugin:` line contradicts the block printed just above it. Also, the Codex `hooks:` line leaves out `guard/*.py`, `lib/ai-hook-common.sh` and the two `*-defaults.json` files that apply installs (`:1278-1281`). · in_scope: yes
+- [INFO] I3 **Plugin-route-only ways to switch the guard off for later sessions; verified through the plugin-cache `ai-guard.py`, no task in flight.** All of these are allowed: `claude plugin disable riskrails@riskrails`; a Write to `~/.claude/plugins/known_marketplaces.json`; a Write to `~/.claude/plugins/marketplaces/riskrails/hooks/guard/git.py` (the source the next update copies from). On the npx route nothing equivalent exists: the hook entries sit in `settings.json`, which is frozen during a task. A related case, reasoned: a user who disables the plugin after npx has run is left with no guard and no `SKILL.md` until npx runs again, because npx's detection is a snapshot. Both need deliberate action, which is outside the mistake threat model in `.ai/policies/safety.md`. They belong in `known-risks.md`, not in a remediation. · in_scope: yes
+- [INFO] I4 `(npm publish)`, `$(npm publish)` and `` `npm publish` `` are allowed, verified. The git rules behave the same way: `(git push --force origin main)` is allowed too, because the boundary class `(^|[|;&[:space:]])` has no `(` or backtick. So `cd <cache>/hooks/guard && sed -i … git.py` is allowed on the plugin cache, and the same command against `~/.claude/hooks/guard` is allowed on the npx route. This class of gap was there before this task and is the same on both routes. Not raised as new. · in_scope: yes
+- [INFO] closed: B1. Reproduced on scratch homes: npx install, then `make_plugin_cache` (user scope, enabled), then npx again, for both Claude and Codex. The rr-build loop resolves `AI_HOME` to `<home>/.claude` (or `.codex`). `state.py --help` exits 0, and `ai-path policies/safety.md` exits 0 when run from a `.ai/` project. The skill folders keep every script and lose only `SKILL.md`. `test_install_routes.py::assertSkillsResolve` now pins this.
+- [INFO] closed: H1. `claudePlugin` (`riskrails.js:831-844`) needs a user-scope entry in `installed_plugins.json`, `enabledPlugins[key] === true` and an existing `installPath`. `codexPlugin` needs an enabled `[plugins."riskrails@m"]` table. The format matches the real `installed_plugins.json` (v2, an array of entries, `scope`/`installPath`, all under `plugins/cache`), read only. `test_a_cache_alone_is_not_an_active_plugin` passes: cache only (pass 1's scenario), project scope and disabled for Claude, cache only and disabled for Codex. My hand re-run of pass 1's bare-cache scenario was refused by the live path guard (a `cp` into a `.claude/plugins` path while the task is in flight). I did not work around it, so this one rests on the test, which I ran on the current tree.
+- [INFO] closed: H2. The cached `ai-guard.py` denies, for both the Claude and the Codex cache: Edit of `hooks/guard/git.py`, also as `//` and `/./` path variants; Edit of `skills/ai-task/state.py`; `sed -i` on the cached guard and on `codex-hooks.json`; `cp` into the cache, and `echo >` the plugin's `hooks.json`; `mv` of the version folder and of the marketplace folder; `rm -rf` of `…/cache/riskrails`, `…/cache` and `~/.codex/plugins`. The npx-route guard also denies an Edit in the Claude cache. With `CLAUDE_CONFIG_DIR=<home>/cfg`, Edits of `cfg/plugins/cache/mkt/riskrails/…/git.py` and `…/state.py` are denied, because `paths.py:658-661` anchors that directory as `.claude/`. Read stays allowed. `test_ai_path_guard.py -k test_21` passes.
+- [INFO] closed: M1, L6. `checkHomeJSON` (`riskrails.js:939-957`) runs before either runtime is touched and exits 5. `test_an_unreadable_home_file_stops_before_any_change` passes: 5 bad shapes × 2 runtimes, the file unchanged, the shim not retired, no `agents/` created. Not re-run by hand: a redirect into `.claude/settings.json` is refused during the task.
+- [INFO] closed: M2. Claude takes `installPath` from the registry. Codex uses `compareVersions` (`:847-855`). `test_the_plugin_version_is_the_numerically_latest` passes.
+- [INFO] closed: M3. All 11 forms pass 1 listed are now denied, verified through `hooks/ai-guard.py`: `npm publish;`, `npm 'publish'`, `--workspace a version minor`, `version --no-git-tag-version patch`, `publish&&echo`, `/usr/bin/npm publish`, `-w a version patch`, `version -m "x" patch`, `publ`, `vers patch`, `verison patch`. Also denied: `env`/`sudo`/`NODE_ENV=x npm publish`, `npm -C pkg publish`, `--registry https://r publish`. `npm ver` is not an npm 9.2.0 command, so allowing it is correct.
+- [INFO] closed: L1. Verified: `npm run publish`, `npm install publish`, `npm help publish`, `npm --prefix pkg run publish`, `npm run version`, `npm view … version`, bare `npm version` and `npm version --json` are all allowed. `npm --dry-run publish` and the double-quoted echo are still denied; `known-risks.md` accepts both.
+- [INFO] closed: L2. `SHIM_RE` now has the lookahead `(?=["'\s]|$)`. `test_foreign_keys_survive` asserts that `/opt/mine/hooks/ai-scope-guard.sh.wrapper` survives.
+- [INFO] closed: L3. `common.py:523-536` searches the Codex home first when the realpath of `hook_dir` lies under the Codex home, and otherwise keeps the old order. Your probe showed the test fails without the fix. It passes on the current tree (`test_ai_git_guard.py`, 6/6). One contrived ordering edge remains: `CODEX_HOME` set to an ancestor of the Claude home. Not raised.
+- [INFO] closed: L4. None of the listed files names a shim or `install.sh` any more. README:140 mentions `./install.sh` on purpose, to say it now only prints the `npx` line. The remaining mentions (`skills/usage-report/usage-report.py:24,613`, `docs/**`, shipped messages) are recorded in `known-risks.md` with owner 3.6.
+- [INFO] partly closed: L5. The `hooks:` line no longer names `hooks.json`/`codex-hooks.json`/`AGENTS.md`/`CLAUDE.md`. The shim-retire line and the `(without SKILL.md …)` note are there. What is still wrong is L7 above.
+- [INFO] I1 and I2 are still open as documented (`known-risks.md`, README Install section). The fixes did not make them worse.
+
+## VERDICT
+verdict: pass
+scope_assessment: The fixes stay inside the amended plan: path-guard defaults for H2, `bin/riskrails.js` for B1, H1, M1, M2, L2, L5 and L6, `hooks/guard/git.py` for M3 and L1, and `common.py`, `sensors.py`, `state.py` and `testing.md` for L3 and L4. Every pass-1 finding with in_scope yes closes against the current tree. I re-ran `test_install_routes` (9), `test_ai_git_guard` (6) and `test_ai_path_guard -k test_21` here, all green. The B1 fix brought in a SKILL.md/script version-skew risk on plugin updates (M4) and left the plugin-route dry run partly inaccurate (L7). Neither moves the verdict.
+```
+
 ## Changes
 
 measured at close
 
 ## Verdict
 
-close: open — fix the blockers, 'state.py verify --scope all --after-fix "…"', one scoped re-review
-facts: (a) not measured · (b) not measured
-gate: none
+close: open — the human approves in their own terminal, then 'state.py close' again
+facts: (a) green — suite green on 12a8550a8 (run 24) · (b) green — 47 changed files, all in the task's files
+gate: requested G1 at 2026-10-27T23:13:45Z; approved by - at - via -
 confirm: none
-handoffs: 10 · suite runs: 2 · review passes: 1
+handoffs: 18 · suite runs: 5 · review passes: 2

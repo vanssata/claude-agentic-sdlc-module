@@ -125,6 +125,26 @@ class TestAiGitGuard(HookAsserts, unittest.TestCase):
                         "npm --prefix pkg run publish", "npm view riskrails version", "npm run version"):
             self.expect("allow", command, "'%s' is allowed" % command)
 
+    def test_plugin_cache_reads_its_own_runtimes_config(self):
+        """Review L3: a guard in a runtime's plugin cache reads that runtime's ai-git-guard.json first."""
+        home = os.path.join(self.tmp, "plugin-home")
+        for runtime, branches in ((".claude", ["release"]), (".codex", ["main"])):
+            os.makedirs(os.path.join(home, runtime, "hooks"), exist_ok=True)
+            with open(os.path.join(home, runtime, "hooks", "ai-git-guard.json"), "w", encoding="utf-8") as fh:
+                fh.write('{"protected_branches": %s}\n' % str(branches).replace("'", '"'))
+            shutil.copytree(os.path.join(PLUGIN, "hooks"),
+                            os.path.join(home, runtime, "plugins", "cache", "mkt", "riskrails", "3.0.0", "hooks"),
+                            dirs_exist_ok=True)
+        env = dict(os.environ, HOME=home)
+        env.pop("CLAUDE_CONFIG_DIR", None)
+        env.pop("CODEX_HOME", None)
+        for runtime, expected in ((".codex", "deny"), (".claude", "allow")):
+            hook = ["python3", "-I", "-S", os.path.join(home, runtime, "plugins", "cache", "mkt", "riskrails",
+                                                        "3.0.0", "hooks", "ai-guard.py"), "--only", "git"]
+            with self.subTest(runtime):
+                _, out = run(hook, bash("git push origin main", self.root), env=env)
+                self.assertEqual(decision(out), expected, "%s cache: %s" % (runtime, out[:200]))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -124,10 +124,9 @@ The suites are Python `unittest` modules, `tests/test_*.py`, self-contained: eac
 scaffolds what it needs into a temporary directory and removes it on exit.
 `tests/guard_harness.py` holds the fixture runners for the hook payloads under
 `tests/fixtures/`. `tests/` is not a package, so a module is addressed with
-`discover -s tests -p test_<name>.py`, never `tests.test_<name>`. Until 3.5 the
-install suites (`test-install-dry-run.sh`, `test-profiles.sh`, `test-codex-install.sh`,
-`test-dual-runtime-install.sh`, `test-runtime-gate-*.sh`, `test-shared-tree.sh`)
-are still bash on `tests/lib.sh`.
+`discover -s tests -p test_<name>.py`, never `tests.test_<name>`. Since 3.5 the
+install suites are Python on `tests/install_harness.py`; the `test-runtime-gate-*.sh`
+suites are still bash on `tests/lib.sh`.
 
 `tests/run-all.sh` runs the remaining `.sh` suites from a literal list, then every
 `test_*.py` in one `unittest discover`, so a new Python suite runs without being
@@ -140,11 +139,11 @@ is no mechanical map from a source file to its tests; the useful ones are:
 | Touching | Run |
 |---|---|
 | `skills/usage-report/**` | `tests/test_usage_report.py`, `tests/test_codex_usage_report.py` |
-| `hooks/ai-guard.py`, `hooks/guard/**`, `hooks/ai-*-guard.sh` | `tests/test_ai_path_guard.py`, `tests/test_ai_scope_guard.py`, `tests/test_ai_git_guard.py`, `tests/test_guard_characterization.py`, `tests/test_guard_differential.py`, `tests/test_ere_unit.py` |
+| `hooks/ai-guard.py`, `hooks/guard/**` | `tests/test_ai_path_guard.py`, `tests/test_ai_scope_guard.py`, `tests/test_ai_git_guard.py`, `tests/test_guard_characterization.py`, `tests/test_guard_differential.py`, `tests/test_ere_unit.py` |
 | `skills/ai-task/state.py`, `weight.py` | `tests/test_ai_task_state.py`, `tests/test_ai_status_root.py`, `tests/test_weight.py` |
 | `skills/ai-task/sensors.py` | `tests/test_ai_task_sensors.py` |
 | `skills/project-update/**`, `skills/rr-setup/**`, `hooks/project-scaffold.*` | `tests/test_project_update.py`, `tests/test_merge_migration.py`, `tests/test_project_adopt.py`, `tests/test_scaffold_idempotency.py`, `tests/test_scaffold_differential.py`, `tests/test_setup.py` |
-| `install.sh`, `profiles/**`, `scripts/resolve-profile.py` | `tests/test-install-dry-run.sh`, `tests/test-profiles.sh`, `tests/test-codex-install.sh`, `tests/test-dual-runtime-install.sh` |
+| `bin/riskrails.js`, `profiles/**`, `scripts/resolve-profile.py` | `tests/test_install_dry_run.py`, `tests/test_profiles.py`, `tests/test_codex_install.py`, `tests/test_dual_runtime_install.py`, `tests/test_shared_tree.py`, `tests/test_install_routes.py` |
 | `hooks/runtime-gate.py`, `hooks/context-guard.py` | `tests/test_runtime_gate.py`, `tests/test_context_guard.py`, `tests/test-runtime-gate-fable.sh`, `tests/test-runtime-gate-codex.sh` |
 | `agents/**`, `codex/**`, `instructions/**`, `skills/*/SKILL.md` | `tests/test_codex_agent_render.py`, `tests/test_shared_prompts_model_free.py`, `tests/test_instruction_budget.py`, `tests/test_skills_surface.py` |
 

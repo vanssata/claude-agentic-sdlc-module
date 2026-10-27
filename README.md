@@ -115,6 +115,8 @@ npx riskrails@3.0.0                       # detects Claude Code, Codex, or both,
 npx riskrails@3.0.0 --target codex        # auto | claude | codex | both
 npx riskrails@3.0.0 --dry-run             # print what would be written, write nothing
 npx riskrails@3.0.0 --home ~/alt-claude   # another Claude home (--codex-home for Codex)
+# The installer does not read CLAUDE_CONFIG_DIR or CODEX_HOME: with a home other than
+# ~/.claude or ~/.codex, pass it with --home / --codex-home (or CLAUDE_DIR / CODEX_DIR).
 
 # Claude-side options. The plan is detected from ~/.claude.json (organizationRateLimitTier
 # tells Max 5x from 20x) and, on a terminal, proposed for you to confirm with Enter (--yes
@@ -220,7 +222,7 @@ exactly one always-loaded file per runtime, and it is short.
 All of the block text comes from one source, `instructions/stub.md`, rendered per
 scope and runtime by `skills/project-update/render_instructions.py`; the committed
 templates are build artefacts and `render_instructions.py build --check` fails the
-suite on drift. `install.sh` prints what the block costs after every install
+suite on drift. `npx riskrails` prints what the block costs after every install
 (`managed block 1 903 B (budget 2 560), file 8 457 B — the rest is yours`) and
 never touches the rest of the file; `/ai-status` prints the same line for a
 project. Downstream the budget is advisory — the plugin measures, it does not
@@ -274,7 +276,7 @@ The same commands in both runtimes:
 
 ### Updating a project after the plugin changes
 
-`install.sh` updates `~/.claude/` (or `~/.codex/`), and with it the shared
+`npx riskrails` updates `~/.claude/` (or `~/.codex/`), and with it the shared
 tree at `<home>/riskrails/ai/`: the 29 policies, agent contracts,
 workflows and templates that are the same in every project. A project does not
 copy them; it reads them from there, and a file at the same path under `.ai/`
@@ -317,7 +319,7 @@ first, then every unedited copy of a shared file is proposed for deletion,
 edited ones are reported as overrides), and a project initialised before the
 version existed is schema 0. Migration 0006 deletes nothing while any installed
 home (`~/.claude`, `~/.codex`) lacks the shared file it would fall back to — it
-exits 2 and asks for `install.sh` — and holds `.ai/VERSION` at 5 until the
+exits 2 and asks for `npx riskrails` — and holds `.ai/VERSION` at 5 until the
 deletion is confirmed. Every machine of a team upgrades the plugin before a
 project at schema 6 is committed; an older plugin refuses it. Migrations under
 `skills/project-update/migrations/` run in order before anything is merged —
@@ -494,7 +496,7 @@ resolved object to `<home>/riskrails/profile.json`; `runtime-gate` enforces the
 fan-out and EXPERT budgets by asking, `state.py profile --tier <TIER>` prints a
 tier's model, and `/usage-report --task <id>` compares a task's tokens with its
 plan's figure — reported, never enforced. The prompts themselves name tiers only;
-`tests/test-shared-prompts-model-free.sh` keeps it that way.
+`tests/test_shared_prompts_model_free.py` keeps it that way.
 
 | Tier | Claude Code | Codex | Does |
 |---|---|---|---|
@@ -623,7 +625,7 @@ make self-approval deliberate and visible, not impossible.
 and how (`via: terminal`).
 **What to do.** Read `state.py events` for the approval before you merge a
 T4–T6 change. An approval you do not remember giving is a finding.
-**Source.** WP2 security review. `hooks/ai-path-guard.sh`, `docs/hooks.md`.
+**Source.** WP2 security review. `hooks/guard/paths.py`, `docs/hooks.md`.
 
 ### The deletion gate stops an agent's command, not an agent's script
 
@@ -654,7 +656,7 @@ session, is refused too — that shell carries the markers.
 **What to do.** Run `--confirm-delete` in a terminal of your own. A `via:
 unattended` on a run nobody launched unattended is a finding.
 **Source.** WP6 finding F3, `.ai/reports/T-2026-09-27-003/`.
-`hooks/ai-path-guard.sh`, `skills/project-update/adopt.py` (`human_gate`).
+`hooks/guard/paths.py`, `skills/project-update/adopt.py` (`human_gate`).
 
 ### `AI_UNATTENDED=1` turns the human gates off
 
@@ -685,7 +687,7 @@ EXPERT reroute, the quota records or the session and compaction snapshot.
 file proves no guard behaviour changed. Protection for both hooks was split off
 as its own additive task.
 **Limits.** The installed copies live under `~/.claude` or `~/.codex`, outside
-any project, and a change to them shows up in `install.sh --dry-run`. On Codex an
+any project, and a change to them shows up in `npx riskrails --dry-run`. On Codex an
 edited hook entry loses its trust and stops running until you re-approve it.
 **What to do.** Treat an unexpected diff under `hooks/` like a change to CI
 configuration. Until the follow-up lands, review hook changes by hand.
@@ -716,7 +718,7 @@ entry. After an upgrade changes an entry, for example the gate's matcher
 simply not running under Codex, and nothing on screen says so.
 **Why it stays.** This is how Codex's trust model works. A plugin cannot and
 should not approve itself.
-**What to do.** After every `./install.sh` that touches Codex, open `/hooks` in
+**What to do.** After every `npx riskrails` that touches Codex, open `/hooks` in
 Codex and approve the changed entries. The installer ends with that reminder.
 **Source.** `docs/hooks.md`, runtime gate. `README.md`, "What it installs".
 
@@ -794,7 +796,7 @@ whether a surprising number came from the cache. Deleting
 
 ## Migrating from claude-routing
 
-This plugin absorbed `claude-routing`. Run `./install.sh` once and it:
+This plugin absorbed `claude-routing`. Run `npx riskrails` once and it:
 
 - writes the routing settings itself, from the same `profiles/` — nothing about
   your model, effort or limits changes;
