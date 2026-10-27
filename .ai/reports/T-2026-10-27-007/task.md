@@ -31,7 +31,7 @@ amended 2026-10-27T22:53:31Z: +hooks/guard/common.py, skills/ai-task/sensors.py,
 
 ## Questions
 
-[questions.md](questions.md) — 1 pending
+[questions.md](questions.md) — 0 pending
 
 ## Verify
 
@@ -133,12 +133,62 @@ scope_assessment: The fixes stay inside the amended plan: path-guard defaults fo
 
 ## Changes
 
-measured at close
+| File | Change | New/Edit/Delete |
+|---|---|---|
+| .agents/plugins/marketplace.json | +20 −0 | New |
+| .ai/policies/testing.md | +5 −6 | Edit |
+| .ai/project/known-risks.md | +18 −0 | Edit |
+| .claude-plugin/marketplace.json | +21 −0 | New |
+| .claude-plugin/plugin.json | +21 −0 | New |
+| .codex-plugin/plugin.json | +13 −9 | Edit |
+| README.md | +54 −32 | Edit |
+| bin/riskrails.js | +1375 −0 | New |
+| codex/hooks.json | +3 −25 | Edit |
+| hooks/ai-git-guard-defaults.json | +1 −1 | Edit |
+| hooks/ai-git-guard.sh | +0 −14 | Delete |
+| hooks/ai-path-guard-defaults.json | +4 −2 | Edit |
+| hooks/ai-path-guard.sh | +0 −15 | Delete |
+| hooks/ai-scope-guard.sh | +0 −15 | Delete |
+| hooks/codex-hooks.json | +103 −0 | New |
+| hooks/guard/common.py | +9 −3 | Edit |
+| hooks/guard/git.py | +20 −2 | Edit |
+| hooks/hooks.json | +122 −0 | New |
+| install.sh | +14 −1260 | Edit |
+| package.json | +15 −0 | New |
+| settings.common.json | +3 −25 | Edit |
+| skills/ai-task/sensors.py | +1 −1 | Edit |
+| skills/ai-task/state.py | +5 −5 | Edit |
+| tests/guard_harness.py | +9 −2 | Edit |
+| tests/install_harness.py | +73 −0 | New |
+| tests/run-all.sh | +2 −5 | Edit |
+| tests/test-codex-install.sh | +0 −310 | Delete |
+| tests/test-dual-runtime-install.sh | +0 −163 | Delete |
+| tests/test-guard-characterization.sh | +0 −383 | Delete |
+| tests/test-install-dry-run.sh | +0 −403 | Delete |
+| tests/test-profiles.sh | +0 −101 | Delete |
+| tests/test-runtime-gate-fable.sh | +21 −21 | Edit |
+| tests/test-scaffold-idempotency.sh | +0 −158 | Delete |
+| tests/test-shared-tree.sh | +0 −241 | Delete |
+| tests/test_ai_git_guard.py | +45 −2 | Edit |
+| tests/test_ai_path_guard.py | +35 −2 | Edit |
+| tests/test_ai_scope_guard.py | +2 −2 | Edit |
+| tests/test_codex_install.py | +608 −0 | New |
+| tests/test_dual_runtime_install.py | +246 −0 | New |
+| tests/test_end_to_end.py | +8 −9 | Edit |
+| tests/test_install_dry_run.py | +757 −0 | New |
+| tests/test_install_routes.py | +330 −0 | New |
+| tests/test_instruction_budget.py | +6 −6 | Edit |
+| tests/test_merge_migration.py | +3 −3 | Edit |
+| tests/test_profiles.py | +194 −0 | New |
+| tests/test_shared_prompts_model_free.py | +4 −4 | Edit |
+| tests/test_shared_tree.py | +331 −0 | New |
+
++4501 −3230 lines, 47 files
 
 ## Verdict
 
-close: open — the human approves in their own terminal, then 'state.py close' again
+close: closed
 facts: (a) green — suite green on 12a8550a8 (run 24) · (b) green — 47 changed files, all in the task's files
-gate: requested G1 at 2026-10-27T23:13:45Z; approved by - at - via -
+gate: requested G1 at 2026-10-27T23:13:45Z; approved by vanssa at 2026-10-27T23:15:19Z via terminal
 confirm: none
-handoffs: 18 · suite runs: 5 · review passes: 2
+handoffs: 19 · suite runs: 5 · review passes: 2
