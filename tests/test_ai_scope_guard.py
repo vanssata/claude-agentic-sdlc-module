@@ -32,11 +32,11 @@ class TestAiScopeGuard(HookAsserts, unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def put_state(self, state):
-        with open(os.path.join(self.root, ".ai", "state", "current.json"), "w", encoding="utf-8") as fh:
+    def put_state(self, state, name="current.json"):
+        with open(os.path.join(self.root, ".ai", "state", name), "w", encoding="utf-8") as fh:
             json.dump(state, fh)
 
-    def write_state(self, stage, step="1"):
+    def write_state(self, stage, step="1", name="current.json"):
         self.put_state({
             "task_id": "T-2026-09-09-001",
             "goal": "add a fee to the payment gateway",
@@ -56,7 +56,7 @@ class TestAiScopeGuard(HookAsserts, unittest.TestCase):
                      "required_tests": ["tests/Payment/GatewayTest.php"]},
                 ],
             },
-        })
+        }, name)
 
     def out(self, payload):
         return run(GUARD, payload)[1]
@@ -91,6 +91,18 @@ class TestAiScopeGuard(HookAsserts, unittest.TestCase):
         self.write_state("implementation", "1")
         self.assertIn("SCOPE_CHANGE_REQUIRED", self.out(payload),
                       "deny message contains the SCOPE_CHANGE_REQUIRED signal")
+
+    def test_either_state_file_name_arms_the_guard(self):
+        # R34: state.json from 3.4b; current.json is still read for one version.
+        payload = edit(self.root, self.root + "/src/Order/OrderProcessor.php")
+        self.write_state("implementation", "1", name="state.json")
+        self.assertIn("SCOPE_CHANGE_REQUIRED", self.out(payload), "state.json alone arms the guard")
+        self.write_state("plan", "1")
+        self.assertIn("SCOPE_CHANGE_REQUIRED", self.out(payload),
+                      "with both names, state.json is the one read")
+        self.write_state("plan", "1", name="state.json")
+        self.write_state("implementation", "1")
+        self.assertEqual(self.out(payload), "", "with both names, the legacy file is not read")
 
     def test_a_step_id_used_twice(self):
         # Every step carrying the current id contributes — not just the first one

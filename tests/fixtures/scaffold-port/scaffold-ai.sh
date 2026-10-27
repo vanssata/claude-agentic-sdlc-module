@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotent .ai/ scaffold for claude-agentic.
+# Idempotent .ai/ scaffold for RiskRails.
 #   scaffold-ai.sh [project-dir] [--runtime auto|claude|codex|both]   (default: $PWD, auto)
 #
 # Never overwrites an existing file. Run it as often as you like: it creates what
@@ -32,7 +32,7 @@ ROOT="$(cd "$ROOT" && pwd)"
 PROJECT="$(basename "$ROOT")"
 
 if [ ! -d "$TPL/.ai" ]; then
-  echo "scaffold-ai: templates not found at $TPL (run claude-agentic/install.sh)" >&2
+  echo "scaffold-ai: templates not found at $TPL (run riskrails/install.sh)" >&2
   exit 1
 fi
 
@@ -102,7 +102,7 @@ instruction_file() {  # instruction_file <name> <minimal-template> <block-templa
     sed -e "s/{{PROJECT}}/$PROJECT_ESC/g" "$TPL/$2" > "$md"
     created+=("$1")
   fi
-  if ! grep -qsE '<!-- (claude-agentic|[Cc]odex-agentic):start -->' "$md" 2>/dev/null; then
+  if ! grep -qsE '<!-- (riskrails|claude-agentic|[Cc]odex-agentic):start -->' "$md" 2>/dev/null; then
     { [ -s "$md" ] && [ -n "$(tail -c1 "$md")" ] && echo; echo; cat "$TPL/$3"; } >> "$md"
     created+=("$1 (agent workflow block appended)")
   fi

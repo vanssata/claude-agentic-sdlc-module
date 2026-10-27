@@ -14,8 +14,8 @@ only for those. If it finds neither it stops and tells you to name one with
 **Claude Code.** It detects your plan from `~/.claude.json`, writes the model,
 effort and context settings for it, renders the EXPERT tier accordingly, copies
 the agents, hooks and skills into `~/.claude/`, installs the shared tree
-(`claude-agentic/ai/`, the 29 policies, agent contracts, workflows and
-templates every project reads) and its resolver `claude-agentic/ai-path`,
+(`riskrails/ai/`, the 29 policies, agent contracts, workflows and
+templates every project reads) and its resolver `riskrails/ai-path`,
 registers the hooks in
 `settings.json` and writes one managed block into `~/.claude/CLAUDE.md`.
 

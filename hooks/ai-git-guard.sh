@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# claude-agentic: git and deployment safety guard (PreToolUse on Bash).
+# RiskRails: git and deployment safety guard (PreToolUse on Bash).
 # A shim: the rules live in hooks/ai-guard.py (guard/git.py), one Python process
 # for all three guards. This file keeps the command each runtime registered
 # working until the registrations name ai-guard.py itself.

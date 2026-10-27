@@ -1,7 +1,7 @@
 # Hook performance — the hot path
 
 The three shell guards (`ai-git-guard`, `ai-path-guard`, `ai-scope-guard`) are the
-only part of claude-agentic that runs on **every** tool call, at every risk tier,
+only part of RiskRails that runs on **every** tool call, at every risk tier,
 including the T0 work the pipeline never touches. A session makes 150–200 tool
 calls; a guard that costs 150 ms costs the user half a minute of pure waiting per
 task, and nobody sees it in a token report.

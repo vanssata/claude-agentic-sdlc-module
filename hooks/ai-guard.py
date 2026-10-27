@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""claude-agentic: the PreToolUse guards in one process.
+"""RiskRails: the PreToolUse guards in one process.
 
 Reads the hook payload from stdin and either exits 0 silently (allow) or prints
 the deny object and exits 0, the contract of every guard. The checks are the

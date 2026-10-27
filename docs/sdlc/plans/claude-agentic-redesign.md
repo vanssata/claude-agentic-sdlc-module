@@ -237,12 +237,17 @@ top of `verify_command` once to the end and `e2e_command` once.
   `known-risks.md` (SQ13). Proof: `test_ai_path_guard.py` + new fixtures, `test_guard_characterization.py`,
   e2e listing = {events.jsonl, task.md}.
 - **G2 (human, before 3.4b).** OQ8: `npm view riskrails` (free, or use `@<owner>/riskrails`) and a web and
-  trademark search for "RiskRails". `[ ]`
+  trademark search for "RiskRails". `[x]` — closed by vanssata, 2026-10-27: unscoped `riskrails`, npm user
+  `ikakarov`, org `vanssata`.
 - **3.4b Renames (`state.json`, RiskRails).** **Full** (reversibility 2 via the migrations hint). Workflow
   refactoring. Proof: R34 (`test_reads_legacy_state_name`, `TestMigration0008` with a task in flight, a
   path-guard fixture for each name), R35 (`test_rename.py` allow-list; markers rewritten with the user's text
   byte-identical; new install home + symlink), Review focus 1, and a scripted golden check: every changed
   line contains an old name or path and its decision is unchanged.
+- **3.4c State file move (R34's contract half).** Expected guarded. After a release has shipped 3.4b: a
+  migration moves `.ai/state/current.json` to `state.json` (MOVES), `state.py` starts new tasks in
+  `state.json`; readers already take either. Proof: `TestMigration0009` with a task in flight; a revert
+  check that 3.4b's code still arms on the moved file.
 - **3.5 `npx riskrails`, manifests, entries switched, shims and `lib.sh` deleted.** **Full** (W 8). Proof:
   R16 (five install suites ported, driving `bin/riskrails.js`), R17 (`test_install_routes`: equal effective
   inventories, no duplicate hook command, Review focus 2), risk 6 (`test_codex_install` asserts the `/hooks`
@@ -340,10 +345,14 @@ shown in `task.md`.
   2.6 without reverting 2.6 first.
 - **2.H / 3.H / 3.H2:** the human reverts their own policy commits. `/status` confirms the schema.
 - **3.4:** revert the commit. The golden returns with it. The old deny set is the 3.1 port's, which stays.
-- **3.4b / migration 0008:** for one version `state.py` reads `current.json` and the guards arm and deny on
-  both names, the installer leaves a symlink at the old home, and old env names and markers are read. A
-  revert therefore leaves migrated user projects working. Re-running the old installer recreates the old
-  home.
+- **3.4b / migration 0008:** the state file does not move in 3.4b (expand/contract, review H1, Q2=B): every
+  task stays in `current.json`, which the reverted code reads, so no guard disarms. 0008 renames only the
+  markers and routes; a project that ran it is returned by restoring `.ai/VERSION` 7 and its instruction
+  files' and `.ai/AGENTS.md`'s marker and route lines (`git restore` of those files, or the `[0008]` items in
+  `.ai/reports/project-update-<date>/original/`) — the old `update.py` refuses schema 8 until then. The
+  installer's symlink at the old home stays valid; re-running the old installer recreates the old home.
+- **3.4c / the state-file move:** shipped only after a release has carried 3.4b's two-name readers, so a
+  revert of 3.4c leaves `state.json` readable by every guard.
 - **3.5:** `install.sh` from the previous tag still installs, and the shims are restorable from the parent
   commit. A published npm version cannot be unpublished after 72 h: mark it with `npm deprecate
   riskrails@<v> "<reason>"` (human) and publish a fix. Plugin manifests are removed by reverting; users

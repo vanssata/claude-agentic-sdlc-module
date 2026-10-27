@@ -53,7 +53,7 @@ class Env:
         self.env = {k: v for k, v in os.environ.items()
                     if k not in ("CODEX_HOME", "CODEX_DIR", "CLAUDE_DIR", "AI_UNATTENDED", "CLAUDE_AGENTIC_MIGRATIONS",
                                  "CLAUDE_CONFIG_DIR", "CLAUDE_AGENTIC_SHARED", "CLAUDE_ROUTING_TEMPLATES",
-                                 "CLAUDE_AGENTIC_TEMPLATES")}
+                                 "CLAUDE_AGENTIC_TEMPLATES") and not k.startswith("RISKRAILS_")}
         self.env["HOME"] = home
 
     def dir(self, name):
@@ -133,7 +133,7 @@ class TestInstallMigrations(unittest.TestCase):
         text = read(md)
         self.assertNotIn("old hand-written rules", text, "its superseded rules are removed")
         self.assertIn("keep me", text, "unrelated sections are kept")
-        self.assertEqual(text.count("claude-agentic:start"), 1, "one managed block results")
+        self.assertEqual(text.count("riskrails:start"), 1, "one managed block results")
 
 
 class TestScaffoldsCompose(unittest.TestCase):
@@ -165,7 +165,7 @@ class TestScaffoldsCompose(unittest.TestCase):
 
     def test_project_files(self):
         claude_md = read(os.path.join(self.repo, "CLAUDE.md"))
-        self.assertEqual(claude_md.count("claude-agentic:start"), 1, "the project CLAUDE.md carries one agent block")
+        self.assertEqual(claude_md.count("riskrails:start"), 1, "the project CLAUDE.md carries one agent block")
         self.assertIn("/rr-build", claude_md, "and points at the pipeline as the default route")
         gitignore = read(os.path.join(self.repo, ".gitignore"))
         self.assertRegex(gitignore, r".claude/settings.local.json", ".gitignore covers the sdlc layout")

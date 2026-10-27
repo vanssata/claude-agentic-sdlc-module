@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# claude-agentic: sensitive-path guard (PreToolUse on Read|Edit|Write|NotebookEdit|Bash;
+# RiskRails: sensitive-path guard (PreToolUse on Read|Edit|Write|NotebookEdit|Bash;
 # in Codex on Bash|apply_patch).
 # A shim: the rules live in hooks/ai-guard.py (guard/paths.py), one Python process
 # for all three guards. This file keeps the command each runtime registered

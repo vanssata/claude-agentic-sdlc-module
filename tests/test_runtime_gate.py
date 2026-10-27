@@ -232,7 +232,7 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
 
     def test_05_quota_claude_code_from_the_statusline(self):
         cl, g, now, tmp = self.cl, self.g, self.now, self.tmp
-        self.rmrf(cl + "/state", cl + "/claude-agentic")
+        self.rmrf(cl + "/state", cl + "/riskrails")
         line = self.out(g, "statusline", "--then", "cat >/dev/null; echo LINE",
                         stdin={"rate_limits": {"seven_day": {"used_percentage": 42.5, "resets_at": now + 86400},
                                                "five_hour": {"used_percentage": 7}}})
@@ -247,14 +247,14 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
         self.assertTrue(has_line("^inactive", self.out(g, "status")), "42% used marks nothing")
         self.assertIn("weekly 42%, 5-hour 7%", self.out(g, "quota"), "quota prints one readable line")
 
-        os.makedirs(cl + "/claude-agentic")
-        write(cl + "/claude-agentic/profile.json", '{"plan":"max","fable":false}')
+        os.makedirs(cl + "/riskrails")
+        write(cl + "/riskrails/profile.json", '{"plan":"max","fable":false}')
         self.gate(g, "statusline", stdin={"rate_limits": {"seven_day": {"used_percentage": 95}}})
         self.assertTrue(has_line("^inactive", self.out(g, "status")),
                         "fable: false — 95% records the quota but marks no Fable outage")
         self.assertEqual(json.loads(self.out(g, "quota", "--json"))["weekly_pct"], 95,
                          "and the quota is still recorded")
-        write(cl + "/claude-agentic/profile.json", '{"plan":"max","fable":true}')
+        write(cl + "/riskrails/profile.json", '{"plan":"max","fable":true}')
         self.gate(g, "statusline", stdin={"rate_limits": {"seven_day": {"used_percentage": 95}}})
         self.assertTrue(has_line("^active: Fable", self.out(g, "status")), "fable: true — 95% marks Fable unavailable")
         self.gate(g, "clear")
@@ -327,9 +327,9 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
     def test_07_budgets_expert_asks(self):
         cl, cx, tmp = self.cl, self.cx, self.tmp
         self.rmrf(cl + "/state", cx + "/state")
-        self.resolve("max", "yes", cl + "/claude-agentic/profile.json")
-        os.makedirs(cx + "/claude-agentic", exist_ok=True)
-        self.resolve("codex-plus", "no", cx + "/claude-agentic/profile.json")
+        self.resolve("max", "yes", cl + "/riskrails/profile.json")
+        os.makedirs(cx + "/riskrails", exist_ok=True)
+        self.resolve("codex-plus", "no", cx + "/riskrails/profile.json")
         proj = type(self).proj = tmp + "/proj"
         os.makedirs(proj + "/.ai")
         os.makedirs(proj + "/src")
@@ -356,7 +356,7 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
         out = self.launch(g, "architect", AI_UNATTENDED="1")
         self.assertTrue(decision(out) == "none" and "unattended" in hso(out).get("additionalContext", ""),
                         "AI_UNATTENDED=1: allowed and explained, never asked" + ": %s" % out)
-        self.resolve("max20", "yes", cl + "/claude-agentic/profile.json")
+        self.resolve("max20", "yes", cl + "/riskrails/profile.json")
         self.rmrf(cl + "/state")
         o1, o2, o3 = (self.launch(g, "architect") for _ in range(3))
         self.assertEqual(o1 + o2, "", "max20: two EXPERT launches in a task need no question")
@@ -370,7 +370,7 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
 
     def test_08_no_fan_out_budget_and_no_agent_count(self):
         cl, g = self.cl, self.g
-        self.resolve("max", "yes", cl + "/claude-agentic/profile.json")
+        self.resolve("max", "yes", cl + "/riskrails/profile.json")
         self.rmrf(cl + "/state")
         with self.subTest("six parallel launches of one session: no question"):
             for _ in range(6):
@@ -528,7 +528,7 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
         cl, g, tmp = self.cl, self.g, self.tmp
         if not os.path.lexists(cl + "/skills"):
             os.symlink(os.path.join(PLUGIN, "skills"), cl + "/skills")  # where install.sh puts state.py
-        self.resolve("max", "yes", cl + "/claude-agentic/profile.json")
+        self.resolve("max", "yes", cl + "/riskrails/profile.json")
         self.rmrf(cl + "/state")
         self.gate(g, "set", "600", "rate_limit")
         ev = "%s/.ai/reports/%s/events.jsonl" % (self.proj, self.task)

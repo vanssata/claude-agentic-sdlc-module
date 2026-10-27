@@ -126,7 +126,7 @@ class TestUsageReport(unittest.TestCase):
         """$H, $P and the transcript directory of the --task cases."""
         h, p, t = self.path("home"), self.path("project"), SHELL_TASK
         os.makedirs(os.path.join(p, ".ai", "reports", t))
-        self.resolve_profile("max", "yes", os.path.join(h, ".claude", "claude-agentic", "profile.json"))
+        self.resolve_profile("max", "yes", os.path.join(h, ".claude", "riskrails", "profile.json"))
         write(os.path.join(p, ".ai", "reports", t, "events.jsonl"),
               EVENT % ("2026-09-01T10:00:00.000Z", t, "task_started", "{}")
               + EVENT % ("2026-09-01T10:05:00.000Z", t, "tier_set", '{"tier":"T2"}')
@@ -217,7 +217,7 @@ class TestUsageReport(unittest.TestCase):
 
     def test_budgets_prints_each_installed_plans_tables(self):
         h, _, _, dirs = self.task_fixture()
-        self.resolve_profile("codex-plus", "no", os.path.join(h, ".codex", "claude-agentic", "profile.json"))
+        self.resolve_profile("codex-plus", "no", os.path.join(h, ".codex", "riskrails", "profile.json"))
         out = self.out("--budgets", **dirs)
         with self.subTest("both runtimes' plans are listed"):
             self.assertRegex(out, r"(?m)^claude: Max \(max\)", "budgets header")

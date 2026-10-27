@@ -115,10 +115,10 @@ import sys; sys.path.insert(0, sys.argv[1]); import render_instructions as r
 for name in ("Codex-agentic", "codex-agentic"):
     text = "above\\n<!-- %s:start -->\\nbody\\n<!-- %s:end -->\\nbelow\\n" % (name, name)
     assert r.block_of(text) == "<!-- %s:start -->\\nbody\\n<!-- %s:end -->" % (name, name), name
-assert r.block_of("<!-- claude-agentic:start -->\\nlone\\n<!-- Codex-agentic:start -->\\nx\\n<!-- Codex-agentic:end -->\\n") is None
+assert r.block_of("<!-- riskrails:start -->\\nlone\\n<!-- Codex-agentic:start -->\\nx\\n<!-- Codex-agentic:end -->\\n") is None
 assert r.block_of("<!-- Codex-agentic:start -->\\nno end\\n") is None
 assert r.block_of("<!-- Codex-agentic:end -->\\n<!-- Codex-agentic:start -->\\n") is None
-cur = "<!-- claude-agentic:start -->\\nbody\\n<!-- claude-agentic:end -->"
+cur = "<!-- riskrails:start -->\\nbody\\n<!-- riskrails:end -->"
 assert r.block_of("x\\n" + cur + "\\n<!-- Codex-agentic:start -->\\ny\\n<!-- Codex-agentic:end -->\\n") == cur
 assert r.block_of("x\\n" + cur + "\\ny\\n") == cur
 """
@@ -148,7 +148,7 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
         cls.env = {k: v for k, v in os.environ.items()
                    if k not in ("CODEX_HOME", "CODEX_DIR", "CLAUDE_DIR", "AI_UNATTENDED", "CLAUDE_AGENTIC_MIGRATIONS",
                                 "CLAUDE_CONFIG_DIR", "CLAUDE_AGENTIC_SHARED", "CLAUDE_AGENTIC_TEMPLATES",
-                                "CLAUDE_ROUTING_TEMPLATES") and not k.startswith("RENDER_")}
+                                "CLAUDE_ROUTING_TEMPLATES") and not k.startswith(("RENDER_", "RISKRAILS_"))}
         cls.env["HOME"] = os.path.join(cls.t, "home")
         # A freshly scaffolded project — in a path with a space. The four instruction
         # files are kept as scaffold-ai.sh left them, before project-scaffold.sh runs.
@@ -347,8 +347,8 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
                 self.assertTrue(os.path.isfile(os.path.join(rp, f)), "%s was not rendered" % f)
         payment = read(os.path.join(rp, "src", "Payment", "CLAUDE.md"))
         with self.subTest("one file carries both rules that name its directory"):
-            self.assertIn("claude-agentic:rule:payment:start", payment)
-            self.assertIn("claude-agentic:rule:imports:start", payment)
+            self.assertIn("riskrails:rule:payment:start", payment)
+            self.assertIn("riskrails:rule:imports:start", payment)
         with self.subTest("the text outside the markers survives the render"):
             self.assertIn("my own note", payment, "the render ate the project's own text")
         scoped = read(os.path.join(rp, ".claude", "rules", "payment.md"))
@@ -392,7 +392,7 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
             if rc != 0:
                 continue
             with self.subTest("$label: routing.md installed", label=label):
-                self.assertTrue(os.path.isfile(os.path.join(d, "claude-agentic", "routing.md")),
+                self.assertTrue(os.path.isfile(os.path.join(d, "riskrails", "routing.md")),
                                 "%s: routing.md missing" % label)
             with self.subTest("$label: the size line is printed", label=label):
                 self.assertRegex(out, r"managed block .* B \(budget", "%s: no size line" % label)
@@ -407,7 +407,7 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
             self.assertIn("the rest is yours", out, "no size line for the large file")
         with self.subTest("every line the user wrote survives byte-identical"):
             text = read(os.path.join(userdir, "CLAUDE.md"))
-            start = text.find("<!-- claude-agentic:start -->")
+            start = text.find("<!-- riskrails:start -->")
             outside = text[:start] if start >= 0 else text
             self.assertEqual(outside.count("a line the user wrote.\n"), 950, "the user's text was changed")
 
@@ -436,7 +436,7 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
         shutil.copytree(self.proj, hint, symlinks=True)
         claude = os.path.join(hint, "CLAUDE.md")
         text = read(claude)
-        end = text.find("<!-- claude-agentic:end -->")
+        end = text.find("<!-- riskrails:end -->")
         write(claude, text[:end] + "- a rule this project added inside the markers.\n" * 60 + text[end:])
         write(os.path.join(hint, "docs", "sdlc", "constitution.md"),
               "# Constitution\n\n" + "".join("C%d. a principle this project does not negotiate.\n" % n
@@ -456,7 +456,7 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
     def test_a_legacy_codex_agentic_marker_pair_is_the_managed_block_too(self):
         """measure: the legacy block ($want B) out of a larger file"""
         legacy_block = self.path("legacy-block")
-        write(legacy_block, re.sub(r"claude-agentic:(start|end)", r"Codex-agentic:\1", read(BLOCK_TEMPLATE)))
+        write(legacy_block, re.sub(r"riskrails:(start|end)", r"Codex-agentic:\1", read(BLOCK_TEMPLATE)))
         lb = self.path("legacy.md")
         write(lb, "# mine\n\nkeep this.\n\n" + read(legacy_block) + "\n# below\nmore of mine\n")
         want = self.measure(legacy_block)[-2]

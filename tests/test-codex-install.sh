@@ -32,7 +32,7 @@ out=$(CODEX_DIR="$TMP/probe" bash "$INSTALL" --target codex --dry-run 2>&1); rc=
 [ -z "$(ls -A "$TMP/probe")" ] && pass "the target directory is untouched" || fail "the dry run wrote files" "$(ls -A "$TMP/probe")"
 grep -q 'would have added model = "gpt-5.6-sol"' <<<"$out" && pass "the dry run names the model it would set" || fail "expected the model change in the dry run" "$out"
 grep -q '{{' <<<"$out" && fail "an unrendered placeholder reached the output" || pass "the AGENTS.md block renders completely"
-grep -q 'claude-agentic:start' <<<"$out" && pass "the managed block is shown" || fail "the managed block should be printed"
+grep -q 'riskrails:start' <<<"$out" && pass "the managed block is shown" || fail "the managed block should be printed"
 grep -q 'plan=pro (Pro)' <<<"$out" && pass "with no ChatGPT login the pro profile is assumed" || fail "no auth.json should fall back to pro" "$out"
 grep -q -- '--codex-plan plus' <<<"$out" && pass "the fallback says how to pick plus" || fail "the fallback should mention --codex-plan plus" "$out"
 
@@ -193,21 +193,21 @@ got=$(cd "$UP/agents" && ls *.toml | sed 's/\.toml$//' | LC_ALL=C sort | paste -
     && pass "no *.bak is left outside backups/" || fail "*.bak left" "$(cd "$UP" && find . -path ./backups -prune -o -name '*.bak' -print)"
 
 echo "== the managed AGENTS.md block"
-[ "$(grep -c 'claude-agentic:start' "$DIR/AGENTS.md")" = 1 ] && pass "exactly one managed block" || fail "expected one managed block"
-grep -q 'gpt-5.6-terra' "$DIR/claude-agentic/routing.md" && pass "routing.md names the BALANCED model" || fail "routing.md should name Terra"
-grep -q 'gpt-6-astra' "$DIR/claude-agentic/routing.md" && pass "routing.md names the EXPERT model" || fail "routing.md should name Astra"
+[ "$(grep -c 'riskrails:start' "$DIR/AGENTS.md")" = 1 ] && pass "exactly one managed block" || fail "expected one managed block"
+grep -q 'gpt-5.6-terra' "$DIR/riskrails/routing.md" && pass "routing.md names the BALANCED model" || fail "routing.md should name Terra"
+grep -q 'gpt-6-astra' "$DIR/riskrails/routing.md" && pass "routing.md names the EXPERT model" || fail "routing.md should name Astra"
 grep -q 'Models are tiers, not names' "$DIR/AGENTS.md" && pass "the block carries tiers, not model names" || fail "the block should carry tiers, not names"
 grep -q 'rr-build' "$DIR/AGENTS.md" && pass "the block carries the pipeline contract" || fail "the pipeline contract is missing"
 
 echo "== profile.json (R4)"
 jq -e '.runtime == "codex" and (.plan == "plus" or .plan == "pro") and .fable == false and (.tiers.STRONG.model | length > 0)' \
-    "$DIR/claude-agentic/profile.json" >/dev/null \
+    "$DIR/riskrails/profile.json" >/dev/null \
     && pass "profile.json written for the Codex install, tiers read from the Codex profile" || fail "codex profile.json missing or wrong"
-grep -q 'claude_agentic' "$DIR/config.toml" && fail "claude_agentic leaked into config.toml" || pass "config.toml has no claude_agentic"
+grep -q 'riskrails' "$DIR/config.toml" && fail "riskrails leaked into config.toml" || pass "config.toml has no riskrails"
 out=$(CODEX_DIR="$TMP/probe-profile" bash "$INSTALL" --target codex --codex-plan plus --dry-run 2>&1)
-grep -q "^== profile.json (plan tables): $TMP/probe-profile/claude-agentic/profile.json" <<<"$out" \
+grep -q "^== profile.json (plan tables): $TMP/probe-profile/riskrails/profile.json" <<<"$out" \
     && pass "--dry-run lists the Codex profile.json" || fail "codex dry run should list profile.json"
-[ ! -e "$TMP/probe-profile/claude-agentic/profile.json" ] && pass "and does not write it" || fail "dry run wrote profile.json"
+[ ! -e "$TMP/probe-profile/riskrails/profile.json" ] && pass "and does not write it" || fail "dry run wrote profile.json"
 
 echo "== re-install is idempotent"
 before=$(cd "$DIR" && find . -path ./backups -prune -o -type f -print0 | sort -z | xargs -0 sha256sum)
@@ -215,7 +215,7 @@ CODEX_DIR="$DIR" bash "$INSTALL" --target codex >/dev/null 2>&1
 after=$(cd "$DIR" && find . -path ./backups -prune -o -type f -print0 | sort -z | xargs -0 sha256sum)
 [ "$before" = "$after" ] && pass "a second install changes no file" || fail "the second install changed files" "$(diff <(printf '%s' "$before") <(printf '%s' "$after") | head -10)"
 [ "$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/hooks.json")" = 4 ] && pass "hook entries are not duplicated" || fail "hooks duplicated"
-[ "$(grep -c 'claude-agentic:start' "$DIR/AGENTS.md")" = 1 ] && pass "the managed block is not duplicated" || fail "block duplicated"
+[ "$(grep -c 'riskrails:start' "$DIR/AGENTS.md")" = 1 ] && pass "the managed block is not duplicated" || fail "block duplicated"
 
 echo "== a user-owned config survives untouched apart from the managed keys"
 DIR2="$TMP/codex2"; mkdir -p "$DIR2"
@@ -295,16 +295,16 @@ CODEX_DIR="$DIR" bash "$INSTALL" --target codex >/dev/null 2>&1
 
 echo "== an AGENTS.md with a legacy Codex-agentic pair gets one block, renamed"
 LG="$TMP/codex-legacy"; mkdir -p "$LG"
-sed 's/claude-agentic:\(start\|end\)/Codex-agentic:\1/' "$PLUGIN_ROOT/skills/ai-init/templates/AGENTS.block.md" > "$TMP/legacy-block"
+sed 's/riskrails:\(start\|end\)/Codex-agentic:\1/' "$PLUGIN_ROOT/skills/ai-init/templates/AGENTS.block.md" > "$TMP/legacy-block"
 { printf '# legacy\n\nkeep me above\n\n'; cat "$TMP/legacy-block"; printf '\n# my notes\nkeep me below\n'; } > "$LG/AGENTS.md"
 out=$(CODEX_DIR="$LG" bash "$INSTALL" --target codex --codex-plan pro 2>&1)
-[ "$(grep -c -E '(claude|[Cc]odex)-agentic:start' "$LG/AGENTS.md")" = 1 ] && pass "exactly one managed block after the install" || fail "a legacy pair was doubled" "$(grep -n 'agentic:' "$LG/AGENTS.md")"
+[ "$(grep -c -E '(riskrails|[Cc]odex-agentic):start' "$LG/AGENTS.md")" = 1 ] && pass "exactly one managed block after the install" || fail "a legacy pair was doubled" "$(grep -n 'agentic:' "$LG/AGENTS.md")"
 if grep -q 'Codex-agentic' "$LG/AGENTS.md"; then fail "the legacy markers are still there"; else pass "the legacy markers are renamed"; fi
 grep -q 'keep me above' "$LG/AGENTS.md" && grep -q 'keep me below' "$LG/AGENTS.md" && pass "the text around the block is kept" || fail "text around the legacy block lost"
 grep -q 'AGENTS.md: updated + renamed the legacy Codex-agentic markers' <<<"$out" \
     && pass "the install says what it renamed" || fail "no rename note in the install output" "$(printf '%s' "$out" | grep AGENTS.md)"
 if grep -q 'AGENTS.md: managed block 0 B' <<<"$out"; then fail "block_size measured 0 B"; else pass "block_size measures the renamed block"; fi
 CODEX_DIR="$LG" bash "$INSTALL" --target codex --codex-plan pro >/dev/null 2>&1
-[ "$(grep -c 'claude-agentic:start' "$LG/AGENTS.md")" = 1 ] && pass "a reinstall keeps one block" || fail "reinstall doubled the block"
+[ "$(grep -c 'riskrails:start' "$LG/AGENTS.md")" = 1 ] && pass "a reinstall keeps one block" || fail "reinstall doubled the block"
 
 summary "codex install"

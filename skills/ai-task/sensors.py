@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Tree snapshots, tree diffs and the project's own commands, for state.py.
 
-Why a separate module: state.py owns every write to current.json and has no
+Why a separate module: state.py owns every write to state.json and has no
 subprocess use at all; this module shells out to git and to the commands written
 in .ai/policies/testing.md, imports nothing from state.py, and never opens
-current.json for writing. state.py imports it, not the reverse. Since redesign
+state.json for writing. state.py imports it, not the reverse. Since redesign
 2.6 it measures nothing else: the size budget, the re-score and the static
 sensors (bite, duplicates, traceability, plan sections, lint, typecheck, detect)
 are gone, and two facts decide a review (R6).
@@ -315,9 +315,11 @@ def expand_files(command, files):
 def resolve_trees(root, args):
     from_tree = args.from_tree
     if not from_tree:
+        state = os.path.join(root, ".ai", "state", "state.json")
+        if not os.path.isfile(state):
+            state = os.path.join(root, ".ai", "state", "current.json")  # R34: legacy name, one version
         try:
-            with open(os.path.join(root, ".ai", "state", "current.json"),
-                      encoding="utf-8") as fh:
+            with open(state, encoding="utf-8") as fh:
                 from_tree = ((json.load(fh) or {}).get("diff") or {}).get("base_tree")
         except (OSError, ValueError):
             from_tree = None

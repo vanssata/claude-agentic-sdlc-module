@@ -32,7 +32,7 @@ ROOT="$(cd "$ROOT" && pwd)"
 PROJECT="$(basename "$ROOT")"
 
 if [ ! -d "$TPL" ]; then
-  echo "project-scaffold: templates not found at $TPL (run claude-agentic/install.sh)" >&2
+  echo "project-scaffold: templates not found at $TPL (run riskrails/install.sh)" >&2
   exit 1
 fi
 

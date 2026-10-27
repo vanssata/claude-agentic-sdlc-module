@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# claude-agentic installer (Claude Code and/or Codex).
+# RiskRails installer (Claude Code and/or Codex).
 #   ./install.sh [--target auto|claude|codex|both] [--plan pro|team-pro|team-max|max|max20|balanced-max]
 #                [--fable auto|yes|no] [--codex-plan plus|pro|balanced-max] [--dry-run]
 # --target defaults to auto: each runtime is installed only if its executable is on PATH.
@@ -18,7 +18,7 @@
 # --codex-plan  Codex only: plus, pro or balanced-max (Sol session, readers on Luna). Defaults to auto-detect from the ChatGPT login in
 #          ~/.codex/auth.json (chatgpt_plan_type); confirmed on a terminal like --plan, and
 #          assumes pro when it cannot detect or ask.
-# Both runtimes get <home>/claude-agentic/profile.json: the resolved plan tables
+# Both runtimes get <home>/riskrails/profile.json: the resolved plan tables
 # (scripts/resolve-profile.py) that the gate, state.py and the reports read.
 # --dry-run prints everything that would be written, per runtime, and writes nothing.
 #
@@ -158,8 +158,8 @@ block_size() {
 import re, sys
 path, budget = sys.argv[1], int(sys.argv[2])
 text = open(path, encoding="utf-8").read()
-# The current pair, or a legacy Codex-agentic pair managed_block has not renamed yet.
-m = re.search(r"<!-- (claude-agentic|[Cc]odex-agentic):start -->.*?<!-- \1:end -->", text, flags=re.S)
+# The current pair, or a legacy claude-agentic or Codex-agentic pair managed_block has not renamed yet.
+m = re.search(r"<!-- (riskrails|claude-agentic|[Cc]odex-agentic):start -->.*?<!-- \1:end -->", text, flags=re.S)
 block = len(m.group(0).encode("utf-8")) if m else 0
 spaced = lambda n: "{:,}".format(n).replace(",", " ")
 print("%s: managed block %s B (budget %s), file %s B — the rest is yours"
@@ -179,7 +179,7 @@ codex_doc_advisory() {
 }
 
 # agentic_profile <runtime> <profile> <plan> <label> <fable> — the resolved
-# claude_agentic tables plus who wrote them (I2), for <home>/claude-agentic/profile.json.
+# riskrails tables plus who wrote them (I2), for <home>/riskrails/profile.json.
 PLUGIN_VERSION=$(jq -r '.version // "unknown"' "$SRC/.codex-plugin/plugin.json" 2>/dev/null || echo unknown)
 agentic_profile() {
   python3 "$SRC/scripts/resolve-profile.py" "$2" --src "$SRC" --plan "$3" --label "$4" --fable "$5" --print agentic \
@@ -191,11 +191,11 @@ agentic_profile() {
 # rather than backed up, and only when something other than written_at changed,
 # so a second install leaves it alone.
 write_profile() {
-  local dst="$1/claude-agentic/profile.json"
+  local dst="$1/riskrails/profile.json"
   if [ -f "$dst" ] && [ "$(jq -S 'del(.written_at)' "$dst" 2>/dev/null)" = "$(jq -S 'del(.written_at)' "$2")" ]; then
     return 0
   fi
-  mkdir -p "$1/claude-agentic"
+  mkdir -p "$1/riskrails"
   cp "$2" "$dst"
   chmod 0644 "$dst"
 }
@@ -211,7 +211,9 @@ claude_render() {
 # profile; max and team-max (a Team Premium seat) share the max profile. A Team
 # org says nothing about the seat in organizationType, so the seat and rate-limit
 # tier fields decide, and an undetectable Team seat is asked for on a tty.
-PREV_PLAN=$(jq -r '.plan // empty' "$CLAUDE_DIR/claude-agentic/profile.json" 2>/dev/null || true)
+# An install from before 3.4b recorded it under claude-agentic/ (R35, one version).
+PREV_PLAN=$(jq -r '.plan // empty' "$CLAUDE_DIR/riskrails/profile.json" 2>/dev/null \
+  || jq -r '.plan // empty' "$CLAUDE_DIR/claude-agentic/profile.json" 2>/dev/null || true)
 if [ -z "$PLAN" ]; then
   org=$(jq -r '.oauthAccount.organizationType // .organizationType // empty' "$HOME/.claude.json" 2>/dev/null || true)
   ratelimit=$(jq -r '.oauthAccount.organizationRateLimitTier // empty' "$HOME/.claude.json" 2>/dev/null || true)
@@ -282,7 +284,7 @@ if { [ "$TIER" = pro ] || [ "$PLAN" = balanced-max ]; } && [ "$FABLE" = yes ]; t
 fi
 
 # ---------------------------------------------------------------- render settings
-# The profile's claude_agentic tables are the plugin's, not Claude Code's: the
+# The profile's riskrails tables are the plugin's, not Claude Code's: the
 # resolver prints the settings half alone, so they never reach settings.json.
 python3 "$SRC/scripts/resolve-profile.py" "$PROFILE_NAME" --src "$SRC" --print settings > "$TMP/profile.settings.json"
 if [ "$TIER" = max ] && [ "$FABLE" = no ]; then
@@ -412,8 +414,8 @@ RENDER_BALANCED_MODEL="$(tier_field BALANCED model)" \
 RENDER_BALANCED_EFFORT="$(tier_field BALANCED effort)" \
 RENDER_STRONG_MODEL="$(tier_field STRONG model)" \
 RENDER_STRONG_EFFORT="$(tier_field STRONG effort)" \
-RENDER_AI_SHARED="$CLAUDE_DIR/claude-agentic/ai" \
-RENDER_AI_RESOLVER="$CLAUDE_DIR/claude-agentic/ai-path" \
+RENDER_AI_SHARED="$CLAUDE_DIR/riskrails/ai" \
+RENDER_AI_RESOLVER="$CLAUDE_DIR/riskrails/ai-path" \
   render_claude_files
 }
 
@@ -504,9 +506,9 @@ claude_dry_run() {
   sed -n '1,10p' "$TMP/agents/architect.md"
   echo "== CLAUDE.md managed block:"
   cat "$TMP/CLAUDE.block.md"
-  echo "== routing.md (on demand): $CLAUDE_DIR/claude-agentic/routing.md"
+  echo "== routing.md (on demand): $CLAUDE_DIR/riskrails/routing.md"
   cat "$TMP/claude-routing.md"
-  echo "== profile.json (plan tables): $CLAUDE_DIR/claude-agentic/profile.json"
+  echo "== profile.json (plan tables): $CLAUDE_DIR/riskrails/profile.json"
   jq . "$TMP/claude-profile.json"
   echo "== would install:"
   echo "   agents:  $(ls "$SRC/agents" | grep -v '^superseded$' | sed 's/\.md\(\.tmpl\)\?$//' | paste -sd,)"
@@ -514,10 +516,11 @@ claude_dry_run() {
   [ "$TIER" = max ] && echo "   bin:     claude-1m (opus[1m]$( [ "$FABLE" = yes ] && echo " / fable[1m]" ), pins the model at launch; compacts near $ONE_M_AT)"
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
   echo "   retire:  skills/status (now skills/rr-status), into backups/<date>/ if present"
+  home_line "$CLAUDE_DIR"
   shared_line
   echo "   config:  ai-git-guard.json (only if absent)"
-  echo "   routing: claude-agentic/routing.md"
-  echo "   profile: claude-agentic/profile.json"
+  echo "   routing: riskrails/routing.md"
+  echo "   profile: riskrails/profile.json"
   echo "== would migrate: the claude-routing managed block, if present, into this one"
 }
 
@@ -547,6 +550,24 @@ retire() {  # retire <root> <rel> — move what nothing installs any more into b
   echo "retired: $rel -> backups/$BACKUP_DATE/$rel"
 }
 
+# move_home <root> — R35: the install home was <root>/claude-agentic/ before
+# 3.4b. It moves to <root>/riskrails/ and the old path becomes a symlink to it
+# for one version, so a global instruction file or a script that names the old
+# path keeps working. A real old home beside an existing new one (or a link
+# there, dangling or not) is retired.
+move_home() {
+  local root="$1" old="$1/claude-agentic" new="$1/riskrails"
+  [ -d "$old" ] && [ ! -L "$old" ] || return 0
+  if [ -e "$new" ] || [ -L "$new" ]; then   # a dangling link counts: mv would fail on it
+    retire "$root" claude-agentic
+  else
+    mv "$old" "$new"
+    echo "moved: claude-agentic/ -> riskrails/"
+  fi
+  ln -s riskrails "$old"
+  echo "linked: claude-agentic -> riskrails (for one version)"
+}
+
 # sweep_bak <root> <root-file>… — once per install, every *.bak an older
 # installer left beside a live file moves into backups/<date>/, keeping its
 # path. Only the directories and root files this installer writes, without
@@ -554,7 +575,7 @@ retire() {  # retire <root> <rel> — move what nothing installs any more into b
 sweep_bak() {
   local root="$1" bak rel dest name; shift
   local candidates=("$root"/agents/*.bak "$root"/hooks/*.bak "$root"/hooks/lib/*.bak
-                    "$root"/claude-agentic/*.bak "$root"/bin/*.bak)
+                    "$root"/riskrails/*.bak "$root"/bin/*.bak)
   for name in "$@"; do candidates+=("$root/$name.bak"); done
   for bak in "${candidates[@]}"; do
     [ -f "$bak" ] && [ -e "${bak%.bak}" ] || continue
@@ -625,12 +646,12 @@ install_skills() {
 }
 
 # install_shared <destination-root> — the .ai/ files every project shares, at
-# <root>/claude-agentic/ai, and the resolver beside them. Runs before
+# <root>/riskrails/ai, and the resolver beside them. Runs before
 # install_skills, so a new update.py never exists without its tree. The new tree
 # is copied next to the old one and renamed into place, so there is no moment
 # without a tree; a tree that differs from ai/ is backed up first.
 install_shared() {
-  local root="$1" home="$1/claude-agentic"
+  local root="$1" home="$1/riskrails"
   mkdir -p "$home"
   rm -rf "$home/ai.new" "$home/ai.old"
   cp -r "$SRC/ai" "$home/ai.new"
@@ -642,14 +663,21 @@ install_shared() {
   fi
   mv "$home/ai.new" "$home/ai"
   rm -rf "$home/ai.old"
-  echo "installed: claude-agentic/ai ($(find "$home/ai" -type f | wc -l | tr -d ' ') files)"
+  echo "installed: riskrails/ai ($(find "$home/ai" -type f | wc -l | tr -d ' ') files)"
   install_file "$SRC/scripts/ai-path" "$home/ai-path" "$root"
   chmod +x "$home/ai-path"
 }
 
+# home_line <root> — the dry run's line for move_home, when there is a move.
+home_line() {
+  if [ -d "$1/claude-agentic" ] && [ ! -L "$1/claude-agentic" ]; then
+    echo "   home:    claude-agentic/ -> riskrails/, the old path a symlink for one version"
+  fi
+}
+
 # shared_line — the dry run's line for install_shared.
 shared_line() {
-  echo "   shared:  claude-agentic/ai ($(find "$SRC/ai" -type f | wc -l | tr -d ' ') files), claude-agentic/ai-path"
+  echo "   shared:  riskrails/ai ($(find "$SRC/ai" -type f | wc -l | tr -d ' ') files), riskrails/ai-path"
 }
 
 # managed_block <target.md> <block-file> <label> — replace the one managed block,
@@ -665,7 +693,7 @@ path = sys.argv[1]
 block = open(os.environ["BLOCK"]).read().strip("\n")
 label = os.environ["LABEL"]
 text = open(path).read()
-start, end = "<!-- claude-agentic:start -->", "<!-- claude-agentic:end -->"
+start, end = "<!-- riskrails:start -->", "<!-- riskrails:end -->"
 notes = []
 
 # Migrate the predecessor plugin's block: this one now carries its rules.
@@ -680,10 +708,11 @@ if legacy and start not in text[: legacy.start()]:
     text = text[: legacy.start()] + text[legacy.end():]
     notes.append("migrated an unmarked 'Model allocation' section")
 
-# A legacy Codex-agentic pair (both markers, in order, no current pair) is
-# the managed block under its old name: rename it, never append beside it.
+# A legacy claude-agentic (before 3.4b) or Codex-agentic pair (both markers, in
+# order, no current pair) is the managed block under its old name: rename it,
+# never append beside it.
 if start not in text and end not in text:
-    pair = re.search(r"<!-- (?P<name>[Cc]odex-agentic):start -->.*?<!-- (?P=name):end -->", text, flags=re.S)
+    pair = re.search(r"<!-- (?P<name>claude-agentic|[Cc]odex-agentic):start -->.*?<!-- (?P=name):end -->", text, flags=re.S)
     if pair:
         name = pair.group("name")
         text = (text[: pair.start()]
@@ -706,6 +735,7 @@ PY
 
 claude_apply() {
 
+move_home "$CLAUDE_DIR"
 mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/hooks/lib" "$CLAUDE_DIR/hooks/guard" "$CLAUDE_DIR/skills"
 sweep_bak "$CLAUDE_DIR" settings.json CLAUDE.md
 
@@ -839,8 +869,8 @@ retire "$CLAUDE_DIR" hooks/fable-gate.py
 # ---------------------------------------------------------------- 5. CLAUDE.md block
 GLOBAL_MD="$CLAUDE_DIR/CLAUDE.md"
 managed_block "$GLOBAL_MD" "$TMP/CLAUDE.block.md" "CLAUDE.md"
-mkdir -p "$CLAUDE_DIR/claude-agentic"
-install_file "$TMP/claude-routing.md" "$CLAUDE_DIR/claude-agentic/routing.md"
+mkdir -p "$CLAUDE_DIR/riskrails"
+install_file "$TMP/claude-routing.md" "$CLAUDE_DIR/riskrails/routing.md"
 write_profile "$CLAUDE_DIR" "$TMP/claude-profile.json"
 block_size "$GLOBAL_MD" 2560
 
@@ -877,7 +907,7 @@ fi
 if python3 - "$GLOBAL_MD" <<'PY'
 import re, sys
 t = open(sys.argv[1]).read()
-outside = re.sub(r"<!-- claude-agentic:start -->.*?<!-- claude-agentic:end -->", "", t, flags=re.S)
+outside = re.sub(r"<!-- riskrails:start -->.*?<!-- riskrails:end -->", "", t, flags=re.S)
 sys.exit(0 if re.search(r"claude-routing:start|# Model routing|# Model allocation by task", outside) else 1)
 PY
 then
@@ -893,7 +923,7 @@ cat <<SUM
 Done (Claude Code).
   target          $CLAUDE_DIR
   plan            $PLAN  ($PLAN_LABEL, $PROFILE_NAME profile, fable=$FABLE)
-  plan tables     $CLAUDE_DIR/claude-agentic/profile.json
+  plan tables     $CLAUDE_DIR/riskrails/profile.json
   session model   $SESSION_MODEL ($SESSION_HUMAN), effort $EFFORT
   fallback        $FALLBACK
   EXPERT tier     architect on $( [ "$TIER" = pro ] && echo "opus, pinned" || { [ "$FABLE" = yes ] && echo "fable[1m], pinned" || echo "the session model"; } ) at effort $ARCHITECT_EFFORT
@@ -907,7 +937,7 @@ $( [ "$TIER" = max ] && echo "  large context   claude-1m$( [ "$FABLE" = yes ] &
   hooks           cap-large-read, project-scaffold (Setup:init), ai-git-guard (global),
                   ai-path-guard + ai-scope-guard (active where .ai/ exists),
                   context-guard (UserPromptSubmit, PreCompact, SessionStart:compact)
-  runtime gate    on — budgets from claude-agentic/profile.json, running agents, quota through the statusline
+  runtime gate    on — budgets from riskrails/profile.json, running agents, quota through the statusline
   fable branch    $GATE $( [ "$GATE" = on ] && echo "(Fable agents go to Opus while Fable is rate-limited, unreachable,
                   or the weekly limit is ${CLAUDE_FABLE_GATE_WEEKLY_PCT:-90}% used — checked through the statusline)" || echo "(no Fable on this install)" )
   skills          $(ls "$SRC/skills" | paste -sd' ')
@@ -953,7 +983,8 @@ PY
 }
 
 codex_render() {
-  CODEX_PREV_PLAN=$(jq -r '.plan // empty' "$CODEX_DIR/claude-agentic/profile.json" 2>/dev/null || true)
+  CODEX_PREV_PLAN=$(jq -r '.plan // empty' "$CODEX_DIR/riskrails/profile.json" 2>/dev/null \
+    || jq -r '.plan // empty' "$CODEX_DIR/claude-agentic/profile.json" 2>/dev/null || true)
   # BalancedMax is one routing idea on both runtimes: --plan balanced-max selects
   # the Codex balanced-max profile too, unless --codex-plan says otherwise.
   if [ -z "$CODEX_PLAN" ] && [ "$PLAN" = balanced-max ]; then CODEX_PLAN=balanced-max; fi
@@ -1014,7 +1045,7 @@ codex_render() {
   CODEX_PLAN_RULE=${CODEX_PLAN_RULE//\{\{EXPERT_MODEL\}\}/$(codex_label "$CODEX_EXPERT")}
 
   python3 "$SRC/scripts/render-codex-agents.py" --src "$SRC" --out "$TMP/codex-agents" --profile "$CODEX_PROFILE" \
-          --ai-shared "$CODEX_DIR/claude-agentic/ai" >/dev/null
+          --ai-shared "$CODEX_DIR/riskrails/ai" >/dev/null
 
   RENDER_CODEX_PLAN="$CODEX_PLAN_LABEL" \
   RENDER_CODEX_PLAN_RULE="$CODEX_PLAN_RULE" \
@@ -1037,8 +1068,8 @@ codex_render() {
   RENDER_MAX_THREADS="$CODEX_MAX_THREADS" \
   RENDER_PLAN_LABEL="ChatGPT $CODEX_PLAN_LABEL" \
   RENDER_READ_LINES="$(jq -r '.env.CLAUDE_READ_MAX_LINES' "$SRC/settings.common.json")" \
-  RENDER_AI_SHARED="$CODEX_DIR/claude-agentic/ai" \
-  RENDER_AI_RESOLVER="$CODEX_DIR/claude-agentic/ai-path" \
+  RENDER_AI_SHARED="$CODEX_DIR/riskrails/ai" \
+  RENDER_AI_RESOLVER="$CODEX_DIR/riskrails/ai-path" \
     codex_render_files
 }
 
@@ -1054,19 +1085,20 @@ codex_dry_run() {
           --profile "$CODEX_PROFILE" --dry-run | sed 's/^/== /'
   echo "== AGENTS.md managed block:"
   cat "$TMP/AGENTS.block.md"
-  echo "== routing.md (on demand): $CODEX_DIR/claude-agentic/routing.md"
+  echo "== routing.md (on demand): $CODEX_DIR/riskrails/routing.md"
   cat "$TMP/codex-routing.md"
-  echo "== profile.json (plan tables): $CODEX_DIR/claude-agentic/profile.json"
+  echo "== profile.json (plan tables): $CODEX_DIR/riskrails/profile.json"
   jq . "$TMP/codex-profile.json"
   echo "== would install:"
   echo "   agents:  $(ls "$TMP/codex-agents" | sed 's/\.toml$//' | paste -sd,)"
   echo "   hooks:   $(codex_hook_files | xargs -n1 basename | paste -sd,)"
   echo "   skills:  $(ls "$SRC/skills" | paste -sd,)"
   echo "   retire:  skills/status (now skills/rr-status), into backups/<date>/ if present"
+  home_line "$CODEX_DIR"
   shared_line
   echo "   config:  ai-git-guard.json (only if absent)"
-  echo "   routing: claude-agentic/routing.md"
-  echo "   profile: claude-agentic/profile.json"
+  echo "   routing: riskrails/routing.md"
+  echo "   profile: riskrails/profile.json"
   echo "== hooks.json entries (merged into $CODEX_DIR/hooks.json):"
   jq . "$SRC/codex/hooks.json"
   echo "== reminder: Codex lists a non-managed hook until you review it in /hooks"
@@ -1089,6 +1121,7 @@ codex_hook_files() {
 }
 
 codex_apply() {
+  move_home "$CODEX_DIR"
   mkdir -p "$CODEX_DIR/agents" "$CODEX_DIR/hooks/lib" "$CODEX_DIR/hooks/guard" "$CODEX_DIR/skills"
   sweep_bak "$CODEX_DIR" hooks.json config.toml AGENTS.md
 
@@ -1178,8 +1211,8 @@ codex_apply() {
 
   # -------------------------------------------------------------- 6. AGENTS.md
   managed_block "$CODEX_DIR/AGENTS.md" "$TMP/AGENTS.block.md" "AGENTS.md"
-  mkdir -p "$CODEX_DIR/claude-agentic"
-  install_file "$TMP/codex-routing.md" "$CODEX_DIR/claude-agentic/routing.md" "$CODEX_DIR"
+  mkdir -p "$CODEX_DIR/riskrails"
+  install_file "$TMP/codex-routing.md" "$CODEX_DIR/riskrails/routing.md" "$CODEX_DIR"
   write_profile "$CODEX_DIR" "$TMP/codex-profile.json"
   block_size "$CODEX_DIR/AGENTS.md" 2560
   codex_doc_advisory "$CODEX_DIR/AGENTS.md"

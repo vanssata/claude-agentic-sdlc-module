@@ -225,7 +225,7 @@ the playbook asks for.
 ## I reinstalled the plugin. Why does my project still follow the old rules?
 
 The installer updates `~/.claude/`, including the shared tree
-`claude-agentic/ai/` that every project reads its shared policies, agent
+`riskrails/ai/` that every project reads its shared policies, agent
 contracts, workflows and templates from — those take effect at once, unless the
 project overrides one with its own file under `.ai/`. The project-owned rest of
 `.ai/`, the `docs/sdlc/` templates and the `CLAUDE.md` block are copies made when
@@ -266,7 +266,7 @@ commit / push / merge / deploy, verify before reporting done, the context rules,
 and tiers rather than model names. Everything else is one hop away:
 
 - **the model ladder, the context-guard thresholds, the launcher, the guard
-  list** → `~/.claude/claude-agentic/routing.md` (`~/.codex/` under Codex),
+  list** → `~/.claude/riskrails/routing.md` (`~/.codex/` under Codex),
   installed beside the block and read when a routing question actually comes up;
 - **the pipeline's procedure** → `/ai-task` itself, and the project's
   `.ai/AGENTS.md`, which is now a router: one row per job, pointing at the

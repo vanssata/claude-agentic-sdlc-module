@@ -232,7 +232,7 @@ def main(argv):
     tpl = env("AI_PROJECT_TEMPLATES") or env("CLAUDE_ROUTING_TEMPLATES") \
         or os.path.join(HERE, "..", "skills", "project-init", "templates")
     if not os.path.isdir(tpl):
-        raise Exit(1, "%s: templates not found at %s (run claude-agentic/install.sh)" % (NAME, tpl))
+        raise Exit(1, "%s: templates not found at %s (run riskrails/install.sh)" % (NAME, tpl))
     on = runtimes(runtime, root)
     s = Scaffold(tpl, root)
 

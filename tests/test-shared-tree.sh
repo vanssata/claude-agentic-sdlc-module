@@ -90,18 +90,18 @@ resolve "$W/proj" policies/../../x >/dev/null 2>&1; rc=$?; [ $rc -eq 2 ] && pass
 resolve "$W/proj" /etc/passwd >/dev/null 2>&1; rc=$?; [ $rc -eq 2 ] && pass "an absolute path exits 2" || fail "absolute: rc=$rc"
 
 echo "== the resolver in the installed layout"
-mkdir -p "$W/home/claude-agentic"; cp -r ai "$W/home/claude-agentic/ai"; cp "$RES" "$W/home/claude-agentic/ai-path"
-out=$(cd "$W/proj" && "$W/home/claude-agentic/ai-path" policies/tooling.md 2>&1)
-[ "$out" = "$W/home/claude-agentic/ai/policies/tooling.md" ] && pass "installed: the tree beside the script is used" || fail "installed layout" "$out"
-out=$(cd "$W/proj" && CLAUDE_AGENTIC_SHARED="$PLUGIN_ROOT/ai" "$W/home/claude-agentic/ai-path" policies/tooling.md 2>&1)
+mkdir -p "$W/home/riskrails"; cp -r ai "$W/home/riskrails/ai"; cp "$RES" "$W/home/riskrails/ai-path"
+out=$(cd "$W/proj" && "$W/home/riskrails/ai-path" policies/tooling.md 2>&1)
+[ "$out" = "$W/home/riskrails/ai/policies/tooling.md" ] && pass "installed: the tree beside the script is used" || fail "installed layout" "$out"
+out=$(cd "$W/proj" && CLAUDE_AGENTIC_SHARED="$PLUGIN_ROOT/ai" "$W/home/riskrails/ai-path" policies/tooling.md 2>&1)
 [ "$out" = "$PLUGIN_ROOT/ai/policies/tooling.md" ] && pass "CLAUDE_AGENTIC_SHARED outranks the installed tree" || fail "env override" "$out"
 
 echo "== --tree-hash"
-h1=$("$W/home/claude-agentic/ai-path" --tree-hash); h2=$("$W/home/claude-agentic/ai-path" --tree-hash)
+h1=$("$W/home/riskrails/ai-path" --tree-hash); h2=$("$W/home/riskrails/ai-path" --tree-hash)
 [ -n "$h1" ] && [ "$h1" = "$h2" ] && pass "the tree hash is stable" || fail "tree hash unstable" "$h1 / $h2"
 [ "$h1" = "$("$RES" --tree-hash)" ] && pass "an equal tree has an equal hash" || fail "copy hashes differently"
-printf 'x' >> "$W/home/claude-agentic/ai/policies/git.md"
-[ "$h1" != "$("$W/home/claude-agentic/ai-path" --tree-hash)" ] && pass "a one-byte edit changes the hash" || fail "hash ignored a one-byte edit"
+printf 'x' >> "$W/home/riskrails/ai/policies/git.md"
+[ "$h1" != "$("$W/home/riskrails/ai-path" --tree-hash)" ] && pass "a one-byte edit changes the hash" || fail "hash ignored a one-byte edit"
 
 echo "== update.py helpers for the cut-over"
 # Python prints "ok <what>" or "FAIL <what> | <detail>"; each line becomes one assertion.
@@ -166,7 +166,7 @@ codex = os.path.join(W, "h", ".codex"); os.makedirs(os.path.join(codex, "skills"
 msg = refused()
 check(msg is not None and codex in msg and "--target codex" in msg,
       "require_shared: a codex home with the plugin but no tree refuses", msg)
-tree = os.path.join(codex, "claude-agentic", "ai")
+tree = os.path.join(codex, "riskrails", "ai")
 shutil.copytree(U.SHARED, tree)
 os.remove(os.path.join(tree, "policies", "git.md")); os.remove(os.path.join(tree, "agents", "risk.md"))
 msg = refused()
@@ -235,7 +235,7 @@ echo "== consumers name the rule"
 for a in ai-discovery ai-reviewer; do
     [ "$(grep -c '{{AI_SHARED}}/<path>' "agents/$a.md.tmpl")" -eq 1 ] && pass "agents/$a.md.tmpl states the rule once" || fail "agents/$a.md.tmpl should state the shared-path rule once"
 done
-grep -qF '"$AI_HOME/claude-agentic/ai-path" <path>' skills/rr-build/SKILL.md && pass "rr-build names the resolver" || fail "rr-build SKILL.md should name the resolver"
+grep -qF '"$AI_HOME/riskrails/ai-path" <path>' skills/rr-build/SKILL.md && pass "rr-build names the resolver" || fail "rr-build SKILL.md should name the resolver"
 grep -qF '$STATE review --verdict' skills/rr-review/SKILL.md && pass "rr-review records its verdict through state.py review" || fail "rr-review lost the review call"
 
 summary "shared-tree"

@@ -85,7 +85,8 @@ class Project:
         os.makedirs(self.home)
         os.makedirs(self.root)
         self.env = {k: v for k, v in os.environ.items()
-                    if k not in ("CODEX_HOME", "AI_UNATTENDED", "CLAUDE_AGENTIC_MIGRATIONS", "CLAUDE_CONFIG_DIR")}
+                    if k not in ("CODEX_HOME", "AI_UNATTENDED", "CLAUDE_AGENTIC_MIGRATIONS", "CLAUDE_CONFIG_DIR")
+                    and not k.startswith("RISKRAILS_")}
         self.env.update(HOME=self.home, CLAUDE_AGENTIC_SHARED=os.path.join(ROOT, "ai"))
         subprocess.run(["bash", SCAFFOLD, self.root, "--runtime", "claude"], env=self.env, check=True,
                        capture_output=True)
@@ -188,12 +189,12 @@ class TestMigration0007(unittest.TestCase):
         p = Project(edited=True)
         try:
             dry = p.update()
-            self.assertIn("schema    6 -> 7", dry.stdout)
+            self.assertIn("schema    6 -> 8", dry.stdout)
             self.assertNotIn("delete?", dry.stdout)
             self.assertEqual([line for line in dry.stdout.split("\n") if "[0007]" in line and "risk-tiers" in line], [])
             done = p.update("--apply")
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            self.assertEqual(p.version(), "7")
+            self.assertEqual(p.version(), "8")
             weight = json.loads(p.read("policies", "weight.json"))
             self.assertIn("the order export job", weight["examples"]["guarded"])
             self.assertIn("weight --mirror", done.stdout)
@@ -216,7 +217,7 @@ class TestMigration0007(unittest.TestCase):
             p = Project(weight=False, edited=edited)
             try:
                 done = p.update("--apply")
-                self.assertEqual((done.returncode, p.version()), (0, "7"), done.stdout + done.stderr)
+                self.assertEqual((done.returncode, p.version()), (0, "8"), done.stdout + done.stderr)
                 with open(os.path.join(POLICIES, "weight.json"), "rb") as fh:
                     shipped = fh.read()
                 if edited:
@@ -382,7 +383,7 @@ def insert_line(content, n, line, after):
 
 
 def legacy(block):
-    return re.sub(r"claude-agentic:(start|end)", r"Codex-agentic:\1", block)
+    return re.sub(r"riskrails:(start|end)", r"Codex-agentic:\1", block)
 
 
 def replace_line(path, n, line):
@@ -397,6 +398,93 @@ def only(pattern):
     return paths[0] if len(paths) == 1 else os.path.join(os.path.dirname(pattern), "<%d matches>" % len(paths))
 
 
+FIXTURE_V7 = os.path.join(ROOT, "tests", "fixtures", "project-update", "schema-v7")
+MIGRATION_0008 = os.path.join(ROOT, "skills", "project-update", "migrations", "0008_renames.py")
+
+
+def to_schema_7(root):
+    """Today's scaffold as a schema-7 project had it: the old marker and route
+    names, and .ai/VERSION from the fixture."""
+    shutil.copytree(os.path.join(FIXTURE_V7, ".ai"), os.path.join(root, ".ai"), dirs_exist_ok=True)
+    for rel, old, new in (("CLAUDE.md", b"<!-- riskrails:", b"<!-- claude-agentic:"),
+                          (".ai/AGENTS.md", b"/riskrails/ai", b"/claude-agentic/ai")):
+        path = os.path.join(root, rel)
+        with open(path, "rb") as fh:
+            data = fh.read()
+        assert old in data, (rel, old)
+        with open(path, "wb") as fh:
+            fh.write(data.replace(old, new))
+
+
+class TestMigration0008(unittest.TestCase):
+    """R35: the markers and routes take the new name, the text around them stays
+    byte for byte the project's, and the state file stays where it is (R34)."""
+
+    def setUp(self):
+        self.p = Project()
+        to_schema_7(self.p.root)
+        claude = os.path.join(self.p.root, "CLAUDE.md")
+        with open(claude, "rb") as fh:
+            self.claude = b"# my own heading\n\nmy words  stay\r\n" + fh.read() + b"\nand after the block\n"
+        with open(claude, "wb") as fh:
+            fh.write(self.claude)
+
+    def tearDown(self):
+        self.p.close()
+
+    def commit(self):
+        subprocess.run(GIT + ["-C", self.p.root, "add", "-A"], check=True)
+        subprocess.run(GIT + ["-C", self.p.root, "commit", "-qm", "schema 7"], check=True)
+
+    def test_after_0007_in_flight(self):
+        env = dict(self.p.env, AI_RUNTIME="claude")
+        put(os.path.join(self.p.root, "src", "Clock.php"), "x\n")
+        self.commit()
+        started = subprocess.run([sys.executable, "-I", STATE, "--root", self.p.root, "start", "--goal", "mid-build",
+                                  "--workflow", "feature", "--files", "src/Clock.php", "--tests", "tests/ClockTest.php",
+                                  "--declare", "behaviour=0:none", "--declare", "novelty=0:none"],
+                                 env=env, capture_output=True, text=True, check=False)
+        self.assertEqual(started.returncode, 0, started.stderr)
+        state = self.p.read("state", "current.json")
+        self.commit()
+        done = self.p.update("--apply")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.p.version(), "8")
+        self.assertEqual(self.p.read("state", "current.json"), state, "0008 leaves the task's state alone (R34)")
+        self.assertFalse(os.path.exists(self.p.path("state", "state.json")), "and moves nothing")
+        with open(os.path.join(self.p.root, "CLAUDE.md"), "rb") as fh:
+            self.assertEqual(fh.read(), self.claude.replace(b"<!-- claude-agentic:", b"<!-- riskrails:"),
+                             "only the marker word changes; the project's text is byte-identical")
+        with open(os.path.join(ROOT, "skills", "ai-init", "templates", ".ai", "AGENTS.md"), "rb") as fh:
+            self.assertEqual(self.p.read("AGENTS.md"), fh.read(), "the router routes to the riskrails home")
+        status = subprocess.run([sys.executable, "-I", STATE, "--root", self.p.root, "status"],
+                                env=env, capture_output=True, text=True, check=False)
+        self.assertEqual(status.returncode, 0, status.stderr)
+        self.assertIn("mid-build", status.stdout)
+        again = self.p.update("--apply")
+        self.assertNotIn("schema ", again.stdout)
+        self.assertEqual(self.p.update("--check").returncode, 0)
+
+    def test_without_a_task(self):
+        self.commit()
+        done = self.p.update("--apply")
+        self.assertEqual((done.returncode, self.p.version()), (0, "8"), done.stdout + done.stderr)
+        self.assertFalse(os.path.exists(self.p.path("state", "state.json")))
+        self.assertNotIn(b"claude-agentic", open(os.path.join(self.p.root, "CLAUDE.md"), "rb").read())
+
+    def test_rule_markers_keep_their_spacing(self):
+        spec = importlib.util.spec_from_file_location("migration_0008_under_test", MIGRATION_0008)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        text = (b"<!--  claude-agentic:rule:payments:start -->\nbody claude-agentic stays\n"
+                b"<!-- claude-agentic:rule:payments:end-->\n")
+        self.assertEqual(mod.rename_markers(text),
+                         b"<!--  riskrails:rule:payments:start -->\nbody claude-agentic stays\n"
+                         b"<!-- riskrails:rule:payments:end-->\n")
+        self.assertEqual(mod.rename_routes(b"`~/.claude/claude-agentic/ai-path x` and /claude-agentic/aix"),
+                         b"`~/.claude/riskrails/ai-path x` and /claude-agentic/aix")
+
+
 class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-methods
     """project-update: a project scaffolded from the oldest shipped templates, then
     edited by hand, is brought up to date without losing an edit."""
@@ -408,7 +496,8 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         os.makedirs(os.path.join(cls.t, "home"))
         cls.env = {k: v for k, v in os.environ.items()
                    if k not in ("CODEX_HOME", "AI_UNATTENDED", "CLAUDE_AGENTIC_MIGRATIONS", "CLAUDE_CONFIG_DIR",
-                                "CLAUDE_AGENTIC_TEMPLATES", "CLAUDE_ROUTING_TEMPLATES")}
+                                "CLAUDE_AGENTIC_TEMPLATES", "CLAUDE_ROUTING_TEMPLATES")
+                   and not k.startswith("RISKRAILS_")}
         cls.env.update(HOME=os.path.join(cls.t, "home"), CLAUDE_AGENTIC_SHARED=os.path.join(ROOT, "ai"))
         cls.current = int(subprocess.run(
             [sys.executable, "-I", "-c", "import sys; sys.path.insert(0, sys.argv[1]); import migrations; "
@@ -624,7 +713,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         claude = text_of(os.path.join(p, "CLAUDE.md"))
         self.assertTrue("keep me" in claude and ".ai/state/handoff.md" in claude,
                         "the CLAUDE.md block is updated and the rest of the file kept")
-        self.assertEqual(grep("claude-agentic:start", claude), 1, "one managed block remains")
+        self.assertEqual(grep("riskrails:start", claude), 1, "one managed block remains")
         self.assertIn("verify_command is empty", out, "an empty verify_command is flagged")
 
         # idempotent
@@ -660,9 +749,9 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         os.remove(os.path.join(p4, ".codex", "memory", "README.md"))
         _, out = self.upd(p4, "--apply", merge=True)
         agents = text_of(os.path.join(p4, "AGENTS.md"))
-        self.assertTrue("keep me" in agents and "claude-agentic:start" in agents,
+        self.assertTrue("keep me" in agents and "riskrails:start" in agents,
                         "the AGENTS.md block is managed and the rest of the file kept\n" + out)
-        self.assertEqual(grep("claude-agentic:start", agents), 1, "one AGENTS.md block remains")
+        self.assertEqual(grep("riskrails:start", agents), 1, "one AGENTS.md block remains")
         self.assertTrue(not os.path.lexists(os.path.join(p4, "CLAUDE.md"))
                         and not os.path.isdir(os.path.join(p4, ".claude")), "no Claude layer is added to a Codex project")
         self.assertTrue(os.path.isfile(os.path.join(p4, ".codex", "memory", "README.md")),
@@ -680,7 +769,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.agentic(p5, "--runtime", "both", templates=self.tpl("ai-init"))
         self.upd(p5, "--apply")
         self.assertTrue(".ai/state/handoff.md" in text_of(os.path.join(p5, "CLAUDE.md"))
-                        and "claude-agentic:start" in text_of(os.path.join(p5, "AGENTS.md")),
+                        and "riskrails:start" in text_of(os.path.join(p5, "AGENTS.md")),
                         "both blocks are brought up to date over the one .ai/ tree")
 
         # a project that also declares Gemini and Junie gets their blocks too
@@ -688,14 +777,14 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.agentic(p6, "--runtime", "claude,codex,gemini,junie")
         for f in ("GEMINI.md", ".junie/guidelines.md"):
             with self.subTest(Template("$f carries the managed block").substitute(f=f)):
-                self.assertIn("claude-agentic:start", text_of(os.path.join(p6, f)))
+                self.assertIn("riskrails:start", text_of(os.path.join(p6, f)))
         self.assertIn(".ai/policies/safety.md", text_of(os.path.join(p6, "GEMINI.md")),
                       "the Gemini block routes to the policies like every other runtime")
         self.upd(p6, "--apply")
         _, out = self.upd(p6)
         self.assertTrue(has("^0 automatic, 0 conflict", out), "a four-runtime project is idempotent\n" + out)
         # an edited block is the user's, in a fourth runtime exactly as in the first
-        put(os.path.join(p6, "GEMINI.md"), "\n<!-- claude-agentic:start -->\nmy own text\n<!-- claude-agentic:end -->\n")
+        put(os.path.join(p6, "GEMINI.md"), "\n<!-- riskrails:start -->\nmy own text\n<!-- riskrails:end -->\n")
         _, out = self.upd(p6)
         self.assertIn("conflict  GEMINI.md", out, "an edited Gemini block is a conflict, never overwritten")
 
@@ -822,12 +911,14 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
                             r"\(now in the managed block\)", out), "the dry run names the section it will take out\n" + out)
         self.assertIn("AGENTS.md: the managed block was edited here", out,
                       "and hints that an edited block cannot be replaced")
+        self.assertNotIn("CLAUDE.md: the managed block was edited here", out,
+                         "a pristine block under the pre-3.4b markers is the shipped one (review M1)")
         self.assertEqual(tree_sum(s8), before, "the dry run writes nothing")
 
         self.upd(s8, "--apply")
         claude = text_of(os.path.join(s8, "CLAUDE.md"))
         self.assertNotIn("SDLC workflow", claude, "the shipped section is removed")
-        self.assertTrue("keep me" in claude and grep("claude-agentic:start", claude) == 1,
+        self.assertTrue("keep me" in claude and grep("riskrails:start", claude) == 1,
                         "and the human's own lines and the one block are kept")
         self.assertIn("SDLC workflow", text_of(only(os.path.join(s8, ".ai", "reports", "project-update-*", "original",
                                                                  "CLAUDE.md"))),
@@ -839,7 +930,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertNotIn("SDLC workflow", agents,
                          "the section leaves the file whose block was edited, which is a separate decision")
         gemini = text_of(os.path.join(s8, "GEMINI.md"))
-        self.assertTrue("claude-agentic:start" in gemini and "my own instructions" in gemini,
+        self.assertTrue("riskrails:start" in gemini and "my own instructions" in gemini,
                         "a third runtime's file gains the block without losing its text")
         self.assertEqual(self.version(s8), self.cur(),
                          Template("the schema reaches $CURRENT: 0003 holds it for nothing").substitute(CURRENT=self.cur()))
@@ -879,8 +970,9 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
                             ("0005_runtimes_and_plans.py", "0005 names no runtime")):
             with self.subTest(label):
                 self.assertIsNone(re.search(r"claude|codex", text_of(os.path.join(migrations, name)), re.I))
+        # claude-agentic is the plugin's old name (0008 renames it), not a runtime.
         branching = [f for f in glob.glob(os.path.join(migrations, "[0-9]*.py"))
-                     if re.search(r"claude|codex", text_of(f))]
+                     if re.search(r"claude(?!-agentic)|codex", text_of(f))]
         self.assertEqual(branching, [], "no migration branches on the runtime")
 
     def test_sdlc_only_project(self):
@@ -1074,7 +1166,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         rule = os.path.join(rd, ".claude", "rules", "payment.md")
         self.assertTrue(os.path.isfile(rule), "an --apply without the confirmation leaves it alone")
         self.assertIn("keep me", text_of(payment_md), "the human's text around a removed block survives")
-        self.assertNotIn("claude-agentic:rule:payment", text_of(payment_md),
+        self.assertNotIn("riskrails:rule:payment", text_of(payment_md),
                          "the stale block was taken out without a gate: it is ours")
         self.upd(rd, "--apply", "--confirm-delete", "Ivan", AI_UNATTENDED="1")
         self.assertFalse(os.path.isfile(rule), "the confirmed deletion is performed")
@@ -1086,7 +1178,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         # a nested worktree or repository is not this project's: its rule blocks are never touched
         rn = os.path.join(self.t, "rules-nested")
         shutil.copytree(rd, rn, symlinks=True)
-        stale = "# theirs\n<!-- claude-agentic:rule:gone:start -->\nold\n<!-- claude-agentic:rule:gone:end -->\n"
+        stale = "# theirs\n<!-- riskrails:rule:gone:start -->\nold\n<!-- riskrails:rule:gone:end -->\n"
         for sub in (".claude/worktrees/wt", "vendor-repo"):
             put(os.path.join(rn, sub, "src", "Payment", "CLAUDE.md"), stale)
         put(os.path.join(rn, ".claude", "worktrees", "wt", ".git"),
@@ -1109,7 +1201,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         os.makedirs(os.path.join(rw, ".claude", "worktrees", "wt", "src"))
         put(os.path.join(rw, ".ai", "rules", "sub.md"),
             "---\ndirs: [libs, libs/sub, .claude/worktrees/wt/src]\n---\n# Sub rules\n- new text\n")
-        stale = "# theirs\n<!-- claude-agentic:rule:sub:start -->\nold\n<!-- claude-agentic:rule:sub:end -->\n"
+        stale = "# theirs\n<!-- riskrails:rule:sub:start -->\nold\n<!-- riskrails:rule:sub:end -->\n"
         put(os.path.join(rw, "libs", "sub", "CLAUDE.md"), stale)
         _, out = self.upd(rw, merge=True)
         self.assertFalse(has(r"^  (create|update) +(libs/sub|\.claude/worktrees/wt)/", out),
@@ -1123,7 +1215,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertFalse(os.path.lexists(os.path.join(rw, ".claude", "worktrees", "wt", "src", "CLAUDE.md")),
                          "--apply creates nothing inside the worktree")
         libs = os.path.join(rw, "libs", "CLAUDE.md")
-        self.assertTrue(os.path.isfile(libs) and "claude-agentic:rule:sub:start" in text_of(libs),
+        self.assertTrue(os.path.isfile(libs) and "riskrails:rule:sub:start" in text_of(libs),
                         "--apply renders the control target libs/CLAUDE.md")
         rc, out = self.upd(rw, "--check", merge=True)
         self.assertEqual(rc, 0, "--check exits 0: a hint is not a pending update\n" + out)
@@ -1151,9 +1243,9 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         rc, out = self.upd(rs, "--check", merge=True)
         self.assertEqual(rc, 0, "--check exits 0 after --apply\n" + out)
         lib = os.path.join(rs, "lib", "CLAUDE.md")
-        self.assertEqual(grep("claude-agentic:rule:lib:start", text_of(lib)) if os.path.isfile(lib) else 0, 1,
+        self.assertEqual(grep("riskrails:rule:lib:start", text_of(lib)) if os.path.isfile(lib) else 0, 1,
                          "lib/CLAUDE.md holds one lib block: ./lib and lib collapse")
-        self.assertIn("claude-agentic:rule:top:start", text_of(os.path.join(rs, "CLAUDE.md")),
+        self.assertIn("riskrails:rule:top:start", text_of(os.path.join(rs, "CLAUDE.md")),
                       "--apply renders the ./ rule into the root CLAUDE.md")
         rx = os.path.join(self.t, "rules-spelling-escape")
         shutil.copytree(rd, rx, symlinks=True)
@@ -1280,12 +1372,12 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
                          "the dry run sees the legacy block as the managed block (no split? hint)")
         self.upd(lp, "--apply", merge=True)
         agents = text_of(os.path.join(lp, "AGENTS.md"))
-        self.assertEqual(grep("claude-agentic:start", agents), 1, "one current block remains")
+        self.assertEqual(grep("riskrails:start", agents), 1, "one current block remains")
         self.assertNotIn("Codex-agentic", agents, "the legacy markers are gone")
         self.assertTrue("keep me above" in agents and "keep me below" in agents, "the text around the block is kept")
         rows = agents.splitlines(keepends=True)
-        start = next(i for i, l in enumerate(rows) if "claude-agentic:start" in l)
-        end = next(i for i, l in enumerate(rows) if i > start and "claude-agentic:end" in l)
+        start = next(i for i, l in enumerate(rows) if "riskrails:start" in l)
+        end = next(i for i, l in enumerate(rows) if i > start and "riskrails:end" in l)
         self.assertEqual("".join(rows[start:end + 1]), block, "the renamed block is the shipped one")
         _, out = self.upd(lp, "--apply", merge=True)
         self.assertTrue(has("^0 automatic, 0 conflict", out), "a second run has nothing left\n" + out)
@@ -1298,13 +1390,13 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         agents = text_of(os.path.join(e, "AGENTS.md"))
         self.assertNotIn("Codex-agentic", agents, "an edited legacy block gets the current markers")
         self.assertIn("my own rule, right inside the block", agents, "and its edit is kept")
-        self.assertEqual(grep("claude-agentic:start", agents), 1, "with one block")
+        self.assertEqual(grep("riskrails:start", agents), 1, "with one block")
 
         # Half a current pair next to a legacy pair is a broken file: nothing is renamed.
-        h = self.legacy_project("legacy-half", "# half\n\n<!-- claude-agentic:start -->\nlone start\n\n" + old)
+        h = self.legacy_project("legacy-half", "# half\n\n<!-- riskrails:start -->\nlone start\n\n" + old)
         self.upd(h, "--apply", merge=True)
         agents = text_of(os.path.join(h, "AGENTS.md"))
-        self.assertTrue("Codex-agentic:start" in agents and grep("claude-agentic:end", agents) == 1,
+        self.assertTrue("Codex-agentic:start" in agents and grep("riskrails:end", agents) == 1,
                         "a lone current marker beside a legacy pair renames nothing\n" + agents)
 
     def test_budget_hint_for_a_pristine_legacy_block(self):
@@ -1315,7 +1407,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         pt = os.path.join(self.t, "padded-tpl")
         shutil.copytree(TEMPLATES, pt, symlinks=True)
         padded = text_of(os.path.join(pt, "AGENTS.block.md"))
-        i = padded.index("<!-- claude-agentic:end -->")
+        i = padded.index("<!-- riskrails:end -->")
         put(os.path.join(pt, "AGENTS.block.md"),
             padded[:i] + "<!-- padding, over the project budget -->\n" * 60 + padded[i:])
         pb = self.legacy_project("padded-legacy", "# legacy\n\n" + legacy(text_of(os.path.join(pt, "AGENTS.block.md"))))

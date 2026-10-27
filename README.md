@@ -1,4 +1,4 @@
-# claude-agentic
+# RiskRails
 
 [![Version](https://img.shields.io/badge/version-2.0.2-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v2.0.2)
 [![Runtimes](https://img.shields.io/badge/runtimes-Claude%20Code%20%7C%20Codex-d2f878?labelColor=101210)](#one-module-two-runtimes)
@@ -9,7 +9,7 @@
 widening its own scope, reading a production secret, force-pushing or
 deploying.**
 
-`claude-agentic` is a plugin for **Claude Code and Codex**, built for codebases
+**RiskRails** (`riskrails`) is a plugin for **Claude Code and Codex**, built for codebases
 with undocumented business rules, old workarounds and behaviour customers
 rely on today. Small, well-defined changes go through easily. Risky ones are
 stopped by a hook, not by a polite request in a prompt.
@@ -21,6 +21,12 @@ cd claude-agentic-sdlc-module && ./install.sh   # detects Claude Code, Codex or 
 
 Then, in any project: `/ai-init` once, and `/ai-task <what you want>` for every
 change.
+
+Upgrading from `claude-agentic`: `install.sh` moves `<home>/claude-agentic/` to
+`<home>/riskrails/` and leaves a symlink at the old path for one version, and
+`/rr-setup --update` renames each project's managed-block markers (migration
+0008). The task state stays in `.ai/state/current.json`; a later release moves
+it to `state.json`, and this one already reads either.
 
 **What you get**
 
@@ -151,9 +157,9 @@ duplicates a hook entry, and never overwrites your edits to `ai-git-guard.json`.
 | `profiles/{pro,max}.json` + `settings.common.json` | deep-merged into `settings.json` | — |
 | `profiles/codex-{plus,pro}.json` | — | six managed keys in `config.toml` |
 | `instructions/stub.md` | a managed block in `~/.claude/CLAUDE.md` | a managed block in `~/.codex/AGENTS.md` |
-| `instructions/routing.md` | `~/.claude/claude-agentic/routing.md`, read on demand | `~/.codex/claude-agentic/routing.md`, read on demand |
+| `instructions/routing.md` | `~/.claude/riskrails/routing.md`, read on demand | `~/.codex/riskrails/routing.md`, read on demand |
 | `agents/*.md.tmpl` | rendered to `~/.claude/agents/*.md`, each tier's model and effort from the plan (`ai-expert` and `architect` have their own model line) | rendered to `~/.codex/agents/*.toml`, the model pinned per role |
-| `profiles/*.json` | the plan's settings, and its tier and budget tables (`claude_agentic`), resolved by `scripts/resolve-profile.py` into `~/.claude/claude-agentic/profile.json` | the same, into `~/.codex/claude-agentic/profile.json` |
+| `profiles/*.json` | the plan's settings, and its tier and budget tables (`riskrails`), resolved by `scripts/resolve-profile.py` into `~/.claude/riskrails/profile.json` | the same, into `~/.codex/riskrails/profile.json` |
 | `hooks/*` | `~/.claude/hooks/` — six hooks, `runtime-gate` (the old `fable-gate`/`codex-model-gate` names are shims), the shared library and the guards' default config | `~/.codex/hooks/` + `codex/hooks.json` |
 | `skills/*/` | `~/.claude/skills/` | `~/.codex/skills/` |
 
@@ -186,7 +192,7 @@ exactly one always-loaded file per runtime, and it is short.
 |---|---|---|
 | `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` | the managed block: the rules an agent is unsafe without | 2 560 B |
 | a project's `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.junie/guidelines.md` | the same block, project scope | 2 048 B |
-| `~/.claude/claude-agentic/routing.md` | the model ladder, the context-guard thresholds, the guard list — read when a routing question comes up | — |
+| `~/.claude/riskrails/routing.md` | the model ladder, the context-guard thresholds, the guard list — read when a routing question comes up | — |
 | a project's `.ai/AGENTS.md` | a router: one row per job, pointing at the policy that answers it | advisory 4 096 B |
 | `docs/sdlc/constitution.md` | the 10–15 principles the project does not negotiate, cited as `C<n>` by `/sdlc-spec` and the planner | 15 lines, 4 096 B |
 | `.ai/rules/<slug>.md` | a rule scoped to the directories it names, rendered into their instruction files by `/project-update` | — |
@@ -249,10 +255,10 @@ The same commands in both runtimes:
 ### Updating a project after the plugin changes
 
 `install.sh` updates `~/.claude/` (or `~/.codex/`), and with it the shared
-tree at `<home>/claude-agentic/ai/`: the 29 policies, agent contracts,
+tree at `<home>/riskrails/ai/`: the 29 policies, agent contracts,
 workflows and templates that are the same in every project. A project does not
 copy them; it reads them from there, and a file at the same path under `.ai/`
-wins as an **override**. `<home>/claude-agentic/ai-path <path>` prints which one
+wins as an **override**. `<home>/riskrails/ai-path <path>` prints which one
 applies. What a project owns stays in the project — `.ai/project/`, `rules/`,
 `state/`, `reports/`, `VERSION`, `AGENTS.md`, and the policies `risk-tiers.json`,
 `risk-tiers.md`, `path-guard.json`, `testing.md`, `coding.md`, `safety.md` and
@@ -457,14 +463,14 @@ key. No stage is ever skipped; the profile only changes who does it.
 ## Model tiers
 
 Each plan is one file in `profiles/`: the runtime's own settings plus a
-`claude_agentic` object with the tier table (which model and effort each of FAST,
+`riskrails` object with the tier table (which model and effort each of FAST,
 BALANCED, STRONG and EXPERT is on that plan), the budgets (how many agents may run
 at once and how many of them on STRONG, how far direct mode reaches, whether EXPERT
 runs without asking, and a token figure per tier) and the preferred runtime per
 workflow. `max20.json` is `max.json` with larger budgets; `balanced-max.json` is `max.json`
 with the session pinned to Opus 5.5, no Fable and EXPERT at `high` — only the
 session runs the strong model, every agent keeps its cheap tier. The installer writes the
-resolved object to `<home>/claude-agentic/profile.json`; `runtime-gate` enforces the
+resolved object to `<home>/riskrails/profile.json`; `runtime-gate` enforces the
 fan-out and EXPERT budgets by asking, `state.py profile --tier <TIER>` prints a
 tier's model, and `/usage-report --task <id>` compares a task's tokens with its
 plan's figure — reported, never enforced. The prompts themselves name tiers only;
@@ -763,7 +769,7 @@ The cache is a report's cache: nothing else reads it, and a wrong number is a
 wrong number in a report, not a wrong change to a repository.
 **What to do.** `--no-cache` reports without it, and tells you within one run
 whether a surprising number came from the cache. Deleting
-`~/.cache/claude-agentic/usage-report.json` rebuilds it from scratch.
+`~/.cache/riskrails/usage-report.json` rebuilds it from scratch.
 **Source.** This entry; `skills/usage-report/SKILL.md`, "The parse cache".
 
 ## Migrating from claude-routing
@@ -773,7 +779,7 @@ This plugin absorbed `claude-routing`. Run `./install.sh` once and it:
 - writes the routing settings itself, from the same `profiles/` — nothing about
   your model, effort or limits changes;
 - **removes the `<!-- claude-routing:start/end -->` block** from
-  `~/.claude/CLAUDE.md` and writes one `claude-agentic` block carrying both sets
+  `~/.claude/CLAUDE.md` and writes one `riskrails` block carrying both sets
   of rules;
 - also removes an older unmarked `# Model allocation by task and scope` section,
   if one predates the plugins;

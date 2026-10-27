@@ -68,6 +68,6 @@ Say these whenever you quote it:
 
 Local transcripts only (`~/.claude/projects/**/*.jsonl`,
 `~/.codex/sessions/**/rollout-*.jsonl`); sessions from other machines are not
-visible. The parse cache is `~/.cache/claude-agentic/usage-report.json`
+visible. The parse cache is `~/.cache/riskrails/usage-report.json`
 (`USAGE_REPORT_CACHE=<path>` moves it, empty turns it off); delete it if you
 suspect it, and `--no-cache` tells within one run whether it was the cache.

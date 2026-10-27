@@ -171,7 +171,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/06-write-state.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/state/current.json (matched: (^|/)\\.ai/state/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.ai/state/current.json (matched: (^|/)\\.ai/state/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/06-write-state.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/state/current.json is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -212,35 +212,35 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/101-bash-tar-into-current-json.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a RiskRails control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/101-bash-tar-into-current-json.json
 rc=0
 ### ai-git-guard | fixture path-guard/102-bash-curl-o-into-current-json.json
 rc=0
 ### ai-path-guard | fixture path-guard/102-bash-curl-o-into-current-json.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a RiskRails control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/102-bash-curl-o-into-current-json.json
 rc=0
 ### ai-git-guard | fixture path-guard/103-bash-wget-o-into-task-md.json
 rc=0
 ### ai-path-guard | fixture path-guard/103-bash-wget-o-into-task-md.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: .ai/reports/T-1/task.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a RiskRails control file: .ai/reports/T-1/task.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/103-bash-wget-o-into-task-md.json
 rc=0
 ### ai-git-guard | fixture path-guard/104-bash-scp-into-events-jsonl.json
 rc=0
 ### ai-path-guard | fixture path-guard/104-bash-scp-into-events-jsonl.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: .ai/reports/T-1/events.jsonl\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a RiskRails control file: .ai/reports/T-1/events.jsonl\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/104-bash-scp-into-events-jsonl.json
 rc=0
 ### ai-git-guard | fixture path-guard/105-edit-installed-guard-engine.json
 rc=0
 ### ai-path-guard | fixture path-guard/105-edit-installed-guard-engine.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.claude/hooks/guard/paths.py (matched: (^|/)\\.(claude|codex)/hooks/(guard|lib)/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.claude/hooks/guard/paths.py (matched: (^|/)\\.(claude|codex)/hooks/(guard|lib)/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/105-edit-installed-guard-engine.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .claude/hooks/guard/paths.py is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -248,14 +248,14 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/106-bash-rm-installed-guard-dir.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a directory that holds a claude-agentic control file: .claude/hooks/guard\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a directory that holds a RiskRails control file: .claude/hooks/guard\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/106-bash-rm-installed-guard-dir.json
 rc=0
 ### ai-git-guard | fixture path-guard/107-edit-installed-state-py.json
 rc=0
 ### ai-path-guard | fixture path-guard/107-edit-installed-state-py.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.claude/skills/ai-task/state.py (matched: (^|/)\\.(claude|codex)/skills/ai-task/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.claude/skills/ai-task/state.py (matched: (^|/)\\.(claude|codex)/skills/ai-task/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/107-edit-installed-state-py.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .claude/skills/ai-task/state.py is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -279,6 +279,21 @@ rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to read a sensitive path: __TMP__/project/var/dump-2026-09-01.sql (matched: (dump|backup|export)s?[-_.].*\\.(sql|sql\\.gz|sql\\.bz2|csv|xlsx)$)\n\nProduction secrets and data dumps must not enter the model context.\nIf this path is genuinely safe (a .dist/.example file, a fixture), add a regex to\n\"allow_patterns\" in .ai/policies/path-guard.json. See .ai/policies/security.md."}}
 ### ai-scope-guard | fixture path-guard/11-db-dump.json
 rc=0
+### ai-git-guard | fixture path-guard/110-write-state-json.json
+rc=0
+### ai-path-guard | fixture path-guard/110-write-state-json.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.ai/state/state.json (matched: (^|/)\\.ai/state/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/110-write-state-json.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/state/state.json is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
+### ai-git-guard | fixture path-guard/111-bash-sed-i-state-json.json
+rc=0
+### ai-path-guard | fixture path-guard/111-bash-sed-i-state-json.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell in-place edit of a RiskRails control file: __TMP__/project/.ai/state/state.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/111-bash-sed-i-state-json.json
+rc=0
 ### ai-git-guard | fixture path-guard/12-migration-sql.json
 rc=0
 ### ai-path-guard | fixture path-guard/12-migration-sql.json
@@ -289,7 +304,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/13-edit-policy-json.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/policies/path-guard.json (matched: (^|/)\\.ai/policies/[^/]*\\.json$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.ai/policies/path-guard.json (matched: (^|/)\\.ai/policies/[^/]*\\.json$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/13-edit-policy-json.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/policies/path-guard.json is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -365,7 +380,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/24-edit-questions-md.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/reports/T-1/questions.md (matched: (^|/)\\.ai/reports/[^/]+/(questions|task)\\.md$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.ai/reports/T-1/questions.md (matched: (^|/)\\.ai/reports/[^/]+/(questions|task)\\.md$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/24-edit-questions-md.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/reports/T-1/questions.md is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -379,7 +394,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/26-redirect-into-questions.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a claude-agentic control file: __TMP__/project/.ai/reports/T-1/questions.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a RiskRails control file: __TMP__/project/.ai/reports/T-1/questions.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/26-redirect-into-questions.json
 rc=0
 ### ai-git-guard | fixture path-guard/27-cat-events-jsonl.json
@@ -392,7 +407,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/28-write-handoff-md.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/state/handoff.md (matched: (^|/)\\.ai/state/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.ai/state/handoff.md (matched: (^|/)\\.ai/state/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/28-write-handoff-md.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/state/handoff.md is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -426,14 +441,14 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/33-bash-tee-session-json.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: __TMP__/project/.ai/state/session.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a RiskRails control file: __TMP__/project/.ai/state/session.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/33-bash-tee-session-json.json
 rc=0
 ### ai-git-guard | fixture path-guard/34-bash-sed-i-current-json.json
 rc=0
 ### ai-path-guard | fixture path-guard/34-bash-sed-i-current-json.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell in-place edit of a claude-agentic control file: __TMP__/project/.ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell in-place edit of a RiskRails control file: __TMP__/project/.ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/34-bash-sed-i-current-json.json
 rc=0
 ### ai-git-guard | fixture path-guard/35-bash-run-context-guard.json
@@ -559,7 +574,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/53-bash-rm-state-file.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a RiskRails control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/53-bash-rm-state-file.json
 rc=0
 ### ai-git-guard | fixture path-guard/54-bash-rm-vendor-instruction-file.json
@@ -590,7 +605,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/58-bash-rm-ai-state-dir.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a RiskRails control file: .ai/state/\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/58-bash-rm-ai-state-dir.json
 rc=0
 ### ai-git-guard | fixture path-guard/59-bash-rm-claude-dir.json
@@ -673,7 +688,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/70-bash-brace-group-rm.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a RiskRails control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/70-bash-brace-group-rm.json
 rc=0
 ### ai-git-guard | fixture path-guard/71-bash-continuation-cp.json
@@ -687,7 +702,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/72-bash-backtick-rm.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a RiskRails control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/72-bash-backtick-rm.json
 rc=0
 ### ai-git-guard | fixture path-guard/73-bash-sh-c-rm.json
@@ -706,7 +721,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/75-bash-sudo-env-rm.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a RiskRails control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/75-bash-sudo-env-rm.json
 rc=0
 ### ai-git-guard | fixture path-guard/76-bash-echo-prose-rm-allowed.json
@@ -786,7 +801,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/86-edit-migration-json.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/reports/project-update-x/migration.json (matched: (^|/)\\.ai/reports/[^/]+/(adopt|migration)\\.json$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.ai/reports/project-update-x/migration.json (matched: (^|/)\\.ai/reports/[^/]+/(adopt|migration)\\.json$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/86-edit-migration-json.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/reports/project-update-x/migration.json is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -794,7 +809,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/86-write-adopt-json.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/reports/adopt-x/adopt.json (matched: (^|/)\\.ai/reports/[^/]+/(adopt|migration)\\.json$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.ai/reports/adopt-x/adopt.json (matched: (^|/)\\.ai/reports/[^/]+/(adopt|migration)\\.json$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/86-write-adopt-json.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/reports/adopt-x/adopt.json is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -829,7 +844,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/91-write-dotdot-policy.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/src/../.ai/policies/risk-tiers.json (matched: (^|/)\\.ai/policies/[^/]*\\.json$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/src/../.ai/policies/risk-tiers.json (matched: (^|/)\\.ai/policies/[^/]*\\.json$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/91-write-dotdot-policy.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — src/../.ai/policies/risk-tiers.json is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -837,7 +852,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/92-edit-task-md.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/reports/T-1/task.md (matched: (^|/)\\.ai/reports/[^/]+/(questions|task)\\.md$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.ai/reports/T-1/task.md (matched: (^|/)\\.ai/reports/[^/]+/(questions|task)\\.md$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/92-edit-task-md.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/reports/T-1/task.md is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -845,7 +860,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/93-redirect-into-task-md.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a claude-agentic control file: __TMP__/project/.ai/reports/T-1/task.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a RiskRails control file: __TMP__/project/.ai/reports/T-1/task.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/93-redirect-into-task-md.json
 rc=0
 ### ai-git-guard | fixture path-guard/94-read-task-md-allowed.json
@@ -858,7 +873,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/95-write-runtime-gate.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.claude/hooks/runtime-gate.py (matched: (^|/)\\.(claude|codex)/hooks/runtime-gate\\.py$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.claude/hooks/runtime-gate.py (matched: (^|/)\\.(claude|codex)/hooks/runtime-gate\\.py$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/95-write-runtime-gate.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .claude/hooks/runtime-gate.py is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -866,7 +881,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/96-redirect-into-events-jsonl.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a claude-agentic control file: __TMP__/project/.ai/reports/T-1/events.jsonl\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a RiskRails control file: __TMP__/project/.ai/reports/T-1/events.jsonl\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/96-redirect-into-events-jsonl.json
 rc=0
 ### ai-git-guard | fixture path-guard/97-edit-policy-md-in-task.json
@@ -881,7 +896,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture path-guard/98-write-state-log.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/state/logs/T-1/step-1.log (matched: (^|/)\\.ai/state/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.ai/state/logs/T-1/step-1.log (matched: (^|/)\\.ai/state/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/98-write-state-log.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/state/logs/T-1/step-1.log is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -984,7 +999,7 @@ rc=0
 rc=0
 ### ai-path-guard | fixture codex-hooks/13-path-apply-patch-guard-config.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: .codex/hooks/ai-git-guard.json (matched: (^|/)\\.codex/hooks/ai-[^/]*$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: .codex/hooks/ai-git-guard.json (matched: (^|/)\\.codex/hooks/ai-[^/]*$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture codex-hooks/13-path-apply-patch-guard-config.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .codex/hooks/ai-git-guard.json is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -1458,12 +1473,12 @@ rc=0
 rc=0
 ### ai-path-guard | main bash: echo x > .ai/state/current.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a RiskRails control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: echo x >> .ai/policies/path-guard.json
 rc=0
 ### ai-path-guard | main bash: echo x >> .ai/policies/path-guard.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a claude-agentic control file: .ai/policies/path-guard.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a RiskRails control file: .ai/policies/path-guard.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: cat .ai/state/current.json
 rc=0
 ### ai-path-guard | main bash: cat .ai/state/current.json
@@ -1564,27 +1579,27 @@ rc=0
 rc=0
 ### ai-path-guard | main bash: echo x > .ai/reports/T-1/questions.md
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a claude-agentic control file: .ai/reports/T-1/questions.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a RiskRails control file: .ai/reports/T-1/questions.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: touch .ai/reports/T-1/questions.md
 rc=0
 ### ai-path-guard | main bash: touch .ai/reports/T-1/questions.md
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: .ai/reports/T-1/questions.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a RiskRails control file: .ai/reports/T-1/questions.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: chmod 644 .ai/state/current.json
 rc=0
 ### ai-path-guard | main bash: chmod 644 .ai/state/current.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a RiskRails control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: chown me .ai/state/handoff.md
 rc=0
 ### ai-path-guard | main bash: chown me .ai/state/handoff.md
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: .ai/state/handoff.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a RiskRails control file: .ai/state/handoff.md\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: tee .ai/state/session.json
 rc=0
 ### ai-path-guard | main bash: tee .ai/state/session.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: .ai/state/session.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a RiskRails control file: .ai/state/session.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: truncate -s 0 .ai/reports/T-1/events.jsonl
 rc=0
 ### ai-path-guard | main bash: truncate -s 0 .ai/reports/T-1/events.jsonl
@@ -1593,12 +1608,12 @@ rc=0
 rc=0
 ### ai-path-guard | main bash: dd if=/tmp/x of=.ai/state/session.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a claude-agentic control file: of=.ai/state/session.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell command that writes a RiskRails control file: of=.ai/state/session.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: sed -i 's/a/b/' .ai/state/current.json
 rc=0
 ### ai-path-guard | main bash: sed -i 's/a/b/' .ai/state/current.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell in-place edit of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell in-place edit of a RiskRails control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: touch src/Service.php
 rc=0
 ### ai-path-guard | main bash: touch src/Service.php
@@ -1830,12 +1845,12 @@ rc=0
 rc=0
 ### ai-path-guard | main bash: rm -rf .ai/state/
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a RiskRails control file: .ai/state/\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: rm -rf .codex/hooks
 rc=0
 ### ai-path-guard | main bash: rm -rf .codex/hooks
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a directory that holds a claude-agentic control file: .codex/hooks (holds __TMP__/project/.codex/hooks/ai-git-guard.json)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a directory that holds a RiskRails control file: .codex/hooks (holds __TMP__/project/.codex/hooks/ai-git-guard.json)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: mv .claude /tmp/x
 rc=0
 ### ai-path-guard | main bash: mv .claude /tmp/x
@@ -1878,7 +1893,7 @@ rc=0
 rc=0
 ### ai-path-guard | main bash: { rm -f .ai/state/current.json; }
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a RiskRails control file: .ai/state/current.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: sh -c 'rm -f .ai/state/current.json'
 rc=0
 ### ai-path-guard | main bash: sh -c 'rm -f .ai/state/current.json'
@@ -1887,7 +1902,7 @@ rc=0
 rc=0
 ### ai-path-guard | main bash: echo `rm .ai/state/x.json`
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a claude-agentic control file: .ai/state/x.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell removal of a RiskRails control file: .ai/state/x.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: echo "step 2; rm -f .ai/state/current.json"
 rc=0
 ### ai-path-guard | main bash: echo "step 2; rm -f .ai/state/current.json"
@@ -2135,7 +2150,7 @@ rc=0
 rc=0
 ### ai-path-guard | Edit file_path=__TMP__/project/.ai/policies/risk-tiers.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/policies/risk-tiers.json (matched: (^|/)\\.ai/policies/[^/]*\\.json$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.ai/policies/risk-tiers.json (matched: (^|/)\\.ai/policies/[^/]*\\.json$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | Edit file_path=__TMP__/project/.ai/policies/risk-tiers.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/policies/risk-tiers.json is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -2143,7 +2158,7 @@ rc=0
 rc=0
 ### ai-path-guard | Edit file_path=__TMP__/project/.ai/state/current.json
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/project/.ai/state/current.json (matched: (^|/)\\.ai/state/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.ai/state/current.json (matched: (^|/)\\.ai/state/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | Edit file_path=__TMP__/project/.ai/state/current.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/state/current.json is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
@@ -2240,7 +2255,7 @@ rc=0
 rc=0
 ### ai-path-guard | Edit file_path=__TMP__/home/.claude/hooks/ai-path-guard.sh
 rc=0
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a claude-agentic control file: __TMP__/home/.claude/hooks/ai-path-guard.sh (matched: (^|/)\\.claude/hooks/ai-[^/]*$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/home/.claude/hooks/ai-path-guard.sh (matched: (^|/)\\.claude/hooks/ai-[^/]*$)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | Edit file_path=__TMP__/home/.claude/hooks/ai-path-guard.sh
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — __TMP__/home/.claude/hooks/ai-path-guard.sh is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}

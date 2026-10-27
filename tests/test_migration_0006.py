@@ -211,7 +211,8 @@ class TestMigration0006(unittest.TestCase):  # pylint: disable=too-many-public-m
         cls.w = cls.tmp.name
         os.makedirs(os.path.join(cls.w, "home"))
         cls.env = {k: v for k, v in os.environ.items()
-                   if k not in ("CODEX_HOME", "AI_UNATTENDED", "CLAUDE_AGENTIC_MIGRATIONS", "CLAUDE_CONFIG_DIR")}
+                   if k not in ("CODEX_HOME", "AI_UNATTENDED", "CLAUDE_AGENTIC_MIGRATIONS", "CLAUDE_CONFIG_DIR")
+                   and not k.startswith("RISKRAILS_")}
         cls.env.update(HOME=os.path.join(cls.w, "home"), CLAUDE_AGENTIC_SHARED=os.path.join(ROOT, "ai"))
         GIT_ENV.clear()
         GIT_ENV.update(cls.env)

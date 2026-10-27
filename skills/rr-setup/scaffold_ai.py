@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Idempotent .ai/ scaffold for claude-agentic.
+"""Idempotent .ai/ scaffold for RiskRails.
   scaffold_ai.py [project-dir] [--runtime auto|claude|codex|both]   (default: $PWD, auto)
 skills/ai-init/scaffold-ai.sh execs it; the templates stay in skills/ai-init/.
 
@@ -28,7 +28,7 @@ NAME = "scaffold-ai"
 # The directory the shell script ran from: templates and the runtime it was installed for.
 HERE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ai-init"))
 RUNTIMES = ("claude", "codex", "gemini", "junie")
-BLOCK = re.compile(rb"<!-- (claude-agentic|[Cc]odex-agentic):start -->")
+BLOCK = re.compile(rb"<!-- (riskrails|claude-agentic|[Cc]odex-agentic):start -->")
 
 
 class Exit(Exception):
@@ -212,9 +212,9 @@ def main(argv):
         root = stdin_cwd()
     root = logical_cd(root or logical_pwd())
     project = os.fsencode("/" if root == "/" else os.path.basename(root))
-    tpl = env("CLAUDE_AGENTIC_TEMPLATES") or os.path.join(HERE, "templates")
+    tpl = env("RISKRAILS_TEMPLATES") or env("CLAUDE_AGENTIC_TEMPLATES") or os.path.join(HERE, "templates")
     if not os.path.isdir(os.path.join(tpl, ".ai")):
-        raise Exit(1, "%s: templates not found at %s (run claude-agentic/install.sh)" % (NAME, tpl))
+        raise Exit(1, "%s: templates not found at %s (run riskrails/install.sh)" % (NAME, tpl))
     on = runtimes(runtime, root)
     created = []
 

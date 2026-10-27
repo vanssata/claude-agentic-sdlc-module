@@ -11,7 +11,7 @@
     "claude-haiku-4-5-20251001": { "effortLevel": "low" }
   },
   "autoCompactWindow": 800000,
-  "claude_agentic": {
+  "riskrails": {
     "inherits": null,
     "plan": "max",
     "label": "Max",

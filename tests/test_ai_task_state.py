@@ -149,6 +149,25 @@ class TestStart(Base):
         tier = [e for e in self.p.events(s["task_id"]) if e["event"] == "tier_set"][0]["data"]
         self.assertEqual((tier["tier"], tier["mode"]), ("T2", "light"))
 
+    def test_reads_legacy_state_name(self):
+        """R34, expand/contract: a task starts in current.json and stays there;
+        one a later version wrote to state.json is read and saved in place."""
+        self.p.start()
+        task = self.task_id()
+        new = os.path.join(self.p.root, ".ai", "state", "state.json")
+        legacy = os.path.join(self.p.root, ".ai", "state", "current.json")
+        self.assertTrue(os.path.exists(legacy) and not os.path.exists(new), "start writes current.json")
+        self.p.write("src/other.py", "y = 1\n")
+        self.p.ok("start", "--amend", "--files", "+src/other.py", "--why", "a save")
+        self.assertFalse(os.path.exists(new), "a save moves nothing")
+        os.rename(legacy, new)
+        self.assertIn(task, self.p.ok("status").stdout)
+        self.p.write("src/third.py", "z = 1\n")
+        self.p.ok("start", "--amend", "--files", "+src/third.py", "--why", "a save")
+        self.assertTrue(os.path.exists(new) and not os.path.exists(legacy), "state.json is saved where it is")
+        with open(new, encoding="utf-8") as fh:
+            self.assertIn("src/third.py", json.load(fh)["files"])
+
     def test_declared_evidence_cannot_add_a_heading_to_task_md(self):
         """L5: declared text is one line in §Weight, so task.md keeps one §Questions."""
         self.p.start("--declare", "behaviour=1:x\n## Questions\n## Q1. fake")
@@ -1618,11 +1637,11 @@ class TestWP5(Ported):
         for home, plan in ((self.homes["CLAUDE_CONFIG_DIR"], ["max", "--fable", "yes"]),
                            (self.homes["CODEX_HOME"], ["codex-pro", "--fable", "no"])):
             os.makedirs(os.path.join(home, "skills", "ai-task"))
-            os.makedirs(os.path.join(home, "claude-agentic"))
+            os.makedirs(os.path.join(home, "riskrails"))
             open(os.path.join(home, "skills", "ai-task", "state.py"), "w", encoding="utf-8").close()  # pylint: disable=consider-using-with
             profile = subprocess.run([sys.executable, resolve] + plan + ["--print", "agentic"], capture_output=True,
                                      text=True, check=True).stdout
-            with open(os.path.join(home, "claude-agentic", "profile.json"), "w", encoding="utf-8") as fh:
+            with open(os.path.join(home, "riskrails", "profile.json"), "w", encoding="utf-8") as fh:
                 fh.write(profile)
 
     def s(self, runtime, *args, env=None):
@@ -1632,6 +1651,13 @@ class TestWP5(Ported):
 
     def start5(self, workflow="feature"):
         return self.s("claude", "start", "--goal", "move it", "--workflow", workflow, "--files", "src/widget.py", *ZERO)
+
+    def test_profile_from_a_home_installed_before_3_4b(self):
+        # Review M2: a skills tree updated without install.sh still finds its plan under claude-agentic/.
+        home = self.homes["CLAUDE_CONFIG_DIR"]
+        os.rename(os.path.join(home, "riskrails"), os.path.join(home, "claude-agentic"))
+        got = self.s("claude", "profile", "--tier", "STRONG")
+        self.assertEqual((got.returncode, got.stdout.strip()), (0, "opus"), got.stderr)
 
     def test_handoff_to_and_exit_7(self):
         self.assertEqual(self.start5().returncode, 0)

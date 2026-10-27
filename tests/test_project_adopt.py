@@ -351,7 +351,7 @@ class TestProjectAdopt(unittest.TestCase):  # pylint: disable=too-many-public-me
         text = body(os.path.join(d, name))
         lines = text.split("\n")[:-1]
         off = len(lines) - len(body(os.path.join(fx, "fixture-" + name)).split("\n")[:-1])
-        start = next(i for i, l in enumerate(lines, 1) if "claude-agentic:start" in l)
+        start = next(i for i, l in enumerate(lines, 1) if "riskrails:start" in l)
         canned = read_json(os.path.join(fx, "split-proposal.fixture.json"))
         sh = lambda r: [r[0] + off, r[1] + off]  # noqa: E731
         doc = {"version": 1, "source": name,
@@ -1207,8 +1207,8 @@ class TestProjectAdopt(unittest.TestCase):  # pylint: disable=too-many-public-me
         """WP3 R13's case: a hand-edited block goes through the split and ends as the shipped block"""
         he = self.fixture("large-claude-md", "split-edited")
         claude = os.path.join(he, "CLAUDE.md")
-        put(claude, re.sub(r"(?m)^<!-- claude-agentic:end -->$",
-                           "- Our own rule, written into the block by hand.\n<!-- claude-agentic:end -->", body(claude)))
+        put(claude, re.sub(r"(?m)^<!-- riskrails:end -->$",
+                           "- Our own rule, written into the block by hand.\n<!-- riskrails:end -->", body(claude)))
         self.commit(he)
         rc, out = self.upd(he, "--adopt", "--apply", "--split", "fallback")
         shipped = self.py('import update; print(update.shipped_block("claude"))')[1].rstrip("\n")

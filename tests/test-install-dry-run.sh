@@ -26,7 +26,7 @@ grep -q '"fable' <<<"$(sed -n '/^== settings snippet/,/^== agents/p' <<<"$out")"
 echo "== dry run: the shared tree"
 for target in claude codex; do
     out=$(HOME="$TMP/h-$target" CLAUDE_DIR="$TMP/none" CODEX_DIR="$TMP/none-x" bash "$INSTALL" --target "$target" --plan max --codex-plan plus --dry-run 2>&1)
-    n=$(printf '%s\n' "$out" | grep -c '^   shared:  claude-agentic/ai (31 files), claude-agentic/ai-path$')
+    n=$(printf '%s\n' "$out" | grep -c '^   shared:  riskrails/ai (31 files), riskrails/ai-path$')
     [ "$n" -eq 1 ] && pass "$target: the would-install list names the shared tree once" || fail "$target: shared line count $n" "$out"
     skills=$(printf '%s\n' "$out" | sed -n 's/^   skills:  //p')
     missing=""; for s in rr-setup rr-spec rr-plan rr-build rr-review rr-ship rr-status; do
@@ -38,7 +38,7 @@ for target in claude codex; do
         && pass "$target: the dry run names the retire of skills/status" || fail "$target: no retire line" "$out"
     span=$(printf '%s\n' "$out" | sed -n '/^== \(CLAUDE\|AGENTS\)\.md managed block:/,/^== profile\.json/p')
     grep -q '^   shared:' <<<"$span" && fail "$target: the shared line is inside the block/routing span" || pass "$target: the shared line is outside the block/routing span"
-    grep -qF 'claude-agentic/ai-path <path>' <<<"$span" && pass "$target: routing.md renders the shared-files line" || fail "$target: routing.md lacks the shared-files line" "$span"
+    grep -qF 'riskrails/ai-path <path>' <<<"$span" && pass "$target: routing.md renders the shared-files line" || fail "$target: routing.md lacks the shared-files line" "$span"
     grep -q '{{' <<<"$out" && fail "$target: an unrendered placeholder" || pass "$target: every placeholder is rendered"
 done
 
@@ -108,9 +108,9 @@ grep -q 'plan=max20 (Max 20x, max profile) fable=yes' <<<"$out20" && pass "--pla
     && pass "max20's settings snippet equals max's" || fail "max20 snippet differs from max"
 for plan in pro team-pro team-max max max20; do
     o=$(CLAUDE_DIR="$TMP/none" bash "$INSTALL" --target claude --plan "$plan" --dry-run 2>&1)
-    printf '%s' "$o" | snippet | sed '1d;$d' | jq -e 'has("claude_agentic") | not' >/dev/null \
-        && pass "$plan: claude_agentic never reaches settings.json" || fail "$plan: claude_agentic leaked into the snippet"
-    grep -q "^== profile.json (plan tables): $TMP/none/claude-agentic/profile.json" <<<"$o" \
+    printf '%s' "$o" | snippet | sed '1d;$d' | jq -e 'has("riskrails") | not' >/dev/null \
+        && pass "$plan: riskrails never reaches settings.json" || fail "$plan: riskrails leaked into the snippet"
+    grep -q "^== profile.json (plan tables): $TMP/none/riskrails/profile.json" <<<"$o" \
         && pass "$plan: --dry-run lists profile.json" || fail "$plan: profile.json not listed"
 done
 printf '%s' "$out20" | sed -n '/^== profile.json/,/^== would install/p' | sed '1d;$d' \
@@ -126,6 +126,7 @@ grep -q 'detected plan: max20 (organizationRateLimitTier default_claude_max_20x)
 printf '{"oauthAccount":{"organizationType":"claude_max","organizationRateLimitTier":"default_claude_max_5x"}}' > "$HOME_T/.claude.json"
 out=$(HOME="$HOME_T" CLAUDE_DIR="$TMP/none" bash "$INSTALL" --dry-run 2>&1 </dev/null)
 grep -q 'plan=max (Max' <<<"$out" && pass "default_claude_max_5x stays max" || fail "max_5x should map to max" "$out"
+# An install from before 3.4b recorded its plan under claude-agentic/ (R35).
 PREV="$TMP/prev"; mkdir -p "$PREV/claude-agentic"; printf '{"plan":"max20"}' > "$PREV/claude-agentic/profile.json"
 printf '{}' > "$HOME_T/.claude.json"
 out=$(HOME="$HOME_T" CLAUDE_DIR="$PREV" bash "$INSTALL" --dry-run 2>&1 </dev/null)
@@ -157,7 +158,7 @@ for combo in "pro no|architect opus high" \
     for t in "$PLUGIN_ROOT"/agents/*.md.tmpl; do
         tier=$(sed -n 's/^model: {{\([A-Z]*\)_MODEL}}$/\1/p' "$t"); [ -n "$tier" ] || continue
         n=$(basename "$t" .md.tmpl)
-        want_m=$(jq -r --arg t "$tier" '.tiers[$t].model' "$D/claude-agentic/profile.json")
+        want_m=$(jq -r --arg t "$tier" '.tiers[$t].model' "$D/riskrails/profile.json")
         grep -qx "model: $want_m" "$D/agents/$n.md" || bad="$bad $n"
     done
     [ -z "$bad" ] && pass "--plan $1: each installed model is the profile's tiers[<tier>].model" || fail "--plan $1: model differs from its tier:$bad"
@@ -179,10 +180,10 @@ echo "== real install into a scratch CLAUDE_DIR"
 DIR="$TMP/claude"; mkdir -p "$DIR"
 out=$(CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes 2>&1)
 [ $? -eq 0 ] && pass "install exits 0" || fail "install should exit 0" "$out"
-jq -e '.plan == "max" and .runtime == "claude" and .fable == true' "$DIR/claude-agentic/profile.json" >/dev/null \
+jq -e '.plan == "max" and .runtime == "claude" and .fable == true' "$DIR/riskrails/profile.json" >/dev/null \
     && pass "profile.json written for the Claude install (R4)" || fail "profile.json missing or wrong"
-[ "$(stat -c %a "$DIR/claude-agentic/profile.json" 2>/dev/null)" = 644 ] && pass "profile.json is mode 0644" || fail "profile.json mode"
-jq -e 'has("claude_agentic") | not' "$DIR/settings.json" >/dev/null && pass "settings.json has no claude_agentic" || fail "claude_agentic leaked into settings.json"
+[ "$(stat -c %a "$DIR/riskrails/profile.json" 2>/dev/null)" = 644 ] && pass "profile.json is mode 0644" || fail "profile.json mode"
+jq -e 'has("riskrails") | not' "$DIR/settings.json" >/dev/null && pass "settings.json has no riskrails" || fail "riskrails leaked into settings.json"
 
 for f in agents/ai-discovery.md agents/ai-reviewer.md agents/architect.md agents/Explore.md \
          agents/log-reader.md hooks/ai-git-guard.sh hooks/lib/ai-hook-common.sh \
@@ -195,8 +196,8 @@ for f in agents/ai-discovery.md agents/ai-reviewer.md agents/architect.md agents
          skills/project-update/SKILL.md skills/project-update/update.py skills/project-update/history/index.json \
          skills/project-update/migrations/__init__.py skills/project-update/migrations/0001_schema_version.py \
          skills/usage-report/SKILL.md skills/usage-report/usage-report.py \
-         hooks/context-guard.py claude-agentic/routing.md claude-agentic/ai-path \
-         claude-agentic/ai/policies/git.md claude-agentic/ai/workflows/feature.md \
+         hooks/context-guard.py riskrails/routing.md riskrails/ai-path \
+         riskrails/ai/policies/git.md riskrails/ai/workflows/feature.md \
          skills/project-update/render_instructions.py \
          hooks/ai-guard.py hooks/guard/__init__.py hooks/guard/common.py hooks/guard/ere.py \
          hooks/guard/git.py hooks/guard/paths.py hooks/guard/scope.py; do
@@ -216,11 +217,11 @@ payload "git push --force" | "$DIR/hooks/ai-git-guard.sh" | grep -q '"permission
 for f in hooks/fable-gate.py hooks/codex-model-gate.py; do
     [ ! -e "$DIR/$f" ] && pass "$f is not installed (redesign 1.3)" || fail "$f installed"
 done
-[ -x "$DIR/claude-agentic/ai-path" ] && pass "ai-path is executable" || fail "ai-path should be executable"
-grep -qF "$DIR/claude-agentic/ai/" "$DIR/claude-agentic/routing.md" && pass "routing.md names the installed shared tree" || fail "routing.md should name $DIR/claude-agentic/ai/"
-grep -qF "$DIR/claude-agentic/ai-path <path>" "$DIR/claude-agentic/routing.md" && pass "routing.md names the resolver" || fail "routing.md should name the resolver"
+[ -x "$DIR/riskrails/ai-path" ] && pass "ai-path is executable" || fail "ai-path should be executable"
+grep -qF "$DIR/riskrails/ai/" "$DIR/riskrails/routing.md" && pass "routing.md names the installed shared tree" || fail "routing.md should name $DIR/riskrails/ai/"
+grep -qF "$DIR/riskrails/ai-path <path>" "$DIR/riskrails/routing.md" && pass "routing.md names the resolver" || fail "routing.md should name the resolver"
 for a in ai-discovery ai-reviewer; do
-    grep -qF "$DIR/claude-agentic/ai/<path>" "$DIR/agents/$a.md" && pass "$a names the installed shared tree" || fail "$a should name $DIR/claude-agentic/ai/<path>"
+    grep -qF "$DIR/riskrails/ai/<path>" "$DIR/agents/$a.md" && pass "$a names the installed shared tree" || fail "$a should name $DIR/riskrails/ai/<path>"
 done
 [ -x "$DIR/skills/ai-init/scaffold-ai.sh" ] && pass "scaffold-ai.sh is executable" || fail "scaffold should be executable"
 RETIRED_24="ai-context ai-expert ai-implementer ai-indexer ai-planner ai-release ai-risk ai-security ai-tester"
@@ -261,8 +262,8 @@ done
 CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 [ "$(jq -r '[.hooks.UserPromptSubmit[]?.hooks[]?.command | select(test("context-guard"))] | length' "$DIR/settings.json")" = 1 ] \
     && pass "a second install does not register context-guard twice" || fail "context-guard registered twice"
-grep -q 'Compaction near 767 000 tokens' "$DIR/claude-agentic/routing.md" && pass "routing.md names the point where compaction fires on the 1M session" || fail "routing.md should say compaction fires near 767 000"
-grep -q 'warning from 613k tokens, and from 920k' "$DIR/claude-agentic/routing.md" && pass "routing.md names the guard's thresholds" || fail "the guard thresholds are not rendered"
+grep -q 'Compaction near 767 000 tokens' "$DIR/riskrails/routing.md" && pass "routing.md names the point where compaction fires on the 1M session" || fail "routing.md should say compaction fires near 767 000"
+grep -q 'warning from 613k tokens, and from 920k' "$DIR/riskrails/routing.md" && pass "routing.md names the guard's thresholds" || fail "the guard thresholds are not rendered"
 grep -q 'On compaction keep' "$DIR/CLAUDE.md" && pass "the block carries what a compaction must keep" || fail "the compaction rule is missing from the block"
 grep -q '{{' "$DIR/CLAUDE.md" && fail "an unrendered placeholder is left in CLAUDE.md" || pass "every placeholder is rendered"
 [ -x "$DIR/bin/claude-1m" ] && pass "max installs the opus[1m] launcher" || fail "bin/claude-1m missing or not executable"
@@ -275,10 +276,10 @@ out1m=$(CLAUDE_BIN="$TMP/fake-claude" "$DIR/bin/claude-1m" fable -p hi)
 [ "$out1m" = "window=800000 args=--model fable[1m] -p hi" ] && pass "claude-1m fable runs fable[1m] with the same 800k window" || fail "claude-1m fable launched the wrong session" "$out1m"
 out1m=$(CLAUDE_BIN="$TMP/fake-claude" "$DIR/bin/claude-1m" opus)
 [ "$out1m" = "window=800000 args=--model opus[1m]" ] && pass "claude-1m opus is the default spelled out" || fail "claude-1m opus launched the wrong session" "$out1m"
-grep -q 'claude-1m fable' "$DIR/claude-agentic/routing.md" && pass "routing.md offers Fable 5.1 [1m] as a session through claude-1m fable" || fail "routing.md does not mention claude-1m fable"
+grep -q 'claude-1m fable' "$DIR/riskrails/routing.md" && pass "routing.md offers Fable 5.1 [1m] as a session through claude-1m fable" || fail "routing.md does not mention claude-1m fable"
 CLAUDE_1M_COMPACT_WINDOW=lots CLAUDE_BIN="$TMP/fake-claude" "$DIR/bin/claude-1m" >/dev/null 2>&1 && fail "a non-numeric window must be refused" || pass "a non-numeric window is refused"
 [ "$(jq -r .autoCompactWindow "$DIR/settings.json")" = "800000" ] && pass "the launcher leaves the settings window for every other model alone" || fail "settings window changed"
-grep -q 'claude-1m' "$DIR/claude-agentic/routing.md" && pass "routing.md says opus[1m] starts with claude-1m" || fail "routing.md does not mention claude-1m"
+grep -q 'claude-1m' "$DIR/riskrails/routing.md" && pass "routing.md says opus[1m] starts with claude-1m" || fail "routing.md does not mention claude-1m"
 [ "$(jq -r '.modelSettings["claude-opus-5"].effortLevel' "$DIR/settings.json")" = "medium" ] && pass "Opus runs at medium" || fail "opus effort not medium"
 [ "$(jq -r '.env.CLAUDE_CODE_SUBAGENT_MODEL // "unset"' "$DIR/settings.json")" = "unset" ] && pass "CLAUDE_CODE_SUBAGENT_MODEL is not set, so each agent's own model: applies" || fail "CLAUDE_CODE_SUBAGENT_MODEL would override every agent tier"
 jq '.env.CLAUDE_CODE_SUBAGENT_MODEL = "sonnet"' "$DIR/settings.json" > "$DIR/s.tmp" && mv "$DIR/s.tmp" "$DIR/settings.json"
@@ -291,7 +292,7 @@ out=$(CLAUDE_DIR="$DIR" bash "$INSTALL" --plan max --fable yes 2>&1)
 grep -q 'CLAUDE_CODE_SUBAGENT_MODEL=opus is set' <<<"$out" && pass "the installer warns about a user-set override" || fail "no warning for a user-set override"
 grep -q 'Before 2.1.251' <<<"$out" && pass "the warning says the override flattens the tiers only before Claude Code 2.1.251" || fail "the warning does not name the 2.1.251 boundary"
 jq 'del(.env.CLAUDE_CODE_SUBAGENT_MODEL)' "$DIR/settings.json" > "$DIR/s.tmp" && mv "$DIR/s.tmp" "$DIR/settings.json"
-grep -q 'claude-agentic:start' "$DIR/CLAUDE.md" && pass "the CLAUDE.md block is written" || fail "block missing"
+grep -q 'riskrails:start' "$DIR/CLAUDE.md" && pass "the CLAUDE.md block is written" || fail "block missing"
 
 echo "== backups never land inside skills/"
 printf 'stale\n' > "$DIR/skills/ai-init/EXTRA.md"
@@ -311,7 +312,7 @@ for a in $STALE $RETIRED_24; do printf -- '---\nname: %s\n---\nold\n' "$a" > "$D
 printf 'mine\n' > "$DIR/agents/x.md"; printf 'old mine\n' > "$DIR/agents/x.md.bak"
 printf 'orphan\n' > "$DIR/agents/gone.md.bak"
 printf 'old\n' > "$DIR/hooks/ai-git-guard.sh.bak"; printf 'old\n' > "$DIR/hooks/lib/ai-hook-common.sh.bak"
-printf 'old\n' > "$DIR/claude-agentic/routing.md.bak"
+printf 'old\n' > "$DIR/riskrails/routing.md.bak"
 printf '{}\n' > "$DIR/settings.json.bak"; printf 'old\n' > "$DIR/CLAUDE.md.bak"
 printf '#!/usr/bin/env python3\n' > "$DIR/hooks/fable-gate.py"
 printf 'old\n' > "$DIR/bin/claude-1m.bak"
@@ -333,7 +334,7 @@ grep -q "moved: agents/x.md.bak -> backups/$DAY/agents/x.md.bak" <<<"$out" && pa
 [ -f "$DIR/agents/gone.md.bak" ] && pass "a .bak with no live file beside it is left alone" || fail "orphan .bak moved"
 [ ! -e "$DIR/hooks/fable-gate.py" ] && [ -f "$DIR/backups/$DAY/hooks/fable-gate.py" ] \
     && pass "an installed fable-gate.py shim is retired too" || fail "shim not retired" "$out"
-left=$(for f in "$DIR"/*.bak "$DIR"/agents/*.bak "$DIR"/hooks/*.bak "$DIR"/hooks/lib/*.bak "$DIR"/claude-agentic/*.bak "$DIR"/bin/*.bak; do
+left=$(for f in "$DIR"/*.bak "$DIR"/agents/*.bak "$DIR"/hooks/*.bak "$DIR"/hooks/lib/*.bak "$DIR"/riskrails/*.bak "$DIR"/bin/*.bak; do
            [ -f "$f" ] && [ -e "${f%.bak}" ] && printf '%s ' "${f#"$DIR"/}"; done)
 [ -z "$left" ] && pass "no *.bak is left beside a live file" || fail "*.bak left beside a live file" "$left"
 [ -z "$(cd "$DIR" && find . -path ./backups -prune -o -name '*.bak' -print | grep -v '^./agents/gone.md.bak$')" ] \
@@ -348,7 +349,7 @@ n=$(jq '[.hooks.PreToolUse[].hooks[].command] | length' "$DIR/settings.json")
 [ "$n" = 5 ] && pass "hook entries are not duplicated on re-install" || fail "hooks duplicated: $n"
 [ "$(jq '[.hooks.Setup[].hooks[].command] | length' "$DIR/settings.json")" = 1 ] \
     && pass "the Setup hook is not duplicated either" || fail "Setup hook duplicated"
-b=$(grep -c 'claude-agentic:start' "$DIR/CLAUDE.md")
+b=$(grep -c 'riskrails:start' "$DIR/CLAUDE.md")
 [ "$b" = 1 ] && pass "the CLAUDE.md block is not duplicated" || fail "block duplicated: $b copies"
 
 echo "== a user edit to the git guard config survives a re-install"
@@ -373,9 +374,30 @@ DIR3="$TMP/claude3"; mkdir -p "$DIR3"
 printf '<!-- claude-routing:start -->\nrouting rules\n<!-- claude-routing:end -->\n\n# My own notes\n' > "$DIR3/CLAUDE.md"
 out=$(CLAUDE_DIR="$DIR3" bash "$INSTALL" --plan max --fable yes 2>&1)
 grep -q 'migrated the claude-routing block' <<<"$out" && pass "the migration is reported" || fail "migration should be reported" "$out"
-[ "$(grep -c 'claude-agentic:start' "$DIR3/CLAUDE.md")" = 1 ] && pass "exactly one managed block remains" || fail "expected one block"
+[ "$(grep -c 'riskrails:start' "$DIR3/CLAUDE.md")" = 1 ] && pass "exactly one managed block remains" || fail "expected one block"
 grep -q 'claude-routing:start' "$DIR3/CLAUDE.md" && fail "the predecessor block should have been migrated away" || pass "the claude-routing block is migrated away"
 grep -q 'routing rules' "$DIR3/CLAUDE.md" && fail "the old block's content should be gone" || pass "its superseded content is removed"
 grep -q '# My own notes' "$DIR3/CLAUDE.md" && pass "the user's own content is kept" || fail "user content must survive migration"
+
+echo "== R35: an install home from before 3.4b moves to riskrails/, the old path a symlink"
+DIR4="$TMP/claude4"; mkdir -p "$DIR4/claude-agentic/ai"
+printf '{"plan":"max"}' > "$DIR4/claude-agentic/profile.json"; printf 'mine\n' > "$DIR4/claude-agentic/notes.txt"
+printf '<!-- claude-agentic:start -->\nold block\n<!-- claude-agentic:end -->\n\n# My own notes\n' > "$DIR4/CLAUDE.md"
+out=$(CLAUDE_DIR="$DIR4" bash "$INSTALL" --plan max --fable yes --dry-run 2>&1)
+grep -q '^   home:    claude-agentic/ -> riskrails/' <<<"$out" && pass "the dry run names the move" || fail "dry run should name the move" "$out"
+[ -d "$DIR4/claude-agentic" ] && [ ! -L "$DIR4/claude-agentic" ] && pass "and moves nothing" || fail "dry run moved the home"
+out=$(CLAUDE_DIR="$DIR4" bash "$INSTALL" --plan max --fable yes 2>&1)
+[ "$(readlink "$DIR4/claude-agentic")" = riskrails ] && pass "the old home is a relative symlink to riskrails" || fail "old home is not a symlink" "$out"
+grep -qx mine "$DIR4/riskrails/notes.txt" && pass "what the old home held moved with it" || fail "old home content lost"
+[ -f "$DIR4/claude-agentic/routing.md" ] && pass "the old path still reaches routing.md" || fail "old path broken"
+[ "$(grep -c 'riskrails:start' "$DIR4/CLAUDE.md")" = 1 ] && ! grep -q 'claude-agentic:start' "$DIR4/CLAUDE.md" \
+  && pass "the legacy global block is renamed, not doubled" || fail "global block markers" "$(cat "$DIR4/CLAUDE.md")"
+grep -q '# My own notes' "$DIR4/CLAUDE.md" && pass "the user's own text stays" || fail "user text lost"
+out=$(CLAUDE_DIR="$DIR4" bash "$INSTALL" --plan max --fable yes 2>&1)
+grep -q '^moved:\|^linked:' <<<"$out" && fail "a reinstall moved again" "$out" || pass "a reinstall leaves the symlink alone"
+DIR5="$TMP/claude5"; mkdir -p "$DIR5/claude-agentic" "$DIR5/riskrails"; printf 'stale\n' > "$DIR5/claude-agentic/notes.txt"
+CLAUDE_DIR="$DIR5" bash "$INSTALL" --plan max --fable yes >/dev/null 2>&1
+[ -L "$DIR5/claude-agentic" ] && grep -qx stale "$DIR5/backups/$(date +%F)/claude-agentic/notes.txt" \
+  && pass "an old home beside a new one is retired into backups/, then linked" || fail "old home beside new one"
 
 summary "install.sh"

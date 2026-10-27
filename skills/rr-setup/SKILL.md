@@ -83,9 +83,9 @@ formatting fix. Problems you find are written down, never fixed. Never read
 
    Copy them under `## Verification` in the project instruction file. Shared
    policies (`database.md`, `tooling.md`, `release.md` …) live in
-   `<home>/claude-agentic/ai/` and are never written there; when the project has
+   `<home>/riskrails/ai/` and are never written there; when the project has
    something to say in one, copy the whole file that
-   `"$AI_HOME/claude-agentic/ai-path" policies/<name>.md` prints to
+   `"$AI_HOME/riskrails/ai-path" policies/<name>.md` prints to
    `.ai/policies/<name>.md` and fill that copy — it is now an override. Check
    that `.claude/settings.json` keeps `"enableAllProjectMcpServers": false` and
    that each server in a checked-in `.mcp.json` sits in `enabledMcpjsonServers`
@@ -191,7 +191,7 @@ destination or a source to make it pass.
    A glob key settles a directory (`drop` or `ignore` only); an exact path wins
    over a glob, a longer glob over a shorter one.
 4. A `split?` (an instruction file too large to keep): on a `pro` or `plus` plan
-   (`jq -r .plan "$AI_HOME/claude-agentic/profile.json"`), when that fails, or
+   (`jq -r .plan "$AI_HOME/riskrails/profile.json"`), when that fails, or
    under `AI_UNATTENDED`, use `--split fallback` — every line outside the managed
    block moves verbatim to `.ai/policies/adopted/`. Otherwise run
    `--split-request` and write the proposal yourself, once, to the `proposal`

@@ -64,7 +64,7 @@
   },
   "plan": "pro",
   "plan_rule": "- On Pro, `xhigh` is allowed only for an EXPERT question and verify/judge stages on {{EXPERT_MODEL}}; `max` and `ultra` stay off.",
-  "claude_agentic": {
+  "riskrails": {
     "inherits": null,
     "plan": "pro",
     "label": "Pro",

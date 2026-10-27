@@ -70,7 +70,7 @@ agent file's model is the tier). Give it the intent, the policy list, and ask fo
 Requirements (numbered, testable, each naming the outcome it satisfies), Design
 (components, data flow, at least two alternatives rejected), Interfaces (exact
 shapes) and Risks. It writes no code. Only an EXPERT trigger from
-`<home>/claude-agentic/routing.md` — an irreversible data-model or API
+`<home>/riskrails/routing.md` — an irreversible data-model or API
 decision — moves this to the top tier.
 
 ## 5. Write

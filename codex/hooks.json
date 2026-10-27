@@ -1,5 +1,5 @@
 {
-  "description": "claude-agentic guards for Codex. The installer merges these entries into ~/.codex/hooks.json without duplicating a command. Codex requires you to review and trust a non-managed hook before it runs: open /hooks once after installing, or these are listed and skipped.",
+  "description": "RiskRails guards for Codex. The installer merges these entries into ~/.codex/hooks.json without duplicating a command. Codex requires you to review and trust a non-managed hook before it runs: open /hooks once after installing, or these are listed and skipped.",
   "hooks": {
     "PreToolUse": [
       {

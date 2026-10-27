@@ -28,7 +28,7 @@ PROFILES = os.path.join(ROOT, "profiles")
 TWIN_OF = "test-codex-agent-render.sh"
 
 # R13 reads the shell `pass` text as written, the escaped `\$` included.
-CODEX_HOME_DEFAULT_CASE = r"the default is \$CODEX_HOME/claude-agentic/ai"
+CODEX_HOME_DEFAULT_CASE = r"the default is \$CODEX_HOME/riskrails/ai"
 
 ROSTER = ["Explore", "ai-discovery", "ai-reviewer", "architect", "log-reader"]
 
@@ -56,7 +56,8 @@ class TestCodexAgentRender(unittest.TestCase):
         self.home = self.path("home")
         os.makedirs(self.home)
         self.env = {k: v for k, v in os.environ.items() if k not in ("CODEX_HOME", "CODEX_DIR", "CLAUDE_DIR",
-                                                                     "CLAUDE_CONFIG_DIR", "CLAUDE_AGENTIC_SHARED")}
+                                                                     "CLAUDE_CONFIG_DIR", "CLAUDE_AGENTIC_SHARED")
+                    and not k.startswith("RISKRAILS_")}
         self.env["HOME"] = self.home
         self.out = self.path("agents")
         self.first = self.render("--out", self.out)
@@ -179,13 +180,13 @@ class TestCodexAgentRender(unittest.TestCase):
             ch = self.path("ch")
             done = self.render("--out", self.path("ai2"), env=dict(self.env, CODEX_HOME=ch))
             self.assertEqual(done.returncode, 0, "the --ai-shared default is wrong\n" + done.stdout)
-            self.assertIn(ch + "/claude-agentic/ai/<path>", read(self.path("ai2", "ai-reviewer.toml")),
+            self.assertIn(ch + "/riskrails/ai/<path>", read(self.path("ai2", "ai-reviewer.toml")),
                           "the --ai-shared default is wrong")
-        with self.subTest("without CODEX_HOME the default is ~/.codex/claude-agentic/ai"):
+        with self.subTest("without CODEX_HOME the default is ~/.codex/riskrails/ai"):
             h = self.path("h")
             done = self.render("--out", self.path("ai3"), env=dict(self.env, HOME=h))
             self.assertEqual(done.returncode, 0, "the --ai-shared fallback is wrong\n" + done.stdout)
-            self.assertIn(h + "/.codex/claude-agentic/ai/<path>", read(self.path("ai3", "ai-reviewer.toml")),
+            self.assertIn(h + "/.codex/riskrails/ai/<path>", read(self.path("ai3", "ai-reviewer.toml")),
                           "the --ai-shared fallback is wrong")
         with self.subTest("no placeholder survives"):
             self.assertFalse([p for p, data in tree(ai1).items() if b"{{" in data], "a placeholder survived")

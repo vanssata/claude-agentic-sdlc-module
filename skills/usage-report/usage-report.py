@@ -22,7 +22,7 @@ Usage:
     usage-report.py --budgets             # the installed plans' budget tables
 
 --task and --budgets read the plan tables install.sh writes to
-<home>/claude-agentic/profile.json. Budgets are reported, never enforced, and
+<home>/riskrails/profile.json. Budgets are reported, never enforced, and
 the task's journal is only read.
 """
 
@@ -134,7 +134,7 @@ def cache_path() -> str:
             _CACHE_PATH = os.path.abspath(os.path.expanduser(env)) if env else ""
         else:
             base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
-            _CACHE_PATH = os.path.join(base, "claude-agentic", "usage-report.json")
+            _CACHE_PATH = os.path.join(base, "riskrails", "usage-report.json")
     return _CACHE_PATH
 
 
@@ -580,10 +580,15 @@ def runtime_home(runtime: str) -> str:
     return os.path.expanduser(os.environ.get("CLAUDE_CONFIG_DIR", "~/.claude"))
 
 
+def profile_file(home: str) -> str:
+    """<home>/riskrails/profile.json, or the pre-3.4b claude-agentic/ one (R35, one version)."""
+    path = os.path.join(home, "riskrails", "profile.json")
+    return path if os.path.exists(path) else os.path.join(home, "claude-agentic", "profile.json")
+
+
 def read_profile(runtime: str) -> dict:
     try:
-        with open(os.path.join(runtime_home(runtime), "claude-agentic", "profile.json"),
-                  encoding="utf-8") as fh:
+        with open(profile_file(runtime_home(runtime)), encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
@@ -605,7 +610,7 @@ def print_budgets() -> int:
               f"at most {expert.get('max_per_task')} per task")
         print("  tokens / task  " + "  ".join(f"{t} {v}M" for t, v in sorted(tokens.items())))
     if not found:
-        print("no plan profile installed (install.sh writes <home>/claude-agentic/profile.json)")
+        print("no plan profile installed (install.sh writes <home>/riskrails/profile.json)")
         return 1
     print("\nBudgets are reported, never enforced. Calibrate them from --task.")
     return 0

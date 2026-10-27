@@ -111,8 +111,8 @@ wrote "$TMP/explicit-both/codex" && pass "--target both installs Codex without d
 
 # Each runtime renders its own routing.md; one shared temp file meant the
 # second render (Codex) overwrote the first before Claude's was installed.
-CR="$TMP/explicit-both/claude/claude-agentic/routing.md"
-XR="$TMP/explicit-both/codex/claude-agentic/routing.md"
+CR="$TMP/explicit-both/claude/riskrails/routing.md"
+XR="$TMP/explicit-both/codex/riskrails/routing.md"
 has() { grep -q "$2" "$1" 2>/dev/null; }
 CLAUDE_MARK='^# Model routing (.* plan)$' CODEX_MARK='^# Model allocation by task'
 if has "$CR" "$CLAUDE_MARK" && ! has "$CR" "$CODEX_MARK"; then pass "Claude's routing.md is the Claude text"
@@ -125,25 +125,25 @@ else fail "Codex's routing.md is not the Codex text" "$(grep -n '^# ' "$XR" 2>&1
 for home in claude codex; do
     H="$TMP/explicit-both/$home"
     other=$([ "$home" = claude ] && echo codex || echo claude)
-    diff -r "$PLUGIN_ROOT/ai" "$H/claude-agentic/ai" >/dev/null 2>&1 \
-        && pass "$home: claude-agentic/ai equals ai/" || fail "$home: claude-agentic/ai differs from ai/" "$(diff -rq "$PLUGIN_ROOT/ai" "$H/claude-agentic/ai" 2>&1)"
-    [ -x "$H/claude-agentic/ai-path" ] && pass "$home: ai-path is executable" || fail "$home: ai-path is missing or not executable"
-    has "$H/claude-agentic/routing.md" "$H/claude-agentic/ai/" \
-        && pass "$home: routing.md names its own shared tree" || fail "$home: routing.md does not name $H/claude-agentic/ai/"
-    has "$H/claude-agentic/routing.md" "$TMP/explicit-both/$other/claude-agentic/ai" \
+    diff -r "$PLUGIN_ROOT/ai" "$H/riskrails/ai" >/dev/null 2>&1 \
+        && pass "$home: riskrails/ai equals ai/" || fail "$home: riskrails/ai differs from ai/" "$(diff -rq "$PLUGIN_ROOT/ai" "$H/riskrails/ai" 2>&1)"
+    [ -x "$H/riskrails/ai-path" ] && pass "$home: ai-path is executable" || fail "$home: ai-path is missing or not executable"
+    has "$H/riskrails/routing.md" "$H/riskrails/ai/" \
+        && pass "$home: routing.md names its own shared tree" || fail "$home: routing.md does not name $H/riskrails/ai/"
+    has "$H/riskrails/routing.md" "$TMP/explicit-both/$other/riskrails/ai" \
         && fail "$home: routing.md names the $other tree" || pass "$home: routing.md does not name the $other tree"
-    out=$(cd "$TMP" && "$H/claude-agentic/ai-path" --root "$TMP" policies/git.md 2>&1)
-    [ "$out" = "$H/claude-agentic/ai/policies/git.md" ] && pass "$home: the installed resolver finds its own tree" || fail "$home: installed resolver" "$out"
-    ls "$H/claude-agentic" | grep -q '^ai\.\(new\|old\)$' && fail "$home: a temp tree was left behind" || pass "$home: no temp tree left behind"
+    out=$(cd "$TMP" && "$H/riskrails/ai-path" --root "$TMP" policies/git.md 2>&1)
+    [ "$out" = "$H/riskrails/ai/policies/git.md" ] && pass "$home: the installed resolver finds its own tree" || fail "$home: installed resolver" "$out"
+    ls "$H/riskrails" | grep -q '^ai\.\(new\|old\)$' && fail "$home: a temp tree was left behind" || pass "$home: no temp tree left behind"
 done
 
 # A reinstall over a tree someone edited backs that tree up, then replaces it.
 C="$TMP/explicit-both/claude"
-printf 'local edit\n' >> "$C/claude-agentic/ai/policies/git.md"
+printf 'local edit\n' >> "$C/riskrails/ai/policies/git.md"
 out=$(run explicit-both --target both --plan pro)
-grep -q '^local edit$' "$C/backups/$(date +%F)/claude-agentic/ai/policies/git.md" 2>/dev/null \
+grep -q '^local edit$' "$C/backups/$(date +%F)/riskrails/ai/policies/git.md" 2>/dev/null \
     && pass "reinstall backs up an edited shared tree" || fail "no backup of the edited shared tree" "$out"
-diff -r "$PLUGIN_ROOT/ai" "$C/claude-agentic/ai" >/dev/null 2>&1 \
+diff -r "$PLUGIN_ROOT/ai" "$C/riskrails/ai" >/dev/null 2>&1 \
     && pass "reinstall restores the shipped shared tree" || fail "reinstall left the edited tree"
 
 echo "== an unknown target is rejected"

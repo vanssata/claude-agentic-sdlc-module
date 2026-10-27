@@ -36,8 +36,8 @@ KINDS = ("block", "skeleton", "routing")
 SOURCE_FILES = {"block": "stub.md", "skeleton": "stub.md",
                 "routing": "routing.md"}
 
-BLOCK_START = "<!-- claude-agentic:start -->"
-BLOCK_END = "<!-- claude-agentic:end -->"
+BLOCK_START = "<!-- riskrails:start -->"
+BLOCK_END = "<!-- riskrails:end -->"
 
 DIRECTIVE_RE = re.compile(r"^<!--\s*stub:\s*(?P<attrs>.*?)\s*-->\s*$")
 PLACEHOLDER_RE = re.compile(r"\{\{([A-Z_]+)\}\}")
@@ -45,10 +45,14 @@ PLACEHOLDER_RE = re.compile(r"\{\{([A-Z_]+)\}\}")
 # Per-directory rules. `.ai/rules/<slug>.md` is the source; what it renders into
 # a directory's instruction file is a block of its own, so several rules can
 # share a file and the text around them stays the project's.
-RULE_START = "<!-- claude-agentic:rule:%s:start -->"
-RULE_END = "<!-- claude-agentic:rule:%s:end -->"
+RULE_START = "<!-- riskrails:rule:%s:start -->"
+RULE_END = "<!-- riskrails:rule:%s:end -->"
+# R35: the spelling before 3.4b, read for one version and rewritten on the next
+# splice or strip, so a project never carries both for one slug.
+LEGACY_RULE_START = "<!-- claude-agentic:rule:%s:start -->"
+LEGACY_RULE_END = "<!-- claude-agentic:rule:%s:end -->"
 RULE_MARKER_RE = re.compile(
-    r"<!--\s*claude-agentic:rule:(?P<slug>[a-z0-9][a-z0-9-]*):start\s*-->"
+    r"<!--\s*(?:riskrails|claude-agentic):rule:(?P<slug>[a-z0-9][a-z0-9-]*):start\s*-->"
 )
 RULE_GENERATED = ("<!-- generated from .ai/rules/%s.md by /project-update"
                   " \u2014 edit that file -->")
@@ -412,24 +416,32 @@ def rule_targets(rules, runtimes):
     return out
 
 
+def _rule_span(text, slug):
+    """(start, end) of the rule block of this slug — end past its end marker —
+    under the current markers, else under the legacy ones, else None."""
+    for start_marker, end_marker in ((RULE_START, RULE_END), (LEGACY_RULE_START, LEGACY_RULE_END)):
+        start, end = text.find(start_marker % slug), text.find(end_marker % slug)
+        if start >= 0 and end >= 0:
+            return start, end + len(end_marker % slug)
+    return None
+
+
 def splice_rule(text, slug, block):
     """Put one rule block into a file, replacing the block of that slug if it is
-    already there. Everything outside the markers is the project's and is
-    returned untouched."""
-    start_marker, end_marker = RULE_START % slug, RULE_END % slug
-    start, end = text.find(start_marker), text.find(end_marker)
-    if start < 0 or end < 0:
+    already there (a legacy-marked one included). Everything outside the
+    markers is the project's and is returned untouched."""
+    span = _rule_span(text, slug)
+    if span is None:
         return text.rstrip("\n") + "\n\n" + block if text.strip() else block
-    return text[:start] + block.rstrip("\n") + text[end + len(end_marker):]
+    return text[:span[0]] + block.rstrip("\n") + text[span[1]:]
 
 
 def strip_rule(text, slug):
     """Take one rule block away again, and the blank line it was given."""
-    start_marker, end_marker = RULE_START % slug, RULE_END % slug
-    start, end = text.find(start_marker), text.find(end_marker)
-    if start < 0 or end < 0:
+    span = _rule_span(text, slug)
+    if span is None:
         return text
-    head, tail = text[:start], text[end + len(end_marker):]
+    head, tail = text[:span[0]], text[span[1]:]
     if head.strip() and tail.strip():
         return head.rstrip("\n") + "\n\n" + tail.lstrip("\n")
     if head.strip():
@@ -446,7 +458,7 @@ def rule_slugs_in(text):
 # BLOCK_START/BLOCK_END. Every lookup goes through find_block, so a legacy pair
 # is read as the managed block everywhere — measured, merged, renamed — and
 # never has a second block appended beside it.
-LEGACY_MARKER_RE = re.compile(r"<!-- (?P<name>[Cc]odex-agentic):start -->")
+LEGACY_MARKER_RE = re.compile(r"<!-- (?P<name>claude-agentic|[Cc]odex-agentic):start -->")
 _LEGACY_MARKER_RE_B = re.compile(LEGACY_MARKER_RE.pattern.encode())
 
 

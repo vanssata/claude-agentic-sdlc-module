@@ -174,14 +174,16 @@ Each: testable (test file / case / measurement), intent outcome it serves (quote
   `expected_fail: true`; the bugfix workflow text requires it before the fix. Test:
   `test_ai_task_state.py::test_expect_fail`. Phase 2.
 
-- **R34 State file `current.json` → `state.json`** (OQ11, developer, 2026-10-25). In task 3.4b: `state.py`,
-  `hooks/guard/{scope,paths}.py`, `context-guard.py`, `runtime-gate.py`, `status.py`,
-  `hooks/ai-path-guard-defaults.json` and the fixtures move to `state.json`. For one version `state.py` reads
-  `current.json` when `state.json` is absent, the scope guard arms on either, and the path guard denies agent
-  writes to both. Migration 0008 moves the file in user projects. Test:
-  `test_ai_task_state.py::test_reads_legacy_state_name`; `test_project_update.py::TestMigration0008` on a fixture
-  with a task in flight; path-guard fixtures for a write to each name (denied). Outcome: "Three control files
-  (`state.json`, `events.jsonl`, `task.md`)". Phase 3 step 4b.
+- **R34 State file `current.json` → `state.json`** (OQ11, developer, 2026-10-25; split expand/contract by
+  review H1 of T-2026-10-27-006, Q2=B, 2026-10-27). **Task 3.4b (expand):** `state.py`,
+  `hooks/guard/{scope,paths}.py`, `context-guard.py`, `runtime-gate.py`, `status.py`, `sensors.py`, `adopt.py`
+  and `update.py` read `state.json` first and `current.json` otherwise, and `state.py` writes the file where it
+  is (a new task starts in `current.json`); the scope guard arms on either and the path guard denies agent
+  writes to both. Nothing moves, so reverting 3.4b disarms no guard. Test:
+  `test_ai_task_state.py::test_reads_legacy_state_name`; scope and path guard tests for each name; path-guard
+  fixtures for a write to each name (denied). **Task 3.4c (contract), after a release ships 3.4b:** a migration
+  moves the file in user projects and `state.py` starts new tasks in `state.json`. Test: a migration test with a
+  task in flight. Outcome: "Three control files (`state.json`, `events.jsonl`, `task.md`)". Phase 3 steps 4b, 4c.
 - **R35 Plugin name RiskRails** (developer, 2026-10-25). Display name `RiskRails`, machine name `riskrails`
   everywhere a name is an identifier (npm and plugin names are lowercase); the full map is **Names** in
   §Interfaces. For one version `update.py` and the renderer recognise the old markers and rewrite them on

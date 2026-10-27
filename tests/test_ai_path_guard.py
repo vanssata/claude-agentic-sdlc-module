@@ -25,7 +25,7 @@ SHELL_MECHANICS = ("$name", "and within $4 ms (${ms} ms)")
 
 GUARD = os.path.join(PLUGIN, "hooks", "ai-path-guard.sh")
 IMPLEMENTATION = '{"current_stage":"implementation","task_id":"T-1"}\n'
-CONTROL_FILE = "removal of a claude-agentic control file"
+CONTROL_FILE = "removal of a RiskRails control file"
 WORK_CAP = "names more paths than the guard can check"
 LONG = "shell command that names a guarded path"
 
@@ -436,10 +436,10 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         self.says("a long glob operand before a later segment's control-file rm is denied by the 4 KB rule", LONG,
                   b("rm -f %s; rm -f .ai/state/current.json" % globop))
         self.says("a later segment's mv destination is still a copy or move into, not a move of",
-                  "copy or move into a claude-agentic control file", b("rm x; mv a.txt .ai/state/current.json"))
+                  "copy or move into a RiskRails control file", b("rm x; mv a.txt .ai/state/current.json"))
         for c in ("mv loopA/x y; mv current.json .env.example st/", "mv current.json .env.example st/; mv loopA/x y"):
             self.says(Template("$c: a symlink loop in one segment does not hide a symlinked state directory in "
-                               "another").substitute(c=c), "claude-agentic control file", b(c, lnk))
+                               "another").substitute(c=c), "RiskRails control file", b(c, lnk))
         # Its STRONG review: one realpath for the whole line was a unit the clock could
         # not stop (400 segments of a symlink chain ran past 20 s; HEAD denied by the
         # clock in 5.1 s), and an early segment's deny waited for the whole line (HEAD
@@ -592,17 +592,18 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
                     b("bash 2>'/tmp/a b' -c 'rm -f .ai/state/current.json'"))
 
     def test_13_the_installed_shared_tree_is_frozen_during_a_task(self):
-        # T-2026-10-13-004, Q4=A: <home>/claude-agentic/ai/ and ai-path are the rules a
+        # T-2026-10-13-004, Q4=A: <home>/riskrails/ai/ and ai-path are the rules a
         # run is judged by, like the policies they replace. The installed tree is
         # anchored to the runtime's home (direct-mode-diet D4b): the guard is given
-        # the test home as its own, and every expectation stands.
+        # the test home as its own, and every expectation stands. R35: the old home
+        # name is the installer's symlink for one version, and stays frozen too.
         env = dict(os.environ, HOME=self.home_t, CLAUDE_CONFIG_DIR="", CODEX_HOME="")
         root, tmp = self.root, self.tmp
-        for home in (".claude", ".codex"):
-            sh = "%s/%s/claude-agentic" % (self.home_t, home)
+        for home, name in ((h, n) for h in (".claude", ".codex") for n in ("riskrails", "claude-agentic")):
+            sh = "%s/%s/%s" % (self.home_t, home, name)
 
-            def t(label, expect, payload, home=home):
-                self.decide("%s %s" % (home, label), expect, payload, env=env)
+            def t(label, expect, payload, home=home, name=name):
+                self.decide("%s/%s %s" % (home, name, label), expect, payload, env=env)
 
             def bc(command):
                 return self.b(command)
@@ -975,6 +976,25 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         self.timed("a 40 KB one-liner of commas and parens that reads the state is denied by the 4 KB rule", "deny",
                    self.b("python3 -c \"print(open('.ai/state/current.json').read())\" # open(" + "(a, b)," * 5800),
                    1000)
+
+    def test_20_a_task_in_flight_under_either_state_file_name(self):
+        # R34: state.json from 3.4b; current.json is still read for one version.
+        edit_settings = tool(self.root, "Edit", self.root + "/.claude/settings.json")
+        new = os.path.join(self.root, ".ai", "state", "state.json")
+        try:
+            self.state(None)
+            self.write(new, IMPLEMENTATION)
+            self.decide("state.json in implementation: editing the claude settings is denied", "deny",
+                        edit_settings)
+            self.write(new, '{"current_stage":"done","task_id":"T-1"}\n')
+            self.decide("state.json done: the same edit is allowed", "allow", edit_settings)
+            os.remove(new)
+            self.state(IMPLEMENTATION)
+            self.decide("only the legacy current.json in implementation: denied", "deny", edit_settings)
+        finally:
+            if os.path.exists(new):
+                os.remove(new)
+            self.state("{}\n")
 
     def test_19_project_without_ai_every_guard_is_inert(self):
         bare = self.tmp + "/bare"

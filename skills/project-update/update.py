@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bring a project's claude-agentic files up to date with the installed plugin.
+"""Bring a project's RiskRails files up to date with the installed plugin.
 
   update.py [project-dir] [--apply [--confirm-delete NAME]] [--check [--budget]]
 
@@ -56,24 +56,41 @@ from migrations import SchemaError  # noqa: E402
 import render_instructions  # noqa: E402  # lives next to this script
 import adopt  # noqa: E402  # lives next to this script
 SKILLS = os.path.dirname(HERE)
+def env(name, default=None):
+    """RISKRAILS_<name>, else the pre-3.4b CLAUDE_AGENTIC_<name> (R35, one version)."""
+    return os.environ.get("RISKRAILS_" + name, os.environ.get("CLAUDE_AGENTIC_" + name, default))
+
+
 TEMPLATES = {
-    "ai-init": os.environ.get("CLAUDE_AGENTIC_TEMPLATES", os.path.join(SKILLS, "ai-init", "templates")),
+    "ai-init": env("TEMPLATES", os.path.join(SKILLS, "ai-init", "templates")),
     "project-init": os.environ.get("CLAUDE_ROUTING_TEMPLATES", os.path.join(SKILLS, "project-init", "templates")),
 }
-HISTORY = os.environ.get("CLAUDE_AGENTIC_HISTORY", os.path.join(HERE, "history"))
+HISTORY = env("HISTORY", os.path.join(HERE, "history"))
 # The shared tree every project reads unless it keeps its own copy: installed
-# beside the skills as claude-agentic/ai, or ai/ at the root of a checkout.
+# beside the skills as riskrails/ai (claude-agentic/ai before 3.4b), or ai/ at
+# the root of a checkout.
 PLUGIN_HOME = os.path.dirname(SKILLS)
-SHARED = os.environ.get("CLAUDE_AGENTIC_SHARED") or next(
-    (p for p in (os.path.join(PLUGIN_HOME, "claude-agentic", "ai"), os.path.join(PLUGIN_HOME, "ai"))
-     if os.path.isdir(p)), os.path.join(PLUGIN_HOME, "claude-agentic", "ai"))
+SHARED = env("SHARED") or next(
+    (p for p in (os.path.join(PLUGIN_HOME, "riskrails", "ai"), os.path.join(PLUGIN_HOME, "claude-agentic", "ai"),
+                 os.path.join(PLUGIN_HOME, "ai"))
+     if os.path.isdir(p)), os.path.join(PLUGIN_HOME, "riskrails", "ai"))
 VERSION_FILE = ".ai/VERSION"
 ROUTER_FILE = ".ai/AGENTS.md"
 # The router must name the shared tree exactly once: a merge that drops the
 # section, or doubles it, is a conflict for a human.
 SHARED_SECTION_RE = re.compile(rb"(?m)^## Shared files[ \t]*\r?$")
 SHARED_SCHEMA = 6  # the schema from which shared copies are overrides (0006)
-STATE_FILE = ".ai/state/current.json"
+STATE_FILE = ".ai/state/state.json"
+LEGACY_STATE_FILE = ".ai/state/current.json"  # R34: the name until migration 0008 moves it
+
+
+def state_file(plan):
+    """The task state's path as this run leaves the project: state.json once it
+    exists there (migration 0008 moved it, or the task started under it), else
+    the legacy current.json."""
+    if not plan.exists(STATE_FILE) and plan.exists(LEGACY_STATE_FILE):
+        return LEGACY_STATE_FILE
+    return STATE_FILE
 RULES_DIR = ".ai/rules"
 # Directories a stale rule block is never hunted in: a dependency's instruction
 # file is not ours (the path guard refuses it too), and .git is not text.
@@ -83,7 +100,14 @@ RULES_DIR = ".ai/rules"
 # symlinked directory (.ai/project/known-risks.md).
 RULES_SKIP = {".git", ".ai", "vendor", "node_modules", "bower_components",
               "third_party", "Pods", "site-packages", ".venv", ".pnpm", ".yarn"}
-START, END = "<!-- claude-agentic:start -->", "<!-- claude-agentic:end -->"
+START, END = "<!-- riskrails:start -->", "<!-- riskrails:end -->"
+OLD_START, OLD_END = b"<!-- claude-agentic:start -->", b"<!-- claude-agentic:end -->"  # R35, one version
+
+
+def renamed_markers(block):
+    """A block the plugin shipped before 3.4b, as it reads under the current
+    markers: the version an unedited block was installed from still matches it."""
+    return block.replace(OLD_START, START.encode()).replace(OLD_END, END.encode())
 # The marker lookup is shared with render_instructions (block_of) and adopt:
 # one place knows the legacy Codex-agentic pair.
 find_block = render_instructions.find_block
@@ -225,13 +249,13 @@ _DECLARED = None
 
 def declared_shared():
     """The shared set as 0006 declares it, literally — read from the migration
-    shipped beside this script, whatever registry CLAUDE_AGENTIC_MIGRATIONS
+    shipped beside this script, whatever registry RISKRAILS_MIGRATIONS
     points at. What the installed tree holds never widens it: a file planted
     there must not turn a project's own file into a deletion candidate."""
     global _DECLARED  # pylint: disable=global-statement  # loaded once per run
     if _DECLARED is None:
         path = os.path.join(HERE, "migrations", "0006_shared_files.py")
-        spec = importlib.util.spec_from_file_location("claude_agentic_shared_set", path)
+        spec = importlib.util.spec_from_file_location("riskrails_shared_set", path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         _DECLARED = frozenset(mod.SHARED)
@@ -427,7 +451,7 @@ class MigrationContext:
         ours = current_markers(text[start:end], start_marker, end_marker) + b"\n"
         block_tpl = INSTRUCTION_FILE[runtime][1]
         tpl = read(os.path.join(TEMPLATES["ai-init"], block_tpl))
-        if ours == tpl or ours in self.history.versions("ai-init/" + block_tpl):
+        if ours == tpl or ours in map(renamed_markers, self.history.versions("ai-init/" + block_tpl)):
             return "shipped"
         return "edited"
 
@@ -478,7 +502,9 @@ class MigrationContext:
             if (not home or os.path.realpath(home) == mine
                     or not os.path.isdir(os.path.join(home, "skills", "project-update"))):
                 continue
-            tree = os.path.join(home, "claude-agentic", "ai")
+            tree = os.path.join(home, "riskrails", "ai")
+            if not os.path.isdir(tree):   # installed before 3.4b (R35, one version)
+                tree = os.path.join(home, "claude-agentic", "ai")
             missing = [r for r in rels if not os.path.isfile(os.path.join(tree, r))]
             if missing:
                 raise SchemaError("%04d: %s has this plugin installed for %s, but %d of the %d shared "
@@ -599,7 +625,7 @@ class MigrationContext:
         self._add("update", path, "migrated", content=dump_json(after), policy=policy)
 
     def patch_state(self, fn):  # noqa: D401
-        """Change the task in flight. update.py writes .ai/state/current.json the
+        """Change the task in flight. update.py writes the state file the
         way state.py does — atomically, with a history entry — so a task started
         before the migration keeps working after it."""
         if self.state is None:
@@ -615,7 +641,7 @@ class MigrationContext:
             {"at": utc_now(), "event": "schema_migrated",
              "detail": "%04d %s" % (self.module.VERSION, self.module.TITLE)})
         self.state = after
-        self._add("update", STATE_FILE, "task state migrated",
+        self._add("update", state_file(self.plan), "task state migrated",
                   content=(json.dumps(after, indent=2, ensure_ascii=False) + "\n").encode())
 
     def delete(self, path, reason):
@@ -641,30 +667,31 @@ def run_migrations(plan, version, history):
     three-way merge sees a single file. Returns the modules that ran."""
     mods = [m for m in migrations.load() if version < m.VERSION <= migrations.CURRENT]
     state = None
+    path = state_file(plan)
     try:
-        raw = plan.read(STATE_FILE)
+        raw = plan.read(path)
     except OSError as exc:
         raise SchemaError("%s cannot be read: %s — a migration must see the task in flight"
-                          % (STATE_FILE, exc)) from exc
+                          % (path, exc)) from exc
     if raw is not None:
-        # state.py dies loudly on a corrupt current.json because ai-scope-guard
+        # state.py dies loudly on a corrupt state file because ai-scope-guard
         # derives its boundaries from it; a migration must not quietly skip it.
         try:
             state = json.loads(raw, object_pairs_hook=OrderedDict)
         except ValueError as exc:
-            raise SchemaError("%s is not valid JSON (%s) — inspect it by hand" % (STATE_FILE, exc)) from exc
+            raise SchemaError("%s is not valid JSON (%s) — inspect it by hand" % (path, exc)) from exc
         if not isinstance(state, dict):
-            raise SchemaError("%s is not a task state object" % STATE_FILE)
+            raise SchemaError("%s is not a task state object" % path)
     for mod in mods:
         # A copy each, taken from the plan: a migration that mutates ctx.state in
         # place without patch_state changes nothing for the next one.
-        planned = plan.final.get(STATE_FILE)
+        planned = plan.final.get(state_file(plan))
         if planned is not None:
             state = json.loads(planned, object_pairs_hook=OrderedDict)
         mod.plan(MigrationContext(plan, mod, version, copy.deepcopy(state), history))
     if state is not None:
         plan.hints.append("%s: a task is in flight while the schema changes — check that the files "
-                          "its current step may touch still exist afterwards" % STATE_FILE)
+                          "its current step may touch still exist afterwards" % state_file(plan))
     return mods
 
 
@@ -899,7 +926,7 @@ def block_update(plan, history, runtime):
             plan.add("update", name, "managed block kept" + renamed,
                      content=text[:s] + tpl.rstrip(b"\n") + text[e:])
         return
-    versions = [v for v in history.versions("ai-init/" + block_tpl) if v != tpl]
+    versions = [v for v in map(renamed_markers, history.versions("ai-init/" + block_tpl)) if v != tpl]
     if ours in versions:
         new_block = tpl
         note = "managed block replaced (unchanged since it was installed)" + renamed
@@ -1185,7 +1212,7 @@ def build_plan(root, confirm_delete=None, confirm_via=None):
         migrations.load()  # CURRENT comes from the file names; this validates the registry
         if version > migrations.CURRENT:
             raise SchemaError("%s says schema %d, this plugin ships schema %d — update the plugin "
-                              "(claude-agentic/install.sh)" % (VERSION_FILE, version, migrations.CURRENT))
+                              "(riskrails/install.sh)" % (VERSION_FILE, version, migrations.CURRENT))
         if version < migrations.CURRENT:
             mods = run_migrations(plan, version, history)
             plan.schema = (version, migrations.CURRENT, mods)
@@ -1593,7 +1620,7 @@ def main():
         return 1 if offenders else 0
     for name, tpl in TEMPLATES.items():
         if not os.path.isdir(tpl):
-            print("project-update: %s templates not found at %s (run claude-agentic/install.sh)" % (name, tpl), file=sys.stderr)
+            print("project-update: %s templates not found at %s (run riskrails/install.sh)" % (name, tpl), file=sys.stderr)
             return 2
     try:
         plan = build_plan(root, confirm_delete=getattr(args, "confirm_delete", None), confirm_via=confirm_via)

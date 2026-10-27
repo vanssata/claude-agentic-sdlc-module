@@ -64,7 +64,7 @@
   },
   "plan": "plus",
   "plan_rule": "- On Plus the usage window is a fraction of Pro's, so `xhigh` stays off: an EXPERT question runs {{EXPERT_MODEL}} at `high`, the session and STRONG agents at `medium`/`high`. Plan T3+ work in one thread; a second EXPERT question in the same task waits for the first.",
-  "claude_agentic": {
+  "riskrails": {
     "inherits": null,
     "plan": "plus",
     "label": "Plus",

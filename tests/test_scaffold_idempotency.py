@@ -89,7 +89,7 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         self.assertRegex(read(os.path.join(root, ".ai", "VERSION")), r"^[0-9]+\n?$",
                          "a fresh scaffold starts at the shipped schema")
         self.assertIn(".ai/state/*.json", read(os.path.join(root, ".gitignore")), ".gitignore excludes the state file")
-        self.assertIn("claude-agentic:start", read(os.path.join(root, "CLAUDE.md")),
+        self.assertIn("riskrails:start", read(os.path.join(root, "CLAUDE.md")),
                       "CLAUDE.md carries the managed block")
 
         # second run
@@ -104,7 +104,7 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
                          "a rerun over an existing .ai/ does not invent a schema version")
         gi = [l for l in read(os.path.join(root, ".gitignore")).splitlines() if "claude-agentic" in l]
         self.assertEqual(1, len(gi), ".gitignore snippet is not duplicated")
-        self.assertEqual(1, read(os.path.join(root, "CLAUDE.md")).count("claude-agentic:start"),
+        self.assertEqual(1, read(os.path.join(root, "CLAUDE.md")).count("riskrails:start"),
                          "the CLAUDE.md block is not duplicated")
 
         # hand-edited files survive
@@ -122,7 +122,7 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         run(SCAFFOLD, four, "--runtime", "claude,gemini")
         for f in ("CLAUDE.md", "GEMINI.md"):
             with self.subTest("$f carries the block", f=f):
-                self.assertIn("claude-agentic:start", read(os.path.join(four, f)))
+                self.assertIn("riskrails:start", read(os.path.join(four, f)))
         for f in ("AGENTS.md", ".junie/guidelines.md"):
             with self.subTest("$f was not created", f=f):
                 self.assertFalse(os.path.exists(os.path.join(four, f)))
@@ -151,7 +151,7 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         write(os.path.join(root2, "CLAUDE.md"), "# Existing project\n\n## Commands\n\nmake test\n")
         run(SCAFFOLD, root2)
         self.assertIn("make test", read(os.path.join(root2, "CLAUDE.md")), "existing CLAUDE.md content is kept")
-        self.assertIn("claude-agentic:start", read(os.path.join(root2, "CLAUDE.md")), "the block is appended to it")
+        self.assertIn("riskrails:start", read(os.path.join(root2, "CLAUDE.md")), "the block is appended to it")
 
         root3 = self.project("project3")
         write(os.path.join(root3, ".gitignore"), "vendor/\nnode_modules/")   # deliberately no trailing newline
@@ -164,13 +164,13 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         """both instruction files can coexist over one shared .ai/"""
         root4 = self.project("project4")
         run(SCAFFOLD, root4, "--runtime", "both")
-        self.assertIn("claude-agentic:start", read(os.path.join(root4, "CLAUDE.md")), "CLAUDE.md carries the block")
-        self.assertIn("claude-agentic:start", read(os.path.join(root4, "AGENTS.md")), "AGENTS.md carries the block")
+        self.assertIn("riskrails:start", read(os.path.join(root4, "CLAUDE.md")), "CLAUDE.md carries the block")
+        self.assertIn("riskrails:start", read(os.path.join(root4, "AGENTS.md")), "AGENTS.md carries the block")
         self.assertEqual([".ai"], [n for n in os.listdir(root4) if n == ".ai"], "there is exactly one .ai/ tree")
         self.assertIn("rr-build", read(os.path.join(root4, "AGENTS.md")), "AGENTS.md names the same pipeline entry point")
         _, out = run(SCAFFOLD, root4, "--runtime", "both")
         self.assertIn("nothing to do", out, "a dual-runtime scaffold is idempotent too")
-        self.assertEqual(1, read(os.path.join(root4, "AGENTS.md")).count("claude-agentic:start"),
+        self.assertEqual(1, read(os.path.join(root4, "AGENTS.md")).count("riskrails:start"),
                          "the AGENTS.md block is not duplicated")
 
     def test_codex_only(self):
@@ -187,7 +187,7 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         root6 = self.project("project6")
         write(os.path.join(root6, "AGENTS.md"), "# existing\n")
         run(SCAFFOLD, root6)
-        self.assertIn("claude-agentic:start", read(os.path.join(root6, "AGENTS.md")), "an existing AGENTS.md is extended")
+        self.assertIn("riskrails:start", read(os.path.join(root6, "AGENTS.md")), "an existing AGENTS.md is extended")
         self.assertIn("# existing", read(os.path.join(root6, "AGENTS.md")), "its content survives")
         self.assertFalse(os.path.exists(os.path.join(root6, "CLAUDE.md")), "no CLAUDE.md is added")
 
@@ -218,7 +218,7 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         for name in ("Codex-agentic", "codex-agentic"):
             r9 = self.project("legacy-" + name)
             write(os.path.join(r9, "AGENTS.md"),
-                  "# mine\n\nkeep this.\n\n" + re.sub(r"claude-agentic:(start|end)", name + r":\1", block))
+                  "# mine\n\nkeep this.\n\n" + re.sub(r"riskrails:(start|end)", name + r":\1", block))
             _, out = run(SCAFFOLD, r9, "--runtime", "codex")
             text = read(os.path.join(r9, "AGENTS.md"))
             with self.subTest("$name: one block, the legacy pair is not doubled", name=name):

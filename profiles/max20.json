@@ -1,5 +1,5 @@
 {
-  "claude_agentic": {
+  "riskrails": {
     "inherits": "max",
     "plan": "max20",
     "label": "Max 20x",

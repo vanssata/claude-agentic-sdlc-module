@@ -1,6 +1,6 @@
 <!-- stub: scope=doc runtime=none -->
 <!-- The long-form reference installed beside the stub, at
-     {{HOME}}/claude-agentic/routing.md, and read on demand — never at session start.
+     {{HOME}}/riskrails/routing.md, and read on demand — never at session start.
      Same directive syntax as instructions/stub.md; rendered per runtime and per plan
      by install.sh. Nothing here may be needed to work safely: what an agent must know
      without reading a file belongs in the stub. -->

@@ -28,7 +28,7 @@ Codex (EXPERT model -> STRONG model); an agent launch is `spawn_agent`, or
   SubagentStart      a child that resolved to EXPERT during an outage was missed:
                      journaled as `missed_reroute`, and the child is told
 
-Budgets (from <home>/claude-agentic/profile.json; no profile, no budget):
+Budgets (from <home>/riskrails/profile.json; no profile, no budget):
   PreToolUse:Agent   an EXPERT launch without `expert.without_asking`, or past
                      `expert.max_per_task` for the task in flight, asks on Claude
                      Code; Codex cannot ask, so there — and under AI_UNATTENDED=1
@@ -125,10 +125,16 @@ def codex_model(value):
     return not claude_model(value)
 
 
+def profile_file(home):
+    """<home>/riskrails/profile.json, or the pre-3.4b claude-agentic/ one (R35, one version)."""
+    path = os.path.join(home, "riskrails", "profile.json")
+    return path if os.path.exists(path) else os.path.join(home, "claude-agentic", "profile.json")
+
+
 def profile_tier(home, tier, field, default):
     """A field of the installed plan's tier table, else the default."""
     try:
-        with open(os.path.join(home, "claude-agentic", "profile.json"), encoding="utf-8") as fh:
+        with open(profile_file(home), encoding="utf-8") as fh:
             value = json.load(fh)["tiers"][tier][field]
         return value if isinstance(value, str) and value else default
     except (OSError, ValueError, KeyError, TypeError):
@@ -139,7 +145,7 @@ def profile_fable(home):
     """profile.json's `fable`; True when there is no profile (an install from
     before WP5 wrapped the statusline only on a Fable install)."""
     try:
-        with open(os.path.join(home, "claude-agentic", "profile.json"), encoding="utf-8") as fh:
+        with open(profile_file(home), encoding="utf-8") as fh:
             return bool(json.load(fh).get("fable", True))
     except (OSError, ValueError, AttributeError):
         return True
@@ -854,7 +860,7 @@ def respond(out):
 
 def profile():
     try:
-        with open(os.path.join(HOME, "claude-agentic", "profile.json"), encoding="utf-8") as fh:
+        with open(profile_file(HOME), encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
@@ -905,7 +911,9 @@ def project_task(cwd):
     """(project root, task id) of the task in flight at or above cwd, or (None, None)."""
     here = os.path.abspath(cwd) if isinstance(cwd, str) and cwd else None
     while here:
-        path = os.path.join(here, ".ai", "state", "current.json")
+        path = os.path.join(here, ".ai", "state", "state.json")
+        if not os.path.isfile(path):
+            path = os.path.join(here, ".ai", "state", "current.json")  # R34: legacy name, one version
         if os.path.isfile(path):
             try:
                 with open(path, encoding="utf-8") as fh:

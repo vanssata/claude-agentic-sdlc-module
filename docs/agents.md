@@ -3,7 +3,7 @@
 Ten static definitions plus two rendered at install time. They are identical in
 every project; the rest of their instructions comes from the policies and agent
 contracts they read at the start of a run — the project's own file under `.ai/`
-when it exists, else the shared one at `<home>/claude-agentic/ai/` (see
+when it exists, else the shared one at `<home>/riskrails/ai/` (see
 `docs/architecture.md`).
 
 The roster and the tiers are the same in both runtimes. The prompt bodies are

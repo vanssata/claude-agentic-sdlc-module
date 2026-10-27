@@ -16,7 +16,7 @@ done
 STATE="python3 $AI_HOME/skills/ai-task/state.py"
 ```
 
-Shared policies resolve through `"$AI_HOME/claude-agentic/ai-path" <path>`: a
+Shared policies resolve through `"$AI_HOME/riskrails/ai-path" <path>`: a
 project file at the same path under `.ai/` wins. Read `policies/safety.md` and
 `using-riskrails.md` once per session.
 

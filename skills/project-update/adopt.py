@@ -1,4 +1,4 @@
-"""Adopt a foreign AI-tool structure into claude-agentic's layout (`update.py --adopt`).
+"""Adopt a foreign AI-tool structure into RiskRails' layout (`update.py --adopt`).
 
 This module grows over WP6's plan steps; update.py keeps only flag parsing and the
 calls into it, so new behaviour lives here.
@@ -25,6 +25,11 @@ REFUSED = "ADOPT_REFUSED"
 # and the names Codex gives its tool calls. Present counts, an empty value too.
 AGENT_MARKERS = ("CLAUDECODE", "CODEX_THREAD_ID", "CODEX_SESSION_ID", "CODEX_CI",
                  "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_VERSION")
+
+
+def test_mode():
+    """RISKRAILS_TEST=1, or CLAUDE_AGENTIC_TEST=1 before 3.4b (R35, one version)."""
+    return os.environ.get("RISKRAILS_TEST", os.environ.get("CLAUDE_AGENTIC_TEST")) == "1"
 
 
 def human_gate():
@@ -776,8 +781,8 @@ def nested_signature(path, table, tools):
 
 
 def today():
-    """UTC date; ADOPT_TODAY overrides it only under CLAUDE_AGENTIC_TEST=1."""
-    if os.environ.get("CLAUDE_AGENTIC_TEST") == "1" and os.environ.get("ADOPT_TODAY"):
+    """UTC date; ADOPT_TODAY overrides it only under RISKRAILS_TEST=1."""
+    if test_mode() and os.environ.get("ADOPT_TODAY"):
         return os.environ["ADOPT_TODAY"]
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -1318,9 +1323,13 @@ def partial_record(root):
 
 
 def task_in_flight(root):
-    """The task in .ai/state/current.json when its stage is not `done`."""
+    """The task in .ai/state/state.json (or the legacy current.json) when its
+    stage is not `done`."""
+    path = os.path.join(root, ".ai", "state", "state.json")
+    if not os.path.isfile(path):
+        path = os.path.join(root, ".ai", "state", "current.json")
     try:
-        with open(os.path.join(root, ".ai", "state", "current.json"), encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             state = json.load(fh)
     except (OSError, ValueError):
         return None
@@ -1379,8 +1388,8 @@ def phase_of(item):
 
 
 def test_stop_after():
-    """ADOPT_STOP_AFTER=<phase>, read only under CLAUDE_AGENTIC_TEST=1."""
-    if os.environ.get("CLAUDE_AGENTIC_TEST") != "1":
+    """ADOPT_STOP_AFTER=<phase>, read only under RISKRAILS_TEST=1."""
+    if not test_mode():
         return None
     try:
         return int(os.environ.get("ADOPT_STOP_AFTER", ""))

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # profiles/*.json and scripts/resolve-profile.py: every plan carries the plugin's
-# own tables under `claude_agentic`, max20 is max plus budgets and nothing else,
+# own tables under `riskrails`, max20 is max plus budgets and nothing else,
 # and the budgets carry no fan-out and no direct-mode cap since redesign 2.4 —
 # what is left is the EXPERT rule and the token table.
 set -uo pipefail
@@ -9,7 +9,7 @@ set -uo pipefail
 RESOLVE="$PLUGIN_ROOT/scripts/resolve-profile.py"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
-echo "== R1: every profile has claude_agentic with tiers, budgets, preferred_runtime"
+echo "== R1: every profile has riskrails with tiers, budgets, preferred_runtime"
 for f in "$PLUGIN_ROOT"/profiles/*.json; do
     name=$(basename "$f" .json)
     if python3 "$RESOLVE" "$name" --print agentic > "$TMP/$name.json" 2> "$TMP/$name.err"; then
@@ -24,15 +24,15 @@ for f in "$PLUGIN_ROOT"/profiles/*.json; do
 done
 
 keys=$(jq -r 'keys | join(",")' "$PLUGIN_ROOT/profiles/max20.json")
-[ "$keys" = claude_agentic ] && pass "max20.json holds only claude_agentic" || fail "max20.json top-level keys: $keys"
-[ "$(jq -r .claude_agentic.inherits "$PLUGIN_ROOT/profiles/max20.json")" = max ] \
+[ "$keys" = riskrails ] && pass "max20.json holds only riskrails" || fail "max20.json top-level keys: $keys"
+[ "$(jq -r .riskrails.inherits "$PLUGIN_ROOT/profiles/max20.json")" = max ] \
     && pass "max20 inherits max" || fail "max20 should inherit max"
 
 python3 "$RESOLVE" max20 --print settings | jq -S . > "$TMP/max20.settings"
 python3 "$RESOLVE" max --print settings | jq -S . > "$TMP/max.settings"
-jq -S 'del(.claude_agentic)' "$PLUGIN_ROOT/profiles/max.json" > "$TMP/max.raw"
+jq -S 'del(.riskrails)' "$PLUGIN_ROOT/profiles/max.json" > "$TMP/max.raw"
 cmp -s "$TMP/max20.settings" "$TMP/max.settings" && cmp -s "$TMP/max.settings" "$TMP/max.raw" \
-    && pass "resolved(max20) minus claude_agentic equals max.json minus it" \
+    && pass "resolved(max20) minus riskrails equals max.json minus it" \
     || fail "max20 settings differ from max" "$(diff "$TMP/max20.settings" "$TMP/max.raw" | head -5)"
 jq -e '.plan == "max20" and .label == "Max 20x" and .tiers == input.tiers' \
     "$TMP/max20.json" "$TMP/max.json" >/dev/null \
@@ -92,7 +92,7 @@ for t in "$PLUGIN_ROOT"/agents/*.md.tmpl; do
     done
     for p in pro max; do
         jq -e --arg n "$n" --arg t "$tier" '.tiers[$t].agents | index($n)' "$TMP/$p.json" >/dev/null \
-            && pass "$n listed under $tier in $p" || fail "$n not listed under $tier in $p's claude_agentic.tiers"
+            && pass "$n listed under $tier in $p" || fail "$n not listed under $tier in $p's riskrails.tiers"
     done
     eff=$(sed -n 's/^effort: \(.*\)$/\1/p' "$t")
     case "$eff" in "{{${tier}_EFFORT}}"|low|medium|high) ;; *) fail "$n: effort '$eff' is neither its tier's placeholder nor a literal";; esac

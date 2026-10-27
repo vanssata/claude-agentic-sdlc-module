@@ -3,7 +3,8 @@ MultiEdit, NotebookEdit and Codex's apply_patch.
 
 During the implementation stage the approved plan names the files a step may
 touch; an edit outside them is refused with SCOPE_CHANGE_REQUIRED. Inert unless
-.ai/state/current.json exists and its stage is "implementation".
+.ai/state/state.json (or, for one version, the legacy current.json) exists and
+its stage is "implementation".
 
 Bash semantics kept: a plan glob is matched as `[[ $rel == $pattern ]]` — "*"
 crosses "/", extglob is on inside [[ ]] — and the deny lists the allowed globs
@@ -248,7 +249,7 @@ class Glob:
 # ------------------------------------------------------------------ the state file
 
 def _step_lines(doc):
-    """The lines one document of current.json prints through the guard's jq
+    """The lines one document of the state file prints through the guard's jq
     filter (unicode text, each without its newline)."""
     stage = jq_index_safe(doc, "current_stage")
     if stage is None or stage is False:
@@ -332,7 +333,9 @@ def check(ctx):
     root = find_ai_root(p.cwd, ctx.pwd)
     if root is None:
         return
-    state = root + "/.ai/state/current.json"
+    state = root + "/.ai/state/state.json"
+    if not is_file(state):
+        state = root + "/.ai/state/current.json"
     if not is_file(state):
         return
     step_id, task_id, allowed, forbidden, reason = read_state(state)

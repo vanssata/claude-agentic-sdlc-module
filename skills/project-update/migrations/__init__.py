@@ -12,11 +12,13 @@ update.py runs every migration with version < VERSION <= CURRENT before the
 three-way merge. There is no down(): moves and deletions keep the original under
 .ai/reports/project-update-<date>/original/.
 
-CLAUDE_AGENTIC_MIGRATIONS points the registry at another directory (tests).
+RISKRAILS_MIGRATIONS (CLAUDE_AGENTIC_MIGRATIONS before 3.4b) points the registry
+at another directory (tests).
 """
 import importlib.util, os, posixpath, re, sys
 
-DIR = os.environ.get("CLAUDE_AGENTIC_MIGRATIONS", os.path.dirname(os.path.abspath(__file__)))
+DIR = os.environ.get("RISKRAILS_MIGRATIONS", os.environ.get("CLAUDE_AGENTIC_MIGRATIONS",
+                                                          os.path.dirname(os.path.abspath(__file__))))
 NAME_RE = re.compile(r"(\d{4})_[a-z0-9_]+\.py")
 
 # Templates the plugin stopped shipping under a key that no MOVES pair can
@@ -119,7 +121,7 @@ def load():
             raise SchemaError("%s: migrations are numbered from 0001" % name)
         if num in by_num:
             raise SchemaError("%s: duplicate migration %04d" % (name, num))
-        spec = importlib.util.spec_from_file_location("claude_agentic_migration_%04d" % num, os.path.join(DIR, name))
+        spec = importlib.util.spec_from_file_location("riskrails_migration_%04d" % num, os.path.join(DIR, name))
         mod = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = mod  # dataclasses and pickle look the module up by name
         try:

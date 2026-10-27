@@ -548,8 +548,13 @@ class PathGuard:                            # pylint: disable=too-many-instance-
 
     # -------------------------------------------------------------- the task
 
+    def _state_file(self):
+        """R34: state.json, or the legacy current.json for one version."""
+        new = self.root + "/.ai/state/state.json"
+        return new if is_file(new) else self.root + "/.ai/state/current.json"
+
     def _task_line(self):
-        loaded = load_json_file(self.root + "/.ai/state/current.json")
+        loaded = load_json_file(self._state_file())
         out = []
         if loaded is not None:
             for doc in loaded[0]:
@@ -567,7 +572,7 @@ class PathGuard:                            # pylint: disable=too-many-instance-
         answer the guard already had is used, a new one is not kept."""
         if self.task_active is None:
             active, task_id = "no", self.task_id
-            if is_file(self.root + "/.ai/state/current.json"):
+            if is_file(self._state_file()):
                 line = self._task_line()
                 if line.split("\t", 1)[0] != "done":
                     active = "yes"
@@ -765,7 +770,7 @@ class PathGuard:                            # pylint: disable=too-many-instance-
             if kind == "protected":
                 if verb == "read":
                     continue
-                raise Deny("Refusing to %s a claude-agentic control file: %s (matched: %s)%s"
+                raise Deny("Refusing to %s a RiskRails control file: %s (matched: %s)%s"
                            % (verb, literal, pattern, WHY_PROTECTED))
             if kind == "task":
                 if verb == "read" or not self.task_in_flight():
@@ -1096,7 +1101,7 @@ class PathGuard:                            # pylint: disable=too-many-instance-
                                or self.classify(real_path(a, self.cwd)))
                 kind = verdict[0] if verdict else ""
                 if kind == "protected":
-                    raise Deny("Refusing a shell %s a claude-agentic control file: %s%s" % (how, cand, WHY_PROTECTED))
+                    raise Deny("Refusing a shell %s a RiskRails control file: %s%s" % (how, cand, WHY_PROTECTED))
                 if kind == "task" and self.task_in_flight():
                     raise Deny("Refusing a shell %s runtime configuration while task %s is in flight: %s%s"
                                % (how, self.task_id, cand, WHY_TASK))
@@ -1110,7 +1115,7 @@ class PathGuard:                            # pylint: disable=too-many-instance-
                 verdict = self.classify(found) or self.classify(found + "/")
                 held = "" if found == strip1(real, "/") else " (holds %s)" % found
                 if verdict and verdict[0] == "protected":
-                    raise Deny("Refusing a shell %s a directory that holds a claude-agentic control file: %s%s%s"
+                    raise Deny("Refusing a shell %s a directory that holds a RiskRails control file: %s%s%s"
                                % (how, cand, held, WHY_PROTECTED))
                 raise Deny("Refusing a shell %s a directory that holds runtime configuration while task %s is "
                            "in flight: %s%s%s" % (how, self.task_id, cand, held, WHY_TASK))
@@ -1294,7 +1299,7 @@ class PathGuard:                            # pylint: disable=too-many-instance-
                     how = what
             if how:
                 if kind == "protected":
-                    raise Deny("Refusing a shell %s a claude-agentic control file: %s%s" % (how, token, WHY_PROTECTED))
+                    raise Deny("Refusing a shell %s a RiskRails control file: %s%s" % (how, token, WHY_PROTECTED))
                 if kind == "task" and self.task_in_flight():
                     raise Deny("Refusing a shell %s runtime configuration while task %s is in flight: %s%s"
                                % (how, self.task_id, token, WHY_TASK))

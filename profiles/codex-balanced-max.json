@@ -65,7 +65,7 @@
   },
   "plan": "balanced-max",
   "plan_rule": "- On BalancedMax only the session runs the strong model: Sol at `high` plans and implements, the readers (`Explore`, `log-reader`) run on Luna at `low`, and `xhigh` stays off — an EXPERT question runs {{EXPERT_MODEL}} at `high`.",
-  "claude_agentic": {
+  "riskrails": {
     "inherits": null,
     "plan": "balanced-max",
     "label": "BalancedMax",

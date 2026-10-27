@@ -2,19 +2,19 @@
 """Resolve a plan profile from ``profiles/`` into one object.
 
 Every file in ``profiles/`` carries the plugin's own tables under one namespaced
-key, ``claude_agentic`` — the model tiers, the per-plan budgets and the preferred
+key, ``riskrails`` — the model tiers, the per-plan budgets and the preferred
 runtime. The rest of a Claude profile is a ``settings.json`` fragment, and the
 rest of a Codex profile is read field by field by the Codex renderers; neither
-ever sees ``claude_agentic``. This script is the single place that reads it, so
+ever sees ``riskrails``. This script is the single place that reads it, so
 the installer, the gate and ``state.py profile`` all agree on what a plan means.
 
 Resolution:
 
-* ``claude_agentic.inherits`` names another profile (``max20`` inherits ``max``).
+* ``riskrails.inherits`` names another profile (``max20`` inherits ``max``).
   The parent is resolved first and the child deep-merged over it: objects merge
   key by key, arrays and scalars are replaced. A file that holds only
-  ``claude_agentic`` takes the parent's settings unchanged.
-* A Codex profile keeps its top-level ``tiers``; ``claude_agentic.tiers`` is
+  ``riskrails`` takes the parent's settings unchanged.
+* A Codex profile keeps its top-level ``tiers``; ``riskrails.tiers`` is
   filled from them, with each tier's ``agents`` taken from ``roles`` (the roles
   that have their own ``source`` — variants are renderings, not agents).
 * ``--plan`` and ``--label`` override ``plan``/``label`` (``team-pro`` resolves
@@ -25,8 +25,8 @@ Resolution:
   resolve-profile.py <name|path> [--src DIR] [--plan P] [--label L]
                      [--fable yes|no] [--print full|settings|agentic]
 
-``settings`` prints the profile without ``claude_agentic``; ``agentic`` prints
-the resolved ``claude_agentic`` object; ``full`` (the default) prints both.
+``settings`` prints the profile without ``riskrails``; ``agentic`` prints
+the resolved ``riskrails`` object; ``full`` (the default) prints both.
 """
 import argparse
 import copy
@@ -34,7 +34,8 @@ import json
 import os
 import sys
 
-KEY = "claude_agentic"
+KEY = "riskrails"
+OLD_KEY = "claude_agentic"  # R35: a profile written before 3.4b, read for one version
 
 
 def deep_merge(base, over):
@@ -60,6 +61,8 @@ def load(src, name, seen=()):
         raise ValueError("inheritance cycle: " + " -> ".join(seen + (stem,)))
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
+    if KEY not in data and OLD_KEY in data:
+        data[KEY] = data.pop(OLD_KEY)
     parent = (data.get(KEY) or {}).get("inherits")
     if not parent:
         return data

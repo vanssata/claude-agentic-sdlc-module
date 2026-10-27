@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotent .ai/ scaffold for claude-agentic.
+# Idempotent .ai/ scaffold for RiskRails.
 #   scaffold-ai.sh [project-dir] [--runtime auto|claude|codex|both]   (default: $PWD, auto)
 #
 # A shim: the scaffold lives in skills/rr-setup/scaffold_ai.py and reads its

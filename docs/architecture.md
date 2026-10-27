@@ -57,14 +57,14 @@ The split matters: the installed agent definitions (`~/.claude/agents/*.md`,
 prompts stay cache-friendly; the policies and agent contracts are the layer they
 read at the start of a run.
 
-That layer has two homes. The **shared tree**, `<home>/claude-agentic/ai/`
+That layer has two homes. The **shared tree**, `<home>/riskrails/ai/`
 (`policies/`, `agents/`, `workflows/`, `templates/` — 29 files), ships with the
 plugin, is installed by `install.sh` and is the same in every project. The
 **project tree**, `.ai/`, holds what is the project's own: `project/`, `rules/`,
 `state/`, `reports/`, `AGENTS.md`, `VERSION` and the policies `risk-tiers.json`,
 `risk-tiers.md`, `path-guard.json`, `testing.md`, `coding.md`, `safety.md` and
 `security.md`. For a shared path the project's file wins when it exists — an
-override — else the shared one is read; `<home>/claude-agentic/ai-path <path>`
+override — else the shared one is read; `<home>/riskrails/ai-path <path>`
 prints which, and `ai-path --tree-hash` fingerprints the installed tree. An
 override no longer receives the plugin's changes; `/project-update` says so
 every time it runs. Migration 0006 moves an existing project to this layout

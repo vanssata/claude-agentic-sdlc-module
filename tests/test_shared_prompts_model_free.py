@@ -94,7 +94,8 @@ def env_for(**extra):
     tmp_home = extra.pop("HOME")
     env = {k: v for k, v in os.environ.items()
            if k not in ("CODEX_HOME", "CODEX_DIR", "CLAUDE_DIR", "AI_UNATTENDED", "CLAUDE_CONFIG_DIR",
-                        "CLAUDE_AGENTIC_SHARED", "CLAUDE_ROUTING_TEMPLATES", "CLAUDE_AGENTIC_TEMPLATES")}
+                        "CLAUDE_AGENTIC_SHARED", "CLAUDE_ROUTING_TEMPLATES", "CLAUDE_AGENTIC_TEMPLATES")
+           and not k.startswith("RISKRAILS_")}
     env["HOME"] = tmp_home
     env.update(extra)
     return env

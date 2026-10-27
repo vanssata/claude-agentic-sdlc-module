@@ -181,8 +181,22 @@ def die(message, code=1):
     sys.exit(code)
 
 
+STATE_NAMES = ("state.json", "current.json")
+
+
 def state_path(root):
-    return os.path.join(root, ".ai", "state", "current.json")
+    """The task's state file, read and written where it is: state.json when a
+    later version wrote one, else current.json, where every task starts. R34 is
+    expand/contract: this version reads both names and moves nothing, so a
+    revert of the move that comes later still finds the task."""
+    new, legacy = (os.path.join(root, ".ai", "state", name) for name in STATE_NAMES)
+    return new if os.path.exists(new) else legacy
+
+
+def remove_state(root):
+    for path in (os.path.join(root, ".ai", "state", name) for name in STATE_NAMES):
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(path)
 
 
 def session_path(root):
@@ -437,12 +451,18 @@ def installed(runtime):
     return os.path.isfile(os.path.join(runtime_home(runtime), "skills", "ai-task", "state.py"))
 
 
+def profile_file(home):
+    """<home>/riskrails/profile.json, or <home>/claude-agentic/profile.json where
+    install.sh has not run since 3.4b (R35, one version)."""
+    path = os.path.join(home, "riskrails", "profile.json")
+    return path if os.path.exists(path) else os.path.join(home, "claude-agentic", "profile.json")
+
+
 def read_profile(runtime=None):
-    """<home>/claude-agentic/profile.json, written by install.sh; {} when absent,
+    """<home>/riskrails/profile.json, written by install.sh; {} when absent,
     which turns every plan budget into a no-op."""
     try:
-        with open(os.path.join(runtime_home(runtime or own_runtime()), "claude-agentic",
-                               "profile.json"), encoding="utf-8") as fh:
+        with open(profile_file(runtime_home(runtime or own_runtime())), encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
@@ -500,7 +520,7 @@ def cmd_profile(args, _root):
     runtime = other_runtime() if args.other else own_runtime()
     prof = read_profile(runtime)
     if not prof:
-        die("no plan profile for %s (%s/claude-agentic/profile.json); install.sh writes it"
+        die("no plan profile for %s (%s/riskrails/profile.json); install.sh writes it"
             % (runtime, runtime_home(runtime)))
     if args.tier:
         model = ((prof.get("tiers") or {}).get(args.tier) or {}).get("model")
@@ -2735,7 +2755,7 @@ def archive_v7(root, state, tree, result, facts=None):
         fh.write("\n")
     with contextlib.suppress(OSError):
         os.remove(handoff_path(root))
-    os.remove(state_path(root))
+    remove_state(root)
     print("%s %s (%s): %s" % (state["task_id"], result, state["mode"],
                               os.path.relpath(task_md_path(root, state), root)))
     print("state: %s" % os.path.relpath(target, root))
@@ -3025,7 +3045,7 @@ def abandon_old(_args, root):
         fh.write("\n")
     with contextlib.suppress(OSError):
         os.remove(handoff_path(root))
-    os.remove(state_path(root))
+    remove_state(root)
     print("%s abandoned (old surface)" % state["task_id"])
     print("state: %s" % os.path.relpath(target, root))
 

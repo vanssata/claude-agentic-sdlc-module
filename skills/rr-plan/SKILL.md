@@ -44,7 +44,7 @@ When `$ARGUMENTS` is a spec (default: the newest `docs/sdlc/specs/*.md`):
 
 **1. Classify** the request: feature, bugfix, refactoring, hotfix or
 investigation — say which and why. `using-riskrails.md` in the shared tree
-(`"$AI_HOME/claude-agentic/ai-path" using-riskrails.md`) and
+(`"$AI_HOME/riskrails/ai-path" using-riskrails.md`) and
 `workflows.md#<kind>` say what each kind requires. A refactoring and a feature
 are never one task.
 

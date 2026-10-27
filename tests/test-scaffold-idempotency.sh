@@ -30,13 +30,13 @@ copied=""; for f in $shared; do [ -e "$ROOT/.ai/$f" ] && copied="$copied $f"; do
 grep -qE '^[0-9]+$' "$ROOT/.ai/VERSION" && pass "a fresh scaffold starts at the shipped schema" || fail ".ai/VERSION should hold a number"
 
 grep -q '.ai/state/\*.json' "$ROOT/.gitignore" && pass ".gitignore excludes the state file" || fail ".gitignore should exclude state"
-grep -q 'claude-agentic:start' "$ROOT/CLAUDE.md" && pass "CLAUDE.md carries the managed block" || fail "CLAUDE.md should carry the block"
+grep -q 'riskrails:start' "$ROOT/CLAUDE.md" && pass "CLAUDE.md carries the managed block" || fail "CLAUDE.md should carry the block"
 
 echo "== a comma list scaffolds exactly the runtimes it names"
 FOUR="$TMP/four"; mkdir -p "$FOUR"
 bash "$SCAFFOLD" "$FOUR" --runtime claude,gemini >/dev/null
 for f in CLAUDE.md GEMINI.md; do
-    grep -q 'claude-agentic:start' "$FOUR/$f" && pass "$f carries the block" || fail "$f should carry the block"
+    grep -q 'riskrails:start' "$FOUR/$f" && pass "$f carries the block" || fail "$f should carry the block"
 done
 for f in AGENTS.md .junie/guidelines.md; do
     [ -e "$FOUR/$f" ] && fail "$f should not exist: it was not asked for" || pass "$f was not created"
@@ -58,7 +58,7 @@ out=$(bash "$SCAFFOLD" "$ROOT" 2>&1)
 
 gi_lines=$(grep -c 'claude-agentic' "$ROOT/.gitignore")
 [ "$gi_lines" = 1 ] && pass ".gitignore snippet is not duplicated" || fail ".gitignore duplicated" "$gi_lines copies"
-md_blocks=$(grep -c 'claude-agentic:start' "$ROOT/CLAUDE.md")
+md_blocks=$(grep -c 'riskrails:start' "$ROOT/CLAUDE.md")
 [ "$md_blocks" = 1 ] && pass "the CLAUDE.md block is not duplicated" || fail "CLAUDE.md block duplicated" "$md_blocks copies"
 
 echo "== hand-edited files survive"
@@ -85,7 +85,7 @@ ROOT2="$TMP/project2"; mkdir -p "$ROOT2"
 printf '# Existing project\n\n## Commands\n\nmake test\n' > "$ROOT2/CLAUDE.md"
 bash "$SCAFFOLD" "$ROOT2" >/dev/null 2>&1
 grep -q 'make test' "$ROOT2/CLAUDE.md" && pass "existing CLAUDE.md content is kept" || fail "existing content must be kept"
-grep -q 'claude-agentic:start' "$ROOT2/CLAUDE.md" && pass "the block is appended to it" || fail "block should be appended"
+grep -q 'riskrails:start' "$ROOT2/CLAUDE.md" && pass "the block is appended to it" || fail "block should be appended"
 
 echo "== an existing .gitignore is appended to"
 ROOT3="$TMP/project3"; mkdir -p "$ROOT3"
@@ -97,13 +97,13 @@ grep -q '^node_modules/$' "$ROOT3/.gitignore" && pass "a missing trailing newlin
 echo "== both instruction files can coexist over one shared .ai/"
 ROOT4="$TMP/project4"; mkdir -p "$ROOT4"
 bash "$SCAFFOLD" "$ROOT4" --runtime both >/dev/null 2>&1
-grep -q 'claude-agentic:start' "$ROOT4/CLAUDE.md" && pass "CLAUDE.md carries the block" || fail "CLAUDE.md should carry the block"
-grep -q 'claude-agentic:start' "$ROOT4/AGENTS.md" && pass "AGENTS.md carries the block" || fail "AGENTS.md should carry the block"
+grep -q 'riskrails:start' "$ROOT4/CLAUDE.md" && pass "CLAUDE.md carries the block" || fail "CLAUDE.md should carry the block"
+grep -q 'riskrails:start' "$ROOT4/AGENTS.md" && pass "AGENTS.md carries the block" || fail "AGENTS.md should carry the block"
 [ "$(find "$ROOT4" -maxdepth 1 -name '.ai' | wc -l)" = 1 ] && pass "there is exactly one .ai/ tree" || fail "expected one .ai/ tree"
 grep -q 'rr-build' "$ROOT4/AGENTS.md" && pass "AGENTS.md names the same pipeline entry point" || fail "AGENTS.md should name /rr-build"
 out=$(bash "$SCAFFOLD" "$ROOT4" --runtime both 2>&1)
 grep -q 'nothing to do' <<<"$out" && pass "a dual-runtime scaffold is idempotent too" || fail "second run should be a no-op" "$out"
-[ "$(grep -c 'claude-agentic:start' "$ROOT4/AGENTS.md")" = 1 ] && pass "the AGENTS.md block is not duplicated" || fail "AGENTS.md block duplicated"
+[ "$(grep -c 'riskrails:start' "$ROOT4/AGENTS.md")" = 1 ] && pass "the AGENTS.md block is not duplicated" || fail "AGENTS.md block duplicated"
 
 echo "== a Codex-only project gets no stray CLAUDE.md"
 ROOT5="$TMP/project5"; mkdir -p "$ROOT5"
@@ -116,7 +116,7 @@ echo "== auto-detection follows what the project already declares"
 ROOT6="$TMP/project6"; mkdir -p "$ROOT6"
 printf '# existing\n' > "$ROOT6/AGENTS.md"
 bash "$SCAFFOLD" "$ROOT6" >/dev/null 2>&1
-grep -q 'claude-agentic:start' "$ROOT6/AGENTS.md" && pass "an existing AGENTS.md is extended" || fail "AGENTS.md should be extended"
+grep -q 'riskrails:start' "$ROOT6/AGENTS.md" && pass "an existing AGENTS.md is extended" || fail "AGENTS.md should be extended"
 grep -q '# existing' "$ROOT6/AGENTS.md" && pass "its content survives" || fail "existing AGENTS.md content must survive"
 [ -e "$ROOT6/CLAUDE.md" ] && fail "auto must not add CLAUDE.md to an AGENTS.md project" || pass "no CLAUDE.md is added"
 
@@ -145,7 +145,7 @@ echo "== a legacy Codex-agentic pair is the managed block: nothing is appended b
 # the block, and a second one must not be appended.
 for name in Codex-agentic codex-agentic; do
     R9="$TMP/legacy-$name"; mkdir -p "$R9"
-    { printf '# mine\n\nkeep this.\n\n'; sed "s/claude-agentic:\(start\|end\)/$name:\1/" "$CLAUDE_AGENTIC_TEMPLATES/AGENTS.block.md"; } > "$R9/AGENTS.md"
+    { printf '# mine\n\nkeep this.\n\n'; sed "s/riskrails:\(start\|end\)/$name:\1/" "$CLAUDE_AGENTIC_TEMPLATES/AGENTS.block.md"; } > "$R9/AGENTS.md"
     out=$(bash "$SCAFFOLD" "$R9" --runtime codex 2>&1)
     [ "$(grep -c 'agentic:start -->' "$R9/AGENTS.md")" = 1 ] && pass "$name: one block, the legacy pair is not doubled" \
         || fail "$name: a second block was appended beside the legacy pair" "$out"

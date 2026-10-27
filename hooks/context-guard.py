@@ -329,8 +329,11 @@ def task_in_flight(root):
     shouting its handoff at every new session in the repository."""
     if not root:
         return False
+    state = os.path.join(root, ".ai", "state", "state.json")
+    if not os.path.isfile(state):
+        state = os.path.join(root, ".ai", "state", "current.json")  # R34: legacy name, one version
     try:
-        with open(os.path.join(root, ".ai", "state", "current.json"), encoding="utf-8") as fh:
+        with open(state, encoding="utf-8") as fh:
             return (json.load(fh) or {}).get("current_stage") != "done"
     except (OSError, ValueError):
         return False
@@ -341,7 +344,7 @@ def stamp():
 
 
 def write_session(root, updates):
-    """.ai/state/session.json (I5): the sidecar this hook owns. current.json has
+    """.ai/state/session.json (I5): the sidecar this hook owns. state.json has
     two writers by contract and the hook is not one of them. Atomic, and silent
     about its own failures — a session that cannot be recorded must still start."""
     path = os.path.join(root, ".ai", "state", "session.json")

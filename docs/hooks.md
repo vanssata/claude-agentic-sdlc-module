@@ -189,7 +189,7 @@ for a future session. All three are written by `state.py` alone — `ask`,
 
 **Runtime configuration, while a task is in flight** — `.claude/settings*.json`,
 `.codex/config.toml`, the pipeline's `.ai/policies/`, and the installed shared
-tree `<home>/claude-agentic/ai/` with its resolver `ai-path` (R22). Agent
+tree `<home>/riskrails/ai/` with its resolver `ai-path` (R22). Agent
 definitions, skills, commands, the other runtimes' instruction files, the rule
 sources and `docs/sdlc/constitution.md` were on this list until redesign 3.4 and
 are ordinary files now (`.ai/project/known-risks.md`, "Path guard after R22").
@@ -472,7 +472,7 @@ gate chose not to reroute. Project agent files are looked up from the payload's
 
 ### Budgets
 
-Budgets come from `<home>/claude-agentic/profile.json`, which `install.sh`
+Budgets come from `<home>/riskrails/profile.json`, which `install.sh`
 writes per plan (`usage-report --budgets` prints them). Without that file every
 budget check is a no-op.
 

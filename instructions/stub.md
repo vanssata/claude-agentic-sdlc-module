@@ -15,10 +15,10 @@
      project policy, or nowhere. -->
 
 <!-- stub: scope=global runtime=claude,codex -->
-# claude-agentic ({{PLAN_LABEL}} plan)
+# RiskRails ({{PLAN_LABEL}} plan)
 
 <!-- stub: scope=global runtime=claude,codex -->
-Rules for every repository; everything else loads on demand. `{{HOME}}/claude-agentic/routing.md` has the model ladder, the context-guard thresholds and the launcher; a project's `.ai/AGENTS.md` routes to its policies.
+Rules for every repository; everything else loads on demand. `{{HOME}}/riskrails/routing.md` has the model ladder, the context-guard thresholds and the launcher; a project's `.ai/AGENTS.md` routes to its policies.
 
 <!-- stub: scope=global runtime=claude,codex -->
 - With `.ai/`: read `.ai/AGENTS.md` first, run every change through `/rr-build <request>`, treat `.ai/policies/` as binding; `/rr-setup --update` after a plugin reinstall. Without `.ai/`: `/rr-setup` first.

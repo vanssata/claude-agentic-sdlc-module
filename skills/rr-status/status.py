@@ -5,7 +5,7 @@
 
 Read-only and model-free. A schema-7 task is described by `state.py status`;
 for any other task, and whenever that call fails, it reads the files directly —
-.ai/state/current.json, the task's events.jsonl, .ai/policies/risk-tiers.json
+.ai/state/state.json (or the legacy current.json), the task's events.jsonl, .ai/policies/risk-tiers.json
 and .ai/VERSION — so it answers in a project whose state.py is older, newer or
 broken. The root is found the way the guards find it (find_ai_root in
 hooks/lib/ai-hook-common.sh): the nearest ancestor holding .ai/, not stopping at
@@ -33,6 +33,12 @@ def find_ai_root(start):
         if parent == d:
             return None
         d = parent
+
+
+def state_file(root):
+    """R34: state.json, or the legacy current.json for one version."""
+    path = os.path.join(root, ".ai", "state", "state.json")
+    return path if os.path.isfile(path) else os.path.join(root, ".ai", "state", "current.json")
 
 
 def read_json(path):
@@ -93,7 +99,7 @@ def short(items, limit=4):
 
 def report(root):
     lines = ["root: %s" % root]
-    state = read_json(os.path.join(root, ".ai", "state", "current.json"))
+    state = read_json(state_file(root))
     if not state.get("task_id"):
         return lines + ["task: none — no task in flight", schema_line(root)], None
     policy = read_json(os.path.join(root, ".ai", "policies", "risk-tiers.json"))
@@ -143,7 +149,7 @@ def main(argv=None):
         print("root: none — no .ai/ in %s or above it; /ai-init sets one up" % os.path.abspath(args.root))
         return 1
     lines, task_id = None, None
-    state = read_json(os.path.join(root, ".ai", "state", "current.json"))
+    state = read_json(state_file(root))
     if state.get("schema") == 7:
         # A schema-7 task is state.py's to describe; this file's own read stays for
         # an older task, and for an install whose state.py cannot answer.
