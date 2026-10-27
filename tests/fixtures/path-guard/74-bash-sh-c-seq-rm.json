@@ -1,1 +1,1 @@
-{"case":"sh -c with an rm after a ; is still denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"sh -c 'x; rm -f .ai/state/current.json'"}}}
+{"case":"sh -c with a removal after a semicolon is allowed since 3.4 (R22, SQ13: sh -c is not re-parsed)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"sh -c 'x; rm -f .ai/state/current.json'"}}}

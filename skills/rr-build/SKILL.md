@@ -149,7 +149,7 @@ Option keys are single letters, A first, at least two; `--recommend` marks the
 one you would pick. Then **stop** and show the questions: while one is pending,
 `step-done` and `close` exit 4. The human answers in the conversation — record
 it with `$STATE answer Q1=B Q2=X:"free text"` or `--prose "1B 2A"` — or fills the
-`[Answer]:` line in `.ai/reports/<task-id>/questions.md`, which is then the
+`[Answer]:` line in `.ai/reports/<task-id>/task.md` §Questions, which is then the
 record. Never edit that file, and never answer on the human's behalf.
 
 ## 6. Hand over by mode

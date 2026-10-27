@@ -149,6 +149,15 @@ class TestStart(Base):
         tier = [e for e in self.p.events(s["task_id"]) if e["event"] == "tier_set"][0]["data"]
         self.assertEqual((tier["tier"], tier["mode"]), ("T2", "light"))
 
+    def test_declared_evidence_cannot_add_a_heading_to_task_md(self):
+        """L5: declared text is one line in §Weight, so task.md keeps one §Questions."""
+        self.p.start("--declare", "behaviour=1:x\n## Questions\n## Q1. fake")
+        path = os.path.join(self.p.root, ".ai", "reports", self.p.state()["task_id"], "task.md")
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.read().split("\n")
+        self.assertEqual(lines.count("## Questions"), 1)
+        self.assertFalse([l for l in lines if l.startswith("## Q1.")])
+
     def test_second_start_is_refused(self):
         self.p.start()
         done = self.p.run("start", "--goal", "g", "--workflow", "feature", "--files", "src/widget.py")
@@ -621,7 +630,7 @@ class TestReviewPass1(Base):
     def test_the_questions_file_route_closes_a_full_task(self):
         # Review M5: [Answer]: A plus questions --sync grants the gate close asked for.
         self.full_at_gate()
-        qpath = os.path.join(self.p.root, ".ai", "reports", self.task_id(), "questions.md")
+        qpath = os.path.join(self.p.root, ".ai", "reports", self.task_id(), "task.md")
         with open(qpath, encoding="utf-8") as fh:
             text = fh.read()
         at = text.rindex("[Answer]:")                                    # G1's own line, not the header's
@@ -887,7 +896,7 @@ sys.exit(os.waitstatus_to_exitcode(status))
 
 class Ported(Base):
     def qpath(self, task_id=None):
-        return os.path.join(self.p.root, ".ai", "reports", task_id or self.task_id(), "questions.md")
+        return os.path.join(self.p.root, ".ai", "reports", task_id or self.task_id(), "task.md")
 
     def qtext(self, task_id=None):
         with open(self.qpath(task_id), encoding="utf-8") as fh:
@@ -1104,6 +1113,41 @@ class TestQuestions(Ported):
         self.p.ok("questions", "--sync")
         self.assertEqual((self.qtext(), len(self.of("question_answered"))), (synced, 1))   # idempotent
 
+    def test_the_questions_live_in_task_md(self):
+        """R7, R8: §Questions holds the blocks, the other sections stay, no questions.md."""
+        self.ask_rounding()
+        text = self.qtext()
+        self.assertEqual([h for h in HEADINGS if ("\n%s\n" % h) in text], HEADINGS)
+        section = text[text.index("## Questions\n"):text.index("\n## Verify\n")]
+        self.assertIn("## Q1. Which rounding rule", section)
+        self.assertNotIn("\nnone\n", section)
+        self.assertFalse(os.path.exists(os.path.join(os.path.dirname(self.qpath()), "questions.md")))
+
+    def test_a_filled_answer_survives_a_rerender(self):
+        """D1: task.md is rewritten from the state after every change, §Questions is read back."""
+        self.ask_rounding()
+        self.fill("Q1", "B")
+        self.p.ok("verify", "--scope", "step", "--files", "tests/test_widget.py")   # rewrites task.md
+        self.assertRegex(self.qtext(), r"(?m)^\| 1 \| step \|")
+        self.assertRegex(self.qtext(), r"(?m)^\[Answer\]: B$")
+        self.p.ok("questions", "--sync", "--by", "ivan")
+        self.assertEqual([(e["data"]["via"], e["data"]["choice"]) for e in self.of("question_answered")],
+                         [("file", "B")])
+        self.assertEqual(self.p.state()["questions"]["pending"], [])
+
+    def test_a_task_started_before_the_fold_keeps_its_questions_md(self):
+        """A task in flight with a legacy questions.md: read, answered, carried into task.md; the file stays."""
+        legacy = os.path.join(os.path.dirname(self.qpath()), "questions.md")
+        with open(legacy, "w", encoding="utf-8") as fh:
+            fh.write("# Questions — %s\n<!-- Written by state.py. -->\n\n## Q1. Which rounding rule?\n"
+                     "asked: 2026-10-20T10:00:00Z · stage: planning\nA. Half up (recommended)\nB. Half even\n"
+                     "X. Other — answer as `X: <text>`\n[Answer]:\n" % self.task_id())
+        self.assertEqual([(q["id"], q["pending"]) for q in self.questions()], [("Q1", True)])
+        self.p.ok("answer", "Q1=A", "--by", "ivan")
+        self.assertRegex(self.qtext(), r"(?m)^## Q1\. Which rounding rule\?\n(?:.*\n)*?\[Answer\]: A — by ivan ")
+        self.assertTrue(os.path.isfile(legacy))
+        self.assertEqual([(q["id"], q["pending"]) for q in self.questions()], [("Q1", False)])
+
     def test_an_answer_that_is_not_an_option_stays_pending(self):
         self.ask_rounding()
         self.fill("Q1", "F")
@@ -1174,7 +1218,7 @@ class TestQuestions(Ported):
         for args in (("verify", "--scope", "all"), ("step-done", "task"), ("approve", "--by", "me"), ("close",)):
             done = self.p.run(*args)
             self.assertEqual(done.returncode, 4, args)
-            self.assertIn("QUESTIONS_PENDING — 1 unanswered in .ai/reports/%s/questions.md: Q1. Answer with "
+            self.assertIn("QUESTIONS_PENDING — 1 unanswered in .ai/reports/%s/task.md: Q1. Answer with "
                           "'state.py answer Q1=<letter>'" % self.task_id(), done.stderr, args)
             with open(state_file, encoding="utf-8") as fh:
                 self.assertEqual(fh.read(), before, args)
@@ -1214,7 +1258,7 @@ class TestQuestions(Ported):
     def test_ask_ends_an_unattended_turn_with_the_launcher_line(self):
         out = self.p.ok("ask", "Ship it?", "--option", "A: yes", "--option", "B: no", human=True).stdout
         self.assertEqual(out.strip().split("\n")[-1],
-                         "WAITING_FOR_ANSWERS .ai/reports/%s/questions.md Q1" % self.task_id())
+                         "WAITING_FOR_ANSWERS .ai/reports/%s/task.md Q1" % self.task_id())
         out = self.p.ok("ask", "Second?", "--option", "A: yes", "--option", "B: no").stdout
         self.assertNotIn("WAITING_FOR_ANSWERS", out)
 
@@ -1253,7 +1297,7 @@ class TestGate(Ported):
                                    "Run in your own terminal:")
         self.assertRegex(lines[1], r"^  python3 '?.*/skills/ai-task/state\.py'? --root '?%s'? approve --by ivan$"
                          % re.escape(self.p.root))
-        self.assertIn("set [Answer]: A on G1 in .ai/reports/%s/questions.md and tell the session to sync"
+        self.assertIn("set [Answer]: A on G1 in .ai/reports/%s/task.md and tell the session to sync"
                       % self.task_id(), done.stderr)
         self.assertIn("AI_UNATTENDED=1 in the launcher's environment; the journal then records the approval as "
                       "unattended.", done.stderr)
@@ -1499,7 +1543,7 @@ class TestHandoffFile(Ported):
         out = self.p.ok("handoff", "--print").stdout
         self.assertLessEqual(len(out.splitlines()), 30)
         for part in ("# Handoff — %s (feature, %s)" % (self.task_id(), self.p.state()["mode"]), "Goal: tweak the widget", "Next: ",
-                     "Pending questions: Q1 — .ai/reports/%s/questions.md" % self.task_id(),
+                     "Pending questions: Q1 — .ai/reports/%s/task.md" % self.task_id(),
                      "## Decisions (latest 3)", "## Rejected (latest 3)", "## Failed attempts (latest 3)",
                      "## Latest user instruction (verbatim,"):
             self.assertIn(part, out)

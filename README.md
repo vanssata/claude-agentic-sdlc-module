@@ -79,7 +79,7 @@ Five files make that resume real, and every one of them is provider-neutral:
 |---|---|---|
 | `.ai/state/current.json` | `state.py`, `update.py` | the task: stage, step, risk tier, approval |
 | `.ai/reports/<task-id>/events.jsonl` | `state.py` | the journal — one append-only line per event, with the runtime that emitted it |
-| `.ai/reports/<task-id>/questions.md` | `state.py` | the open questions, each with an `[Answer]:` line a human fills in |
+| `.ai/reports/<task-id>/task.md` §Questions | `state.py` | the open questions, each with an `[Answer]:` line a human fills in |
 | `.ai/state/handoff.md` | `state.py`, rendered | thirty lines a session reads first: where the task is, what it may touch, what is pending |
 | `.ai/reports/<task-id>/sensors.json` | `state.py review-gate` | what each deterministic sensor measured, and on which tree |
 | `.ai/reports/<task-id>/tests-<scope>-<n>.log` | `state.py test-run` | the full test output, so it never reaches a context window |
@@ -95,7 +95,7 @@ open request. `init`, `quick` and `risk` print a
 plans) or the quota rule points at the other runtime — advice only.
 
 A subagent that needs a decision **returns** `QUESTIONS_NEEDED` instead of
-asking; the manager writes the question into `questions.md`, a human answers it
+asking; the manager writes the question into `task.md` §Questions, a human answers it
 there or in the session, and `state.py questions --sync` puts the answer back
 into the state. The journal is what `/ai-status` and `/usage-report` read, at
 zero model cost — no model is involved in writing or reading any of these files.

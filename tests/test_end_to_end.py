@@ -84,6 +84,40 @@ class TestEndToEnd(unittest.TestCase):
         self.assertEqual(self.reports(task), ["events.jsonl", "task.md"])
         self.assertTrue(os.path.isfile(os.path.join(self.p.root, ".ai", "state", "logs", task, "state.json")))
 
+    def test_a_task_that_asks_still_leaves_two_files(self):
+        """R8 phase 3: a question and the gate, both answered in task.md, and no third file."""
+        self.call("start", "--goal", "asks first", "--workflow", "feature", "--files", "src/widget.py",
+                  "--tests", "tests/test_widget.py", *ZERO, "--mode", "full", "--by", "lead")
+        task = self.p.state()["task_id"]
+        self.call("ask", "Which wording?", "--option", "A: short", "--option", "B: long", "--recommend", "A")
+        task_md = os.path.join(self.p.root, ".ai", "reports", task, "task.md")
+
+        def fill(qid, answer):
+            with open(task_md, encoding="utf-8") as fh:
+                lines = fh.read().split("\n")
+            start = lines.index(next(line for line in lines if line.startswith("## %s." % qid)))
+            end = next(i for i in range(start, len(lines)) if lines[i].startswith("[Answer]:"))
+            lines[end] = "[Answer]: " + answer
+            with open(task_md, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(lines))
+
+        fill("Q1", "A")
+        self.call("questions", "--sync", "--by", "ivan", human=True)
+        self.p.write("src/widget.py", "x = 3\n")
+        self.call("verify", "--scope", "all")
+        self.call("review", "--verdict", "pass", "--tier", "STRONG", "--report", "-",
+                  stdin="FINDINGS\nnone\nVERDICT pass\n")
+        self.assertIn("ready for approval", self.call("close").stdout)
+        fill("G1", "A")
+        self.call("questions", "--sync", "--by", "ivan", human=True)
+        self.call("close")
+        self.assertFalse(self.p.in_flight())
+        self.assertEqual(self.reports(task), ["events.jsonl", "task.md"])
+        with open(task_md, encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertRegex(text, r"(?m)^\[Answer\]: A — by ivan via file at ")
+        self.assertIn("## Q1. Which wording?", text)
+
 
 def patch(*paths):
     """One apply_patch payload updating each path."""

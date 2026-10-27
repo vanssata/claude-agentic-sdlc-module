@@ -27,6 +27,7 @@ GUARD = os.path.join(PLUGIN, "hooks", "ai-path-guard.sh")
 IMPLEMENTATION = '{"current_stage":"implementation","task_id":"T-1"}\n'
 CONTROL_FILE = "removal of a claude-agentic control file"
 WORK_CAP = "names more paths than the guard can check"
+LONG = "shell command that names a guarded path"
 
 
 def pad_a(n):
@@ -142,15 +143,17 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
                               "tool_input": {"command": "*** Begin Patch\n*** End Patch"}})
 
     def test_04_the_runtime_lock_is_tied_to_a_task(self):
-        edit_agent = tool(self.root, "Edit", self.root + "/.claude/agents/ai-reviewer.md")
+        # The claude settings stay frozen in a task (R22), so they carry the lock's cases.
+        edit_settings = tool(self.root, "Edit", self.root + "/.claude/settings.json")
         self.state(IMPLEMENTATION)
-        self.decide("stage=implementation: editing an agent definition is denied", "deny", edit_agent)
+        self.decide("stage=implementation: editing the claude settings is denied", "deny", edit_settings)
         self.state('{"current_stage":"done","task_id":"T-1"}\n')
-        self.decide("stage=done: the same edit is allowed again", "allow", edit_agent)
+        self.decide("stage=done: the same edit is allowed again", "allow", edit_settings)
         self.state(None)
-        self.decide("no task at all: the same edit is allowed", "allow", edit_agent)
+        self.decide("no task at all: the same edit is allowed", "allow", edit_settings)
         self.state("not json\n")
-        self.decide("a state file that does not parse counts as in flight", "deny", edit_agent)
+        self.decide("a state file that does not parse counts as a task in flight: denied", "deny",
+                    edit_settings)
         self.state("{}\n")
 
     def test_05_approval_cannot_be_granted_from_an_agent_shell(self):
@@ -192,7 +195,7 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
 
     def test_07_the_context_guard_is_the_runtimes_to_run(self):
         hookrun = self.b("python3 /home/u/.claude/hooks/context-guard.py")
-        self.decide("with a task in flight, running it by hand is denied", "deny", hookrun)
+        self.decide("with a task in flight, running it by hand is allowed since 3.4 (R22)", "allow", hookrun)
         with self.subTest("and AI_UNATTENDED lets a launcher through"):
             self.assertEqual(self.out(hookrun, dict(os.environ, AI_UNATTENDED="1")), "")
         self.state(None)
@@ -266,7 +269,7 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         self.state('{"current_stage":"human_approval","task_id":"T-1"}\n')
         self.decide("state.py \\⏎approve --by x is denied", "deny",
                     self.b("python3 /home/u/.claude/skills/ai-task/state.py \\\napprove --by x"))
-        self.decide("python3 \\⏎context-guard.py is denied", "deny",
+        self.decide("python3 \\⏎context-guard.py is allowed since 3.4 (R22: running the hook is not refused)", "allow",
                     self.b("python3 \\\n/home/u/.claude/hooks/context-guard.py"))
         # Spellings the T-2026-10-15-003 reviews found past APPROVE_RE.
         for c in [
@@ -336,18 +339,21 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         names = "".join(" file%d.txt" % i for i in range(1, 3001))
         self.timed("a 40 KB echo is allowed", "allow", b("echo " + pad_a(40000)), 1000)
         self.timed("a 40 KB sh -c string is allowed", "allow", b("sh -c '%s'" % pad_a(40000)), 1000)
+        # R22, D3: past 4096 characters a verb the rules need is refused unread, fast.
+        self.timed("a 20 KB sh -c string that runs state.py approve is denied by the 4 KB rule", "deny",
+                   b("sh -c '%s; python3 state.py approve --by x'" % pad_a(20000)), 100)
         self.timed("a 200 KB echo followed by cat .env is denied", "deny", b("echo %s; cat .env" % pad_a(200000)), 1000)
         self.timed("rm -f of 3000 files and a task state file is denied", "deny",
                    b("rm -f%s .ai/state/current.json" % names), 5000)
         self.within("rm -f of 3000 ordinary files is decided within 5 s (${ms} ms)", b("rm -f" + names), 5000)
         self.timed("a 200 KB argument glued to a protected path is denied", "deny",
                    b("echo %s/.ai/state/current.json" % pad_a(200000)), 1000)
-        self.timed("a 200 KB argument beside a frozen path, with no task, is allowed", "allow",
+        self.timed("a 200 KB argument beside a frozen path, with no task, is denied by the 4 KB rule", "deny",
                    b("echo %s .claude/settings.json" % pad_a(200000)), 1000)
         self.state(None)
+        # Since 3.4 (R22, D3) .claude/agents/ is not frozen, so no work cap is reached.
         cap = b("ls" + "".join(" .claude/agents/x%d.md" % i for i in range(1, 301)))
-        self.decide("ls of 300 frozen paths is denied by the work cap", "deny", cap)
-        self.says("and the deny says why", WORK_CAP, cap)
+        self.decide("ls of 300 .claude/agents paths is allowed since 3.4 (R22: they are not frozen)", "allow", cap)
         # Prose is not counted (STRONG review): only tokens that hit the pre-filter.
         self.timed("a 300-word heredoc that mentions .env.example is allowed", "allow",
                    b("cat > docs/setup.md <<'EOF'\ncopy .env.example first.%s\nEOF" % words(300)), 3000)
@@ -389,7 +395,8 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         self.timed("cat .env.example and 60 more tokens is allowed (the cap does not reach normal lines)", "allow",
                    b("cat .env.example" + words(60)), 3000)
         # The movers caps: 64 operands that need classify, 16 directory scans.
-        frozen = lambda n: "".join(" .claude/agents/x%d.md" % i for i in range(1, n + 1))  # noqa: E731
+        # The claude settings stay frozen in a task (R22), so they still need classify.
+        frozen = lambda n: "".join(" .claude/settings-x%d.json" % i for i in range(1, n + 1))  # noqa: E731
         self.state(None)
         self.decide("rm -f of 30 frozen paths with no task is allowed", "allow", b("rm -f" + frozen(30)))
         self.says("rm -f of 70 frozen paths is denied by the work cap", WORK_CAP, b("rm -f" + frozen(70)))
@@ -397,7 +404,7 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             os.makedirs("%s/scan/d%d" % (tmp, i))
         dirs = lambda n: "".join(" %s/scan/d%d" % (tmp, i) for i in range(1, n + 1))  # noqa: E731
         self.decide("rm -rf of 16 directories is allowed", "allow", b("rm -rf" + dirs(16)))
-        self.decide("rm -rf of 17 directories is denied by the work cap", "deny", b("rm -rf" + dirs(17)))
+        self.says("rm -rf of 17 directories is denied by the work cap", WORK_CAP, b("rm -rf" + dirs(17)))
         # T-2026-10-20-001 (known-risks: padded sh -c segments): segments_of re-reads
         # at most 64 sh -c / eval strings, and every segment loop is on the clock.
         self.timed("6000 sh -c segments and rm of the task state file are denied", "deny",
@@ -405,10 +412,11 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         self.timed("6000 eval segments and rm of the task state file are denied", "deny",
                    b("eval x; " * 6000 + "rm -f .ai/state/current.json"), 2000)
         self.decide("64 sh -c segments and rm -f a.txt are allowed", "allow", b("sh -c x; " * 64 + "rm -f a.txt"))
-        self.says("65 sh -c segments and rm -f a.txt are denied by the work cap", WORK_CAP,
-                  b("sh -c x; " * 65 + "rm -f a.txt"))
-        self.says("the 64th sh -c string is still read: its rm of the state file is denied", CONTROL_FILE,
-                  b("sh -c x; " * 63 + "sh -c 'rm -f .ai/state/current.json'"))
+        # Since 3.4 (R22, SQ13) no sh -c string is re-parsed, so none is counted either.
+        self.decide("65 sh -c segments and rm -f a.txt are allowed since 3.4 (R22, SQ13: sh -c is not re-parsed)",
+                    "allow", b("sh -c x; " * 65 + "rm -f a.txt"))
+        self.decide("the 64th sh -c string's rm of the state file is allowed since 3.4 (R22, SQ13: sh -c is not "
+                    "re-parsed)", "allow", b("sh -c x; " * 63 + "sh -c 'rm -f .ai/state/current.json'"))
         self.timed("100000 one-word segments and rm -f a.txt are allowed", "allow",
                    b("x;" * 100000 + "rm -f a.txt"), 3000)
         self.timed("100000 one-word segments and rm of the task state file are denied", "deny",
@@ -420,12 +428,12 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         self.timed("1000 rm segments and rm -f a.txt are allowed", "allow", b("rm x; " * 1000 + "rm -f a.txt"), 2000)
         pl = b("rm x; " * 1000 + "rm -f .ai/state/current.json")
         self.timed("1000 rm segments and rm of the task state file are denied", "deny", pl, 2000)
-        self.says("and the deny names the control file, not the work cap", CONTROL_FILE, pl)
+        self.says("and the deny is the 4 KB rule's, not the work cap", LONG, pl)
         globop = pad_a(4097) + "*"
-        self.says("a control-file deny comes before a later segment's long glob operand deny", CONTROL_FILE,
+        # Both lines are over 4 KB and name the state file: the 4 KB rule decides first.
+        self.says("a control-file rm before a later segment's long glob operand is denied by the 4 KB rule", LONG,
                   b("rm -f .ai/state/current.json; rm -f " + globop))
-        self.says("a long glob operand deny comes before a later segment's control-file deny",
-                  "operand that holds a glob or expansion character",
+        self.says("a long glob operand before a later segment's control-file rm is denied by the 4 KB rule", LONG,
                   b("rm -f %s; rm -f .ai/state/current.json" % globop))
         self.says("a later segment's mv destination is still a copy or move into, not a move of",
                   "copy or move into a claude-agentic control file", b("rm x; mv a.txt .ai/state/current.json"))
@@ -443,7 +451,7 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
                    b(("rm %s; " % chain) * 400 + "rm -f .ai/state/current.json"), 8000)
         pl = b("rm -f .ai/state/current.json; " + "rm x; " * 20000 + "rm y")
         self.timed("rm of the task state file before 20000 rm segments is denied", "deny", pl, 2000)
-        self.says("and the deny names the control file, not the work cap", CONTROL_FILE, pl)
+        self.says("and the deny is the 4 KB rule's, not the work cap", LONG, pl)
         # Its re-review: a batch was checked only when its candidates filled 32 KB, so
         # segments that add none (`rm -f;`) or one behind thousands of options left an
         # early deny waiting for the end of the line (HEAD 1.1 s with the control-file
@@ -452,10 +460,10 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         # candidate by candidate now: allowed when none of them is protected.
         pl = b("rm -f .ai/state/current.json; " + "rm -f; " * 150000 + "rm y")
         self.timed("rm of the task state file before 150000 rm segments with no operand is denied", "deny", pl, 3000)
-        self.says("and the deny names the control file, not the work cap", CONTROL_FILE, pl)
+        self.says("and the deny is the 4 KB rule's, not the work cap", LONG, pl)
         pl = b("rm -f .ai/state/current.json; " + ("rm %sy; " % ("-f " * 2000)) * 200)
         self.timed("rm of the task state file before 200 rm segments of 2000 options is denied", "deny", pl, 3000)
-        self.says("and the deny names the control file, not the work cap", CONTROL_FILE, pl)
+        self.says("and the deny is the 4 KB rule's, not the work cap", LONG, pl)
         deep = root + "/" + (pad_a(200) + "/") * 8
         os.makedirs(deep)
         self.decide("rm of 1500 files under a 1600-character cwd is allowed: past ARG_MAX, every candidate is checked",
@@ -470,10 +478,10 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         pl = b("rm -f .ai/state/current.json; rm" + (" " + qop) * 30)
         self.timed("rm of the task state file before a 123 KB segment of quote-padded operands is denied", "deny",
                    pl, 2000)
-        self.says("and the deny names the control file, not the work cap", CONTROL_FILE, pl)
+        self.says("and the deny is the 4 KB rule's, not the work cap", LONG, pl)
         pl = b(("rm %s; " % qop) * 16 + "rm -f .ai/state/current.json; " + ("rm %s; " % qop) * 8)
         self.timed("rm of the task state file among 24 quote-padded rm segments is denied", "deny", pl, 2000)
-        self.says("and the deny names the control file, not the work cap", CONTROL_FILE, pl)
+        self.says("and the deny is the 4 KB rule's, not the work cap", LONG, pl)
         self.decide("rm of the task state file inside runs of both quote kinds is denied", "deny",
                     b("rm \"'\".ai/state/current.json\"'\""))
         self.decide("cp -t into the state directory inside runs of both quote kinds is denied", "deny",
@@ -489,11 +497,11 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         pl = b("rm -f %s/.ai/state/current.json; rm%s" % (root, words(5000)), deep2.rstrip("/"))
         self.timed("rm of the task state file before an rm of 5000 operands under a 3.3 KB cwd is denied", "deny",
                    pl, 2000)
-        self.says("and the deny names the control file, not the work cap", CONTROL_FILE, pl)
+        self.says("and the deny is the 4 KB rule's, not the work cap", LONG, pl)
         pl = b("rm -f .ai/state/current.json; mv" + words(3000) + " d/" + pad_a(4000))
         self.timed("rm of the task state file before an mv of 3000 sources into a 4 KB destination is denied",
                    "deny", pl, 2000)
-        self.says("and the deny names the control file, not the work cap", CONTROL_FILE, pl)
+        self.says("and the deny is the 4 KB rule's, not the work cap", LONG, pl)
 
     def test_12_sh_c_through_blanks_and_spellings(self):
         b = self.b
@@ -506,12 +514,14 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         for cp in ("1680", "2000", "2001", "2002", "2003", "2004", "2005", "2006", "2008", "2009", "200A",
                    "2028", "2029", "205F", "3000"):
             u = chr(int(cp, 16))
-            self.decide("IFS=U+%s running /bin/sh -c 'rm of the task state file' is denied" % cp, "deny",
-                        b(sh_ifs(u, ".ai/state/current.json")))
-            self.decide("echo of /bin/sh -c 'rm of the task state file' with U+%s blanks is denied" % cp, "deny",
-                        b("echo /bin/sh%s-c%s'rm -f .ai/state/current.json'" % (u, u)))
+            # Since 3.4 (R22, SQ13) a sh -c string is not re-parsed: the accepted bypass.
+            self.decide("IFS=U+%s running /bin/sh -c 'rm of the task state file' is allowed since 3.4 (R22, SQ13)"
+                        % cp, "allow", b(sh_ifs(u, ".ai/state/current.json")))
+            self.decide("echo of /bin/sh -c 'rm of the task state file' with U+%s blanks is allowed since 3.4 "
+                        "(R22, SQ13)" % cp, "allow", b("echo /bin/sh%s-c%s'rm -f .ai/state/current.json'" % (u, u)))
             self.decide("IFS=U+%s running /bin/sh -c 'rm -f a.txt' is allowed" % cp, "allow", b(sh_ifs(u, "a.txt")))
-        self.decide("under LC_ALL=C, IFS=U+3000 running /bin/sh -c 'rm of the task state file' is denied", "deny",
+        self.decide("under LC_ALL=C, IFS=U+3000 running /bin/sh -c 'rm of the task state file' is allowed since 3.4 "
+                    "(R22, SQ13)", "allow",
                     b(sh_ifs("　", ".ai/state/current.json")), env=dict(os.environ, LC_ALL="C"))
         # U+2007 is not in that set: like IFS=, it stays out of reach (known-risks).
         self.decide("IFS=U+2007 is not a blank: its /bin/sh -c split is allowed, as before", "allow",
@@ -525,7 +535,8 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             'sh -c 2>/dev/null', 'sh -c 2> /dev/null', 'sh -c >/dev/null 2>&1', 'sh -c &>/dev/null',
             'sh </dev/null -c', "'sh' -c", '"bash" -c', '\\sh -c', "'/bin/sh' -c",
         ]:
-            self.decide("%s 'rm of the task state file' is denied" % p, "deny",
+            # Since 3.4 (R22, SQ13) the string is not re-parsed: every spelling is allowed.
+            self.decide("%s 'rm of the task state file' is allowed since 3.4 (R22, SQ13)" % p, "allow",
                         b("%s 'rm -f .ai/state/current.json'" % p))
         for p in ['bash --norc -c', 'bash -o posix -c', 'sh -c --', 'sh -c 2>/dev/null', "'sh' -c", '\\sh -c']:
             self.decide("%s 'rm -f a.txt' is allowed" % p, "allow", b("%s 'rm -f a.txt'" % p))
@@ -539,9 +550,11 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             "find . -name 'sh' -exec sh -c", 'find . -name sh 2>/dev/null -exec sh -c',
             "find . -path '*/sh' -exec bash -c", "sudo -u 'sh' -c x bash -c",
         ]:
-            self.decide("%s 'rm of the task state file' is denied" % p, "deny",
+            # Since 3.4 (R22, SQ13) the string is not re-parsed: every spelling is allowed.
+            self.decide("%s 'rm of the task state file' is allowed since 3.4 (R22, SQ13)" % p, "allow",
                         b("%s 'rm -f .ai/state/current.json'" % p))
-        self.decide("a bash -c inside a sh -c string, rm of the task state file, is denied", "deny",
+        self.decide("a bash -c inside a sh -c string, rm of the task state file, is allowed since 3.4 (R22, SQ13)",
+                    "allow",
                     b("sh -c 'echo; bash -c \"rm -f .ai/state/current.json\"'"))
         self.decide("bash -c -o posix 'rm -f a.txt' is allowed", "allow", b("bash -c -o posix 'rm -f a.txt'"))
         self.decide("find -name 'sh' -exec sh -c 'rm -f a.txt' is allowed", "allow",
@@ -556,7 +569,8 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             'bash ' + '-e ' * 20 + '-c', 'bash -o posix ' + '-e ' * 9 + '-O extglob -c',
             'bash 2>/tmp/…あ→ᚁx -c',
         ]:
-            self.decide("%s 'rm of the task state file' is denied" % p, "deny",
+            # Since 3.4 (R22, SQ13) the string is not re-parsed: every spelling is allowed.
+            self.decide("%s 'rm of the task state file' is allowed since 3.4 (R22, SQ13)" % p, "allow",
                         b("%s 'rm -f .ai/state/current.json'" % p))
         self.decide("bash with 9 -e before -c and 'rm -f a.txt' is allowed", "allow",
                     b("bash %s-c 'rm -f a.txt'" % ("-e " * 9)))
@@ -626,7 +640,8 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         def agent_override(name):
             return tool(self.root, name, self.root + "/.ai/agents/reviewer.md")
         self.state(IMPLEMENTATION)
-        self.decide("in a task: Write to .ai/agents/ is denied", "deny", agent_override("Write"))
+        self.decide("in a task: Write to .ai/agents/ is allowed since 3.4 (R22: no longer frozen)", "allow",
+                    agent_override("Write"))
         self.decide("in a task: Read of .ai/agents/ is allowed", "allow", agent_override("Read"))
         self.state(None)
         self.decide("no task: Write to .ai/agents/ is allowed", "allow", agent_override("Write"))
@@ -658,6 +673,10 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             'read -r a <<< "$x"\nchmod 000 .ai/state/current.json',
             'echo $((1<<2))\nrm -f .ai/state/current.json',
             '(( x <<= 1 ))\nrm -f .ai/state/current.json',
+        ]:
+            dh("in a task: still denied: " + c.replace("\n", "⏎"), "deny", c)
+        # Since 3.4 (R22, SQ13) a shell's -c string is not re-parsed: the accepted bypass.
+        for c in [
             "/bin/sh -c 'cd /tmp; rm -f .ai/state/current.json'",
             "xargs sh -c 'true; rm -f .ai/state/current.json'",
             "find . -exec sh -c 'true; rm -f .ai/state/current.json' \\;",
@@ -665,10 +684,12 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             "timeout 5 sh -c 'x; rm -f .ai/state/current.json'",
             "bash -c $'true; rm -f .ai/state/current.json'",
         ]:
-            dh("in a task: still denied: " + c.replace("\n", "⏎"), "deny", c)
-        with self.subTest("in a task: the deny names the file found under the directory"):
+            dh("in a task: allowed since 3.4 (R22, SQ13: sh -c is not re-parsed): " + c, "allow", c)
+        # Since 3.4 everything under .ai/state/ is protected (R22), so the
+        # directory is named before any file inside it is looked for.
+        with self.subTest("in a task: the deny names the state directory"):
             out = self.out(self.b("rm -rf .ai/state"))
-            self.assertRegex(out, r"current\.json|session\.json")
+            self.assertRegex(out, r"control file: \.ai/state")
         self.state(None)
         dh("no task: rm -rf .ai/state/ is still denied, it holds a control file", "deny", 'rm -rf .ai/state/')
         dh("no task: { rm -f .ai/state/session.json; } is denied", "deny", '{ rm -f .ai/state/session.json; }')
@@ -696,6 +717,8 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             'ruby -e \'puts File.read(".ai/state/current.json")\'',
         ]:
             dh("a read-only one-liner is allowed: " + c, "allow", c)
+        c = 'perl -e \'open(F, ">>.ai/reports/T-1/events.jsonl")\''
+        dh("a writing one-liner is denied: " + c, "deny", c)
         for c in [
             'python3 -c "open(\'.ai/state/current.json\', \'w\').write(\'{}\')"',
             'python3 -c "open(\'.ai/reports/T-1/notes.md\', mode=\'a\').write(\'x\')"',
@@ -716,7 +739,6 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             'python3 -c "import subprocess; subprocess.run([\'rm\', \'.ai/state/current.json\'])"',
             'python3 -c "import os; os.system(\'rm .ai/state/current.json\')"',
             'perl -e \'open(my $f, ">", ".ai/state/current.json")\'',
-            'perl -e \'open(F, ">>.ai/reports/T-1/events.jsonl")\'',
             'perl -e \'open(F, "+<", ".ai/state/current.json")\'',
             'perl -e \'system("rm", ".ai/state/current.json")\'',
             "perl -e '`rm .ai/state/current.json`'",
@@ -756,6 +778,8 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
 
         def write_at(path, cwd=root):
             return tool(cwd, "Write", path, content="{}")
+        unfrozen = ('.ai/workflows/t3.md', '.ai/AGENTS.md', '.claude/agents/x.md', 'docs/sdlc/constitution.md',
+                    '.github/copilot-instructions.md', '.junie/guidelines.md', '.cursor/rules/x.mdc', '.cursorrules')
         for rel in [
             '.ai/state/current.json', '.ai/state/handoff.md', '.ai/reports/T-1/questions.md',
             '.ai/reports/T-1/events.jsonl', '.ai/policies/path-guard.json', '.ai/policies/risk-tiers.json',
@@ -763,7 +787,12 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             '.claude/hooks/ai-x.sh', '.codex/config.toml', '.codex/hooks/ai-x.sh', 'docs/sdlc/constitution.md',
             '.github/copilot-instructions.md', '.junie/guidelines.md', '.cursor/rules/x.mdc', '.cursorrules',
         ]:
-            self.decide("in a task: Write to %s under the root is denied" % rel, "deny", write_at(root + "/" + rel))
+            # Since 3.4 (R22, D3) the instruction files are no longer frozen in a task.
+            if rel in unfrozen:
+                self.decide("in a task: Write to %s under the root is allowed since 3.4 (R22)" % rel, "allow",
+                            write_at(root + "/" + rel))
+            else:
+                self.decide("in a task: Write to %s under the root is denied" % rel, "deny", write_at(root + "/" + rel))
             self.decide("in a task: Write to %s in a tree outside the root is allowed" % rel, "allow",
                         write_at(scratch + "/" + rel))
             self.decide("in a task: Write to %s under the ai-init templates is allowed" % rel, "allow",
@@ -785,7 +814,8 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         self.decide("Edit from cwd=src of the root's policy file is denied", "deny",
                     tool(root + "/src", "Edit", root + "/.ai/policies/path-guard.json"))
         dh("cat of a policy file outside the root is allowed", "allow", "cat %s/.ai/policies/path-guard.json" % scratch)
-        dh("cat of the root's policy file is still denied", "deny", 'cat .ai/policies/path-guard.json')
+        dh("cat of the root's policy file is allowed since 3.4 (R22: only secrets are read-denied)", "allow",
+           'cat .ai/policies/path-guard.json')
         dh("cp into a state file outside the root is allowed", "allow", "cp /tmp/x %s/.ai/state/current.json" % scratch)
         dh("a redirect into a state file outside the root is allowed", "allow",
            "echo '{}' > %s/.ai/state/current.json" % scratch)
@@ -914,7 +944,7 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             'python3 -c "print(\'x\', file=open(\'.ai/state/handoff.md\', mode=\'w\'))"',
             'python3 -c "from pathlib import Path; p=Path(\'/tmp/c\'); t=Path(\'.ai/state/current.json\'); p.replace(str(t))"',
         ]:
-            dh("a writing one-liner is still denied: " + c, "deny", c)
+            dh("a writing one-liner is denied: " + c, "deny", c)
         # Review of T-2026-10-25-001, H1, L1: the first-argument walk reads three
         # levels of parens, quoted strings and new Class(; HEAD denied all of these.
         for c in [
@@ -933,7 +963,7 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             'ruby -vpi -e \'sub(/a/, "b")\' .ai/reports/T-1/notes.md',
             'ruby -E utf-8 -i -pe \'sub(/a/, "b")\' .ai/reports/T-1/notes.md',
         ]:
-            dh("a writing one-liner is still denied: " + c, "deny", c)
+            dh("a writing one-liner is denied: " + c, "deny", c)
         # L2: a copy.copy and a str.replace whose string holds a paren are reads.
         for c in [
             'python3 -c "import copy, json; from pathlib import Path; d=copy.copy(json.loads(Path(\'.ai/state/current.json\').read_text())); print(d)"',
@@ -942,7 +972,7 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             dh("a read is allowed: " + c, "allow", c)
         # The mode indicator walks the first argument with a nested group: a long line
         # of commas and parens goes to grep (ere_match), measured at 40 KB.
-        self.timed("a 40 KB one-liner of commas and parens that reads the state is allowed", "allow",
+        self.timed("a 40 KB one-liner of commas and parens that reads the state is denied by the 4 KB rule", "deny",
                    self.b("python3 -c \"print(open('.ai/state/current.json').read())\" # open(" + "(a, b)," * 5800),
                    1000)
 

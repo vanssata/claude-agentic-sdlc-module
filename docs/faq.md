@@ -439,7 +439,7 @@ first line when you get a moment.
 ## Can an agent edit these policies?
 
 No. `.ai/policies/*.json`, `.ai/state/*.json`, `.ai/state/handoff.md`, the task's
-`questions.md` and `events.jsonl`, and the guards' own files are refused by the
+`task.md` and `events.jsonl`, and the guards' own files are refused by the
 path guard. A human edits them, outside an agent run, where the change shows up
 in review. An agent that can rewrite its own constraints does not have
 constraints.
@@ -450,21 +450,21 @@ With the task, and each has one writer:
 
 | File | Written by | For |
 |---|---|---|
-| `.ai/reports/<task-id>/questions.md` | `state.py ask` / `answer` / `questions --sync` | decisions a human has to make |
+| `.ai/reports/<task-id>/task.md` §Questions | `state.py ask` / `answer` / `questions --sync` | decisions a human has to make |
 | `.ai/reports/<task-id>/events.jsonl` | `state.py emit` | the append-only journal `/ai-status` and `/usage-report` read |
 | `.ai/state/handoff.md` | `state.py handoff` | the thirty lines a session reads first after a `/clear` or a compaction |
 | `.ai/state/session.json` | `hooks/context-guard.py` | which runtime is driving, and when you last took a turn |
 
-`questions.md` and `events.jsonl` are archived with the task; `handoff.md` and
+`task.md` and `events.jsonl` are archived with the task; `handoff.md` and
 `session.json` are git-ignored, because they describe a session and not the
-repository. You edit the `[Answer]:` lines in `questions.md` by hand — that is
-what it is for — and then tell the session to run `state.py questions --sync`.
+repository. You edit the `[Answer]:` lines in `task.md` §Questions by hand — that
+section is kept when the rest of `task.md` is rewritten — and then tell the session to run `state.py questions --sync`.
 Nothing else in there is yours to edit, and the guard enforces it.
 
 ## A subagent asked me a question and then stopped. Why?
 
 Because a subagent has no user to ask. It returns `QUESTIONS_NEEDED` with the
-question instead of guessing, the manager writes it into `questions.md`, and the
+question instead of guessing, the manager writes it into `task.md` §Questions, and the
 stage commands exit 4 while a question is pending. The alternative — a subagent
 that invents the answer it needed — is how a plan quietly ends up built on an
 assumption nobody made.
@@ -480,7 +480,7 @@ python3 <plugin>/skills/ai-task/state.py --root . approve --by "<your name>"
 
 `approve` checks for a TTY, so the same line run through the agent's shell exits
 5 and changes nothing. Or set `[Answer]: A` on the gate's question in
-`.ai/reports/<task-id>/questions.md` and tell the session to run `state.py
+`.ai/reports/<task-id>/task.md` and tell the session to run `state.py
 questions --sync`; that door opens only behind a turn you actually took —
 `context-guard.py` records it in `.ai/state/session.json`, and the path guard
 refuses to let an agent run that hook by hand. And `state.py approve` from an

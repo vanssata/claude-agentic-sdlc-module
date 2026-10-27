@@ -231,7 +231,7 @@ def compute(root, files, declared, goal="", policy=None):
     for axis in AXES:
         value, why, flag = measured.get(axis, (None, "", False))
         if axis in declared:
-            n, because = declared[axis]
+            n, because = declared[axis][0], " ".join(declared[axis][1].split())  # one line in task.md §Weight
             if value is not None and n < value:
                 notes.append("%s: declared %d below the measurement %d — replaced" % (axis, n, value))
             elif value is None or n > value:

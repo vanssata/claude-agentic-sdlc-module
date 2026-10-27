@@ -30,8 +30,8 @@ Usage:
   state.py ask    --batch FILE.json [--topic SLUG]
   state.py answer Q1=B [Q2=X:"text"] [--by NAME] [--via picker|prose] | --prose "1B 2A 3: text"
   state.py questions [--pending] [--sync] [--format md|prose|json] [--topic SLUG]
-                                         --sync records the [Answer]: lines a human filled,
-                                         the gate's file route among them (kept until phase 3)
+                                         --sync records the [Answer]: lines a human filled in
+                                         task.md §Questions, the gate's file route among them
   state.py handoff [--print] [--reason stage|precompact|manual|session-start]
   state.py handoff --to claude|codex [--for continue|review] [--why TEXT]
                                          move the task to the other runtime: it must resume there
@@ -97,12 +97,16 @@ FORGEABLE_EVENTS = {"gate_requested", "gate_approved", "gate_rejected",
                     "task_started", "task_closed", "weight_set", "weight_raised", "mode_set",
                     "verify_run", "review_verdict"}
 
-# The questions file is written by state.py and never by a model (R1). One regex
-# per line (I2), so a hand edit that keeps the shape round-trips exactly.
+# The questions are written by state.py and never by a model (R1). One regex
+# per line (I2), so a hand edit that keeps the shape round-trips exactly. A
+# task's questions live in task.md §Questions (R7, R8); a topic's in its own file.
 QUESTIONS_HEADER = """# Questions — %s
 <!-- Written by state.py. Answer with `state.py answer Q1=B`, or fill the [Answer]: lines and run
      `state.py questions --sync`. Do not edit the questions themselves. -->
 """
+TASK_QUESTIONS_NOTE = """<!-- Written by state.py. Answer with `state.py answer Q1=B`, or fill the [Answer]: lines here and run
+     `state.py questions --sync`; the rest of task.md is rewritten from the state, this section is kept. -->"""
+QUESTIONS_SECTION = "## Questions"
 OTHER_OPTION = "X. Other — answer as `X: <text>`"
 HEADING_RE = re.compile(r"^## (Q|G)(\d+)\. (.+)$")
 OPTION_RE = re.compile(r"^([A-W])\. (.+?)( \(recommended\))?$")
@@ -299,7 +303,7 @@ def apply_defaults(state):
     # load() promises to be loud about a file it cannot read and silent about one
     # it can, so the defaults are total rather than assuming the v1 shape.
     if not isinstance(state.get("questions"), dict):
-        state["questions"] = {"file": ".ai/reports/%s/questions.md" % task_id, "pending": []}
+        state["questions"] = {"file": ".ai/reports/%s/task.md" % task_id, "pending": []}
     if not isinstance(state.get("handoff"), dict):
         state["handoff"] = {"file": ".ai/state/handoff.md", "written_at": None, "reason": None}
     if not isinstance(state.get("human_approval"), dict):
@@ -670,7 +674,7 @@ def valid_task_id(task_id, flag="--task-id"):
     """A task id is a directory name under .ai/reports/, and everything the
     journal and the questions file are worth rests on it staying one. A '/' or
     a '..' in it puts both outside the project — and outside the path guard's
-    `.ai/reports/<id>/` patterns, which is how a writable questions.md, and
+    `.ai/reports/<id>/` patterns, which is how a writable task.md, and
     with it a self-granted gate, would come back."""
     if not isinstance(task_id, str) or not TASK_ID_RE.match(task_id) or ".." in task_id:
         die("%s takes a directory name — letters, digits, '.', '_' and '-', "
@@ -686,7 +690,62 @@ def questions_path(root, state, topic):
         if not SLUG_RE.match(topic):
             die("--topic takes a slug of lowercase letters, digits and hyphens, not %r" % topic)
         return os.path.join(root, "docs", "sdlc", "intent", "%s.questions.md" % topic)
-    return os.path.join(root, ".ai", "reports", state["task_id"], "questions.md")
+    return task_md_path(root, state)
+
+
+def in_task_md(path):
+    return os.path.basename(path) == "task.md"
+
+
+def split_task_md(lines):
+    """task.md as (before, section, after): `before` ends with the §Questions
+    heading, `section` runs to the next `## ` heading that is not a question's.
+    No heading: everything is `before` and the section is None."""
+    try:
+        start = lines.index(QUESTIONS_SECTION) + 1
+    except ValueError:
+        return lines, None, []
+    end = start
+    while end < len(lines) and not (lines[end].startswith("## ") and not HEADING_RE.match(lines[end])):
+        end += 1
+    return lines[:start], lines[start:end], lines[end:]
+
+
+def read_lines(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read().split("\n")
+    except OSError:
+        return None
+
+
+def question_lines(path):
+    """The lines the questions live in. For task.md that is §Questions only; a
+    task started before the fold may still hold its questions in questions.md
+    beside it, which is read until the first write carries them into task.md."""
+    lines = read_lines(path)
+    if not in_task_md(path):
+        return lines or []
+    section = split_task_md(lines or [])[1] or []
+    if not any(HEADING_RE.match(line) for line in section):
+        legacy = read_lines(os.path.join(os.path.dirname(path), "questions.md"))
+        if legacy and any(HEADING_RE.match(line) for line in legacy):
+            first = next(i for i, line in enumerate(legacy) if HEADING_RE.match(line))
+            return [""] + TASK_QUESTIONS_NOTE.split("\n") + [""] + legacy[first:]
+    return section
+
+
+def with_preamble(path, lines, name):
+    """An existing but empty (or header-less) question store still gets the
+    notice that tells a human not to edit the questions."""
+    if in_task_md(path):
+        if not any(line.startswith("<!-- Written by state.py") for line in lines):
+            lines = [""] + TASK_QUESTIONS_NOTE.split("\n") + [line for line in lines
+                                                              if line.strip() not in ("", "none")]
+        return lines
+    if not any(line.startswith("# Questions") for line in lines):
+        lines = (QUESTIONS_HEADER % name).rstrip("\n").split("\n") + lines
+    return lines
 
 
 def parse_answer_body(question, body):
@@ -721,13 +780,9 @@ def parse_answer_body(question, body):
 
 
 def parse_questions(path):
-    """One regex per line (I2). Returns the file's lines beside the questions, so
+    """One regex per line (I2). Returns the store's lines beside the questions, so
     a writer can replace an [Answer]: line and leave every other byte alone."""
-    try:
-        with open(path, encoding="utf-8") as fh:
-            lines = fh.read().split("\n")
-    except OSError:
-        return [], []
+    lines = question_lines(path)
     questions, current = [], None
     for index, line in enumerate(lines):
         heading = HEADING_RE.match(line)
@@ -778,7 +833,7 @@ LOCK_DEPTH = 0
 
 @contextlib.contextmanager
 def question_lock(path):
-    """questions.md is read, modified and written back. Without a lock across
+    """The questions are read, modified and written back. Without a lock across
     that window two `ask` calls lose a block — and the journal would then name a
     question the file does not hold, which nothing would ever block on.
 
@@ -813,6 +868,14 @@ def question_lock(path):
 
 def write_questions(path, lines):
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    if in_task_md(path):
+        # Only §Questions is replaced; the other sections stay as rendered.
+        before, section, after = split_task_md(read_lines(path) or [])
+        lines = lines + ([""] if lines and lines[-1] else [])
+        if section is not None:
+            lines = before + lines + after
+        else:
+            lines = before + (["", QUESTIONS_SECTION] if before else [QUESTIONS_SECTION]) + lines
     tmp = "%s.%d.tmp" % (path, os.getpid())
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines).rstrip("\n") + "\n")
@@ -1057,10 +1120,7 @@ def cmd_ask(args, root):
         lines, existing = parse_questions(path)
         while lines and not lines[-1].strip():
             lines.pop()
-        if not any(line.startswith("# Questions") for line in lines):
-            # An existing but empty (or header-less) file still gets the notice
-            # that tells a human not to edit the questions.
-            lines = (QUESTIONS_HEADER % (args.topic or state["task_id"])).rstrip("\n").split("\n") + lines
+        lines = with_preamble(path, lines, args.topic or state["task_id"])
         kind = "G" if args.gate else "Q"
         number = max([q["number"] for q in existing if q["kind"] == kind] or [0])
         for item in asked:
@@ -1262,7 +1322,7 @@ def handoff_lines(root, state, reason):
     """The six parts of I4, ≤ 30 lines by construction: a header, the three
     facts a session needs first, three sections of three notes, and the user's
     own last words. Everything here is a fact the runtime cannot lose — the
-    state, the journal, questions.md and session.json — never a transcript."""
+    state, the journal, task.md §Questions and session.json — never a transcript."""
     plan = state.get("approved_plan") or {}
     steps = plan.get("steps") or []
     # step ids and file scopes come from a model-authored plan file, so they are
@@ -1329,7 +1389,7 @@ def handoff_lines(root, state, reason):
 
 
 def write_handoff(root, state, reason):
-    """A pure function of the state, the journal, questions.md and session.json,
+    """A pure function of the state, the journal, task.md §Questions and session.json,
     written atomically — rendering it twice gives the same file but its
     timestamp. Best effort end to end, rendering included: a handoff that cannot
     be built or written must never fail the command that moved the stage, and
@@ -1486,8 +1546,7 @@ def request_gate(root, state, gate):
         gate_id = "G%d" % number
         while lines and not lines[-1].strip():
             lines.pop()
-        if not any(line.startswith("# Questions") for line in lines):
-            lines = (QUESTIONS_HEADER % state["task_id"]).rstrip("\n").split("\n") + lines
+        lines = with_preamble(path, lines, state["task_id"])
         lines.extend(question_block({
             "id": gate_id,
             "question": "%s (gate: %s)" % (gate_question_text(state["task_id"]), gate),
@@ -1757,7 +1816,7 @@ def apply_defaults_v7(state):
     state.setdefault("resume_point", None)
     state.setdefault("cross_vendor_review", None)
     if not isinstance(state.get("questions"), dict):
-        state["questions"] = {"file": ".ai/reports/%s/questions.md" % task_id, "pending": []}
+        state["questions"] = {"file": ".ai/reports/%s/task.md" % task_id, "pending": []}
     if not isinstance(state.get("handoff"), dict):
         state["handoff"] = {"file": ".ai/state/handoff.md", "written_at": None, "reason": None}
     state["handoff"].setdefault("pending_to", None)
@@ -2844,7 +2903,8 @@ def md_cell(text):
 
 
 def task_md_lines(root, state):
-    """A pure function of the state and the journal: eight sections (§Interfaces)."""
+    """A pure function of the state and the journal: eight sections (§Interfaces).
+    §Questions is "none" here; write_task_md keeps the section already on disk."""
     events, _ = read_journal(root, state["task_id"])
     w = state.get("weight") or {}
     override = state.get("mode_override")
@@ -2865,10 +2925,7 @@ def task_md_lines(root, state):
                                             ", ".join(step["tests"]) or "no tests", step["status"]))
     out += ["amended %s: +%s — %s" % (a["ts"], ", ".join(a["added"]), one_line(a["why"]))
             for a in state.get("amendments") or []]
-    pending = (state.get("questions") or {}).get("pending") or []
-    asked = any(e.get("event") in ("question_asked", "gate_requested") for e in events)
-    out += ["", "## Questions", "",
-            ("[questions.md](questions.md) — %d pending" % len(pending)) if asked or pending else "none"]
+    out += ["", QUESTIONS_SECTION, "", "none"]
     out += ["", "## Verify", "", "| n | scope | exit | tree | log | expected_fail |", "|---|---|---|---|---|---|"]
     for r in state["verify"]["runs"]:
         out.append("| %s | %s | %s | %s | %s | %s |" % (r["n"], r["scope"], r.get("exit"),
@@ -2925,15 +2982,22 @@ def task_md_lines(root, state):
 
 def write_task_md(root, state):
     """Rewritten whole and atomically after every change; best effort, because
-    the state is the contract and task.md is rendered from it."""
+    the state is the contract and task.md is rendered from it — except
+    §Questions, which is read back from disk under the questions lock, so an
+    [Answer]: line a human filled survives until `questions --sync` reads it."""
     path = task_md_path(root, state)
     tmp = "%s.%d.tmp" % (path, os.getpid())
     try:
-        text = "\n".join(task_md_lines(root, state)) + "\n"
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(tmp, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        os.replace(tmp, path)
+        with question_lock(path):
+            before, _, after = split_task_md(task_md_lines(root, state))
+            section = question_lines(path)
+            if not any(HEADING_RE.match(line) for line in section):
+                section = ["", "none"]
+            text = "\n".join(before + section + ([""] if section[-1] else []) + after) + "\n"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            os.replace(tmp, path)
     except Exception as exc:  # pylint: disable=broad-exception-caught  # derived artefact: never fatal
         with contextlib.suppress(OSError):
             os.unlink(tmp)

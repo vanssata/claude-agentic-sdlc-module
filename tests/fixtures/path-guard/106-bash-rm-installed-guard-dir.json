@@ -1,0 +1,1 @@
+{"case":"removing the installed guard engine directory is denied (H2)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"rm -rf .claude/hooks/guard"}}}

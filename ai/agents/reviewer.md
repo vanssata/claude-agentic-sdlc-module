@@ -81,7 +81,7 @@ scope_assessment: <did the change stay inside what was planned>
 ```
 
 Labels count per severity from 1; a re-review continues the numbers already in
-`.ai/reports/<task-id>/review-report.md`, when that file exists. `in_scope: no`
+`.ai/reports/<task-id>/task.md` §Review, when it has a pass. `in_scope: no`
 appears only on an `[INFO]` row (`I<n>`); an `[INFO]` inside the boundary is an
 ordinary note, `in_scope: yes`. Only `in_scope: yes` findings decide the verdict: `blockers_open` for a
 BLOCKER, `pass_with_findings` for a HIGH and no BLOCKER, `pass` otherwise.
@@ -90,7 +90,7 @@ Do not modify the implementation. Findings first; the fix is someone else's turn
 
 ## QUESTIONS_NEEDED
 
-You never ask the user, and you never write `.ai/reports/*/questions.md`. When the
+You never ask the user, and you never write `.ai/reports/*/task.md`. When the
 work cannot continue without a human decision, stop at that point and return this
 section — under exactly this heading, before any RESULT:
 

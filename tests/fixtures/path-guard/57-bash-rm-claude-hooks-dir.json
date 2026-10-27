@@ -1,1 +1,1 @@
-{"case":"rm -rf of the bare .claude/hooks directory is denied in a task (known-risks a1)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"rm -rf .claude/hooks"}}}
+{"case":"removing a bare claude hooks directory with no ai-* hook in it is allowed in a task since 3.4 (R22)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"rm -rf .claude/hooks"}}}

@@ -45,7 +45,7 @@ defaults.
 | `current.json` | `state.py`, and `update.py` during a migration | no |
 | `session.json` | `context-guard.py`, on SessionStart and each prompt | no |
 | `handoff.md` | `state.py handoff` — never a model | no |
-| `../reports/<task-id>/questions.md` | `state.py ask/answer/questions` | yes |
+| `../reports/<task-id>/task.md` §Questions | `state.py ask/answer/questions` | yes |
 | `../reports/<task-id>/events.jsonl` | `state.py` (`emit`), append-only | yes |
 
 `handoff.md` is the ≤ 30-line frame a session that lost its context reads first:

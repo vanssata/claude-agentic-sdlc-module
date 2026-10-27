@@ -1,0 +1,1 @@
+{"case":"tar naming the task state file is denied: it can extract over it (H1)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"tar xf backup.tar .ai/state/current.json"}}}

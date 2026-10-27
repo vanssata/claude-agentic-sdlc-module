@@ -88,7 +88,7 @@ run. You never commit, push, merge or deploy.
 
 A pending question blocks `close` (exit 4). The human answers in the
 conversation — record it with `$STATE answer Q1=B` or `--prose "1B"` — or fills
-the `[Answer]:` line in `.ai/reports/<task-id>/questions.md` themselves, which
+the `[Answer]:` line in `.ai/reports/<task-id>/task.md` §Questions themselves, which
 is then the record. Never edit that file, never answer for them.
 
 ## 5. After

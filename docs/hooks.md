@@ -137,11 +137,10 @@ It refuses four kinds of path:
 customer exports, production logs. Allowed back in: `.env.example` and friends,
 migrations, fixtures, test SQL.
 
-**Control files** — `.ai/state/*.json`, `.ai/state/handoff.md`,
-`.ai/reports/<task-id>/questions.md`, `.ai/reports/<task-id>/events.jsonl`,
+**Control files** — everything under `.ai/state/`,
+`.ai/reports/<task-id>/task.md` (and a legacy `questions.md`), `.ai/reports/<task-id>/events.jsonl`,
 `.ai/policies/*.json`, and the guards' own scripts and configuration under
-`~/.claude/hooks/ai-*` and `~/.codex/hooks/ai-*` (including
-`codex-model-gate.py`, the shim that keeps the protected name). Reading them is fine; writing them is not. State is
+`~/.claude/hooks/` and `~/.codex/hooks/` (`ai-*` and `runtime-gate.py`). Reading them is fine; writing them is not. State is
 written by `state.py`; policy is edited by a human, outside an agent run, where
 the change is reviewable.
 
@@ -169,9 +168,8 @@ root or outside one, so it is matched unanchored as before. A project pattern
 that starts with `^` was written against the absolute path and is still matched
 against it. The residual is accepted: an agent in project A can write project
 B's `.ai/state/` by absolute path and A's guard does not see it. B's guard
-does, in B's session. `deny_patterns` and `dependency_instruction_patterns` are
-not anchored, because a secret is a secret anywhere and a vendored instruction
-file is third-party data anywhere.
+does, in B's session. `deny_patterns` are not anchored, because a secret is a
+secret anywhere.
 
 One gap is known and predates the anchoring. A `$CLAUDE_CONFIG_DIR` or
 `$CODEX_HOME` that is not named `.claude` or `.codex` is guarded for the file
@@ -180,7 +178,7 @@ that looks for `.claude/` and `.codex/`. So `echo x > $CFG/hooks/ai-path-guard.s
 with a literal custom directory is not refused, as on HEAD.
 
 The three added with schema 2 are protected for the same reason the state file
-is — each is an input to a decision, not a document. `questions.md` carries the
+is — each is an input to a decision, not a document. `task.md` §Questions carries the
 `[Answer]:` line that can *grant the approval gate*, so an agent that could edit
 it could approve its own plan. `events.jsonl` is the audit trail: an append-only
 journal that can be rewritten is not one. `handoff.md` is what the next session
@@ -190,38 +188,35 @@ for a future session. All three are written by `state.py` alone — `ask`,
 **readable**, because reading them is how the work gets done.
 
 **Runtime configuration, while a task is in flight** — `.claude/settings*.json`,
-`.claude/agents/`, `skills/`, `commands/`, `hooks/`, `plugins/`, the `.codex/`
-equivalents and `config.toml`, and the pipeline's own `.ai/policies/`,
-`.ai/workflows/`, `.ai/templates/` and `.ai/AGENTS.md`, the installed shared tree
-`<home>/claude-agentic/ai/` and its resolver `ai-path`, plus the other runtimes'
-instruction files (`.cursorrules`, `.cursor/rules/`, `.github/copilot-instructions.md`,
-`.junie/guidelines.md`). The rule sources join them: `.ai/rules/` and the
-`.claude/rules/` copies rendered from it are instructions for a directory, and
-`docs/sdlc/constitution.md` is what the spec and the plan are judged against — a
-task that could rewrite either could widen its own scope or drop the principle
-it is failing. Reading is fine; writing is refused **only while an
-`/ai-task` run owns the project** — `.ai/state/current.json` exists and has not
+`.codex/config.toml`, the pipeline's `.ai/policies/`, and the installed shared
+tree `<home>/claude-agentic/ai/` with its resolver `ai-path` (R22). Agent
+definitions, skills, commands, the other runtimes' instruction files, the rule
+sources and `docs/sdlc/constitution.md` were on this list until redesign 3.4 and
+are ordinary files now (`.ai/project/known-risks.md`, "Path guard after R22").
+Reading is fine; writing is refused **only while a task owns the project** — `.ai/state/current.json` exists and has not
 reached `done`. A run may not edit the rules it is being judged by; `state.py
 close` archives the task and the same files become ordinary files again. A state
 file that does not parse counts as in flight, because refusing to unlock the
 configuration on the strength of a corrupt file costs nothing.
 
-**Instruction files inside a dependency** — a `CLAUDE.md`, `AGENTS.md`,
-`GEMINI.md`, `.cursorrules`, `copilot-instructions.md` or the like under
-`vendor/`, `node_modules/`, `Pods/`, `site-packages/`, `third_party/` and
-friends. Both reading and writing are refused, always. Such a file is
-third-party text that arrived with a package: it is **data**, it carries no
-authority over the task, and the next install overwrites it anyway. Ordinary
-source inside a dependency is untouched — the rule is about instruction files,
-not about the directory.
+Instruction files inside a dependency (`vendor/`, `node_modules/` …) were
+refused for read and write until redesign 3.4; they are not guarded now. Such a
+file is still third-party data, not an instruction — that stays the rule for the
+agent, it is no longer a hook.
 
 Both the literal path and its `realpath` are checked, so a symlink pointing at
 `.env` is caught. `ln -s .env public/x` is refused at creation time, because the
 link does not exist yet when the guard runs.
 
 For `Bash`, the guard extracts every argument-looking token and only complains
-when the token is genuinely an argument of a reading, copying or redirecting
-command — a path mentioned inside a message or a heredoc is left alone. There is
+when the token is genuinely an argument of a reading (secrets only), copying,
+writing or redirecting command — a path mentioned inside a message or a heredoc
+is left alone. The command is split at its top level only, on `;`, `&&`, `||`,
+`|` and newlines: the string a `sh -c`, `bash -c` or `eval` runs is not
+re-parsed (SQ13), and that bypass is accepted in `known-risks.md`. A command over
+4096 characters that names a guarded path or a `state.py`/`update.py` verb is
+refused in one sentence rather than scanned; a long heredoc that names none of
+them passes. There is
 a fast path: if nothing on the command line looks interesting, the guard exits
 after a single `grep`, which keeps it at tens of milliseconds even on a
 200-argument command.
@@ -248,18 +243,16 @@ python3 <plugin>/skills/ai-task/state.py --root . approve --by "<name>"
 
 run in **their own terminal** (the command checks for a TTY, so the same line
 run through the agent's shell — a pipe — exits 5 and changes nothing), or the
-`[Answer]: A` line on the gate's question in `.ai/reports/<task-id>/questions.md`,
+`[Answer]: A` line on the gate's question in `.ai/reports/<task-id>/task.md`,
 after which the session runs `state.py questions --sync`. The file route is the
 weaker of the two and knows it: it is accepted only behind a human turn —
 `last_prompt_at` in `.ai/state/session.json`, from the same session the plan was
 presented in, after the gate was requested.
 
-**Running `hooks/context-guard.py` by hand is refused too**, and only that one
-hook, because only that one writes state: `session.json` is the evidence the
-file route rests on, so an agent that could run the hook could mint the human
-turn it needs and then answer its own gate. Reading, diffing, linting and
-testing the file are untouched — the rule fires only in command position. These
-two rules are inert unless a task is in flight.
+Running `hooks/context-guard.py` by hand is no longer refused (redesign 3.4,
+D4): it writes `session.json`, the evidence the file route rests on, and that
+gap is accepted in `known-risks.md` together with the interpreter one-liner
+below. The two rules above are inert unless a task is in flight.
 
 **`update.py --apply --confirm-delete` from an agent session is refused** (WP6
 F3), task or no task — a deletion is irreversible either way — though, like
@@ -276,59 +269,14 @@ and the record says why the gate passed (`via: terminal | unattended`). Known
 false positive: `update.py` followed on the same segment by `--co…` and `--ap…`
 tokens that are not its own flags — search with the Grep tool instead.
 
-There is a third, cheaper route to the same place, and it is closed by the
-interpreter tripwire further down: `python3 -c 'open(".ai/state/session.json",
-"w")…'` writes the human turn without going through a file tool at all. Any
-interpreter one-liner that mentions `.ai/state/` or `.ai/reports/` **and shows
-a write** is refused for that reason (direct-mode-diet §4a). A one-liner that
-only reads them — `python3 -c "import json; print(json.load(open('.ai/state/current.json'))['current_stage'])"`
-— is allowed, because reading the state is how the work gets done. The write
-indicators are matched in process over the whole line:
-
-- a call that writes, removes, renames, links, copies or runs a command, in
-  Python, Perl, Ruby, Node or PHP: `write_text(`, `json.dump(`, `os.remove(`,
-  `writeFileSync(`, `File.delete(`, `file_put_contents(`, `write_file(`,
-  `system(`, `exec(` and the like. `stdout.write` and `stderr.write` print, so
-  they do not count. `copy(` counts only bare, as PHP spells it, not a dict's
-  `.copy()`; `copy_into(` and `move_into(` (Python 3.14) count anywhere;
-- a name that does the same without a call: `subprocess`, `shutil`,
-  `child_process`, `FileUtils`, the `O_WRONLY`-style flags, `os.replace`,
-  `fileinput`'s `inplace`, a backtick, `$( )`, `%x` and `qx`;
-- on a line that says `Path`, a `.replace(target)` with one argument — a
-  `str.replace(old, new)` has two and is no write — or a `.copy(target)` with
-  an argument (`Path.copy`, Python 3.14) — a dict's `.copy()` has none, and
-  `copy.copy(x)` does not count;
-- `open`, `new` or `FileIO` on the line, with a quoted mode that holds `w`, `a`,
-  `x` or `+` right after the first argument of `open…`, `new`, `new Class` or
-  `FileIO`, after `mode=` or right after `open…(`, or a Perl mode in the same
-  place (`">"`, `"+<"`, `"|-"`). The first argument is read as plain
-  characters, quoted strings and parentheses three deep counting the call's
-  own, so `open(os.path.join(os.getcwd(), p), 'w')`, `open('a,b.md', 'w')`
-  and `new IO::File(p, "w")` are seen; a fourth level of parentheses, or a
-  string holding its own kind of quote escaped, is not. A `count('a')` or a
-  `d.get('x', 'a')` elsewhere on the line is no mode;
-- a shell redirect or a `tee` whose target is under those paths.
-
-An `eval` that mentions them is refused as before, because its body is opaque.
-So is `perl -i` or `ruby -i` (an `i` in a cluster of switches that take no
-argument, such as `-pi`, `-ni`, `-gpi` or `-i.bak`; also after `-C`, `-E`,
-`-I`, `-M`, `-m` or `-r`, which may take a separate argument, as in
-`ruby -r json -i`), because it
-rewrites the files it is given. `ruby -rdigest` and `perl -mio` load a library
-and are no `-i`. Deliberate obfuscation, such
-as a computed mode, `getattr` or base64, is not read: the guards defend against
-mistakes, not against a command built to pass them.
-
-The rule also reaches further than it did. HEAD reached the tripwire only when
-the line named a protected file. Now any line with an interpreter `-c`/`-e` (or
-an in-place `perl`/`ruby`) that names `.ai/state/` or `.ai/reports/` gets there.
-So a write into an unprotected report file, such as
-`.ai/reports/<id>/notes.md`, is refused too. A read of such a file is still
-allowed, unless the line happens to show one of the indicators above. Like the
-rest of the tripwire it is a tripwire, not a wall. It matches text, so it is not
-anchored to the project root the way the path lists are. It also misses an
-interpreter named by its path or version (`/usr/bin/python3`, `python3.12`),
-`perl -E`, and `php -r` on its own, as HEAD did.
+There is a third, cheaper route to the same place, and since redesign 3.4 it is
+open: an interpreter one-liner (`python3 -c`, `perl -e`, `ruby -e`, `node -e`,
+`php -r`) or an `eval` is not scanned for the files it writes or the secrets it
+opens. The text heuristic that refused one (direct-mode-diet §4a) went with the
+`sh -c` re-parse (R22, D4); a top-level redirect, `tee`, `sed -i`, `perl -i` or
+`ruby -i` onto a control file is still refused. The gap is accepted in
+`known-risks.md` ("Path guard after R22"): the guards defend against mistakes,
+not against a command built to pass them.
 
 **`AI_UNATTENDED=1` turns both off**, because an unattended run has no human to
 take a turn. It is for a launcher — CI, a cron job, a scripted batch — that
@@ -349,25 +297,20 @@ runtime that made it possible would have a worse problem than this one. Trust
 the hooks after installing, and `/ai-status` says so under Codex.
 
 Configuration: `hooks/ai-path-guard-defaults.json` (shipped, do not edit) unioned
-with `.ai/policies/path-guard.json` (per project), in five lists —
-`deny_patterns`, `allow_patterns`, `protected_config_patterns`,
-`task_protected_patterns` and `dependency_instruction_patterns`. Allow wins over
-every one of the others. When the guard refuses something it should not,
-**widen the allow list** — do not route around it.
+with `.ai/policies/path-guard.json` (per project), in four lists —
+`deny_patterns`, `allow_patterns`, `protected_config_patterns` and
+`task_protected_patterns`. Allow wins over every one of the others. When the
+guard refuses something it should not, **widen the allow list** — do not route
+around it. A `dependency_instruction_patterns` list left in a project's file is
+read as `deny_patterns` since redesign 3.4.
 
 A path is classified against those lists in a fixed order: allow, then
-protected, then dependency, then task, then deny. That matters when you add
-patterns of your own, because the first list to match decides — and `protected`,
-`task` and `dependency` each permit reads that `deny_patterns` would have
-refused. A `task_protected_patterns` regex loose enough to also cover an `.env`
-would therefore *weaken* an existing secret-read rule rather than add to it.
-Keep a new pattern narrow enough that it cannot reach a path another list
-already covers. The shipped lists do not overlap.
-
-The dependency rule recognises a dependency by directory name (`vendor/`,
-`node_modules/`, `third_party/`, `Pods/`, …), so a first-party directory using
-one of those names has its own instruction files refused too. Projects laid out
-that way should put the owned paths in `allow_patterns`.
+protected, then task, then deny; the first list to match decides what a write
+gets. A read is refused when the path matches `deny_patterns` whichever list
+matched first, so a broad protected pattern such as `.ai/state/` does not open
+a key file under it to reading. Keep a new pattern narrow all the same: a
+protected or task pattern that also covers a secret turns that secret's Bash
+writes into control-file refusals with the wrong message.
 
 ## ai-scope-guard — during an implementation step
 

@@ -1,1 +1,1 @@
-{"case":"cp -r of a directory named agents into .claude/ is denied in a task (a1)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"cp -r src/agents .claude/"}}}
+{"case":"a recursive copy of a directory named agents into the claude directory is allowed in a task since 3.4 (R22: no longer frozen)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"cp -r src/agents .claude/"}}}

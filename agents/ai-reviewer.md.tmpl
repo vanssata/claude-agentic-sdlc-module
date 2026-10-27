@@ -117,7 +117,7 @@ scope_assessment: <did the change stay inside the approved plan>
 
 Label each finding with its severity's letter and a number, counted per
 severity from 1; a re-review continues the numbers already in
-`.ai/reports/<task-id>/review-report.md`, when that file exists.
+`.ai/reports/<task-id>/task.md` §Review, when it has a pass.
 `in_scope: no` appears only on an `[INFO]` row (`I<n>`), as the Boundary says;
 an `[INFO]` row inside the boundary is an ordinary note, `in_scope: yes`.
 Only `in_scope: yes` findings decide the verdict:
@@ -128,7 +128,7 @@ Do not modify the implementation. Findings first; fixing is someone else's turn.
 
 ## QUESTIONS_NEEDED
 
-You never ask the user, and you never write `.ai/reports/*/questions.md`. When the
+You never ask the user, and you never write `.ai/reports/*/task.md`. When the
 work cannot continue without a human decision, stop at that point and return this
 section — under exactly this heading, before any RESULT:
 

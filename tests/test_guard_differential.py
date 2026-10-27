@@ -14,6 +14,13 @@ engine and a decoded string could get wrong, under both locales: the multibyte
 blanks, `sh -c` spellings, BASH_REMATCH captures (refspec, ln source, the
 string a sh -c runs), raw bytes that are not UTF-8 in the payload and in file
 names, and lines past the 4096 and 16384 cut-offs.
+
+From task 3.4 the path guard's rules and messages are its own (R22): its runs
+are compared by decision — exit code and allow or deny — and a decision that
+moved on purpose is named, with why, in fixtures/guard-characterization/
+moved-3.4.json; a name there whose decision no longer moves fails too, so the
+list cannot outlive what it excuses. The git and scope guards stay
+byte-identical.
 """
 import concurrent.futures
 import json
@@ -27,6 +34,17 @@ import test_guard_characterization as tc  # noqa: E402  pylint: disable=wrong-im
 BLANKS = [" ", " ", " ", " ", " ", " ", " ", " ", " ",
           " ", " ", " ", " ", " ", "　", " "]
 STATE = ".ai/state/current.json"
+
+# (check, label) of a run whose path-guard decision a task changed on purpose.
+with open(os.path.join(tc.TESTS, "fixtures", "guard-characterization", "moved-3.4.json"), encoding="utf-8") as _fh:
+    MOVED = {(tc.PATH, label) for label in json.load(_fh)["moved"]}
+
+
+def decision(record):
+    """A path-guard record without its message: the exit code and allow or deny."""
+    head, _, out = record.partition(b"\nrc=")
+    rc, _, rest = out.partition(b"\n")
+    return head, rc, b'"permissionDecision":"deny"' in rest
 
 
 def extra_runs(tree):
@@ -111,6 +129,7 @@ def run_pair(tree, runs, lc, workers=8):
                              pool.submit(tc.run_guard, tc.port_argv(check), payload, env, tc.TESTS)))
         out = []
         for label, check, a, b in jobs:
+            label = label.replace(tree.tmp, "__TMP__")
             out.append((label, check, tc.record(tc.NAMES[check], label, *a.result(), tree.tmp),
                         tc.record(tc.NAMES[check], label, *b.result(), tree.tmp)))
     return out
@@ -118,7 +137,11 @@ def run_pair(tree, runs, lc, workers=8):
 
 class TestGuardDifferential(unittest.TestCase):
     def assert_same(self, pairs, lc):
-        diffs = [(label, check, a, b) for label, check, a, b in pairs if a != b]
+        diffs = [(label, check, a, b) for label, check, a, b in pairs
+                 if (decision(a) != decision(b) and (check, label) not in MOVED if check == tc.PATH else a != b)]
+        stale = sorted({label for label, check, a, b in pairs if (check, label) in MOVED and decision(a) == decision(b)})
+        if stale:
+            self.fail("%d names in moved-3.4.json no longer move under %s:\n  %s" % (len(stale), lc, "\n  ".join(stale)))
         if diffs:
             label, check, a, b = diffs[0]
             self.fail("%d of %d runs differ under %s; first: %s | %s\n  shell: %r\n  port:  %r"

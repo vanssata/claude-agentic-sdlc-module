@@ -187,7 +187,7 @@ one writer:
 | File | Written by | Answers |
 |---|---|---|
 | `.ai/reports/<task-id>/events.jsonl` | `state.py emit` | what happened, in order, and **which runtime** did it |
-| `.ai/reports/<task-id>/questions.md` | `state.py ask` / `answer` / `questions --sync` | what the pipeline needs a human to decide |
+| `.ai/reports/<task-id>/task.md` §Questions | `state.py ask` / `answer` / `questions --sync` | what the pipeline needs a human to decide |
 | `.ai/state/handoff.md` | `state.py handoff` | what a session that has just lost its context needs first |
 | `.ai/state/session.json` | `hooks/context-guard.py` | which runtime is driving, and when the human last took a turn |
 
@@ -205,8 +205,8 @@ a task's history at zero model cost.
 **The questions file** is how a subagent asks without being able to ask. A
 subagent has no user; the eight agent contracts therefore tell it to **return**
 `QUESTIONS_NEEDED` with the question rather than guess, and the manager writes
-it into `questions.md`, where a human fills in an `[Answer]:` line. `state.py
-questions --sync` parses the file, writes the answers back into the state, and
+it into `task.md` §Questions, where a human fills in an `[Answer]:` line. `state.py
+questions --sync` parses the section, writes the answers back into the state, and
 leaves the question text byte-identical. A pending question blocks the stage
 commands with exit 4: the pipeline stops on an unanswered question instead of
 picking an answer for itself.
@@ -219,7 +219,7 @@ a missing convenience, not a broken run.
 
 **Approval is the one thing none of this can grant.** At T4+ the pipeline stops
 at a gate that only a human closes — from their own terminal, where `approve`
-checks for a TTY, or by answering the gate's question in `questions.md`, which
+checks for a TTY, or by answering the gate's question in `task.md`, which
 is accepted only behind a human turn recorded in `session.json` by a hook the
 agent is forbidden to run. `ai-path-guard` refuses `state.py approve` from an
 agent session outright. An unattended launcher can set `AI_UNATTENDED=1` and

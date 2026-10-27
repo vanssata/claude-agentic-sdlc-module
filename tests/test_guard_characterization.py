@@ -7,6 +7,9 @@ the same project tree: every payload goes through `ai-guard.py --only <check>`
 and the exact result — exit code and the full deny text — is compared with
 tests/fixtures/guard-characterization/golden.txt, which the shell guards
 recorded. Byte-identical is the bar: the port moved no decision and no message.
+The test only compares. A task that changes a decision on purpose re-records
+the golden with tools/golden-diff.py --record, which then lists, by record,
+what moved against the committed golden.
 
 The corpus and the tree are importable (Corpus, Tree): the differential test
 runs the same payloads through the frozen shell guards beside the port.

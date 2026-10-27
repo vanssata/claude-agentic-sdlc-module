@@ -1,1 +1,1 @@
-{"case":"cp after a variable assignment is denied in a task (a2)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"FOO=1 cp x .claude/agents/"}}}
+{"case":"a copy onto the claude settings after an assignment prefix is denied in a task (M4: the movers parse it)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"FOO=1 cp x .claude/settings.json"}}}
