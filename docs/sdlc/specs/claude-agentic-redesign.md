@@ -204,7 +204,8 @@ Each: testable (test file / case / measurement), intent outcome it serves (quote
   through verbatim, once, within 120 s, same session, in order; anything else is `CONSENT_MISMATCH` and voids the
   picks. While a decision is open the PreToolUse gate (matcher `*`) denies every other tool and Stop blocks, at
   most twice per turn. Off (file missing, `enabled:false`, `AI_UNATTENDED`, a subagent, unverified Codex) is
-  today's behaviour byte-for-byte; the migration writes off, the scaffold writes on. First consumer: plan drift,
+  today's behaviour byte-for-byte; the scaffold and the migration both write on, the migration printing one line
+  that says so (Q9, 2026-10-28). First consumer: plan drift,
   `state.py profile detect` (ported from `bin/riskrails.js`, a C3 refactor) at SessionStart, on `auth_success`
   and on an account-file mtime change; `profile set <plan>` same tier only, otherwise it prints the `npx riskrails`
   line. `askUserQuestionTimeout` is never rendered. C5 is amended by the human: "No agent merges or deploys; an

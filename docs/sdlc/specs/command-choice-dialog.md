@@ -43,6 +43,7 @@ Ordinary Bash keeps running as today (Q4). No `askUserQuestionTimeout` (Q3). Not
 | Q6 | Codex without `request_user_input` | **X** — the same native dialog or nothing: unavailable means the project behaves as switched off and the human types in their own terminal |
 | Q7 | Plan-drift detection | **A** — in this spec, as the first consumer of the dialog |
 | Q8 | The switch | **A** — project-level setting; off means the human must run the command in another terminal |
+| Q9 | OQ1: the migration in existing projects | **A** — turns the dialog on (`enabled:true`) and prints one line saying so and how to turn it off (2026-10-28) |
 
 ## Requirements
 
@@ -53,9 +54,10 @@ O4 plan drift first consumer · O5 Codex parity or off. Steps 7.0–7f are the d
   `enabled` is true, the runtime's dialog tool is available (R36.19), `AI_UNATTENDED` is unset and this is the main
   session (not a subagent). Missing or unreadable file = off. The agent cannot flip it: the file is already under
   `(^|/)\.ai/policies/[^/]*\.json$` (`hooks/ai-path-guard-defaults.json:31`). New projects are scaffolded with
-  `true`; existing projects get `false` from the migration (next free number after 0008 and 3.4c), which prints
-  the one line that turns it on (A1). Test: `tests/test_dialog_gate.py::test_effective_switch_matrix`;
-  `tests/test_migration_00NN.py::test_writes_disabled`. O3. Step 7c.
+  `true`, and existing projects get `true` from the migration (next free number after 0008 and 3.4c), which
+  prints one line saying the dialog is now on and how to turn it off (Q9, developer, 2026-10-28; C6 makes this
+  behaviour 2 for every updated project, accepted). Test: `tests/test_dialog_gate.py::test_effective_switch_matrix`;
+  `tests/test_migration_00NN.py::test_writes_enabled_and_prints`. O3. Step 7c.
 - **R36.2 Off changes nothing.** With the file missing or `enabled:false`: every guard golden record is
   byte-identical; `close` prints the terminal `approve` command as today (`skills/rr-ship/SKILL.md:46-55`); a
   plain `git commit` is not refused; no Stop gate, no deny-all gate. Test: `tests/test_guard_characterization.py`
@@ -282,7 +284,7 @@ fires hooks outside plan mode) · **7a** detection refactor (C3) · **7b** `prof
 
 ## Interfaces
 
-**`.ai/policies/dialog.json`** (template; the migration writes `"enabled": false`):
+**`.ai/policies/dialog.json`** (the scaffold template and the migration both write it as below, Q9):
 ```json
 { "version": 1, "enabled": true, "window_seconds": 120, "stop_blocks_max": 2 }
 ```
@@ -378,7 +380,7 @@ picked in the dialog — verbatim, once — or the human runs them outside the a
 
 | # | Question | Owner |
 |---|---|---|
-| OQ1 | Migration default: `enabled:false` for existing projects (A1) or `true`? C6 says changing approval without a human act is behaviour 2. | developer |
+| OQ1 | Resolved 2026-10-28 (Q9): the migration turns the dialog on in existing projects and prints one line saying so; the behaviour-2 effect on every updated project is accepted. | developer |
 | OQ2 | `profiles/api.json`: does an API-key account get its own budgets (R37 candidate) or stay `unsupported`? | developer |
 | OQ3 | Spike 7.0: does Codex `request_user_input` fire PreToolUse/PostToolUse outside plan mode, on which version? Negative = Codex off for good (Q6). | spike |
 | OQ4 | `window_seconds` 120 (A2): long enough for pre-commit hooks before the push? | developer, after 7d |
@@ -407,8 +409,9 @@ picked in the dialog — verbatim, once — or the human runs them outside the a
 8. Q4 names "human_set" as `state.py set --by`; `set` was removed (redesign spec §Interfaces). `paths.py:87-90`
    `SETBY_RE` guards only `set`; the live verbs have no rule — outside this task (C1), record in `known-risks.md`.
 9. Q8 per-project switch vs per-user plan drift (OQ5).
-10. The intent implies on by default; C6 makes changing approval in a user project behaviour 2 — the migration
-    writes off and the scaffold writes on (A1, OQ1).
+10. The intent implies on by default; C6 makes changing approval in a user project behaviour 2. The developer
+    decided (Q9, 2026-10-28) that the migration turns it on anyway: every updated project changes its approval
+    path on `/rr-setup --update`, announced by one printed line. The migration task carries `behaviour=2`.
 
 ### B. Policy vs policy, or inside this design
 1. C6 + `hooks/CLAUDE.md` + `skills/CLAUDE.md`: behaviour 2, full mode for every step (W ≈ 9).
@@ -425,7 +428,7 @@ picked in the dialog — verbatim, once — or the human runs them outside the a
 - "Codex gets the same dialog" (Q6) — only if spike 7.0 is positive; otherwise Codex is permanently off.
 
 ### D. Assumptions the intent left open
-- A1 migration writes `enabled:false`; A2 window 120 s chained; A3 no `api` profile, `unsupported` only warns;
+- A1 (closed by Q9) migration writes `enabled:true`; A2 window 120 s chained; A3 no `api` profile, `unsupported` only warns;
   A4 every consent-producing dialog is prepared by `state.py` (a model-written commit dialog could misstate facts).
 
 ### S. Security and data protection

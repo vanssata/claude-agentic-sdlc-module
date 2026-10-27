@@ -265,6 +265,8 @@ Added 2026-10-28 (developer's decisions in the brainstorm
 - Delivery: phase 3 step 7 after 3.5, as 7.0 (fixture spike, incl. whether Codex
   `request_user_input` fires hooks outside plan mode) then 7a–7f, every step full mode with
   `--declare behaviour=2`.
+- The migration turns the dialog on in existing projects too (Q9, 2026-10-28), printing one
+  line that says so and how to turn it off; the C6 effect on every updated project is accepted.
 
 ## Open questions
 
@@ -328,9 +330,7 @@ Added 2026-10-28 (developer's decisions in the brainstorm
 - **Team profile and abrites-staging-v2**: nobody on either machine uses the team profile
   (proposal: documented, not tested on every run); abrites-staging-v2's pre-plugin `ai-tools`
   branch with six own guards: `--adopt` or abandon.
-- **Dialog gate (R36, added 2026-10-28)**: whether the migration turns the dialog on in
-  existing projects (`enabled:true`) or off with a printed hint — C6 says changing approval
-  without a human act is behaviour 2, so the spec assumes off; whether an API-key account gets
+- **Dialog gate (R36, added 2026-10-28)**: whether an API-key account gets
   its own `profiles/api.json` or stays `unsupported`; whether plan drift, which is per user,
   needs its own switch when the dialog switch is per project; the `window_seconds` default
   (120) against pre-commit hooks that run before the push. All in

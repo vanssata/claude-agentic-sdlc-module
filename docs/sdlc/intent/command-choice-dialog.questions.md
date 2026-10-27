@@ -61,3 +61,10 @@ B. user-level setting
 C. always on
 X. Other — answer as `X: <text>`
 [Answer]: A — by vanssa via prose at 2026-10-27T22:17:46Z
+
+## Q9. OQ1: does the migration turn the dialog on in existing projects?
+asked: 2026-10-27T23:22:08Z · stage: intent
+A. yes, enabled:true, the migration prints one line saying the dialog is on and how to turn it off
+B. no, enabled:false with a printed hint (recommended)
+X. Other — answer as `X: <text>`
+[Answer]: A — by vanssa via prose at 2026-10-27T23:22:08Z
