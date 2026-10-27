@@ -85,17 +85,19 @@ test only, through `single_test`.
 
 ```
 verify_command:      bash tests/run-all.sh
-step_test_command:   bash -c 'rc=0; for t in {files}; do bash "$t" || rc=1; done; exit $rc'
-e2e_command:         bash tests/test-end-to-end.sh
+step_test_command:   bash -c 'rc=0; for t in {files}; do case "$t" in *.py) python3 -I -m unittest discover -s tests -p "${t##*/}" ;; *) bash "$t" ;; esac || rc=1; done; exit $rc'
+e2e_command:         AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
 lint_command:        pylint $(git ls-files '*.py')
 typecheck_command:   none
 healthy_output:      run-all.sh ends with "all suites passed" and exit 0; each suite prints
                      "<name>: N passed, 0 failed". pylint ends with "rated at 10.00/10".
-                     test-end-to-end.sh ends with "end to end: N passed, 0 failed".
+                     unittest ends with "OK" (or "OK (skipped=N)") and exit 0.
 runtime:             run-all.sh ~4-5 min (the CI job measures 4m21s); test-end-to-end.sh
                      ~7 s; pylint ~5 s; any single suite seconds, except the install and
                      adopt suites, which scaffold scratch trees and take tens of seconds.
-single_test:         bash tests/test-<name>.sh
+single_test:         python3 -I -m unittest discover -s tests -p test_<name>.py
+                     (the five install suites and test-shared-tree.sh stay
+                     bash tests/test-<name>.sh until 3.5)
 ```
 
 `step_test_command` may contain `{files}`, which is replaced by the paths the
@@ -118,34 +120,33 @@ free of them.
 
 ## Project specifics
 
-Every suite is a bash script under `tests/`, self-contained: it scaffolds what it
-needs into a `mktemp -d` and removes it on exit. `tests/lib.sh` holds the
-harness — `pass`, `fail`, `summary`, and the fixture runners for the hook
-payloads under `tests/fixtures/`. There is no unit/integration split: the axis is
-what a suite exercises, not how deep it goes.
+The suites are Python `unittest` modules, `tests/test_*.py`, self-contained: each
+scaffolds what it needs into a temporary directory and removes it on exit.
+`tests/guard_harness.py` holds the fixture runners for the hook payloads under
+`tests/fixtures/`. `tests/` is not a package, so a module is addressed with
+`discover -s tests -p test_<name>.py`, never `tests.test_<name>`. Until 3.5 the
+install suites (`test-install-dry-run.sh`, `test-profiles.sh`, `test-codex-install.sh`,
+`test-dual-runtime-install.sh`, `test-runtime-gate-*.sh`, `test-shared-tree.sh`)
+are still bash on `tests/lib.sh`.
 
-`tests/run-all.sh` names its suites in a literal list, so **a new test file is
-not run until it is added there**. It skips a suite that is missing rather than
-failing, which is deliberate for a partial checkout and worth remembering when a
-suite seems to have disappeared from the count.
-
-`verify_command` includes `test-end-to-end.sh`, so the end-of-task `e2e_command`
-run is a second run of the same suite. At 7 seconds that is cheaper than an
-exception to the rule; keep it.
+`tests/run-all.sh` runs the remaining `.sh` suites from a literal list, then every
+`test_*.py` in one `unittest discover`, so a new Python suite runs without being
+listed; a new `.sh` suite does not. `test_end_to_end.py` skips itself without
+`AI_E2E`, so `verify_command` excludes it and `e2e_command` is its only run.
 
 **A step names its own suites, by hand, in `allowed_files`-style paths.** There
 is no mechanical map from a source file to its tests; the useful ones are:
 
 | Touching | Run |
 |---|---|
-| `skills/usage-report/**` | `tests/test-usage-report.sh`, `tests/test-codex-usage-report.sh` |
-| `hooks/ai-*-guard.sh` | `tests/test-ai-path-guard.sh`, `tests/test-ai-scope-guard.sh`, `tests/test-ai-git-guard.sh`, `tests/test-guard-characterization.sh` |
-| `skills/ai-task/state.py` | `tests/test-ai-task-state.sh`, `tests/test-ai-status-root.sh` |
-| `skills/ai-task/sensors.py` | `tests/test-ai-task-sensors.sh` |
-| `skills/project-update/**` | `tests/test-project-update.sh`, `tests/test-merge-migration.sh`, `tests/test-project-adopt.sh`, `tests/test-scaffold-idempotency.sh` |
+| `skills/usage-report/**` | `tests/test_usage_report.py`, `tests/test_codex_usage_report.py` |
+| `hooks/ai-guard.py`, `hooks/guard/**`, `hooks/ai-*-guard.sh` | `tests/test_ai_path_guard.py`, `tests/test_ai_scope_guard.py`, `tests/test_ai_git_guard.py`, `tests/test_guard_characterization.py`, `tests/test_guard_differential.py`, `tests/test_ere_unit.py` |
+| `skills/ai-task/state.py`, `weight.py` | `tests/test_ai_task_state.py`, `tests/test_ai_status_root.py`, `tests/test_weight.py` |
+| `skills/ai-task/sensors.py` | `tests/test_ai_task_sensors.py` |
+| `skills/project-update/**`, `skills/rr-setup/**`, `hooks/project-scaffold.*` | `tests/test_project_update.py`, `tests/test_merge_migration.py`, `tests/test_project_adopt.py`, `tests/test_scaffold_idempotency.py`, `tests/test_scaffold_differential.py`, `tests/test_setup.py` |
 | `install.sh`, `profiles/**`, `scripts/resolve-profile.py` | `tests/test-install-dry-run.sh`, `tests/test-profiles.sh`, `tests/test-codex-install.sh`, `tests/test-dual-runtime-install.sh` |
-| `hooks/fable-gate.py`, `hooks/runtime-gate.py`, `hooks/context-guard.py` | `tests/test-fable-gate.sh`, `tests/test-runtime-gate.sh`, `tests/test-context-guard.sh` |
-| `agents/**`, `codex/**`, `instructions/**` | `tests/test-codex-agent-render.sh`, `tests/test-shared-prompts-model-free.sh`, `tests/test-instruction-budget.sh` |
+| `hooks/runtime-gate.py`, `hooks/context-guard.py` | `tests/test_runtime_gate.py`, `tests/test_context_guard.py`, `tests/test-runtime-gate-fable.sh`, `tests/test-runtime-gate-codex.sh` |
+| `agents/**`, `codex/**`, `instructions/**`, `skills/*/SKILL.md` | `tests/test_codex_agent_render.py`, `tests/test_shared_prompts_model_free.py`, `tests/test_instruction_budget.py`, `tests/test_skills_surface.py` |
 
 CI runs two workflows on every push and pull request: `.github/workflows/test.yml`
 (`bash tests/run-all.sh`) and `.github/workflows/pylint.yml`
