@@ -1,6 +1,6 @@
 # RiskRails
 
-[![Version](https://img.shields.io/badge/version-2.0.2-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v2.0.2)
+[![Version](https://img.shields.io/badge/version-3.0.0-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v3.0.0)
 [![Runtimes](https://img.shields.io/badge/runtimes-Claude%20Code%20%7C%20Codex-d2f878?labelColor=101210)](#one-module-two-runtimes)
 [![Known risks](https://img.shields.io/badge/known%20risks-documented-d2f878?labelColor=101210)](#known-risks)
 [![License: MIT](https://img.shields.io/badge/license-MIT-d2f878?labelColor=101210)](LICENSE)
@@ -15,14 +15,13 @@ rely on today. Small, well-defined changes go through easily. Risky ones are
 stopped by a hook, not by a polite request in a prompt.
 
 ```bash
-git clone https://github.com/vanssata/claude-agentic-sdlc-module.git
-cd claude-agentic-sdlc-module && ./install.sh   # detects Claude Code, Codex or both
+npx riskrails@3.0.0   # detects Claude Code, Codex or both (Node 18+, python3)
 ```
 
 Then, in any project: `/ai-init` once, and `/ai-task <what you want>` for every
 change.
 
-Upgrading from `claude-agentic`: `install.sh` moves `<home>/claude-agentic/` to
+Upgrading from `claude-agentic`: `npx riskrails` moves `<home>/claude-agentic/` to
 `<home>/riskrails/` and leaves a symlink at the old path for one version, and
 `/rr-setup --update` renames each project's managed-block markers (migration
 0008). The task state stays in `.ai/state/current.json`; a later release moves
@@ -47,7 +46,7 @@ Tuned for **one developer who knows the codebase, on a Pro or Team Pro plan**,
 following the [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook).
 A fully delegated `team` profile is one JSON key away.
 
-**Version 2.0.2.** The guards have limits: read [Known risks](#known-risks)
+**Version 3.0.0.** The guards have limits: read [Known risks](#known-risks)
 before relying on them.
 
 > This plugin absorbs the former `claude-routing`. Installing it migrates that
@@ -108,28 +107,49 @@ zero model cost — no model is involved in writing or reading any of these file
 
 ## Install
 
+Pin the version: `npx riskrails` alone runs whatever was published last, and the
+hooks it installs see every command an agent runs.
+
 ```bash
-./install.sh                       # detects Claude Code, Codex, or both, and updates each
-./install.sh --target codex        # auto | claude | codex | both
-./install.sh --dry-run             # print what would be written, write nothing
+npx riskrails@3.0.0                       # detects Claude Code, Codex, or both, and updates each
+npx riskrails@3.0.0 --target codex        # auto | claude | codex | both
+npx riskrails@3.0.0 --dry-run             # print what would be written, write nothing
+npx riskrails@3.0.0 --home ~/alt-claude   # another Claude home (--codex-home for Codex)
 
 # Claude-side options. The plan is detected from ~/.claude.json (organizationRateLimitTier
-# tells Max 5x from 20x) and, on a terminal, proposed for you to confirm with Enter:
-./install.sh --plan pro            # Pro: opusplan session, opus pinned for EXPERT
-./install.sh --plan team-pro       # Team, Standard seat: the pro profile with the Team label
-./install.sh --plan team-max       # Team, Premium seat: the max profile, Fable on architect
-./install.sh --plan max            # Max 5x: Opus 5.5 [1m] session (1M window by default), Fable only on architect
-./install.sh --plan max20          # Max 20x: max's settings, larger budgets (6 agents, EXPERT without asking)
-./install.sh --plan max --fable no # no Fable anywhere; architect inherits the Opus session
-./install.sh --plan balanced-max   # BalancedMax: only the session is strong (Opus 5.5, 200k); readers on Haiku,
-                                   # judgement on Sonnet, reviews on Opus, EXPERT at high, no Fable, no xhigh;
-                                   # also picks the Codex balanced-max profile (Sol session, readers on Luna)
+# tells Max 5x from 20x) and, on a terminal, proposed for you to confirm with Enter (--yes
+# takes the detection without asking):
+npx riskrails@3.0.0 --plan pro            # Pro: opusplan session, opus pinned for EXPERT
+npx riskrails@3.0.0 --plan team-pro       # Team, Standard seat: the pro profile with the Team label
+npx riskrails@3.0.0 --plan team-max       # Team, Premium seat: the max profile, Fable on architect
+npx riskrails@3.0.0 --plan max            # Max 5x: Opus 5.5 [1m] session (1M window by default), Fable only on architect
+npx riskrails@3.0.0 --plan max20          # Max 20x: max's settings, larger budgets (6 agents, EXPERT without asking)
+npx riskrails@3.0.0 --plan max --fable no # no Fable anywhere; architect inherits the Opus session
+npx riskrails@3.0.0 --plan balanced-max   # BalancedMax: only the session is strong (Opus 5.5, 200k); readers on Haiku,
+                                          # judgement on Sonnet, reviews on Opus, EXPERT at high, no Fable, no xhigh;
+                                          # also picks the Codex balanced-max profile (Sol session, readers on Luna)
 
 # Codex-side options (the ChatGPT plan is auto-detected from ~/.codex/auth.json):
-./install.sh --codex-plan plus     # Plus: Sol at medium, three agent threads, Astra at high, no xhigh
-./install.sh --codex-plan pro      # Pro: Sol at high, six agent threads, Astra at xhigh for ai-expert
-./install.sh --codex-plan balanced-max  # Pro's budgets, Sol session, FAST readers on Luna, Astra at high
+npx riskrails@3.0.0 --codex-plan plus     # Plus: Sol at medium, three agent threads, Astra at high, no xhigh
+npx riskrails@3.0.0 --codex-plan pro      # Pro: Sol at high, six agent threads, Astra at xhigh for ai-expert
+npx riskrails@3.0.0 --codex-plan balanced-max  # Pro's budgets, Sol session, FAST readers on Luna, Astra at high
 ```
+
+From a checkout, `node bin/riskrails.js` takes the same flags. `./install.sh` only
+prints the `npx` line now and exits 2; the 2.0.x installer is at the `v2.0.2` tag.
+
+**The plugin route.** `/plugin install riskrails` (Claude Code) or the Codex
+plugin directory installs the skills and the hooks. Run `npx riskrails@3.0.0`
+as well: the plugin format cannot carry the agents, the plan profile, the
+managed block or the settings. When the runtime records the plugin as
+installed and enabled (Claude Code: `installed_plugins.json` at user scope and
+`enabledPlugins`; Codex: `[plugins."riskrails@<marketplace>"] enabled = true`
+in `config.toml`), `npx` registers none of the plugin's hooks and installs the
+skills without their `SKILL.md`, so nothing loads or runs twice and the skills
+still find their scripts under `~/.claude/skills/`. A plugin cache folder by
+itself changes nothing: `npx` installs everything. With
+the plugin alone there is no `ai-reviewer` agent, so a task whose mode needs a
+review has nothing to run it with.
 
 `--target auto` installs for each runtime whose CLI is on `PATH`, and asks for
 that runtime's plan only. A `~/.claude` or `~/.codex` directory without its CLI
@@ -142,7 +162,7 @@ guesses one.
 Restart the runtime afterwards.
 
 - **Claude Code**: `/skills` should list `ai-init`, `ai-audit`, `ai-task` and
-  `ai-status`; `/hooks` should list the three guards.
+  `ai-status`; `/hooks` should list `ai-guard.py`, the one guard command.
 - **Codex**: `/hooks` shows the hooks — **and you must review and trust them
   there before they run.** Codex does not execute a non-managed hook until it has
   been trusted, so until you do, nothing is being enforced.
@@ -568,7 +588,7 @@ and server-side branch protection.
 
 ## Known risks
 
-What version 2.0.2 knowingly does **not** protect against. Each entry says what
+What version 3.0.0 knowingly does **not** protect against. Each entry says what
 can happen, why it was left that way, what limits the damage, and what you should
 do. None is a secret. Each was found in a review or a spec, then accepted or
 deferred with a written reason in the file named under **Source**.

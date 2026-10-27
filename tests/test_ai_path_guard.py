@@ -14,7 +14,7 @@ import unittest
 from string import Template
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from guard_harness import (FIXTURES, PLUGIN, HookAsserts, bash, codex_fixtures,  # noqa: E402  pylint: disable=wrong-import-position
+from guard_harness import (FIXTURES, PLUGIN, HookAsserts, guard, bash, codex_fixtures,  # noqa: E402  pylint: disable=wrong-import-position
                            decision, fixtures, run)
 
 TWIN_OF = "test-ai-path-guard.sh"
@@ -23,7 +23,7 @@ TWIN_OF = "test-ai-path-guard.sh"
 # with are the cases below.
 SHELL_MECHANICS = ("$name", "and within $4 ms (${ms} ms)")
 
-GUARD = os.path.join(PLUGIN, "hooks", "ai-path-guard.sh")
+GUARD = guard("paths")  # the shim hooks/ai-path-guard.sh ran exactly this until 3.5
 IMPLEMENTATION = '{"current_stage":"implementation","task_id":"T-1"}\n'
 CONTROL_FILE = "removal of a RiskRails control file"
 WORK_CAP = "names more paths than the guard can check"
@@ -995,6 +995,39 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             if os.path.exists(new):
                 os.remove(new)
             self.state("{}\n")
+
+    def test_21_the_plugin_cache_is_the_guard_too(self):
+        # T-2026-10-27-007 review H2: on the plugin route the guard code, its hook file and
+        # state.py live under <home>/plugins/cache/<marketplace>/riskrails/<ver>/; they are
+        # protected as the npx copies are, and installed_plugins.json is frozen in a task.
+        env = dict(os.environ, HOME=self.home_t, CLAUDE_CONFIG_DIR="", CODEX_HOME="")
+        root, tmp = self.root, self.tmp
+        for home in (".claude", ".codex"):
+            cache = "%s/%s/plugins/cache/mkt/riskrails/3.0.0" % (self.home_t, home)
+
+            def t(label, expect, payload, home=home):
+                self.decide("%s %s" % (home, label), expect, payload, env=env)
+            for st in (None, IMPLEMENTATION):
+                self.state(st)
+                when = "in a task" if st else "no task"
+                t(when + ": Edit of the cached git guard is denied", "deny", tool(root, "Edit", cache + "/hooks/guard/git.py"))
+                t(when + ": Edit of the cached state.py is denied", "deny",
+                  tool(root, "Edit", cache + "/skills/ai-task/state.py"))
+                t(when + ": Write of the cached ai-guard.py is denied", "deny", tool(root, "Write", cache + "/hooks/ai-guard.py"))
+                t(when + ": Edit of the plugin's hooks.json is denied", "deny", tool(root, "Edit", cache + "/hooks/hooks.json"))
+                t(when + ": sed -i on the cached guard is denied", "deny",
+                  self.b("sed -i s/Deny/pass/ %s/hooks/guard/git.py" % cache))
+                t(when + ": rm -rf of the plugin's version folder is denied", "deny", self.b("rm -rf %s" % cache))
+                t(when + ": Read of the cached guard is allowed", "allow", tool(root, "Read", cache + "/hooks/guard/git.py"))
+                t(when + ": another plugin's cache is not this rule's", "allow",
+                  tool(root, "Write", "%s/%s/plugins/cache/mkt/other/1.0.0/hooks/x.py" % (self.home_t, home)))
+            installed = "%s/.claude/plugins/installed_plugins.json" % self.home_t
+            self.state(IMPLEMENTATION)
+            t("in a task: Write of installed_plugins.json is denied", "deny", tool(root, "Write", installed))
+            self.state(None)
+            t("no task: Write of installed_plugins.json is allowed", "allow", tool(root, "Write", installed))
+        del tmp
+        self.state("{}\n")
 
     def test_19_project_without_ai_every_guard_is_inert(self):
         bare = self.tmp + "/bare"

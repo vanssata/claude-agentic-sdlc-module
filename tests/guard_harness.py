@@ -17,11 +17,18 @@ PLUGIN = os.path.dirname(TESTS)
 FIXTURES = os.path.join(TESTS, "fixtures")
 
 
+def guard(check):
+    """The command a removed shim ran for one check: ai-guard.py with --only <check>."""
+    return ["python3", "-I", "-S", os.path.join(PLUGIN, "hooks", "ai-guard.py"), "--only", check]
+
+
 def run(hook, stdin, env=None, cwd=None, args=()):
-    """Run a hook with `stdin` (str or a JSON-able value); (exit code, stdout+stderr)."""
+    """Run a hook (a path, or a command as a list) with `stdin` (str or a JSON-able
+    value); (exit code, stdout+stderr)."""
     if not isinstance(stdin, str):
         stdin = json.dumps(stdin)
-    proc = subprocess.run([hook, *args], input=stdin, capture_output=True, text=True,
+    command = list(hook) if isinstance(hook, (list, tuple)) else [hook]
+    proc = subprocess.run([*command, *args], input=stdin, capture_output=True, text=True,
                           env=env, cwd=cwd, check=False)
     return proc.returncode, proc.stdout + proc.stderr
 

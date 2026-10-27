@@ -18,7 +18,7 @@ import unittest
 from string import Template
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INSTALL = os.path.join(ROOT, "install.sh")
+INSTALL = os.path.join(ROOT, "bin", "riskrails.js")  # the installer since 3.5
 
 TWIN_OF = "test-shared-prompts-model-free.sh"
 
@@ -111,7 +111,7 @@ class TestSharedPromptsModelFree(unittest.TestCase):
         self.tmp.cleanup()
 
     def dry_run(self, *args, **extra):
-        done = subprocess.run(["bash", INSTALL] + list(args) + ["--dry-run"], cwd=ROOT,
+        done = subprocess.run(["node", INSTALL] + list(args) + ["--dry-run"], cwd=ROOT,
                               env=env_for(HOME=self.home, **extra), stdout=subprocess.PIPE,
                               stderr=subprocess.DEVNULL, text=True, check=False)
         return done.stdout

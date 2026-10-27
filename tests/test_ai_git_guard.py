@@ -11,7 +11,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from guard_harness import (FIXTURES, PLUGIN, HookAsserts, bash, codex_fixtures,  # noqa: E402  pylint: disable=wrong-import-position
+from guard_harness import (FIXTURES, PLUGIN, HookAsserts, guard, bash, codex_fixtures,  # noqa: E402  pylint: disable=wrong-import-position
                            decision, fixtures, run)
 
 TWIN_OF = "test-ai-git-guard.sh"
@@ -19,7 +19,7 @@ TWIN_OF = "test-ai-git-guard.sh"
 # labels it was called with are the cases below.
 SHELL_MECHANICS = ("$3",)
 
-GUARD = os.path.join(PLUGIN, "hooks", "ai-git-guard.sh")
+GUARD = guard("git")  # the shim hooks/ai-git-guard.sh ran exactly this until 3.5
 
 
 class TestAiGitGuard(HookAsserts, unittest.TestCase):
@@ -101,6 +101,29 @@ class TestAiGitGuard(HookAsserts, unittest.TestCase):
     def test_codex_payloads(self):
         self.assertFixtures(GUARD, codex_fixtures("git", self.root), env=self.env)
         self.assertFailsOpen(GUARD, "a malformed Codex payload fails open", "{ not json", env=self.env)
+
+    def test_npm_publish_is_a_human_act(self):
+        """FC-A5: publishing to the registry is outward-facing and lasts; an agent never does it."""
+        for command in ("npm publish", "npm publish --access public --provenance", "npm --prefix pkg publish",
+                        "npm version patch", "npm version 3.0.0 -m 'release'", "git status && npm publish",
+                        "npm version minor && git push --follow-tags",
+                        # review M3: a separator glued on, a quoted or abbreviated subcommand, a path
+                        # to npm, a version bump with an option before the new version
+                        "npm publish;", "npm publish&&echo", "npm 'publish'", "/usr/bin/npm publish",
+                        "npm publ", "npm pu", "npm vers patch", "npm verison patch",
+                        "npm --workspace a version minor", "npm -w a version patch",
+                        "npm version --no-git-tag-version patch", "npm version -m \"x\" patch"):
+            self.expect("deny", command, "'%s' is denied" % command)
+        _, out = run(GUARD, bash("npm publish", self.root), env=self.env)
+        with self.subTest("the refusal says who publishes"):
+            self.assertIn("human", out)
+        for command in ("npm test", "npm install", "npm version", "npm version --json", "npm view riskrails version",
+                        "npm pack --dry-run", "echo 'npm publish is the human step'",
+                        "git commit -m 'docs: npm publish runs from CI'",
+                        # review L1: publish as an argument of another subcommand
+                        "npm run publish", "npm install publish", "npm search publish", "npm help publish",
+                        "npm --prefix pkg run publish", "npm view riskrails version", "npm run version"):
+            self.expect("allow", command, "'%s' is allowed" % command)
 
 
 if __name__ == "__main__":

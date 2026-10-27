@@ -34,7 +34,7 @@ amended 2026-10-27T20:52:34Z: +docs/sdlc/specs/claude-agentic-redesign.md — Q2
 
 ## Questions
 
-[questions.md](questions.md) — 1 pending
+[questions.md](questions.md) — 0 pending
 
 ## Verify
 
@@ -85,12 +85,106 @@ closed by a green run: H1
 
 ## Changes
 
-measured at close
+| File | Change | New/Edit/Delete |
+|---|---|---|
+| README.md | +17 −11 | Edit |
+| codex/hooks.json | +1 −1 | Edit |
+| docs/agents.md | +1 −1 | Edit |
+| docs/architecture.md | +2 −2 | Edit |
+| docs/faq.md | +2 −2 | Edit |
+| docs/getting-started.md | +2 −2 | Edit |
+| docs/hook-performance.md | +1 −1 | Edit |
+| docs/hooks.md | +2 −2 | Edit |
+| docs/sdlc/plans/claude-agentic-redesign.md | +14 −5 | Edit |
+| docs/sdlc/specs/claude-agentic-redesign.md | +10 −8 | Edit |
+| hooks/ai-git-guard.sh | +1 −1 | Edit |
+| hooks/ai-guard.py | +1 −1 | Edit |
+| hooks/ai-path-guard-defaults.json | +2 −2 | Edit |
+| hooks/ai-path-guard.sh | +1 −1 | Edit |
+| hooks/ai-scope-guard.sh | +2 −2 | Edit |
+| hooks/context-guard.py | +5 −2 | Edit |
+| hooks/guard/paths.py | +11 −6 | Edit |
+| hooks/guard/scope.py | +6 −3 | Edit |
+| hooks/lib/ai-hook-common.sh | +1 −1 | Edit |
+| hooks/project-scaffold.py | +1 −1 | Edit |
+| hooks/runtime-gate.py | +13 −5 | Edit |
+| install.sh | +72 −39 | Edit |
+| instructions/routing.md | +1 −1 | Edit |
+| instructions/stub.md | +2 −2 | Edit |
+| profiles/balanced-max.json | +1 −1 | Edit |
+| profiles/codex-balanced-max.json | +1 −1 | Edit |
+| profiles/codex-plus.json | +1 −1 | Edit |
+| profiles/codex-pro.json | +1 −1 | Edit |
+| profiles/max.json | +1 −1 | Edit |
+| profiles/max20.json | +1 −1 | Edit |
+| profiles/pro.json | +1 −1 | Edit |
+| scripts/ai-path | +2 −2 | Edit |
+| scripts/render-codex-agents.py | +2 −2 | Edit |
+| scripts/resolve-profile.py | +11 −8 | Edit |
+| skills/ai-init/scaffold-ai.sh | +1 −1 | Edit |
+| skills/ai-init/templates/.ai/AGENTS.md | +2 −2 | Edit |
+| skills/ai-init/templates/.ai/VERSION | +1 −1 | Edit |
+| skills/ai-init/templates/.ai/rules/README.md | +1 −1 | Edit |
+| skills/ai-init/templates/AGENTS.block.md | +2 −2 | Edit |
+| skills/ai-init/templates/CLAUDE.block.md | +2 −2 | Edit |
+| skills/ai-init/templates/GEMINI.block.md | +2 −2 | Edit |
+| skills/ai-init/templates/junie-guidelines.block.md | +2 −2 | Edit |
+| skills/ai-task/sensors.py | +6 −4 | Edit |
+| skills/ai-task/state.py | +27 −7 | Edit |
+| skills/project-update/adopt.py | +16 −7 | Edit |
+| skills/project-update/history/blobs/65acd4be95c695d0cc20cb5f4faffe0f44e0873b385c124140b223c41328cb56 | +13 −0 | New |
+| skills/project-update/history/blobs/7eee4ea9f6e778ff691c263621e717c021505b86386034cc64f8ebbfc9d8fe65 | +13 −0 | New |
+| skills/project-update/history/blobs/aa67a169b0bba217aa0aa88a65346920c84c42447c36ba5f7ea65f422c1fe5d8 | +1 −0 | New |
+| skills/project-update/history/blobs/ae49c96abe45e56e88ae5e28e046212f7114d6413785cbe998f692d2914792be | +24 −0 | New |
+| skills/project-update/history/blobs/c076d603cffc731823d2acf096bcc17cca1d99eee24b0aa313776d7d01571b4f | +13 −0 | New |
+| skills/project-update/history/blobs/fe513647c66e8883b326ea884a7e9cb045ce54c49b03d2e75a0b73c4756c423e | +67 −0 | New |
+| skills/project-update/history/index.json | +14 −7 | Edit |
+| skills/project-update/migrations/0008_renames.py | +43 −0 | New |
+| skills/project-update/migrations/__init__.py | +5 −3 | Edit |
+| skills/project-update/render_instructions.py | +28 −16 | Edit |
+| skills/project-update/update.py | +52 −25 | Edit |
+| skills/rr-build/SKILL.md | +1 −1 | Edit |
+| skills/rr-plan/SKILL.md | +1 −1 | Edit |
+| skills/rr-setup/SKILL.md | +3 −3 | Edit |
+| skills/rr-setup/scaffold_ai.py | +4 −4 | Edit |
+| skills/rr-spec/SKILL.md | +1 −1 | Edit |
+| skills/rr-status/SKILL.md | +1 −1 | Edit |
+| skills/rr-status/status.py | +9 −3 | Edit |
+| skills/usage-report/usage-report.py | +10 −5 | Edit |
+| tests/fixtures/guard-characterization/golden.txt | +59 −44 | Edit |
+| tests/fixtures/path-guard/110-write-state-json.json | +1 −0 | New |
+| tests/fixtures/path-guard/111-bash-sed-i-state-json.json | +1 −0 | New |
+| tests/fixtures/project-update/schema-v7/.ai/VERSION | +1 −0 | New |
+| tests/fixtures/project-update/schema-v7/README.md | +10 −0 | New |
+| tests/fixtures/scaffold-port/project-scaffold.sh | +1 −1 | Edit |
+| tests/fixtures/scaffold-port/scaffold-ai.sh | +3 −3 | Edit |
+| tests/test-codex-install.sh | +12 −12 | Edit |
+| tests/test-dual-runtime-install.sh | +14 −14 | Edit |
+| tests/test-install-dry-run.sh | +46 −24 | Edit |
+| tests/test-profiles.sh | +7 −7 | Edit |
+| tests/test-scaffold-idempotency.sh | +9 −9 | Edit |
+| tests/test-shared-tree.sh | +9 −9 | Edit |
+| tests/test_ai_path_guard.py | +29 −9 | Edit |
+| tests/test_ai_scope_guard.py | +16 −4 | Edit |
+| tests/test_ai_task_state.py | +28 −2 | Edit |
+| tests/test_codex_agent_render.py | +6 −5 | Edit |
+| tests/test_instruction_budget.py | +9 −9 | Edit |
+| tests/test_merge_migration.py | +3 −3 | Edit |
+| tests/test_migration_0006.py | +2 −1 | Edit |
+| tests/test_project_adopt.py | +3 −3 | Edit |
+| tests/test_project_update.py | +120 −28 | Edit |
+| tests/test_rename.py | +94 −0 | New |
+| tests/test_runtime_gate.py | +10 −10 | Edit |
+| tests/test_scaffold_idempotency.py | +9 −9 | Edit |
+| tests/test_shared_prompts_model_free.py | +2 −1 | Edit |
+| tests/test_usage_report.py | +2 −2 | Edit |
+
++1064 −431 lines, 91 files
 
 ## Verdict
 
-close: open — the human approves in their own terminal, then 'state.py close' again
+close: closed
 facts: (a) green — suite green on 998f5900a (run 15) · (b) green — 91 changed files, all in the task's files
-gate: requested G1 at 2026-10-27T21:03:28Z; approved by - at - via -
+gate: requested G1 at 2026-10-27T21:03:28Z; approved by vanssa at 2026-10-27T21:06:37Z via terminal
 confirm: none
-handoffs: 8 · suite runs: 2 · review passes: 1
+handoffs: 12 · suite runs: 2 · review passes: 1

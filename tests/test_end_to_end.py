@@ -174,7 +174,7 @@ class TestInstalledPipeline(unittest.TestCase):
         repo, hooks, chooks = self.repo, os.path.join(self.dir, "hooks"), os.path.join(self.cdir, "hooks")
 
         # install
-        self.sh("bash", os.path.join(PLUGIN, "install.sh"), "--plan", "max", "--fable", "yes",
+        self.sh("node", os.path.join(PLUGIN, "bin", "riskrails.js"), "--plan", "max", "--fable", "yes",
                 env={"CLAUDE_DIR": self.dir})
         self.check("installed into a scratch CLAUDE_DIR",
                    os.path.isfile(os.path.join(self.dir, "skills", "ai-init", "scaffold-ai.sh")))
@@ -195,9 +195,10 @@ class TestInstalledPipeline(unittest.TestCase):
         self.check("the risk tiers are in place",
                    os.path.isfile(os.path.join(repo, ".ai", "policies", "risk-tiers.json")))
 
-        path_guard = os.path.join(hooks, "ai-path-guard.sh")
-        scope_guard = os.path.join(hooks, "ai-scope-guard.sh")
-        git_guard = os.path.join(hooks, "ai-git-guard.sh")
+        # One registered command runs all three checks (3.5): the one settings.json names.
+        path_guard = scope_guard = git_guard = ["python3", "-I", "-S", os.path.join(hooks, "ai-guard.py")]
+        self.check("no shell guard is installed", not any(
+            os.path.lexists(os.path.join(hooks, "ai-%s-guard.sh" % g)) for g in ("git", "path", "scope")))
 
         # the path guard is now live in this project
         self.check("reading .env is refused once the project has .ai/",
@@ -236,8 +237,8 @@ class TestInstalledPipeline(unittest.TestCase):
         # the same task, from Codex: a second runtime installed over the same project
         # must land on the same state file and enforce the same step — the pipeline
         # is shared, only the adapter differs.
-        self.sh("bash", os.path.join(PLUGIN, "install.sh"), env={"CODEX_DIR": self.cdir})
-        self.check("installed into a scratch CODEX_DIR", os.path.isfile(os.path.join(chooks, "ai-scope-guard.sh")))
+        self.sh("node", os.path.join(PLUGIN, "bin", "riskrails.js"), env={"CODEX_DIR": self.cdir})
+        self.check("installed into a scratch CODEX_DIR", os.path.isfile(os.path.join(chooks, "ai-guard.py")))
         self.check("the Codex agent roster is rendered",
                    os.path.isfile(os.path.join(self.cdir, "agents", "ai-reviewer.toml")))
         self.check("no Claude-only hook is installed into Codex",
@@ -255,9 +256,7 @@ class TestInstalledPipeline(unittest.TestCase):
         self.check("and registered on its three events there",
                    len([c for c in commands if "context-guard" in c]) == 3, sorted(registered))
 
-        codex_scope = os.path.join(chooks, "ai-scope-guard.sh")
-        codex_path = os.path.join(chooks, "ai-path-guard.sh")
-        codex_git = os.path.join(chooks, "ai-git-guard.sh")
+        codex_scope = codex_path = codex_git = ["python3", "-I", "-S", os.path.join(chooks, "ai-guard.py")]
 
         # The state the Claude half of this test wrote is the state Codex reads.
         out = self.state("status", home=self.cdir).stdout

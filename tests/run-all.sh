@@ -8,13 +8,10 @@ for tool in jq python3 git; do
 done
 
 FAILED=""
-for suite in test-guard-characterization.sh \
-             test-scaffold-idempotency.sh test-install-dry-run.sh \
+for suite in \
              test-end-to-end.sh \
              test-runtime-gate-fable.sh \
-             test-codex-install.sh test-dual-runtime-install.sh \
-             test-runtime-gate-codex.sh \
-             test-profiles.sh test-shared-tree.sh; do
+             test-runtime-gate-codex.sh; do
     [ -f "$suite" ] || continue
     printf '\n--- %s\n' "$suite"
     bash "$suite" || FAILED="$FAILED $suite"

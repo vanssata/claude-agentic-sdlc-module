@@ -19,13 +19,16 @@ WHY_HISTORY = ("\n\nRewriting or force-pushing shared history destroys other peo
                "whoever else has the branch checked out.")
 WHY_PROTECTED = ("\n\nProtected branches change through a reviewed pull request, not through a push\n"
                  "from an agent session. Open a PR, or ask the human to run this push themselves.")
+WHY_PUBLISH = ("\n\nA published version is public at once and cannot be taken back after 72 hours;\n"
+               "releasing is a human act. The human bumps the version and publishes, from CI with\n"
+               "2FA and provenance (policies/release.md).")
 WHY_DEPLOY = ("\n\nProduction deployments are a human action with a human on the hook for the\n"
               "rollback. The pipeline ends at the release report and human approval; see\n"
               "policies/release.md.")
 
 SPACE = "[[:space:]]"
 CHEAP_RE = ("(^|[|;&[:space:]])(git|gh|argocd|helm|kubectl|terraform|dep|deployer|cap|flyctl|fly|"
-            "vercel|netlify)([[:space:]]|$)")
+            "vercel|netlify|npm)([[:space:]]|$)|/npm([[:space:]]|$)")
 ADD_RE = "(^|[|;&[:space:]])git[[:space:]]+(add|stage)([[:space:]]|$)"
 WILD1_RE = ("(^|[|;&[:space:]])git[[:space:]]+(add|stage)([[:space:]]+-[^[:space:]]+)*[[:space:]]+"
             "(\\.|-A|--all|\\*)([[:space:]]|$)")
@@ -43,6 +46,16 @@ MERGE_RE = "(^|[|;&[:space:]])git[[:space:]]+merge([[:space:]]|$)"
 GH_MERGE_RE = "(^|[|;&[:space:]])gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)"
 RESET_RE = "(^|[|;&[:space:]])git[[:space:]]+reset[[:space:]]+[^;&|]*--hard"
 NO_VERIFY_RE = "(^|[|;&[:space:]])git[[:space:]]+[^;&|]*(--no-verify|-n[[:space:]]+--)"
+# npm's subcommand is the first word after `npm` and its options, an option's value
+# included (`npm -w a version patch`); it may be quoted or abbreviated (`npm publ`,
+# `npm vers`, the alias `verison`). `publish` as another subcommand's argument
+# (`npm run publish`) is not the subcommand. `npm version` with a new version, options
+# before it included, bumps it; bare `npm version` and its flags only print.
+_NPM = ("(^|[|;&[:space:]/])npm([[:space:]]+-[^[:space:];&|]*([[:space:]]+[^-[:space:];&|][^[:space:];&|]*)?)*"
+        "[[:space:]]+['\"]?")
+_NPM_OPTS = "([[:space:]]+-[^[:space:];&|]*([[:space:]]+[^-[:space:];&|][^[:space:];&|]*)?)*"
+NPM_PUBLISH_RE = _NPM + "pu(b(l(i(sh?)?)?)?)?['\"]?([[:space:];&|)<>]|$)"
+NPM_VERSION_RE = _NPM + "(vers(i(on?)?)?|verison)['\"]?" + _NPM_OPTS + "[[:space:]]+[^-[:space:];&|]"
 COMMIT_PUSH_RE = "(^|[|;&[:space:]])git[[:space:]]+([^;&|]*[[:space:]])?(commit|push)([[:space:]]|$)"
 
 _WORD_SPLIT = re.compile("[ \t\n]+")
@@ -208,7 +221,12 @@ class GitGuard:
                        "fail, the fix is the code, not the flag. If a hook is broken, say so and let a\n"
                        "human decide.")
 
-        # 7. production deploys
+        # 7. publishing a package (FC-A5)
+        if m.ere_match(NPM_PUBLISH_RE, cmd_rules) or m.ere_match(NPM_VERSION_RE, cmd_rules):
+            raise Deny("Refusing to publish to the npm registry or bump the package version "
+                       "(npm publish / npm version)." + WHY_PUBLISH)
+
+        # 8. production deploys
         for pattern in herestring_lines(deploys):
             if pattern and m.ere_match(pattern, cmd_rules):
                 raise Deny("Refusing to run a deployment or infrastructure-mutating command.\n\n"

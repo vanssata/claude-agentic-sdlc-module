@@ -19,7 +19,7 @@ import unittest
 from string import Template
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INSTALL = os.path.join(ROOT, "install.sh")
+INSTALL = os.path.join(ROOT, "bin", "riskrails.js")  # the installer since 3.5
 
 TWIN_OF = "test-merge-migration.sh"
 
@@ -67,7 +67,7 @@ class Env:
         return done.stdout
 
     def install(self, claude_dir):
-        return self.run(["bash", INSTALL, "--plan", "max", "--fable", "yes"], CLAUDE_DIR=claude_dir)
+        return self.run(["node", INSTALL, "--plan", "max", "--fable", "yes"], CLAUDE_DIR=claude_dir)
 
     def close(self):
         self.tmp.cleanup()

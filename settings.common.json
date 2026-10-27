@@ -26,35 +26,13 @@
         ]
       },
       {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/.claude/hooks/ai-git-guard.sh\"",
-            "timeout": 15,
-            "statusMessage": "Checking git and deploy safety"
-          }
-        ]
-      },
-      {
         "matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.claude/hooks/ai-path-guard.sh\"",
-            "timeout": 10,
-            "statusMessage": "Checking sensitive paths"
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/.claude/hooks/ai-scope-guard.sh\"",
-            "timeout": 10,
-            "statusMessage": "Checking task scope"
+            "command": "python3 -I -S \"$HOME/.claude/hooks/ai-guard.py\"",
+            "timeout": 15,
+            "statusMessage": "Checking git, paths and scope"
           }
         ]
       }

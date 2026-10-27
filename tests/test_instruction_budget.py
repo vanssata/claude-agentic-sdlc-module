@@ -24,7 +24,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RENDER = os.path.join(ROOT, "skills", "project-update", "render_instructions.py")
 STATE = os.path.join(ROOT, "skills", "ai-task", "state.py")
 TEMPLATE_AI = os.path.join(ROOT, "skills", "ai-init", "templates", ".ai")
-INSTALL = os.path.join(ROOT, "install.sh")
+INSTALL = os.path.join(ROOT, "bin", "riskrails.js")  # the installer since 3.5
 SUPERPOWERS_BYTES = 3686          # using-superpowers, as SQ12 measured it (3.6 KB)
 GLOBAL_BUDGET = 2560
 SESSION_START_BUDGET = 10240
@@ -378,10 +378,10 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
             d = os.path.join(self.space, label)
             os.makedirs(d)
             if target == "claude":
-                rc, out = self.sh(["bash", INSTALL, "--target", "claude"] + args, CLAUDE_DIR=d)
+                rc, out = self.sh(["node", INSTALL, "--target", "claude"] + args, CLAUDE_DIR=d)
                 file = os.path.join(d, "CLAUDE.md")
             else:
-                rc, out = self.sh(["bash", INSTALL, "--target", "codex"] + args, CODEX_DIR=d,
+                rc, out = self.sh(["node", INSTALL, "--target", "codex"] + args, CODEX_DIR=d,
                                   CLAUDE_DIR=os.path.join(d, "claude"))
                 file = os.path.join(d, "AGENTS.md")
             with self.subTest("$label: global block $size B <= 2560", label=label):
@@ -400,7 +400,7 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
     def test_a_users_own_20_kib_of_text_is_measured_never_touched(self):
         userdir = os.path.join(self.space, "userfile")
         write(os.path.join(userdir, "CLAUDE.md"), USER_TEXT)
-        rc, out = self.sh(["bash", INSTALL, "--target", "claude", "--plan", "max", "--fable", "yes"], CLAUDE_DIR=userdir)
+        rc, out = self.sh(["node", INSTALL, "--target", "claude", "--plan", "max", "--fable", "yes"], CLAUDE_DIR=userdir)
         with self.subTest("a 20 KiB user file does not fail the install"):
             self.assertEqual(rc, 0, "install exited %d\n%s" % (rc, "\n".join(out.splitlines()[-3:])))
         with self.subTest("the size line names the user's share"):
@@ -420,11 +420,11 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
         write(os.path.join(big, "AGENTS.md"), USER_TEXT)
         os.makedirs(small)
         with self.subTest("a 20 KiB AGENTS.md gets the advisory"):
-            out = self.sh(["bash", INSTALL, "--target", "codex", "--codex-plan", "pro"], CODEX_DIR=big,
+            out = self.sh(["node", INSTALL, "--target", "codex", "--codex-plan", "pro"], CODEX_DIR=big,
                           CLAUDE_DIR=os.path.join(big, "claude"))[1]
             self.assertIn("Codex reads at most 32 KiB", out, "no advisory for a 20 KiB AGENTS.md")
         with self.subTest("a fresh AGENTS.md is left alone about the limit"):
-            out = self.sh(["bash", INSTALL, "--target", "codex", "--codex-plan", "pro"], CODEX_DIR=small,
+            out = self.sh(["node", INSTALL, "--target", "codex", "--codex-plan", "pro"], CODEX_DIR=small,
                           CLAUDE_DIR=os.path.join(small, "claude"))[1]
             self.assertNotIn("Codex reads at most 32 KiB", out, "a fresh AGENTS.md got the advisory")
 
