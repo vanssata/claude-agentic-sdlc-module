@@ -193,6 +193,28 @@ Each: testable (test file / case / measurement), intent outcome it serves (quote
   allow-list of compat readers; `TestMigration0008` rewrites the markers in a fixture `CLAUDE.md` and leaves
   the user's text byte-identical; install suites assert the new home and the symlink. Outcome: "One install
   command for both runtimes" (published once, under its final name). Phase 3 step 4b, before 3.5.
+- **R36 Guarded commands and decisions in the runtime's dialog** (developer, 2026-10-28; spec
+  `docs/sdlc/specs/command-choice-dialog.md`, Q1–Q8 in `docs/sdlc/intent/command-choice-dialog.questions.md`).
+  With `.ai/policies/dialog.json` `enabled:true`, a command the agent may not run itself (`approve`, `reject`,
+  `git commit`/`git push`, `verify --by`, `review --by`, a lowering `start --mode`, `profile set`) and a plan or
+  review decision are offered through the runtime's native dialog (`AskUserQuestion`; Codex `request_user_input`
+  only on a version spike 7.0 verifies, else off), prepared solely by `state.py decision`, option text = the
+  command verbatim, `multiSelect` only for command lists. A PostToolUse hook records the harness's `tool_response`
+  into `.ai/state/consent.jsonl`; the git guard, the path guard and the `state.py` human route let that command
+  through verbatim, once, within 120 s, same session, in order; anything else is `CONSENT_MISMATCH` and voids the
+  picks. While a decision is open the PreToolUse gate (matcher `*`) denies every other tool and Stop blocks, at
+  most twice per turn. Off (file missing, `enabled:false`, `AI_UNATTENDED`, a subagent, unverified Codex) is
+  today's behaviour byte-for-byte; the migration writes off, the scaffold writes on. First consumer: plan drift,
+  `state.py profile detect` (ported from `bin/riskrails.js`, a C3 refactor) at SessionStart, on `auth_success`
+  and on an account-file mtime change; `profile set <plan>` same tier only, otherwise it prints the `npx riskrails`
+  line. `askUserQuestionTimeout` is never rendered. C5 is amended by the human: "No agent merges or deploys; an
+  agent commits, pushes or approves only by running, verbatim and once, a command a human picked in the
+  runtime's dialog as recorded by the harness — otherwise a human runs it outside the agent." Test:
+  `tests/test_dialog_gate.py`, `tests/test_dialog_consent.py::test_model_cannot_forge_consent`,
+  `tests/test_profile_detect.py`, additive golden fixtures in `test_ai_git_guard.py` and `test_ai_path_guard.py`,
+  `tests/test_guard_characterization.py` with an empty diff while the dialog is off, `tests/test_instruction_budget.py`.
+  Outcome: "the human never leaves the session for a gate". Behaviour 2, full mode for every step. Phase 3
+  step 7 (7.0 spike, 7a–7f), after 3.5.
 
 ## Design
 
@@ -473,13 +495,18 @@ model-facing (9)
  status   [--json]                                         what status.py prints (status.py shells to it)
  ask      [question] [--option …] [--recommend …] [--gate] [--topic SLUG]
  answer   [Q1=A …] [--prose …] [--topic SLUG]
-human-only (2, terminal or AI_UNATTENDED=1; path guard denies the literal invocation from an agent)
- approve  --by WHO [--confirm "<operation>"] [--note]      --confirm required for full+irreversible
+ decision show [--id D] [--json] | open --kind commit --command C… | settle --id D [--pick N] | fallback --id D --why …
+                                                           R36 (phase 3 step 7); --pick is terminal/unattended only
+human-only (3, terminal, AI_UNATTENDED=1, or a dialog pick under R36; path guard denies the literal invocation from an agent)
+ approve  --by WHO [--confirm "<operation>"] [--note]      --confirm required for full+irreversible; never via the dialog
  reject   --by WHO --why …
-internal (3, called by hooks/skills, undocumented in SKILL.md)
+ profile set <plan> [--runtime R]                           R36; same tier only, else 6 PROFILE_NEEDS_INSTALLER
+internal (5, called by hooks/skills, undocumented in SKILL.md)
  handoff  [--print] [--reason stage|precompact|manual|session-start] [--to RT] [--for continue|review]
  event    TYPE [--detail] [--data JSON]                     hooks only
  profile  [--field] [--tier] [--json]
+ profile detect [--runtime R] [--json] [--open]             R36; context-guard at SessionStart / auth_success
+ consent  [--json] | audit [--json]                         R36; the consent.jsonl ledger, read-only
 removed (19): init get stage risk triage quick plan remediate step review-gate test-run step-split set risks modules
               questions note events done archive   (remediate → verify --after-fix; set → review/approve; done+archive → close)
 ```

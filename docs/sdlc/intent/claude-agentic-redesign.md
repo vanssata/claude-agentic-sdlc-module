@@ -90,6 +90,17 @@ that the developer has read, and **Open questions** what the spec stage must set
   marketplace entry) so the skills, agents and hooks can be enabled with `/plugin` in Claude
   Code and from the same marketplace in Codex; `npx` then does only what the plugin format
   cannot (plan profile, managed block, settings merge, `ai/` tree, migrations).
+- The human never leaves the session for a gate (added 2026-10-28, R36). A command the agent
+  may not run itself (`approve`, `reject`, `git commit`/`git push`, `verify --by`, `review --by`,
+  a lowering `start --mode`, `profile set`) and a plan or review decision are offered through the
+  runtime's native selection dialog (`AskUserQuestion`; Codex `request_user_input` when a spike
+  verifies it fires hooks outside plan mode, otherwise off), with the command itself as the option
+  text; the human picks with the arrow keys, nothing is typed, and the agent runs the pick
+  verbatim, once, within a short window. A project-level switch (`.ai/policies/dialog.json`)
+  turns it off, which is today's behaviour: the human runs the command in their own terminal.
+  First consumer: a changed subscription plan (`profile.json` vs the live account) detected at
+  SessionStart and after `/login`, fixed by `state.py profile set` without re-running the
+  installer. Spec: `docs/sdlc/specs/command-choice-dialog.md`.
 
 ## Affected users & systems
 
@@ -230,6 +241,31 @@ Added 2026-10-25 (developer's decision after an assessment of shell → Python, 
 - Node is a build-and-install dependency only: no hook, skill or `state.py` call runs Node,
   because Claude Code and Codex guarantee Node at install time, not inside a project.
 
+Added 2026-10-28 (developer's decisions in the brainstorm
+`docs/sdlc/intent/command-choice-dialog.questions.md`, Q1–Q8; after T-2026-10-27-007 closed):
+
+- Gates and decisions go through the runtime's native dialog, and the agent runs the picked
+  command itself (Q5): the gate moves from "outside the agent" into the harness. A PostToolUse
+  hook records the human's pick from `tool_response` (the harness's, never the model's) and the
+  guards and `state.py` let exactly that command through, once. **C5 is amended** by the human
+  to: "No agent merges or deploys; an agent commits, pushes or approves only by running,
+  verbatim and once, a command a human picked in the runtime's dialog as recorded by the
+  harness — otherwise a human runs it outside the agent." The global and project `CLAUDE.md`
+  lines and `rr-ship` say the same, conditional on the switch.
+- Option text is the command itself, verbatim (Q1); only commands the agent may not run and
+  plan/review decisions get the dialog, ordinary Bash does not (Q4); the switch is a
+  project-level file, off = the human types in another terminal (Q8); no typed-number fallback
+  and no pasted `!` lines — Codex gets the same dialog or behaves as off (Q6).
+- While a decision is open the PreToolUse gate denies every other tool and Stop blocks (Q2;
+  bounded to two blocks per turn by the runtime's loop rule). `askUserQuestionTimeout` is never
+  rendered (Q3).
+- Plan drift is the first consumer (Q7): the detection moves from `bin/riskrails.js` to
+  `state.py profile detect` (a refactor, its own task) and `profile set` re-renders the same tier
+  without the installer.
+- Delivery: phase 3 step 7 after 3.5, as 7.0 (fixture spike, incl. whether Codex
+  `request_user_input` fires hooks outside plan mode) then 7a–7f, every step full mode with
+  `--declare behaviour=2`.
+
 ## Open questions
 
 - Exact point values and thresholds of the seven weight questions, and whether question 2
@@ -292,6 +328,13 @@ Added 2026-10-25 (developer's decision after an assessment of shell → Python, 
 - **Team profile and abrites-staging-v2**: nobody on either machine uses the team profile
   (proposal: documented, not tested on every run); abrites-staging-v2's pre-plugin `ai-tools`
   branch with six own guards: `--adopt` or abandon.
+- **Dialog gate (R36, added 2026-10-28)**: whether the migration turns the dialog on in
+  existing projects (`enabled:true`) or off with a printed hint — C6 says changing approval
+  without a human act is behaviour 2, so the spec assumes off; whether an API-key account gets
+  its own `profiles/api.json` or stays `unsupported`; whether plan drift, which is per user,
+  needs its own switch when the dialog switch is per project; the `window_seconds` default
+  (120) against pre-commit hooks that run before the push. All in
+  `docs/sdlc/specs/command-choice-dialog.md` §Open questions.
 
 ## Evidence from every project on this machine (2026-10-24)
 
