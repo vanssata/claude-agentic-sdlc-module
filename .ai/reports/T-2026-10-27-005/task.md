@@ -26,7 +26,23 @@ amended 2026-10-27T18:26:44Z: +tests/fixtures/path-guard/101-bash-tar-into-curre
 
 ## Questions
 
-[questions.md](questions.md) — 1 pending
+<!-- Written by state.py. Answer with `state.py answer Q1=B`, or fill the [Answer]: lines here and run
+     `state.py questions --sync`; the rest of task.md is rewritten from the state, this section is kept. -->
+
+## Q1. Record decisions D1-D4 (review M2): the drops beyond R22 cite them but no file holds their text. Which stands?
+asked: 2026-10-27T18:40:09Z · stage: implementation
+context: Answer X: <D1..D4 text, who, when> to record the exact wording instead.
+A. Confirm them as .ai/project/known-risks.md 'Path guard after R22' now lists the allowed items, with D4 (interpreter text not scanned) reversed by the H3 fix (recommended)
+B. Reopen: one or more of those drops was not decided; name which
+X. Other — answer as `X: <text>`
+[Answer]: A — by vanssa via prose at 2026-10-27T18:41:34Z
+
+## G1. Approve T-2026-10-27-005 for implementation? (gate: human_approval)
+asked: 2026-10-27T19:15:35Z · stage: human_approval
+A. Approve
+B. Reject — answer as `B: <reason>`
+X. Other — answer as `X: <text>`
+[Answer]: A — by vanssa via terminal at 2026-10-27T19:17:14Z
 
 ## Verify
 
@@ -133,12 +149,105 @@ closed by a green run: H1, H2, H3
 
 ## Changes
 
-measured at close
+| File | Change | New/Edit/Delete |
+|---|---|---|
+| .ai/project/known-risks.md | +10 −0 | Edit |
+| AGENTS.md | +1 −1 | Edit |
+| README.md | +2 −2 | Edit |
+| agents/ai-discovery.md.tmpl | +1 −1 | Edit |
+| agents/ai-reviewer.md.tmpl | +2 −2 | Edit |
+| ai/agents/context.md | +1 −1 | Edit |
+| ai/agents/discovery.md | +1 −1 | Edit |
+| ai/agents/implementer.md | +1 −1 | Edit |
+| ai/agents/planner.md | +1 −1 | Edit |
+| ai/agents/release.md | +1 −1 | Edit |
+| ai/agents/reviewer.md | +2 −2 | Edit |
+| ai/agents/risk.md | +1 −1 | Edit |
+| ai/agents/security.md | +1 −1 | Edit |
+| docs/architecture.md | +4 −4 | Edit |
+| docs/faq.md | +7 −7 | Edit |
+| docs/hooks.md | +49 −106 | Edit |
+| hooks/ai-path-guard-defaults.json | +7 −26 | Edit |
+| hooks/guard/paths.py | +70 −167 | Edit |
+| instructions/stub.md | +1 −1 | Edit |
+| skills/ai-init/templates/.ai/policies/security.md | +12 −18 | Edit |
+| skills/ai-init/templates/.ai/state/README.md | +1 −1 | Edit |
+| skills/ai-init/templates/AGENTS.block.md | +1 −1 | Edit |
+| skills/ai-init/templates/CLAUDE.block.md | +1 −1 | Edit |
+| skills/ai-init/templates/GEMINI.block.md | +1 −1 | Edit |
+| skills/ai-init/templates/junie-guidelines.block.md | +1 −1 | Edit |
+| skills/ai-task/state.py | +97 −33 | Edit |
+| skills/ai-task/weight.py | +1 −1 | Edit |
+| skills/project-update/history/blobs/19b1a6390e96136619d23bc2ef9afed8f15e62107de7c1052bc5ea23e5bb5692 | +64 −0 | New |
+| skills/project-update/history/blobs/1a8995e5f7e51b5be74fca82551e5d9e4d970c546d9fd6eecb6809a7f6af8821 | +69 −0 | New |
+| skills/project-update/history/blobs/4d1f9073276936834747199393159f1badc0277b5bb394f78f408d52c36c4e35 | +13 −0 | New |
+| skills/project-update/history/blobs/c735911eb1a744f78213a9f7577b425c1605843f6d05fed798d7f41b47fa1e0c | +13 −0 | New |
+| skills/project-update/history/blobs/da848b831443484c831fa630666c004e07c1c9669dd247e8e4066979c8599080 | +13 −0 | New |
+| skills/project-update/history/index.json | +28 −14 | Edit |
+| skills/rr-build/SKILL.md | +1 −1 | Edit |
+| skills/rr-ship/SKILL.md | +1 −1 | Edit |
+| tests/fixtures/guard-characterization/golden.txt | +154 −81 | Edit |
+| tests/fixtures/guard-characterization/moved-3.4.json | +110 −0 | New |
+| tests/fixtures/path-guard/10-python-oneliner.json | +1 −12 | Edit |
+| tests/fixtures/path-guard/100-bash-long-heredoc-allowed.json | +1 −0 | New |
+| tests/fixtures/path-guard/101-bash-tar-into-current-json.json | +1 −0 | New |
+| tests/fixtures/path-guard/102-bash-curl-o-into-current-json.json | +1 −0 | New |
+| tests/fixtures/path-guard/103-bash-wget-o-into-task-md.json | +1 −0 | New |
+| tests/fixtures/path-guard/104-bash-scp-into-events-jsonl.json | +1 −0 | New |
+| tests/fixtures/path-guard/105-edit-installed-guard-engine.json | +1 −0 | New |
+| tests/fixtures/path-guard/106-bash-rm-installed-guard-dir.json | +1 −0 | New |
+| tests/fixtures/path-guard/107-edit-installed-state-py.json | +1 −0 | New |
+| tests/fixtures/path-guard/108-bash-long-heredoc-approve-word-allowed.json | +1 −0 | New |
+| tests/fixtures/path-guard/109-read-pem-under-ai-state.json | +1 −0 | New |
+| tests/fixtures/path-guard/15-edit-claude-agent-in-task.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/20-read-vendor-agents-md.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/21-edit-node-modules-claude-md.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/22-cat-vendor-cursorrules.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/27-cat-events-jsonl.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/35-bash-run-context-guard.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/39-bash-python-writes-session-json.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/40-edit-ai-rule-in-task.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/42-write-claude-rule-in-task.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/43-edit-constitution-in-task.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/51-bash-cp-into-ai-agents.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/52-bash-mv-agent-definition-away.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/54-bash-rm-vendor-instruction-file.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/57-bash-rm-claude-hooks-dir.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/59-bash-rm-claude-dir.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/60-bash-mv-claude-dir-away.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/61-bash-cp-dir-onto-claude-agents.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/62-bash-rsync-contents-into-claude.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/64-bash-for-do-cp.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/65-bash-if-then-cp.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/66-bash-subshell-cp.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/67-bash-cmdsubst-cp.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/68-bash-assignment-cp.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/69-bash-time-cp.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/71-bash-continuation-cp.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/73-bash-sh-c-rm.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/74-bash-sh-c-seq-rm.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/88-bash-python-json-dump-state.json | +1 −1 | Edit |
+| tests/fixtures/path-guard/92-edit-task-md.json | +1 −0 | New |
+| tests/fixtures/path-guard/93-redirect-into-task-md.json | +1 −0 | New |
+| tests/fixtures/path-guard/94-read-task-md-allowed.json | +1 −0 | New |
+| tests/fixtures/path-guard/95-write-runtime-gate.json | +1 −0 | New |
+| tests/fixtures/path-guard/96-redirect-into-events-jsonl.json | +1 −0 | New |
+| tests/fixtures/path-guard/97-edit-policy-md-in-task.json | +1 −0 | New |
+| tests/fixtures/path-guard/98-write-state-log.json | +1 −0 | New |
+| tests/fixtures/path-guard/99-bash-long-command-names-state-py.json | +1 −0 | New |
+| tests/test_ai_path_guard.py | +76 −46 | Edit |
+| tests/test_ai_task_state.py | +50 −6 | Edit |
+| tests/test_end_to_end.py | +34 −0 | Edit |
+| tests/test_guard_characterization.py | +3 −0 | Edit |
+| tests/test_guard_differential.py | +24 −1 | Edit |
+| tools/golden-diff.py | +76 −0 | New |
+
++1054 −573 lines, 90 files
 
 ## Verdict
 
-close: open — the human approves in their own terminal, then 'state.py close' again
+close: closed
 facts: (a) green — suite green on e25ecfe84 (run 9) · (b) green — 90 changed files, all in the task's files
-gate: requested G1 at 2026-10-27T19:15:35Z; approved by - at - via -
+gate: requested G1 at 2026-10-27T19:15:35Z; approved by vanssa at 2026-10-27T19:17:14Z via terminal
 confirm: none
-handoffs: 7 · suite runs: 4 · review passes: 1
+handoffs: 9 · suite runs: 4 · review passes: 1
