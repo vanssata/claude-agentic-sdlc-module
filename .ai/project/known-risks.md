@@ -141,7 +141,7 @@ following; each is open unless marked.
 - **Status**: fixed (2026-10-21, T1, `tests/test-fable-gate.sh` only). KNOWN FACT — not the home: the test runs under `set -uo pipefail` (`:6`) and checked the 17.7 KB dry-run output with `printf '%s' "$out" | grep -q …`. Bash's `printf` writes it in 4096-byte chunks (strace: 4×4096 + 1321), the matcher line sits at byte 4258, and when `grep -q` exits on the match before `printf` has written its last chunk, `printf` dies of SIGPIPE, the pipeline returns 141 and the check fails. Measured on this machine, 3000 runs of the line-253 check: idle 0 failures; with every core busy 17 and 4 failures, all exit 141; the fixed form 0 under the same load. Fix: the 12 `printf '%s' "$out" | grep -q '…'` lines in the file became `grep -q '…' <<<"$out"` — the shell writes the here-string before grep starts, so no writer is left to receive SIGPIPE. Dropping `-q` would not help: GNU grep with stdout on `/dev/null` exits on the first match too. The same pattern elsewhere: see the next entry.
 
 ## `<writer> | grep -q` under `pipefail` can fail by SIGPIPE in other test files (found 2026-10-21, while fixing the entry above)
-- **Where**: about 540 `| grep -q` checks in 20 other `tests/*.sh` files that set `pipefail` — most in `test-project-adopt.sh` (125), `test-ai-task-state.sh` (99), `test-project-update.sh` (57), `test-ai-task-sensors.sh` (47), `test-install-dry-run.sh` (37).
+- **Where**: about 540 `| grep -q` checks in 20 other `tests/*.sh` files that set `pipefail` — most in `test-project-adopt.sh` (125), `test-ai-task-state.sh` (99), `test-project-update.sh` (57), `test-ai-task-sensors.sh` (47), `test-install-dry-run.sh` (37). (2026-10-27, redesign 3.3b: `test-ai-task-state.sh`, `test-ai-task-sensors.sh` and `test-ai-status-root.sh` are now the unittest twins `tests/test_ai_task_state.py`, `test_ai_task_sensors.py`, `test_ai_status_root.py`; their checks no longer pipe into `grep -q`.)
 - **What could go wrong**: KNOWN FACT — the mechanism above: a check fails with 141 when the writer's output is over one 4096-byte write and `grep -q` matches before the last one. INFERENCE — only checks on outputs over 4 KB can fail; a short output is written in one `write` and cannot. Not measured per file.
 - **How likely / how bad**: intermittent, more likely under load; a red suite that is not a regression.
 - **Suggested fix**: the same here-string form, file by file, starting with the checks on dry-run and install output; a test-only task.
@@ -405,7 +405,7 @@ following; each is open unless marked.
 - **What could go wrong**: INFERENCE — if 2.4 removes or renames `profile` with the twins, the two skills spawn the agent without a model and it runs at its default tier.
 - **How likely / how bad**: only if 2.4 changes `profile`; the review would run on the session's model.
 - **Suggested fix**: 2.4 keeps `profile --tier` or rewrites the two lines with the agent template's own tier.
-- **Status**: closed 2026-10-26 by T-2026-10-26-003 (redesign 2.4) — `profile --tier` is kept; `tests/test-ai-task-state.sh` still covers `--tier` and `--field`.
+- **Status**: closed 2026-10-26 by T-2026-10-26-003 (redesign 2.4) — `profile --tier` is kept; `tests/test-ai-task-state.sh` still covers `--tier` and `--field`. (That shell suite is gone since redesign 3.3b, 2026-10-27; its twin `tests/test_ai_task_state.py` carries its cases.)
 
 ## The new surface's human-only routes have no path-guard rule (found 2026-10-26 by the T-2026-10-26-001 review, M1, out of scope)
 
@@ -547,4 +547,13 @@ following; each is open unless marked.
 - **What could go wrong**: KNOWN FACT: the plan's floor ("Python stdlib only, 3.10+", R15) is not what the code meets; the Codex install and render paths need `tomllib`. INFERENCE: the shell-suite failures share that cause (each is a Codex path), not checked one by one. The five guard twins of 3.3a pass on 3.10.
 - **How likely / how bad**: certain on a 3.10 interpreter; a Codex install or render there fails, the Claude Code paths the twins cover do not.
 - **Suggested fix**: a `tomllib` fallback or a declared 3.11 floor for those scripts, in its own task; then add "3.10" back to the matrix.
+- **Status**: open
+
+## `testing.md` still names the shell suites 3.3a and 3.3b deleted (found 2026-10-27 by T-2026-10-27-002)
+
+- **Found**: 2026-10-27, T-2026-10-27-002 (redesign 3.3b), outside its files; 3.3a's review L1 found the same for its five guard suites.
+- **Where**: `.ai/policies/testing.md:94` — healthy output "test-end-to-end.sh ends with \"end to end: N passed, 0 failed\""; `:143-144` map `skills/ai-task/state.py` to `tests/test-ai-task-state.sh`, `tests/test-ai-status-root.sh` and `skills/ai-task/sensors.py` to `tests/test-ai-task-sensors.sh`, now `tests/test_ai_task_state.py`, `tests/test_ai_status_root.py`, `tests/test_ai_task_sensors.py`.
+- **What could go wrong**: KNOWN FACT — `tests/test-end-to-end.sh` is now a one-line wrapper that execs `python3 -I -m unittest discover … -p test_end_to_end.py` with `AI_E2E=1`; it prints unittest's `Ran N tests` / `OK`, not "end to end: N passed". `verify` judges by exit code, so nothing breaks; an agent picking a step's tests from the map names a file that does not exist.
+- **How likely / how bad**: certain for a reader of those rows; a wrong test name or a misread healthy output, no wrong verdict.
+- **Suggested fix**: the human edits the three rows (and 3.3a's) in 3.H, when the wrapper goes.
 - **Status**: open

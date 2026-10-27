@@ -1,4 +1,6 @@
-"""state.py's schema-7 surface (redesign 2.2a): start, verify, review, close,
+#!/usr/bin/env python3
+"""exec" python3 -I "$0" "$@"
+state.py's schema-7 surface (redesign 2.2a): start, verify, review, close,
 step-done, status, approve --confirm, task.md, and the re-score.
 
 Every project here is a scratch git repository in a temp directory. The suite's
@@ -24,6 +26,8 @@ sys.path.insert(0, os.path.join(ROOT, "skills", "ai-task"))
 import state as state_mod  # noqa: E402  pylint: disable=wrong-import-position
 import sensors  # noqa: E402  pylint: disable=wrong-import-position
 import weight  # noqa: E402  pylint: disable=wrong-import-position
+
+TWIN_OF = "test-ai-task-state.sh"
 
 ZERO = ["--declare", "behaviour=0:synthetic", "--declare", "domain=0:synthetic",
         "--declare", "novelty=0:synthetic"]
@@ -1676,6 +1680,76 @@ class TestSensorsSurface(unittest.TestCase):
             self.assertFalse(hasattr(sensors, name), name)
         commands = sensors.build_parser()._subparsers._group_actions[0].choices  # pylint: disable=protected-access
         self.assertEqual(sorted(commands), ["diff", "run", "snapshot"])
+
+
+class TestNoTask(unittest.TestCase):
+    """What needs no task: the failure modes that must be loud rather than
+    silent, and topic questions, which live with a document and need no .ai/."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with  # tearDown ends it
+        self.root = os.path.join(self.tmp.name, "project")
+        os.makedirs(os.path.join(self.root, ".ai", "state"))
+        os.makedirs(os.path.join(self.root, ".ai", "reports"))
+        self.topic = os.path.join(self.tmp.name, "topic")
+        os.makedirs(os.path.join(self.topic, "docs", "sdlc", "intent"))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_state(self, root, *args):
+        env = {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "AI_RUNTIME")}
+        env["CLAUDE_CONFIG_DIR"] = os.path.join(self.tmp.name, "home", ".claude")
+        env["CODEX_HOME"] = os.path.join(self.tmp.name, "home", ".codex")
+        done = subprocess.run([sys.executable, "-I", STATE, "--root", root] + list(args), input="",
+                              capture_output=True, text=True, env=env, check=False)
+        return done.stdout + done.stderr
+
+    def topic_ok(self, *args):
+        out = self.run_state(self.topic, *args)
+        self.assertNotIn("Traceback", out)
+        return out
+
+    def test_a_corrupt_state_file_is_loud_and_untouched(self):
+        path = os.path.join(self.root, ".ai", "state", "current.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("not json at all")
+        self.assertIn("unreadable", self.run_state(self.root, "status"),
+                      "a corrupt state file reports the problem")
+        with open(path, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), "not json at all", "and is left exactly as it was")
+
+    def test_no_ai_at_all(self):
+        self.assertIn("run /ai-init first", self.run_state(self.tmp.name, "status"),
+                      "a project without .ai/ says what to do")
+
+    def test_topic_questions_live_with_the_document(self):
+        """R17: topic questions need no .ai/."""
+        self.topic_ok("ask", "What problem are we solving?", "--option", "A: decisions are lost",
+                      "--option", "B: cost", "--topic", "my-idea")
+        self.assertTrue(os.path.isfile(os.path.join(self.topic, "docs", "sdlc", "intent", "my-idea.questions.md")),
+                        "a topic question lands beside its intent")
+        self.topic_ok("answer", "Q1=A", "--topic", "my-idea", "--by", "ivan")
+        md = self.topic_ok("questions", "--topic", "my-idea", "--format", "md")
+        self.assertRegex(md, r"(?m)^- \*\*What problem are we solving\?\*\* — decisions are lost",
+                         "--format md renders the Decisions taken line")
+        self.assertFalse(os.path.isdir(os.path.join(self.topic, ".ai")), "and no .ai/ was created")
+        found = [os.path.join(d, n) for d, dirs, files in os.walk(self.topic) for n in dirs + files
+                 if n in ("events.jsonl", ".ai")]
+        self.assertEqual(found, [], "a topic question writes no journal anywhere in the tree")
+
+    def test_a_topic_slug_that_is_a_path_is_refused(self):
+        out = self.run_state(self.topic, "ask", "Escape?", "--option", "A: one", "--option", "B: two",
+                             "--topic", "../../pwned/evil")
+        self.assertIn("takes a slug of lowercase letters", out, "a slug that is a path is refused")
+        self.assertFalse(os.path.exists(os.path.join(self.tmp.name, "pwned"))
+                         or os.path.exists(os.path.join(self.topic, "docs", "pwned")),
+                         "and nothing was written outside docs/sdlc/intent/")
+
+    def test_a_topic_file_cannot_hold_a_gate(self):
+        out = self.run_state(self.topic, "ask", "Gate?", "--option", "A: one", "--option", "B: two",
+                             "--gate", "human_approval", "--topic", "my-idea")
+        self.assertIn("a gate is requested by", out, "a topic file cannot hold a gate either")
 
 
 if __name__ == "__main__":
