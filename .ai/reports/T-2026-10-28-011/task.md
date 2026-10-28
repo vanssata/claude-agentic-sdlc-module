@@ -221,12 +221,86 @@ scope_assessment: The fixes stay inside the task's files plus the amended `tests
 
 ## Changes
 
-measured at close
+| File | Change | New/Edit/Delete |
+|---|---|---|
+| .ai/project/known-risks.md | +30 −0 | Edit |
+| README.md | +9 −0 | Edit |
+| docs/architecture.md | +6 −3 | Edit |
+| docs/local-memory.md | +221 −0 | New |
+| docs/sdlc/plans/compact-project-memory.md | +46 −2 | Edit |
+| docs/sdlc/specs/compact-project-memory.md | +5 −3 | Edit |
+| hooks/ai-path-guard-defaults.json | +3 −1 | Edit |
+| hooks/memory-pre-push.py | +28 −0 | New |
+| skills/ai-init/templates/.ai/policies/safety.md | +9 −2 | Edit |
+| skills/ai-init/templates/.ai/state/README.md | +6 −3 | Edit |
+| skills/ai-task/memory_compact.py | +968 −0 | New |
+| skills/ai-task/memory_format.py | +775 −0 | New |
+| skills/ai-task/memory_store.py | +528 −0 | New |
+| skills/ai-task/memory_sync.py | +1571 −0 | New |
+| skills/ai-task/sensors.py | +1 −1 | Edit |
+| skills/ai-task/state.py | +406 −10 | Edit |
+| skills/project-update/history/blobs/23a42febbacaa7b52a802d428033a99c0694391c81d51fe3b6e1dff608a641d5 | +67 −0 | New |
+| skills/project-update/history/blobs/fae3064e648cdc55be4aeb1177525b302a5e34ebd752e4a904f47dc0f4557b96 | +71 −0 | New |
+| skills/project-update/history/index.json | +4 −2 | Edit |
+| skills/rr-build/SKILL.md | +9 −3 | Edit |
+| skills/rr-plan/SKILL.md | +4 −1 | Edit |
+| skills/rr-review/SKILL.md | +4 −2 | Edit |
+| skills/rr-ship/SKILL.md | +6 −3 | Edit |
+| skills/usage-report/usage-report.py | +41 −8 | Edit |
+| tests/fixtures/guard-characterization/golden.txt | +35 −0 | Edit |
+| tests/fixtures/guard-characterization/moved-3.4.json | +4 −1 | Edit |
+| tests/fixtures/memory/goldens/files-mode.txt | +117 −0 | New |
+| tests/fixtures/memory/goldens/journal-summary.txt | +98 −0 | New |
+| tests/fixtures/memory/goldens/status-py.txt | +22 −0 | New |
+| tests/fixtures/memory/goldens/usage-report-task.txt | +29 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-09-21-001/events.jsonl | +43 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-09-21-001/questions.md | +10 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-09-21-001/state.json | +615 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-09-23-001/state.json | +233 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-15-001/events.jsonl | +57 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-15-001/lint.log | +1 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-15-001/questions.md | +10 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-15-001/state.json | +374 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-15-001/tests-suite-2.log | +40 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-25-004/bite-must_fail.log | +13 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-25-004/events.jsonl | +41 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-25-004/lint.log | +10 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-25-004/review-report.md | +26 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-25-004/state.json | +341 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-25-004/tests-e2e-2.log | +61 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-25-004/tests-suite-2.log | +40 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-26-002/events.jsonl | +6 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-26-002/task.md | +56 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-27-007/events.jsonl | +86 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-27-007/questions.md | +10 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-27-007/task.md | +194 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-28-009/events.jsonl | +43 −0 | New |
+| tests/fixtures/memory/legacy-reports/T-2026-10-28-009/task.md | +131 −0 | New |
+| tests/memory_harness.py | +195 −0 | New |
+| tests/test_benchmark_memory.py | +53 −0 | New |
+| tests/test_dialog_gate.py | +1 −1 | Edit |
+| tests/test_end_to_end.py | +35 −0 | Edit |
+| tests/test_guard_characterization.py | +5 −0 | Edit |
+| tests/test_memory_characterization.py | +161 −0 | New |
+| tests/test_memory_cleanup.py | +188 −0 | New |
+| tests/test_memory_compact.py | +218 −0 | New |
+| tests/test_memory_format.py | +173 −0 | New |
+| tests/test_memory_migration.py | +165 −0 | New |
+| tests/test_memory_pre_push.py | +315 −0 | New |
+| tests/test_memory_recall.py | +189 −0 | New |
+| tests/test_memory_risks.py | +128 −0 | New |
+| tests/test_memory_store.py | +173 −0 | New |
+| tests/test_memory_sync.py | +489 −0 | New |
+| tests/test_project_update.py | +27 −0 | Edit |
+| tests/test_task_id.py | +170 −0 | New |
+| tools/benchmark-memory.py | +231 −0 | New |
+
++10480 −46 lines, 71 files
 
 ## Verdict
 
-close: open — the human approves in their own terminal, then 'state.py close' again
+close: closed
 facts: (a) green — suite green on 5ac11ce4b (run 4) · (b) green — 71 changed files, all in the task's files
 gate: requested G1 at 2026-10-28T21:48:56Z; approved by vanssa at 2026-10-28T21:52:32Z via terminal
 confirm: none
-handoffs: 9 · suite runs: 3 · review passes: 2
+handoffs: 10 · suite runs: 3 · review passes: 2

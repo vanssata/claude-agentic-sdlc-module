@@ -47,3 +47,5 @@
 {"ts": "2026-10-28T21:48:56.534Z", "task": "T-2026-10-28-011", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "close", "data": {"reason": "close", "lines": 14}}
 {"ts": "2026-10-28T21:52:32.022Z", "task": "T-2026-10-28-011", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "stage", "data": {"reason": "stage", "lines": 14}}
 {"ts": "2026-10-28T21:52:32.023Z", "task": "T-2026-10-28-011", "event": "gate_approved", "actor": "human", "runtime": "claude", "stage": "implementation", "detail": "granted by vanssa via terminal", "data": {"by": "vanssa", "gate_id": "G1", "via": "terminal", "unattended": false, "tty": true}}
+{"ts": "2026-10-28T21:56:37.772Z", "task": "T-2026-10-28-011", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "close", "data": {"reason": "close", "lines": 14}}
+{"ts": "2026-10-28T21:58:16.109Z", "task": "T-2026-10-28-011", "event": "task_closed", "actor": "agent", "runtime": "claude", "stage": "done", "detail": "", "data": {"abandoned": false, "mode": "full", "w": 7}}
