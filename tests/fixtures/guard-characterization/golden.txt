@@ -1700,6 +1700,30 @@ rc=0
 ### ai-path-guard | main bash: $STATE approve --by ivan
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing 'state.py approve' from an agent session.\n\nApproval happens outside the agent. A human runs, in their own terminal:\n  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\nor sets [Answer]: A on the gate question in .ai/reports/<task-id>/task.md\nand tells the session to run state.py questions --sync. An unattended run\nexports AI_UNATTENDED=1 in the launcher's environment, and the journal then\nrecords the approval as unattended for ever. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: python3 /p/skills/ai-task/state.py --root . reject --by ivan --why no
+rc=0
+### ai-path-guard | main bash: python3 /p/skills/ai-task/state.py --root . reject --by ivan --why no
+rc=0
+### ai-git-guard | main bash: python3 /p/skills/ai-task/state.py --root . verify --scope all --by ivan
+rc=0
+### ai-path-guard | main bash: python3 /p/skills/ai-task/state.py --root . verify --scope all --by ivan
+rc=0
+### ai-git-guard | main bash: python3 /p/skills/ai-task/state.py --root . review --by ivan --verdict pass
+rc=0
+### ai-path-guard | main bash: python3 /p/skills/ai-task/state.py --root . review --by ivan --verdict pass
+rc=0
+### ai-git-guard | main bash: python3 /p/skills/ai-task/state.py --root . start --mode light --by ivan
+rc=0
+### ai-path-guard | main bash: python3 /p/skills/ai-task/state.py --root . start --mode light --by ivan
+rc=0
+### ai-git-guard | main bash: python3 /p/skills/ai-task/state.py profile set --runtime claude --plan max
+rc=0
+### ai-path-guard | main bash: python3 /p/skills/ai-task/state.py profile set --runtime claude --plan max
+rc=0
+### ai-git-guard | main bash: git commit -m x -- a.py
+rc=0
+### ai-path-guard | main bash: git commit -m x -- a.py
+rc=0
 ### ai-git-guard | main bash: $STATE note decision "approve it later"
 rc=0
 ### ai-path-guard | main bash: $STATE note decision "approve it later"
@@ -2821,6 +2845,18 @@ rc=0
 ### ai-git-guard | feature bash: python3 /p/skills/ai-task/state.py --root . get --field approved_plan
 rc=0
 ### ai-git-guard | feature bash: $STATE approve --by ivan
+rc=0
+### ai-git-guard | feature bash: python3 /p/skills/ai-task/state.py --root . reject --by ivan --why no
+rc=0
+### ai-git-guard | feature bash: python3 /p/skills/ai-task/state.py --root . verify --scope all --by ivan
+rc=0
+### ai-git-guard | feature bash: python3 /p/skills/ai-task/state.py --root . review --by ivan --verdict pass
+rc=0
+### ai-git-guard | feature bash: python3 /p/skills/ai-task/state.py --root . start --mode light --by ivan
+rc=0
+### ai-git-guard | feature bash: python3 /p/skills/ai-task/state.py profile set --runtime claude --plan max
+rc=0
+### ai-git-guard | feature bash: git commit -m x -- a.py
 rc=0
 ### ai-git-guard | feature bash: $STATE note decision "approve it later"
 rc=0
