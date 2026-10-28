@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """exec" python3 -I "$0" "$@"
-The skills surface (R1): seven `rr-` skills named for the job, the ten old
-names kept for one version as short aliases, and no skill text that calls a
-`state.py` subcommand or an agent the redesign removes.
+The skills surface (R1): seven `rr-` skills named for the job — eight with
+`rr-build-all`, the batch loop — the ten old names kept for one version as short
+aliases, and no skill text that calls a `state.py` subcommand or an agent the
+redesign removes.
 
 `step_test_command` hands every test path to bash; the line above makes bash
 re-run this file under python3.
@@ -17,7 +18,7 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKILLS = os.path.join(ROOT, "skills")
 
-NEW = ("rr-setup", "rr-spec", "rr-plan", "rr-build", "rr-review", "rr-ship", "rr-status")
+NEW = ("rr-setup", "rr-spec", "rr-plan", "rr-build", "rr-build-all", "rr-review", "rr-ship", "rr-status")
 # old name -> the body's first line after "deprecated → /"
 ALIASES = {
     "ai-init": "rr-setup", "ai-audit": "rr-setup --audit", "project-init": "rr-setup",
@@ -57,7 +58,7 @@ def split(text):
 
 
 class TestInventory(unittest.TestCase):
-    def test_seventeen_skills(self):
+    def test_eighteen_skills(self):
         found = sorted(os.path.basename(os.path.dirname(p)) for p in glob.glob(os.path.join(SKILLS, "*", "SKILL.md")))
         self.assertEqual(found, sorted(NEW + tuple(ALIASES)))
 
@@ -124,6 +125,25 @@ class TestNewSkills(unittest.TestCase):
         self.assertTrue(all(done.returncode == 0 for done in usage.values()))
         self.assertIn("{show,open,settle,fallback}", usage["decision"].stdout)
         self.assertIn("{audit}", usage["consent"].stdout)
+
+    def test_build_all_names_live_commands(self):
+        """The batch loop's skill names the state.py commands it runs, and each
+        one is a subcommand state.py accepts (docs/sdlc/specs/batch-build.md R12)."""
+        text = read("rr-build-all").replace("\n  ", " ").replace(" \\\n", " ")
+        for phrase in ("$STATE steps --ready", "$STATE batch off --by", "--batch --by", "$STATE step-done",
+                       "$STATE start --amend --files", "$STATE verify --scope all --after-fix",
+                       "$STATE review --closes", "agents/implementer.md", "batch.review_rounds_max",
+                       "batch.max_suite_runs", "batch.parallel", "batch.tier", "batch.default"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+        self.assertNotIn("Sonnet", text, "tiers, never models (Codex runs the same text)")
+        state_py = os.path.join(SKILLS, "ai-task", "state.py")
+        usage = {name: subprocess.run([sys.executable, "-I", state_py, name, "--help"], capture_output=True,
+                                      text=True, check=False) for name in ("steps", "batch", "start")}
+        self.assertTrue(all(done.returncode == 0 for done in usage.values()))
+        self.assertIn("--ready", usage["steps"].stdout)
+        self.assertIn("{on,off}", usage["batch"].stdout)
+        self.assertIn("--no-batch", usage["start"].stdout)
 
     def test_the_checks_bite(self):
         # The two patterns must catch the forms the old text used, or a clean

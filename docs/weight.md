@@ -126,6 +126,33 @@ Two statements, both true, for different purposes:
    journaled for one version beside the mode, so token reports across the
    change still compare. It never decides a gate.
 
+## Batch — one task for a whole plan (sdlc-lite)
+
+`/rr-build-all` runs a programme plan as one task (`docs/sdlc/specs/batch-build.md`). The
+mode stays the weight's — a whole-plan task usually lands in full by its scope — and the
+table gains one section the loop reads instead of the two budgets above:
+
+```json
+"batch": {"default": false, "review_rounds_max": 3, "max_suite_runs": 8, "parallel": 3, "tier": "BALANCED"}
+```
+
+- **`review_rounds_max` 3, not 2.** The standard two passes are one full review and one scoped
+  re-review of one row's change. A batch task's fix batch spans many files and several
+  subagents, so every pass is a full one, and the developer's rule — "after three failed
+  reviews, a human" — is the fourth pass refused: `REVIEW_BUDGET`, exactly as today.
+- **`max_suite_runs` 8.** One run after the last step, one after its fix batch, and up to two
+  per review round for three rounds. Past it, `SUITE_BUDGET` is the human's run.
+- **`parallel` 3, `tier` BALANCED.** Three or more agents at once never run above BALANCED
+  (`model-routing.md`, "Fan-out"); the reviewer keeps the mode's tier.
+- **`default` false.** A project turns the loop on for every task with it; `start --batch
+  --by` turns it on for one task, `--no-batch` off. A table without the section runs with these
+  numbers (`BATCH_DEFAULTS` in `state.py`); `/rr-setup --update` adds it.
+
+What the loop does not change: the scope guard, the two facts, the e2e rule, the gate in full
+mode, and "the mode only rises". `state.py batch off --by … --why …` returns a task to the
+standard budgets, counting what it already spent; `batch on` during a task lowers the rigor
+and is the human's, from their own terminal.
+
 ## Changing the table
 
 Edit `.ai/policies/weight.json`, then run `state.py weight --mirror` and commit

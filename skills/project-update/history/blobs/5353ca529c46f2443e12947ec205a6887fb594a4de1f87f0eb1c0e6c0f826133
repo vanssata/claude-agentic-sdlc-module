@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "axes": {
+    "scope": {"measure": "references", "bands": [0, 5], "hot_paths": ["hooks/**", "src/Shared/**"]},
+    "behaviour": {"measure": "session",
+                  "keywords": ["workflow", "transition", "state machine", "messenger", "queue", "async", "transaction"]},
+    "reversibility": {"measure": "paths+content",
+                      "needs_step": ["**/migrations/**", "**/Migrations/**", "config/**", "k8s/**", "**/env/**"],
+                      "irreversible": ["**/prod/**", "**/production/**", "deploy/**", "**/*.deploy.*"],
+                      "irreversible_content": ["DROP ", "TRUNCATE", "DELETE FROM", "ALTER .* DROP", "RENAME"]},
+    "domain": {"measure": "modules+session",
+               "modules": ["**/Payment/**", "**/Tax/**", "**/Invoice/**", "**/Security/**", "**/account/**"],
+               "customer_visible": ["templates/**", "**/Shop/**", "**/Resources/views/**"]},
+    "novelty": {"measure": "session",
+                "manifests": ["composer.json", "requirements*.txt", "package.json", "pyproject.toml", "Gemfile"]},
+    "coverage": {"measure": "tests-map",
+                 "code_globs": ["**/*.php", "**/*.py", "**/*.js", "**/*.ts", "**/*.sh"],
+                 "test_globs": ["tests/**", "spec/**", "**/*Test.php", "**/*.test.*", "**/*.spec.*", "**/test_*.py"],
+                 "map": {}}
+  },
+  "hints": [
+    {"paths": ["**/login*", "**/Security/**", "**/*Auth*"], "axis": "domain", "note": "auth-shaped path"},
+    {"paths": ["skills/project-update/migrations/**"], "axis": "reversibility", "note": "touches user trees"},
+    {"paths": [".ai/policies/**", ".claude/**", ".codex/**", "CLAUDE.md", "AGENTS.md"], "axis": "behaviour", "note": "pipeline"},
+    {"paths": ["composer.json", "package.json", "requirements*.txt"], "axis": "novelty", "note": "dependency manifest"}
+  ],
+  "modes": {
+    "light": {"max_w": 2, "plan": "inline", "review": "on_red_fact", "reviewer": "BALANCED",
+              "human_stops": 0, "suite": "verify", "e2e": false},
+    "guarded": {"max_w": 7, "plan": "plan_mode", "review": "one", "reviewer": "BALANCED",
+                "human_stops": 1, "suite": "verify+e2e", "e2e": true},
+    "full": {"min_w": 8, "hard_axes": ["reversibility", "domain"], "plan": "written", "review": "one",
+             "reviewer": "STRONG", "security_focus_when": "domain=2", "human_stops": 2, "suite": "verify+e2e", "e2e": true},
+    "full_irreversible": {"when": "reversibility=2 and domain=2, or irreversible_content",
+                          "human_stops": 3, "confirm_names_operation": true}
+  },
+  "rules": {"unknown_scores": 1, "hint_raises_by": 1, "hint_raises_once_per_axis": true,
+            "rescore_axes": ["reversibility", "domain"], "rescore_direction": "up", "lower_by": "human",
+            "steps_advice_over": 8},
+  "review_rounds_max": 2,
+  "remediation_rounds": 2,
+  "tests": {"max_suite_runs": 2, "timeout_seconds": 1800, "env_retries": 1, "log_max_bytes": 2097152},
+  "batch": {"default": false, "review_rounds_max": 3, "max_suite_runs": 8, "parallel": 3, "tier": "BALANCED"},
+  "examples": {
+    "light": ["a font or copy change in one template", "a test-only change", "a message-text change"],
+    "guarded": ["a regex fix in a hot guard script", "a dev-environment manifest", "a feature with a new screen and an additive migration"],
+    "full": ["a change in Payment/, Tax/ or Security/", "a migration that rewrites user trees", "a production manifest or secret"]
+  }
+}

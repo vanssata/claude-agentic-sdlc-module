@@ -294,7 +294,7 @@ def mirror(path):
                                       (policy.get("rules") or {}).get("hint_raises_by", 1), h.get("note", ""))
             for h in policy.get("hints") or []]
     out += ["", "Rules: " + json.dumps(policy.get("rules") or {}, ensure_ascii=False), "",
-            "Budgets: review_rounds_max %s · remediation_rounds %s · tests %s" % (
-                policy.get("review_rounds_max"), policy.get("remediation_rounds"),
-                json.dumps(policy.get("tests") or {}))]
+            "Budgets: review_rounds_max %s · remediation_rounds %s · tests %s%s" % (
+                policy.get("review_rounds_max"), policy.get("remediation_rounds"), json.dumps(policy.get("tests") or {}),
+                " · batch %s" % json.dumps(policy["batch"]) if isinstance(policy.get("batch"), dict) else "")]
     return "\n".join(out) + "\n"

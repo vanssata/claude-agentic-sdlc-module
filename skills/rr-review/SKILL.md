@@ -30,7 +30,10 @@ STATE="python3 $AI_HOME/skills/ai-task/state.py"
 (`review_rounds_max`): one full review and one scoped re-review. The pass past
 it exits 6 `REVIEW_BUDGET` — the next verdict is the human's, from their own
 terminal, with the command it prints, or the pick in the dialog (`DIALOG_PENDING`,
-then the picked command verbatim, once). Never a third pass.
+then the picked command verbatim, once). Never a third pass. A batch task
+(`/rr-build-all`) has its own budget, `batch.review_rounds_max` full passes
+(shipped three): after a `blockers_open` fix batch the next pass is a full one,
+and the pass past the budget is the human's the same way.
 
 ## 2. Brief one `ai-reviewer`
 
