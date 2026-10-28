@@ -16,9 +16,12 @@ them by hand, and the path guard refuses when one tries.
 It is **not committed**: it describes a session, not the repository. The
 `.gitignore` entry added by `/ai-init` keeps it out of git.
 
-When a task closes, `state.py archive` moves it to
-`.ai/reports/<task-id>/state.json`, which **is** committed — that is the audit
-trail: which stages ran, in what order, who approved what, and when.
+When a task closes, `state.py close` writes the final state to
+`.ai/state/logs/<task-id>/state.json`, beside the task's verify logs — local,
+**not** committed. What is committed is `.ai/reports/<task-id>/events.jsonl`
+and `task.md`, and in packages mode the task's compact record under
+`.ai/memory/` — that is the audit trail: which stages ran, in what order, who
+approved what, and when (the plugin's `docs/local-memory.md`).
 
 It holds facts, never transcripts:
 
