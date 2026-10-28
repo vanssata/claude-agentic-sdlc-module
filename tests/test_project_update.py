@@ -1423,5 +1423,32 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
                         "an edited legacy block over budget is the project's\n" + out)
 
 
+class TestMemoryPolicy(unittest.TestCase):
+    """compact-project-memory (plan Risks): .ai/policies/memory.json is the
+    project's, written by `memory enable`; no template ships it, and --update
+    leaves it and the record byte for byte as they are."""
+
+    def test_update_leaves_memory_json_and_the_record_alone(self):
+        p = Project()
+        try:
+            policy = b'{\n  "schema": 1,\n  "mode": "packages",\n  "period": "month",\n  "cleanup": false\n}\n'
+            with open(p.path("policies", "memory.json"), "wb") as fh:
+                fh.write(policy)
+            os.makedirs(p.path("memory"))
+            with open(p.path("memory", "2026-10.dev.abcd.jsonl"), "wb") as fh:
+                fh.write(b'{"author":"dev","batch":"abcd","created":"2026-10-01T00:00:00Z","format":1,'
+                         b'"period":"2026-10","pkg":"riskrails-memory"}\n')
+            subprocess.run(GIT + ["-C", p.root, "add", "-A"], check=True)
+            subprocess.run(GIT + ["-C", p.root, "commit", "-qm", "memory on"], check=True)
+            done = p.update("--apply")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertEqual(p.read("policies", "memory.json"), policy)
+            self.assertEqual(os.listdir(p.path("memory")), ["2026-10.dev.abcd.jsonl"])
+            self.assertNotIn("memory.json", done.stdout)
+            self.assertFalse(os.path.exists(os.path.join(TEMPLATES, ".ai", "policies", "memory.json")))
+        finally:
+            p.close()
+
+
 if __name__ == "__main__":
     unittest.main()

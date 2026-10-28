@@ -1,0 +1,98 @@
+exit 0
+report dirs: 7
+== T-2026-09-21-001 events.jsonl questions.md state.json
+   tier=T3 workflow=feature stage=done created=2026-09-21T23:56 updated=2026-09-22T03:23 steps=11 review=passed test=not_run e2e=not_run security=not_started
+   goal: WP6: project-update --adopt — detect, migrate/coexist and clean up foreign AI-tool structures (Spec Kit, Kiro, Cursor, Copilot, AI-DLC, large instruction files)
+   journal: 43 events, <N> min, tiers []
+    {'step_started': 5, 'handoff_written': 22, 'scope_change': 1, 'step_done': 4, 'stage_started': 4, 'field_set': 2, 'gate_requested': 1, 'runtime_handoff': 2, 'gate_approved': 1, 'task_closed': 1}
+== T-2026-09-23-001 state.json
+   tier=T2 workflow=feature stage=done created=2026-09-23T15:57 updated=2026-09-23T16:08 steps=2 review=passed test=not_run e2e=not_applicable security=not_started
+   goal: Route multi-hop traces of installed third-party code to a BALANCED reader; plain lookups stay on Explore (FAST)
+== T-2026-10-15-001 events.jsonl lint.log questions.md state.json tests-suite-2.log
+   tier=T4 workflow=bugfix stage=done created=2026-10-15T07:59 updated=2026-10-15T09:01 steps=3 review=not_started test=passing e2e=passing security=not_started
+   goal: Path guard denies cp/mv/install destinations, rm, the bare shared tree and .ai/agents/ in flight; deny texts name the moved files
+   journal: 57 events, <N> min, tiers ['T4', 'T4']
+    {'task_started': 2, 'handoff_written': 20, 'stage_started': 11, 'tier_set': 2, 'plan_registered': 2, 'step_started': 6, 'step_done': 3, 'field_set': 7, 'gate_requested': 1, 'note': 1, 'gate_approved': 1, 'task_closed': 1}
+             task_started     Path guard denies cp/mv/install destinations, rm, the bare shared tree and .ai/agents/ in flight; deny texts n
+      +0m    stage_started    discovery -> discovery: inline
+      +0m    stage_started    discovery -> context: inline
+      +0m    stage_started    context -> impact_analysis: inline
+      +0m    stage_started    impact_analysis -> risk_classification: inline
+      +0m    tier_set         T4: shared domain behaviour and processes: the path guard is a process every agent session runs through; plan 
+      +0m    plan_registered  1 step, inline (quick)
+      +0m    stage_started    risk_classification -> plan -> implementation: quick
+      +0m    step_started     1: Path guard denies cp/mv/install destinations, rm, the bare shared tree and .ai/agents/ in flight; deny text
+      +1m    task_started     Path guard denies cp/mv/install destinations, rm, the bare shared tree and .ai/agents/ in flight; deny texts n
+      +0m    stage_started    discovery -> discovery: inline
+      +0m    stage_started    discovery -> context: inline
+      +0m    stage_started    context -> impact_analysis: inline
+      +0m    stage_started    impact_analysis -> risk_classification: inline
+      +0m    tier_set         T4: shared domain behaviour and processes: the path guard is a process every agent session runs through; plan 
+      +0m    plan_registered  1 step, inline (quick)
+      +0m    stage_started    risk_classification -> plan -> implementation: quick
+      +0m    step_started     1: Path guard denies cp/mv/install destinations, rm, the bare shared tree and .ai/agents/ in flight; deny text
+      +12m   step_done        1
+      +0m    step_started     R1: 1 regression: test-project-update.sh 'history is stale' — the reword of skills/project-init/templates/proj
+      +0m    step_started     R1: 1 regression: test-project-update.sh 'history is stale' — the reword of skills/project-init/templates/proj
+      +5m    field_set        e2e_status = passing
+      +0m    step_done        R1
+      +0m    field_set        sensors: review required
+      +5m    field_set        test_status = passing (suite run 1, exit 0)
+      +0m    field_set        sensors: review required
+      +8m    step_started     R2: review (STRONG, pass, 0 BLOCKER/HIGH, 6 MEDIUM): fix TOKEN_END losing & under patsub_replacement (bash 5.2
+      +0m    step_started     R2: review (STRONG, pass, 0 BLOCKER/HIGH, 6 MEDIUM): fix TOKEN_END losing & under patsub_replacement (bash 5.2
+      +9m    field_set        test_status = passing (suite run 2, exit 0)
+      +0m    step_done        R2
+      +0m    field_set        sensors: review required
+      +0m    field_set        e2e_status = passing
+      +0m    stage_started    implementation -> human_approval
+      +0m    gate_requested   G1: human_approval
+      +19m   gate_approved    granted by ikakarov via terminal
+      +0m    task_closed      
+== T-2026-10-25-004 bite-must_fail.log events.jsonl lint.log review-report.md state.json tests-e2e-2.log tests-suite-2.log
+   tier=T3 workflow=feature stage=done created=2026-10-25T20:17 updated=2026-10-25T20:50 steps=2 review=passed test=passing e2e=passing security=not_started
+   goal: Redesign 2.1: weight.json + weight.py + read-only state.py weight (mirror, docs/weight.md, test_weight.py)
+   journal: 41 events, <N> min, tiers ['T3']
+    {'task_started': 1, 'handoff_written': 17, 'stage_started': 5, 'tier_set': 1, 'plan_registered': 1, 'step_started': 3, 'field_set': 9, 'step_done': 2, 'findings_closed': 1, 'task_closed': 1}
+== T-2026-10-26-002 events.jsonl task.md
+   journal: 6 events, <N> min, tiers ['T5']
+    {'task_started': 1, 'weight_set': 1, 'mode_set': 1, 'tier_set': 1, 'handoff_written': 1, 'task_closed': 1}
+== T-2026-10-27-007 events.jsonl questions.md task.md
+   journal: 86 events, <N> min, tiers ['T5']
+    {'task_started': 1, 'weight_set': 1, 'tier_set': 1, 'handoff_written': 19, 'note': 14, 'verify_run': 27, 'step_done': 6, 'step_started': 5, 'scope_change': 4, 'review_verdict': 2, 'human_set': 3, 'gate_requested': 1, 'gate_approved': 1, 'task_closed': 1}
+== T-2026-10-28-009 events.jsonl task.md
+   journal: 43 events, <N> min, tiers ['T5']
+    {'task_started': 1, 'weight_set': 1, 'mode_set': 1, 'tier_set': 1, 'handoff_written': 10, 'verify_run': 12, 'step_done': 3, 'step_started': 2, 'scope_change': 3, 'review_verdict': 1, 'question_asked': 1, 'question_answered': 1, 'human_set': 2, 'gate_requested': 1, 'findings_closed': 1, 'gate_approved': 1, 'task_closed': 1}
+             task_started     R36 step 7d1: the inert hook half of the dialog — consent-ledger module, PostToolUse recorder, Stop blocker, p
+      +0m    weight_set       W 7 → guarded
+      +0m    mode_set         guarded -> full by Ivan Kakurov
+      +0m    tier_set         T5 (mode full, compat)
+      +3m    verify_run       step run 1: exit 0
+      +0m    step_done        s1: 5 files changed
+      +0m    step_started     s2
+      +2m    verify_run       step run 2: exit 0
+      +0m    step_done        s2: 6 files changed
+      +0m    step_started     s3
+      +1m    verify_run       step run 3: exit 1
+      +0m    verify_run       step run 4: exit 0
+      +0m    step_done        s3: 9 files changed
+      +3m    verify_run       suite run 5: exit 1
+      +3m    verify_run       suite run 6: exit 0
+      +0m    verify_run       e2e run 7: exit 0
+      +10m   scope_change     +/tmp/claude-1000/-Store-ProjectToBuild-claude-agentic/c5d28dfa-92c4-472a-939f-2111ad61371f/scratchpad/review-
+      +0m    review_verdict   pass_with_findings on STRONG (pass 1)
+      +2m    question_asked   Q1: H1: a Bash command that pipes a forged answer into dialog-gate.py writes a pick today; where does the deny
+      +25m   question_answered Q1 = A
+      +0m    scope_change     +hooks/guard/paths.py, tests/fixtures/path-guard/1*-dialog-gate-*.json, tests/fixtures/guard-characterization/
+      +1m    verify_run       step run 8: exit 0
+      +2m    human_set        suite run 3 past the budget by Ivan Kakurov via terminal
+      +3m    verify_run       suite run 9: exit 1
+      +2m    scope_change     +tests/fixtures/guard-characterization/moved-3.4.json — H1 fix (Q1=A): the new dialog-gate deny moves three pa
+      +0m    verify_run       step run 10: exit 0
+      +1m    human_set        suite run 4 past the budget by Ivan Kakurov via terminal
+      +3m    verify_run       suite run 11: exit 0
+      +0m    verify_run       e2e run 12: exit 0
+      +0m    gate_requested   G1: human_approval
+      +0m    findings_closed  H1 closed by suite run 11 on <SHA9>
+      +1m    gate_approved    granted by Ivan Kakurov via terminal
+      +0m    task_closed      

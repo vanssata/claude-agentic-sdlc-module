@@ -1506,6 +1506,15 @@ rc=0
 ### ai-path-guard | main bash: echo x >> .ai/policies/path-guard.json
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a RiskRails control file: .ai/policies/path-guard.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: echo x >> .ai/memory/2026-Q4.dev.abcd.jsonl
+rc=0
+### ai-path-guard | main bash: echo x >> .ai/memory/2026-Q4.dev.abcd.jsonl
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell redirect into a RiskRails control file: .ai/memory/2026-Q4.dev.abcd.jsonl\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-git-guard | main bash: cat .ai/memory/2026-Q4.dev.abcd.jsonl
+rc=0
+### ai-path-guard | main bash: cat .ai/memory/2026-Q4.dev.abcd.jsonl
+rc=0
 ### ai-git-guard | main bash: cat .ai/state/current.json
 rc=0
 ### ai-path-guard | main bash: cat .ai/state/current.json
@@ -2268,6 +2277,28 @@ rc=0
 ### ai-scope-guard | Edit file_path=__TMP__/project/config/link.txt
 rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — config/link.txt is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
+### ai-git-guard | Edit file_path=__TMP__/project/.ai/memory/2026-Q4.dev.abcd.jsonl
+rc=0
+### ai-path-guard | Edit file_path=__TMP__/project/.ai/memory/2026-Q4.dev.abcd.jsonl
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.ai/memory/2026-Q4.dev.abcd.jsonl (matched: (^|/)\\.ai/memory/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | Edit file_path=__TMP__/project/.ai/memory/2026-Q4.dev.abcd.jsonl
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/memory/2026-Q4.dev.abcd.jsonl is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
+### ai-git-guard | Write file_path=__TMP__/project/.ai/local/memory/config.json
+rc=0
+### ai-path-guard | Write file_path=__TMP__/project/.ai/local/memory/config.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to write a RiskRails control file: __TMP__/project/.ai/local/memory/config.json (matched: (^|/)\\.ai/local/memory/)\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
+### ai-scope-guard | Write file_path=__TMP__/project/.ai/local/memory/config.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"SCOPE_CHANGE_REQUIRED — .ai/local/memory/config.json is outside the approved scope of step 1 (task T-2026-09-09-001).\n\nAllowed for this step:\n  - src/Payment/*.php\n  - tests/Payment/*.php\n  - docs/\n\nStop implementing, report SCOPE_CHANGE_REQUIRED with the reason this file is\nneeded, and let the planner amend the step. Widening scope silently is what this\nguard exists to prevent. See .ai/policies/safety.md."}}
+### ai-git-guard | Read file_path=__TMP__/project/.ai/memory/2026-Q4.dev.abcd.jsonl
+rc=0
+### ai-path-guard | Read file_path=__TMP__/project/.ai/memory/2026-Q4.dev.abcd.jsonl
+rc=0
+### ai-scope-guard | Read file_path=__TMP__/project/.ai/memory/2026-Q4.dev.abcd.jsonl
+rc=0
 ### ai-git-guard | Write file_path=__TMP__/project/tests/Payment/NewTest.php
 rc=0
 ### ai-path-guard | Write file_path=__TMP__/project/tests/Payment/NewTest.php
@@ -2757,6 +2788,10 @@ rc=0
 ### ai-git-guard | feature bash: echo x > .ai/state/current.json
 rc=0
 ### ai-git-guard | feature bash: echo x >> .ai/policies/path-guard.json
+rc=0
+### ai-git-guard | feature bash: echo x >> .ai/memory/2026-Q4.dev.abcd.jsonl
+rc=0
+### ai-git-guard | feature bash: cat .ai/memory/2026-Q4.dev.abcd.jsonl
 rc=0
 ### ai-git-guard | feature bash: cat .ai/state/current.json
 rc=0

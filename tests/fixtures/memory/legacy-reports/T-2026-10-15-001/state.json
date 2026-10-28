@@ -1,0 +1,374 @@
+{
+  "task_id": "T-2026-10-15-001",
+  "goal": "Path guard denies cp/mv/install destinations, rm, the bare shared tree and .ai/agents/ in flight; deny texts name the moved files",
+  "workflow": "bugfix",
+  "risk_tier": "T4",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "Path guard denies cp/mv/install destinations, rm, the bare shared tree and .ai/agents/ in flight; deny texts name the moved files",
+        "allowed_files": [
+          "hooks/ai-path-guard.sh",
+          "hooks/ai-path-guard-defaults.json",
+          "hooks/ai-git-guard.sh",
+          "skills/project-init/templates/project-config.toml",
+          "tests/test-ai-path-guard.sh",
+          "tests/fixtures/path-guard/5[1-6]-*.json",
+          "tests/fixtures/guard-characterization/golden.txt",
+          ".ai/project/known-risks.md",
+          "README.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "c5234088821da5904b3ebe9a830b7e8ec7382b39",
+          "seq": 1,
+          "paths": [
+            "hooks/ai-git-guard.sh",
+            "hooks/ai-path-guard-defaults.json",
+            "hooks/ai-path-guard.sh",
+            "skills/project-init/templates/project-config.toml",
+            "tests/fixtures/guard-characterization/golden.txt",
+            "tests/fixtures/path-guard/51-bash-cp-into-ai-agents.json",
+            "tests/fixtures/path-guard/52-bash-mv-agent-definition-away.json",
+            "tests/fixtures/path-guard/53-bash-rm-state-file.json",
+            "tests/fixtures/path-guard/54-bash-rm-vendor-instruction-file.json",
+            "tests/fixtures/path-guard/55-bash-cp-to-tmp-allowed.json",
+            "tests/fixtures/path-guard/56-bash-mv-docs-allowed.json",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 12,
+          "added": 192,
+          "deleted": 43,
+          "lines": 235,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "1 regression: test-project-update.sh 'history is stale' — the reword of skills/project-init/templates/project-config.toml is a new template version and tools/build-template-history.py must record it (the plan missed that the template is history-tracked)",
+        "allowed_files": [
+          "hooks/ai-path-guard.sh",
+          "hooks/ai-path-guard-defaults.json",
+          "hooks/ai-git-guard.sh",
+          "skills/project-init/templates/project-config.toml",
+          "tests/test-ai-path-guard.sh",
+          "tests/fixtures/path-guard/5[1-6]-*.json",
+          "tests/fixtures/guard-characterization/golden.txt",
+          ".ai/project/known-risks.md",
+          "README.md",
+          "skills/project-update/history/**"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "c5234088821da5904b3ebe9a830b7e8ec7382b39",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "d9c34af7039db1b182d3b5084097bef90907f825",
+          "seq": 2,
+          "paths": [
+            "skills/project-update/history/blobs/b9da99bf05f0f08663469288f694f153fb6f2d806cdedf2cdb10cee3d3722295",
+            "skills/project-update/history/index.json"
+          ],
+          "files": 2,
+          "added": 20,
+          "deleted": 1,
+          "lines": 21,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R2",
+        "description": "review (STRONG, pass, 0 BLOCKER/HIGH, 6 MEDIUM): fix TOKEN_END losing & under patsub_replacement (bash 5.2+), add <> to the class, one in-process pre-check per candidate instead of four forks, no-space && and > tests; the other MEDIUMs (prose false denies, segment heads, parent directories, -t glued, rsync option values) recorded as residuals in known-risks, not fixed",
+        "allowed_files": [
+          "hooks/ai-path-guard.sh",
+          "hooks/ai-path-guard-defaults.json",
+          "hooks/ai-git-guard.sh",
+          "skills/project-init/templates/project-config.toml",
+          "tests/test-ai-path-guard.sh",
+          "tests/fixtures/path-guard/5[1-6]-*.json",
+          "tests/fixtures/guard-characterization/golden.txt",
+          ".ai/project/known-risks.md",
+          "README.md",
+          "skills/project-update/history/**",
+          ".ai/reports/T-2026-10-15-001/review-report.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "d9c34af7039db1b182d3b5084097bef90907f825",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f",
+          "seq": 3,
+          "paths": [
+            "hooks/ai-path-guard.sh",
+            "tests/test-ai-path-guard.sh"
+          ],
+          "files": 2,
+          "added": 32,
+          "deleted": 11,
+          "lines": 43,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "R1",
+    "R2"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "not_started",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "ikakarov",
+    "granted_at": "2026-10-15T09:01:36Z",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "terminal",
+    "unattended": false
+  },
+  "created_at": "2026-10-15T07:59:59Z",
+  "updated_at": "2026-10-15T09:01:51Z",
+  "history": [
+    {
+      "at": "2026-10-15T07:59:59Z",
+      "event": "task_started",
+      "detail": "Path guard denies cp/mv/install destinations, rm, the bare shared tree and .ai/agents/ in flight; deny texts name the moved files (bugfix)"
+    },
+    {
+      "at": "2026-10-15T07:59:59Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-15T07:59:59Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-15T07:59:59Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-15T07:59:59Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-15T07:59:59Z",
+      "event": "risk_classified",
+      "detail": "T4: shared domain behaviour and processes: the path guard is a process every agent session runs through; plan approved in plan mode; closes known-risks a, b, d. Re-armed once: the plan numbered the new fixtures 41-46 but 41-50 exist, so they are 51-56."
+    },
+    {
+      "at": "2026-10-15T07:59:59Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-15T07:59:59Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-15T07:59:59Z",
+      "event": "step_started",
+      "detail": "1: Path guard denies cp/mv/install destinations, rm, the bare shared tree and .ai/agents/ in flight; deny texts name the moved files"
+    },
+    {
+      "at": "2026-10-15T08:12:02Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-15T08:12:02Z",
+      "event": "remediation",
+      "detail": "R1: 1 regression: test-project-update.sh 'history is stale' — the reword of skills/project-init/templates/project-config.toml is a new template version and tools/build-template-history.py must record it (the plan missed that the template is history-tracked)"
+    },
+    {
+      "at": "2026-10-15T08:12:02Z",
+      "event": "step_started",
+      "detail": "R1: 1 regression: test-project-update.sh 'history is stale' — the reword of skills/project-init/templates/project-config.toml is a new template version and tools/build-template-history.py must record it (the plan missed that the template is history-tracked)"
+    },
+    {
+      "at": "2026-10-15T08:17:43Z",
+      "event": "set",
+      "detail": "e2e_status = passing"
+    },
+    {
+      "at": "2026-10-15T08:17:43Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-10-15T08:17:43Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-15T08:23:02Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-15T08:23:06Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-15T08:32:00Z",
+      "event": "remediation",
+      "detail": "R2: review (STRONG, pass, 0 BLOCKER/HIGH, 6 MEDIUM): fix TOKEN_END losing & under patsub_replacement (bash 5.2+), add <> to the class, one in-process pre-check per candidate instead of four forks, no-space && and > tests; the other MEDIUMs (prose false denies, segment heads, parent directories, -t glued, rsync option values) recorded as residuals in known-risks, not fixed"
+    },
+    {
+      "at": "2026-10-15T08:32:00Z",
+      "event": "step_started",
+      "detail": "R2: review (STRONG, pass, 0 BLOCKER/HIGH, 6 MEDIUM): fix TOKEN_END losing & under patsub_replacement (bash 5.2+), add <> to the class, one in-process pre-check per candidate instead of four forks, no-space && and > tests; the other MEDIUMs (prose false denies, segment heads, parent directories, -t glued, rsync option values) recorded as residuals in known-risks, not fixed"
+    },
+    {
+      "at": "2026-10-15T08:41:33Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-15T08:41:43Z",
+      "event": "step_completed",
+      "detail": "R2"
+    },
+    {
+      "at": "2026-10-15T08:41:43Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-10-15T08:41:49Z",
+      "event": "set",
+      "detail": "e2e_status = passing"
+    },
+    {
+      "at": "2026-10-15T08:41:49Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval"
+    },
+    {
+      "at": "2026-10-15T08:41:49Z",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "2026-10-15T09:01:36Z",
+      "event": "human_approval",
+      "detail": "granted by ikakarov via terminal"
+    },
+    {
+      "at": "2026-10-15T09:01:51Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-15T09:01:51Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-15-001/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-15T09:01:51Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "9992c3e23248258ead24dc08319ca6b6cdc1c037",
+    "base_tree": "de51e05dd4c02c90d611234f262055cfd896b1a5",
+    "task": {
+      "files": 14,
+      "added": 233,
+      "deleted": 44,
+      "lines": 277,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 8,
+      "tree": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f",
+      "measured_at": "2026-10-15T08:41:43Z",
+      "status": "green"
+    },
+    "rescored_tier": "T4",
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-15-001/sensors.json",
+    "tree": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f",
+    "verdict": "required",
+    "checked_at": "2026-10-15T08:41:43Z"
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "d9c34af7039db1b182d3b5084097bef90907f825",
+        "exit": 0,
+        "duration_s": 297,
+        "log": ".ai/reports/T-2026-10-15-001/tests-suite-1.log",
+        "at": "2026-10-15T08:23:02Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "1cd17325c690d9953cf59452b1d8f10f6f4b6b3f",
+        "exit": 0,
+        "duration_s": 272,
+        "log": ".ai/reports/T-2026-10-15-001/tests-suite-2.log",
+        "at": "2026-10-15T08:41:33Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 2
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}

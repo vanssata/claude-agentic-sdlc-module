@@ -108,6 +108,9 @@
   "task done: Edit vendor/acme/pkg/AGENTS.md": "(a) vendor instruction file",
   "task done: bash echo > node_modules/foo/CLAUDE.md": "(a) vendor instruction file",
   "task done: bash echo > vendor/acme/pkg/AGENTS.md": "(a) vendor instruction file",
-  "unparsable state: Edit .claude/agents": "(b) in-task instruction file"
+  "unparsable state: Edit .claude/agents": "(b) in-task instruction file",
+  "main bash: echo x >> .ai/memory/2026-Q4.dev.abcd.jsonl": "compact-project-memory R19: the record's directories join protected_config_patterns",
+  "Edit file_path=__TMP__/project/.ai/memory/2026-Q4.dev.abcd.jsonl": "compact-project-memory R19: the record's directories join protected_config_patterns",
+  "Write file_path=__TMP__/project/.ai/local/memory/config.json": "compact-project-memory R19: the record's directories join protected_config_patterns"
  }
 }

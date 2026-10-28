@@ -172,9 +172,12 @@ It does three jobs at once:
 - **survival** — a task resumes after `/clear`, a crash, or a day off;
 - **enforcement** — `ai-scope-guard` derives the current step's allowed files
   from it, so the plan is not advice;
-- **audit** — `history[]` records every stage transition with a timestamp, and
-  `state.py archive` moves the finished record into `.ai/reports/<task-id>/`,
-  where it is committed alongside the change it describes.
+- **audit** — `history[]` records every stage transition with a timestamp;
+  `state.py close` archives the finished state into the local
+  `.ai/state/logs/<task-id>/state.json` (not committed), while the journal and
+  `task.md` under `.ai/reports/<task-id>/` — and, in packages mode, the task's
+  compact record under `.ai/memory/` — are committed alongside the change they
+  describe (`docs/local-memory.md`).
 
 It is git-ignored on purpose: it describes a session, not the repository.
 

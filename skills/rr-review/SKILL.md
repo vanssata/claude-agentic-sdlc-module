@@ -49,7 +49,7 @@ the tier, so name the tier in the brief. Give it paths, not pasted text:
 **Bounded inputs in light and guarded:** the goal, the diff, the named tests,
 and the project's own threat model (`.ai/policies/safety.md`, the guards'
 defaults, the test fixtures). A finding that needs anything outside them comes
-back `[INFO]` with `in_scope: no`; write it into `.ai/project/known-risks.md`
+back `[INFO]` with `in_scope: no`; record it with `$STATE memory risk add`
 as one entry — it never opens a fix. You may move a finding to
 `in_scope: yes`, never the other way. **In full mode** the reviewer's own "look
 for" list applies unbounded.
@@ -94,6 +94,8 @@ The `verify` after a fix is often the task's third whole-suite run: past
 from their own terminal, with the command it prints, or the pick in the dialog.
 
 A finding whose cause is the plan goes back to `/rr-plan` for that part only. A
-real problem outside the task goes into `.ai/project/known-risks.md`. A mistake
+real problem outside the task is recorded with `$STATE memory risk add`; a
+fix in this task closes its risk with `$STATE memory risk close <rkey> --status
+fixed --why "…"`. A mistake
 this repository has seen before — the second time a review flags it — gets one
 line in the project instruction file, in this task.

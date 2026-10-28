@@ -98,6 +98,8 @@ EVENT_TYPES = [
     # R36 (7c): the dialog's decisions and the consent ledger, mirrored by state.py.
     "decision_opened", "consent_recorded", "consent_used", "consent_voided", "decision_declined",
     "decision_settled", "decision_fallback", "plan_drift",
+    # compact-project-memory §D9: a risk recorded with `memory risk`, compacted at close.
+    "risk_recorded",
 ]
 # The types `event` will not write: each is the record of an authorization or a
 # lifecycle decision, and is emitted by the transition that made it. `event` is
@@ -106,7 +108,7 @@ FORGEABLE_EVENTS = {"gate_requested", "gate_approved", "gate_rejected",
                     "task_started", "task_closed", "weight_set", "weight_raised", "mode_set",
                     "verify_run", "review_verdict", "decision_opened", "consent_recorded",
                     "consent_used", "consent_voided", "decision_declined", "decision_settled",
-                    "decision_fallback", "plan_drift"}
+                    "decision_fallback", "plan_drift", "risk_recorded"}
 
 # The questions are written by state.py and never by a model (R1). One regex
 # per line (I2), so a hand edit that keeps the shape round-trips exactly. A
@@ -443,13 +445,40 @@ def emit(root, state, event, detail="", data=None, legacy=None, actor="agent"):
         state.get("task_id"), event, actor, state.get("current_stage"), detail, data))
 
 
-def next_task_id(root):
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    reports = os.path.join(root, ".ai", "reports")
-    existing = []
-    if os.path.isdir(reports):
-        existing = [n for n in os.listdir(reports) if n.startswith("T-%s-" % day)]
-    return "T-%s-%03d" % (day, len(existing) + 1)
+def sealed_task_ids(root):
+    """The task ids a package under .ai/memory/ seals; empty in files mode."""
+    found = set()
+    base = os.path.join(root, ".ai", "memory")
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        try:
+            with open(os.path.join(base, name), "rb") as fh:
+                for raw in fh:
+                    if b'"kind":"task"' not in raw:
+                        continue
+                    with contextlib.suppress(ValueError, UnicodeDecodeError, AttributeError):
+                        found.add(json.loads(raw.decode("utf-8")).get("task"))
+        except OSError:
+            continue
+    return found
+
+
+def next_task_id(root, goal="", slug=None, at=None):
+    """R1: T-YYYY-MM-DD-HHMM-<slug>, from the clock and the goal alone. A count
+    of the day's report directories gave two clones the same id and handed a
+    deleted directory's id to the next task. A local hit — a report directory,
+    the raw store under .ai/state/logs/, a sealed key — gets -2 … -9."""
+    import memory_format                  # pylint: disable=import-outside-toplevel
+    stamp = at or datetime.now(timezone.utc)
+    base = slug or memory_format.slug_of(goal)
+    sealed = sealed_task_ids(root)
+    for n in range(1, 10):
+        task_id = memory_format.new_task_id(stamp, memory_format.with_suffix(base, n))
+        if not (os.path.exists(os.path.join(root, ".ai", "reports", task_id))
+                or os.path.exists(os.path.join(root, ".ai", "state", "logs", task_id)) or task_id in sealed):
+            return task_id
+    die("%s and -2 … -9 are all taken this minute: start again with another --slug \"<3-24 characters>\""
+        % memory_format.new_task_id(stamp, base), 2)
+    return None
 
 
 # ------------------------------------------------------------------ plan profile (WP5)
@@ -3234,7 +3263,13 @@ def cmd_start(args, root):
                        args.mode, shlex.quote(args.by), why), 5)
         override = {"from": mode, "to": args.mode, "by": args.by, "why": args.why, "ts": now()}
         mode = args.mode
-    task_id = valid_task_id(args.task_id) if args.task_id else next_task_id(root)
+    if args.slug is not None:
+        import memory_format              # pylint: disable=import-outside-toplevel
+        if args.task_id:
+            die("--slug and --task-id both name the id: pass one", 2)
+        if not memory_format.SLUG_RE.match(args.slug):
+            die("--slug takes 3-24 characters of [a-z0-9] words joined by '-', not %r" % args.slug, 2)
+    task_id = valid_task_id(args.task_id) if args.task_id else next_task_id(root, args.goal, args.slug)
     base_tree = current_tree(root)
     state = {
         "schema": SCHEMA, "task_id": task_id, "goal": args.goal, "workflow": args.workflow,
@@ -3803,6 +3838,7 @@ def cmd_close_v7(args, root):
     state = load_v7(root)
     if args.abandon:
         archive_v7(root, state, current_tree(root), "abandoned")
+        memory_after_close(root, state["task_id"])
         return
     policy = weight_policy(root)
     tree = current_tree(root)
@@ -3865,6 +3901,7 @@ def cmd_close_v7(args, root):
         state["gate"].update(approved_by=approval.get("granted_by"), approved_at=approval.get("granted_at"),
                              via=approval.get("via"), approved_tree=state["gate"].get("tree"))
     archive_v7(root, state, tree, "closed", facts)
+    memory_after_close(root, state["task_id"])
 
 
 def archive_v7(root, state, tree, result, facts=None):
@@ -4203,6 +4240,360 @@ def route_surface(root, args):
     die(old_surface_refusal(state))
 
 
+# ------------------------------------------------------------------ the compact record (compact-project-memory)
+def memory_modules():
+    """memory_sync and memory_store, imported only by the commands that use them."""
+    try:
+        import memory_store               # pylint: disable=import-outside-toplevel
+        import memory_sync                # pylint: disable=import-outside-toplevel
+    except ImportError as exc:
+        die("the memory modules are not installed beside state.py (%s)" % exc, 2)
+    return memory_sync, memory_store
+
+
+def memory_after_close(root, task_id):
+    """§D5: packages mode exports the closed task. Files mode (no memory.json)
+    imports nothing and prints nothing (R15)."""
+    if not os.path.exists(os.path.join(root, ".ai", "policies", "memory.json")):
+        return
+    try:
+        import memory_sync                # pylint: disable=import-outside-toplevel
+    except ImportError:
+        return
+    memory_sync.after_close(root, task_id)
+
+
+def memory_config(sync, root):
+    try:
+        return sync.load_config(root)
+    except sync.MemoryError_ as exc:
+        die(str(exc), exc.code)
+    return None
+
+
+def memory_human(root, what):
+    """R16: enable, disable, cleanup, pack, redact and move-logs take the human's route, as approve does."""
+    via, why = human_route(root)
+    if via is None:
+        die("APPROVAL_REFUSED — 'memory %s' is the human's, from their own terminal:\n  python3 %s --root %s "
+            "%s\nRefused because %s." % (what, shlex.quote(os.path.abspath(__file__)), shlex.quote(root),
+                                         " ".join(shlex.quote(a) for a in sys.argv[sys.argv.index("memory"):]
+                                                  if "memory" in sys.argv), why), 5)
+    return via
+
+
+def memory_confirm(cfg, name, what):
+    if not name:
+        die("'memory %s' deletes or moves files: add --confirm-delete %s" % (what, cfg.author), 2)
+    if name != cfg.author:
+        die("--confirm-delete names %r; this clone's author is %r (.ai/local/memory/config.json)"
+            % (name, cfg.author), 2)
+
+
+def in_flight(root):
+    state = load(root, required=False, claim=False)
+    return state if state and state.get("current_stage") != "done" and state.get("task_id") else None
+
+
+def cmd_recall(args, root):
+    """R10: the open risks, residual findings, decisions, scope changes and task
+    one-liners that touch these files, within the budget. Read-only."""
+    sync, store = memory_modules()
+    cfg = memory_config(sync, root)
+    files = _split_files(args.files)
+    if not files:
+        die("recall needs --files \"a,b,dir/**\"", 2)
+    kinds = _split_files(args.kinds) or None
+    history = store.open_history(root, cfg)
+    budget = args.budget if args.budget is not None else cfg.recall_budget
+    text, result = history.recall(files, budget, cfg.recall_max_items, kinds, args.all_risks, args.offset)
+    if args.json:
+        print(json.dumps({"schema": 1, "files": files, "budget": budget, "used": result["used"],
+                          "items": [{k: i[k] for k in ("rid", "kind", "task", "ts", "line", "src")}
+                                    for i in result["items"]],
+                          "more": result["more"], "next": result["next"], "source": history.source()},
+                         ensure_ascii=False, sort_keys=True))
+        return
+    sys.stdout.write(text)
+
+
+def cmd_memory(args, root):
+    sync, store = memory_modules()
+    action = args.memory_action
+    try:
+        MEMORY_ACTIONS[action](args, root, sync, store)
+    except sync.MemoryError_ as exc:
+        die(str(exc), exc.code)
+
+
+def memory_status(args, root, sync, _store):
+    lines = sync.status_lines(root)
+    if args.json:
+        print(json.dumps(dict(line.split(": ", 1) for line in lines), ensure_ascii=False, sort_keys=True))
+        return
+    print("\n".join(lines))
+
+
+def memory_enable(args, root, sync, _store):
+    memory_human(root, "enable")
+    hook = sync.enable(root, args.author, args.period, args.index)
+    print("memory: packages mode on (%s); every teammate's next close exports" % sync.POLICY_REL)
+    print("pre-push: %s" % hook)
+    if hook in ("foreign", "hookspath"):
+        print("not written — %s. Add these lines to your own pre-push hook:\n%s" % (
+            "core.hooksPath is set" if hook == "hookspath" else "a pre-push hook exists", sync.snippet_text()))
+    print("\n".join(sync.status_lines(root)))
+
+
+def memory_disable(_args, root, sync, _store):
+    memory_human(root, "disable")
+    print("memory: files mode; packages and local data kept; pre-push: %s" % sync.disable(root))
+
+
+def memory_export(args, root, sync, _store):
+    cfg = memory_config(sync, root)
+    ids = "pending" if args.pending or not args.ids else [valid_task_id(t, "ID") for t in args.ids]
+    result = sync.export(root, ids, cfg)
+    for line in sync.record_lines(result):
+        print(line)
+    print("exported: +%d entries%s" % (result.added, "" if result.added else " — nothing pending"))
+    for task_id, why in result.failures:
+        print("memory: export of %s failed (%s)" % (task_id, why))
+    if result.failures:
+        sys.exit(1)
+
+
+def memory_verify(args, root, sync, _store):
+    stats = None
+    if args.range:
+        if ".." not in args.range:
+            die("--range takes OLD..NEW", 2)
+        old, new = args.range.split("..", 1)
+        findings, stats = sync.validate_range(root, sync.rev(root, old), sync.rev(root, new) or new, local=False)
+        findings = findings or []
+    elif args.fresh_clone:
+        findings = sync.verify_fresh_clone(root)
+    else:
+        findings = sync.verify(root, "all", [valid_task_id(t, "ID") for t in args.ids] or None)
+    failing = [f for f in findings if not f.check.endswith("-warn")]
+    if args.json:
+        print(json.dumps({"findings": [f._asdict() for f in findings], "ok": not failing, "stats": stats},
+                         ensure_ascii=False, sort_keys=True))
+    else:
+        for f in findings:
+            print(sync.format_finding(f))
+        print("memory verify: %s" % ("ok" if not failing else "%d finding(s)" % len(failing)))
+    if failing:
+        sys.exit(1)
+
+
+def memory_show(args, root, sync, _store):
+    print("\n".join(sync.show(root, valid_task_id(args.id, "ID"), "json" if args.json else "md", args.entry)))
+
+
+def memory_search(args, root, sync, store):
+    cfg = memory_config(sync, root)
+    filters = {"kind": args.kind, "by": args.by, "task": args.task, "since": args.since, "until": args.until,
+               "files": _split_files(args.file) or None}
+    history = store.open_history(root, cfg)
+    hits, total = history.search(args.query or "", filters, args.limit, args.offset)
+    if args.json:
+        print(json.dumps({"schema": 1, "query": args.query or "", "total": total, "offset": args.offset,
+                          "items": [{"rid": e["rid"], "kind": e["kind"], "task": e.get("task"), "ts": e.get("ts"),
+                                     "line": store.mf.search_line(e)} for e in hits],
+                          "source": history.source()}, ensure_ascii=False, sort_keys=True))
+        return
+    print("# Search — \"%s\" · %d of %d matches · offset %d · index %s" % (
+        args.query or "", len(hits), total, args.offset, history.source()["index"]))
+    for e in hits:
+        print("- %s" % store.mf.search_line(e))
+    if args.offset + len(hits) < total:
+        print("… %d more: --offset %d" % (total - args.offset - len(hits), args.offset + len(hits)))
+
+
+def risk_scope(state):
+    """C4 (§D9): with a task in flight, files mode edits known-risks.md only
+    when the task names it."""
+    rel = ".ai/project/known-risks.md"
+    if state and not sensors.scope_any(rel, task_files(state)):
+        die("SCOPE_CHANGE_REQUIRED — 'memory risk' writes %s, which task %s does not name:\n"
+            "  state.py start --amend --files \"+%s\" --why \"<the risk you record>\"" % (rel, state["task_id"], rel),
+            6)
+
+
+def memory_risk(args, root, sync, store):
+    cfg = memory_config(sync, root)
+    state = in_flight(root)
+    if args.risk_action == "add":
+        where = _split_files(args.where)
+        if args.label not in store.mf.LABELS:
+            die("--label takes one of: %s" % ", ".join(store.mf.LABELS), 2)
+        if args.status not in store.mf.RISK_STATUS:
+            die("--status takes one of: %s" % ", ".join(store.mf.RISK_STATUS), 2)
+        if not cfg.packages:
+            risk_scope(state)
+            found = "%s, by %s" % (now()[:10], state["task_id"] if state else "no task")
+            rkey = sync.risk_add_files(root, args.title, where, args.label, args.what, args.likely, args.fix,
+                                       args.status, found)
+            print("risk: %s added to .ai/project/known-risks.md" % rkey)
+            return
+        data = sync.risk_data(args.title, where, args.label, args.what, args.likely, args.fix, args.status)
+    else:
+        if args.status not in ("fixed", "accepted", "ticketed"):
+            die("--status takes fixed, accepted or ticketed", 2)
+        if not cfg.packages:
+            risk_scope(state)
+            sync.risk_close_files(root, args.rkey, args.status, args.why)
+            print("risk: %s is %s" % (args.rkey, args.status))
+            return
+        history = store.FileHistory(root, cfg)
+        found = [e for e in history.risks("all") if e.get("rkey") == args.rkey]
+        if not found:
+            die("no risk %s ('state.py memory risks --status all')" % args.rkey, 1)
+        last = found[0]
+        data = sync.risk_data(last["title"], last.get("where"), last.get("label"), last.get("what"),
+                              last.get("likelihood"), last.get("fix"), args.status, args.why, last["rid"])
+    if state:
+        state = load(root)
+        emit(root, state, "risk_recorded", "%s: %s" % (data["rkey"], one_line(data["title"], 200)), data)
+        save(root, state)
+        print("risk: %s recorded in %s's journal (exported at close)" % (data["rkey"], state["task_id"]))
+        return
+    entry = sync.standalone_risk(root, cfg, data, RUNTIME)
+    print("risk: %s recorded (%s)" % (data["rkey"], entry["rid"]))
+
+
+def memory_risks(args, root, sync, store):
+    cfg = memory_config(sync, root)
+    risks = store.open_history(root, cfg).risks(args.status)
+    if args.json:
+        for e in risks:
+            print(store.mf.canonical(e).decode("utf-8"))
+        return
+    if args.md:
+        out = ["# Known risks", ""]
+        for e in risks:
+            out += (e["text"].split("\n") if e.get("text") else store.mc.risk_section(
+                e.get("title"), store.mf.where_list(e.get("where")), e.get("label"), e.get("what"),
+                e.get("likelihood"), e.get("fix"), "%s%s" % (e.get("status"), " — %s" % e["status_why"]
+                                                             if e.get("status_why") else ""),
+                e.get("found_by") or "-")) + [""]
+        print("\n".join(out).rstrip("\n"))
+        return
+    print("# Risks — %s · %d" % (args.status, len(risks)))
+    for e in risks:
+        where = store.mf.where_list(e.get("where"))
+        print("- [%s %s] %s — %s (%s)" % (e.get("status"), e.get("label"), where[0] if where else "-",
+                                          e.get("title"), e.get("rkey")))
+
+
+def memory_migrate(args, root, sync, _store):
+    cfg = memory_config(sync, root)
+    if args.move_logs:
+        memory_human(root, "migrate --move-logs")
+        memory_confirm(cfg, args.confirm_delete, "migrate --move-logs")
+        moved, command = sync.move_logs(root)
+        print("moved %d committed log(s) into .ai/state/logs/<id>/legacy/; now, as its own commit (C3):\n  %s"
+              % (len(moved), command))
+        return
+    if args.apply:
+        print("\n".join(sync.migrate_apply(root, risks=args.risks)))
+        return
+    report = sync.migrate_report(root)
+    print("report: %s (%d lines) — read it, then 'state.py memory migrate --apply'"
+          % (os.path.join(sync.LOCAL_REL, "migration-report.md"), report.count("\n")))
+
+
+def memory_rebuild(_args, root, sync, store):
+    cfg = memory_config(sync, root)
+    print("index: rebuilt from %d sources (%s)" % (store.SqliteHistory(root, cfg).rebuild(), store.INDEX_REL))
+
+
+def memory_cleanup(args, root, sync, _store):
+    cfg = memory_config(sync, root)
+    memory_human(root, "cleanup")
+    memory_confirm(cfg, args.confirm_delete, "cleanup")
+    if not args.all and not args.ids:
+        die("memory cleanup takes IDs or --all", 2)
+    print("\n".join(sync.cleanup(root, "all" if args.all else [valid_task_id(t, "ID") for t in args.ids])))
+
+
+def memory_restore(args, root, sync, _store):
+    if not args.all and not args.ids:
+        die("memory restore takes IDs or --all", 2)
+    print("\n".join(sync.restore(root, "all" if args.all else [valid_task_id(t, "ID") for t in args.ids])))
+
+
+def memory_pack(args, root, sync, _store):
+    cfg = memory_config(sync, root)
+    memory_human(root, "pack")
+    memory_confirm(cfg, args.confirm_delete, "pack")
+    target, removed, count = sync.pack(root, args.period)
+    print("pack: %s (%d records; %d batch(es) removed)" % (os.path.join(sync.MEMORY_REL, target), count,
+                                                          len(removed)))
+
+
+def memory_redact(args, root, sync, _store):
+    via = memory_human(root, "redact")
+    rid, name = sync.redact(root, args.rid, args.field, args.why, by="%s via %s" % (os.environ.get("USER") or
+                                                                                   "unknown", via))
+    print("redacted: %s in %s (new rid %s)" % (args.field, os.path.join(sync.MEMORY_REL, name), rid))
+
+
+MEMORY_ACTIONS = {"status": memory_status, "enable": memory_enable, "disable": memory_disable,
+                  "export": memory_export, "verify": memory_verify, "show": memory_show, "search": memory_search,
+                  "risk": memory_risk, "risks": memory_risks, "migrate": memory_migrate, "rebuild": memory_rebuild,
+                  "cleanup": memory_cleanup, "restore": memory_restore, "pack": memory_pack,
+                  "redact": memory_redact}
+
+
+def memory_parsers(sub):
+    p = sub.add_parser("recall", help="what the record holds about these files, within a token budget")
+    p.add_argument("--files", default=""); p.add_argument("--budget", type=int)
+    p.add_argument("--kinds", default=""); p.add_argument("--all-risks", dest="all_risks", action="store_true")
+    p.add_argument("--offset", type=int, default=0); p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_recall)
+    p = sub.add_parser("memory", help="the compact project record (docs/local-memory.md)")
+    p.set_defaults(func=cmd_memory)
+    msub = p.add_subparsers(dest="memory_action", required=True)
+    m = msub.add_parser("status"); m.add_argument("--json", action="store_true")
+    m = msub.add_parser("enable"); m.add_argument("--author"); m.add_argument("--period", choices=["month", "quarter", "year"])
+    m.add_argument("--index", choices=["none", "sqlite"])
+    msub.add_parser("disable")
+    m = msub.add_parser("export"); m.add_argument("ids", nargs="*"); m.add_argument("--pending", action="store_true")
+    m = msub.add_parser("verify"); m.add_argument("ids", nargs="*"); m.add_argument("--all", action="store_true")
+    m.add_argument("--range"); m.add_argument("--fresh-clone", dest="fresh_clone", action="store_true")
+    m.add_argument("--json", action="store_true")
+    m = msub.add_parser("show"); m.add_argument("id"); m.add_argument("--md", action="store_true")
+    m.add_argument("--json", action="store_true"); m.add_argument("--entry")
+    m = msub.add_parser("search"); m.add_argument("query", nargs="?", default="")
+    for flag in ("--kind", "--by", "--file", "--task", "--since", "--until"):
+        m.add_argument(flag)
+    m.add_argument("--limit", type=int, default=20); m.add_argument("--offset", type=int, default=0)
+    m.add_argument("--json", action="store_true")
+    m = msub.add_parser("risk"); rsub = m.add_subparsers(dest="risk_action", required=True)
+    r = rsub.add_parser("add"); r.add_argument("--title", required=True); r.add_argument("--where", default="")
+    r.add_argument("--label", required=True); r.add_argument("--what", required=True)
+    r.add_argument("--likely"); r.add_argument("--fix"); r.add_argument("--status", default="open")
+    r = rsub.add_parser("close"); r.add_argument("rkey"); r.add_argument("--status", required=True)
+    r.add_argument("--why", required=True)
+    m = msub.add_parser("risks"); m.add_argument("--status", choices=["open", "ticketed", "accepted", "fixed", "all"],
+                                                 default="open")
+    m.add_argument("--md", action="store_true"); m.add_argument("--json", action="store_true")
+    m = msub.add_parser("migrate"); g = m.add_mutually_exclusive_group(required=True)
+    g.add_argument("--report", action="store_true"); g.add_argument("--apply", action="store_true")
+    g.add_argument("--move-logs", dest="move_logs", action="store_true")
+    m.add_argument("--risks", action="store_true"); m.add_argument("--confirm-delete", dest="confirm_delete")
+    msub.add_parser("rebuild")
+    m = msub.add_parser("cleanup"); m.add_argument("ids", nargs="*"); m.add_argument("--all", action="store_true")
+    m.add_argument("--confirm-delete", dest="confirm_delete")
+    m = msub.add_parser("restore"); m.add_argument("ids", nargs="*"); m.add_argument("--all", action="store_true")
+    m = msub.add_parser("pack"); m.add_argument("--period", required=True)
+    m.add_argument("--confirm-delete", dest="confirm_delete")
+    m = msub.add_parser("redact"); m.add_argument("rid"); m.add_argument("--field", required=True)
+    m.add_argument("--why", required=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--root", default=".", help="project directory (default: search upwards for .ai/)")
@@ -4279,7 +4670,10 @@ def main():
     p.add_argument("--tests", default=""); p.add_argument("--declare", action="append", default=[])
     p.add_argument("--mode"); p.add_argument("--by", default=""); p.add_argument("--why", default="")
     p.add_argument("--steps", default=""); p.add_argument("--plan-file", dest="plan_file")
-    p.add_argument("--task-id"); p.add_argument("--amend", action="store_true")
+    p.add_argument("--task-id", help="an id of your own; a legacy T-YYYY-MM-DD-NNN id is still accepted")
+    p.add_argument("--slug", help="3-24 characters of [a-z0-9] words joined by '-': the id becomes "
+                                  "T-YYYY-MM-DD-HHMM-<slug> (UTC). Default: derived from --goal")
+    p.add_argument("--amend", action="store_true")
     p.set_defaults(func=cmd_start)
 
     p = sub.add_parser("verify")
@@ -4304,6 +4698,8 @@ def main():
 
     p = sub.add_parser("consent"); p.add_argument("action", nargs="?", choices=["audit"])
     p.add_argument("--json", action="store_true"); p.set_defaults(func=cmd_consent)
+
+    memory_parsers(sub)
 
     global RUNTIME, MUTATING              # pylint: disable=global-statement
     args = parser.parse_args()

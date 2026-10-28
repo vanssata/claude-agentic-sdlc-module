@@ -1,0 +1,29 @@
+exit 0
+task T-2026-10-28-009 mode full (tier T5) window 2026-10-28T17:06:11+00:00..2026-10-28T18:17:20+00:00
+  (by time window: any other session in this project inside it is counted too)
+claude   tokens in 0 cache 0 out 0 total 0
+         budget: no claude plan table for T5
+codex    tokens in 0 cache 0 out 0 total 0
+         budget: no codex plan table for T5
+
+exit 0
+task T-2026-10-27-007 mode full (tier T5) window 2026-10-27T21:14:12+00:00..2026-10-27T23:15:33+00:00
+  (by time window: any other session in this project inside it is counted too)
+claude   tokens in 0 cache 0 out 0 total 0
+         budget: no claude plan table for T5
+codex    tokens in 0 cache 0 out 0 total 0
+         budget: no codex plan table for T5
+
+exit 0
+task T-2026-10-15-001 tier T4 window 2026-10-15T07:58:52+00:00..2026-10-15T09:01:51+00:00
+  (by time window: any other session in this project inside it is counted too)
+claude   tokens in 0 cache 0 out 0 total 0
+         budget: no claude plan table for T4
+
+exit 0
+task T-2026-09-21-001 tier untiered window 2026-09-22T01:57:17+00:00..2026-09-22T03:23:46+00:00
+  (by time window: any other session in this project inside it is counted too)
+claude   tokens in 0 cache 0 out 0 total 0
+         budget: no claude plan table for untiered
+codex    tokens in 0 cache 0 out 0 total 0
+         budget: no codex plan table for untiered

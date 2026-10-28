@@ -1,0 +1,22 @@
+exit 0
+root: <ROOT>
+task: none — no task in flight
+schema: project 0 · plugin 8 — behind: run /project-update
+
+exit 0
+root: <ROOT>
+task: <ID> — tweak the widget
+mode: light · W 0 · workflow feature
+axes: scope 0 behaviour 0 reversibility 0 domain 0 novelty 0 coverage 0
+stage: build · next: edit, then 'state.py verify --scope all', then 'state.py close'
+steps: one scope
+files: 2 in scope — src/widget.py, tests/test_widget.py
+verify: suite not_run · runs 0/2 · e2e not_run
+facts: (a) RED — no whole-suite 'verify --scope suite|all' has run
+       (b) green — 0 changed files, all in the task's files
+review: not_started (0 of 2) · tier -
+gate: none in light mode
+findings: 0 recorded in task.md
+questions: 0 pending
+schema: project 0 · plugin 8 — behind: run /project-update
+last event: <TS> handoff_written start

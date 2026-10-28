@@ -121,7 +121,7 @@ def snapshot_tree(root):
         if git(root, ["add", "-A", "--", "."], env=env)[0] != 0:
             return None
         git(root, ["rm", "-r", "--cached", "--quiet", "--ignore-unmatch", "--",
-                   ".ai/state", ".ai/reports"], env=env)
+                   ".ai/state", ".ai/reports", ".ai/memory"], env=env)
         code, out = git(root, ["write-tree"], env=env)
         return out.strip() if code == 0 and out.strip() else None
     finally:

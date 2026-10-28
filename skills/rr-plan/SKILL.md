@@ -48,7 +48,10 @@ investigation — say which and why. `using-riskrails.md` in the shared tree
 `workflows.md#<kind>` say what each kind requires. A refactoring and a feature
 are never one task.
 
-**2. Name the files** from the request, confirmed with `grep -n`. Then weigh:
+**2. Name the files** from the request, confirmed with `grep -n`. Recall what
+the record holds about them — `$STATE recall --files "<a>,<b>"`: open risks,
+residual findings and earlier decisions are evidence for the weight and the
+plan. Then weigh:
 
 ```bash
 $STATE weight --files "<a>,<b>" --goal "<one sentence>" \

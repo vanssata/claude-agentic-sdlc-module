@@ -23,8 +23,15 @@ is evidence; your intuition about how the code "should" look is not.
 - Read production secrets or customer data into the model context.
 
 If you find a problem outside the current task: **write it down, do not fix it.**
-Unrelated findings go to `.ai/project/known-risks.md` or into the report's
-"observations" section, and the human decides whether they become their own task.
+Unrelated findings are recorded with `state.py memory risk add` (in files mode it
+writes `.ai/project/known-risks.md`) or go into the report's "observations"
+section, and the human decides whether they become their own task.
+
+The compact record is the human's to switch: `state.py memory enable`, `disable`,
+`cleanup`, `pack`, `redact` and `migrate --move-logs` take the human route, as
+`approve` does, and `.ai/memory/` and `.ai/local/memory/` are written by
+`state.py` alone — an agent never edits them (`state.py memory --help`; the
+plugin's `docs/local-memory.md`).
 
 ## Scope
 

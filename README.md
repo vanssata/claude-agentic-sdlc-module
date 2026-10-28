@@ -280,6 +280,14 @@ The same commands in both runtimes:
 /usage-report            # what it cost, from local transcripts, at zero model cost
 ```
 
+A closed task's who, what, how and why can also travel as a compact record:
+`state.py memory enable` (the human's) switches a project to packages mode, in
+which close appends the task's entries to a per-developer batch under
+`.ai/memory/` and a pre-push hook checks them; `state.py recall --files …` gives
+an agent what the record holds about the files it is about to touch, within a
+token budget, in either mode. Task ids are `T-YYYY-MM-DD-HHMM-<slug>`; legacy ids
+stay valid. See `docs/local-memory.md`.
+
 ### Updating a project after the plugin changes
 
 `npx riskrails` updates `~/.claude/` (or `~/.codex/`), and with it the shared
@@ -866,6 +874,7 @@ No suite reads or writes the developer's real `~/.claude` or `~/.codex`.
 | `docs/risk-tiers.md` | how classification works and how to tune it |
 | `docs/workflows.md` | the five workflows and how one is chosen |
 | `docs/faq.md` | why something was blocked, and how to change it |
+| `docs/local-memory.md` | the compact project record: task ids, packages, recall, the pre-push check, migration |
 | `docs/sdlc/plans/dual-runtime-agentic-routing.md` | the approved plan this dual-runtime support was built from |
 
 ## Contributing, security and license

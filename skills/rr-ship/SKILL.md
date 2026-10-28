@@ -91,11 +91,14 @@ Write the body from `.ai/reports/<task-id>/task.md` — no new opinion:
 - the verification command and its result (suite and e2e);
 - the review verdict, with any finding left open and why;
 - the rollback: `git revert <commit>`, plus anything a revert does not undo;
-- open risks, pointing at `.ai/project/known-risks.md`.
+- open risks: the ones this task recorded or closed with `state.py memory risk
+  add|close`, by rkey (`state.py memory risks` lists them).
 
 Suggest the commit command — `git add` of the task's files and its
-`.ai/reports/<task-id>/`, then `git commit` with that body — for the human to
-run. You never commit, push, merge or deploy.
+`.ai/reports/<task-id>/` (in packages mode also `.ai/memory/`, which holds the
+task's record — the pre-push check refuses a closed task without it), then
+`git commit` with that body — for the human to run. You never commit, push,
+merge or deploy.
 
 ## 4. Pending questions
 

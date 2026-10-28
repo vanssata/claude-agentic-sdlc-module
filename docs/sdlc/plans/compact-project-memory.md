@@ -36,6 +36,37 @@ records where it departs from the spec's suggested order and why, and maps every
   `state.py memory status`, never by the hook. M7 amends the one line in §D10 and this repository turns
   packages mode on only at G2, after the migration.
 
+## Executed as one task (T-2026-10-28-011, developer 2026-10-28)
+
+The developer asked for every row at once, with one verification run at the end and one review. Answers
+given before `start`:
+
+- **M2 without its refactoring (C3).** `memory_store.FileHistory` is new code that only the new commands
+  read; `journal-summary.py`, `status.py` and `usage-report.py` are not moved onto it. Their answers are
+  pinned by goldens recorded from the tree before the change (`tests/test_memory_characterization.py`,
+  `AI_GOLDEN_ROOT`), and `usage-report --task` gains only the R20 fallback (the moved journal, then the
+  seal's window). Moving the three tools onto `History` is a later refactoring task of its own.
+- **M10 unconditionally** — G3 below records the numbers anyway.
+- **One whole-suite run and one e2e run at the end**; each new test module ran alone while written, and
+  M3's failing test ran once with `--expect fail` (C2).
+
+Decided while building, each pinned by a test:
+
+- **A4 against R1.** R1 caps the disambiguator at `-9`, so "1 000 starts in one minute with one goal give
+  1 000 ids" cannot hold; the test proves the property behind it — no two starts ever share an id: one
+  goal gives 9 ids and then exit 2 naming `--slug`, and 1 000 slugs in one minute give 1 000 ids.
+- **Recall's continuation is `state.py recall --files … --offset N`**, not `memory search --files`: search
+  orders by time and could not continue a tiered list. `recall` gained `--offset`.
+- **The recall header names the backend** (`index none|sqlite`), so R11's byte identity holds for the
+  items and the counts: the token count covers the items and the continuation line, and the packing
+  reserves the widest header any backend prints.
+- **V5 checks that every kept line of a committed closed journal is an entry's `src`**; it does not
+  re-compact a changed sealed task from its blobs. **V4 is not checked for a key with a recorded
+  conflict**, because which entries belong to which seal is not knowable from the lines.
+- **A redaction entry carries `replacement`** (the rewritten line's rid) besides `target`, so V4 maps the
+  new rid back when it recomputes the seal's digest.
+- **`migrate --move-logs` takes the human route**, like `cleanup`.
+
 ## Departures from the spec's suggested order
 
 1. **Spec steps 4 and 5 are one task, M4.** The record format has no deliverable of its own, and dropping
@@ -143,7 +174,17 @@ is free. **Consumes / Produces**: the exact names neighbouring tasks rely on (sp
 - **G1 (human, after M5).** Apply the staged edits: `.ai/policies/security.md:59-61` (packages and
   `.ai/memory/` as evidence inputs and as always read-only for an agent), `.ai/AGENTS.md:33-35`
   (`memory.json` among the policy files), `.ai/state/README.md:19-21` (the archived state lives in
-  `.ai/state/logs/`). Tick here: `[ ]`.
+  `.ai/state/logs/`). Tick here: `[ ]`. The text, staged by T-2026-10-28-011:
+  - `.ai/policies/security.md:59-61`, the first sentence becomes: "Always read-only for an agent: the
+    task's state under `.ai/state/`, its `task.md` and `events.jsonl`, `.ai/policies/*.json`, the compact
+    record under `.ai/memory/` and `.ai/local/memory/` (written by `state.py` alone), and the installed
+    guards — their hooks, engine and `skills/ai-task/` under `.claude/` and `.codex/`." Add after the
+    paragraph: "A review's evidence for a closed task is its record — `state.py memory show <id>` and
+    `recall` — once cleanup has moved the report directory; an approval in the record authorises nothing."
+  - `.ai/AGENTS.md:33-35`: "`coding.md`, `safety.md` and `security.md`" becomes "`coding.md`,
+    `safety.md`, `security.md` and, once a human ran `state.py memory enable`, `memory.json`".
+  - `.ai/state/README.md:19-21`: the template's new paragraph (`skills/ai-init/templates/.ai/state/README.md`,
+    "When a task closes, `state.py close` writes the final state to `.ai/state/logs/<task-id>/state.json` …").
 - **M6 Recall, search, risk records.** Expected guarded (read-only commands, behaviour 0; the new journal
   event is forgeable-protected). Workflow feature. Consumes: M4, M5. Produces: `state.py recall --files …
   [--budget N] [--kinds …] [--all-risks] [--json]` with the §I4 header and line forms and the `--json`
@@ -197,7 +238,10 @@ is free. **Consumes / Produces**: the exact names neighbouring tasks rely on (sp
   `.ai/policies/memory.json` and `memory status` showing the hook `installed`. Tick here: `[ ]`.
 - **G3 (human).** From M1's baseline and M6's timings: if `FileHistory` recall p95 exceeds 300 ms or search
   exceeds 1 s at 1 000 tasks, M10 runs; otherwise M10 is skipped and this line records the numbers and the
-  decision (Q5). Tick here: `[ ]` — numbers: ….
+  decision (Q5). Tick here: `[x]` — numbers (`tools/benchmark-memory.py`, seed 1, 4 KB journals): at 1 000
+  tasks FileHistory recall 129–165 ms and search 118–148 ms, under the threshold; at 10 000, 1.4–1.6 s and
+  1.3–1.6 s, the index 0.73 s and 0.31 s. M10 ran anyway, unconditionally, by the developer's decision of
+  2026-10-28 (T-2026-10-28-011); the index stays opt-in (`--index sqlite`).
 - **M10 SQLite index** (only past G3). Expected guarded (a local, derived store). Workflow feature.
   Consumes: M5, M6. Produces: `SqliteHistory(root, cfg)` with `refresh()` and `rebuild()`, the §I3 DDL
   (`PRAGMA user_version=1`, WAL, `busy_timeout=5000`, FTS5 as a prefilter only, detected on `:memory:`),

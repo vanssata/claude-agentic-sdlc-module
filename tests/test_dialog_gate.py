@@ -59,7 +59,7 @@ class TestPayload(unittest.TestCase):
                                    (git(self.p.root, "rev-parse", "--abbrev-ref", "HEAD"), "<BRANCH>"),
                                    (name, "<NAME>")):
             text = text.replace(value, placeholder)
-        text = re.sub(r"T-\d{4}-\d{2}-\d{2}-\d{3}", "<TASK>", text)
+        text = re.sub(r"T-\d{4}-\d{2}-\d{2}-(?:\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*|\d{3})", "<TASK>", text)
         return re.sub(r"(tree|green on) [0-9a-f]{9}", r"\1 <TREE>", text)
 
     def shown(self):

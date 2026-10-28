@@ -637,20 +637,53 @@ def find_project(start: str) -> str | None:
         d = parent
 
 
+def seal_events(project: str, task: str) -> list:
+    """R20 (compact-project-memory): after cleanup only the record knows the
+    task — its seal's started_at, closed_at, mode and runtimes stand in for
+    the journal's first and last lines."""
+    base = os.path.join(project, ".ai", "memory")
+    seal = None
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        if not name.endswith(".jsonl"):
+            continue
+        with open(os.path.join(base, name), encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                rec = _record(line)
+                if rec and rec.get("kind") == "task" and rec.get("task") == task:
+                    if seal is None or (rec.get("inst") or 0) >= (seal.get("inst") or 0):
+                        seal = rec
+    if not seal or not seal.get("started_at"):
+        return []
+    runtimes = [rt for rt in seal.get("runtimes") or [] if rt in RUNTIMES]
+    out = [{"ts": seal["started_at"], "event": "task_started", "runtime": rt} for rt in runtimes or [None]]
+    out.append({"ts": seal["started_at"], "event": "tier_set",
+                "data": {"tier": seal.get("legacy_tier") or "untiered", "mode": seal.get("mode")}})
+    if seal.get("closed_at"):
+        out.append({"ts": seal["closed_at"], "event": "task_closed"})
+    return out
+
+
 def task_report(args) -> int:
     """One task's window from its journal, the tokens each runtime spent in it,
     and each involved runtime's budget for the task's final tier."""
     project = find_project(args.project or os.getcwd())
     journal = os.path.join(project or "", ".ai", "reports", args.task, "events.jsonl")
-    if not project or not os.path.isfile(journal):
-        print(f"no journal for {args.task} (looked for {journal})")
-        return 1
+    moved = os.path.join(project or "", ".ai", "state", "logs", args.task, "report", "events.jsonl")
     events = []
-    with open(journal, encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            rec = _record(line)
-            if rec is not None:
-                events.append(rec)
+    if project and not os.path.isfile(journal) and os.path.isfile(moved):
+        journal = moved                   # cleanup moved the report directory into the local raw store
+    if not project or not os.path.isfile(journal):
+        events = seal_events(project, args.task) if project else []
+        if not events:
+            print(f"no journal for {args.task} (looked for {journal})")
+            return 1
+        print(f"(no journal: the window is the record's seal for {args.task})")
+    else:
+        with open(journal, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                rec = _record(line)
+                if rec is not None:
+                    events.append(rec)
     stamps = [parse_ts(e.get("ts")) for e in events if parse_ts(e.get("ts"))]
     if not stamps:
         print(f"the journal of {args.task} has no timestamps")

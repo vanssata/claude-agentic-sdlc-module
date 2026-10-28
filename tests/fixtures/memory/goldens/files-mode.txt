@@ -1,0 +1,117 @@
+$ state.py start
+exit 0
+scope          0  src/widget.py referenced from 0 files
+behaviour      0  synthetic (declared)
+reversibility  0  git revert returns everything
+domain         0  synthetic (declared)
+novelty        0  synthetic (declared)
+coverage       0  1 of 1 code files have a test
+W 0 → light   hints none · unknown none · light ≤2 · guarded 3–7 · full ≥8 or reversibility/domain=2
+<ID> started: light · 2 files in scope · .ai/reports/<ID>/task.md
+next: edit, then 'state.py verify --scope all', then 'state.py close'
+-- files
+.ai/policies/testing.md
+.ai/reports/<ID>/events.jsonl
+.ai/reports/<ID>/task.md
+.ai/state/current.json
+.ai/state/handoff.md
+.gitignore
+src/widget.py
+tests/test_widget.py
+
+$ state.py status
+exit 0
+root: <ROOT>
+task: <ID> — tweak the widget
+mode: light · W 0 · workflow feature
+axes: scope 0 behaviour 0 reversibility 0 domain 0 novelty 0 coverage 0
+stage: build · next: edit, then 'state.py verify --scope all', then 'state.py close'
+steps: one scope
+files: 2 in scope — src/widget.py, tests/test_widget.py
+verify: suite not_run · runs 0/2 · e2e not_run
+facts: (a) RED — no whole-suite 'verify --scope suite|all' has run
+       (b) green — 0 changed files, all in the task's files
+review: not_started (0 of 2) · tier -
+gate: none in light mode
+findings: 0 recorded in task.md
+questions: 0 pending
+schema: project 0 · plugin 8 — behind: run /project-update
+last event: <TS> handoff_written start
+-- files
+.ai/policies/testing.md
+.ai/reports/<ID>/events.jsonl
+.ai/reports/<ID>/task.md
+.ai/state/current.json
+.ai/state/handoff.md
+.gitignore
+src/widget.py
+tests/test_widget.py
+
+$ state.py handoff
+exit 0
+# Handoff — <ID> (feature, light) · stage implementation · step task/1 · owner claude · written <TS> (manual)
+Goal: tweak the widget
+Next: edit, then 'state.py verify --scope all', then 'state.py close'   ← resume point (step task: src/widget.py, tests/test_widget.py)
+Pending questions: none
+## Decisions (latest 3)
+- none
+## Rejected (latest 3)
+- none
+## Failed attempts (latest 3)
+- none
+## Latest user instruction (verbatim, never, unknown)
+> none recorded
+-- files
+.ai/policies/testing.md
+.ai/reports/<ID>/events.jsonl
+.ai/reports/<ID>/task.md
+.ai/state/current.json
+.ai/state/handoff.md
+.gitignore
+src/widget.py
+tests/test_widget.py
+
+$ state.py verify
+exit 0
+suite run 1: exit 0 in <N>s
+command: sh -c 'test ! -e <TMP>/flags-p/red' {files}
+log: .ai/state/logs/<ID>/suite-1.log
+e2e: not required in light mode
+suite runs used: 1 of 2
+-- files
+.ai/policies/testing.md
+.ai/reports/<ID>/events.jsonl
+.ai/reports/<ID>/task.md
+.ai/state/current.json
+.ai/state/handoff.md
+.ai/state/logs/<ID>/suite-1.log
+.gitignore
+src/widget.py
+tests/test_widget.py
+
+$ state.py close
+exit 0
+<ID> closed (light): .ai/reports/<ID>/task.md
+state: .ai/state/logs/<ID>/state.json
+-- files
+.ai/policies/testing.md
+.ai/reports/<ID>/events.jsonl
+.ai/reports/<ID>/task.md
+.ai/state/logs/<ID>/suite-1.log
+.gitignore
+src/widget.py
+tests/test_widget.py
+
+$ state.py status
+exit 0
+root: <ROOT>
+task: none — no task in flight
+schema: project 0 · plugin 8 — behind: run /project-update
+-- files
+.ai/policies/testing.md
+.ai/reports/<ID>/events.jsonl
+.ai/reports/<ID>/task.md
+.ai/state/logs/<ID>/suite-1.log
+.gitignore
+src/widget.py
+tests/test_widget.py

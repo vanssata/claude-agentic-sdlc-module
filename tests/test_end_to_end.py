@@ -318,5 +318,40 @@ class TestInstalledPipeline(unittest.TestCase):
         self.check("src/ is untouched", out == "", out)
 
 
+@unittest.skipUnless(os.environ.get("AI_E2E"), "end to end: AI_E2E=1 (tests/test-end-to-end.sh)")
+class TestCompactMemory(unittest.TestCase):
+    """compact-project-memory M12: enable → start → close → record → pre-push →
+    fresh clone → show, through state.py, the installed hook and git."""
+
+    def test_the_record_travels_with_the_push(self):
+        import memory_harness as mh  # pylint: disable=import-outside-toplevel
+        p = mh.Project()
+        self.addCleanup(p.close)
+        remote = os.path.join(p.tmp, "remote.git")
+        subprocess.run(["git", "init", "-q", "--bare", "--initial-branch=main", remote], check=True)
+        p.git("remote", "add", "origin", remote)
+        self.assertIn("pre-push: installed", p.ok("memory", "enable", "--author", "dev", human=True).stdout)
+        p.commit("memory on")
+        task, out = p.rich_task("travels with the push")
+        self.assertIn("record: .ai/memory/", out)
+        self.assertIn("%s sealed" % task, out)
+        p.commit("the task")
+        pushed = p.git("push", "-q", "origin", "main", check=False)
+        self.assertEqual(pushed.returncode, 0, pushed.stderr)
+        shown = p.ok("memory", "show", task).stdout
+        clone = mh.Project("clone", tmp=p.tmp, clone_of=remote)
+        self.assertEqual(clone.ok("memory", "show", task).stdout, shown)
+        self.assertEqual(p.run("memory", "verify", "--fresh-clone").returncode, 0)
+        self.assertIn('"Which cache key?" → A "by locale" by vanssa', clone.ok("recall", "--files",
+                                                                                "src/widget.py").stdout)
+        name = os.listdir(p.path(".ai/memory"))[0]
+        lines = p.read(".ai/memory/" + name, binary=True).split(b"\n")
+        p.write(".ai/memory/" + name, b"\n".join(lines[:1] + lines[2:]), mode="wb")
+        p.commit("drops a record")
+        refused = p.git("push", "-q", "origin", "main", check=False)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("V2", refused.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

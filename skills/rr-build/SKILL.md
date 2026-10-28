@@ -47,6 +47,11 @@ $STATE handoff --print
 
 ## 2. Edit, inside the task
 
+Before the first edit, recall what the record already holds about the task's
+files — open risks, residual findings, decisions and why, within a token budget,
+read-only: `$STATE recall --files "<the task's files>"` (`memory show <id>` for
+one task in full).
+
 Implement it yourself. The scope guard refuses an edit to a file the task does
 not name. That refusal is the plan being enforced, not an obstacle:
 
@@ -56,8 +61,9 @@ $STATE start --amend --files "+<path>" --why "<why the task needs it>"
 ```
 
 The amendment is journaled; the task is not re-planned. A file that belongs to
-a different change is not amended in — it is written into
-`.ai/project/known-risks.md` and left for its own task.
+a different change is not amended in — it is recorded with `$STATE memory risk
+add --title … --where "file:line" --label RISK --what …` (in files mode that
+writes `.ai/project/known-risks.md`) and left for its own task.
 
 Production behaviour is the source of truth: code that looks wrong may be
 load-bearing. Change only what the task asked for; a refactoring never rides
@@ -118,7 +124,7 @@ fixed:
 $STATE verify --scope all --after-fix "<n> regressions: <one line each>"
 ```
 
-- An existing failure is recorded in `.ai/project/known-risks.md`, not fixed.
+- An existing failure is recorded with `$STATE memory risk add`, not fixed.
 - An environment failure gets one more run, not a code change.
 - Never edit a test to make it pass.
 - Two whole-suite runs are the budget (`tests.max_suite_runs`). The third

@@ -669,9 +669,11 @@ titles.
     key with two unchained seals is refused; a legacy duplicate is allowed
     when a `conflict` entry records it;
   - V4 each seal's `entries` count and digest match its key's entries;
-  - V5 every `.ai/reports/<id>/events.jsonl` at T containing `task_closed`
-    has a seal at T, and each of its kept lines is the `src` of an entry; a
-    sealed task changed in O..T is compacted again from its blobs;
+  - V5 every `.ai/reports/<id>/events.jsonl` at T containing `task_closed`,
+    for an id matching `NEW_ID_RE` or a legacy id that already has a seal in
+    a package, has a seal at T, and each of its kept lines is the `src` of an
+    entry (an unmigrated legacy task is listed by `state.py memory status`,
+    never by the hook — plan, "V5 scope");
   - V6 no `*.log` added under `.ai/reports/` in O..T; nothing under
     `.ai/local/` or `.ai/state/logs/` and no `*.sqlite3*` in T;
   - V7 with `cleanup: true`, no `.ai/reports/<id>/` of a sealed task is added

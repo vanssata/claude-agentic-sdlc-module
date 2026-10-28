@@ -672,3 +672,33 @@ following; each is open unless marked.
 - **I3** RISK: binding a decision to its session needs `state.py`'s session env (`CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`) to equal the hook payload's `session_id`. Verified for a fresh Claude session only; after `/clear`, a resume, or on Codex a mismatch fails open (the gate does not see the decision; picks still bind to the payload's session).
 - **I4** KNOWN FACT: `prune_decisions` with the switch off drops a decision even when its `settle` line could not be appended (the `OSError` is suppressed); a live pick then outlives its decision until its window ends. Matters only if the switch is turned on again within the window.
 - **Status**: open
+
+## archive_v7 writes the archived state.json with a plain, non-atomic write
+
+- **Found**: 2026-10-28, by T-2026-10-28-011
+- **Where**: `skills/ai-task/state.py:3928`
+- **What could go wrong**: a crash or a full disk during close leaves a torn .ai/state/logs/<id>/state.json; the compaction refuses that task (problem 'not valid JSON') and keeps the originals, so its record needs a manual re-export
+- **How likely / how bad**: rare (needs a crash inside close); visible: 'memory export' names the file
+- **Suggested fix**: write it with a temp file and os.replace, as save() does
+- **Status**: open
+- **Label**: KNOWN FACT
+
+## state.py event stamps actor hook on an agent's own notes
+
+- **Found**: 2026-10-28, by T-2026-10-28-011
+- **Where**: `skills/ai-task/state.py:1031`
+- **What could go wrong**: notes an agent writes with 'state.py event note' are journaled as actor hook, so the record (which copies the actor as stored) shows agent decisions as [decision hook] in recall
+- **How likely / how bad**: every note written through 'event'; cosmetic for recall, misleading for an audit of who decided
+- **Suggested fix**: let 'event' take an actor for the note type, or stamp agent when no hook marker is set
+- **Status**: open
+- **Label**: KNOWN FACT
+
+## .ai/state/consent.jsonl is not matched by the ignore snippet
+
+- **Found**: 2026-10-28, by T-2026-10-28-011
+- **Where**: `skills/ai-init/templates/gitignore.snippet:2`, `skills/ai-task/state.py:2317`
+- **What could go wrong**: the snippet ignores .ai/state/*.json, not *.jsonl, so the dialog's consent ledger would be committed once it exists (git check-ignore confirms)
+- **How likely / how bad**: certain once the dialog writes the ledger in a project with the snippet
+- **Suggested fix**: add .ai/state/*.jsonl (or consent.jsonl) to gitignore.snippet, with its project-update migration
+- **Status**: open
+- **Label**: KNOWN FACT
