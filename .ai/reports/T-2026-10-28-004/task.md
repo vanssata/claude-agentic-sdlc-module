@@ -24,7 +24,7 @@ tests: tests/test_dialog_gate.py, tests/test_dialog_contract.py, tests/test_ai_t
 
 ## Questions
 
-[questions.md](questions.md) — 1 pending
+[questions.md](questions.md) — 0 pending
 
 ## Verify
 
@@ -98,12 +98,40 @@ closed by a green run: H1
 
 ## Changes
 
-measured at close
+| File | Change | New/Edit/Delete |
+|---|---|---|
+| skills/ai-task/state.py | +852 −19 | Edit |
+| skills/rr-build/SKILL.md | +3 −1 | Edit |
+| skills/rr-review/SKILL.md | +3 −2 | Edit |
+| skills/rr-ship/SKILL.md | +13 −0 | Edit |
+| tests/fixtures/dialog/ledger/cases.json | +116 −0 | New |
+| tests/fixtures/dialog/ledger/chain-unused.jsonl | +3 −0 | New |
+| tests/fixtures/dialog/ledger/chain.jsonl | +4 −0 | New |
+| tests/fixtures/dialog/ledger/reoffer-expired.jsonl | +4 −0 | New |
+| tests/fixtures/dialog/ledger/reoffer-session.jsonl | +2 −0 | New |
+| tests/fixtures/dialog/ledger/reoffer-voided.jsonl | +5 −0 | New |
+| tests/fixtures/dialog/ledger/settled.jsonl | +2 −0 | New |
+| tests/fixtures/dialog/ledger/single.jsonl | +2 −0 | New |
+| tests/fixtures/dialog/ledger/torn.jsonl | +4 −0 | New |
+| tests/fixtures/dialog/ledger/used.jsonl | +3 −0 | New |
+| tests/fixtures/dialog/ledger/voided.jsonl | +3 −0 | New |
+| tests/fixtures/dialog/payload-golden/approval.json | +23 −0 | New |
+| tests/fixtures/dialog/payload-golden/commit-push.json | +23 −0 | New |
+| tests/fixtures/dialog/payload-golden/commit.json | +19 −0 | New |
+| tests/fixtures/dialog/payload-golden/question.json | +23 −0 | New |
+| tests/fixtures/dialog/payload-golden/two-open.json | +38 −0 | New |
+| tests/test_ai_task_state.py | +554 −0 | Edit |
+| tests/test_dialog_contract.py | +54 −0 | New |
+| tests/test_dialog_gate.py | +156 −0 | New |
+| tests/test_profile_detect.py | +33 −2 | Edit |
+| tests/test_skills_surface.py | +19 −1 | Edit |
+
++1961 −25 lines, 25 files
 
 ## Verdict
 
-close: open — the human approves in their own terminal, then 'state.py close' again
+close: closed
 facts: (a) green — suite green on 1a238607d (run 8) · (b) green — 25 changed files, all in the task's files
-gate: requested G1 at 2026-10-28T13:17:59Z; approved by - at - via -
+gate: requested G1 at 2026-10-28T13:17:59Z; approved by Ivan Kakurov at 2026-10-28T14:02:30Z via terminal
 confirm: none
-handoffs: 4 · suite runs: 2 · review passes: 1
+handoffs: 6 · suite runs: 2 · review passes: 1
