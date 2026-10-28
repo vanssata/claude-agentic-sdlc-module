@@ -88,6 +88,23 @@ SETBY_VERB = ("([[:space:]]+--)?[[:space:]]+" + Q + "set" + END + "([^|;&`]*[[:s
               + Q + "(=|[[:space:]]|$)")
 SETBY_RE = (BOUND + "(python3?[[:space:]]+)?" + Q + "[^[:space:]'\"]*state\\.py" + Q + ARGS + SETBY_VERB + "|"
             + BOUND + "(python3?[[:space:]]+)?" + Q + VAR + Q + ARGS + SETBY_VERB)
+# R36.11, with the dialog on only: the other human-only state.py commands —
+# `profile set` and the --by forms of verify, review and reject — run from an
+# agent session only as the next live pick, like approve. `start --mode --by`
+# reaches state.py: raising a mode needs no human, and a lowering opens its own
+# decision there before human_route() refuses it (review H1, T-2026-10-28-010).
+PROFILE_SET_VERB = "([[:space:]]+--)?[[:space:]]+" + Q + "profile" + Q + "[[:space:]]+" + Q + "set" + END
+PROFILE_SET_RE = (BOUND + "(python3?[[:space:]]+)?" + Q + "[^[:space:]'\"]*state\\.py" + Q + ARGS + PROFILE_SET_VERB
+                  + "|" + BOUND + "(python3?[[:space:]]+)?" + Q + VAR + Q + ARGS + PROFILE_SET_VERB)
+HUMAN_BY_VERB = ("([[:space:]]+--)?[[:space:]]+" + Q + "(verify|review|reject)" + END + "([^|;&`]*[[:space:]])?"
+                 + Q + "--by?" + Q + "(=|[[:space:]]|$)")
+HUMAN_BY_RE = (BOUND + "(python3?[[:space:]]+)?" + Q + "[^[:space:]'\"]*state\\.py" + Q + ARGS + HUMAN_BY_VERB + "|"
+               + BOUND + "(python3?[[:space:]]+)?" + Q + VAR + Q + ARGS + HUMAN_BY_VERB)
+WHY_PICK = T(
+    "\n\nWith the dialog on, this command runs from an agent session only as the human's pick.\n"
+    "The command that needs it opened a decision: 'state.py decision show' prints the dialog;\n"
+    "send it and run the picked command verbatim, once. Otherwise the human runs it in their\n"
+    "own terminal. See .ai/policies/safety.md.")
 # R36.11: running the dialog's recorder by hand would forge the human's answer.
 # dialog-gate.py in command position — the program itself, or the script a
 # python runs — after a separator, a quote, exec/env/command/nohup/time/sudo
@@ -1176,6 +1193,27 @@ class PathGuard:                            # pylint: disable=too-many-instance-
             return
         self.check_bash(unattended)
 
+    def dialog_consent(self, cmd):
+        """(the dialog is on for this call, the command is the next live pick
+        of this session) — R36.11's pass-through. state.py spends the pick
+        after its own argv check (R36.10); the guard only lets it reach it."""
+        if not self.root or not exists(self.root + "/.ai/policies/dialog.json"):
+            return False, False
+        from datetime import datetime, timezone  # pylint: disable=import-outside-toplevel
+        from guard import dialog            # pylint: disable=import-outside-toplevel
+        root = os.fsdecode(b_bytes(self.root))
+        values = self.p.values
+        raw = values[0] if len(values) == 1 and isinstance(values[0], dict) else None
+        hook_file = os.path.join(os.fsdecode(b_bytes(self.ctx.hook_dir)), "ai-guard.py")
+        try:
+            if raw is None or not dialog.effective_switch(root, dialog.payload_runtime(raw, hook_file), raw):
+                return False, False
+            pick = dialog.next_live_pick(root, raw.get("session_id"), datetime.now(timezone.utc))
+        except Exception:                   # pylint: disable=broad-exception-caught
+            return True, False
+        command = b_bytes(cmd).decode("utf-8", "replace").strip()
+        return True, bool(pick and pick.get("label") == command)
+
     def interpreter_text(self, cmd):
         """The text of an interpreter one-liner or an eval, scanned whole (H3)."""
         m = self.m
@@ -1212,8 +1250,14 @@ class PathGuard:                            # pylint: disable=too-many-instance-
                        "the dialog, and only the runtime calls it, after the dialog tool. To answer a decision, "
                        "send the dialog ('state.py decision show'); a human settles one in their own terminal "
                        "('state.py decision settle --id D<n> --pick <n>'). See .ai/policies/safety.md.")
-        if m.ere_match(APPROVE_RE, cmd_joined) and not unattended and self.task_in_flight():
+        on, picked = self.dialog_consent(cmd)
+        if m.ere_match(APPROVE_RE, cmd_joined) and not unattended and self.task_in_flight() and not picked:
             raise Deny("Refusing 'state.py approve' from an agent session." + WHY_APPROVE)
+        if on and not picked and not unattended:
+            if m.ere_match(PROFILE_SET_RE, cmd_joined):
+                raise Deny("Refusing 'state.py profile set' from an agent session." + WHY_PICK)
+            if m.ere_match(HUMAN_BY_RE, cmd_joined):
+                raise Deny(T("Refusing a 'state.py … --by' verdict from an agent session.") + WHY_PICK)
         if m.ere_match(SETBY_RE, cmd_joined) and not unattended and self.task_in_flight():
             raise Deny(T("Refusing 'state.py set \u2026 --by' from an agent session: a verdict with --by is the "
                          "human's, given when the review budget is spent.") + WHY_SET_BY)

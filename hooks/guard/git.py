@@ -5,11 +5,13 @@ protected branch, staging a secret, bypassing hooks and running a production
 deploy, in any repository. Rules match the command with prose removed; the
 secret-staging rule reads the command itself, because a path is an argument.
 """
+import os
 import re
+from datetime import datetime, timezone
 
-from guard.common import (Deny, b_bytes, bytes_b, chomp_all, herestring_lines,
-                          is_file, is_jq_string, load_json_file, read_lines,
-                          runtime_hook_config, strip1, strip_prose, text_to_b)
+from guard.common import (Deny, b_bytes, bytes_b, chomp_all, exists, find_ai_root,
+                          herestring_lines, is_file, is_jq_string, load_json_file,
+                          read_lines, runtime_hook_config, strip1, strip_prose, text_to_b)
 
 LIST_KEYS = ("protected_branches", "deploy_patterns", "sensitive_staging_patterns",
              "allow_force_push_repos", "allow_protected_push_repos")
@@ -25,6 +27,10 @@ WHY_PUBLISH = ("\n\nA published version is public at once and cannot be taken ba
 WHY_DEPLOY = ("\n\nProduction deployments are a human action with a human on the hook for the\n"
               "rollback. The pipeline ends at the release report and human approval; see\n"
               "policies/release.md.")
+WHY_CONSENT = ("\n\nWith the dialog on, a commit or push runs only when the human picked it in the\n"
+               "dialog. Open a decision with 'state.py decision open --kind commit --command \"<command>\"',\n"
+               "send the dialog it prints, then run the picked command verbatim, once. See\n"
+               ".ai/policies/safety.md.")
 
 SPACE = "[[:space:]]"
 CHEAP_RE = ("(^|[|;&[:space:]])(git|gh|argocd|helm|kubectl|terraform|dep|deployer|cap|flyctl|fly|"
@@ -231,6 +237,46 @@ class GitGuard:
             if pattern and m.ere_match(pattern, cmd_rules):
                 raise Deny("Refusing to run a deployment or infrastructure-mutating command.\n\n"
                            "Matched pattern: %s%s" % (pattern, WHY_DEPLOY))
+
+        # 9. consent (R36.9): with the dialog on, after every rule above — a
+        # pick never lifts one of them.
+        if m.ere_match(COMMIT_PUSH_RE, cmd_rules):
+            self.consent(cmd)
+
+    def consent(self, cmd):
+        """A commit or push runs only as the next live pick of this session,
+        verbatim; its `use` is appended here unless the decision gate spent it
+        on this call already. This one rule fails closed: a ledger that cannot
+        be read or locked is no consent."""
+        root = find_ai_root(self.cwd, self.ctx.pwd)
+        if root is None or not exists(root + "/.ai/policies/dialog.json"):
+            return
+        from guard import dialog            # pylint: disable=import-outside-toplevel
+        root = os.fsdecode(b_bytes(root))
+        values = self.ctx.payload.values
+        raw = values[0] if len(values) == 1 and isinstance(values[0], dict) else None
+        hook_file = os.path.join(os.fsdecode(b_bytes(self.ctx.hook_dir)), "ai-guard.py")
+        try:
+            on = raw is not None and dialog.effective_switch(root, dialog.payload_runtime(raw, hook_file), raw)
+        except Exception:                   # pylint: disable=broad-exception-caught
+            on = False
+        if not on:
+            return
+        command = b_bytes(cmd).decode("utf-8", "replace").strip()
+        if not dialog.needs_consent(command):
+            return
+        spent = getattr(self.ctx, "consent", None)
+        if spent and spent.get("label") == command:
+            return
+        try:
+            with dialog.ledger_lock(root):
+                pick = dialog.next_live_pick(root, raw.get("session_id"), datetime.now(timezone.utc))
+                if pick and pick.get("label") == command and dialog.is_git_label(command):
+                    dialog.ledger_append(root, {"type": "use", "id": pick["id"], "by": "git"})
+                    return
+        except Exception:                   # pylint: disable=broad-exception-caught
+            pass
+        raise Deny(text_to_b("CONSENT_REQUIRED \u2014 no live pick of this session is this command.") + WHY_CONSENT)
 
     def _drop_status(self, path):
         """`[ "${#path}" -lt 3 ] || path="${path:3}"`, counted in the locale's characters."""

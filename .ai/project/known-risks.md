@@ -635,12 +635,40 @@ following; each is open unless marked.
 - **Found**: 2026-10-28, 7d1 step 3. KNOWN FACT: `bin/riskrails.js` `mergeHooks` runs with `replace=false` for Codex (`codexApply`, the `hooks.json` merge), so a group that already runs `ai-guard.py` is kept as it is: an install made before 7d1 keeps `"matcher": "Bash|apply_patch|Edit|Write"` instead of `".*"`. Claude's merge uses `replace=true` and widens it.
 - **Effect today**: none. In 7d1 the decision check only allows. The new `PostToolUse` and `Stop` entries for `dialog-gate.py` are new commands and are added.
 - **Matters for**: 7d2. The open-decision gate (R36.12) would not see Codex's other tools on an old install. Suggested fix in 7d2: replace a Codex group whose commands are exactly the new group's, as Claude's merge does. This means Codex asks the user to trust the changed entry again in `/hooks`.
-- **Also rests on it** (review L3 of T-2026-10-28-009): the recorder matches a dialog to a decision by question text, header and labels, not by option descriptions. So a dialog whose descriptions mislead ("CANCEL - nothing runs" on a command) still records a pick. 7d2's R36.5 PreToolUse check on the dialog tool is what stops that payload. It fails open by design (R36.12), and on an old Codex install it never runs for `request_user_input`.
-- **Status**: open
+- **Also rests on it** (review L3 of T-2026-10-28-009): the recorder matches a dialog to a decision by question text, header and labels, not by option descriptions. So a dialog whose descriptions mislead ("CANCEL - nothing runs" on a command) still records a pick. 7d2's R36.5 PreToolUse check on the dialog tool is what stops that payload. It fails open by design (R36.12), and on an old Codex install it never runs for `request_user_input`. Fixed in T-2026-10-28-010: `question_key` includes each option's description (`test_misleading_description_records_nothing`).
+- **Status**: fixed (T-2026-10-28-010, step s7): Codex's merge replaces a group whose commands are exactly the new group's, as Claude's does, so a reinstall widens the ai-guard matcher to `.*`; the installer then prints "changed: riskrails hook entries in hooks.json — review them once in /hooks, or Codex skips them" (review L2): until the user does, Codex runs none of the changed entry's guards.
 
 ## The hooks' dialog switch and state.py's disagree on Codex and across sessions (found 2026-10-28, review I1 of T-2026-10-28-009)
 
 - **Found**: KNOWN FACT. `hooks/guard/dialog.py` `effective_switch` turns on for Codex from `profile.json` `dialog.tool` plus the payload's `session_id`. `skills/ai-task/state.py` `dialog_on` also needs `CODEX_THREAD_ID` in the environment, which the spike did not verify. The Stop reminder (`hooks/dialog-gate.py`) ignores a decision's `runtime` and the session that opened it, so one Claude session's open decision Stop-blocks every other session in the same root, Codex included, at most twice per turn. The Codex Stop output shape (`decision: block`) is not in the spike.
 - **Effect today**: none. No project has the dialog on before 7f (D4).
 - **Suggested fix**: 7d2 or 7e. Bind the Stop reminder to the decision's runtime and session, verify `CODEX_THREAD_ID` and the Codex Stop shape in a spike, and make both switches read one rule.
+- **Status**: partly fixed (T-2026-10-28-010). `state.py open_decision` records the opener's `runtime` and `session`; the gate (`hooks/guard/decision.py`), the Stop reminder and `decision show` hold only that session to it (`dialog.bound`; a decision with neither field stays everyone's). Still open: `CODEX_THREAD_ID` and the Codex Stop shape are unverified, and the two switches are still two copies of one rule.
+
+## Consent forged by a constructed command (accepted 2026-10-28, T-2026-10-28-010, R36 7d2)
+
+- **Found**: KNOWN FACT (spec `docs/sdlc/specs/command-choice-dialog.md` §Security). With the dialog on, the ledger `.ai/state/consent.jsonl` and `decision.json` are protected control files, the recorder `hooks/dialog-gate.py` cannot be run from a shell (R36.11), labels cannot chain commands, a pick is one-shot, short-lived and bound to its session and order, and `state.py` checks argv against the label again (R36.10). A command built to get past the guards — `sh -c` writing the ledger, the hook's path behind a variable — is outside their threat model (`.ai/policies/safety.md`).
+- **Effect**: such a command could append a `pick` the human never made.
+- **Accepted**: the same class as "a terminal alone is not enough — an agent can open a pty" on the terminal route. `state.py consent audit` detects it afterwards: a pick whose `tool_use_id` is not in its transcript reports `mismatch` (`tests/test_dialog_consent.py::TestForgeryOnStatePy`).
+- **Status**: accepted
+
+## `SETBY_RE` guards the removed `set … --by` verb (found 2026-10-28, spec flag A8; recorded by T-2026-10-28-010)
+
+- **Found**: KNOWN FACT. `hooks/guard/paths.py` `SETBY_RE` denies `state.py set … --by` from an agent session; `state.py` has no `set` subcommand any more (its `--by` verdicts are `verify`, `review`, `start --mode`, `reject`). With the dialog off those live verbs have no path-guard rule, as before 7d2; with it on, `HUMAN_BY_RE` (R36.11) covers them.
+- **Effect today**: with the dialog off an agent session can run `verify --by` / `review --by` / a lowering `start --mode --by`; `state.py human_route()` refuses them without a terminal, so the guard rule would only be a second line.
+- **Suggested fix**: drop `SETBY_RE` and its `WHY_SET_BY`, or point them at the live verbs in both modes — a behaviour change (C1), its own task; the golden re-records.
+- **Status**: open
+
+## Task state is still read in several places with the `state.json`/`current.json` fallback (C1, recorded by T-2026-10-28-010)
+
+- **Found**: KNOWN FACT. `skills/ai-task/state.py` `STATE_NAMES`, `hooks/guard/paths.py` `_state_file` and `hooks/guard/scope.py` each read `.ai/state/state.json`, falling back to the legacy `current.json` (plan risk P7). 7d2 adds no copy: the dialog modules read `decision.json` and the ledger only.
+- **Effect today**: none; the copies agree. They have to be removed together when the legacy name goes.
+- **Status**: open
+
+## Dialog gate: what the STRONG review of T-2026-10-28-010 left outside the task (found 2026-10-28)
+
+- **I1** KNOWN FACT: while a decision is open the gate lets through any `python3 <path>/state.py decision show|settle|fallback` and `$STATE decision …` by the script's basename (`hooks/guard/dialog.py` `decision_command`). Using it to run something else needs a planted script or variable — a constructed command, outside the threat model.
+- **I2** KNOWN FACT: `/usr/bin/git commit`, `(git commit …)` and `"git" commit …` skip the consent rule, as they skip every git rule (`CHEAP_RE`/`COMMIT_PUSH_RE` prefix class).
+- **I3** RISK: binding a decision to its session needs `state.py`'s session env (`CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`) to equal the hook payload's `session_id`. Verified for a fresh Claude session only; after `/clear`, a resume, or on Codex a mismatch fails open (the gate does not see the decision; picks still bind to the payload's session).
+- **I4** KNOWN FACT: `prune_decisions` with the switch off drops a decision even when its `settle` line could not be appended (the `OSError` is suppressed); a live pick then outlives its decision until its window ends. Matters only if the switch is turned on again within the window.
 - **Status**: open

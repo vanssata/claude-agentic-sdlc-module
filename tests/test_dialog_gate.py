@@ -231,6 +231,8 @@ def relabel(payload, mapping, question, header, qid=None):
         q["question"], q["header"] = question, header
         for option in q["options"]:
             option["label"] = mapping.get(option["label"], option["label"])
+            # What state.py's dialog_payload sends: SAFE is the choice, the rest commands.
+            option["description"] = "nothing runs" if option["label"] == SAFE else "the session runs exactly this, once"
         if qid is not None:
             q["id"] = qid
         if "answers" in holder:
@@ -444,6 +446,17 @@ class TestRecorder(HookCase):
         lines = dialog.record(self.s.root, "claude", payload, NOW)
         self.assertEqual([(line["type"], line.get("why")) for line in lines], [("offer", None), ("decline", "label")])
 
+    def test_misleading_description_records_nothing(self):
+        """Review L3 of T-2026-10-28-009: the descriptions the human read are
+        part of the question; a dialog whose descriptions differ from the
+        prepared ones is not the decision's dialog."""
+        self.commit_decision()
+        payload = commit_payload()
+        for holder in (payload["tool_input"], payload["tool_response"]):
+            holder["questions"][0]["options"][1]["description"] = "CANCEL - nothing runs"
+        self.assertEqual(dialog.record(self.s.root, "claude", payload, NOW), [])
+        self.assertEqual(self.s.ledger(), [])
+
     def test_round_without_call_id_or_transcript_writes_nothing(self):
         """Review L2: a payload with no tool_use_id would merge with another
         round; none with no transcript could be audited."""
@@ -562,8 +575,7 @@ class TestGateHook(HookCase):
 
 
 class TestGateFastPath(HookCase):
-    """R36.12: with no decision.json the decision check costs one stat; 7d1
-    allows with one open too (the gate is 7d2's)."""
+    """R36.12: with no decision.json the decision check costs one stat."""
 
     def guard(self, payload):
         proc = subprocess.run(["python3", "-I", "-S", os.path.join(ROOT, "hooks", "ai-guard.py")],
@@ -574,11 +586,6 @@ class TestGateFastPath(HookCase):
     def grep(self):
         return {"hook_event_name": "PreToolUse", "tool_name": "Grep", "cwd": self.s.root,
                 "session_id": "s", "tool_use_id": "toolu_1", "tool_input": {"pattern": "x"}}
-
-    def test_open_decision_still_allows(self):
-        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
-        self.assertEqual(self.guard(self.grep()), (0, ""))
-        self.assertEqual(self.guard(dict(self.grep(), tool_name="Bash", tool_input={"command": "ls"})), (0, ""))
 
     def test_later_checks_still_run(self):
         """The new first check must not end the run: git still denies."""
@@ -613,6 +620,227 @@ class TestGateFastPath(HookCase):
                               json.dumps(self.grep()), self.s.root) for _ in range(5))[2]
         self.assertLessEqual(median - overhead, budget, "%.1f ms over the interpreter's start" %
                              ((median - overhead) * 1000))
+
+
+class TestDecisionGate(HookCase):
+    """R36.5, R36.7, R36.8, R36.12, R36.15 (hook half): hooks/ai-guard.py while
+    a decision is open, end to end."""
+
+    SESSION = "sess-main"
+    STATE = "python3 /p/skills/ai-task/state.py"
+
+    def setUp(self):
+        super().setUp()
+        self.n = 0
+
+    def open(self, *commands, **extra):
+        self.s.decide(dict(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE)] +
+                                    [("command", c) for c in commands], multi=len(commands) > 1), **extra))
+
+    def append(self, line):
+        with dialog.ledger_lock(self.s.root):
+            dialog.ledger_append(self.s.root, line)
+
+    def pick(self, label, option=2, order=1, session=None, age=5, tool_use_id="toolu_dialog"):
+        self.n += 1
+        at = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(seconds=age)
+        self.append({"type": "pick", "id": "C%d" % self.n, "decision": "D1", "option": option, "order": order,
+                     "label": label, "session": session or self.SESSION, "tool_use_id": tool_use_id,
+                     "transcript": "t.jsonl", "runtime": "claude", "at": dialog.stamp(at),
+                     "expires_at": dialog.stamp(at + timedelta(seconds=120))})
+
+    def guard(self, command=None, tool="Bash", tool_input=None, hooks=ROOT, **extra):
+        payload = dict({"hook_event_name": "PreToolUse", "tool_name": tool, "cwd": self.s.root,
+                        "session_id": self.SESSION, "prompt_id": "p1", "transcript_path": "t.jsonl",
+                        "tool_use_id": "toolu_run",
+                        "tool_input": tool_input if tool_input is not None else {"command": command}}, **extra)
+        proc = subprocess.run(["python3", "-I", "-S", os.path.join(hooks, "hooks", "ai-guard.py")],
+                              input=json.dumps(payload), capture_output=True, text=True, check=False,
+                              cwd=self.s.root)
+        out = proc.stdout
+        reason = json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"] if out else ""
+        return decision_of(out), reason
+
+    def sent(self):
+        return dialog.dialog_payload(dialog.read_decisions(self.s.root), "claude")
+
+    def types(self):
+        return [line["type"] for line in self.s.ledger()]
+
+    def test_gate_denies_all_but_three(self):
+        self.open(COMMIT)
+        expected = json.dumps(self.sent(), ensure_ascii=False)
+        for tool, tool_input in (("Grep", {"pattern": "x"}), ("Read", {"file_path": "a.py"}),
+                                 ("Bash", {"command": "ls"}), ("Write", {"file_path": "a.py", "content": ""}),
+                                 ("mcp__x__y", {})):
+            with self.subTest(tool=tool):
+                verdict, reason = self.guard(tool=tool, tool_input=tool_input)
+                self.assertEqual(verdict, "deny")
+                self.assertTrue(reason.startswith("DECISION_PENDING D1"), reason)
+                self.assertIn(expected, reason)
+        for command in (self.STATE + " decision show", self.STATE + " --root . decision show --json",
+                        self.STATE + " decision settle --id D1", '$STATE decision show',
+                        self.STATE + " decision fallback --id D1 --why 'the dialog is not available'"):
+            with self.subTest(command=command):
+                self.assertEqual(self.guard(command), ("allow", ""))
+        for command in (self.STATE + " decision show; ls", self.STATE + " decision open --kind commit"):
+            with self.subTest(command=command):
+                self.assertEqual(self.guard(command)[0], "deny")
+        self.assertEqual(self.guard(tool="AskUserQuestion", tool_input=self.sent()), ("allow", ""))
+        self.pick(COMMIT)
+        self.assertEqual(self.guard(COMMIT), ("allow", ""))
+
+    def test_dialog_input_must_match(self):
+        self.open(COMMIT)
+        changed = self.sent()
+        changed["questions"][0]["options"][1]["description"] = "nothing runs"
+        verdict, reason = self.guard(tool="AskUserQuestion", tool_input=changed)
+        self.assertEqual(verdict, "deny")
+        self.assertIn(json.dumps(self.sent(), ensure_ascii=False), reason)
+        self.assertEqual(self.s.ledger(), [], "a refused dialog call is no offer")
+        self.assertEqual(self.guard(tool="AskUserQuestion", tool_input=self.sent()), ("allow", ""))
+        self.assertEqual([(e["type"], e.get("decisions"), e.get("tool_use_id")) for e in self.s.ledger()],
+                         [("offer", ["D1"], "toolu_run")])
+
+    def test_gate_skips_subagent(self):
+        """Review focus 3: a subagent cannot answer a dialog; the gate does not
+        stop its tools."""
+        self.open(COMMIT)
+        self.assertEqual(self.guard(tool="Grep", tool_input={"pattern": "x"}, agent_id="a1"), ("allow", ""))
+
+    def test_gate_is_the_opening_sessions(self):
+        """A decision another session or runtime opened does not stop this one."""
+        for extra in ({"session": "another"}, {"runtime": "codex"}):
+            with self.subTest(extra=extra):
+                self.open(COMMIT, **extra)
+                self.assertEqual(self.guard(tool="Grep", tool_input={"pattern": "x"}), ("allow", ""))
+        self.open(COMMIT, session=self.SESSION, runtime="claude")
+        self.assertEqual(self.guard(tool="Grep", tool_input={"pattern": "x"})[0], "deny")
+
+    def test_once(self):
+        self.open(COMMIT)
+        self.pick(COMMIT)
+        self.assertEqual(self.guard(COMMIT), ("allow", ""))
+        self.assertEqual(self.types(), ["pick", "use"])
+        verdict, reason = self.guard(COMMIT)
+        self.assertEqual(verdict, "deny")
+        self.assertIn("CONSENT_REQUIRED", reason)
+
+    def test_window_and_chain(self):
+        self.open(COMMIT, PUSH)
+        self.pick(COMMIT, 2, 1)
+        self.pick(PUSH, 3, 2)
+        self.assertEqual(self.guard(COMMIT), ("allow", ""))
+        self.assertEqual(self.guard(PUSH), ("allow", ""))
+        self.assertEqual(self.types(), ["pick", "pick", "use", "use"])
+        self.open(COMMIT)
+        self.pick(COMMIT, age=200, tool_use_id="toolu_late")
+        self.assertEqual(self.guard(COMMIT)[0], "deny", "a pick past its window is no pick")
+
+    def test_other_session(self):
+        self.open(COMMIT)
+        self.pick(COMMIT, session="another")
+        verdict, reason = self.guard(COMMIT)
+        self.assertEqual(verdict, "deny")
+        self.assertTrue(reason.startswith("DECISION_PENDING D1"), reason)
+
+    def test_order(self):
+        self.open(COMMIT, PUSH)
+        self.pick(COMMIT, 2, 1)
+        self.pick(PUSH, 3, 2)
+        verdict, reason = self.guard(PUSH)
+        self.assertEqual(verdict, "deny")
+        self.assertTrue(reason.startswith("CONSENT_MISMATCH"), reason)
+        self.assertIn(COMMIT, reason)
+        self.assertIn(PUSH, reason)
+
+    def test_mismatch_voids_all_picks(self):
+        self.open(COMMIT, PUSH)
+        self.pick(COMMIT, 2, 1)
+        self.pick(PUSH, 3, 2)
+        verdict, reason = self.guard("git commit -m other -- b.py")
+        self.assertEqual(verdict, "deny")
+        self.assertTrue(reason.startswith("CONSENT_MISMATCH"), reason)
+        self.assertEqual(self.s.ledger()[-1]["type"], "void")
+        self.assertEqual(self.s.ledger()[-1]["ids"], ["C1", "C2"])
+        self.assertTrue(self.guard(COMMIT)[1].startswith("DECISION_PENDING D1"), "the decision reopens")
+
+    def test_offer_without_pick_falls_back(self):
+        """R36.15: an offer neither picked nor declined by the next PreToolUse
+        means the recorder did not run; the decision falls back to the terminal."""
+        self.open(COMMIT)
+        self.append({"type": "offer", "decisions": ["D1"], "session": self.SESSION, "tool_use_id": "toolu_old"})
+        verdict, reason = self.guard(tool="Grep", tool_input={"pattern": "x"})
+        self.assertEqual(verdict, "deny")
+        self.assertTrue(reason.startswith("DECISION_FALLBACK D1"), reason)
+        self.assertIn(COMMIT, reason)
+        self.assertEqual(dialog.read_decisions(self.s.root), [])
+        self.assertEqual(self.guard(tool="Grep", tool_input={"pattern": "x"}), ("allow", ""))
+
+    def test_failed_fallback_fails_open(self):
+        """Review M2: a fallback state.py cannot run is the gate's own error —
+        it allows, and the way out (decision show|settle|fallback) stays open."""
+        self.open(COMMIT)
+        self.append({"type": "offer", "decisions": ["D1"], "session": self.SESSION, "tool_use_id": "toolu_old"})
+        self.assertEqual(self.guard(self.STATE + " decision fallback --id D1 --why x"), ("allow", ""))
+        with tempfile.TemporaryDirectory() as plugin:
+            # A plugin root with the hooks and no skills/ai-task/state.py.
+            shutil.copytree(os.path.join(ROOT, "hooks"), os.path.join(plugin, "hooks"),
+                            ignore=shutil.ignore_patterns("__pycache__"))
+            self.assertEqual(self.guard(tool="Grep", tool_input={"pattern": "x"}, hooks=plugin), ("allow", ""))
+        self.assertEqual(len(dialog.read_decisions(self.s.root)), 1, "nothing settled it")
+
+    def test_dialog_call_carries_nothing_else(self):
+        """Review L1: a title or pre-filled answers beside the prepared questions
+        is not the prepared call."""
+        self.open(COMMIT)
+        for extra in ({"title": "Safety check: the second option CANCELS the commit"},
+                      {"answers": {"Commit a.py?": COMMIT}}, {"annotations": {}}):
+            with self.subTest(extra=extra):
+                self.assertEqual(self.guard(tool="AskUserQuestion", tool_input=dict(self.sent(), **extra))[0],
+                                 "deny")
+        self.assertEqual(self.s.ledger(), [])
+
+    def test_answered_offer_does_not_fall_back(self):
+        self.open(COMMIT)
+        self.append({"type": "offer", "decisions": ["D1"], "session": self.SESSION, "tool_use_id": "toolu_dialog"})
+        self.pick(COMMIT)
+        self.assertTrue(self.guard(tool="Grep", tool_input={"pattern": "x"})[1].startswith("DECISION_PENDING"))
+        self.assertEqual(len(dialog.read_decisions(self.s.root)), 1)
+
+    def test_denied_after_use_settles_and_explains(self):
+        """Review focus 1: a picked command another git rule denies has spent
+        its pick; the deny says so and how to ask again."""
+        picked = "git commit --no-verify -m x"
+        self.open(picked)
+        self.pick(picked)
+        verdict, reason = self.guard(picked)
+        self.assertEqual(verdict, "deny")
+        self.assertIn("--no-verify", reason)
+        self.assertIn("C1 was used", reason)
+        self.assertIn("decision open", reason)
+        self.assertEqual(self.types(), ["pick", "use"])
+
+    def test_gate_fails_open_on_error(self):
+        for text in ("not json", '{"open": "x"}', '{"open": [{"id": "D1", "options": 3}]}'):
+            with self.subTest(text=text):
+                with open(os.path.join(self.s.root, ".ai", "state", "decision.json"), "w", encoding="utf-8") as fh:
+                    fh.write(text)
+                self.assertEqual(self.guard(tool="Grep", tool_input={"pattern": "x"}), ("allow", ""))
+
+    def test_off_is_today(self):
+        self.open(COMMIT)
+        os.remove(os.path.join(self.s.root, ".ai", "policies", "dialog.json"))
+        self.assertEqual(self.guard(tool="Grep", tool_input={"pattern": "x"}), ("allow", ""))
+        self.assertEqual(self.guard(COMMIT), ("allow", ""))
+
+    def test_stop_is_the_opening_sessions(self):
+        """Q1 of T-2026-10-28-010: Stop blocks only the session that opened it."""
+        stop = spike("claude/stop")
+        self.open(COMMIT, session="another")
+        self.assertEqual(hook_output(run_gate(self.s, stop)[1]), {})
+        self.open(COMMIT, session=stop["session_id"])
+        self.assertEqual(hook_output(run_gate(self.s, stop)[1]).get("decision"), "block")
 
 
 class TestRegistrations(unittest.TestCase):

@@ -220,10 +220,12 @@ def offered(decisions, runtime):
 
 def question_key(question, runtime):
     """What identifies a question across the call: its text, header, labels
-    and, on Codex, its id. Descriptions and multiSelect are the model's to echo."""
+    with the descriptions the human read and, on Codex, its id. multiSelect is
+    the model's to echo."""
     if not isinstance(question, dict):
         return None
-    labels = [o.get("label") if isinstance(o, dict) else None for o in question.get("options") or []]
+    labels = [[o.get("label"), o.get("description")] if isinstance(o, dict) else None
+              for o in question.get("options") or []]
     key = [question.get("question"), question.get("header"), labels]
     return canonical(key + [question.get("id")] if runtime == "codex" else key)
 
@@ -348,11 +350,9 @@ def read_ledger(root, path=None, types=LEDGER_TYPES):
     return entries
 
 
-def live_picks(ledger, session, at):
-    """The picks a command may consume at `at` (R36.7): of each decision's
-    latest dialog call (one tool_use_id), unused, not voided, the decision not
-    settled, same session, inside the window — and only the first unused one
-    in its order. A later pick's window restarts when the one before is used."""
+def ledger_index(ledger):
+    """(used {id: at}, voided ids, settled decisions, {decision: (call, picks of
+    its latest dialog call)}) — what live_picks and pending read."""
     used, voided, settled, rounds = {}, set(), set(), {}
     for entry in ledger:
         kind = entry.get("type")
@@ -368,6 +368,15 @@ def live_picks(ledger, session, at):
                 chain.append(entry)
             else:
                 rounds[entry.get("decision")] = (entry.get("tool_use_id"), [entry])
+    return used, voided, settled, rounds
+
+
+def live_picks(ledger, session, at):
+    """The picks a command may consume at `at` (R36.7): of each decision's
+    latest dialog call (one tool_use_id), unused, not voided, the decision not
+    settled, same session, inside the window — and only the first unused one
+    in its order. A later pick's window restarts when the one before is used."""
+    used, voided, settled, rounds = ledger_index(ledger)
     live = []
     for decision, (_, chain) in rounds.items():
         if decision in settled:
@@ -386,6 +395,113 @@ def live_picks(ledger, session, at):
                 live.append(pick)
             break
     return live
+
+
+def bound(decisions, runtime, session):
+    """The decisions of this runtime and session: the one that opened a
+    decision answers it (state.py records both; a decision with neither is
+    everyone's, as before 7d2)."""
+    return [d for d in decisions if d.get("runtime") in (None, "", runtime) and d.get("session") in (None, "", session)]
+
+
+def pending(decisions, ledger):
+    """The decisions still waiting (state.py's prune_decisions): not settled,
+    and not every command pick of their latest dialog call used."""
+    used, _, settled, rounds = ledger_index(ledger)
+    out = []
+    for decision in decisions:
+        commands = {o.get("n") for o in decision.get("options") or [] if isinstance(o, dict) and o.get("kind") == "command"}
+        picks = [p for p in rounds.get(decision.get("id"), (None, []))[1] if p.get("option") in commands]
+        if decision.get("id") in settled or (picks and all(p.get("id") in used for p in picks)):
+            continue
+        out.append(decision)
+    return out
+
+
+def unused_picks(ledger, decision_ids, session):
+    """The ids of this session's picks of the latest dialog call not yet used
+    or voided, for every decision named: what a mismatch voids (R36.8)."""
+    used, voided, _, rounds = ledger_index(ledger)
+    return [p.get("id") for d in decision_ids for p in rounds.get(d, (None, []))[1]
+            if p.get("session") == session and p.get("id") not in used and p.get("id") not in voided]
+
+
+def unanswered_offer(ledger, session, tool_use_id, decision_ids):
+    """This session's last offer when it named an open decision and no pick or
+    decline of its call followed, seen from a later tool call: the recorder
+    did not run (R36.15)."""
+    offers = [e for e in ledger if e.get("type") == "offer" and e.get("session") == session]
+    if not offers or not offers[-1].get("tool_use_id") or offers[-1].get("tool_use_id") == tool_use_id:
+        return None
+    call = offers[-1]["tool_use_id"]
+    if any(e.get("type") in ("pick", "decline") and e.get("tool_use_id") == call for e in ledger):
+        return None
+    names = [d for d in offers[-1].get("decisions") or [] if d in decision_ids]
+    return dict(offers[-1], decisions=names) if names else None
+
+
+# git in command position — after a separator, NAME=value words and exec-like
+# prefixes, with its global options — running commit or push as its subcommand.
+# `git stash push`, `git grep commit`, `echo git commit` are not that.
+GIT_CONSENT_RE = re.compile(
+    r"(?:^|[|;&(\n]|\$\()\s*(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S*|env|command|exec|nohup|time|sudo)\s+)*"
+    r"git(?:\s+(?:-[Cc]\s+\S+|--?[A-Za-z][\w-]*(?:=\S+)?))*\s+(commit|push)(?=$|[\s|;&)])([^|;&\n)]*)")
+HUMAN_VERB_RE = re.compile(r"(^|\s)(approve|reject)(\s|$)|(^|\s)profile\s+set(\s|$)|"
+                           r"(^|\s)(verify|review|start)(\s.*)?\s--by(\s|=|$)")
+DECISION_VERBS = ("show", "settle", "fallback")
+
+
+def needs_consent(command):
+    """A git commit or push that would change something: what the consent rule
+    (R36.9) asks a pick for. Help and a push's dry run change nothing."""
+    for match in GIT_CONSENT_RE.finditer(command):
+        rest = match.group(2).split()
+        if "--help" in rest or "-h" in rest:
+            continue
+        if match.group(1) == "push" and ("--dry-run" in rest or "-n" in rest):
+            continue
+        return True
+    return False
+
+
+def guarded(command):
+    """git commit/push or a human-only state.py command: what a mismatch with
+    the next live pick voids the picks for (R36.8)."""
+    return bool(needs_consent(command)
+                or (("state.py" in command or "STATE" in command) and HUMAN_VERB_RE.search(command)))
+
+
+def decision_command(command):
+    """`[python3 [-I…]] <…/state.py | $STATE> [--root X] decision show|settle|
+    fallback …` as one simple command: the third thing the gate lets through."""
+    if any(c in command for c in LABEL_FORBIDDEN):
+        return False
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    i = 0
+    if tokens and INTERPRETER_RE.match(tokens[0]):
+        i = 1
+        while i < len(tokens) and INTERPRETER_FLAG_RE.match(tokens[i]):
+            i += 1
+    if i >= len(tokens) or not (os.path.basename(tokens[i]) == "state.py" or tokens[i] in ("$STATE", "${STATE}")):
+        return False
+    rest = tokens[i + 1:]
+    while rest and ((rest[0] in ("--root", "--runtime") and len(rest) >= 2) or rest[0].startswith("--root=")):
+        rest = rest[1:] if rest[0].startswith("--root=") else rest[2:]
+    return len(rest) >= 2 and rest[0] == "decision" and rest[1] in DECISION_VERBS
+
+
+def is_git_label(label):
+    return (label or "").split()[:1] == ["git"]
+
+
+def used_note(pick):
+    """What a deny after the gate spent a git pick adds (review focus 1)."""
+    return ("\n\nThe pick %s was used by this call and is spent; the command did not run. To ask the human "
+            "again, open a new decision: state.py decision open --kind commit --command \"<command>\"."
+            % pick.get("id"))
 
 
 def next_live_pick(root, session_id, now):

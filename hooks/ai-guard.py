@@ -7,7 +7,8 @@ open-decision gate, then the three shell guards this replaces, in the order a
 runtime ran them:
 
   decision  the gate while a dialog decision is open, on every tool
-            (guard/decision.py; 7d1 ships its fast path only)
+            (guard/decision.py): deny all but the dialog, the picked command
+            and `state.py decision show|settle|fallback`
   git    git and deployment safety, on Bash (guard/git.py)
   paths  sensitive paths, control files, the runtime lock, dependency
          instruction files (guard/paths.py)
@@ -20,6 +21,9 @@ flag all of them run and the first refusal wins.
 Fail-open: anything unexpected — a payload that is not JSON, a missing file,
 an exception — allows, with no output. A guard is defence-in-depth against an
 agent's mistakes, not a security boundary, and must never make a tool unusable.
+Two exceptions, both with the dialog on (R36): the git check's consent rule
+denies a commit or push when the consent ledger cannot be read (R36.9), and
+state.py's own approve refuses without a pick or a terminal (R36.10).
 Run as `python3 -I -S`: no site packages, no environment-driven imports.
 """
 import os
@@ -72,6 +76,11 @@ def main(argv):
                 # broken module — a half-done install — must not end the run
                 # before git, paths and scope.
                 if name != "decision" or isinstance(exc, common.Deny):
+                    # A git pick the gate spent on this call is gone even
+                    # though a later rule refuses the command (review focus 1).
+                    if isinstance(exc, common.Deny) and name != "decision" and ctx.consent:
+                        from guard import dialog    # pylint: disable=import-outside-toplevel
+                        exc.reason += common.text_to_b(dialog.used_note(ctx.consent))
                     raise
     except Exception as exc:                # pylint: disable=broad-exception-caught
         common = sys.modules.get("guard.common")
@@ -97,6 +106,7 @@ class Context:                              # pylint: disable=too-few-public-met
         self.pwd = pwd
         self.hook_dir = hook_dir
         self.clock = common.Clock()
+        self.consent = None                 # the git pick the decision gate spent on this call
 
 
 if __name__ == "__main__":

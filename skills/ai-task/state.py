@@ -2501,7 +2501,8 @@ def open_decision(root, state, kind, header, question, options, opened_by, multi
         return None, "CONSENT_LABEL_INVALID — two options carry the same label"
     decision = dict({
         "id": next_decision_id(data, read_ledger(root)), "kind": kind, "task": (state or {}).get("task_id"),
-        "runtime": own_runtime(), "tree": current_tree(root), "opened_at": now(), "opened_by": opened_by,
+        "runtime": own_runtime(), "session": (dialog_on(root) or {}).get("session"),
+        "tree": current_tree(root), "opened_at": now(), "opened_by": opened_by,
         "header": one_line(header, HEADER_MAX), "multi_select": bool(multi),
         "question": (question or "").strip()[:QUESTION_MAX],
         "options": [dict(option, n=n) for n, option in enumerate(options, 1)],
@@ -2575,7 +2576,8 @@ def settle_decision(root, decision_id, effect, pick=None):
 
 def prune_decisions(root):
     """On every run: a decision with a settle line, or whose latest round's
-    command picks are all used, leaves decision.json (R36.14)."""
+    command picks are all used, leaves decision.json (R36.14); with the
+    project's dialog switch off, every open one falls back (R36.15)."""
     try:
         with open(decision_path(root), encoding="utf-8") as fh:
             data = json.load(fh)
@@ -2586,10 +2588,16 @@ def prune_decisions(root):
     settled = {e.get("decision") for e in ledger if e["type"] == "settle"}
     used = {e.get("id") for e in ledger if e["type"] == "use"}
     rounds = latest_rounds(ledger)
+    off = dialog_policy(root) is None
     for decision in list(keep):
         commands = {o.get("n") for o in decision.get("options") or [] if o.get("kind") == "command"}
         picks = [e for e in rounds.get(decision.get("id"), []) if e.get("option") in commands]
         if decision.get("id") in settled:
+            keep.remove(decision)
+        elif off:
+            with contextlib.suppress(OSError), ledger_lock(root):
+                ledger_append(root, {"type": "settle", "decision": decision["id"], "pick": None,
+                                     "effect": "fallback"})
             keep.remove(decision)
         elif picks and all(p.get("id") in used for p in picks):
             parsed = label_argv(picks[-1].get("label") or "")
@@ -2738,7 +2746,11 @@ def cmd_decision(args, root):
         return
     data = read_decisions(root)
     if args.action == "show":
-        chosen = [d for d in data["open"] if not args.id or d["id"] == args.id]
+        # A session sees the decisions it opened (and those that name none):
+        # the hooks' gate and Stop reminder hold only the opener to them.
+        session = os.environ.get(SESSION_ENV.get(own_runtime(), ""))
+        chosen = [d for d in data["open"] if (not args.id or d["id"] == args.id) and (
+            not session or (d.get("session") in (None, "", session) and d.get("runtime") in (None, "", own_runtime())))]
         if not chosen:
             die("no open decision%s" % (" " + args.id if args.id else ""))
         if args.json:

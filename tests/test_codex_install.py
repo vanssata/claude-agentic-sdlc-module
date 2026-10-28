@@ -607,6 +607,26 @@ class CodexInstall(ScratchCase):
             and os.path.isfile(os.path.join(old, "backups", day, "hooks", "ai-%s-guard.sh" % g))
             for g in ("git", "path", "scope")), out)
 
+    def test_17b_an_older_ai_guard_matcher_is_widened(self):
+        """R36 7d2 (known-risks, Codex matcher): an install from before 7d1 kept
+        the ai-guard group's old matcher; a reinstall replaces a group whose
+        commands are exactly the new group's, as the Claude merge does."""
+        old = self.path("codex-old-matcher")
+        os.makedirs(os.path.join(old, "hooks"))
+        guard = {"matcher": "Bash|apply_patch|Edit|Write",
+                 "hooks": [{"type": "command", "command": 'python3 -I -S "$HOME/.codex/hooks/ai-guard.py"'}]}
+        mine = {"matcher": "Bash", "hooks": [{"type": "command", "command": "my-own-guard.sh"}]}
+        write(os.path.join(old, "hooks.json"), json.dumps({"hooks": {"PreToolUse": [guard, mine]}}))
+        _, out = self.codex(old)
+        groups = read_json(os.path.join(old, "hooks.json"))["hooks"]["PreToolUse"]
+        matchers = [g.get("matcher") for g in groups if any("ai-guard.py" in h["command"] for h in g["hooks"])]
+        self.check("the ai-guard group is there once, with the new matcher", matchers == [".*"], matchers)
+        self.check("the user's own group stays as it was", mine in groups, groups)
+        self.check("the install says the changed entry needs a review in /hooks (review L2)",
+                   "review them once in /hooks, or Codex skips them" in out, out)
+        _, again = self.codex(old)
+        self.check("an unchanged reinstall says nothing about /hooks", "or Codex skips them" not in again, again)
+
     def test_18_dialog_tool_only_on_verified_version(self):
         """R36.19: request_user_input only for a Codex on spike 7.0's list (>= 0.165.0); else null."""
         bare = os.pathsep.join(d for d in os.environ.get("PATH", "").split(os.pathsep)

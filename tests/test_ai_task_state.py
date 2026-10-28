@@ -1929,6 +1929,26 @@ class TestDialogDecisions(DialogBase):
     """R36.3, R36.4, R36.14, R36.15, R36.24: state.py alone prepares a decision;
     the ledger's lines settle it and are mirrored into the journal."""
 
+    def test_decision_is_the_opening_sessions(self):
+        """Q1 of T-2026-10-28-010: a decision records the session and runtime
+        that opened it; `decision show` is that session's."""
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        [opened] = self.p.decisions()
+        self.assertEqual((opened["session"], opened["runtime"]), (DIALOG_SESSION, "claude"))
+        self.assertIn("git commit -m x", self.p.ok("decision", "show").stdout)
+        other = self.p.run("decision", "show", env={"CLAUDE_CODE_SESSION_ID": "another"})
+        self.assertEqual(other.returncode, 1, other.stdout)
+        self.assertIn("no open decision", other.stderr)
+
+    def test_switch_off_falls_back(self):
+        """R36.15: when the project turns the dialog off, an open decision falls
+        back to the terminal route on the next run, journaled."""
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        os.remove(os.path.join(self.p.root, ".ai", "policies", "dialog.json"))
+        self.p.run("decision", "show")
+        self.assertEqual(self.p.decisions(), [])
+        self.assertEqual([(e["type"], e.get("effect")) for e in self.p.ledger()], [("settle", "fallback")])
+
     def test_decision_open_commit_validates_labels(self):
         for bad in ("git commit -m x; rm -rf ~", "git commit -m \"$(id)\"", "git commit -m a | tee x",
                     "git commit -m 'two\nlines'", "git commit -m a && git push origin main",

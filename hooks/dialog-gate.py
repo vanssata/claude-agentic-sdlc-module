@@ -43,7 +43,9 @@ def prompt_count(root):
 
 
 def on_stop(dialog, root, runtime, payload):
-    decisions = dialog.read_decisions(root)
+    # Only the session and runtime that opened a decision answer it (7d2).
+    decisions = dialog.pending(dialog.bound(dialog.read_decisions(root), runtime, payload.get("session_id")),
+                               dialog.read_ledger(root))
     policy = dialog.dialog_policy(root)
     if not decisions or policy is None:
         return None

@@ -1343,7 +1343,9 @@ function codexApply() {
   // codex-model-gate entries from before WP5 and runtime-gate ones from an earlier run go
   // first, so the merge adds exactly one gate per event. Codex runs only hooks the user has
   // reviewed (config.toml keeps a trusted_hash per entry): a changed entry is skipped until
-  // it is reviewed once in /hooks.
+  // it is reviewed once in /hooks. A group whose commands are exactly a new group's is
+  // replaced by it, as on Claude, so a reinstall carries a widened matcher (R36 7d2); an
+  // unchanged group is written back as it was and keeps its trust.
   const HOOKS = path.join(CODEX_DIR, 'hooks.json');
   if (isFile(HOOKS)) backupFile(HOOKS, CODEX_DIR); else fs.writeFileSync(HOOKS, '{}\n');
   let hadShim = false, hadGuardShims = false;
@@ -1355,7 +1357,11 @@ function codexApply() {
     dropHooks(doc, SHIM_RE);
     const keys = pluginHookKeys(plugin, 'codex-hooks.json');
     if (dropPluginDuplicates(doc, keys)) out('removed: the hook entries the riskrails plugin now runs');
-    writeJSONFile(HOOKS, mergeHooks(doc, withoutPluginHooks(readJSON(path.join(SRC, 'codex/hooks.json')).hooks, keys), false));
+    const fresh = withoutPluginHooks(readJSON(path.join(SRC, 'codex/hooks.json')).hooks, keys);
+    const changed = Object.entries(fresh).some(([ev, entries]) => ((isObj(doc.hooks) && doc.hooks[ev]) || []).some(
+      (old) => entries.some((e) => sameList(commands(e), commands(old)) && !sameList(e, old))));
+    writeJSONFile(HOOKS, mergeHooks(doc, fresh, true));
+    if (changed) out('changed: riskrails hook entries in hooks.json — review them once in /hooks, or Codex skips them');
   }
   out('merged: hooks.json');
   if (hadShim) out('replaced: codex-model-gate.py hooks with runtime-gate.py — review the changed gate entries once in /hooks, or Codex skips them');
