@@ -38,6 +38,8 @@ $STATE handoff --print
   Trust it over a compaction summary; it is rendered from the state. If
   `$ARGUMENTS` asks for something else, say what is in flight and ask whether to
   finish it, or drop it with `$STATE close --abandon`. Never discard it silently.
+  A handoff line `Batch: on` means the task runs the loop of `/rr-build-all` —
+  parallel implementers and fixers, its own budgets — continue there.
 - **`Handed to <the other runtime>`:** every state change exits 7 until that
   runtime resumes it. Say where to resume; take it back with
   `$STATE handoff --to <this runtime>` only when asked. `Handed to <this
@@ -127,7 +129,8 @@ $STATE verify --scope all --after-fix "<n> regressions: <one line each>"
 - An existing failure is recorded with `$STATE memory risk add`, not fixed.
 - An environment failure gets one more run, not a code change.
 - Never edit a test to make it pass.
-- Two whole-suite runs are the budget (`tests.max_suite_runs`). The third
+- Two whole-suite runs are the budget (`tests.max_suite_runs`; in a batch task
+  `batch.max_suite_runs`). The third
   exits 6 `SUITE_BUDGET`: running it again is the human's decision, from their
   own terminal, with the command it prints — or the pick: with the dialog on it
   also prints `DIALOG_PENDING`, and you run the command the human picks,

@@ -678,11 +678,14 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         rc, out = self.upd(p, "--check")
         self.assertEqual(rc, 1, "--check exits 1 while an update is pending")
         # The exact shape /ai-status reads: one line, the reasons, the command (R21 keeps it byte-identical).
-        # Two manual merges: the state README edit, and weight.json, which carries the T0 example
-        # migration 0007 converts from risk-tiers.json and has no older shipped version to merge against.
+        # One manual merge: the state README edit. weight.json, which carries the T0 example migration 0007
+        # converts from risk-tiers.json, merges: three_way drops the history versions equal to the current
+        # template, and since the batch section was added the history holds a shipped version that differs
+        # (the one before it), which becomes the base; against it the example is the project's only edit.
+        # It conflicted while no such base existed.
         self.assertTrue(len(out.splitlines()) == 1 and has(
             r"^project is behind the installed plugin: schema 0 -> [0-9]+, [0-9]+ file\(s\) to update, "
-            r"2 need a manual merge — run /project-update$", out), "the plain --check line keeps its exact shape\n" + out)
+            r"1 need a manual merge — run /project-update$", out), "the plain --check line keeps its exact shape\n" + out)
 
         # apply
         _, out = self.upd(p, "--apply", merge=True)
@@ -719,11 +722,11 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         # idempotent
         snap = tree_sum(p)
         _, out = self.upd(p, "--apply", merge=True)
-        self.assertTrue(has("^0 automatic, 2 conflict", out), "a second run has nothing automatic left\n" + out)
+        self.assertTrue(has("^0 automatic, 1 conflict", out), "a second run has nothing automatic left\n" + out)
         self.assertEqual(tree_sum(p), snap, "a second run changes nothing")
         rc, out = self.upd(p, "--check")
         self.assertEqual(rc, 0, "--check exits 0 once only a hand-merge choice remains")
-        self.assertEqual(out.rstrip("\n"), "project matches the installed plugin (2 file(s) differ by hand-merge choice)",
+        self.assertEqual(out.rstrip("\n"), "project matches the installed plugin (1 file(s) differ by hand-merge choice)",
                          "the plain --check line is byte-identical")
 
     def test_stale_mirror_stays_stale(self):

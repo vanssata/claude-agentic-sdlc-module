@@ -91,7 +91,11 @@ A task gets **two passes**: one full review and one scoped re-review, at every
 tier. That holds whoever asks — a re-review the human requests is one of the
 two, a cross-vendor review is one, and the parallel dimensions of §4 together
 are one. When both are spent, a third pass is not the next move: the human
-decides the verdict. The reviewer's verdict says which closing rule applies:
+decides the verdict. One exception, chosen per project or per task: a **batch**
+task (`/rr-build-all`, `weight.json` `batch.*`) runs a whole plan as one task,
+and its passes are full ones — `batch.review_rounds_max` of them (three as
+shipped), each after a fix batch — before the same stop: the pass past that
+number is the human's. The reviewer's verdict says which closing rule applies:
 `blockers_open` (a BLOCKER) takes the remediation and the scoped re-review;
 `pass_with_findings` (a HIGH, no BLOCKER) takes the remediation and a green
 verification run, no re-review; `pass` closes. `state.py` has no value of its
@@ -204,6 +208,7 @@ work.
 - No reviewer is moved to a cheaper model to go faster. Narrow the surface, never
   the mind.
 - A blocker still returns to implementation, however late it arrives. Past the
-  two passes of §3, a human — not a third pass — decides that it closed.
+  two passes of §3 — `batch.review_rounds_max` passes in a batch task — a human,
+  not another pass, decides that it closed.
 - The probe is the manager's own work and never replaces the adversarial pass. It
   exists so the pass starts further in, not so it happens less.

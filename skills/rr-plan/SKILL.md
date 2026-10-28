@@ -38,7 +38,11 @@ When `$ARGUMENTS` is a spec (default: the newest `docs/sdlc/specs/*.md`):
 4. Copy the template to `docs/sdlc/plans/<slug>.md`, fill **Files that change /
    Order of work / Risks / Proof / Rollback**; Proof maps every requirement R<n>
    to a test or command. One round of corrections; suggest the commit
-   `plan: <title>`. Each row of the plan is later one task, planned below.
+   `plan: <title>`. Each row of the plan is later one task, planned below —
+   unless the whole plan runs as one task through `/rr-build-all` (the project's
+   `batch.default` in `weight.json`, or the developer's call): then every row
+   becomes one step of that task, so give each row its files and its *Consumes*
+   line (the rows it depends on) — that is what `/rr-build-all` reads.
 
 ## A task → weight, mode, plan, start
 
@@ -95,6 +99,9 @@ $STATE start --goal "<one sentence>" --workflow <kind> --files "<a>,<b>" \
 
 `--plan-file` is a JSON list `[{"id": "s1", "files": [...], "tests": [...]}]`
 for a guarded or full plan with steps; a light task is one scope and needs none.
+A step may add `"after": ["s0"]`, the steps it waits for — `/rr-build-all` runs
+the rest in parallel — and `--batch --by "<name>"` (or `--no-batch`) sets that
+loop for the task; the default is `batch.default` in `weight.json`.
 `--files` lists every file of every step — the guard refuses an edit outside
 them. `--tests` names the task's own tests; a bugfix names its failing test. At
 guarded and full, run `start` only after the human accepted the plan.

@@ -702,3 +702,10 @@ following; each is open unless marked.
 - **Suggested fix**: add .ai/state/*.jsonl (or consent.jsonl) to gitignore.snippet, with its project-update migration
 - **Status**: open
 - **Label**: KNOWN FACT
+
+## pylint: three warnings on the tree before T-2026-10-28-012 (found 2026-10-28 by T-2026-10-28-012)
+
+- **Found**: KNOWN FACT. The installed pylint (4.0.8) on the committed tree (`git show HEAD:<file> | pylint --from-stdin <file>`) reports `skills/ai-task/state.py:737 W0621 redefined-outer-name` (`installed`, outer scope at line 474), `tests/test_ai_task_state.py:2152 R0904 too-many-public-methods` (`TestDialogRoute`, 24/20) and `tests/test_project_update.py:473 R1732 consider-using-with`. T-2026-10-28-012 touches none of those lines: `git diff HEAD -- skills/ai-task/state.py | grep -c installed` is 0.
+- **Effect today**: `.github/workflows/pylint.yml` fails on a single warning; if the CI pylint version reports them, the branch is red regardless of this task. Not observed in CI from this worktree.
+- **Suggested fix**: an inline `# pylint: disable=<name>` with its reason (the house convention) or the rename, in its own light task.
+- **Status**: open

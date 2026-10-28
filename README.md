@@ -288,6 +288,16 @@ an agent what the record holds about the files it is about to touch, within a
 token budget, in either mode. Task ids are `T-YYYY-MM-DD-HHMM-<slug>`; legacy ids
 stay valid. See `docs/local-memory.md`.
 
+**A whole plan as one task (sdlc-lite).** `/rr-build-all docs/sdlc/plans/<slug>.md` runs
+every row of a programme plan as the steps of one task: the ready rows go to parallel
+implementer subagents on the BALANCED tier (a step's `after` serializes the dependent ones),
+the suite runs once to the end, every failure is fixed by parallel fixers as one batch, one
+review at the mode's tier, its findings fixed as one batch, then tests and the review again
+until it passes. After three failed review passes (`batch.review_rounds_max` in
+`.ai/policies/weight.json`) the next verdict is the human's; `batch.default` makes the loop
+the project's default, and `state.py batch off --by … --why …` returns a running task to the
+standard loop. The mode, the scope guard, the two facts and the approval gate are unchanged.
+
 ### Updating a project after the plugin changes
 
 `npx riskrails` updates `~/.claude/` (or `~/.codex/`), and with it the shared

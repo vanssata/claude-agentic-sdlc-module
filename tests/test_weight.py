@@ -341,6 +341,25 @@ class TestTable(unittest.TestCase):
         self.assertEqual(policy["tests"]["max_suite_runs"], 2)
         self.assertEqual((policy["review_rounds_max"], policy["remediation_rounds"]), (2, 2))
 
+    def test_shipped_batch_section(self):
+        """The batch loop (/rr-build-all) reads its budgets here: off by default,
+        three review passes and eight suite runs before the human, three
+        BALANCED implementers or fixers at once. The mirror carries the section."""
+        with open(os.path.join(SHIPPED_DIR, "weight.json"), encoding="utf-8") as fh:
+            policy = json.load(fh)
+        self.assertEqual(policy["batch"], {"default": False, "review_rounds_max": 3, "max_suite_runs": 8,
+                                           "parallel": 3, "tier": "BALANCED"})
+        text = weight.mirror(os.path.join(SHIPPED_DIR, "weight.json"))
+        self.assertIn('· batch {"default": false, "review_rounds_max": 3', text)
+        with tempfile.TemporaryDirectory() as tmp:
+            # A table without the section mirrors as before: no batch on the Budgets line.
+            bare = dict(policy)
+            del bare["batch"]
+            path = os.path.join(tmp, "weight.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(bare, fh)
+            self.assertNotIn("batch", weight.mirror(path))
+
     def test_mirror_fresh(self):
         src, md = os.path.join(SHIPPED_DIR, "weight.json"), os.path.join(SHIPPED_DIR, "weight.md")
         with open(src, "rb") as fh:

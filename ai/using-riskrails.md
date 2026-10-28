@@ -13,6 +13,7 @@ the steps; `policies/` holds the rules; this says which to open.
 | turn an idea into intent, requirements and design | `/rr-spec <idea>` |
 | plan a spec into tasks, or one task into a mode and a start | `/rr-plan <spec or task>` |
 | do the work, or resume it | `/rr-build` (no task in flight: it runs `/rr-plan` first) |
+| run a whole plan as one task — parallel implementers and fixers, tests and the review again until it passes | `/rr-build-all <plan>` |
 | review the change | `/rr-review` — guarded and full, or when `close` asks |
 | close the task, get the human's approval | `/rr-ship` |
 | see where the task stands, or what it cost | `/rr-status`, `/rr-status --cost` |
@@ -37,6 +38,20 @@ domain at 2 is full whatever W is.
 
 The mode only rises during a task (`verify` and `close` re-score reversibility
 and domain from the diff); lowering it is the human's.
+
+## Batch — one task for a whole plan
+
+`/rr-build-all docs/sdlc/plans/<slug>.md` runs every row of a programme plan as
+one task: the ready rows go to parallel implementers on BALANCED (`after`
+serializes the dependent ones), the suite runs once, every failure is fixed by
+parallel fixers as one batch, one review at the mode's tier, its findings fixed
+as one batch, then tests and the review again until it passes. Its budgets are
+`weight.json` `batch.*`: three failed review passes (`batch.review_rounds_max`)
+and eight suite runs stop at the human — `REVIEW_BUDGET` and `SUITE_BUDGET`, as
+always. The mode, the guard, the two facts and the gate are unchanged.
+`batch.default` makes it the project's default; `state.py batch off --by …
+--why …` returns a task to the standard loop (anyone); `batch on` mid-task is
+the human's, from their own terminal.
 
 ## The two facts
 

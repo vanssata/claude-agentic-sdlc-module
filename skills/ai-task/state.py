@@ -18,6 +18,8 @@ history[] keeps its exact shape and its original event names beside it.
 Usage:
   state.py start  --goal G --workflow W --files a,b [--tests t] [--declare axis=n:"why"]...
                   [--mode M --by WHO [--why TEXT]] [--steps "id:a,b:t;..." | --plan-file F.json]
+                  [--batch --by WHO | --no-batch]  the batch loop of /rr-build-all (weight.json batch.*);
+                                         a plan-file step may name "after": ["s1", ...]
   state.py start  --amend --files "+c,+d" --why TEXT     widen the task in place (R25)
   state.py verify --scope step|suite|e2e|all [--files a,b] [--expect fail]
                   [--e2e not-applicable WHY] [--after-fix WHAT] [--by WHO]
@@ -25,6 +27,9 @@ Usage:
                   --report -|FILE [--focus security] [--by WHO]  |  review --closes "H1,M2"
   state.py close  [--abandon]            two facts, the mode table, the gate, the archive
   state.py step-done <id>                a multi-step guarded or full task
+  state.py steps  [--ready] [--json]     the steps, their status and after; --ready prints the next wave
+  state.py batch  on|off --by WHO [--why TEXT]   off: the standard loop and budgets from here (anyone);
+                                         on: lowers the rigor — the human's, in their own terminal
   state.py status [--json]               what /rr-status prints
   state.py ask    "<question>" --option "A: text" [--option ...] [--recommend A] [--topic S]
   state.py ask    --batch FILE.json [--topic SLUG]
@@ -100,6 +105,8 @@ EVENT_TYPES = [
     "decision_settled", "decision_fallback", "plan_drift",
     # compact-project-memory §D9: a risk recorded with `memory risk`, compacted at close.
     "risk_recorded",
+    # the batch loop (/rr-build-all): the switch, at start or during the task.
+    "batch_set",
 ]
 # The types `event` will not write: each is the record of an authorization or a
 # lifecycle decision, and is emitted by the transition that made it. `event` is
@@ -108,7 +115,7 @@ FORGEABLE_EVENTS = {"gate_requested", "gate_approved", "gate_rejected",
                     "task_started", "task_closed", "weight_set", "weight_raised", "mode_set",
                     "verify_run", "review_verdict", "decision_opened", "consent_recorded",
                     "consent_used", "consent_voided", "decision_declined", "decision_settled",
-                    "decision_fallback", "plan_drift", "risk_recorded"}
+                    "decision_fallback", "plan_drift", "risk_recorded", "batch_set"}
 
 # The questions are written by state.py and never by a model (R1). One regex
 # per line (I2), so a hand edit that keeps the shape round-trips exactly. A
@@ -157,14 +164,14 @@ ERROR_MAX = 1000
 RUNTIME = "unknown"
 # The commands that change the task. Only these take ownership of it: reading a
 # task from the other runtime, or writing a note about it, is not a handoff.
-MUTATING_COMMANDS = {"step-done", "ask", "answer", "close", "start", "verify", "review"}
+MUTATING_COMMANDS = {"step-done", "ask", "answer", "close", "start", "verify", "review", "batch"}
 # What prunes decision.json and mirrors consent.jsonl first (R36.14, R36.24):
 # every command that changes something; status and consent stay read-only.
 DIALOG_SYNC_COMMANDS = MUTATING_COMMANDS | {"approve", "reject", "decision"}
 # The commands that work on the task in flight; a task the old surface started
 # refuses them all but close --abandon (route_surface).
 TASK_COMMANDS = {"step-done", "ask", "answer", "questions", "approve", "reject", "close", "verify",
-                 "review"}
+                 "review", "steps", "batch"}
 MUTATING = False
 
 
@@ -1742,6 +1749,15 @@ def handoff_lines(root, state, reason):
     pending = [q["id"] for q in parse_questions(path)[1] if is_pending(q)]
     out.append("Pending questions: %s" % (
         "%s — %s" % (", ".join(pending), os.path.relpath(path, root)) if pending else "none"))
+    if batch_on(state):
+        try:
+            policy = weight.load_policy(root)[0] if weight else {}
+        except (OSError, ValueError):
+            policy = {}                       # best effort: the handoff never fails a command
+        out.append("Batch: on · ready %s · review %d/%d · suite %d/%d" % (
+            ", ".join(one_line(s["id"], 40) for s in ready_steps(state)) or "none",
+            (state.get("review") or {}).get("passes", 0), budget(policy, state, "review_rounds_max")[0],
+            (state.get("verify") or {}).get("suite_runs", 0), budget(policy, state, "max_suite_runs")[0]))
 
     notes = recent_notes(root, state)
     for kind, heading in (("decision", "Decisions"), ("rejected", "Rejected"),
@@ -2971,6 +2987,11 @@ def apply_defaults_v7(state):
                          ("findings", []), ("diff", {}), ("gate", None), ("mode_override", None)):
         if not isinstance(state.get(key), type(default)) and not (default is None and key in state):
             state[key] = default
+    for step in state["steps"]:
+        if not isinstance(step.get("after"), list):
+            step["after"] = []                # a step from before the batch loop depends on nothing
+    if not isinstance(state.get("batch"), dict):
+        state["batch"] = {"on": False, "by": None, "why": None, "since": None}
     if not isinstance(state.get("verify"), dict):
         state["verify"] = {}
     for key, default in (("status", "not_run"), ("e2e", "not_run"), ("suite_runs", 0), ("runs", [])):
@@ -3028,6 +3049,60 @@ def mode_setting(policy, mode, key, default=None):
         if key in (modes.get(name) or {}):
             return modes[name][key]
     return default
+
+
+# The batch loop of /rr-build-all: one task for a whole plan, its own budgets.
+BATCH_DEFAULTS = {"default": False, "review_rounds_max": 3, "max_suite_runs": 8, "parallel": 3, "tier": "BALANCED"}
+
+
+BATCH_TIERS = ["FAST", "BALANCED", "STRONG", "EXPERT"]
+
+
+def batch_policy(policy, strict=False):
+    """weight.json's batch section with every key filled in and checked. A table
+    from before the section runs with the shipped numbers (R13). A bad value is
+    refused where the task starts or the loop is switched (strict); a reader —
+    status, the handoff — falls back to the shipped value and never crashes."""
+    section = policy.get("batch") if isinstance(policy.get("batch"), dict) else {}
+    out, problems = dict(BATCH_DEFAULTS), []
+    for key, value in section.items():
+        if key not in BATCH_DEFAULTS:
+            continue
+        if key == "default":
+            if isinstance(value, bool):
+                out[key] = value
+            else:
+                problems.append("batch.default must be true or false, not %r" % (value,))
+        elif key == "tier":
+            if isinstance(value, str) and value.upper() in BATCH_TIERS:
+                out[key] = value.upper()
+            else:
+                problems.append("batch.tier must be one of %s, not %r" % ("/".join(BATCH_TIERS), value))
+        elif isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            problems.append("batch.%s must be a whole number of at least 1, not %r" % (key, value))
+        else:
+            out[key] = value
+    if out["parallel"] >= 3 and out["tier"] not in ("FAST", "BALANCED"):
+        problems.append("batch.tier %s with batch.parallel %d: three or more parallel agents run at FAST or "
+                        "BALANCED (model-routing.md, Fan-out)" % (out["tier"], out["parallel"]))
+    if problems and strict:
+        die("weight.json: " + "; ".join(problems))
+    return out
+
+
+def batch_on(state):
+    return bool((state.get("batch") or {}).get("on"))
+
+
+def budget(policy, state, key):
+    """(limit, the table key the refusal names) for review_rounds_max or
+    max_suite_runs: the batch section's while the batch loop is on, else the
+    standard one — a task switched off mid-way keeps what it already spent."""
+    if batch_on(state):
+        return int(batch_policy(policy)[key]), "batch.%s" % key
+    if key == "max_suite_runs":
+        return int((policy.get("tests") or {}).get(key, 2)), "tests.max_suite_runs"
+    return int(policy.get(key, 2)), key
 
 
 def read_text(root, rel):
@@ -3160,7 +3235,8 @@ def task_md_path(root, state):
 
 
 def parse_steps(text, plan_file):
-    """--steps "id:a,b:t;id2:c" or --plan-file F.json ([{id, files, tests}])."""
+    """--steps "id:a,b:t;id2:c" or --plan-file F.json ([{id, files, tests, after}]);
+    `after` (plan-file only) names the steps this one waits for (R2)."""
     raw = []
     if plan_file:
         try:
@@ -3169,22 +3245,89 @@ def parse_steps(text, plan_file):
         except (OSError, ValueError) as exc:
             die("--plan-file %s: %s" % (plan_file, exc))
         if not isinstance(raw, list) or not all(isinstance(s, dict) for s in raw):
-            die("--plan-file holds a JSON list of {\"id\", \"files\", \"tests\"}")
-        raw = [(str(s.get("id") or ""), ",".join(s.get("files") or []), ",".join(s.get("tests") or []))
-               for s in raw]
+            die("--plan-file holds a JSON list of {\"id\", \"files\", \"tests\", \"after\"}")
+        for s in raw:
+            after = s.get("after") or []
+            if not isinstance(after, list) or not all(isinstance(a, str) and a.strip() for a in after):
+                die("step %s: \"after\" is a JSON list of step ids" % (s.get("id") or "?"))
+        raw = [(str(s.get("id") or ""), ",".join(s.get("files") or []), ",".join(s.get("tests") or []),
+                [one_line(a, 40) for a in s.get("after") or []]) for s in raw]
     for chunk in [c for c in (text or "").split(";") if c.strip()]:
         parts = chunk.split(":")
-        raw.append((parts[0], parts[1] if len(parts) > 1 else "", parts[2] if len(parts) > 2 else ""))
+        raw.append((parts[0], parts[1] if len(parts) > 1 else "", parts[2] if len(parts) > 2 else "", []))
     steps = []
-    for step_id, files, tests in raw:
+    for step_id, files, tests, after in raw:
         step_id = one_line(step_id, 40)
         if not step_id or not _split_files(files):
             die("a step is id:files[:tests], with at least one file: %r" % ":".join((step_id, files, tests)))
         if step_id in [s["id"] for s in steps]:
             die("step id %s appears twice" % step_id)
         steps.append({"id": step_id, "files": _split_files(files), "tests": _split_files(tests),
-                      "status": "pending", "tree_before": None, "tree_after": None})
+                      "after": list(dict.fromkeys(after)), "status": "pending", "tree_before": None,
+                      "tree_after": None})
     return steps
+
+
+def _overlap(a, b):
+    """One path or pattern covers the other: equal once normalised, or one
+    matches the other as a glob — so `src/*.py` and `./src/a.py` count as shared."""
+    a, b = os.path.normpath(a), os.path.normpath(b)
+    return a == b or bool(weight and (weight.match(a, [b]) or weight.match(b, [a])))
+
+
+def order_shared_files(steps):
+    """Two steps that name one file or pattern — among their files or their
+    tests — never run side by side: the later one is put after the earlier (R2).
+    Returns the implied edges as (later, earlier, what they share)."""
+    implied = []
+    for n, later in enumerate(steps):
+        for earlier in steps[:n]:
+            shared = [f for f in later["files"] + later["tests"]
+                      if any(_overlap(f, g) for g in earlier["files"] + earlier["tests"])]
+            if shared and earlier["id"] not in later["after"]:
+                later["after"].append(earlier["id"])
+                implied.append((later["id"], earlier["id"], ", ".join(dict.fromkeys(shared))))
+    return implied
+
+
+def check_steps(steps, implied=()):
+    """Every `after` names another, existing step, and the steps form no cycle (R2).
+    A cycle closed by an implied edge (order_shared_files) names that edge."""
+    ids = [s["id"] for s in steps]
+    for step in steps:
+        for dep in step["after"]:
+            if dep == step["id"]:
+                die("step %s lists itself in after" % step["id"])
+            if dep not in ids:
+                die("step %s is after %s, which is not a step (have: %s)" % (step["id"], dep, ", ".join(ids)))
+    by_id = {s["id"]: s for s in steps}
+    seen = {}                                 # id -> "visiting" | "done"
+
+    def visit(step_id, trail):
+        if seen.get(step_id) == "done":
+            return
+        if seen.get(step_id) == "visiting":
+            loop = trail + [step_id]
+            hints = ["%s after %s is implied: they share %s" % edge for edge in implied
+                     if edge[0] in loop and edge[1] in loop]
+            die("the steps' after form a cycle: %s%s" % (
+                " -> ".join(loop), " (%s — list the dependent row after the one it needs)" % "; ".join(hints)
+                if hints else ""))
+        seen[step_id] = "visiting"
+        for dep in by_id[step_id]["after"]:
+            visit(dep, trail + [step_id])
+        seen[step_id] = "done"
+
+    for step in steps:
+        visit(step["id"], [])
+
+
+def ready_steps(state):
+    """The steps not yet done whose `after` are all done, in plan order: the next
+    wave of /rr-build-all, and the step step-done starts next."""
+    steps = state.get("steps") or []
+    done = {s["id"] for s in steps if s.get("status") == "done"}
+    return [s for s in steps if s.get("status") != "done" and all(d in done for d in s.get("after") or [])]
 
 
 def parse_declares(items):
@@ -3199,6 +3342,10 @@ def parse_declares(items):
 
 
 def next_action_for(state):
+    if batch_on(state):
+        return ("batch loop: 'steps --ready' → implementers, step-done each; 'verify --scope all', red fixed "
+                "as one batch; review, findings fixed as one batch; again until it passes; the pass past the "
+                "batch budget is the human's")
     return {
         "light": "edit, then 'state.py verify --scope all', then 'state.py close'",
         "guarded": "edit, 'state.py verify --scope all', one review ('state.py review'), then 'state.py close'",
@@ -3232,6 +3379,20 @@ def cmd_start(args, root):
         die("start needs a git repository: the two facts close decides by are measured on its tree")
     steps = parse_steps(args.steps, args.plan_file)
     policy = weight_policy(root)
+    table = batch_policy(policy, strict=True)      # a malformed section is refused here, not at status
+    if args.batch and args.no_batch:
+        die("--batch and --no-batch exclude each other")
+    if args.batch and not args.by:
+        die("--batch needs --by \"<who asked for the batch loop>\": it is journaled with its author")
+    batch = {"on": False, "by": None, "why": None, "since": None}
+    if args.batch:
+        batch = {"on": True, "by": args.by, "why": args.why or None, "since": now()}
+    elif not args.no_batch and table["default"]:
+        batch = {"on": True, "by": "weight.json batch.default", "why": None, "since": now()}
+    # Shared files order steps only in a batch task, where steps run side by
+    # side; a standard task's steps run one after another, as before.
+    implied = order_shared_files(steps) if batch["on"] else []
+    check_steps(steps, implied)
     concrete = [f for f in files if not any(c in f for c in "*?[")]
     try:
         result = weight.compute(root, concrete, parse_declares(args.declare), args.goal, policy=policy)
@@ -3276,7 +3437,7 @@ def cmd_start(args, root):
         "mode": mode, "weight": dict(result.as_dict(), lines=weight.render(result).split("\n"),
                                      tree=base_tree, computed_at=now(), rescores=[], operations=[]),
         "mode_override": override, "stage": "build", "files": files, "tests": tests,
-        "steps": steps, "amendments": [], "findings": [],
+        "steps": steps, "amendments": [], "findings": [], "batch": batch,
         "diff": {"base_tree": base_tree, "base_commit": safe_sensor(sensors.head_commit, root)},
         "gate": None, "owner_runtime": RUNTIME if RUNTIME in RUNTIMES else None,
         "created": now(), "created_at": now(), "history": [],
@@ -3286,7 +3447,8 @@ def cmd_start(args, root):
         state["dialog"] = {"ledger_pos": os.path.getsize(ledger_path(root))}
     apply_defaults_v7(state)
     if steps:
-        steps[0].update(status="in_progress", tree_before=base_tree)
+        # The first step whose dependencies are done — steps[0] in a plan without `after`.
+        next(iter(ready_steps(state)), steps[0]).update(status="in_progress", tree_before=base_tree)
     arm_scope(state)
     state["next_action"] = next_action_for(state)
     emit(root, state, "task_started", one_line(args.goal, 200),
@@ -3301,6 +3463,9 @@ def cmd_start(args, root):
              actor="human" if MODES.index(mode) < MODES.index(override["from"]) else "agent")
     emit(root, state, "tier_set", "%s (mode %s, compat)" % (MODE_TIER[mode], mode),
          {"tier": MODE_TIER[mode], "mode": mode, "w": result.w})
+    if batch["on"]:
+        emit(root, state, "batch_set", "on by %s" % batch["by"],
+             {"on": True, "by": batch["by"], "why": batch["why"], "via": None, "review_passes": 0, "suite_runs": 0})
     set_resume_point(state)
     write_handoff(root, state, "start")
     save(root, state)
@@ -3308,6 +3473,11 @@ def cmd_start(args, root):
     print(weight.render(result))
     if override:
         print("mode: %s (override of %s by %s)" % (mode, override["from"], args.by))
+    for later, earlier, shared in implied:
+        print("ordered: %s after %s (shares %s)" % (later, earlier, shared))
+    if batch["on"]:
+        print("batch: on by %s · review %s passes · suite %s runs · %s at once on %s"
+              % (batch["by"], table["review_rounds_max"], table["max_suite_runs"], table["parallel"], table["tier"]))
     advice = int((policy.get("rules") or {}).get("steps_advice_over", 8))
     if len(steps) > advice:
         print("advice: %d steps, over %d — fewer, larger steps cost fewer handoffs (not a gate)"
@@ -3504,19 +3674,20 @@ def cmd_verify(args, root):
         die("--files narrows one scope; --scope all runs the whole suite and e2e")
     if args.e2e and e2e_na_refusal(root, state):
         die(e2e_na_refusal(root, state))         # before the suite runs, not after (N3)
-    max_runs = int(tcfg.get("max_suite_runs", 2))
+    max_runs, budget_name = budget(policy, state, "max_suite_runs")
     if scope in ("suite", "all") and state["verify"]["suite_runs"] >= max_runs:
         if not args.by:
             offer_decision(root, state, "human_set", "Budget",
-                           "%s\nSUITE_BUDGET: %d suite runs; weight.json allows %d. Run it once more?"
-                           % (task_facts(root, state), state["verify"]["suite_runs"], max_runs),
+                           "%s\nSUITE_BUDGET: %d suite runs; weight.json allows %d%s. Run it once more?"
+                           % (task_facts(root, state), state["verify"]["suite_runs"], max_runs,
+                              " (%s)" % budget_name if batch_on(state) else ""),
                            [{"kind": "choice", "effect": "keep", "label": "Keep the budget — stop here"},
                             {"kind": "command",
                              "label": state_label(root, sys.argv[1:] + ["--by", human_name(root)])}], "verify")
-            die("SUITE_BUDGET — %d suite runs; weight.json allows %d (tests.max_suite_runs). Running it "
+            die("SUITE_BUDGET — %d suite runs; weight.json allows %d (%s). Running it "
                 "again is not the next move: the human decides. In their own terminal:\n  python3 %s "
                 "--root %s verify --scope %s --by \"<name>\""
-                % (state["verify"]["suite_runs"], max_runs, shlex.quote(os.path.abspath(__file__)),
+                % (state["verify"]["suite_runs"], max_runs, budget_name, shlex.quote(os.path.abspath(__file__)),
                    shlex.quote(root), scope), 6)
         via, why = human_route(root, allow_dialog=True)
         if via is None:
@@ -3613,6 +3784,20 @@ def verdict_matches_findings(verdict, text):
             % ", ".join(highs))
 
 
+def review_next_action(state):
+    """What follows the last verdict — also after `batch off`, which changes what
+    a blockers_open verdict asks for: a full pass in batch, a scoped re-review outside."""
+    status = state["review"].get("status")
+    if status == "blockers_open":
+        if batch_on(state):
+            return ("fix every BLOCKER and HIGH as one parallel batch, 'state.py verify --scope all "
+                    "--after-fix \"…\"', then a full review pass again")
+        return "fix the blockers, 'state.py verify --scope all --after-fix \"…\"', one scoped re-review"
+    if status in VERDICT_STATUS.values():
+        return "'state.py close'"
+    return next_action_for(state)
+
+
 def cmd_review(args, root):
     """One pass recorded; the pass past review_rounds_max is the human's (exit 6)."""
     state = load_v7(root)
@@ -3623,22 +3808,23 @@ def cmd_review(args, root):
         return
     if not args.verdict or not args.tier:
         die("review needs --verdict pass|pass_with_findings|blockers_open and --tier BALANCED|STRONG")
-    rounds = int(policy.get("review_rounds_max", 2))
+    rounds, budget_name = budget(policy, state, "review_rounds_max")
     by_human = None
     if review["passes"] >= rounds:
         if not args.by:
             report = ["--report", os.path.abspath(args.report)] if args.report and os.path.isfile(args.report) else []
             offer_decision(root, state, "human_set", "Review",
-                           "%s\nREVIEW_BUDGET: %d review passes; weight.json allows %d. The next verdict is yours."
-                           % (task_facts(root, state), review["passes"], rounds),
+                           "%s\nREVIEW_BUDGET: %d review passes; weight.json allows %d%s. The next verdict is yours."
+                           % (task_facts(root, state), review["passes"], rounds,
+                              " (%s)" % budget_name if batch_on(state) else ""),
                            [{"kind": "choice", "effect": "keep", "label": "Keep it open — no verdict now"}] +
                            [{"kind": "command",
                              "label": state_label(root, ["review", "--verdict", verdict, "--tier", args.tier] +
                                                   report + ["--by", human_name(root)])}
                             for verdict in ("pass", "pass_with_findings", "blockers_open")], "review")
-            die("REVIEW_BUDGET — %d review passes; weight.json allows %d (review_rounds_max). The next "
+            die("REVIEW_BUDGET — %d review passes; weight.json allows %d (%s). The next "
                 "verdict is the human's, in their own terminal:\n  python3 %s --root %s review --verdict "
-                "<verdict> --tier %s --by \"<name>\"" % (review["passes"], rounds,
+                "<verdict> --tier %s --by \"<name>\"" % (review["passes"], rounds, budget_name,
                                                          shlex.quote(os.path.abspath(__file__)),
                                                          shlex.quote(root), args.tier), 6)
         via, why = human_route(root, allow_dialog=True)
@@ -3671,8 +3857,7 @@ def cmd_review(args, root):
     emit(root, state, "review_verdict", "%s on %s (pass %d)" % (args.verdict, args.tier, review["passes"]),
          {"verdict": args.verdict, "tier": args.tier, "pass_n": review["passes"], "labels": labels,
           "focus": args.focus})
-    state["next_action"] = ("fix the blockers, 'state.py verify --scope all --after-fix \"…\"', one scoped "
-                            "re-review" if status == "blockers_open" else "'state.py close'")
+    state["next_action"] = review_next_action(state)
     write_handoff(root, state, "review")
     save(root, state)
     write_task_md(root, state)
@@ -3771,7 +3956,8 @@ def close_owed(state, facts, tree, policy):
                                    "'start --amend' for a file the task needs)" % "; ".join(red)))
         return owed
     if review["status"] == "blockers_open":
-        owed.append(("review", "the blockers fixed, 'verify --scope all --after-fix \"…\"', one scoped re-review"))
+        owed.append(("review", "the blockers fixed, 'verify --scope all --after-fix \"…\"', %s"
+                               % ("a full review pass again" if batch_on(state) else "one scoped re-review")))
     elif not reviewed:
         owed.append(("review", "one review verdict (%s mode: %s)"
                                % (mode, mode_setting(policy, mode, "reviewer", "BALANCED"))))
@@ -3955,16 +4141,98 @@ def cmd_step_done_v7(args, root):
         die("SCOPE_CHANGE_REQUIRED — step %s changed %s, outside the task's files. Widen the task in "
             "place: state.py start --amend --files \"%s\" --why \"…\""
             % (step["id"], ", ".join(outside), ",".join("+" + p for p in outside)), 6)
+    # In a wave the diff since the step began holds other steps' work too. The
+    # journal says which changed paths were this step's own (its files and
+    # tests) and which were not, so a step that strayed into another's files is
+    # visible; `unready` names dependencies it was recorded ahead of.
+    own_scope = list(step.get("files") or []) + list(step.get("tests") or [])
+    own = [d["path"] for d in diff or [] if sensors.scope_any(d["path"], own_scope)]
+    others = [d["path"] for d in diff or [] if d["path"] not in own]
+    unready = [dep for dep in step.get("after") or [] if any(s["id"] == dep and s["status"] != "done" for s in steps)]
     step.update(status="done", tree_after=tree)
     emit(root, state, "step_done", "%s: %d files changed" % (step["id"], len(diff or [])),
-         {"step_id": step["id"], "files": len(diff or [])}, legacy="step_completed")
-    following = next((s for s in steps if s["status"] == "pending"), None)
+         {"step_id": step["id"], "files": len(diff or []), "own": own, "others": others, "unready": unready},
+         legacy="step_completed")
+    # The first pending step whose dependencies are done — the first pending one
+    # when no step has `after`, as before the batch loop.
+    following = next((s for s in ready_steps(state) if s["status"] == "pending"), None)
     if following:
         following.update(status="in_progress", tree_before=tree)
         emit(root, state, "step_started", following["id"], {"step_id": following["id"], "kind": "step"})
     save(root, state)
     write_task_md(root, state)
-    print("step %s done%s" % (step["id"], "; next: %s" % following["id"] if following else "; all steps done"))
+    open_steps = [s["id"] for s in steps if s["status"] != "done"]
+    if unready:
+        print("note: %s was done before %s, which it is after" % (step["id"], ", ".join(unready)))
+    if others and batch_on(state):
+        print("note: the diff also holds %d file(s) outside this step's own — %s"
+              % (len(others), ", ".join(others[:4]) + (" …" if len(others) > 4 else "")))
+    print("step %s done%s" % (step["id"], "; next: %s" % following["id"] if following
+                              else "; %d still open: %s" % (len(open_steps), ", ".join(open_steps)) if open_steps
+                              else "; all steps done"))
+
+
+def cmd_steps(args, root):
+    """Read-only: the steps, their status and `after`; --ready prints the next
+    wave (R3), nothing when there is none."""
+    state = load_v7(root)
+    steps = state.get("steps") or []
+    ready = [s["id"] for s in ready_steps(state)]
+    if args.json:
+        print(json.dumps({"task_id": state["task_id"], "batch": batch_on(state), "ready": ready, "steps": steps,
+                          "batch_policy": batch_policy(weight_policy(root))}, indent=2, ensure_ascii=False))
+        return
+    if args.ready:
+        for step_id in ready:
+            print(step_id)
+        return
+    if not steps:
+        print("steps: one scope — no plan-file steps")
+        return
+    for s in steps:
+        print("%s · %s · after %s · %s" % (s["id"], s["status"], ", ".join(s.get("after") or []) or "-",
+                                            "ready" if s["id"] in ready else "waiting" if s["status"] != "done" else "-"))
+
+
+def cmd_batch(args, root):
+    """The batch loop's switch during a task (R9). `off` raises the rigor — the
+    standard budgets from here, counting what was spent — and is anyone's with
+    --by and --why. `on` lowers it, so it takes the human route or exits 5."""
+    state = load_v7(root)
+    want = args.action == "on"
+    if not args.by:
+        die("batch %s needs --by \"<who>\"" % args.action)
+    if want == batch_on(state):
+        print("batch is already %s" % args.action)
+        return
+    via = None
+    if want:
+        via, why = human_route(root)
+        if via is None:
+            die("APPROVAL_REFUSED — turning the batch loop on during a task lowers the rigor, so it is the "
+                "human's. In their own terminal:\n  python3 %s --root %s batch on --by \"<name>\"\nRefused "
+                "because %s." % (shlex.quote(os.path.abspath(__file__)), shlex.quote(root), why), 5)
+    elif not (args.why or "").strip():
+        die("batch off needs --why \"<why the standard loop from here>\"")
+    policy = weight_policy(root)
+    if want:
+        batch_policy(policy, strict=True)          # a malformed section is refused before the loop starts
+    state["batch"] = {"on": want, "by": args.by, "why": args.why or None, "since": now()}
+    if state.get("stage") in ("build", "verify", "review"):
+        # At the gate (stage ship) the next action is the human's and stays so.
+        state["next_action"] = review_next_action(state)
+    emit(root, state, "batch_set", "%s by %s%s" % (args.action, args.by, " via %s" % via if via else ""),
+         {"on": want, "by": args.by, "why": args.why or None, "via": via,
+          "review_passes": state["review"]["passes"], "suite_runs": state["verify"]["suite_runs"]},
+         actor="human" if via == "terminal" else "agent")
+    set_resume_point(state)
+    write_handoff(root, state, "batch")
+    save(root, state)
+    write_task_md(root, state)
+    print("batch %s by %s · review %d/%d · suite %d/%d" % (
+        args.action, args.by, state["review"]["passes"], budget(policy, state, "review_rounds_max")[0],
+        state["verify"]["suite_runs"], budget(policy, state, "max_suite_runs")[0]))
+    print("next: %s" % state["next_action"])
 
 
 def cmd_approve_v7(args, root):
@@ -4035,12 +4303,13 @@ def status_lines(root, state):
                                          + (" (+%d more)" % (len(task_files(state)) - 4)
                                             if len(task_files(state)) > 4 else "")),
             "verify: suite %s · runs %d/%s · e2e %s" % (ver["status"], ver["suite_runs"],
-                                                        (policy.get("tests") or {}).get("max_suite_runs", 2),
+                                                        budget(policy, state, "max_suite_runs")[0],
                                                         ver.get("e2e")),
             "facts: (a) %s — %s" % ("green" if facts["a"][0] else "RED", facts["a"][1]),
             "       (b) %s — %s" % ("green" if facts["b"][0] else "RED", facts["b"][1]),
             "review: %s (%d of %s) · tier %s%s" % (review["status"], review["passes"],
-                                                   policy.get("review_rounds_max", 2), review.get("tier") or "-",
+                                                   budget(policy, state, "review_rounds_max")[0],
+                                                   review.get("tier") or "-",
                                                    " · open %s" % ", ".join(review["findings"])
                                                    if review["findings"] else ""),
             "gate: %s" % ("approved by %s%s" % (gate["approved_by"], " · confirm \"%s\"" % gate["confirm"]
@@ -4050,6 +4319,13 @@ def status_lines(root, state):
                           if state["mode"] in ("full", "full_irreversible") else "none in %s mode" % state["mode"]),
             "findings: %d recorded in task.md" % len(state.get("findings") or []),
         ]
+        if batch_on(state):
+            # Before the truncation point, so the 20-line cap never cuts it.
+            lines.insert(3, "batch: on by %s · review %d/%d · suite %d/%d · ready %s" % (
+                one_line(state["batch"].get("by"), 40), review["passes"],
+                budget(policy, state, "review_rounds_max")[0], ver["suite_runs"],
+                budget(policy, state, "max_suite_runs")[0],
+                ", ".join(s["id"] for s in ready_steps(state)) or "none"))
     lines += ["questions: %d pending%s" % (len(pending), " — %s" % ", ".join(map(str, pending[:4])) if pending else ""),
               schema_line(root),
               "last event: %s" % (" ".join(one_line(last.get(k), 80) for k in ("ts", "event", "detail")
@@ -4113,11 +4389,16 @@ def task_md_lines(root, state):
                                                         " — %s" % one_line(override["why"])
                                                         if override.get("why") else ""))
     out += ["re-score %s" % one_line(line, 300) for line in w.get("rescores") or []]
+    if batch_on(state):
+        batch = state["batch"]
+        out.append("batch: on by %s at %s%s" % (one_line(batch.get("by"), 80), batch.get("since"),
+                                                " — %s" % one_line(batch["why"]) if batch.get("why") else ""))
     out += ["", "## Plan", "", "files: %s" % (", ".join(state.get("files") or []) or "none"),
             "tests: %s" % (", ".join(state.get("tests") or []) or "none")]
     for step in state.get("steps") or []:
-        out.append("- %s · %s · %s · %s" % (step["id"], ", ".join(step["files"]),
-                                            ", ".join(step["tests"]) or "no tests", step["status"]))
+        out.append("- %s · %s · %s · %s%s" % (step["id"], ", ".join(step["files"]),
+                                              ", ".join(step["tests"]) or "no tests", step["status"],
+                                              " · after %s" % ", ".join(step["after"]) if step.get("after") else ""))
     out += ["amended %s: +%s — %s" % (a["ts"], ", ".join(a["added"]), one_line(a["why"]))
             for a in state.get("amendments") or []]
     out += ["", QUESTIONS_SECTION, "", "none"]
@@ -4674,7 +4955,16 @@ def main():
     p.add_argument("--slug", help="3-24 characters of [a-z0-9] words joined by '-': the id becomes "
                                   "T-YYYY-MM-DD-HHMM-<slug> (UTC). Default: derived from --goal")
     p.add_argument("--amend", action="store_true")
+    p.add_argument("--batch", action="store_true", help="the batch loop of /rr-build-all (needs --by)")
+    p.add_argument("--no-batch", dest="no_batch", action="store_true", help="opt out of weight.json batch.default")
     p.set_defaults(func=cmd_start)
+
+    p = sub.add_parser("steps"); p.add_argument("--ready", action="store_true")
+    p.add_argument("--json", action="store_true"); p.set_defaults(func=cmd_steps)
+
+    p = sub.add_parser("batch"); p.add_argument("action", choices=["on", "off"])
+    p.add_argument("--by", default=""); p.add_argument("--why", default="")
+    p.set_defaults(func=cmd_batch)
 
     p = sub.add_parser("verify")
     p.add_argument("--scope", required=True, choices=["step", "suite", "e2e", "all"])

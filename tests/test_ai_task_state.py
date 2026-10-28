@@ -2396,5 +2396,326 @@ class TestDialogRoute(DialogBase):
         self.assertEqual(self.journal("mode_set")[-1]["data"]["via"], "dialog")
 
 
+class TestBatch(Base):
+    """The batch loop of /rr-build-all (docs/sdlc/specs/batch-build.md): `after`
+    on plan-file steps, the next wave, the batch budgets, the switch, the lines."""
+
+    PLAN = [{"id": "s1", "files": ["src/a.py"], "tests": ["tests/test_widget.py"]},
+            {"id": "s2", "files": ["src/b.py"], "tests": []},
+            {"id": "s3", "files": ["src/c.py"], "tests": [], "after": ["s1", "s2"]},
+            {"id": "s4", "files": ["src/a.py", "src/d.py"], "tests": [], "after": ["s3"]}]
+    FILES = "src/a.py,src/b.py,src/c.py,src/d.py"
+    BLOCK = "FINDINGS\n[BLOCKER] B1 the lock is not held\nin_scope: yes\nVERDICT blockers_open\n"
+
+    def setUp(self):
+        self.p = None
+
+    def tearDown(self):
+        if self.p:
+            self.p.close()
+
+    def _project(self, batch=None, table=True):
+        """A scratch project whose own weight.json is the shipped table with its
+        batch section replaced by `batch` (None: removed); table=False leaves the
+        project without a table, so the shipped one applies."""
+        if self.p:
+            self.p.close()
+        files = {"src/a.py": "a\n", "src/b.py": "b\n", "src/c.py": "c\n", "src/d.py": "d\n"}
+        if table:
+            with open(os.path.join(ROOT, "skills", "ai-init", "templates", ".ai", "policies", "weight.json"),
+                      encoding="utf-8") as fh:
+                policy = json.load(fh)
+            if batch is None:
+                del policy["batch"]
+            else:
+                policy["batch"] = dict(policy["batch"], **batch)
+            files[".ai/policies/weight.json"] = json.dumps(policy)
+        self.p = Project(files=files)
+        return self.p
+
+    def _plan(self, steps):
+        path = os.path.join(self.p.tmp.name, "plan.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(steps, fh)
+        return path
+
+    def _start(self, *extra, steps=None):
+        return self.p.start("--plan-file", self._plan(self.PLAN if steps is None else steps), *extra, files=self.FILES)
+
+    def _try_start(self, steps, *extra):
+        return self.p.run("start", "--goal", "g", "--workflow", "feature", "--files", self.FILES,
+                          "--plan-file", self._plan(steps), *ZERO, *extra)
+
+    def _ready(self):
+        return self.p.ok("steps", "--ready").stdout.split()
+
+    def _batch_events(self):
+        return [e["data"] for e in self.p.events(self.task_id()) if e["event"] == "batch_set"]
+
+    def test_after_unknown_self_cycle_and_shape_refused(self):
+        self._project(table=False)
+        cases = (([{"id": "s1", "files": ["src/a.py"], "after": ["nope"]}], "is not a step"),
+                 ([{"id": "s1", "files": ["src/a.py"], "after": ["s1"]}], "lists itself"),
+                 ([{"id": "s1", "files": ["src/a.py"], "after": ["s2"]},
+                   {"id": "s2", "files": ["src/b.py"], "after": ["s1"]}], "form a cycle"),
+                 ([{"id": "s1", "files": ["src/a.py"], "after": "s2"}], '"after" is a JSON list'))
+        for steps, text in cases:
+            with self.subTest(text=text):
+                done = self._try_start(steps)
+                self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+                self.assertIn(text, done.stderr)
+                self.assertFalse(self.p.in_flight())
+        # In a batch task the shared file orders y after x, and x says it is after y: a cycle, with
+        # the implied edge named (review L7).
+        done = self._try_start([{"id": "x", "files": ["src/a.py"], "after": ["y"]}, {"id": "y", "files": ["src/a.py"]}],
+                               "--batch", "--by", "ivan")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("form a cycle: x -> y -> x", done.stderr)
+        self.assertIn("y after x is implied: they share src/a.py", done.stderr)
+
+    def test_shared_file_orders_steps(self):
+        self._project(table=False)
+        out = self._start("--batch", "--by", "ivan").stdout
+        self.assertIn("ordered: s4 after s1 (shares src/a.py)", out)
+        steps = {s["id"]: s for s in self.p.state()["steps"]}
+        self.assertEqual((steps["s4"]["after"], steps["s2"]["after"]), (["s3", "s1"], []))
+        self.assertIn("- s3 · src/c.py · no tests · pending · after s1, s2", self.p.task_md(self.task_id()))
+
+    def test_steps_ready_by_waves(self):
+        self._project(table=False)
+        self._start()
+        self.assertEqual(self._ready(), ["s1", "s2"])
+        listing = self.p.ok("steps").stdout
+        self.assertIn("s1 · in_progress · after - · ready", listing)
+        self.assertIn("s3 · pending · after s1, s2 · waiting", listing)
+        self.assertIn("next: s2", self.p.ok("step-done", "s1").stdout)
+        self.assertEqual(self._ready(), ["s2"])
+        self.assertIn("next: s3", self.p.ok("step-done", "s2").stdout)
+        self.assertEqual(self._ready(), ["s3"])
+        self.p.ok("step-done", "s3")
+        self.assertEqual(self._ready(), ["s4"])
+        self.assertIn("all steps done", self.p.ok("step-done", "s4").stdout)
+        self.assertEqual(self._ready(), [])
+        shown = json.loads(self.p.ok("steps", "--json").stdout)
+        self.assertEqual((shown["ready"], shown["batch"], len(shown["steps"])), ([], False, 4))
+        self.assertEqual((shown["batch_policy"]["tier"], shown["batch_policy"]["parallel"]), ("BALANCED", 3))
+
+    def test_steps_without_after_behave_as_before(self):
+        self._project(table=False)
+        self.p.start("--steps", "s1:src/a.py;s2:src/b.py", files=self.FILES)
+        self.assertEqual(self._ready(), ["s1", "s2"])
+        self.assertIn("next: s2", self.p.ok("step-done", "s1").stdout)
+        self.assertEqual(self.p.state()["batch"], {"on": False, "by": None, "why": None, "since": None})
+        self.assertNotIn("batch:", self.p.ok("status").stdout)
+        self.assertNotIn("Batch:", self.p.ok("handoff", "--print").stdout)
+        self.assertNotIn("after", self.p.task_md(self.task_id()).split("## Plan")[1].split("## Questions")[0])
+        # Review M1: outside batch, steps that share a file are not reordered, and step-done
+        # picks the first pending step as before.
+        self.p.ok("close", "--abandon")
+        out = self.p.start("--steps", "s1:src/a.py;s2:src/a.py;s3:src/b.py", files=self.FILES).stdout
+        self.assertNotIn("ordered:", out)
+        self.assertEqual([s["after"] for s in self.p.state()["steps"]], [[], [], []])
+        self.assertIn("step s3 done; next: s2", self.p.ok("step-done", "s3").stdout)
+
+    def test_flag_and_project_default(self):
+        self._project(batch={"default": True})
+        refused = self._try_start(self.PLAN, "--batch")
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("--batch needs --by", refused.stderr)
+        both = self._try_start(self.PLAN, "--batch", "--by", "ivan", "--no-batch")
+        self.assertEqual(both.returncode, 1)
+        self.assertIn("exclude each other", both.stderr)
+        out = self._start().stdout                                           # the project's default
+        self.assertIn("batch: on by weight.json batch.default · review 3 passes · suite 8 runs · 3 at once on "
+                      "BALANCED", out)
+        batch = self.p.state()["batch"]
+        self.assertEqual((batch["on"], batch["by"]), (True, "weight.json batch.default"))
+        self.assertEqual(self._batch_events(), [{"on": True, "by": "weight.json batch.default", "why": None,
+                                                "via": None, "review_passes": 0, "suite_runs": 0}])
+        self.assertIn("batch loop:", self.p.state()["next_action"])
+        self.p.ok("close", "--abandon")
+        self._start("--mode", "full", "--by", "agent", "--why", "the mode's reason")   # review L5
+        self.assertEqual(self.p.state()["batch"]["by"], "weight.json batch.default")
+        self.assertIsNone(self._batch_events()[-1]["why"])
+        self.p.ok("close", "--abandon")
+        self._start("--no-batch")
+        self.assertFalse(self.p.state()["batch"]["on"])
+        self.p.ok("close", "--abandon")
+        self._start("--batch", "--by", "ivan", "--why", "/rr-build-all")
+        self.assertEqual(self.p.state()["batch"]["by"], "ivan")
+        self.assertIn("batch: on by ivan at ", self.p.task_md(self.task_id()))
+        self.assertIn("— /rr-build-all", self.p.task_md(self.task_id()))
+
+    def test_three_passes_then_the_human(self):
+        self._project(table=False)
+        self._start("--mode", "guarded", "--batch", "--by", "ivan")
+        self.p.ok("verify", "--scope", "all")
+        for _ in range(3):
+            self.p.ok("review", "--verdict", "blockers_open", "--tier", "BALANCED", "--report", "-", stdin=self.BLOCK)
+        self.assertIn("then a full review pass again", self.p.state()["next_action"])
+        owed = self.p.run("close")
+        self.assertEqual(owed.returncode, 2)
+        self.assertIn("a full review pass again", owed.stderr)                   # review L4: close_owed
+        fourth = self.p.run("review", "--verdict", "pass", "--tier", "BALANCED", "--report", "-", stdin=CLEAN)
+        self.assertEqual(fourth.returncode, 6)
+        self.assertIn("REVIEW_BUDGET", fourth.stderr)
+        self.assertIn("allows 3 (batch.review_rounds_max)", fourth.stderr)
+        self.assertEqual(self.p.state()["review"]["passes"], 3)
+        self.assertIn("review: blockers_open (3 of 3)", self.p.ok("status").stdout)
+        # Off: the standard budget from here, counting what was spent — the next verdict is the human's.
+        off = self.p.ok("batch", "off", "--by", "ivan", "--why", "the standard loop from here")
+        self.assertIn("batch off by ivan · review 3/2 · suite 1/2", off.stdout)
+        self.assertFalse(self.p.state()["batch"]["on"])
+        self.assertEqual(self._batch_events()[-1], {"on": False, "by": "ivan", "why": "the standard loop from here",
+                                                   "via": None, "review_passes": 3, "suite_runs": 1})
+        self.assertIn("one scoped re-review", self.p.state()["next_action"])
+        again = self.p.run("review", "--verdict", "pass", "--tier", "BALANCED", "--report", "-", stdin=CLEAN)
+        self.assertEqual(again.returncode, 6)
+        self.assertIn("allows 2 (review_rounds_max)", again.stderr)
+        self.p.ok("review", "--verdict", "pass", "--tier", "BALANCED", "--report", "-", "--by", "ivan",
+                  stdin=CLEAN, human=True)
+        self.p.ok("close")
+        self.assertFalse(self.p.in_flight())
+
+    def test_suite_budget_is_eight(self):
+        self._project(table=False)
+        self._start("--batch", "--by", "ivan")
+        for _ in range(8):
+            self.p.ok("verify", "--scope", "suite")
+        ninth = self.p.run("verify", "--scope", "suite")
+        self.assertEqual(ninth.returncode, 6)
+        self.assertIn("SUITE_BUDGET", ninth.stderr)
+        self.assertIn("allows 8 (batch.max_suite_runs)", ninth.stderr)
+        self.assertIn("suite 8/8", self.p.ok("status").stdout)
+
+    def test_batch_on_is_the_humans(self):
+        self._project(table=False)
+        self._start()
+        refused = self.p.run("batch", "on", "--by", "ivan")
+        self.assertEqual(refused.returncode, 5)
+        self.assertIn("APPROVAL_REFUSED", refused.stderr)
+        self.assertIn("batch on --by", refused.stderr)
+        self.assertFalse(self.p.state()["batch"]["on"])
+        self.assertEqual(self.p.run("batch", "on").returncode, 1)                 # --by is required
+        out = self.p.ok("batch", "on", "--by", "ivan", human=True).stdout
+        self.assertIn("batch on by ivan · review 0/3 · suite 0/8", out)
+        self.assertTrue(self.p.state()["batch"]["on"])
+        self.assertIn("batch is already on", self.p.ok("batch", "on", "--by", "ivan", human=True).stdout)
+        self.assertEqual((self._batch_events()[-1]["via"], self._batch_events()[-1]["on"]), ("unattended", True))
+        self.assertEqual(self.p.run("batch", "off", "--by", "ivan").returncode, 1)  # --why is required
+        self.p.ok("batch", "off", "--by", "ivan", "--why", "done with it")
+        self.assertFalse(self.p.state()["batch"]["on"])
+
+    def test_lines_show_batch(self):
+        self._project(table=False)
+        self._start("--batch", "--by", "ivan")
+        status = self.p.ok("status").stdout.splitlines()
+        self.assertLessEqual(len(status), 20)
+        self.assertEqual(status[3], "batch: on by ivan · review 0/3 · suite 0/8 · ready s1, s2")
+        handoff = self.p.ok("handoff", "--print").stdout.splitlines()
+        self.assertLessEqual(len(handoff), 30)
+        self.assertIn("Batch: on · ready s1, s2 · review 0/3 · suite 0/8", handoff)
+        self.assertIn("batch loop: 'steps --ready'", handoff[2])
+        md = self.p.task_md(self.task_id())
+        self.assertIn("batch: on by ivan at ", md)
+        self.assertIn("- s4 · src/a.py, src/d.py · no tests · pending · after s3, s1", md)
+
+    def test_table_without_the_section_uses_the_defaults(self):
+        self._project(batch=None)                     # the project's own table predates the section
+        out = self._start("--batch", "--by", "ivan").stdout
+        self.assertIn("review 3 passes · suite 8 runs · 3 at once on BALANCED", out)
+        self._project(batch={"review_rounds_max": 1, "max_suite_runs": 1, "parallel": 2, "tier": "STRONG"})
+        out = self._start("--batch", "--by", "ivan").stdout
+        self.assertIn("review 1 passes · suite 1 runs · 2 at once on STRONG", out)
+        self.p.ok("verify", "--scope", "suite")
+        self.assertEqual(self.p.run("verify", "--scope", "suite").returncode, 6)
+        # Review L1, L6: a malformed section is refused at start, whether or not the task is batch;
+        # three or more parallel agents never run above BALANCED.
+        for bad, text in (({"review_rounds_max": "three"}, "batch.review_rounds_max must be a whole number"),
+                          ({"default": "false"}, "batch.default must be true or false"),
+                          ({"tier": "LOCAL"}, "batch.tier must be one of"),
+                          ({"tier": "STRONG", "parallel": 5}, "three or more parallel agents run at FAST or BALANCED")):
+            with self.subTest(bad=bad):
+                self._project(batch=bad)
+                done = self._try_start(self.PLAN)
+                self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+                self.assertIn(text, done.stderr)
+                self.assertIn("weight.json:", done.stderr)
+
+    def test_batch_set_is_not_forgeable(self):
+        self._project(table=False)
+        self._start()
+        self.assertEqual(self.p.run("event", "batch_set").returncode, 5)
+
+    def test_a_pending_question_blocks_the_next_wave(self):
+        self._project(table=False)
+        self._start("--batch", "--by", "ivan")
+        self.p.ok("ask", "G1 is yours: apply the staged policy edits", "--option", "A: done", "--option", "B: not yet")
+        self.assertEqual(self.p.run("step-done", "s1").returncode, 4)
+        self.assertEqual(self._ready(), ["s1", "s2"])                           # read-only: it still answers
+        self.assertIn("Pending questions: Q1", self.p.ok("handoff", "--print").stdout)
+        self.p.ok("answer", "Q1=A")
+        self.p.ok("step-done", "s1")
+
+    def test_full_mode_still_asks_the_human(self):
+        self._project(table=False)
+        self._start("--mode", "full", "--batch", "--by", "ivan")
+        self.p.write("src/a.py", "a = 2\n")
+        self.p.ok("verify", "--scope", "all")
+        self.p.ok("review", "--verdict", "pass", "--tier", "STRONG", "--report", "-", stdin=CLEAN)
+        self.assertIn("ready for approval", self.p.ok("close").stdout)
+        self.p.ok("batch", "off", "--by", "ivan", "--why", "the standard loop from here")
+        self.assertIn("the human approves", self.p.state()["next_action"])        # review L4: the gate's text stays
+        self.assertEqual(self.p.run("approve", "--by", "ivan").returncode, 5)
+        self.p.ok("approve", "--by", "ivan", human=True)
+        self.p.ok("close")
+        self.assertFalse(self.p.in_flight())
+
+    def test_a_wave_is_recorded_in_any_order(self):
+        """Review M2, M5, L3: a wave's steps are recorded in any order; the journal
+        says what each step's diff held, and the summary never says done too early."""
+        self._project(table=False)
+        self._start("--batch", "--by", "ivan", steps=[{"id": "s1", "files": ["src/a.py"]},
+                                                      {"id": "s2", "files": ["src/b.py"]},
+                                                      {"id": "s3", "files": ["src/c.py"], "after": ["s1"]}])
+        self.p.write("src/a.py", "a = 2\n")
+        self.p.write("src/b.py", "b = 2\n")
+        out = self.p.ok("step-done", "s2").stdout
+        self.assertIn("step s2 done; 2 still open: s1, s3", out)
+        self.assertIn("note: the diff also holds 1 file(s) outside this step's own — src/a.py", out)
+        data = [e for e in self.p.events(self.task_id()) if e["event"] == "step_done"][-1]["data"]
+        self.assertEqual((data["own"], data["others"], data["unready"]), (["src/b.py"], ["src/a.py"], []))
+        out = self.p.ok("step-done", "s3").stdout                                 # before s1, which it is after
+        self.assertIn("note: s3 was done before s1, which it is after", out)
+        self.assertEqual([e for e in self.p.events(self.task_id()) if e["event"] == "step_done"][-1]["data"]["unready"],
+                         ["s1"])
+        self.assertIn("step s1 done; all steps done", self.p.ok("step-done", "s1").stdout)
+
+    def test_shared_tests_and_patterns_order_steps(self):
+        """Review M4: tests count, patterns count, ./a is a."""
+        self._project(table=False)
+        out = self._start("--batch", "--by", "ivan",
+                          steps=[{"id": "a", "files": ["src/a.py"], "tests": ["tests/test_widget.py"]},
+                                 {"id": "b", "files": ["src/b.py"], "tests": ["tests/test_widget.py"]},
+                                 {"id": "c", "files": ["src/*.py"]},
+                                 {"id": "d", "files": ["./src/d.py"]},
+                                 {"id": "e", "files": ["src/d.py"]}]).stdout
+        self.assertIn("ordered: b after a (shares tests/test_widget.py)", out)
+        self.assertIn("ordered: c after a (shares src/*.py)", out)
+        self.assertIn("ordered: e after d (shares src/d.py)", out)
+        after = {s["id"]: s["after"] for s in self.p.state()["steps"]}
+        self.assertEqual((after["b"], after["c"], after["d"], after["e"]), (["a"], ["a", "b"], ["c"], ["c", "d"]))
+
+    def test_the_first_ready_step_starts(self):
+        """Review L2: start opens the first step whose dependencies are done."""
+        self._project(table=False)
+        self._start("--batch", "--by", "ivan", steps=[{"id": "s1", "files": ["src/a.py"], "after": ["s2"]},
+                                                      {"id": "s2", "files": ["src/b.py"]}])
+        self.assertEqual([(s["id"], s["status"]) for s in self.p.state()["steps"]],
+                         [("s1", "pending"), ("s2", "in_progress")])
+        self.assertEqual(self._ready(), ["s2"])
+        self.assertIn("current s2", self.p.ok("status").stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
