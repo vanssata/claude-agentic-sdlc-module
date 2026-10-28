@@ -369,7 +369,7 @@ by Codex itself through `agents.max_concurrent_threads_per_session` in
 | `PostToolUse` (same tools) | a Fable agent that fell back (overload) | an expert launch that returned an availability error |
 | `SubagentStart` / `SubagentStop` | the running-agent count | the running-agent count, rated by the child's resolved `model` when that is STRONG or EXPERT; `SubagentStart` also catches a missed reroute; `SubagentStop` records an EXPERT failure |
 | `StopFailure` (`rate_limit\|model_not_found`) | on a Fable install only | — (Codex has no such event) |
-| `statusline --then <cmd>` | the quota, and the Fable weekly limit | — |
+| `statusline [--context] --then <cmd>` | the quota, and the Fable weekly limit; with `--context`, a line with the model and the context use | — |
 
 State lives in `<home>/state/runtime-gate.json` — the outage record, the quota,
 the per-task EXPERT counts and the running agents. On the first run after an
@@ -506,13 +506,28 @@ statusline, not hooks, the account's `rate_limits`, so the installer wraps the
 statusline on **every** Claude plan:
 
 ```
-"$HOME/.claude/hooks/runtime-gate.py" statusline --then '<your original command>'
+"$HOME/.claude/hooks/runtime-gate.py" statusline --context --then '<your original command>'
 ```
 
 The gate records `rate_limits.seven_day` and `five_hour`, then runs your command
-on the same input and passes its output and exit code through — what you see does
-not change. With no statusline configured, the installer adds the bare check,
-which prints nothing. On a Fable install, at `AI_RUNTIME_GATE_WEEKLY_PCT` (90)
+on the same input and passes its output and exit code through — your own line does
+not change. `--context` (the installer's `--statusline-context yes`, the default)
+first prints one line with the model and the context use, from the same payload:
+`Opus 5.5 [1m] · 123k/1000k (12%)` — `model.display_name`, then the tokens from
+`context_window.current_usage` (input plus cache reads and writes) or
+`used_percentage`, over `context_window_size`. A payload without those fields
+gives the model alone, and one that does not parse gives no line; your line runs
+either way. `--statusline-context no` drops `--context`; a re-install rewrites an
+existing wrapper in place, your `--then` command byte for byte. With no
+statusline configured, the installer adds the check alone, which prints only that
+line (nothing without `--context`).
+
+Codex has no statusline command to wrap; its `[tui] status_line` is a list of item
+ids. With `--statusline-context yes` the installer appends `model-with-reasoning`
+and `context-used` to a list you set, when missing, and never removes or reorders
+your items. An unset `status_line` is Codex's own default set and an empty one is
+your choice: both are left alone, and the installer says which items to add. `no`
+leaves the list alone. On a Fable install, at `AI_RUNTIME_GATE_WEEKLY_PCT` (90)
 percent of the week used, Fable agents also go to Opus until `resets_at`.
 
 Codex exposes no quota to a hook; the gate reads the last `token_count` event of

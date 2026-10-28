@@ -11,14 +11,19 @@ UserPromptSubmit
     block threshold it holds the prompt back once: sending the same prompt again
     lets it through, so the guard can be overridden but not ignored.
 
-    Both thresholds follow the one knob the profile already sets. Auto-compaction
-    fires about 33k tokens under `autoCompactWindow` (measured over 133 automatic
-    compactions: a 150 000 window compacts at 115–125k, 117k most often), and
-    Claude Code caps that window at the model's own: 200k, or 1M for a [1m] model.
-    The guard warns at 80% of that point and blocks at 120% of it, which is only
-    reached when auto-compaction is off or did not run. An 800 000 window therefore
-    means, on a 200k model, compaction near 167k and a warning from 133k; on a [1m]
-    model, compaction near 767k, a warning from 613k and a block from 920k.
+    Both thresholds follow the window compaction runs against. Auto-compaction
+    fires about 33k tokens under it (measured over 133 automatic compactions: a
+    150 000 window compacts at 115–125k, 117k most often), and Claude Code caps
+    that window at the model's own: 200k, or 1M for a [1m] model. The window is
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW, else settings.json's `autoCompactWindow`, else
+    the economy window in <home>/riskrails/profile.json (`context`, written by
+    `--context economy`), else the model's own; on Codex the first two, Claude Code's
+    own, are skipped. The guard warns at 80% of that
+    point. It blocks at 120% of it — only reached when auto-compaction is off or did
+    not run — and only when a window was configured: in the default mode the runtime
+    compacts on its own and the guard never holds a prompt back. An 800 000 window
+    therefore means, on a 200k model, compaction near 167k and a warning from 133k;
+    on a [1m] model, compaction near 767k, a warning from 613k and a block from 920k.
 
 PreCompact
     Writes a deterministic snapshot of the session — files edited, the latest
@@ -71,7 +76,7 @@ FILES_KEPT = 40
 STATUS_LINES = 40
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
-DEFAULT_WINDOW = 800000            # profiles/max.json; capped per model below
+ECONOMY_WINDOW = 800000            # profiles/max.json riskrails.economy; Codex economy uses it too
 MODEL_WINDOW, MODEL_WINDOW_1M = 200000, 1000000
 COMPACT_RESERVE = 33000            # auto-compaction fires this far under the window
 WARN_PCT, BLOCK_PCT = 80, 120      # of the point where auto-compaction fires
@@ -122,25 +127,59 @@ def model_window(session_id, ctx):
     return MODEL_WINDOW
 
 
+def profile_context():
+    """profile.json's `context` ({mode, window}) in this runtime's home; {} when absent."""
+    home = config_dir()
+    if hook_runtime() == "codex":
+        home = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
+    try:
+        with open(os.path.join(home, "riskrails", "profile.json"), encoding="utf-8") as fh:
+            context = json.load(fh).get("context")
+        return context if isinstance(context, dict) else {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def configured_window():
+    """The window someone set — the env var, settings.json, or the economy profile — or 0.
+    The first two are Claude Code's own and never decide for Codex, whose only source is
+    its profile.json; economy without a window of its own (a Codex profile) keeps the 800k
+    it always had."""
+    if hook_runtime() != "codex":
+        for window in (positive_int(os.environ.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW")),
+                       positive_int(user_settings().get("autoCompactWindow"))):
+            if window > COMPACT_RESERVE:
+                return window
+    context = profile_context()
+    if context.get("mode") == "economy":
+        window = positive_int(context.get("window"))
+        return window if window > COMPACT_RESERVE else ECONOMY_WINDOW
+    return 0
+
+
 def compact_window(session_id, ctx):
-    """The window Claude Code compacts against: the env var wins over settings.json, and
-    Claude Code caps either at the model's window (\"capped to … by model\" in /autocompact),
-    so one 800k setting compacts a 1M session near 767k and a 200k session near 167k."""
-    window = positive_int(os.environ.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW"))
-    if not window:
-        window = positive_int(user_settings().get("autoCompactWindow"))
-    window = window if window > COMPACT_RESERVE else DEFAULT_WINDOW
-    return min(window, model_window(session_id, ctx))
+    """The window the runtime compacts against: a configured one, else the model's own.
+    Claude Code caps a configured window at the model's (\"capped to … by model\" in
+    /autocompact), so one 800k setting compacts a 1M session near 767k and a 200k
+    session near 167k."""
+    model = model_window(session_id, ctx)
+    return min(configured_window() or model, model)
 
 
 def thresholds(session_id, ctx):
+    """Warn and block, in tokens; 0 is off. With no window configured the runtime
+    compacts on its own: the guard warns and blocks only when AI_CONTEXT_BLOCK_TOKENS
+    asks it to."""
     fires_at = compact_window(session_id, ctx) - COMPACT_RESERVE
+    blocks = bool(configured_window())
 
-    def one(name, pct):
+    def one(name, pct, on=True):
         raw = os.environ.get(name, "").strip()
-        return positive_int(raw) if raw.lstrip("-").isdigit() else fires_at * pct // 100
+        if raw.lstrip("-").isdigit():
+            return positive_int(raw)
+        return fires_at * pct // 100 if on else 0
 
-    return one("AI_CONTEXT_WARN_TOKENS", WARN_PCT), one("AI_CONTEXT_BLOCK_TOKENS", BLOCK_PCT)
+    return one("AI_CONTEXT_WARN_TOKENS", WARN_PCT), one("AI_CONTEXT_BLOCK_TOKENS", BLOCK_PCT, blocks)
 
 
 def state_dir():

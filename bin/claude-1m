@@ -6,15 +6,15 @@
 #   claude-1m                    Opus 5 [1m] as the main session
 #   claude-1m fable              Fable 5.1 [1m] as the main session
 #   claude-1m fable -p '<brief>' one headless large-context run, e.g. called from another session
-#   CLAUDE_1M_COMPACT_WINDOW=500000 claude-1m     # compact earlier than 767k
+#   CLAUDE_1M_COMPACT_WINDOW=500000 claude-1m     # compact earlier than the runtime would
 #
-# `autoCompactWindow` in settings.json is one value for every model, but Claude Code
-# caps it at the model's own window, so the 800 000 there already means near 167k on
-# `opus` and near 767k on `opus[1m]` and `fable[1m]`. This launcher is therefore about
-# the model, not the window: it pins a [1m] model for one session at launch.
-# CLAUDE_CODE_AUTO_COMPACT_WINDOW still outranks settings.json for this process only,
-# which is how CLAUDE_1M_COMPACT_WINDOW compacts *earlier* than 767k. context-guard
-# reads the same variable, so its warning and hold-back thresholds follow.
+# This launcher is about the model, not the window: it pins a [1m] model for one
+# session at launch, and by default leaves compaction to Claude Code (or to the
+# `autoCompactWindow` of an install with `--context economy`, which Claude Code caps at
+# the model's own window: 800 000 means near 167k on `opus` and near 767k on `opus[1m]`).
+# Only CLAUDE_1M_COMPACT_WINDOW sets a window: exported as CLAUDE_CODE_AUTO_COMPACT_WINDOW,
+# it outranks settings.json for this process only. context-guard reads the same
+# variable, so its warning and hold-back thresholds follow.
 #
 # Subagents get the session's window, capped by Claude Code at each model's own: a 200k
 # agent compacts near 167k, and `architect` on fable[1m] gets the full window.
@@ -28,10 +28,11 @@ case "${1:-}" in
   fable) MODEL='fable[1m]'; shift;;
 esac
 
-WINDOW="${CLAUDE_1M_COMPACT_WINDOW:-800000}"
-case "$WINDOW" in
-  ''|*[!0-9]*) echo "claude-1m: CLAUDE_1M_COMPACT_WINDOW must be a number of tokens (got '$WINDOW')" >&2; exit 2;;
-esac
-
-export CLAUDE_CODE_AUTO_COMPACT_WINDOW="$WINDOW"
+if [ -n "${CLAUDE_1M_COMPACT_WINDOW:-}" ]; then
+  WINDOW="$CLAUDE_1M_COMPACT_WINDOW"
+  case "$WINDOW" in
+    ''|*[!0-9]*) echo "claude-1m: CLAUDE_1M_COMPACT_WINDOW must be a number of tokens (got '$WINDOW')" >&2; exit 2;;
+  esac
+  export CLAUDE_CODE_AUTO_COMPACT_WINDOW="$WINDOW"
+fi
 exec "${CLAUDE_BIN:-claude}" --model "$MODEL" "$@"

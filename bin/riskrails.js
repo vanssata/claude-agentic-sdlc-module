@@ -2,6 +2,7 @@
 // RiskRails installer (Claude Code and/or Codex). Node 18+, stdlib only.
 //   npx riskrails [--target auto|claude|codex|both] [--plan pro|team-pro|team-max|max|max20|balanced-max]
 //                 [--fable auto|yes|no] [--codex-plan plus|pro|balanced-max] [--dry-run]
+//                 [--context default|economy] [--statusline-context yes|no]
 //                 [--home DIR] [--codex-home DIR] [--yes] [--version]
 // --target defaults to auto: each runtime is installed only if its executable is on PATH.
 // --plan   Claude only: pro, team-pro (Team Standard seat), team-max (Team Premium seat), max
@@ -16,6 +17,14 @@
 // --fable  Claude only. auto = yes on max, max20 and team-max, no on pro and team-pro.
 // --codex-plan  Codex only: plus, pro or balanced-max. Defaults to auto-detect from the ChatGPT
 //          login in ~/.codex/auth.json (chatgpt_plan_type); assumes pro when it cannot tell.
+// --context  default leaves each runtime its own context window and compaction, and
+//          context-guard only warns. economy writes the plan's autoCompactWindow (800 000 on
+//          Max, 300 000 on Pro) and the guard also holds a prompt back past 120% of it.
+//          Without economy, an autoCompactWindow equal to the plan's is removed; any other
+//          value is the user's and stays. Recorded in riskrails/profile.json as `context`.
+// --statusline-context  yes (default) shows the model and the context use in the
+//          statusline: a line before the user's own in Claude Code, `model-with-reasoning`
+//          and `context-used` in Codex's [tui] status_line. no adds nothing and removes nothing.
 // --home / --codex-home  the runtime homes (default ~/.claude and ~/.codex; the environment
 //          variables CLAUDE_DIR and CODEX_DIR mean the same). Naming exactly one of them under
 //          --target auto installs that runtime alone.
@@ -47,6 +56,7 @@ let CODEX_DIR = env.CODEX_DIR || path.join(os.homedir(), '.codex');
 const HOME = env.HOME || os.homedir();
 let PLAN = '', FABLE = 'auto', DRY = false, TARGET = 'auto', PLAN_GIVEN = false;
 let CODEX_PLAN = '', CODEX_PLAN_GIVEN = false, YES = false;
+let CONTEXT = 'default', STATUSLINE_CONTEXT = 'yes';
 
 function version() {
   try { return JSON.parse(fs.readFileSync(path.join(SRC, 'package.json'), 'utf8')).version || 'unknown'; }
@@ -76,6 +86,8 @@ function usage() {
       case '--plan': PLAN = take(); PLAN_GIVEN = true; break;
       case '--fable': FABLE = take(); PLAN_GIVEN = true; break;
       case '--codex-plan': CODEX_PLAN = take(); CODEX_PLAN_GIVEN = true; break;
+      case '--context': CONTEXT = take(); break;
+      case '--statusline-context': STATUSLINE_CONTEXT = take(); break;
       case '--home': CLAUDE_DIR = path.resolve(take()); CLAUDE_DIR_GIVEN = true; break;
       case '--codex-home': CODEX_DIR = path.resolve(take()); CODEX_DIR_GIVEN = true; break;
       case '--dry-run': DRY = true; break;
@@ -88,6 +100,10 @@ function usage() {
 }
 if (!['auto', 'claude', 'codex', 'both'].includes(TARGET)) {
   die(`--target must be auto|claude|codex|both (got '${TARGET}')`, 2);
+}
+if (!['default', 'economy'].includes(CONTEXT)) die(`--context must be default|economy (got '${CONTEXT}')`, 2);
+if (!['yes', 'no'].includes(STATUSLINE_CONTEXT)) {
+  die(`--statusline-context must be yes|no (got '${STATUSLINE_CONTEXT}')`, 2);
 }
 const major = Number(process.versions.node.split('.')[0]);
 if (major < 18) die('riskrails needs Node 18 or newer (this is ' + process.versions.node + ')', 1);
@@ -281,7 +297,7 @@ let PLUGIN_VERSION = 'unknown';
 try { PLUGIN_VERSION = readJSON(path.join(SRC, '.codex-plugin/plugin.json')).version || 'unknown'; } catch (e) { /* unknown */ }
 function agenticProfile(runtime, profile, plan, label, fable) {
   const p = JSON.parse(python([path.join(SRC, 'scripts/resolve-profile.py'), profile, '--src', SRC, '--plan', plan,
-    '--label', label, '--fable', fable, '--print', 'agentic']));
+    '--label', label, '--fable', fable, '--context', CONTEXT, '--print', 'agentic']));
   p.runtime = runtime; p.plugin_version = PLUGIN_VERSION; p.written_at = utcStamp();
   p.dialog = { tool: runtime === 'claude' ? 'AskUserQuestion' : codexDialogTool() };
   p.set_by = { via: 'installer', at: p.written_at };
@@ -391,7 +407,9 @@ function claudeRender() {
 
   // The profile's riskrails tables are the plugin's, not Claude Code's: the resolver
   // prints the settings half alone, so they never reach settings.json.
-  const profile = JSON.parse(python([path.join(SRC, 'scripts/resolve-profile.py'), PROFILE_NAME, '--src', SRC, '--print', 'settings']));
+  // --context economy puts the plan's autoCompactWindow into that half; default leaves it out.
+  const profile = JSON.parse(python([path.join(SRC, 'scripts/resolve-profile.py'), PROFILE_NAME, '--src', SRC,
+    '--context', CONTEXT, '--print', 'settings']));
   if (TIER === 'max' && FABLE === 'no') {
     profile.availableModels = (profile.availableModels || []).filter((m) => !String(m).startsWith('fable'));
     if (isObj(profile.modelSettings)) delete profile.modelSettings['claude-fable-5-1'];
@@ -404,18 +422,26 @@ function claudeRender() {
   const fallbacks = Array.isArray(snippet.fallbackModel) ? snippet.fallbackModel : [snippet.fallbackModel];
   const FALLBACK = fallbacks.join(', then ');
   const EFFORT = String(snippet.effortLevel);
-  const COMPACT = Number(snippet.autoCompactWindow);
-  // Auto-compaction fires about 33k under the window; context-guard.py derives its
-  // thresholds from the same point. Claude Code caps autoCompactWindow at the model's
-  // own window, so print the number that matches the session this install configures.
+  // The plan's own window (riskrails.economy), written only with --context economy; in
+  // default the runtime compacts against the model's window. Auto-compaction fires about
+  // 33k under the window; context-guard.py derives its thresholds from the same point and
+  // holds a prompt back only when a window is configured. Claude Code caps
+  // autoCompactWindow at the model's own window, so print the number that matches the
+  // session this install configures.
+  const COMPACT = CONTEXT === 'economy' ? Number(snippet.autoCompactWindow) || 0 : 0;
   const MODEL_WINDOW = SESSION_MODEL.includes('[1m]') ? 1000000 : 200000;
-  const COMPACT_AT = Math.min(COMPACT, MODEL_WINDOW) - 33000;
-  const oneM = read(path.join(SRC, 'bin/claude-1m')).match(/^WINDOW="\$\{CLAUDE_1M_COMPACT_WINDOW:-([0-9]*)\}"$/m);
-  const ONE_M_AT = Number(oneM ? oneM[1] : 0) - 33000;
+  const fires = (window) => (COMPACT ? Math.min(COMPACT, window) : window) - 33000;
+  const COMPACT_AT = fires(MODEL_WINDOW);
+  const ONE_M_AT = fires(1000000);
+  const COMPACT_NOTE = COMPACT ? `\`autoCompactWindow\` ${COMPACT}` : 'the runtime default, `--context economy` sets a window';
   const ONE_M_FABLE = FABLE === 'yes' ? ' and `claude-1m fable` for Fable 5.1 [1m]' : '';
-  let ONE_M_RULE = `One \`autoCompactWindow\` of ${COMPACT} serves every model: Claude Code caps it at the model's own window, so this session compacts near ${COMPACT_AT} and a \`[1m]\` one near ${ONE_M_AT}, whether it was started with \`claude-1m\` (\`~/.claude/bin/claude-1m\`) for \`opus[1m]\`${ONE_M_FABLE} or switched to with \`/model\`. \`claude-1m\` pins the model at launch and \`CLAUDE_1M_COMPACT_WINDOW\` lowers the window for that one process; it is no longer what grants the large window. When a task inside an ordinary session needs one large-context read, say so and, once the user agrees, run \`claude-1m -p '<brief>'\` from Bash — its own process, only the answer comes back.`;
+  let ONE_M_RULE = COMPACT
+    ? `One \`autoCompactWindow\` of ${COMPACT} serves every model: Claude Code caps it at the model's own window, so this session compacts near ${COMPACT_AT} and a \`[1m]\` one near ${ONE_M_AT}, whether it was started with \`claude-1m\` (\`~/.claude/bin/claude-1m\`) for \`opus[1m]\`${ONE_M_FABLE} or switched to with \`/model\`. \`claude-1m\` pins the model at launch and \`CLAUDE_1M_COMPACT_WINDOW\` lowers the window for that one process; it is no longer what grants the large window. When a task inside an ordinary session needs one large-context read, say so and, once the user agrees, run \`claude-1m -p '<brief>'\` from Bash — its own process, only the answer comes back.`
+    : `Compaction is at the runtime default: each model compacts against its own window, so this session near ${COMPACT_AT} and a \`[1m]\` one near ${ONE_M_AT}, whether it was started with \`claude-1m\` (\`~/.claude/bin/claude-1m\`) for \`opus[1m]\`${ONE_M_FABLE} or switched to with \`/model\`. \`claude-1m\` pins the model at launch and \`CLAUDE_1M_COMPACT_WINDOW\` sets an earlier window for that one process. When a task inside an ordinary session needs one large-context read, say so and, once the user agrees, run \`claude-1m -p '<brief>'\` from Bash — its own process, only the answer comes back.`;
   if (MODEL_WINDOW > 200000) {
-    ONE_M_RULE = `\`autoCompactWindow\` ${COMPACT} applies uncapped to this 1M session, so it compacts near ${COMPACT_AT}; a 200k model picked with \`/model opus\` is capped at its own window and compacts near 167000. For a small task a 200k session is cheaper per turn — say so and let the user switch. \`claude-1m\` (\`~/.claude/bin/claude-1m\`) still pins the model at launch${ONE_M_FABLE}, and \`CLAUDE_1M_COMPACT_WINDOW\` lowers the window for that one process.`;
+    ONE_M_RULE = COMPACT
+      ? `\`autoCompactWindow\` ${COMPACT} applies uncapped to this 1M session, so it compacts near ${COMPACT_AT}; a 200k model picked with \`/model opus\` is capped at its own window and compacts near 167000. For a small task a 200k session is cheaper per turn — say so and let the user switch. \`claude-1m\` (\`~/.claude/bin/claude-1m\`) still pins the model at launch${ONE_M_FABLE}, and \`CLAUDE_1M_COMPACT_WINDOW\` lowers the window for that one process.`
+      : `Compaction is at the runtime default, so this 1M session compacts near ${COMPACT_AT} and context-guard only warns; a 200k model picked with \`/model opus\` compacts near 167000. For a small task a 200k session is cheaper per turn — say so and let the user switch. \`claude-1m\` (\`~/.claude/bin/claude-1m\`) still pins the model at launch${ONE_M_FABLE}, and \`CLAUDE_1M_COMPACT_WINDOW\` sets an earlier window for that one process.`;
   }
   const READ_LINES = String(snippet.env.CLAUDE_READ_MAX_LINES);
   const READ_BYTES = String(snippet.env.CLAUDE_READ_MAX_BYTES);
@@ -442,17 +468,17 @@ function claudeRender() {
       ARCHITECT_MODEL_LINE = 'model: fable[1m]';
       ARCHITECT_EFFORT = 'xhigh';
       EXPERT_ROW = '`fable[1m]` / `xhigh`, pinned on `architect`';
-      PLAN_SPECIFIC = `- Session model is ${SESSION_HUMAN} by default, compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}). A large context is not free: every turn re-reads it, so keep \`/clear\` between tasks. ${ONE_M_RULE} Fable 5.1 [1m] is pinned on \`architect\` (\`model: fable[1m]\`, \`xhigh\`) and is the session only when the user starts one with \`claude-1m fable\` — never pick it for a reader or a reviewer. \`max\` stays off.
+      PLAN_SPECIFIC = `- Session model is ${SESSION_HUMAN} by default, compaction near ${COMPACT_AT} tokens (${COMPACT_NOTE}). A large context is not free: every turn re-reads it, so keep \`/clear\` between tasks. ${ONE_M_RULE} Fable 5.1 [1m] is pinned on \`architect\` (\`model: fable[1m]\`, \`xhigh\`) and is the session only when the user starts one with \`claude-1m fable\` — never pick it for a reader or a reviewer. \`max\` stays off.
 - \`runtime-gate\` checks Fable at run time. \`fallbackModel\` covers an overload; after a rate-limit or model-not-found failure, and while the weekly limit is ${WEEKLY}% or more used, the gate sends every \`model: fable\` agent to Opus until the reset, and says so in the agent's context. If a Fable agent still returns such an error, re-run the same brief once with \`model: opus\` — an availability switch, not a downgrade. \`~/.claude/hooks/runtime-gate.py status\` shows the gate; \`clear\` re-enables Fable early.`;
     } else {
       ARCHITECT_MODEL_LINE = `# model: intentionally omitted — inherits the session model (${SESSION_HUMAN}, Fable disabled in this install)`;
       ARCHITECT_EFFORT = 'high';
       EXPERT_ROW = `the session model at \`${ARCHITECT_EFFORT}\` — \`architect\` inherits it`;
-      PLAN_SPECIFIC = `- Session model is ${SESSION_HUMAN} by default, compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}). ${ONE_M_RULE} Fable is disabled in this install (\`--fable no\`). Do not request \`model: fable\` anywhere. \`xhigh\` and \`max\` stay off.`;
+      PLAN_SPECIFIC = `- Session model is ${SESSION_HUMAN} by default, compaction near ${COMPACT_AT} tokens (${COMPACT_NOTE}). ${ONE_M_RULE} Fable is disabled in this install (\`--fable no\`). Do not request \`model: fable\` anywhere. \`xhigh\` and \`max\` stay off.`;
     }
     if (PLAN === 'balanced-max') {
       ARCHITECT_MODEL_LINE = '# model: intentionally omitted — inherits the session model (Opus 5.5; no Fable on BalancedMax)';
-      PLAN_SPECIFIC = `- BalancedMax: only the session runs the strong model. Session model is Opus 5.5 with the 200k window and compaction near ${COMPACT_AT} tokens (\`autoCompactWindow\` ${COMPACT}); it plans and implements. Agents keep their cheap tiers — readers (\`Explore\`, \`log-reader\`) on \`${tier('FAST', 'model')}\` / \`${tier('FAST', 'effort')}\`, judgement (\`ai-discovery\`) on \`${tier('BALANCED', 'model')}\`, \`ai-reviewer\` on \`${tier('STRONG', 'model')}\`, and \`architect\` inherits the session. \`opus[1m]\` is a per-task choice, never the default. ${ONE_M_RULE} Fable is off on this plan; never request \`model: fable\`. \`xhigh\` and \`max\` stay off.`;
+      PLAN_SPECIFIC = `- BalancedMax: only the session runs the strong model. Session model is Opus 5.5 with the 200k window and compaction near ${COMPACT_AT} tokens (${COMPACT_NOTE}); it plans and implements. Agents keep their cheap tiers — readers (\`Explore\`, \`log-reader\`) on \`${tier('FAST', 'model')}\` / \`${tier('FAST', 'effort')}\`, judgement (\`ai-discovery\`) on \`${tier('BALANCED', 'model')}\`, \`ai-reviewer\` on \`${tier('STRONG', 'model')}\`, and \`architect\` inherits the session. \`opus[1m]\` is a per-task choice, never the default. ${ONE_M_RULE} Fable is off on this plan; never request \`model: fable\`. \`xhigh\` and \`max\` stay off.`;
     }
     EFFORT_RULE = 'Raise to `high` for architecture, root-cause analysis and adversarial verification, and say that you are raising it; readers stay at `low`.';
   }
@@ -467,7 +493,10 @@ function claudeRender() {
   const vars = {
     PLAN: PLAN_LABEL, PLAN_LABEL, SESSION_MODEL: SESSION_HUMAN, FALLBACK_MODEL: FALLBACK_HUMAN,
     DEFAULT_EFFORT: EFFORT, COMPACT_WINDOW: spaced(COMPACT_AT),
-    CONTEXT_WARN: `${Math.trunc(COMPACT_AT * 80 / 100000)}k`, CONTEXT_BLOCK: `${Math.trunc(COMPACT_AT * 120 / 100000)}k`,
+    CONTEXT_WARN: `${Math.trunc(COMPACT_AT * 80 / 100000)}k`,
+    CONTEXT_BLOCK: COMPACT
+      ? `and from ${Math.trunc(COMPACT_AT * 120 / 100000)}k the prompt is held back once — sending it again goes through`
+      : 'and the prompt is never held back (only `--context economy` sets a block threshold)',
     READ_LINES, PLAN_SPECIFIC_ROUTING: PLAN_SPECIFIC, EFFORT_RULE, EXPERT_EFFORT, EXPERT_MODEL_LINE, EXPERT_ROW,
     ARCHITECT_MODEL_LINE, ARCHITECT_EFFORT,
     FAST_MODEL: tier('FAST', 'model'), FAST_EFFORT: tier('FAST', 'effort'),
@@ -524,8 +553,11 @@ function shSplit(s) {                                            // shlex.split,
   return words;
 }
 
+// The wrapper is `<PREFIX> [--context] [--then '<the user's command>']`; --context
+// (--statusline-context yes) adds a line with the model and the context use.
 function statuslineGate(file, gate, mode) {
   const PREFIX = '"$HOME/.claude/hooks/runtime-gate.py" statusline';
+  const WANT = STATUSLINE_CONTEXT === 'yes' ? `${PREFIX} --context` : PREFIX;
   const OLD_PREFIX = '"$HOME/.claude/hooks/fable-gate.py" statusline';
   let settings = {};
   if (exists(file)) {
@@ -538,23 +570,35 @@ function statuslineGate(file, gate, mode) {
     line.command = PREFIX + cmd.slice(OLD_PREFIX.length);
     ours = true; gate = 'moved';
   }
+  // What follows the prefix and an optional --context: the user's --then, byte for byte.
+  const tail = () => line.command.slice(PREFIX.length).trim().replace(/^--context(\s+|$)/, '');
+  const shown = STATUSLINE_CONTEXT === 'yes' ? ' with the model and the context use' : '';
   let action = null;
   if (gate === 'moved') {
+    const rest = tail();
+    line.command = rest ? `${WANT} ${rest}` : WANT;
     action = 'moved the fable-gate statusline wrapper to runtime-gate (your command is unchanged)';
   } else if (gate === 'on') {
-    if (ours) return ['statusline: already records the quota'];
-    if (line === undefined || line === null) {
-      settings.statusLine = { type: 'command', command: PREFIX };
-      action = 'added a silent statusline that records the quota (and the Fable weekly limit)';
+    if (ours) {
+      const rest = tail();
+      const want = rest ? `${WANT} ${rest}` : WANT;
+      if (want === cmd) return ['statusline: already records the quota'];
+      line.command = want;
+      action = STATUSLINE_CONTEXT === 'yes'
+        ? 'added the model and the context use to the statusline wrapper (your command is unchanged)'
+        : 'removed the model and context line from the statusline wrapper (your command is unchanged)';
+    } else if (line === undefined || line === null) {
+      settings.statusLine = { type: 'command', command: WANT };
+      action = `added a statusline that records the quota (and the Fable weekly limit)${shown}`;
     } else if (isObj(line) && line.type === 'command' && typeof cmd === 'string' && cmd.trim()) {
-      line.command = `${PREFIX} --then ${shQuote(cmd)}`;
-      action = 'wrapped your statusline command with the quota check (its output is unchanged)';
+      line.command = `${WANT} --then ${shQuote(cmd)}`;
+      action = `wrapped your statusline command with the quota check${shown} (its output is unchanged)`;
     } else {
       return ['statusline: not a command statusline; the weekly-limit check is not wired'];
     }
   } else {
     if (!ours) return [];
-    const rest = cmd.slice(PREFIX.length).trim();
+    const rest = tail();
     if (rest.startsWith('--then')) {
       const parts = shSplit(rest);
       line.command = parts.length > 1 ? parts[1] : '';
@@ -579,12 +623,26 @@ const claudeHookFiles = () => [...glob(path.join(SRC, 'hooks'), '.sh'), ...glob(
   .filter((f) => !path.basename(f).startsWith('codex-'));
 const skillsLine = (plugin) => out(`   skills:  ${ls(path.join(SRC, 'skills')).filter((n) => isDir(path.join(SRC, 'skills', n))).join(',')}${plugin ? ' (without SKILL.md: the plugin loads them)' : ''}`);
 
+// Without --context economy, an autoCompactWindow equal to a shipped plan's economy window
+// (800000 Max, 300000 Pro — the one an earlier install wrote, whichever plan it was for)
+// goes; any other value is the user's own and stays. Returns the value to remove, or 0.
+function ownCompactWindow(doc) {
+  if (CONTEXT === 'economy' || !isObj(doc)) return 0;
+  const shipped = glob(path.join(SRC, 'profiles'), '.json').map((f) => {
+    try { return Number(((readJSON(f).riskrails || {}).economy || {}).autoCompactWindow) || 0; } catch (e) { return 0; }
+  });
+  return shipped.includes(doc.autoCompactWindow) ? doc.autoCompactWindow : 0;
+}
+
 function claudeDryRun() {
   out(`== claude: plan=${PLAN} (${C.PLAN_LABEL}, ${C.TIER} profile) fable=${FABLE} fable-gate=${C.GATE} runtime-gate=on (dry run, nothing written)`);
   out(`== claude: target directory ${CLAUDE_DIR}`);
   for (const l of statuslineGate(path.join(CLAUDE_DIR, 'settings.json'), 'on', 'dry')) out('== ' + l);
   out(`== settings snippet (merged into ${CLAUDE_DIR}/settings.json):`);
   out(pretty(C.snippet));
+  let current = {};
+  try { current = readJSON(path.join(CLAUDE_DIR, 'settings.json')); } catch (e) { /* nothing installed yet */ }
+  if (ownCompactWindow(current)) out(`== would remove autoCompactWindow ${current.autoCompactWindow} (economy off)`);
   out('== agents/architect.md (rendered head):');
   out(read(path.join(TMP, 'agents/architect.md')).split('\n').slice(0, 10).join('\n'));
   out('== CLAUDE.md managed block:');
@@ -1045,6 +1103,11 @@ function claudeApply() {
     if (dropPluginDuplicates(doc, keys)) out('removed: the hook entries the riskrails plugin now runs');
     if (isObj(doc.env) && doc.env.CLAUDE_CODE_SUBAGENT_MODEL === 'sonnet') delete doc.env.CLAUDE_CODE_SUBAGENT_MODEL;
     doc = mergeHooks(deepMerge(doc, snippet), newHooks, true);
+    const own = ownCompactWindow(doc);
+    if (own) {
+      delete doc.autoCompactWindow;
+      out(`removed: autoCompactWindow ${own} (economy off)`);
+    }
     writeJSONFile(SETTINGS, doc);
   }
   out('merged: settings.json');
@@ -1119,11 +1182,16 @@ function claudeSummary() {
     `  session model   ${C.SESSION_MODEL} (${C.SESSION_HUMAN}), effort ${C.EFFORT}`,
     `  fallback        ${C.FALLBACK}`,
     `  EXPERT tier     architect on ${expert} at effort ${C.ARCHITECT_EFFORT}`,
-    `  compaction      near ${C.COMPACT_AT} tokens on this ${Math.trunc(C.MODEL_WINDOW / 1000)}k session (autoCompactWindow ${C.COMPACT},`,
-    "                  capped at the model's window); context-guard warns from",
-    `                  ${Math.trunc(C.COMPACT_AT * 80 / 100)} and holds a prompt back once from ${Math.trunc(C.COMPACT_AT * 120 / 100)}`,
+    ...(C.COMPACT ? [
+      `  compaction      near ${C.COMPACT_AT} tokens on this ${Math.trunc(C.MODEL_WINDOW / 1000)}k session (autoCompactWindow ${C.COMPACT},`,
+      "                  capped at the model's window, --context economy); context-guard warns from",
+      `                  ${Math.trunc(C.COMPACT_AT * 80 / 100)} and holds a prompt back once from ${Math.trunc(C.COMPACT_AT * 120 / 100)}`,
+    ] : [
+      `  compaction      the runtime default: near ${C.COMPACT_AT} tokens on this ${Math.trunc(C.MODEL_WINDOW / 1000)}k session;`,
+      `                  context-guard warns from ${Math.trunc(C.COMPACT_AT * 80 / 100)} and never holds a prompt back (economy only)`,
+    ]),
     C.TIER === 'max'
-      ? `  large context   claude-1m${FABLE === 'yes' ? ' [opus|fable]' : ''} starts one session on opus[1m]${FABLE === 'yes' ? ' or fable[1m] (Fable 5.1)' : ''} that compacts near ${C.ONE_M_AT}\n                  (the same autoCompactWindow, uncapped on a 1M model)`
+      ? `  large context   claude-1m${FABLE === 'yes' ? ' [opus|fable]' : ''} starts one session on opus[1m]${FABLE === 'yes' ? ' or fable[1m] (Fable 5.1)' : ''} that compacts near ${C.ONE_M_AT}\n                  (${C.COMPACT ? 'the same autoCompactWindow, uncapped on a 1M model' : 'the runtime default'})`
       : '',
     `  read guard      an unbounded Read is refused above ${C.READ_LINES} lines / ${C.READ_BYTES} bytes`,
     `  agents          ${agentNames(' ')}`,
@@ -1217,7 +1285,7 @@ function codexDryRun() {
   out(`== codex: plan=${CODEX_PLAN} (${X.label}) session ${X.s(X.P.session.model)} at ${X.s(X.P.session.model_reasoning_effort)} (dry run, nothing written)`);
   out(`== codex: target directory ${CODEX_DIR}`);
   const merged = python([path.join(SRC, 'scripts/merge-codex-config.py'), path.join(CODEX_DIR, 'config.toml'),
-    '--profile', X.profileFile, '--dry-run'], { allowFail: true });
+    '--profile', X.profileFile, '--status-context', STATUSLINE_CONTEXT, '--dry-run'], { allowFail: true });
   for (const l of merged.replace(/\n$/, '').split('\n')) if (merged) out('== ' + l);
   out('== AGENTS.md managed block:');
   fs.writeSync(1, read(path.join(TMP, 'AGENTS.block.md')));
@@ -1300,7 +1368,8 @@ function codexApply() {
   const config = path.join(CODEX_DIR, 'config.toml'), before = path.join(TMP, 'config.toml.before');
   rmrf(before);
   if (exists(config) && fs.statSync(config).size > 0) fs.copyFileSync(fs.realpathSync(config), before);
-  python([path.join(SRC, 'scripts/merge-codex-config.py'), config, '--profile', X.profileFile, '--no-backup'], { capture: false });
+  python([path.join(SRC, 'scripts/merge-codex-config.py'), config, '--profile', X.profileFile,
+    '--status-context', STATUSLINE_CONTEXT, '--no-backup'], { capture: false });
   if (exists(before) && fs.statSync(before).size > 0 && !sameFile(before, config)) backupFile(config, CODEX_DIR, before);
 
   // -------------------------------------------------------------- 6. AGENTS.md

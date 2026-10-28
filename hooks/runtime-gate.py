@@ -12,8 +12,9 @@ Claude Code (model: fable -> opus):
   StopFailure (rate_limit|model_not_found)  records that Fable is unavailable
   PostToolUse:Agent                         records a Fable agent that fell back (overload), briefly
   PreToolUse:Agent                          while a record is live, rewrites model fable -> opus
-  statusline [--then <command>]             records it when the weekly limit is nearly used, then
-                                            runs the user's own statusline command on the same input
+  statusline [--context] [--then <command>] records it when the weekly limit is nearly used, prints
+                                            the model and the context use with --context, then runs
+                                            the user's own statusline command on the same input
 
 Codex (EXPERT model -> STRONG model); an agent launch is `spawn_agent`, or
 `collaborationspawn_agent` under multi-agent v2:
@@ -43,7 +44,7 @@ A record expires on its own. The gate never denies, always exits 0, and any
 error inside it fails open: the call goes through unchanged.
 
   runtime-gate.py status | quota [--json] | clear | set <seconds> [reason]
-                  | statusline [--then <cmd>]
+                  | statusline [--context] [--then <cmd>]
 
 Quota (advice only, it never refuses anything): Claude Code's comes from the
 statusline payload, Codex's from the newest rollout's token_count event. Both
@@ -1102,7 +1103,7 @@ def cli(argv):
     if cmd == "set" and len(argv) >= 2 and argv[1].isdigit():
         mark(time.time() + int(argv[1]), " ".join(argv[2:]) or "manual", "cli")
         return cli(["status"])
-    print("usage: runtime-gate.py status | quota [--json] | clear | set <seconds> [reason] | statusline [--then <cmd>] < json",
+    print("usage: runtime-gate.py status | quota [--json] | clear | set <seconds> [reason] | statusline [--context] [--then <cmd>] < json",
           file=sys.stderr)
     return 2
 
@@ -1115,17 +1116,63 @@ def disabled():
     return False
 
 
+def context_line(payload):
+    """`Opus 5.5 [1m] · 123k/1000k (12%)` from a Claude Code statusline payload, or ""
+    when it names neither the model nor the context. The context_window fields differ
+    between Claude Code versions: the tokens come from current_usage (input plus cache
+    reads and writes, what the next turn re-reads), else from used_percentage."""
+    model = payload.get("model")
+    name = str(model.get("display_name") or model.get("id") or "") if isinstance(model, dict) else ""
+    window = payload.get("context_window")
+    window = window if isinstance(window, dict) else {}
+
+    def number(value):
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 else None
+
+    size = number(window.get("context_window_size"))
+    pct = number(window.get("used_percentage"))
+    usage = window.get("current_usage")
+    used = None
+    if isinstance(usage, dict):
+        parts = [number(usage.get(k)) for k in
+                 ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")]
+        if any(p is not None for p in parts):
+            used = sum(p or 0 for p in parts)
+    if used is None and pct is not None and size:
+        used = size * pct / 100
+    if pct is None and used is not None and size:
+        pct = used * 100 / size
+    context = ""
+    if used is not None and size:
+        context = f"{round(used / 1000)}k/{round(size / 1000)}k ({round(pct)}%)"
+    return " · ".join(part for part in (name, context) if part)
+
+
 def statusline_main(argv):
-    """`statusline [--then <command>]`: check the weekly limit, then hand the same
-    input to the user's own statusline command and pass its output and exit code
-    through. The check never gets in the way of the statusline."""
+    """`statusline [--context] [--then <command>]`: check the weekly limit, print the
+    model and the context use with --context, then hand the same input to the user's
+    own statusline command and pass its output and exit code through. Neither the
+    check nor the line ever gets in the way of the statusline."""
     data = sys.stdin.buffer.read()
-    if not disabled() and RUNTIME == "claude":
+    show_context = argv[1:2] == ["--context"]
+    if show_context:
+        argv = argv[:1] + argv[2:]
+    payload = None
+    try:
+        payload = json.loads(data.decode("utf-8", "replace"))
+    except Exception:  # pylint: disable=broad-exception-caught  # fail open: a bad payload never breaks the statusline
+        pass
+    if isinstance(payload, dict) and not disabled() and RUNTIME == "claude":
         try:
-            payload = json.loads(data.decode("utf-8", "replace"))
-            if isinstance(payload, dict):
-                statusline(payload)
-        except Exception:  # pylint: disable=broad-exception-caught  # fail open: a bad payload never breaks the statusline
+            statusline(payload)
+        except Exception:  # pylint: disable=broad-exception-caught  # fail open, as above
+            pass
+    if show_context and isinstance(payload, dict):
+        try:
+            line = context_line(payload)
+            if line:
+                print(line)
+        except Exception:  # pylint: disable=broad-exception-caught  # fail open, as above
             pass
     if len(argv) >= 3 and argv[1] == "--then" and argv[2].strip():
         shell = shutil.which("bash") or "/bin/sh"

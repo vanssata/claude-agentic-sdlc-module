@@ -336,7 +336,7 @@ pass "exactly one gate command per event after the upgrade"
 grep -q 'replaced: fable-gate hooks with runtime-gate' <<<"$out" && pass "the replacement is reported" || fail "replacement not reported" "$out"
 jq -e '[.hooks.PostToolUse[].hooks[].command] | index("my-agent-logger.sh")' "$D/settings.json" >/dev/null \
     && pass "the user's hook on the same event survives the upgrade" || fail "user hook lost in the upgrade"
-[ "$(jq -r .statusLine.command "$D/settings.json")" = "\"\$HOME/.claude/hooks/runtime-gate.py\" statusline --then 'my-line.sh'" ] \
+[ "$(jq -r .statusLine.command "$D/settings.json")" = "\"\$HOME/.claude/hooks/runtime-gate.py\" statusline --context --then 'my-line.sh'" ] \
     && pass "the old statusline wrapper is re-pointed, the user's command kept" || fail "statusline not moved" "$(jq -r .statusLine.command "$D/settings.json")"
 grep -q 'statusline: moved the fable-gate statusline wrapper' <<<"$out" && pass "the move is reported" || fail "move not reported" "$out"
 
@@ -350,7 +350,7 @@ grep -q 'statusline: would have wrapped' <<<"$out" && pass "the dry run says it 
 [ "$(jq -r .statusLine.command "$D/settings.json")" = "$ORIG" ] && pass "and the dry run leaves it alone" || fail "dry run changed the statusline"
 out=$(CLAUDE_DIR="$D" node "$INSTALL" --plan max --fable yes 2>&1)
 cmd=$(jq -r .statusLine.command "$D/settings.json")
-case "$cmd" in "$PREFIX --then "*) pass "an install wraps an existing statusline command";; *) fail "statusline not wrapped" "$cmd";; esac
+case "$cmd" in "$PREFIX --context --then "*) pass "an install wraps an existing statusline command, with the context line";; *) fail "statusline not wrapped" "$cmd";; esac
 grep -q 'statusline: wrapped' <<<"$out" && pass "the wrap is reported" || fail "wrap not reported" "$out"
 [ "$(jq -r .statusLine.padding "$D/settings.json")" = 1 ] && pass "other statusLine fields are kept" || fail "statusLine padding lost"
 CLAUDE_DIR="$D" node "$INSTALL" --plan max --fable yes >/dev/null 2>&1
@@ -359,17 +359,29 @@ CLAUDE_DIR="$D" node "$INSTALL" --plan max --fable yes >/dev/null 2>&1
 mkdir -p "$H/.claude"; printf '#!/usr/bin/env bash\ncat >/dev/null; printf "my-statusline %%s" "$*"\n' > "$H/.claude/statusline-command.sh"
 reset_state
 out=$(printf '%s' "$high" | HOME="$H" bash -c "$cmd")
-[ "$out" = "my-statusline --flag two words single" ] && pass "the installed wrapper runs the original statusline with its arguments intact" || fail "installed wrapper output wrong" "$out"
+[ "$out" = "Sonnet
+my-statusline --flag two words single" ] && pass "the installed wrapper prints the model, then runs the original statusline with its arguments intact" || fail "installed wrapper output wrong" "$out"
 marker_active && pass "and records the weekly limit through the installed hook" || fail "installed wrapper did not record"
 
 CLAUDE_DIR="$D" node "$INSTALL" --plan max --fable no >/dev/null 2>&1
 [ "$(jq -r .statusLine.command "$D/settings.json")" = "$cmd" ] && pass "--fable no keeps the wrapper: the quota is read on every plan" || fail "wrapper changed on --fable no" "$(jq -r .statusLine.command "$D/settings.json")"
+out=$(CLAUDE_DIR="$D" node "$INSTALL" --plan max --fable no --statusline-context no 2>&1)
+[ "$(jq -r .statusLine.command "$D/settings.json")" = "$PREFIX --then ${cmd#"$PREFIX --context --then "}" ] \
+    && pass "--statusline-context no rewrites the wrapper in place, the user's command byte for byte" \
+    || fail "wrapper not rewritten without --context" "$(jq -r .statusLine.command "$D/settings.json")"
+grep -q 'statusline: removed the model and context line' <<<"$out" && pass "the rewrite is reported" || fail "rewrite not reported" "$out"
+CLAUDE_DIR="$D" node "$INSTALL" --plan max --fable no >/dev/null 2>&1
+[ "$(jq -r .statusLine.command "$D/settings.json")" = "$cmd" ] && pass "and --statusline-context yes puts --context back" || fail "wrapper not rewritten with --context" "$(jq -r .statusLine.command "$D/settings.json")"
 
 H="$TMP/h-none"; D="$H/.claude"; mkdir -p "$D"
-CLAUDE_DIR="$D" node "$INSTALL" --plan max --fable yes >/dev/null 2>&1
-[ "$(jq -r .statusLine.command "$D/settings.json")" = "$PREFIX" ] && pass "with no statusline, an install adds the bare check" || fail "bare statusline not added" "$(jq -c .statusLine "$D/settings.json")"
+CLAUDE_DIR="$D" node "$INSTALL" --plan max --fable yes --statusline-context no >/dev/null 2>&1
+[ "$(jq -r .statusLine.command "$D/settings.json")" = "$PREFIX" ] && pass "with no statusline and --statusline-context no, an install adds the bare check" || fail "bare statusline not added" "$(jq -c .statusLine "$D/settings.json")"
 out=$(printf '%s' "$high" | HOME="$H" bash -c "$(jq -r .statusLine.command "$D/settings.json")")
 [ -z "$out" ] && pass "which prints nothing" || fail "bare statusline should be silent" "$out"
+CLAUDE_DIR="$D" node "$INSTALL" --plan max --fable yes >/dev/null 2>&1
+[ "$(jq -r .statusLine.command "$D/settings.json")" = "$PREFIX --context" ] && pass "by default the added statusline shows the model and the context" || fail "context statusline not added" "$(jq -c .statusLine "$D/settings.json")"
+out=$(printf '%s' "$high" | HOME="$H" bash -c "$(jq -r .statusLine.command "$D/settings.json")")
+[ "$out" = "Sonnet" ] && pass "which prints the model alone when the payload has no context_window" || fail "context statusline output wrong" "$out"
 
 for opt in "max no" "pro no"; do
     set -- $opt
@@ -377,7 +389,7 @@ for opt in "max no" "pro no"; do
     jq -n --arg c "$ORIG" '{statusLine:{type:"command",command:$c}}' > "$D/settings.json"
     CLAUDE_DIR="$D" node "$INSTALL" --plan "$1" --fable "$2" >/dev/null 2>&1
     case "$(jq -r .statusLine.command "$D/settings.json")" in
-        "$PREFIX --then "*) pass "--plan $1 --fable $2 wraps the statusline too (OQ4)";;
+        "$PREFIX --context --then "*) pass "--plan $1 --fable $2 wraps the statusline too (OQ4)";;
         *) fail "--plan $1 --fable $2 did not wrap the statusline";;
     esac
 done

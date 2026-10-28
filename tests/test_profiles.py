@@ -190,6 +190,28 @@ class Profiles(ScratchCase):
             self.check(lbl("$name resolves and sets no askUserQuestionTimeout", name=name),
                        rc == 0 and "askUserQuestionTimeout" not in out, out)
 
+    def test_06_context_default_leaves_compaction_to_the_runtime_economy_restores_the_window(self):
+        for name, window in (("max", 800000), ("pro", 300000), ("max20", 800000), ("balanced-max", 800000)):
+            raw = read_json(os.path.join(PROFILES, name + ".json"))
+            self.check(lbl("$name.json sets no top-level autoCompactWindow", name=name), "autoCompactWindow" not in raw)
+            settings = json.loads(resolve(name, "--print", "settings")[1])
+            self.check(lbl("$name default: no autoCompactWindow in settings", name=name), "autoCompactWindow" not in settings,
+                       json.dumps(settings.get("autoCompactWindow")))
+            doc = json.loads(resolve(name, "--print", "agentic")[1])
+            self.check(lbl("$name default: context mode default, window null", name=name),
+                       doc["context"] == {"mode": "default", "window": None}, json.dumps(doc["context"]))
+            settings = json.loads(resolve(name, "--context", "economy", "--print", "settings")[1])
+            self.check(lbl("$name economy: autoCompactWindow $w", name=name, w=window),
+                       settings.get("autoCompactWindow") == window, json.dumps(settings.get("autoCompactWindow")))
+            doc = json.loads(resolve(name, "--context", "economy", "--print", "agentic")[1])
+            self.check(lbl("$name economy: context window $w", name=name, w=window),
+                       doc["context"] == {"mode": "economy", "window": window}, json.dumps(doc["context"]))
+        doc = json.loads(resolve("codex-pro", "--context", "economy", "--print", "agentic")[1])
+        self.check("a Codex profile without economy: window null", doc["context"] == {"mode": "economy", "window": None},
+                   json.dumps(doc["context"]))
+        rc = resolve("max", "--context", "huge")[0]
+        self.check("an unknown --context is refused", rc == 2, "exit %s" % rc)
+
 
 def read_text(path):
     with open(path, encoding="utf-8") as fh:

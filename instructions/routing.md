@@ -38,7 +38,7 @@ Facts are collected cheaply; thinking is paid for. Session model {{SESSION_MODEL
 - One subagent returning twenty lines beats five tool calls whose output stays in context all session.
 - Deterministic tools first: `rg`, `git`, `jq`, the framework CLI, the test runner.
 - `/clear` between tasks, and after every task that ran a review. Compaction near {{COMPACT_WINDOW}} tokens is a summary of the old task, not a clean start; until then every turn re-reads the whole history.
-- `context-guard` measures the context on every prompt: a one-line warning from {{CONTEXT_WARN}} tokens, and from {{CONTEXT_BLOCK}} the prompt is held back once — sending it again goes through. When its note says the prompt starts a different task, suggest `/clear` before doing the work. Before a compaction it saves the edited files, the latest instructions verbatim, the todo list and the git state, and hands them back afterwards as "Session state before compaction": trust that block over the summary where they differ, and re-read a file before editing it rather than relying on what the summary says it contains.
+- `context-guard` measures the context on every prompt: a one-line warning from {{CONTEXT_WARN}} tokens, {{CONTEXT_BLOCK}}. When its note says the prompt starts a different task, suggest `/clear` before doing the work. Before a compaction it saves the edited files, the latest instructions verbatim, the todo list and the git state, and hands them back afterwards as "Session state before compaction": trust that block over the summary where they differ, and re-read a file before editing it rather than relying on what the summary says it contains.
 - Run tests once, to the end, and fix every failure as one batch. Never one failure, one fix, one run.
 - `/usage-report` shows where the tokens went, at zero model cost; `--provider both` puts Codex next to Claude Code.
 
@@ -47,7 +47,7 @@ Facts are collected cheaply; thinking is paid for. Session model {{SESSION_MODEL
 
 <!-- stub: runtime=claude -->
 - `ai-git-guard` runs in every repository: no force push, history rewrite, push or merge to a protected branch, `--no-verify`, staged secret or production deploy. `ai-path-guard` and `ai-scope-guard` arm only where `.ai/` exists. No agent commits, merges or deploys on its own; the pipeline ends at human approval.
-- `context-guard` measures the context on every prompt and holds a prompt back once at the block threshold above; its "Session state before compaction" block and `.ai/state/handoff.md` are what a resumed session trusts over the summary.
+- `context-guard` measures the context on every prompt and holds a prompt back once at the block threshold above, when there is one; its "Session state before compaction" block and `.ai/state/handoff.md` are what a resumed session trusts over the summary.
 
 <!-- stub: runtime=codex -->
 # Model allocation by task and scope (host-wide, ChatGPT {{CODEX_PLAN}} plan)

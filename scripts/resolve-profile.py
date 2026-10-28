@@ -21,9 +21,14 @@ Resolution:
   ``pro.json``, ``team-max`` resolves ``max.json``).
 * ``--fable yes|no`` records ``fable`` and drops ``architect_model_with_fable``
   when Fable is off, so a reader never has to know the flag.
+* ``--context default|economy`` (default ``default``) records ``context: {mode,
+  window}``. ``economy`` copies ``riskrails.economy.autoCompactWindow`` to the
+  settings' top level and into ``window``; ``default`` leaves the runtime its own
+  compaction, so ``window`` is null and settings carry no ``autoCompactWindow``.
 
   resolve-profile.py <name|path> [--src DIR] [--plan P] [--label L]
-                     [--fable yes|no] [--print full|settings|agentic]
+                     [--fable yes|no] [--context default|economy]
+                     [--print full|settings|agentic]
 
 ``settings`` prints the profile without ``riskrails``; ``agentic`` prints
 the resolved ``riskrails`` object; ``full`` (the default) prints both.
@@ -79,7 +84,7 @@ def codex_tiers(data):
     return tiers
 
 
-def resolve(src, name, plan=None, label=None, fable=None):
+def resolve(src, name, plan=None, label=None, fable=None, context="default"):
     data = load(src, name)
     agentic = data.get(KEY)
     if not isinstance(agentic, dict):
@@ -94,6 +99,12 @@ def resolve(src, name, plan=None, label=None, fable=None):
         agentic["fable"] = fable
         if not fable:
             agentic.get("tiers", {}).get("EXPERT", {}).pop("architect_model_with_fable", None)
+    window = None
+    if context == "economy":
+        window = (agentic.get("economy") or {}).get("autoCompactWindow")
+        if window:
+            data["autoCompactWindow"] = window
+    agentic["context"] = {"mode": context, "window": window}
     return data
 
 
@@ -105,12 +116,13 @@ def main(argv=None):
     ap.add_argument("--plan")
     ap.add_argument("--label")
     ap.add_argument("--fable", choices=("yes", "no"))
+    ap.add_argument("--context", choices=("default", "economy"), default="default")
     ap.add_argument("--print", dest="what", choices=("full", "settings", "agentic"), default="full")
     args = ap.parse_args(argv)
 
     fable = None if args.fable is None else args.fable == "yes"
     try:
-        data = resolve(args.src, args.profile, args.plan, args.label, fable)
+        data = resolve(args.src, args.profile, args.plan, args.label, fable, args.context)
     except (OSError, ValueError) as exc:
         print(f"resolve-profile: {exc}", file=sys.stderr)
         return 2

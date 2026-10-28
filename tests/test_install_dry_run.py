@@ -458,8 +458,8 @@ class InstallDryRun(ScratchCase):
         self.ok("with --fable no, fable is not offered",
                 "fable[1m]" not in (jv(jload(os.path.join(dirn, "settings.json")), "availableModels") or []),
                 "fable should be removed with --fable no")
-        self.ok("the compaction window is 800k on max; uncapped on the 1M session, so it fires near 767k",
-                jr(jv(st, "autoCompactWindow")) == "800000", "compaction not set")
+        self.ok("by default no compaction window is written: the runtime compacts on its own",
+                jv(st, "autoCompactWindow") is None, "autoCompactWindow written without --context economy")
         self.ok("context-guard is executable", is_x(os.path.join(d, "hooks", "context-guard.py")), "context-guard should be executable")
         for ev in ("UserPromptSubmit", "PreCompact", "SessionStart"):
             self.ok("context-guard is registered under $ev", count_ctx(st, ev) == 1,
@@ -470,10 +470,12 @@ class InstallDryRun(ScratchCase):
                 "context-guard registered twice")
         routing = rd(os.path.join(d, "riskrails", "routing.md"))
         block = rd(os.path.join(d, "CLAUDE.md"))
-        self.ok("routing.md names the point where compaction fires on the 1M session", "Compaction near 767 000 tokens" in routing,
-                "routing.md should say compaction fires near 767 000")
-        self.ok("routing.md names the guard's thresholds", "warning from 613k tokens, and from 920k" in routing,
-                "the guard thresholds are not rendered")
+        self.ok("routing.md names where the 1M session compacts on its own", "Compaction near 967 000 tokens" in routing,
+                "routing.md should say compaction fires near 967 000")
+        self.ok("routing.md says the guard warns and never blocks by default",
+                "warning from 773k tokens, and the prompt is never held back" in routing, "the guard thresholds are not rendered")
+        self.ok("routing.md says compaction is at the runtime default", "runtime default" in routing,
+                "routing.md does not name the runtime default")
         self.ok("the block carries what a compaction must keep", "On compaction keep" in block,
                 "the compaction rule is missing from the block")
         self.ok("every placeholder is rendered", "{{" not in block, "an unrendered placeholder is left in CLAUDE.md")
@@ -485,27 +487,74 @@ class InstallDryRun(ScratchCase):
 
         def launch(*args, window=None):
             proc = subprocess.run([launcher, *args], capture_output=True, text=True,
-                                  env=env_with(CLAUDE_BIN=fake, CLAUDE_1M_COMPACT_WINDOW=window), check=False)
+                                  env=env_with(CLAUDE_BIN=fake, CLAUDE_1M_COMPACT_WINDOW=window,
+                                               CLAUDE_CODE_AUTO_COMPACT_WINDOW=None), check=False)
             return proc.returncode, proc.stdout.rstrip("\n")
 
         rc, out1m = launch("-p", "hi")
-        self.ok("claude-1m runs opus[1m] with an 800k compaction window", out1m == "window=800000 args=--model opus[1m] -p hi",
+        self.ok("claude-1m runs opus[1m] and exports no compaction window", out1m == "window= args=--model opus[1m] -p hi",
                 "claude-1m launched the wrong session " + out1m)
         rc, out1m = launch(window="500000")
-        self.ok("CLAUDE_1M_COMPACT_WINDOW lowers the 1m window", out1m == "window=500000 args=--model opus[1m]",
+        self.ok("CLAUDE_1M_COMPACT_WINDOW sets the 1m window", out1m == "window=500000 args=--model opus[1m]",
                 "the window override was ignored " + out1m)
         rc, out1m = launch("fable", "-p", "hi")
-        self.ok("claude-1m fable runs fable[1m] with the same 800k window", out1m == "window=800000 args=--model fable[1m] -p hi",
+        self.ok("claude-1m fable runs fable[1m], no window either", out1m == "window= args=--model fable[1m] -p hi",
                 "claude-1m fable launched the wrong session " + out1m)
         rc, out1m = launch("opus")
-        self.ok("claude-1m opus is the default spelled out", out1m == "window=800000 args=--model opus[1m]",
+        self.ok("claude-1m opus is the default spelled out", out1m == "window= args=--model opus[1m]",
                 "claude-1m opus launched the wrong session " + out1m)
         self.ok("routing.md offers Fable 5.1 [1m] as a session through claude-1m fable", "claude-1m fable" in routing,
                 "routing.md does not mention claude-1m fable")
         rc, _ = launch(window="lots")
         self.ok("a non-numeric window is refused", rc != 0, "a non-numeric window must be refused")
-        self.ok("the launcher leaves the settings window for every other model alone",
-                jr(jv(jload(sp), "autoCompactWindow")) == "800000", "settings window changed")
+        rc, out1m = launch(window="")
+        self.ok("an empty window is no window", out1m == "window= args=--model opus[1m]", "empty window: " + out1m)
+        self.ok("the launcher writes no settings window", jv(jload(sp), "autoCompactWindow") is None, "settings window changed")
+
+        # --context economy restores the plan's window and the guard's block.
+        rc, log = run("--plan", "max", "--fable", "yes", "--context", "economy", CLAUDE_DIR=d)
+        routing = rd(os.path.join(d, "riskrails", "routing.md"))
+        self.ok("economy: the compaction window is 800k on max; uncapped on the 1M session, so it fires near 767k",
+                rc == 0 and jr(jv(jload(sp), "autoCompactWindow")) == "800000", "economy did not write the window")
+        self.ok("economy: routing.md names compaction near 767 000", "Compaction near 767 000 tokens" in routing,
+                "routing.md should say compaction fires near 767 000")
+        self.ok("economy: routing.md names the guard's thresholds",
+                "warning from 613k tokens, and from 920k the prompt is held back once" in routing,
+                "the guard thresholds are not rendered")
+        self.ok("economy: profile.json records the mode and the window",
+                jv(jload(os.path.join(d, "riskrails", "profile.json")), "context") == {"mode": "economy", "window": 800000},
+                "profile.json context wrong")
+        rc, log = run("--plan", "max", "--fable", "yes", "--context", "economy", "--dry-run", CLAUDE_DIR=d)
+        self.ok("economy over economy: nothing to remove", "would remove autoCompactWindow" not in log, log[-300:])
+
+        # Back to default: the window an install wrote goes, a user's own stays.
+        rc, log = run("--plan", "max", "--fable", "yes", "--dry-run", CLAUDE_DIR=d)
+        self.ok("default --dry-run names the window it would remove",
+                "would remove autoCompactWindow 800000 (economy off)" in log, log[-300:])
+        self.ok("--dry-run removes nothing", jr(jv(jload(sp), "autoCompactWindow")) == "800000", "dry run wrote settings")
+        rc, log = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d)
+        self.ok("default removes the plan's own 800000", "removed: autoCompactWindow 800000 (economy off)" in log
+                and jv(jload(sp), "autoCompactWindow") is None, log[-300:])
+        self.ok("default: profile.json records no window",
+                jv(jload(os.path.join(d, "riskrails", "profile.json")), "context") == {"mode": "default", "window": None},
+                "profile.json context wrong")
+        doc = jload(sp)
+        doc["autoCompactWindow"] = 500000
+        write(sp, json.dumps(doc))
+        rc, log = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d)
+        self.ok("a window the user set (500000) is kept", "removed: autoCompactWindow" not in log
+                and jv(jload(sp), "autoCompactWindow") == 500000, log[-300:])
+        # Review M2: another plan's shipped window (Pro's 300000) is the installer's too.
+        doc["autoCompactWindow"] = 300000
+        write(sp, json.dumps(doc))
+        rc, log = run("--plan", "max", "--fable", "yes", "--dry-run", CLAUDE_DIR=d)
+        self.ok("default --dry-run on max names Pro's 300000 too",
+                "would remove autoCompactWindow 300000 (economy off)" in log, log[-300:])
+        rc, log = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d)
+        self.ok("a Pro window left by a Pro install goes on a default Max install",
+                "removed: autoCompactWindow 300000 (economy off)" in log and jv(jload(sp), "autoCompactWindow") is None,
+                log[-300:])
+        st = jload(sp)
         self.ok("routing.md says opus[1m] starts with claude-1m", "claude-1m" in routing, "routing.md does not mention claude-1m")
         self.ok("Opus runs at medium", jr(jv(st, "modelSettings", "claude-opus-5", "effortLevel")) == "medium", "opus effort not medium")
 

@@ -603,6 +603,31 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
         self.assertEqual((upd(out) or {}).get("model"), "sonnet", "AI_RUNTIME_GATE_CLAUDE_FALLBACK wins over the shared name")
         self.gate(g, "clear")
 
+    def test_16_statusline_context_line(self):
+        g, cl = self.g, self.cl
+        self.rmrf(cl + "/state")
+        user = ["--then", "cat >/dev/null; echo USER"]
+        usage = {"model": {"display_name": "Opus 5.5 [1m]"},
+                 "context_window": {"context_window_size": 1000000,
+                                    "current_usage": {"input_tokens": 3000, "cache_read_input_tokens": 120000,
+                                                      "cache_creation_input_tokens": 0, "output_tokens": 999}}}
+        self.assertEqual(self.gate(g, "statusline", "--context", *user, stdin=usage),
+                         (0, "Opus 5.5 [1m] · 123k/1000k (12%)\nUSER\n"),
+                         "current_usage: input plus cache tokens, then the user's own line")
+        pct = {"model": {"display_name": "Sonnet 5"},
+               "context_window": {"context_window_size": 200000, "used_percentage": 40}}
+        self.assertEqual(self.out(g, "statusline", "--context", stdin=pct), "Sonnet 5 · 80k/200k (40%)\n",
+                         "used_percentage alone gives the tokens")
+        self.assertEqual(self.out(g, "statusline", "--context", stdin={"model": {"display_name": "Haiku"}}), "Haiku\n",
+                         "no context_window: the model alone")
+        for bad in ("garbage", "[1,2]", '{"model": "x", "context_window": {"context_window_size": "lots"}}', ""):
+            with self.subTest(bad=bad):
+                self.assertEqual(self.gate(g, "statusline", "--context", *user, stdin=bad), (0, "USER\n"),
+                                 "a bad payload prints no line and the user's line is intact")
+        self.assertEqual(self.out(g, "statusline", *user, stdin=usage), "USER\n", "without --context there is no line")
+        self.assertEqual(self.out(g, "statusline", "--context", *user, stdin=usage, AI_RUNTIME_GATE="off"),
+                         "Opus 5.5 [1m] · 123k/1000k (12%)\nUSER\n", "the line does not depend on the gate being on")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -135,6 +135,11 @@ npx riskrails@3.0.0 --plan balanced-max   # BalancedMax: only the session is str
 npx riskrails@3.0.0 --codex-plan plus     # Plus: Sol at medium, three agent threads, Astra at high, no xhigh
 npx riskrails@3.0.0 --codex-plan pro      # Pro: Sol at high, six agent threads, Astra at xhigh for ai-expert
 npx riskrails@3.0.0 --codex-plan balanced-max  # Pro's budgets, Sol session, FAST readers on Luna, Astra at high
+
+# Context (both runtimes):
+npx riskrails@3.0.0 --context economy     # the plan's compaction window (800 000 Max, 300 000 Pro); the guard also blocks
+npx riskrails@3.0.0 --context default     # the default: each runtime's own window and compaction; the guard only warns
+npx riskrails@3.0.0 --statusline-context no  # no model and context line in the statusline (default yes)
 ```
 
 From a checkout, `node bin/riskrails.js` takes the same flags. `./install.sh` only
@@ -250,9 +255,10 @@ it should not be the most expensive model by default.
 | `taskOutputMaxChars` (Claude) | 80 000 | — |
 | `MAX_MCP_OUTPUT_TOKENS` (Claude) | 40 000 | 25 000 |
 | `cap-large-read.py` (Claude) | refuses an unbounded `Read` over 4 000 lines or 250 KB | no limit |
-| `autoCompactWindow` (Claude) | 800 000 on Max and Team Max, 300 000 on Pro and Team Pro. Claude Code caps it at the model's own window, so one setting means compaction near 167k on a 200k model and near 767k on a `[1m]` one; on Pro the cap decides, at 167k | the model window |
-| `claude-1m [opus\|fable]` (Claude, Max and Team Max) | pins one session to `opus[1m]`, or to `fable[1m]` (Fable 5.1), at launch. The large window comes from the per-model cap, not from the launcher, so `/model opus[1m]` reaches it too; `CLAUDE_1M_COMPACT_WINDOW` exports `CLAUDE_CODE_AUTO_COMPACT_WINDOW` for that process alone to compact *earlier* than 767k | `/model` only, and the same cap applies |
-| `context-guard.py` (both runtimes) | warns from 80% of the point where compaction fires and holds a prompt back once from 120% — 133k and 200k on a 200k Max session, 613k and 920k on a `[1m]` one; `AI_CONTEXT_WARN_TOKENS` / `AI_CONTEXT_BLOCK_TOKENS` set them in tokens, `0` turns one off | no guard |
+| `autoCompactWindow` (Claude) | not set by default: each runtime keeps its own context window and compaction (near 167k on a 200k model, near 967k on a `[1m]` one). With `--context economy`: 800 000 on Max and Team Max, 300 000 on Pro and Team Pro, capped by Claude Code at the model's own window, so compaction near 167k on a 200k model and near 767k on a `[1m]` one. A re-install without economy removes the value it wrote (only when it still equals the plan's); any other value is yours and stays | the model window |
+| `claude-1m [opus\|fable]` (Claude, Max and Team Max) | pins one session to `opus[1m]`, or to `fable[1m]` (Fable 5.1), at launch. The large window comes from the per-model cap, not from the launcher, so `/model opus[1m]` reaches it too. It exports no window of its own; `CLAUDE_1M_COMPACT_WINDOW` exports `CLAUDE_CODE_AUTO_COMPACT_WINDOW` for that process alone to compact *earlier* | `/model` only, and the same cap applies |
+| `context-guard.py` (both runtimes) | warns from 80% of the point where compaction fires — 133k on a 200k session, 773k on a `[1m]` one — and never holds a prompt back. With `--context economy`, or a window you set yourself, it also holds a prompt back once from 120%: 133k and 200k on a 200k Max session, 613k and 920k on a `[1m]` one. `AI_CONTEXT_WARN_TOKENS` / `AI_CONTEXT_BLOCK_TOKENS` set them in tokens, `0` turns one off | no guard |
+| statusline (both runtimes) | the model and the context use: in Claude Code one line before your own (`Opus 5.5 [1m] · 123k/1000k (12%)`); in Codex `model-with-reasoning` and `context-used` appended to a `[tui] status_line` you set, when missing, your items kept in order (an unset or empty list is left to you). `--statusline-context no` adds nothing | the runtime's own |
 | `model` (Claude) | `opusplan` on Pro and Team Pro: Opus in plan mode, Sonnet when executing; `claude-opus-5-5[1m]` (Opus 5.5, 1M window) by default on Max, Max 20x and Team Max, `opus` (200k) per task through `/model`; `claude-opus-5-5` (200k) on BalancedMax | Sonnet 5 on Pro |
 | `effortLevel` (Claude) | `medium` on both plans; agents raise it per task | — |
 | `model` (Codex) | `gpt-5.6-sol` at `high` on Pro, `medium` on Plus; subagents `gpt-5.6-terra` at `medium` | — |
@@ -512,7 +518,8 @@ the per-call model, which put every agent on Sonnet. A STRONG or EXPERT agent ru
 only when a named trigger fires; the triggers are listed in `policies/model-routing.md` of the shared tree.
 
 On a Max plan the session runs Opus 5.5 [1m] by default at `medium` effort,
-compacting near 767k tokens (`autoCompactWindow` 800 000, uncapped on a 1M model)
+compacting at the runtime default, near 967k tokens (near 767k with `--context economy`, whose
+`autoCompactWindow` 800 000 is uncapped on a 1M model)
 — `/model opus` gives a 200k session that compacts near 167k, cheaper per turn for
 a small task — and escalates from there: `ai-expert` pins `opus` at `xhigh`, so a session switched to
 Sonnet (the JetBrains agent's Model setting, or `/model`) cannot weaken the last-resort tier. Fable 5.1 [1m] is pinned on `architect` alone, at
@@ -569,7 +576,7 @@ model, and nothing in the design depends on a local model existing.
 | `ai-scope-guard` | both | only during an implementation step | refuses editing a file the approved step does not name, with the `SCOPE_CHANGE_REQUIRED` signal |
 | `cap-large-read.py` | Claude only | every session | refuses an unbounded `Read` of a large file; an explicit `limit` passes |
 | `project-scaffold.sh` | Claude only | `Setup:init` | creates the `docs/sdlc/` and runtime layout on `/init` |
-| `context-guard.py` | both | `UserPromptSubmit` / `PreCompact` / `SessionStart:startup\|resume\|clear\|compact` | reads the context size from the transcript: warns once per 10k from 80% of the compaction point, holds a prompt back once from 120% (the same prompt again passes). Before a compaction it writes a snapshot — edited files, latest instructions verbatim, todo list, git state, `.ai/` task state — and tells the summary what to keep; after it, the snapshot goes back into the context. On every session start it writes `.ai/state/session.json` and, with a task in flight, injects `handoff.md` and the pending questions. The snapshot is Claude-only; everything else crosses to Codex. Fails open |
+| `context-guard.py` | both | `UserPromptSubmit` / `PreCompact` / `SessionStart:startup\|resume\|clear\|compact` | reads the context size from the transcript: warns once per 10k from 80% of the compaction point, holds a prompt back once from 120% (the same prompt again passes) only with `--context economy` or a window you set yourself — by default it never blocks. Before a compaction it writes a snapshot — edited files, latest instructions verbatim, todo list, git state, `.ai/` task state — and tells the summary what to keep; after it, the snapshot goes back into the context. On every session start it writes `.ai/state/session.json` and, with a task in flight, injects `handoff.md` and the pending questions. The snapshot is Claude-only; everything else crosses to Codex. Fails open |
 | `runtime-gate.py` | both, every plan | `PreToolUse`/`PostToolUse` on `Agent` (Codex: `spawn_agent`, or `collaborationspawn_agent` under multi-agent v2 — matcher `^Agent$\|spawn_agent$`), `SubagentStart`/`SubagentStop`, `StopFailure` (Fable installs), the statusline | sends the top model's launches one tier down while it is rate-limited or unreachable (Fable → Opus; on Codex `ai-expert` → `ai-expert-strong` by rewriting `agent_type`, since a role's pinned model beats the call's); asks before an EXPERT launch or a launch past the plan's fan-out (explains instead on Codex, which cannot ask); records the quota; journals `model_fallback`, and `missed_reroute` when an EXPERT child starts during an outage anyway. After an upgrade, re-trust the changed Codex entries in `/hooks`. `fable-gate.py` and `codex-model-gate.py` are shims that exec it |
 
 The three shared guards see Codex's `apply_patch` as well. One `apply_patch` can

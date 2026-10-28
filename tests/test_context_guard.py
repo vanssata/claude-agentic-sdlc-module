@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """exec" python3 -I "$0" "$@"
 context-guard.py: on UserPromptSubmit it warns once per 10k band and holds a
-prompt back once past the block threshold, both derived from autoCompactWindow;
+prompt back once past the block threshold, both derived from autoCompactWindow
+or the economy profile (the model's own window, never blocking, without either);
 on PreCompact it writes a snapshot and prints the summary instructions; on
 SessionStart:compact it puts the snapshot back. It fails open everywhere.
 
@@ -116,6 +117,11 @@ class TestContextGuard(unittest.TestCase):  # pylint: disable=too-many-public-me
             settings["model"] = model
         self.write(self.config + "/settings.json", json.dumps(settings))
 
+    def economy(self, window, home=None):  # profile.json as --context economy writes it
+        os.makedirs((home or self.config) + "/riskrails", exist_ok=True)
+        self.write((home or self.config) + "/riskrails/profile.json",
+                   json.dumps({"context": {"mode": "economy", "window": window}}))
+
     def reset_state(self):
         shutil.rmtree(self.state, ignore_errors=True)
 
@@ -182,7 +188,7 @@ class TestContextGuard(unittest.TestCase):  # pylint: disable=too-many-public-me
         self.write(self.t, 'garbage\n{"type":"assistant"}\n\n')
         self.expect_silent(self.prompt("hi"), "a transcript with no usage in it is silent")
 
-    def test_02_thresholds_follow_autocompactwindow(self):
+    def test_02_economy_thresholds_follow_autocompactwindow(self):
         rs, co, p = self.reset_state, self.context_of, self.prompt
         self.set_window(133000)  # compaction near 100k: warn from 80k, block from 120k
         rs(); co(79000); self.expect_silent(p("hi"), "window 133000: 79k is silent")
@@ -203,15 +209,23 @@ class TestContextGuard(unittest.TestCase):  # pylint: disable=too-many-public-me
         rs(); co(214000); self.expect_warn(p("hi"), "window 300000 on a [1m] model: 214k warns")
         rs(); co(321000); self.expect_block(p("hi"), "window 300000 on a [1m] model: 321k holds the prompt back")
 
-        # The default is the Max profile's 800 000, which on a 200k model is capped to
-        # 200 000: compaction near 167k, so the warning starts at 133.6k, not at 80k.
+        # Economy without a window in settings.json: profile.json's context.window, the
+        # Max profile's 800 000, which on a 200k model is capped to 200 000: compaction
+        # near 167k, so the warning starts at 133.6k, not at 80k.
         os.remove(self.config + "/settings.json")
-        rs(); co(133000); self.expect_silent(p("hi"), "no settings.json: the Max default applies, capped")
-        rs(); co(134000); self.expect_warn(p("hi"), "no settings.json: the Max default applies")
+        self.economy(800000)
+        rs(); co(133000); self.expect_silent(p("hi"), "economy, no settings.json: the profile's window applies, capped")
+        rs(); co(134000); self.expect_warn(p("hi"), "economy, no settings.json: the profile's window applies")
         self.set_window(1000)
-        rs(); co(134000); self.expect_warn(p("hi"), "a window under the reserve falls back to the default")
+        rs(); co(134000); self.expect_warn(p("hi"), "a window under the reserve falls back to the profile's")
         self.write(self.config + "/settings.json", "{broken\n")
-        rs(); co(134000); self.expect_warn(p("hi"), "an unreadable settings.json falls back to the default")
+        rs(); co(134000); self.expect_warn(p("hi"), "an unreadable settings.json falls back to the profile's")
+        self.write(self.config + "/settings.json", json.dumps({"model": "opus[1m]"}))
+        rs(); co(920000); self.expect_warn(p("hi"), "economy on [1m]: 920k only warns")
+        rs(); co(921000); self.expect_block(p("hi"), "economy on [1m]: 921k holds the prompt back")
+        self.economy(None)
+        rs(); co(921000); self.expect_block(p("hi"), "economy without a window of its own keeps 800 000")
+        os.remove(self.config + "/riskrails/profile.json")
 
         self.set_window(133000, "opus[1m]")
         rs(); co(200000)
@@ -596,9 +610,52 @@ class TestContextGuard(unittest.TestCase):  # pylint: disable=too-many-public-me
         self.assertEqual(matchers, ["startup|resume|clear|compact"], "settings: SessionStart runs it on every source")
         self.assertTrue(os.access(GUARD, os.X_OK), "the hook is executable")
         with open(GUARD, encoding="utf-8") as fh:
-            default = int(re.search(r"^DEFAULT_WINDOW = (\d+)", fh.read(), re.M).group(1))
-        self.assertEqual(default, read_json(os.path.join(PLUGIN, "profiles", "max.json"))["autoCompactWindow"],
-                         "the hook's default window is the Max profile's")
+            economy = int(re.search(r"^ECONOMY_WINDOW = (\d+)", fh.read(), re.M).group(1))
+        self.assertEqual(economy,
+                         read_json(os.path.join(PLUGIN, "profiles", "max.json"))["riskrails"]["economy"]["autoCompactWindow"],
+                         "the hook's economy window is the Max profile's")
+
+    def test_10_default_mode_warns_from_model_window_never_blocks(self):
+        rs, co, p = self.reset_state, self.context_of, self.prompt
+        self.write(self.config + "/settings.json", "{}")
+        shutil.rmtree(self.config + "/riskrails", ignore_errors=True)
+        # A 200k model compacts near 167k on its own: the warning starts at 133.6k.
+        rs(); co(133000); self.expect_silent(p("hi"), "default, 200k model: 133k is silent")
+        rs(); co(134000); self.expect_warn(p("hi"), "default, 200k model: 134k warns")
+        rs(); co(199000); self.expect_warn(p("hi"), "default, 200k model: 199k only warns, never blocks")
+        # Past 200k the model is a [1m] one: compaction near 967k, a warning from 773.6k.
+        rs(); co(773000); self.expect_silent(p("hi"), "default, [1m]: 773k is silent")
+        rs(); co(990000); self.expect_warn(p("hi"), "default, [1m]: 990k only warns, never blocks")
+        rs(); co(990000)
+        self.expect_block(p("hi", AI_CONTEXT_BLOCK_TOKENS="900000"), "AI_CONTEXT_BLOCK_TOKENS still blocks in default")
+        self.write(self.config + "/settings.json", json.dumps({"autoCompactWindow": 133000}))
+        rs(); co(120000); self.expect_block(p("hi"), "a window the user set in settings.json still blocks")
+        self.write(self.config + "/settings.json", "{}")
+        os.makedirs(self.config + "/riskrails")
+        self.write(self.config + "/riskrails/profile.json", json.dumps({"context": {"mode": "default", "window": None}}))
+        rs(); co(199000); self.expect_warn(p("hi"), "profile.json in default mode: warns, never blocks")
+        codex = self.tmp + "/home/.codex"
+        self.economy(None, codex)
+        rs(); co(921000)
+        self.expect_block(p("hi", AI_HOOK_RUNTIME="codex", CODEX_HOME=codex),
+                          "Codex economy keeps 800 000 from its own profile.json")
+        rs(); co(921000)
+        self.expect_warn(p("hi"), "Claude in default mode does not read Codex's profile")
+        # Review M1: Claude's window (settings.json, the env var) never decides for Codex.
+        os.makedirs(codex + "/riskrails", exist_ok=True)
+        self.write(codex + "/riskrails/profile.json", json.dumps({"context": {"mode": "default", "window": None}}))
+        self.write(self.config + "/settings.json", json.dumps({"autoCompactWindow": 800000}))
+        rs(); co(921000)
+        self.expect_warn(p("hi", AI_HOOK_RUNTIME="codex", CODEX_HOME=codex),
+                         "Codex in default mode ignores Claude's settings.json window")
+        rs(); co(921000)
+        self.expect_warn(p("hi", AI_HOOK_RUNTIME="codex", CODEX_HOME=codex, CLAUDE_CODE_AUTO_COMPACT_WINDOW="800000"),
+                         "and Claude's CLAUDE_CODE_AUTO_COMPACT_WINDOW")
+        rs(); co(921000)
+        self.expect_block(p("hi"), "while Claude itself still follows its own window")
+        self.write(self.config + "/settings.json", "{}")
+        shutil.rmtree(codex, ignore_errors=True)
+        shutil.rmtree(self.config + "/riskrails", ignore_errors=True)
 
 
 if __name__ == "__main__":

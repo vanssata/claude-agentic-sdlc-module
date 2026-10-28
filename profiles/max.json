@@ -10,12 +10,14 @@
     "claude-sonnet-5": { "effortLevel": "medium" },
     "claude-haiku-4-5-20251001": { "effortLevel": "low" }
   },
-  "autoCompactWindow": 800000,
   "riskrails": {
     "inherits": null,
     "plan": "max",
     "label": "Max",
     "runtime": "claude",
+    "economy": {
+      "autoCompactWindow": 800000
+    },
     "tiers": {
       "FAST": {
         "model": "haiku",

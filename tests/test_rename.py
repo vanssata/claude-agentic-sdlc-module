@@ -33,9 +33,6 @@ ALLOWED = {
     "skills/ai-task/state.py": "profile.json under the old home, for a skills tree not reinstalled",
     "hooks/runtime-gate.py": "profile.json under the old home, for a skills tree not reinstalled",
     "skills/usage-report/usage-report.py": "profile.json under the old home, for a skills tree not reinstalled",
-    # rendered into this repository by /rr-setup --update from .ai/rules/, not shipped
-    "hooks/CLAUDE.md": "rendered rule block", "hooks/AGENTS.md": "rendered rule block",
-    "skills/CLAUDE.md": "rendered rule block", "skills/AGENTS.md": "rendered rule block",
     # a project's .gitignore matches these lines verbatim; a new header would be appended beside the old
     "skills/ai-init/templates/gitignore.snippet": "the .gitignore header projects already carry",
     "skills/project-init/templates/gitignore.snippet": "the .gitignore header projects already carry",

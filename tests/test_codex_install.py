@@ -625,6 +625,80 @@ class CodexInstall(ScratchCase):
                 self.assertEqual(prof.get("dialog"), {"tool": want})
                 self.assertEqual((prof.get("set_by") or {}).get("via"), "installer")
 
+    def test_19_status_line_items(self):
+        merger = os.path.join(PLUGIN, "scripts", "merge-codex-config.py")
+        profile = self.path("status-profile.json")
+        write(profile, json.dumps({"session": {"model": "m", "model_reasoning_effort": "high"}, "agents": {}}))
+        head = 'model = "m"\nmodel_reasoning_effort = "high"\n'
+
+        def merge(text, *flags):
+            cfg = self.path("status-config.toml")
+            if text is None:
+                if os.path.exists(cfg):
+                    os.remove(cfg)
+            else:
+                write(cfg, text)
+            proc = subprocess.run([sys.executable, merger, cfg, "--profile", profile, "--no-backup", *flags],
+                                  capture_output=True, text=True, check=False)
+            return proc.returncode, read(cfg) if os.path.exists(cfg) else None, proc.stdout + proc.stderr
+
+        both = '["model-with-reasoning", "context-used"]'
+        # Review M3: an unset key is Codex's own default items; ours would replace them.
+        rc, text, out = merge(None, "--status-context", "yes")
+        self.check("an empty config gets no status_line, with a note",
+                   rc == 0 and text == head + "\n[agents]\n" and "not set: Codex's default items" in out,
+                   "%s\n%s" % (text, out))
+        rc, again, out = merge(text, "--status-context", "yes")
+        self.check("a second run is idempotent", rc == 0 and again == text and "already set" in out, out)
+        empty = head + "\n[tui]\nstatus_line = []\n"
+        rc, text, out = merge(empty, "--status-context", "yes")
+        self.check("an empty list is the user's choice and stays empty",
+                   rc == 0 and "status_line = []\n" in text and "empty on purpose" in out, "%s\n%s" % (text, out))
+
+        mine = head + '\n[tui]\nstatus_line = ["git-branch", "context-used", "current-dir"]\ntheme = "dark"\n'
+        rc, text, out = merge(mine, "--status-context", "yes")
+        want = head + ('\n[tui]\nstatus_line = ["git-branch", "context-used", "current-dir", "model-with-reasoning"]\n'
+                       'theme = "dark"\n')
+        self.check("an existing list is kept in order, the missing item appended once",
+                   rc == 0 and text.startswith(want), "%s\n%s" % (text, out))
+        rc, again, _ = merge(text, "--status-context", "yes")
+        self.check("and appended once only", again == text, again)
+
+        multi = head + '\n[tui]\nstatus_line = [\n  "git-branch",  # mine\n  "current-dir",\n]\n\n[agents]\n'
+        rc, text, out = merge(multi, "--status-context", "yes")
+        self.check("a multi-line list becomes one line with the user's items first",
+                   rc == 0 and 'status_line = ["git-branch", "current-dir", "model-with-reasoning", "context-used"]\n'
+                   in text and "[agents]" in text, "%s\n%s" % (text, out))
+
+        rc, text, _ = merge(head + '\n[tui]\ntheme = "dark"\n', "--status-context", "yes")
+        self.check("a [tui] table without the key does not get it",
+                   rc == 0 and "status_line" not in text, text)
+
+        dotted = head + 'tui.status_line = ["git-branch"]\n'
+        rc, text, out = merge(dotted, "--status-context", "yes")
+        self.check("a dotted tui.status_line is left alone, the rest still merged",
+                   rc == 0 and 'tui.status_line = ["git-branch"]\n' in text and "left [tui] status_line alone" in out,
+                   "%s\n%s" % (text, out))
+
+        for flags in (("--status-context", "no"), ()):
+            rc, text, _ = merge(mine, *flags)
+            self.check("%s touches no status_line" % (" ".join(flags) or "no flag"),
+                       rc == 0 and 'status_line = ["git-branch", "context-used", "current-dir"]\n' in text, text)
+
+        for name, flags, want in (("codex-status", (), 'status_line = ["git-branch", %s' % both[1:]),
+                                  ("codex-status-off", ("--statusline-context", "no"), 'status_line = ["git-branch"]\n')):
+            dirn = self.path(name)
+            os.makedirs(dirn)
+            write(os.path.join(dirn, "config.toml"), '[tui]\nstatus_line = ["git-branch"]\n')
+            self.codex(dirn, *flags)
+            self.check("installer %s: %s" % (" ".join(flags) or "default", want.strip()),
+                       want in read(os.path.join(dirn, "config.toml")), read(os.path.join(dirn, "config.toml")))
+        dir7 = self.path("codex-status-unset")
+        os.makedirs(dir7)
+        self.codex(dir7)
+        self.check("the installer leaves an unset status_line to Codex",
+                   "status_line" not in read(os.path.join(dir7, "config.toml")), read(os.path.join(dir7, "config.toml")))
+
 
 if __name__ == "__main__":
     unittest.main()
