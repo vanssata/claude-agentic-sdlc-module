@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -180,12 +181,12 @@ class ProfileDetect(unittest.TestCase):
                       out)
         self.assertIn("fix: ", out)
 
-    def test_open_is_refused_until_7c(self):
+    def test_open_is_refused_until_7e(self):
         home = Home("claude", {"account": {"oauthAccount": {"organizationType": "claude_max"}}})
         self.addCleanup(home.close)
         done = home.run("profile", "detect", "--runtime", "claude", "--open")
         self.assertEqual(done.returncode, 1)
-        self.assertIn("--open needs state.py decision", done.stderr)
+        self.assertIn("--open opens the plan_drift decision (task 7e)", done.stderr)
 
     def test_needs_no_ai_dir_and_profile_reader_unchanged(self):
         case = {"installed": {"plan": "max20", "tiers": {"FAST": {"model": "claude-haiku-5-5"}}}}
@@ -273,6 +274,36 @@ class ProfileSet(unittest.TestCase):
         done = home.run("profile", "set", "pro", "--runtime", "codex", stdin=subprocess.DEVNULL)
         self.assertEqual(done.returncode, 6, done.stderr)
         self.assertIn("npx riskrails@3.1.0 --target codex --codex-plan pro --yes", done.stderr)
+
+    def test_set_via_dialog(self):
+        """R36.10: inside the agent, profile set runs on the human's pick — this
+        exact command, once — and stamps set_by.via = dialog."""
+        home = self.home(installed_max(), CLAUDECODE="1", CLAUDE_CODE_SESSION_ID="s1",
+                         CLAUDE_CODE_SESSION_ATTENDED="1")
+        project = os.path.join(home.home, "project")
+        write(os.path.join(project, ".ai", "policies", "dialog.json"), {"version": 1, "enabled": True})
+        # The open decision the pick answers (7e's plan_drift; a pick of no open decision counts for nothing).
+        write(os.path.join(project, ".ai", "state", "decision.json"),
+              {"version": 1, "open": [{"id": "D1", "kind": "plan_drift", "options": [
+                  {"n": 1, "kind": "choice", "label": "Keep max"}, {"n": 2, "kind": "command", "label": "x"}]}]})
+        label = "python3 %s --root %s profile set max20 --runtime claude" % (STATE, project)
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        later = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 120))
+        os.makedirs(os.path.join(project, ".ai", "state"), exist_ok=True)
+        with open(os.path.join(project, ".ai", "state", "consent.jsonl"), "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"v": 1, "type": "pick", "id": "C1", "decision": "D1", "option": 2, "order": 1,
+                                 "label": label, "session": "s1", "tool_use_id": "toolu_1", "at": stamp,
+                                 "expires_at": later}) + "\n")
+        argv = ["--root", project, "profile", "set", "max20", "--runtime", "claude"]
+        other = home.run("--root", project, "profile", "set", "team-max", "--runtime", "claude",
+                         stdin=subprocess.DEVNULL)
+        self.assertEqual(other.returncode, 5, "a different argv is not the pick")
+        done = home.run(*argv, stdin=subprocess.DEVNULL)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        prof = self.profile(home)
+        self.assertEqual((prof["plan"], prof["set_by"]["via"]), ("max20", "dialog"))
+        again = home.run(*argv, stdin=subprocess.DEVNULL)
+        self.assertEqual(again.returncode, 5, "a pick is used once")
 
     def test_set_refused_in_agent(self):
         home = self.home(installed_max(), CLAUDECODE="1")

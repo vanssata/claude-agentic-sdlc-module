@@ -122,6 +122,78 @@ class Project:
         self.tmp.cleanup()
 
 
+DIALOG_SESSION = "sess-7c"
+DIALOG_ON = json.dumps({"version": 1, "enabled": True, "window_seconds": 120, "stop_blocks_max": 2})
+
+
+def stamp(at=None):
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() if at is None else at))
+
+
+class DialogProject(Project):
+    """A Project with the dialog on (R36): the test writes dialog.json itself —
+    the template lands in 7f (D4) — a plan profile whose dialog tool is
+    AskUserQuestion, and the agent session a pick is bound to. pick() and
+    append() stand in for the recorder hook of 7d1."""
+
+    def __init__(self, files=None, name="p", on=True):
+        files = dict(files or {})
+        if on:
+            files[".ai/policies/dialog.json"] = DIALOG_ON
+        super().__init__(files, name)
+        # The labels name the repository's git user as --by: fixed here, so a
+        # golden does not depend on the machine's global config.
+        subprocess.run(["git", "-C", self.root, "config", "user.name", "Rita Human"], check=True)
+        self.home = os.path.join(self.tmp.name, "home")
+        self.profile({"plan": "max", "profile": "max", "dialog": {"tool": "AskUserQuestion"}})
+        self.picks = 0
+
+    def profile(self, data):
+        os.makedirs(os.path.join(self.home, "riskrails"), exist_ok=True)
+        with open(os.path.join(self.home, "riskrails", "profile.json"), "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+
+    def run(self, *args, env=None, **kwargs):  # pylint: disable=arguments-differ
+        base = {"CLAUDECODE": "1", "CLAUDE_CODE_SESSION_ID": DIALOG_SESSION, "CLAUDE_CONFIG_DIR": self.home,
+                "CLAUDE_CODE_SESSION_ATTENDED": "1"}
+        base.update(env or {})
+        return super().run(*args, env=base, **kwargs)
+
+    def decisions(self):
+        path = os.path.join(self.root, ".ai", "state", "decision.json")
+        if not os.path.exists(path):
+            return []
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)["open"]
+
+    def ledger(self):
+        path = os.path.join(self.root, ".ai", "state", "consent.jsonl")
+        if not os.path.exists(path):
+            return []
+        with open(path, encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+
+    def append(self, **line):
+        line = dict({"v": 1}, **line)
+        line.setdefault("at", stamp())
+        os.makedirs(os.path.join(self.root, ".ai", "state"), exist_ok=True)
+        with open(os.path.join(self.root, ".ai", "state", "consent.jsonl"), "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(line) + "\n")
+
+    def pick(self, decision_id, option, order=1, session=DIALOG_SESSION, ago=0, window=120, tool_use_id=None,
+             transcript=""):
+        """The line the recorder writes when the human picks `option` of a decision;
+        one tool_use_id is one dialog call, so a multi-pick passes the same one."""
+        decision = next(d for d in self.decisions() if d["id"] == decision_id)
+        label = next(o["label"] for o in decision["options"] if o["n"] == option)
+        self.picks += 1
+        cid, at = "C%d" % self.picks, time.time() - ago
+        self.append(type="pick", id=cid, decision=decision_id, option=option, order=order, label=label,
+                    session=session, tool_use_id=tool_use_id or "toolu_%s" % cid, transcript=transcript,
+                    runtime="claude", at=stamp(at), expires_at=stamp(at + window))
+        return cid
+
+
 class Base(unittest.TestCase):
     def setUp(self):
         self.p = Project()
@@ -1820,6 +1892,488 @@ class TestNoTask(unittest.TestCase):
         out = self.run_state(self.topic, "ask", "Gate?", "--option", "A: one", "--option", "B: two",
                              "--gate", "human_approval", "--topic", "my-idea")
         self.assertIn("a gate is requested by", out, "a topic file cannot hold a gate either")
+
+
+# ---------------------------------------------------------------------------
+# R36 step 7c: decisions, the consent ledger, the dialog route.
+
+class DialogBase(unittest.TestCase):
+    def setUp(self):
+        self.p = DialogProject()
+
+    def tearDown(self):
+        self.p.close()
+
+    def commit(self, *commands, **kwargs):
+        args = ["decision", "open", "--kind", "commit"]
+        for command in commands:
+            args += ["--command", command]
+        return self.p.run(*args, **kwargs)
+
+    def payload(self, done):
+        """The dialog JSON an opener printed under its DIALOG_PENDING line."""
+        lines = done.stdout.split("\n")
+        at = next(i for i, line in enumerate(lines) if line.startswith("DIALOG_PENDING "))
+        return json.loads(lines[at + 1])
+
+    def journal(self, event):
+        return [e for e in self.p.events(self.p.state()["task_id"]) if e["event"] == event]
+
+    def in_pty(self, *args):
+        markers = ",".join(list(state_mod.AGENT_MARKERS) + ["AI_RUNTIME", "AI_UNATTENDED"])
+        return subprocess.run([sys.executable, "-c", PTY_RUN, STATE, self.p.root, markers, ""] + list(args),
+                              capture_output=True, text=True, check=False)
+
+
+class TestDialogDecisions(DialogBase):
+    """R36.3, R36.4, R36.14, R36.15, R36.24: state.py alone prepares a decision;
+    the ledger's lines settle it and are mirrored into the journal."""
+
+    def test_decision_open_commit_validates_labels(self):
+        for bad in ("git commit -m x; rm -rf ~", "git commit -m \"$(id)\"", "git commit -m a | tee x",
+                    "git commit -m 'two\nlines'", "git commit -m a && git push origin main",
+                    "git push --force origin main", "git push origin", "ls -la"):
+            with self.subTest(label=bad):
+                done = self.commit(bad)
+                self.assertEqual(done.returncode, 6, done.stderr)
+                self.assertIn("CONSENT_LABEL_INVALID", done.stderr)
+        self.assertEqual(self.p.decisions(), [])
+        other = self.p.run("decision", "open", "--kind", "approval", "--command", "git commit -m x")
+        self.assertEqual(other.returncode, 1)
+        self.assertIn("takes --kind commit", other.stderr)
+        done = self.commit("git commit -m 'fix it' -- src/widget.py")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue(done.stdout.startswith("DIALOG_PENDING D1 "), done.stdout)
+        [question] = self.payload(done)["questions"]
+        self.assertEqual((question["header"], question["multiSelect"]), ("Commit", False))
+        self.assertEqual([o["label"] for o in question["options"]],
+                         ["Not now — commit nothing", "git commit -m 'fix it' -- src/widget.py"])
+        [decision] = self.p.decisions()
+        self.assertEqual((decision["id"], decision["kind"], decision["opened_by"]), ("D1", "commit", "decision open"))
+        self.assertLessEqual(len(decision["question"]), 1200)
+
+    def test_the_switch_is_off_unless_everything_holds(self):
+        rows = {"no session id": {"CLAUDE_CODE_SESSION_ID": ""},
+                "unattended runtime": {"CLAUDE_CODE_SESSION_ATTENDED": "0"},
+                "AI_UNATTENDED": {"AI_UNATTENDED": "1"}}
+        for name, env in rows.items():
+            with self.subTest(row=name):
+                done = self.commit("git commit -m x", env=env)
+                self.assertEqual(done.returncode, 1)
+                self.assertIn("the dialog is off here", done.stderr)
+        self.p.profile({"plan": "max", "dialog": {"tool": None}})
+        self.assertIn("the dialog is off here", self.commit("git commit -m x").stderr)
+        self.p.profile({"plan": "max", "dialog": {"tool": "AskUserQuestion"}})
+        self.p.write(".ai/policies/dialog.json", json.dumps({"version": 1, "enabled": False}))
+        self.assertIn("the dialog is off here", self.commit("git commit -m x").stderr)
+        os.remove(os.path.join(self.p.root, ".ai", "policies", "dialog.json"))
+        self.assertIn("the dialog is off here", self.commit("git commit -m x").stderr)
+        self.assertEqual(self.p.decisions(), [])
+
+    def test_two_opens_do_not_clobber(self):
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m one")
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m two")
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1", "D2"])
+        shown = json.loads(self.p.ok("decision", "show", "--json").stdout)
+        self.assertEqual([q["options"][1]["label"] for q in shown["questions"]],
+                         ["git commit -m one", "git commit -m two"])
+        only = json.loads(self.p.ok("decision", "show", "--id", "D2", "--json").stdout)
+        self.assertEqual(len(only["questions"]), 1)
+
+    def test_four_open_max(self):
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m a",
+                  "--command", "git push origin main")
+        for n in range(3):
+            self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m n%d" % n)
+        done = self.commit("git commit -m five")
+        self.assertEqual(done.returncode, 6)
+        self.assertIn("DECISION_LIMIT", done.stderr)
+        self.assertEqual(len(json.loads(self.p.ok("decision", "show", "--json").stdout)["questions"]), 4)
+
+    def test_show_with_nothing_open(self):
+        done = self.p.run("decision", "show")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("no open decision", done.stderr)
+
+    def test_decision_settle_choice(self):
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        refused = self.p.run("decision", "settle", "--id", "D1")
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("nothing is recorded for D1", refused.stderr)
+        cid = self.p.pick("D1", 1)
+        out = self.p.ok("decision", "settle", "--id", "D1").stdout
+        self.assertIn("D1 settled: Not now — commit nothing (defer)", out)
+        self.assertEqual(self.p.decisions(), [])
+        settle = self.p.ledger()[-1]
+        self.assertEqual((settle["type"], settle["decision"], settle["pick"], settle["effect"]),
+                         ("settle", "D1", cid, "defer"))
+        self.assertFalse(os.path.exists(os.path.join(self.p.root, ".ai", "state", "decision.json")))
+
+    def test_a_decline_settles_as_declined(self):
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        self.p.append(type="decline", decision="D1", why="other_text")
+        self.assertIn("declined", self.p.ok("decision", "settle", "--id", "D1").stdout)
+        self.assertEqual(self.p.ledger()[-1]["effect"], "declined")
+
+    def test_a_live_command_pick_is_run_not_settled(self):
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        self.p.pick("D1", 2)
+        done = self.p.run("decision", "settle", "--id", "D1")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("has a live pick: run it verbatim", done.stderr)
+        self.assertIn("git commit -m x", done.stderr)
+
+    def test_settle_pick_needs_terminal(self):
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        done = self.p.run("decision", "settle", "--id", "D1", "--pick", "1")
+        self.assertEqual(done.returncode, 5)
+        self.assertIn("APPROVAL_REFUSED", done.stderr)
+        command = self.in_pty("decision", "settle", "--id", "D1", "--pick", "2")
+        self.assertEqual(command.returncode, 1, command.stdout)
+        self.assertIn("run it in this terminal instead", command.stdout)
+        human = self.in_pty("decision", "settle", "--id", "D1", "--pick", "1")
+        self.assertEqual(human.returncode, 0, human.stdout)
+        self.assertEqual(self.p.decisions(), [])
+        self.assertEqual(self.p.ledger()[-1]["effect"], "defer")
+
+    def test_fallback_prints_terminal_commands(self):
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x",
+                  "--command", "git push origin main")
+        self.assertEqual(self.p.run("decision", "fallback", "--id", "D1").returncode, 1)
+        out = self.p.ok("decision", "fallback", "--id", "D1", "--why", "the recorder is not trusted").stdout
+        self.assertIn("D1 falls back to the terminal", out)
+        self.assertIn("\n  git commit -m x\n  git push origin main\n", out)
+        self.assertEqual(self.p.decisions(), [])
+        self.assertEqual(self.p.ledger()[-1]["effect"], "fallback")
+
+    def test_used_picks_settle_the_decision(self):
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        cid = self.p.pick("D1", 2)
+        self.p.append(type="use", id=cid, by="git-guard")
+        self.assertEqual(self.p.run("decision", "show").returncode, 1)
+        self.assertEqual(self.p.decisions(), [])
+        settle = self.p.ledger()[-1]
+        self.assertEqual((settle["type"], settle["pick"], settle["effect"]), ("settle", cid, "approved"))
+
+    def test_ledger_mirrored(self):
+        self.p.start()
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        self.assertEqual(self.journal("decision_opened")[0]["data"], {"decision": "D1", "kind": "commit",
+                                                                       "options": 2})
+        cid = self.p.pick("D1", 2)
+        self.p.append(type="use", id=cid, by="git-guard")
+        self.p.run("decision", "show")
+        self.p.run("decision", "show")
+        recorded, used, settled = (self.journal(e) for e in ("consent_recorded", "consent_used", "decision_settled"))
+        self.assertEqual([len(recorded), len(used), len(settled)], [1, 1, 1])
+        self.assertEqual(recorded[0]["data"]["id"], cid)
+        self.assertEqual(recorded[0]["detail"], "git commit -m x")
+        self.assertEqual(settled[0]["data"]["effect"], "approved")
+
+    def test_a_task_mirrors_only_lines_after_its_start(self):
+        self.p.append(type="decline", decision="D9", why="empty")
+        self.p.start()
+        self.p.append(type="decline", decision="D10", why="empty")
+        self.p.run("decision", "show")
+        self.assertEqual([e["data"]["decision"] for e in self.journal("decision_declined")], ["D10"])
+
+    def test_consent_audit(self):
+        transcript = os.path.join(self.p.tmp.name, "session.jsonl")
+        with open(transcript, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"type": "tool_use", "id": "toolu_real"}) + "\n")
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x",
+                  "--command", "git push origin main")
+        self.p.pick("D1", 2, tool_use_id="toolu_real", transcript=transcript)
+        self.p.pick("D1", 3, order=2, tool_use_id="toolu_forged", transcript=transcript)
+        self.p.pick("D1", 2, tool_use_id="toolu_nowhere")
+        done = self.p.run("consent", "audit")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("C1 D1 ok\nC2 D1 mismatch\nC3 D1 unverifiable\n", done.stdout)
+        rows = json.loads(self.p.run("consent", "audit", "--json").stdout)
+        self.assertEqual([r["result"] for r in rows], ["ok", "mismatch", "unverifiable"])
+
+    def test_consent_lists_live_picks(self):
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m y")
+        self.p.pick("D1", 2, session="another")
+        self.p.pick("D2", 2)
+        listed = json.loads(self.p.ok("consent", "--json").stdout)
+        self.assertTrue(listed["dialog"])
+        self.assertEqual([p["id"] for p in listed["live"]], ["C2"])
+        self.assertIn("live picks: 1", self.p.ok("consent").stdout)
+
+    def test_ask_opens_a_question_decision(self):
+        self.p.start()
+        done = self.p.ok("ask", "Which cache?", "--option", "A: per locale", "--option", "B: global",
+                         "--recommend", "A")
+        [question] = self.payload(done)["questions"]
+        self.assertEqual(question["header"], "Q1")
+        self.assertEqual([o["label"] for o in question["options"]],
+                         ["Not now — leave it pending", "A — per locale", "B — global"])
+        self.assertEqual(question["options"][1]["description"], "per locale (recommended)")
+        [decision] = self.p.decisions()
+        self.assertEqual((decision["kind"], decision["question_id"]), ("question", "Q1"))
+        self.p.pick("D1", 2)
+        out = self.p.ok("decision", "settle", "--id", "D1").stdout
+        self.assertIn("Q1 answered", out)
+        self.assertRegex(self.p.task_md(self.p.state()["task_id"]), r"\[Answer\]: A — by .+ via dialog at ")
+        self.assertEqual(self.p.decisions(), [])
+        self.assertNotIn("DIALOG_PENDING", self.p.ok("ask", "Four?", "--option", "A: a", "--option", "B: b",
+                                                     "--option", "C: c", "--option", "D: d").stdout)
+
+    def test_event_refuses_the_dialog_types(self):
+        self.p.start()
+        for event in ("decision_opened", "consent_recorded", "consent_used", "consent_voided",
+                      "decision_declined", "decision_settled", "decision_fallback", "plan_drift"):
+            with self.subTest(event=event):
+                self.assertEqual(self.p.run("event", event).returncode, 5)
+
+
+class TestDialogRoute(DialogBase):
+    """R36.10: human_route() takes the dialog when a live pick of this session is
+    this very command; close and the budget refusals open the decisions (R36.3);
+    the dialog off is today, byte for byte (R36.2)."""
+
+    def full_gate(self):
+        self.p.start("--mode", "full", "--by", "test")
+        self.p.ok("verify", "--scope", "all")
+        self.p.ok("review", "--verdict", "pass", "--tier", "STRONG", "--report", "-", stdin=CLEAN)
+        return self.p.ok("close")
+
+    def name(self):
+        return subprocess.run(["git", "-C", self.p.root, "config", "user.name"], capture_output=True, text=True,
+                              check=False).stdout.strip() or os.environ.get("USER") or "human"
+
+    def argv(self, label):
+        """The label as the agent runs it: Project.run supplies interpreter, script and --root."""
+        tokens = shlex.split(label)
+        self.assertEqual(tokens[:4], ["python3", STATE, "--root", self.p.root])
+        return tokens[4:]
+
+    def label(self, decision_id, n):
+        decision = next(d for d in self.p.decisions() if d["id"] == decision_id)
+        return next(o["label"] for o in decision["options"] if o["n"] == n)
+
+    def test_close_opens_approval_decision_when_dialog_on(self):
+        done = self.full_gate()
+        self.assertIn("ready for approval", done.stdout)
+        self.assertNotIn("approve in your own terminal", done.stdout)
+        self.assertIn("\nDIALOG_PENDING D1 — call AskUserQuestion", done.stdout)
+        [question] = self.payload(done)["questions"]
+        name = shlex.quote(self.name())
+        self.assertEqual([o["label"] for o in question["options"]], [
+            "Not now — leave the gate open",
+            "python3 %s --root %s approve --by %s" % (STATE, self.p.root, name),
+            "python3 %s --root %s reject --by %s --why 'rejected in the dialog'" % (STATE, self.p.root, name)])
+        self.assertEqual((question["header"], question["multiSelect"]), ("Approve", False))
+        self.assertIn("facts: (a) ", question["question"])
+        [decision] = self.p.decisions()
+        self.assertEqual((decision["kind"], decision["opened_by"], decision["task"]),
+                         ("approval", "close", self.p.state()["task_id"]))
+        self.assertIn("picks in the dialog (D1)", self.p.state()["next_action"])
+
+    def test_close_prints_terminal_command_when_dialog_off(self):
+        self.p.close()
+        self.p = DialogProject(on=False)
+        done = self.full_gate()
+        self.assertIn("approve in your own terminal, then run close again:\n  python3 ", done.stdout)
+        self.assertNotIn("DIALOG_PENDING", done.stdout)
+        self.assertEqual(self.p.decisions(), [])
+
+    def test_approve_via_dialog(self):
+        self.full_gate()
+        cid = self.p.pick("D1", 2)
+        done = self.p.ok(*self.argv(self.label("D1", 2)))
+        self.assertIn("(via dialog)", done.stdout)
+        approved = self.journal("gate_approved")[-1]["data"]
+        self.assertEqual((approved["via"], approved["consent"], approved["decision"], approved["tool_use_id"]),
+                         ("dialog", cid, "D1", "toolu_%s" % cid))
+        self.assertEqual([(e["type"], e.get("id") or e.get("effect")) for e in self.p.ledger()[-2:]],
+                         [("use", cid), ("settle", "approved")])
+        self.assertEqual(self.p.decisions(), [])
+        self.p.ok("close")
+        self.assertFalse(self.p.in_flight())
+
+    def test_dialog_argv_must_equal_label(self):
+        self.full_gate()
+        self.p.pick("D1", 2)
+        for args in (["approve", "--by", "someone else"], ["approve", "--by", self.name(), "--note", "x"]):
+            with self.subTest(argv=args):
+                done = self.p.run(*args)
+                self.assertEqual(done.returncode, 5, done.stdout)
+                self.assertIn("APPROVAL_REFUSED", done.stderr)
+        argv = self.argv(self.label("D1", 2))
+        for env in ({"CLAUDE_CODE_SESSION_ID": "another"}, {"CLAUDECODE": "1", "AI_RUNTIME": "codex"}):
+            with self.subTest(env=env):
+                self.assertEqual(self.p.run(*argv, env=env).returncode, 5)
+        self.assertEqual([e["type"] for e in self.p.ledger()], ["pick"], "a refusal spends no pick")
+        self.assertFalse(self.p.state()["human_approval"]["granted"])
+
+    def test_an_expired_pick_is_no_pick(self):
+        self.full_gate()
+        self.p.pick("D1", 2, ago=200)
+        self.assertEqual(self.p.run(*self.argv(self.label("D1", 2))).returncode, 5)
+
+    def test_a_pick_does_not_outlive_its_gate(self):
+        """Review H1: an approve label is the same string for every gate, so the
+        pick for D1 (gate G1, the first tree) must not sign gate G2 on a changed
+        tree after the agent rejected and closed again."""
+        self.full_gate()
+        label = self.label("D1", 2)
+        self.p.pick("D1", 2)
+        self.p.ok("reject", "--by", "agent", "--why", "redo")
+        self.assertEqual([d["id"] for d in self.p.decisions()], [], "the rejection settles D1")
+        self.p.write("src/widget.py", "x = 3\n")
+        self.p.ok("verify", "--scope", "suite")
+        self.p.ok("verify", "--scope", "e2e")
+        self.p.ok("close")
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D2"])
+        self.assertEqual(self.label("D2", 2), label, "the same string — only the decision tells them apart")
+        done = self.p.run(*self.argv(label))
+        self.assertEqual(done.returncode, 5, done.stdout)
+        self.assertFalse(self.p.state()["human_approval"]["granted"])
+        self.assertNotIn("use", [e["type"] for e in self.p.ledger()])
+
+    def test_a_dropped_decision_spends_no_pick(self):
+        self.full_gate()
+        self.p.pick("D1", 2)
+        os.remove(os.path.join(self.p.root, ".ai", "state", "decision.json"))
+        self.assertEqual(self.p.run(*self.argv(self.label_from_ledger())).returncode, 5)
+
+    def label_from_ledger(self):
+        return next(e["label"] for e in self.p.ledger() if e["type"] == "pick")
+
+    def test_a_reoffer_after_expiry_is_live(self):
+        """Review M1/M2: an expired pick of an earlier round blocks neither the new
+        pick nor the decision's settling."""
+        self.full_gate()
+        self.p.pick("D1", 2, ago=200)
+        cid = self.p.pick("D1", 2)
+        self.p.ok(*self.argv(self.label("D1", 2)))
+        self.assertEqual(self.journal("gate_approved")[-1]["data"]["consent"], cid)
+        self.assertEqual(self.p.decisions(), [])
+
+    def test_terminal_approval_settles_the_decision(self):
+        self.full_gate()
+        done = self.in_pty("approve", "--by", "ivan")
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertEqual(self.p.decisions(), [])
+        self.assertEqual(self.p.ledger()[-1]["effect"], "approved")
+
+    def test_rollback_line_follows_reversibility(self):
+        """Review M3: the question states what the weight says about rollback."""
+        facts = state_mod.task_facts
+        state = {"task_id": "T-1", "goal": "g", "mode": "full", "verify": {"runs": []}, "review": {},
+                 "weight": {"w": 8, "axes": {"reversibility": 2}, "evidence": {"reversibility": "deploy/x.yaml"}}}
+        self.assertIn("rollback: git revert is not enough — reversibility 2: deploy/x.yaml",
+                      facts(self.p.root, state))
+        state["weight"]["axes"]["reversibility"] = 0
+        self.assertIn("rollback: git revert", facts(self.p.root, state))
+
+    def test_a_refusal_at_exit_4_writes_nothing(self):
+        """Review L1: the dialog sync runs after the questions guard."""
+        self.p.start()
+        self.p.ok("ask", "Which?", "--option", "A: a", "--option", "B: b", "--option", "C: c", "--option", "D: d")
+        self.p.append(type="decline", decision="D9", why="empty")
+        path = os.path.join(self.p.root, ".ai", "state", "current.json")
+        with open(path, encoding="utf-8") as fh:
+            before = fh.read()
+        self.assertEqual(self.p.run("verify", "--scope", "suite").returncode, 4)
+        with open(path, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), before)
+
+    def test_a_decline_after_a_choice_wins(self):
+        """Review L4: the human's last answer decides."""
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        self.p.pick("D1", 1)
+        self.p.append(type="decline", decision="D1", why="other_text")
+        self.assertIn("declined", self.p.ok("decision", "settle", "--id", "D1").stdout)
+
+    def test_irreversible_stays_terminal(self):
+        self.p.start("--mode", "full_irreversible", "--by", "test")
+        self.p.ok("verify", "--scope", "all")
+        self.p.ok("review", "--verdict", "pass", "--tier", "STRONG", "--report", "-", stdin=CLEAN)
+        done = self.p.ok("close")
+        self.assertIn("approve in your own terminal", done.stdout)
+        self.assertNotIn("DIALOG_PENDING", done.stdout)
+        argv = ["approve", "--by", "me", "--confirm", "it drops nothing"]
+        self.p.append(type="pick", id="C1", decision="D1", option=2, order=1, session=DIALOG_SESSION,
+                      label="python3 %s --root %s %s" % (STATE, self.p.root, shlex.join(argv)),
+                      expires_at=stamp(time.time() + 120))
+        refused = self.p.run(*argv)
+        self.assertEqual(refused.returncode, 5, refused.stdout)
+        self.assertFalse(self.p.state()["human_approval"]["granted"])
+
+    def test_label_with_quotes_round_trips(self):
+        subprocess.run(["git", "-C", self.p.root, "config", "user.name", "Ivan \"Vanko\" O'Neil"], check=True)
+        self.full_gate()
+        label = self.label("D1", 2)
+        self.assertIsNone(state_mod.validate_label(label))
+        self.p.pick("D1", 2)
+        self.p.ok(*self.argv(label))
+        self.assertEqual(self.p.state()["human_approval"]["granted_by"], "Ivan \"Vanko\" O'Neil")
+
+    def test_reject_via_dialog_settles_declined(self):
+        self.full_gate()
+        cid = self.p.pick("D1", 3)
+        self.p.ok(*self.argv(self.label("D1", 3)))
+        self.assertEqual(self.journal("gate_rejected")[-1]["data"]["consent"], cid)
+        self.assertEqual(self.p.ledger()[-1]["effect"], "declined")
+        self.assertIsNotNone(self.p.state()["human_approval"]["rejected_at"])
+
+    def test_not_now_keeps_the_gate_open(self):
+        self.full_gate()
+        self.p.pick("D1", 1)
+        self.p.ok("decision", "settle", "--id", "D1")
+        self.assertEqual(self.p.decisions(), [])
+        self.assertIsNotNone(self.p.state()["human_approval"]["requested_at"])
+        self.assertFalse(self.p.state()["human_approval"]["granted"])
+
+    def test_suite_budget_opens_human_set(self):
+        self.p.start()
+        self.p.ok("verify", "--scope", "suite")
+        self.p.ok("verify", "--scope", "suite")
+        done = self.p.run("verify", "--scope", "suite")
+        self.assertEqual(done.returncode, 6)
+        self.assertIn("SUITE_BUDGET", done.stderr)
+        [question] = self.payload(done)["questions"]
+        self.assertEqual(question["options"][0]["label"], "Keep the budget — stop here")
+        label = self.label("D1", 2)
+        self.assertEqual(self.argv(label), ["verify", "--scope", "suite", "--by", self.name()])
+        cid = self.p.pick("D1", 2)
+        self.p.ok(*self.argv(label))
+        human = [e for e in self.journal("human_set") if e["data"].get("field") == "suite_runs"][-1]["data"]
+        self.assertEqual((human["via"], human["consent"]), ("dialog", cid))
+
+    def test_review_budget_opens_human_set(self):
+        self.p.start("--mode", "guarded", "--by", "test")
+        for _ in range(2):
+            self.p.ok("review", "--verdict", "blockers_open", "--tier", "BALANCED", "--report", "-", stdin=CLEAN)
+        done = self.p.run("review", "--verdict", "pass", "--tier", "BALANCED", "--report", "-", stdin=CLEAN)
+        self.assertEqual(done.returncode, 6)
+        [question] = self.payload(done)["questions"]
+        self.assertEqual(len(question["options"]), 4)
+        label = self.label("D1", 2)
+        self.assertEqual(self.argv(label), ["review", "--verdict", "pass", "--tier", "BALANCED", "--by", self.name()])
+        self.p.pick("D1", 2)
+        self.p.ok(*self.argv(label))
+        self.assertEqual(self.journal("human_set")[-1]["data"]["via"], "dialog")
+        self.assertEqual(self.p.state()["review"]["status"], "passed")
+
+    def test_lowering_start_mode_opens_human_set(self):
+        args = ["start", "--goal", "tweak the widget", "--workflow", "feature", "--files", "src/widget.py",
+                "--tests", "tests/test_widget.py", "--declare", "behaviour=2:x", "--declare", "domain=2:x",
+                "--declare", "novelty=0:x", "--mode", "light", "--by", "test"]
+        done = self.p.run(*args)
+        self.assertEqual(done.returncode, 5)
+        self.assertIn("APPROVAL_REFUSED — lowering the mode", done.stderr)
+        [decision] = self.p.decisions()
+        self.assertEqual((decision["kind"], decision["opened_by"], decision["task"]), ("human_set", "start --mode", None))
+        self.assertEqual(self.argv(self.label("D1", 2)), args)
+        self.p.pick("D1", 2)
+        self.p.ok(*args)
+        self.assertEqual(self.p.state()["mode"], "light")
+        self.assertEqual(self.journal("mode_set")[-1]["data"]["via"], "dialog")
 
 
 if __name__ == "__main__":

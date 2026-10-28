@@ -62,7 +62,9 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 
 try:
@@ -93,13 +95,18 @@ EVENT_TYPES = [
     "task_closed", "findings_closed", "review_budget_refused", "human_set",
     # schema 7 (redesign 2.2a): the weight model's surface.
     "weight_set", "weight_raised", "mode_set", "verify_run", "review_verdict",
+    # R36 (7c): the dialog's decisions and the consent ledger, mirrored by state.py.
+    "decision_opened", "consent_recorded", "consent_used", "consent_voided", "decision_declined",
+    "decision_settled", "decision_fallback", "plan_drift",
 ]
 # The types `event` will not write: each is the record of an authorization or a
 # lifecycle decision, and is emitted by the transition that made it. `event` is
 # for a hook reporting something that happened outside the state machine.
 FORGEABLE_EVENTS = {"gate_requested", "gate_approved", "gate_rejected",
                     "task_started", "task_closed", "weight_set", "weight_raised", "mode_set",
-                    "verify_run", "review_verdict"}
+                    "verify_run", "review_verdict", "decision_opened", "consent_recorded",
+                    "consent_used", "consent_voided", "decision_declined", "decision_settled",
+                    "decision_fallback", "plan_drift"}
 
 # The questions are written by state.py and never by a model (R1). One regex
 # per line (I2), so a hand edit that keeps the shape round-trips exactly. A
@@ -121,7 +128,7 @@ CONTEXT_RE = re.compile(r"^context: (.+)$")
 # The trailer must be a suffix free text cannot produce: a closed `via`
 # vocabulary, an exact timestamp, and a name that cannot span another em dash —
 # otherwise `X: we chose Adyen — by the way it is cheaper` eats its own answer.
-VIA_VALUES = "picker|prose|file|terminal|unattended"
+VIA_VALUES = "picker|prose|file|terminal|unattended|dialog"
 TRAILER_RE = re.compile(
     r"\s+—\s+by ([^—]+?) via (%s) at (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)\s*$" % VIA_VALUES)
 CHOICE_RE = re.compile(r"^[A-W]$")
@@ -149,6 +156,9 @@ RUNTIME = "unknown"
 # The commands that change the task. Only these take ownership of it: reading a
 # task from the other runtime, or writing a note about it, is not a handoff.
 MUTATING_COMMANDS = {"step-done", "ask", "answer", "close", "start", "verify", "review"}
+# What prunes decision.json and mirrors consent.jsonl first (R36.14, R36.24):
+# every command that changes something; status and consent stay read-only.
+DIALOG_SYNC_COMMANDS = MUTATING_COMMANDS | {"approve", "reject", "decision"}
 # The commands that work on the task in flight; a task the old surface started
 # refuses them all but close --abandon (route_surface).
 TASK_COMMANDS = {"step-done", "ask", "answer", "questions", "approve", "reject", "close", "verify",
@@ -175,6 +185,16 @@ def find_root(start):
         if parent == d:
             die("no .ai/ directory found above %s — run /ai-init first" % start)
         d = parent
+
+
+def find_root_quiet(start):
+    """find_root without the refusal: profile runs where there is no .ai/."""
+    d = os.path.abspath(start or ".")
+    while not os.path.isdir(os.path.join(d, ".ai")):
+        if os.path.dirname(d) == d:
+            return None
+        d = os.path.dirname(d)
+    return d
 
 
 def die(message, code=1):
@@ -734,7 +754,7 @@ def profile_detect(runtime):
 def cmd_profile_detect(args):
     """Read-only, exit 0 always (R36.16); `--open` belongs to 7c."""
     if args.open:
-        die("--open needs state.py decision (task 7c)", 1)
+        die("--open opens the plan_drift decision (task 7e)", 1)
     if args.field or args.tier or args.other or args.plan:
         die("--field, --tier, --other and a plan belong to the profile reader or profile set, not to profile detect")
     found = profile_detect(args.detect_runtime or own_runtime())
@@ -781,7 +801,7 @@ def cmd_profile_set(args):
     plans = PLAN_PROFILES.get(runtime) or {}
     if args.plan not in plans:
         die("profile set needs a %s plan: %s (got %r)" % (runtime, ", ".join(plans), args.plan or ""))
-    via, why = human_route()
+    via, why = human_route(find_root_quiet(args.root), allow_dialog=True)
     if not via:
         die("profile set is the human's: %s" % why, 5)
     prof = read_profile(runtime)
@@ -916,17 +936,24 @@ def agent_markers():
     return [name for name in AGENT_MARKERS if name in os.environ]
 
 
-def human_route():
+def human_route(root=None, allow_dialog=False):
     """(via, why): "terminal" for a terminal outside any agent session,
     "unattended" for a launcher that declared the run unattended, else None and
     what was seen. A terminal alone is not enough — an agent can open a pty — so
     a terminal that carries an agent marker is the agent's. The same condition
-    as adopt.human_gate()."""
+    as adopt.human_gate().
+
+    With allow_dialog, and only with the dialog on, a third route comes before
+    the agent-marker refusal: "dialog", when a live pick of this session is this
+    very command (dialog_pick, R36.10). The pick is spent here; DIALOG_PICK
+    names it for the caller's journal line."""
     markers = agent_markers()
     if os.isatty(0) and not markers:
         return "terminal", ""
     if os.environ.get("AI_UNATTENDED"):
         return "unattended", ""
+    if allow_dialog and root and dialog_pick(root):
+        return "dialog", ""
     if markers:
         return None, ("this run is inside an agent session (%s %s set); run it in a terminal "
                       "outside Claude Code or Codex, not through the `!` prefix"
@@ -1457,6 +1484,18 @@ def cmd_ask(args, root):
     print("%s asked → %s" % (" ".join(new_ids), relative))
     for line in render_prose([q for q in questions if is_pending(q)]):
         print(line)
+    for item in asked if state is not None else []:
+        # A question with at most three options fits the dialog beside "Not now";
+        # a longer one stays on the file route (R36.3).
+        if len(item["options"]) <= 3:
+            offer_decision(root, state, "question", item["id"],
+                           "%s%s" % (item["question"], "\ncontext: %s" % item["context"] if item.get("context") else ""),
+                           [{"kind": "choice", "effect": "defer", "label": "Not now — leave it pending"}] +
+                           [{"kind": "choice", "effect": "answer", "answer": key,
+                             "label": "%s — %s" % (key, one_line(text, 100)),
+                             "description": "%s%s" % (one_line(text, 300),
+                                                      " (recommended)" if key == item.get("recommend") else "")}
+                            for key, text in item["options"]], "ask", question_id=item["id"])
     if os.environ.get("AI_UNATTENDED"):
         # The literal line an unattended launcher greps for (R5).
         print("WAITING_FOR_ANSWERS %s %s" % (relative, " ".join(new_ids)))
@@ -2047,7 +2086,9 @@ def cmd_approve(args, root):
     tty = os.isatty(0)
     # A terminal is the stronger evidence: a launcher variable left in a human's
     # shell must not downgrade an approval they gave in person.
-    via, why = human_route()
+    # full_irreversible never takes the dialog: its --confirm is the human's own
+    # words, so the terminal command is offered as before (R36.10).
+    via, why = human_route(root, allow_dialog=state.get("mode") != "full_irreversible")
     if via is None:
         refuse_approval(root, state, gate_id, args.by, why)
     claim_runtime(root, state)
@@ -2062,13 +2103,14 @@ def cmd_approve(args, root):
     append_journal(root, state["task_id"], journal_line(
         state["task_id"], "gate_approved", "human" if via == "terminal" else "agent",
         state.get("current_stage"), "granted by %s via %s" % (args.by, via),
-        {"by": args.by, "gate_id": gate_id, "via": via,
-         "unattended": via == "unattended", "tty": tty}))
+        dict({"by": args.by, "gate_id": gate_id, "via": via,
+              "unattended": via == "unattended", "tty": tty}, **pick_data(DIALOG_PICK))))
     if not close_gate(root, state, gate_id, "A", args.note, args.by, via):
         print("state.py: %s is not in %s — the gate was granted, answer it by hand"
               % (gate_id, os.path.relpath(questions_path(root, state, None), root)),
               file=sys.stderr)
     save(root, state)
+    retire_approvals(root, state["task_id"], "approved")
     print("approved by %s (via %s)%s" % (args.by, via, " — recorded as unattended"
                                          if via == "unattended" else ""))
 
@@ -2081,6 +2123,9 @@ def cmd_reject(args, root):
     if gate_id is None:
         die("APPROVAL_REFUSED — no gate was requested: 'state.py close' requests it for a full-mode "
             "task.", 5)
+    # A rejection needs no route, but a picked reject spends its pick, so the
+    # approval decision settles.
+    pick = dialog_pick(root)
     claim_runtime(root, state)
     state["human_approval"].update({
         "required": True, "granted": False, "granted_by": None, "granted_at": None,
@@ -2093,10 +2138,740 @@ def cmd_reject(args, root):
     save(root, state)
     append_journal(root, state["task_id"], journal_line(
         state["task_id"], "gate_rejected", "human", state.get("current_stage"),
-        "%s: %s" % (args.by, args.why), {"by": args.by, "gate_id": gate_id, "why": args.why}))
-    close_gate(root, state, gate_id, "B", args.why, args.by, "terminal" if os.isatty(0) else "prose")
+        "%s: %s" % (args.by, args.why),
+        dict({"by": args.by, "gate_id": gate_id, "why": args.why}, **pick_data(pick))))
+    close_gate(root, state, gate_id, "B", args.why, args.by,
+               "dialog" if pick else "terminal" if os.isatty(0) else "prose")
     save(root, state)
+    retire_approvals(root, state["task_id"], "declined")
     print("rejected by %s; stage stays at %s" % (args.by, state["current_stage"]))
+
+
+# ---------------------------------------------- the dialog (R36, step 7c)
+#
+# A guarded command or a decision, offered in the runtime's own dialog. state.py
+# is the only writer of decision.json and prepares every question; the recorder
+# hook (7d1) appends the human's picks to consent.jsonl from the harness's
+# tool_response, and state.py appends `use` and `settle`. With the switch off —
+# no .ai/policies/dialog.json, every project until 7f ships the template — none
+# of this runs and every command prints and refuses as before (R36.2).
+
+DIALOG_TOOL = {"claude": "AskUserQuestion", "codex": "request_user_input"}
+# The runtime's session id as the Bash tool's environment carries it. Spike 7.0:
+# CLAUDE_CODE_SESSION_ID equals the payload's session_id. CODEX_THREAD_ID is
+# unverified; Codex stays off until the spike's version list is not empty.
+SESSION_ENV = {"claude": "CLAUDE_CODE_SESSION_ID", "codex": "CODEX_THREAD_ID"}
+DECISIONS_MAX = 4                         # questions one dialog call carries (R36.3)
+QUESTION_MAX, HEADER_MAX, LABEL_MAX = 1200, 12, 400
+LEDGER_LINE_MAX, LOCK_STALE = 4096, 2.0
+LEDGER_TYPES = {"offer", "pick", "use", "void", "decline", "settle"}
+LABEL_FORBIDDEN = (";", "&", "|", "\n", "\r", "`", "$(", "<", ">")
+INTERPRETER_RE = re.compile(r"^python3?$")   # a bare name: a path could be any program
+PUSH_REF_RE = re.compile(r"^[A-Za-z0-9._/-]+$")  # no '+' (a force push), no ':' (a refspec), no option
+INTERPRETER_FLAG_RE = re.compile(r"^-[IS]+$")
+NPX_PACKAGE_RE = re.compile(r"^riskrails@[0-9A-Za-z.+-]+$")
+SETTLE_EFFECT = {"defer": "defer", "keep": "ack", "answer": "answered"}
+DIALOG_PICK = None                        # the pick human_route() consumed in this process
+
+
+def dialog_policy(root):
+    """.ai/policies/dialog.json when it says enabled: true, else None (R36.1)."""
+    try:
+        with open(os.path.join(root, ".ai", "policies", "dialog.json"), encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("enabled") is not True:
+        return None
+    window = data.get("window_seconds", 120)
+    window = window if isinstance(window, int) and not isinstance(window, bool) else 120
+    return {"window_seconds": min(600, max(30, window))}
+
+
+def dialog_on(root):
+    """The effective switch, state.py's copy of the hooks' rule (7d1): the
+    project says on, nobody declared the run unattended, the runtime's dialog
+    tool is the one the installer verified, and the session has an id to bind a
+    pick to. Anything missing is off — today's route."""
+    if not root:
+        return None
+    policy = dialog_policy(root)
+    if not policy or os.environ.get("AI_UNATTENDED") or os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
+        return None
+    runtime = own_runtime()
+    tool = (read_profile(runtime).get("dialog") or {}).get("tool")
+    session = os.environ.get(SESSION_ENV.get(runtime, ""))
+    if runtime not in DIALOG_TOOL or tool != DIALOG_TOOL[runtime] or not session:
+        return None
+    return dict(policy, runtime=runtime, tool=tool, session=session)
+
+
+def label_argv(label):
+    """(script, argv) when a label runs a state.py, else None."""
+    try:
+        tokens = shlex.split(label)
+    except ValueError:
+        return None
+    if not tokens or not INTERPRETER_RE.match(tokens[0]):
+        return None
+    i = 1
+    while i < len(tokens) and INTERPRETER_FLAG_RE.match(tokens[i]):
+        i += 1
+    if i >= len(tokens) or os.path.basename(tokens[i]) != "state.py":
+        return None
+    return tokens[i], tokens[i + 1:]
+
+
+def subcommand(argv):
+    """argv without the global options: what the command is."""
+    rest = list(argv)
+    while rest[:1] in (["--root"], ["--runtime"]) and len(rest) >= 2:
+        rest = rest[2:]
+    return rest
+
+
+def state_label_ok(argv):
+    """approve | reject | profile set | verify --by | review --by | start --mode … --by."""
+    rest = subcommand(argv)
+    if rest[:1] in (["approve"], ["reject"]) or rest[:2] == ["profile", "set"]:
+        return True
+    if rest[:1] in (["verify"], ["review"]):
+        return "--by" in rest
+    return rest[:1] == ["start"] and "--mode" in rest and "--by" in rest
+
+
+def validate_label(label):
+    """None when `label` may be offered as a command (R36.4), else why not."""
+    if not isinstance(label, str) or not label or label != label.strip():
+        return "a label is a non-empty string without surrounding blanks"
+    if len(label) > LABEL_MAX or not label.isprintable():
+        return "a label is at most %d printable characters" % LABEL_MAX
+    bad = [c for c in LABEL_FORBIDDEN if c in label]
+    if bad:
+        return "a label is one simple command (it contains %s)" % " ".join(repr(c) for c in bad)
+    try:
+        tokens = shlex.split(label)
+    except ValueError as exc:
+        return "a label must split as a shell command (%s)" % exc
+    if tokens[:2] == ["git", "commit"]:
+        return None
+    if tokens[:2] == ["git", "push"]:
+        return None if len(tokens) == 4 and all(PUSH_REF_RE.match(t) and not t.startswith("-")
+                                                for t in tokens[2:]) else \
+            "a push label is exactly 'git push <remote> <branch>', no '+', ':' or option"
+    if tokens[:1] == ["npx"] and len(tokens) >= 3 and NPX_PACKAGE_RE.match(tokens[1]) and tokens[-1] == "--yes":
+        return None
+    script = label_argv(label)
+    if script and os.path.realpath(script[0]) == os.path.realpath(os.path.abspath(__file__)) \
+            and state_label_ok(script[1]):
+        return None
+    return ("a label starts with git commit, git push <remote> <branch>, state.py approve|reject|"
+            "profile set|verify --by|review --by|start --mode --by, or npx riskrails@<v> … --yes")
+
+
+def decision_path(root):
+    return os.path.join(root, ".ai", "state", "decision.json")
+
+
+def ledger_path(root):
+    return os.path.join(root, ".ai", "state", "consent.jsonl")
+
+
+@contextlib.contextmanager
+def ledger_lock(root):
+    """consent.lock by O_EXCL, portable where flock is not; a lock older than
+    LOCK_STALE belongs to a writer that died and is taken over (R36.6)."""
+    path = os.path.join(root, ".ai", "state", "consent.lock")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    deadline = time.time() + 3 * LOCK_STALE
+    while True:
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+            break
+        except FileExistsError:
+            with contextlib.suppress(OSError):
+                if time.time() - os.stat(path).st_mtime > LOCK_STALE:
+                    os.remove(path)
+                    continue
+            if time.time() > deadline:
+                raise OSError("consent.lock is held and cannot be taken over") from None
+            time.sleep(0.02)
+    try:
+        yield
+    finally:
+        with contextlib.suppress(OSError):
+            os.remove(path)
+
+
+def ledger_append(root, entry):
+    """One line, one write, O_APPEND; called under ledger_lock."""
+    line = dict({"v": 1}, **entry)
+    line["at"] = now()
+    payload = (json.dumps(line, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+    if len(payload) > LEDGER_LINE_MAX:
+        raise OSError("a consent line is over %d bytes" % LEDGER_LINE_MAX)
+    fd = os.open(ledger_path(root), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+    try:
+        if os.write(fd, payload) != len(payload):
+            raise OSError("short write to consent.jsonl")
+    finally:
+        os.close(fd)
+
+
+def read_ledger(root, path=None):
+    """Every well-formed line, in order. A torn or foreign line is skipped, so a
+    damaged ledger can only show fewer picks than were written (fails closed).
+    The hooks keep their own reader (hooks/guard/dialog.py, 7d1); the contract
+    test feeds both the same fixtures."""
+    entries = []
+    try:
+        with open(path or ledger_path(root), encoding="utf-8") as fh:
+            for raw in fh:
+                try:
+                    entry = json.loads(raw)
+                except ValueError:
+                    continue
+                if isinstance(entry, dict) and entry.get("v") == 1 and entry.get("type") in LEDGER_TYPES:
+                    entries.append(entry)
+    except OSError:
+        return []
+    return entries
+
+
+def parse_ts(text):
+    try:
+        return datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def latest_rounds(ledger):
+    """decision -> the picks of its latest dialog call (one tool_use_id). A
+    re-offer's picks replace the earlier round's whatever became of them, so an
+    expired, voided or other-session pick never blocks the new one (R36.8)."""
+    rounds = {}
+    for entry in ledger:
+        if entry["type"] == "pick" and isinstance(entry.get("order"), int):
+            call, picks = rounds.get(entry.get("decision"), (None, []))
+            if not picks or call != entry.get("tool_use_id"):
+                rounds[entry.get("decision")] = (entry.get("tool_use_id"), [entry])
+            else:
+                picks.append(entry)
+    return {decision: picks for decision, (_, picks) in rounds.items()}
+
+
+def live_picks(ledger, session, at=None):
+    """The picks a command may consume now (R36.7): of each decision's latest
+    round, unused, not voided, the decision not settled, same session, inside
+    the window — and only the first unused one in its order. A later pick's
+    window restarts when the one before it is used."""
+    at = at or datetime.now(timezone.utc)
+    used, voided, settled = {}, set(), set()
+    for entry in ledger:
+        kind = entry["type"]
+        if kind == "use":
+            used[entry.get("id")] = parse_ts(entry.get("at"))
+        elif kind == "void":
+            voided.update(entry.get("ids") or [])
+        elif kind == "settle":
+            settled.add(entry.get("decision"))
+    live = []
+    for decision, chain in latest_rounds(ledger).items():
+        if decision in settled:
+            continue
+        previous_use = None
+        for pick in sorted(chain, key=lambda p: p["order"]):
+            if pick.get("id") in used:
+                previous_use = used[pick.get("id")]
+                continue
+            picked, expires = parse_ts(pick.get("at")), parse_ts(pick.get("expires_at"))
+            if pick.get("id") in voided or pick.get("session") != session or not picked or not expires:
+                break
+            if previous_use and previous_use > picked:
+                expires = previous_use + (expires - picked)
+            if at <= expires:
+                live.append(pick)
+            break
+    return live
+
+
+def read_decisions(root):
+    """decision.json, or an empty document when there is none."""
+    try:
+        with open(decision_path(root), encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return {"version": 1, "open": []}
+    except (OSError, ValueError) as exc:
+        die("%s is unreadable (%s); only state.py writes it. Remove it to drop every open decision."
+            % (decision_path(root), exc))
+    if not isinstance(data, dict) or not isinstance(data.get("open"), list):
+        die("%s is not a decision document; remove it to drop every open decision." % decision_path(root))
+    return data
+
+
+def write_decisions(root, data):
+    """Atomic; the file is deleted when nothing is open (R36.14)."""
+    path = decision_path(root)
+    if not data["open"]:
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(path)
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+        fh.write("\n")
+    os.replace(tmp, path)
+
+
+def next_decision_id(data, ledger):
+    """One more than any id the file or the ledger has seen: ids are never reused."""
+    seen = [d.get("id") for d in data["open"]] + [e.get("decision") for e in ledger] + \
+        [d for e in ledger for d in (e.get("decisions") or [])]
+    numbers = [int(x[1:]) for x in seen if isinstance(x, str) and re.match(r"^D\d+$", x)]
+    return "D%d" % (max(numbers or [0]) + 1)
+
+
+def run_text(root, argv):
+    try:
+        return subprocess.run(argv, cwd=root, capture_output=True, text=True, check=False,
+                              timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def human_name(root):
+    """Who the labels name as --by: the repository's git user, else $USER."""
+    return one_line(run_text(root, ["git", "config", "user.name"]) or os.environ.get("USER") or "human", 80)
+
+
+def state_label(root, argv):
+    """The command that runs this state.py with argv: absolute, quoted, with
+    --root, so the human's pick and the agent's call are one string."""
+    if "--root" not in subcommand_prefix(argv):
+        argv = ["--root", root] + list(argv)
+    return "python3 %s %s" % (shlex.quote(os.path.abspath(__file__)), shlex.join(argv))
+
+
+def subcommand_prefix(argv):
+    """The global options in front of the subcommand."""
+    return list(argv)[:len(argv) - len(subcommand(argv))]
+
+
+def dialog_questions(decision):
+    """One decision as dialog questions: a command list is one multi-select,
+    unless a label holds ", " — a joined answer would be ambiguous — and then
+    one single-select per command, each with the safe option first (R36.4)."""
+    options = decision["options"]
+    commands = [o for o in options if o["kind"] == "command"]
+    if decision.get("multi_select") and any(", " in o["label"] for o in commands):
+        safe = [o for o in options if o["kind"] == "choice"][:1]
+        return [(safe + [o], False) for o in commands]
+    return [(options, bool(decision.get("multi_select")))]
+
+
+def open_decision(root, state, kind, header, question, options, opened_by, multi=False, **extra):
+    """Write one decision; return (it, "") or (None, why) (R36.3, R36.4)."""
+    data = read_decisions(root)
+    questions = sum(len(dialog_questions(d)) for d in data["open"])
+    if questions + len(dialog_questions({"options": options, "multi_select": multi})) > DECISIONS_MAX:
+        return None, "DECISION_LIMIT — %d questions are open; one dialog call carries %d" % (
+            questions, DECISIONS_MAX)
+    if not 2 <= len(options) <= 4:
+        return None, "a decision has 2 to 4 options"
+    for option in options:
+        why = validate_label(option["label"]) if option["kind"] == "command" else (
+            None if 0 < len(option["label"]) <= LABEL_MAX and option["label"].isprintable()
+            else "a choice label is 1 to %d printable characters" % LABEL_MAX)
+        if why:
+            return None, "CONSENT_LABEL_INVALID — %s: %s" % (why, option["label"][:120])
+    if len({o["label"] for o in options}) != len(options):
+        return None, "CONSENT_LABEL_INVALID — two options carry the same label"
+    decision = dict({
+        "id": next_decision_id(data, read_ledger(root)), "kind": kind, "task": (state or {}).get("task_id"),
+        "runtime": own_runtime(), "tree": current_tree(root), "opened_at": now(), "opened_by": opened_by,
+        "header": one_line(header, HEADER_MAX), "multi_select": bool(multi),
+        "question": (question or "").strip()[:QUESTION_MAX],
+        "options": [dict(option, n=n) for n, option in enumerate(options, 1)],
+    }, **extra)
+    data["open"].append(decision)
+    write_decisions(root, data)
+    if state and state.get("task_id"):
+        append_journal(root, state["task_id"], journal_line(
+            state["task_id"], "decision_opened", "agent", state.get("current_stage"),
+            "%s %s by %s" % (decision["id"], kind, opened_by),
+            {"decision": decision["id"], "kind": kind, "options": len(options)}))
+    return decision, ""
+
+
+def option_description(option):
+    if option.get("description"):
+        return option["description"]
+    return "the session runs exactly this, once" if option["kind"] == "command" else "nothing runs"
+
+
+def dialog_payload(decisions, runtime):
+    """The dialog tool's input for these decisions, in file order: AskUserQuestion
+    for Claude, request_user_input for Codex (keyed by a question id)."""
+    questions = []
+    for decision in decisions:
+        parts = dialog_questions(decision)
+        for i, (options, multi) in enumerate(parts, 1):
+            item = {"question": decision["question"], "header": decision["header"],
+                    "options": [{"label": o["label"], "description": option_description(o)} for o in options]}
+            if runtime == "codex":
+                item = dict({"id": "%s%s" % (decision["id"].lower(), "_%d" % i if len(parts) > 1 else "")},
+                            **item)
+            else:
+                item["multiSelect"] = multi
+            questions.append(item)
+    return {"questions": questions[:DECISIONS_MAX]}
+
+
+def print_dialog(decisions):
+    """DIALOG_PENDING and the JSON the agent sends to the dialog tool."""
+    runtime = own_runtime()
+    print("DIALOG_PENDING %s — call %s with exactly this JSON, then run the picked command verbatim "
+          "or 'state.py decision settle --id %s':"
+          % (" ".join(d["id"] for d in decisions), DIALOG_TOOL.get(runtime, "AskUserQuestion"),
+             decisions[0]["id"]))
+    print(json.dumps(dialog_payload(decisions, runtime), ensure_ascii=False))
+
+
+def offer_decision(root, state, kind, header, question, options, opened_by, **extra):
+    """An opener's whole dialog branch: with the switch on, open and print the
+    decision and return it; off, or refused, return None and the caller prints
+    today's terminal text (R36.2)."""
+    if not dialog_on(root):
+        return None
+    decision, why = open_decision(root, state, kind, header, question, options, opened_by, **extra)
+    if decision is None:
+        print("state.py: no dialog — %s" % why, file=sys.stderr)
+        return None
+    print_dialog([decision])
+    return decision
+
+
+def settle_decision(root, decision_id, effect, pick=None):
+    """Write the settle line and drop the decision from decision.json."""
+    with ledger_lock(root):
+        ledger_append(root, {"type": "settle", "decision": decision_id, "pick": pick, "effect": effect})
+    data = read_decisions(root)
+    data["open"] = [d for d in data["open"] if d.get("id") != decision_id]
+    write_decisions(root, data)
+
+
+def prune_decisions(root):
+    """On every run: a decision with a settle line, or whose latest round's
+    command picks are all used, leaves decision.json (R36.14)."""
+    try:
+        with open(decision_path(root), encoding="utf-8") as fh:
+            data = json.load(fh)
+        keep = list(data["open"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return                            # loud in the decision commands, not in every command
+    ledger = read_ledger(root)
+    settled = {e.get("decision") for e in ledger if e["type"] == "settle"}
+    used = {e.get("id") for e in ledger if e["type"] == "use"}
+    rounds = latest_rounds(ledger)
+    for decision in list(keep):
+        commands = {o.get("n") for o in decision.get("options") or [] if o.get("kind") == "command"}
+        picks = [e for e in rounds.get(decision.get("id"), []) if e.get("option") in commands]
+        if decision.get("id") in settled:
+            keep.remove(decision)
+        elif picks and all(p.get("id") in used for p in picks):
+            parsed = label_argv(picks[-1].get("label") or "")
+            effect = "declined" if parsed and subcommand(parsed[1])[:1] == ["reject"] else "approved"
+            with contextlib.suppress(OSError), ledger_lock(root):
+                ledger_append(root, {"type": "settle", "decision": decision["id"], "pick": picks[-1].get("id"),
+                                     "effect": effect})
+            keep.remove(decision)
+    if len(keep) != len(data["open"]):
+        data["open"] = keep
+        write_decisions(root, data)
+
+
+MIRROR = {"pick": "consent_recorded", "use": "consent_used", "void": "consent_voided",
+          "decline": "decision_declined"}
+
+
+def mirror_ledger(root):
+    """New ledger lines into the journal of the task in flight (R36.24); the
+    byte cursor is the state's, so each line is mirrored once."""
+    state = load(root, required=False, claim=False)
+    path = ledger_path(root)
+    if state is None or not is_v7(state) or not os.path.exists(path):
+        return
+    dialog = state.setdefault("dialog", {})
+    position = dialog.get("ledger_pos", 0)
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(position)
+            chunk = fh.read()
+    except OSError:
+        return
+    end = chunk.rfind(b"\n") + 1
+    if not end:
+        return
+    for raw in chunk[:end].decode("utf-8", "replace").splitlines():
+        try:
+            entry = json.loads(raw)
+        except ValueError:
+            continue
+        if not isinstance(entry, dict) or entry.get("type") not in LEDGER_TYPES or entry["type"] == "offer":
+            continue
+        event = MIRROR.get(entry["type"]) or ("decision_fallback" if entry.get("effect") == "fallback"
+                                              else "decision_settled")
+        data = {k: entry[k] for k in ("id", "ids", "decision", "option", "order", "by", "why", "pick",
+                                      "effect", "tool_use_id", "session") if k in entry}
+        append_journal(root, state["task_id"], journal_line(
+            state["task_id"], event, "hook", state.get("current_stage"),
+            one_line(entry.get("label") or entry.get("id") or entry.get("decision"), 200), data))
+    dialog["ledger_pos"] = position + end
+    save(root, state)
+
+
+def sync_dialog(root):
+    """Prune, then mirror: what every state-changing run does first."""
+    if os.path.exists(decision_path(root)):
+        prune_decisions(root)
+    if os.path.exists(ledger_path(root)):
+        mirror_ledger(root)
+
+
+def dialog_pick(root):
+    """The dialog branch of human_route() (R36.10): a live pick of this session
+    whose label runs this very state.py with exactly this argv. Its `use` is
+    appended before the caller acts, so the pick is spent even when the command
+    then fails; when it was the decision's last pick, the decision settles.
+
+    A pick counts only for a decision that is still open, and an approval's
+    only while the gate and the tree it was offered for are the ones in force:
+    an approve label is the same string for every gate of a project, so a pick
+    left over from a rejected or superseded gate must not sign the next one."""
+    global DIALOG_PICK                    # pylint: disable=global-statement
+    switch = dialog_on(root)
+    if not switch:
+        return None
+    here, argv = os.path.realpath(os.path.abspath(__file__)), sys.argv[1:]
+    current = valid_decisions(root)
+    try:
+        with ledger_lock(root):
+            for pick in live_picks(read_ledger(root), switch["session"]):
+                parsed = label_argv(pick.get("label") or "")
+                if parsed and os.path.realpath(parsed[0]) == here and parsed[1] == argv \
+                        and pick.get("decision") in current:
+                    ledger_append(root, {"type": "use", "id": pick["id"],
+                                         "by": "state.py %s" % " ".join(subcommand(argv)[:1])})
+                    DIALOG_PICK = pick
+                    break
+    except OSError:
+        return None                       # no ledger, no lock: no consent (fails closed)
+    if DIALOG_PICK:
+        prune_decisions(root)
+    return DIALOG_PICK
+
+
+def valid_decisions(root):
+    """The ids of the open decisions a pick may still count for: every open
+    one, except an approval whose gate or tree is no longer the one in force."""
+    try:
+        with open(decision_path(root), encoding="utf-8") as fh:
+            decisions = [d for d in json.load(fh)["open"] if isinstance(d, dict)]
+    except (OSError, ValueError, KeyError, TypeError):
+        return set()
+    state = load(root, required=False, claim=False) if any(d.get("kind") == "approval" for d in decisions) else None
+    tree = current_tree(root) if state else None
+    return {d.get("id") for d in decisions
+            if d.get("kind") != "approval" or (state and d.get("task") == state.get("task_id")
+                                               and d.get("gate_id") and d.get("gate_id") == open_gate(state)
+                                               and d.get("tree") == tree)}
+
+
+def retire_approvals(root, task_id, effect):
+    """Settle the task's open approval decisions: the gate they were offered for
+    was granted, rejected or asked again (H1)."""
+    if not os.path.exists(decision_path(root)):
+        return
+    for decision in read_decisions(root)["open"]:
+        if decision.get("kind") == "approval" and decision.get("task") == task_id:
+            settle_decision(root, decision["id"], effect)
+
+
+def pick_data(pick):
+    """What a grant through the dialog adds to its journal line (R36.10)."""
+    return {"consent": pick.get("id"), "decision": pick.get("decision"),
+            "tool_use_id": pick.get("tool_use_id")} if pick else {}
+
+
+def task_facts(root, state):
+    """The self-contained head of a decision's question: the modal hides the
+    output above it (R36.3)."""
+    review, weight_ = state.get("review") or {}, state.get("weight") or {}
+    findings = [f.get("label") for f in state.get("findings") or [] if f.get("status") == "open"]
+    reversibility = (weight_.get("axes") or {}).get("reversibility", 0)
+    rollback = "git revert" if not reversibility else "git revert is not enough — reversibility %s: %s" % (
+        reversibility, one_line((weight_.get("evidence") or {}).get("reversibility"), 160))
+    return ("%s — %s\nmode %s · W %s · tree %s\nverify: %s · review: %s%s\nrollback: %s"
+            % (state.get("task_id"), one_line(state.get("goal"), 200), state.get("mode"),
+               weight_.get("w"), (current_tree(root) or "?")[:9],
+               "green" if suite_green(state) else "not green", review.get("status") or "none",
+               " (open: %s)" % ", ".join(findings) if findings else "", rollback))
+
+
+def cmd_decision(args, root):
+    """decision show|open|settle|fallback (R36.3, R36.14, R36.15)."""
+    if args.action == "open":
+        decision_open(args, root)
+        return
+    data = read_decisions(root)
+    if args.action == "show":
+        chosen = [d for d in data["open"] if not args.id or d["id"] == args.id]
+        if not chosen:
+            die("no open decision%s" % (" " + args.id if args.id else ""))
+        if args.json:
+            print(json.dumps(dialog_payload(chosen, own_runtime()), ensure_ascii=False))
+        else:
+            print_dialog(chosen)
+        return
+    decision = next((d for d in data["open"] if d["id"] == args.id), None)
+    if decision is None:
+        die("no open decision %s (open: %s)" % (args.id or "(--id)",
+                                                ", ".join(d["id"] for d in data["open"]) or "none"))
+    if args.action == "fallback":
+        if not args.why:
+            die("decision fallback needs --why \"<why the dialog cannot be used>\"")
+        settle_decision(root, decision["id"], "fallback")
+        print("%s falls back to the terminal (%s). The human runs, outside the agent:"
+              % (decision["id"], one_line(args.why, 200)))
+        for option in decision["options"]:
+            if option["kind"] == "command":
+                print("  %s" % option["label"])
+        return
+    decision_settle(args, root, decision)
+
+
+def decision_open(args, root):
+    """The one opener the model may call: commit and push, nothing else."""
+    if args.kind != "commit":
+        die("decision open takes --kind commit; every other decision is opened by the command that "
+            "needs it (close, ask, the budgets, start --mode)")
+    if not args.commands:
+        die("decision open --kind commit needs --command \"git commit …\" [--command \"git push <remote> <branch>\"]")
+    for command in args.commands:
+        why = validate_label(command)
+        if why or command.split()[:2] not in (["git", "commit"], ["git", "push"]):
+            die("CONSENT_LABEL_INVALID — %s: %s" % (why or "a commit decision offers git commit and git push only",
+                                                     command[:120]), 6)
+    if not dialog_on(root):
+        die("the dialog is off here (.ai/policies/dialog.json, the runtime's dialog tool, a session id): "
+            "suggest the commands; the human runs them outside the agent")
+    state = load(root, required=False, claim=False)
+    state = state if state and is_v7(state) else None
+    head = task_facts(root, state) + "\n" if state else ""
+    question = "%sbranch %s · %s\nRun these, in this order?\n%s" % (
+        head, run_text(root, ["git", "rev-parse", "--abbrev-ref", "HEAD"]) or "?",
+        run_text(root, ["git", "diff", "--shortstat", "HEAD"]) or "no uncommitted change",
+        "\n".join("  %s" % c for c in args.commands))
+    options = [{"kind": "choice", "effect": "defer", "label": "Not now — commit nothing"}] + \
+        [{"kind": "command", "label": c} for c in args.commands]
+    decision, why = open_decision(root, state, "commit", "Commit", question, options, "decision open",
+                                  multi=len(args.commands) > 1)
+    if decision is None:
+        die(why, 6)
+    print_dialog([decision])
+
+
+def decision_settle(args, root, decision):
+    """(b) apply what the recorder wrote — a choice pick or a decline; (c) a
+    human in a terminal picks an option by number (R36.14)."""
+    if args.pick is not None:
+        via, why = human_route()
+        if via is None:
+            die("APPROVAL_REFUSED — 'decision settle --pick' is the human's, from their own terminal.\n"
+                "Refused because %s." % why, 5)
+        option = next((o for o in decision["options"] if o["n"] == args.pick), None)
+        if option is None:
+            die("%s has no option %d" % (decision["id"], args.pick))
+        if option["kind"] == "command":
+            die("option %d is a command: run it in this terminal instead —\n  %s" % (args.pick, option["label"]))
+        apply_choice(root, decision, option, None, human_name(root), via)
+        return
+    # The human's last answer decides: a decline after a pick wins, and only the
+    # latest round's choice counts.
+    ledger = read_ledger(root)
+    mine = [e for e in ledger if e.get("decision") == decision["id"] and e["type"] in ("pick", "decline")]
+    choices = {o["n"]: o for o in decision["options"] if o["kind"] == "choice"}
+    picked = [e for e in latest_rounds(ledger).get(decision["id"], []) if e.get("option") in choices]
+    if picked and mine[-1]["type"] == "pick":
+        apply_choice(root, decision, choices[picked[-1]["option"]], picked[-1].get("id"), human_name(root),
+                     "dialog")
+        return
+    if mine and mine[-1]["type"] == "decline":
+        settle_decision(root, decision["id"], "declined")
+        print("%s settled: declined in the dialog (%s); nothing runs"
+              % (decision["id"], mine[-1].get("why") or "no answer"))
+        return
+    live = [p for p in live_picks(ledger, (dialog_on(root) or {}).get("session"))
+            if p.get("decision") == decision["id"]]
+    if live:
+        die("%s has a live pick: run it verbatim —\n  %s" % (decision["id"], live[0].get("label")))
+    die("nothing is recorded for %s: send the dialog ('state.py decision show'), or "
+        "'state.py decision fallback --id %s --why …'" % (decision["id"], decision["id"]))
+
+
+def apply_choice(root, decision, option, pick_id, by, via):
+    effect = SETTLE_EFFECT.get(option.get("effect"), "defer")
+    if effect == "answered":
+        cmd_answer(argparse.Namespace(topic=None, prose=None, by=by, via=via,
+                                      assignment=["%s=%s" % (decision.get("question_id"), option["answer"])]),
+                   root)
+    settle_decision(root, decision["id"], effect, pick_id)
+    print("%s settled: %s (%s)" % (decision["id"], option["label"], effect))
+
+
+def cmd_consent(args, root):
+    """Read-only: the live picks and the ledger tail; `audit` checks each pick's
+    tool_use_id against its transcript (R36.24)."""
+    ledger = read_ledger(root)
+    if args.action == "audit":
+        rows = [{"id": p.get("id"), "decision": p.get("decision"), "result": audit_pick(p)}
+                for p in ledger if p["type"] == "pick"]
+        if args.json:
+            print(json.dumps(rows, ensure_ascii=False))
+        else:
+            for row in rows:
+                print("%s %s %s" % (row["id"], row["decision"], row["result"]))
+            print("%d picks: %s" % (len(rows), ", ".join("%d %s" % (sum(r["result"] == k for r in rows), k)
+                                                       for k in ("ok", "mismatch", "unverifiable"))))
+        if any(r["result"] == "mismatch" for r in rows):
+            sys.exit(1)
+        return
+    switch = dialog_on(root)
+    live = live_picks(ledger, (switch or {}).get("session"))
+    if args.json:
+        print(json.dumps({"dialog": bool(switch), "live": live, "tail": ledger[-10:]}, ensure_ascii=False))
+        return
+    print("dialog: %s · live picks: %d" % ("on" if switch else "off", len(live)))
+    for pick in live:
+        print("  %s %s until %s: %s" % (pick.get("id"), pick.get("decision"), pick.get("expires_at"),
+                                        pick.get("label")))
+    for entry in ledger[-10:]:
+        print("  %s %s %s" % (entry.get("at"), entry["type"], entry.get("id") or entry.get("decision") or ""))
+
+
+def audit_pick(pick):
+    """ok: the transcript holds the pick's tool_use_id; mismatch: it does not —
+    a line no dialog produced; unverifiable: no transcript to read."""
+    path, tool_use = pick.get("transcript"), pick.get("tool_use_id")
+    if not path or not tool_use or not os.path.isfile(path):
+        return "unverifiable"
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return "ok" if any(tool_use in line for line in fh) else "mismatch"
+    except OSError:
+        return "unverifiable"
 
 
 # ---------------------------------------------- the schema-7 surface (redesign 2.2a)
@@ -2420,10 +3195,16 @@ def cmd_start(args, root):
             die("--mode needs --by \"<who>\": an override is journaled with its author")
         if args.mode == mode:
             args.mode = None              # the weight already says so: nothing to override
+    via = None
     if args.mode:
         if MODES.index(args.mode) < MODES.index(mode):
-            via, why = human_route()
+            via, why = human_route(root, allow_dialog=True)
             if via is None:
+                offer_decision(root, None, "human_set", "Mode",
+                               "%s — W %s, the weight says %s.\nLower the mode from %s to %s (by %s)?"
+                               % (one_line(args.goal, 300), result.w, mode, mode, args.mode, args.by),
+                               [{"kind": "choice", "effect": "keep", "label": "Keep mode %s" % mode},
+                                {"kind": "command", "label": state_label(root, sys.argv[1:])}], "start --mode")
                 die("APPROVAL_REFUSED — lowering the mode from %s to %s is a human's decision. Run it in "
                     "your own terminal:\n  python3 %s --root %s start … --mode %s --by %s\nRefused because %s."
                     % (mode, args.mode, shlex.quote(os.path.abspath(__file__)), shlex.quote(root),
@@ -2442,6 +3223,9 @@ def cmd_start(args, root):
         "gate": None, "owner_runtime": RUNTIME if RUNTIME in RUNTIMES else None,
         "created": now(), "created_at": now(), "history": [],
     }
+    if os.path.exists(ledger_path(root)):
+        # The ledger is per project: a task mirrors only the lines after its start.
+        state["dialog"] = {"ledger_pos": os.path.getsize(ledger_path(root))}
     apply_defaults_v7(state)
     if steps:
         steps[0].update(status="in_progress", tree_before=base_tree)
@@ -2454,7 +3238,8 @@ def cmd_start(args, root):
           "unknown": result.unknown})
     if override:
         emit(root, state, "mode_set", "%s -> %s by %s" % (override["from"], mode, args.by),
-             {"from": override["from"], "to": mode, "by": args.by, "why": args.why},
+             dict({"from": override["from"], "to": mode, "by": args.by, "why": args.why},
+                  **(dict(via=via, **pick_data(DIALOG_PICK)) if via else {})),
              actor="human" if MODES.index(mode) < MODES.index(override["from"]) else "agent")
     emit(root, state, "tier_set", "%s (mode %s, compat)" % (MODE_TIER[mode], mode),
          {"tier": MODE_TIER[mode], "mode": mode, "w": result.w})
@@ -2664,19 +3449,25 @@ def cmd_verify(args, root):
     max_runs = int(tcfg.get("max_suite_runs", 2))
     if scope in ("suite", "all") and state["verify"]["suite_runs"] >= max_runs:
         if not args.by:
+            offer_decision(root, state, "human_set", "Budget",
+                           "%s\nSUITE_BUDGET: %d suite runs; weight.json allows %d. Run it once more?"
+                           % (task_facts(root, state), state["verify"]["suite_runs"], max_runs),
+                           [{"kind": "choice", "effect": "keep", "label": "Keep the budget — stop here"},
+                            {"kind": "command",
+                             "label": state_label(root, sys.argv[1:] + ["--by", human_name(root)])}], "verify")
             die("SUITE_BUDGET — %d suite runs; weight.json allows %d (tests.max_suite_runs). Running it "
                 "again is not the next move: the human decides. In their own terminal:\n  python3 %s "
                 "--root %s verify --scope %s --by \"<name>\""
                 % (state["verify"]["suite_runs"], max_runs, shlex.quote(os.path.abspath(__file__)),
                    shlex.quote(root), scope), 6)
-        via, why = human_route()
+        via, why = human_route(root, allow_dialog=True)
         if via is None:
             die("APPROVAL_REFUSED — a run past the suite budget is the human's, from their own terminal."
                 "\nRefused because %s." % why, 5)
         emit(root, state, "human_set", "suite run %d past the budget by %s via %s"
              % (state["verify"]["suite_runs"] + 1, args.by, via),
-             {"field": "suite_runs", "value": state["verify"]["suite_runs"] + 1, "by": args.by,
-              "via": via, "unattended": via == "unattended"},
+             dict({"field": "suite_runs", "value": state["verify"]["suite_runs"] + 1, "by": args.by,
+                   "via": via, "unattended": via == "unattended"}, **pick_data(DIALOG_PICK)),
              actor="human" if via == "terminal" else "agent")
     green_before = suite_green(state)
     state["stage"] = "verify"
@@ -2778,12 +3569,21 @@ def cmd_review(args, root):
     by_human = None
     if review["passes"] >= rounds:
         if not args.by:
+            report = ["--report", os.path.abspath(args.report)] if args.report and os.path.isfile(args.report) else []
+            offer_decision(root, state, "human_set", "Review",
+                           "%s\nREVIEW_BUDGET: %d review passes; weight.json allows %d. The next verdict is yours."
+                           % (task_facts(root, state), review["passes"], rounds),
+                           [{"kind": "choice", "effect": "keep", "label": "Keep it open — no verdict now"}] +
+                           [{"kind": "command",
+                             "label": state_label(root, ["review", "--verdict", verdict, "--tier", args.tier] +
+                                                  report + ["--by", human_name(root)])}
+                            for verdict in ("pass", "pass_with_findings", "blockers_open")], "review")
             die("REVIEW_BUDGET — %d review passes; weight.json allows %d (review_rounds_max). The next "
                 "verdict is the human's, in their own terminal:\n  python3 %s --root %s review --verdict "
                 "<verdict> --tier %s --by \"<name>\"" % (review["passes"], rounds,
                                                          shlex.quote(os.path.abspath(__file__)),
                                                          shlex.quote(root), args.tier), 6)
-        via, why = human_route()
+        via, why = human_route(root, allow_dialog=True)
         if via is None:
             die("APPROVAL_REFUSED — a verdict past the review budget is the human's, from their own "
                 "terminal.\nRefused because %s." % why, 5)
@@ -2807,8 +3607,8 @@ def cmd_review(args, root):
     state["stage"] = "review"
     if by_human:
         emit(root, state, "human_set", "review %s by %s via %s" % (args.verdict, by_human[0], by_human[1]),
-             {"field": "review", "value": status, "by": by_human[0], "via": by_human[1],
-              "unattended": by_human[1] == "unattended"},
+             dict({"field": "review", "value": status, "by": by_human[0], "via": by_human[1],
+                   "unattended": by_human[1] == "unattended"}, **pick_data(DIALOG_PICK)),
              actor="human" if by_human[1] == "terminal" else "agent")
     emit(root, state, "review_verdict", "%s on %s (pass %d)" % (args.verdict, args.tier, review["passes"]),
          {"verdict": args.verdict, "tier": args.tier, "pass_n": review["passes"], "labels": labels,
@@ -2960,6 +3760,21 @@ def approve_command(root, state):
         shlex.quote(os.path.abspath(__file__)), shlex.quote(root), confirm)
 
 
+def offer_approval(root, state, facts):
+    """close's dialog branch (R36.3): Not now, approve, reject — full mode only;
+    full_irreversible keeps the terminal command (R36.10)."""
+    name = human_name(root)
+    retire_approvals(root, state["task_id"], "superseded")
+    return offer_decision(
+        root, state, "approval", "Approve",
+        "%s\nfacts: (a) %s · (b) %s\nApprove this tree for %s?"
+        % (task_facts(root, state), facts["a"][1], facts["b"][1], state["task_id"]),
+        [{"kind": "choice", "effect": "defer", "label": "Not now — leave the gate open"},
+         {"kind": "command", "label": state_label(root, ["approve", "--by", name])},
+         {"kind": "command", "label": state_label(root, ["reject", "--by", name, "--why", "rejected in the dialog"])}],
+        "close", gate_id=state["human_approval"]["gate_id"])
+
+
 def cmd_close_v7(args, root):
     """Two facts, the mode table, the gate, the archive; exits 2 naming what is owed."""
     state = load_v7(root)
@@ -3012,6 +3827,13 @@ def cmd_close_v7(args, root):
         write_task_md(root, state)
         print("%s %s ready for approval: %s" % (state["task_id"], state["mode"], state.get("goal")))
         print("facts: (a) %s · (b) %s" % (facts["a"][1], facts["b"][1]))
+        decision = offer_approval(root, state, facts) if state["mode"] == "full" else None
+        if decision:
+            state["next_action"] = "the human picks in the dialog (%s), then 'state.py close' again" % decision["id"]
+            set_resume_point(state)
+            write_handoff(root, state, "close")
+            save(root, state)
+            return
         print("approve in your own terminal, then run close again:\n  %s" % approve_command(root, state))
         return
     if state.get("gate") and not state["gate"].get("approved_by"):
@@ -3452,6 +4274,14 @@ def main():
     p = sub.add_parser("status"); p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_status)
 
+    p = sub.add_parser("decision"); p.add_argument("action", choices=["show", "open", "settle", "fallback"])
+    p.add_argument("--id"); p.add_argument("--kind"); p.add_argument("--command", dest="commands", action="append", default=[])
+    p.add_argument("--pick", type=int); p.add_argument("--why", default="")
+    p.add_argument("--json", action="store_true"); p.set_defaults(func=cmd_decision)
+
+    p = sub.add_parser("consent"); p.add_argument("action", nargs="?", choices=["audit"])
+    p.add_argument("--json", action="store_true"); p.set_defaults(func=cmd_consent)
+
     global RUNTIME, MUTATING              # pylint: disable=global-statement
     args = parser.parse_args()
     if getattr(args, "topic", None):
@@ -3470,6 +4300,9 @@ def main():
     route_surface(root, args)
     if args.command in BLOCKING_COMMANDS and not getattr(args, "abandon", False):
         guard_pending(root, args.command)
+    # After the guard: an exit-4 refusal leaves every file as it was.
+    if args.command in DIALOG_SYNC_COMMANDS:
+        sync_dialog(root)
     args.func(args, root)
 
 

@@ -1,0 +1,23 @@
+{
+ "questions": [
+  {
+   "question": "Which cache key?\ncontext: src/widget.py:1",
+   "header": "Q1",
+   "options": [
+    {
+     "label": "Not now — leave it pending",
+     "description": "nothing runs"
+    },
+    {
+     "label": "A — per locale",
+     "description": "per locale (recommended)"
+    },
+    {
+     "label": "B — global",
+     "description": "global"
+    }
+   ],
+   "multiSelect": false
+  }
+ ]
+}

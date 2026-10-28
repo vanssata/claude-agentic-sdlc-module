@@ -1,0 +1,116 @@
+[
+ {
+  "name": "live inside the window",
+  "ledger": "single.jsonl",
+  "session": "S1",
+  "at": "2026-10-28T12:01:00Z",
+  "live": [
+   "C1"
+  ]
+ },
+ {
+  "name": "at the expiry second still live",
+  "ledger": "single.jsonl",
+  "session": "S1",
+  "at": "2026-10-28T12:02:00Z",
+  "live": [
+   "C1"
+  ]
+ },
+ {
+  "name": "expired",
+  "ledger": "single.jsonl",
+  "session": "S1",
+  "at": "2026-10-28T12:02:01Z",
+  "live": []
+ },
+ {
+  "name": "another session",
+  "ledger": "single.jsonl",
+  "session": "S2",
+  "at": "2026-10-28T12:01:00Z",
+  "live": []
+ },
+ {
+  "name": "used once",
+  "ledger": "used.jsonl",
+  "session": "S1",
+  "at": "2026-10-28T12:00:20Z",
+  "live": []
+ },
+ {
+  "name": "only the head of the order",
+  "ledger": "chain-unused.jsonl",
+  "session": "S1",
+  "at": "2026-10-28T12:00:50Z",
+  "live": [
+   "C2"
+  ]
+ },
+ {
+  "name": "the next window restarts at the use",
+  "ledger": "chain.jsonl",
+  "session": "S1",
+  "at": "2026-10-28T12:03:20Z",
+  "live": [
+   "C3"
+  ]
+ },
+ {
+  "name": "the restarted window ends",
+  "ledger": "chain.jsonl",
+  "session": "S1",
+  "at": "2026-10-28T12:03:41Z",
+  "live": []
+ },
+ {
+  "name": "voided picks",
+  "ledger": "voided.jsonl",
+  "session": "S1",
+  "at": "2026-10-28T12:00:10Z",
+  "live": []
+ },
+ {
+  "name": "a settled decision",
+  "ledger": "settled.jsonl",
+  "session": "S1",
+  "at": "2026-10-28T12:00:10Z",
+  "live": []
+ },
+ {
+  "name": "torn and foreign lines are skipped",
+  "ledger": "torn.jsonl",
+  "session": "S1",
+  "at": "2026-10-28T12:00:10Z",
+  "live": [
+   "C1"
+  ]
+ },
+ {
+  "name": "a re-offer after expiry: the new round is live",
+  "ledger": "reoffer-expired.jsonl",
+  "session": "S1",
+  "at": "2026-10-28T12:03:20Z",
+  "live": [
+   "C2"
+  ]
+ },
+ {
+  "name": "a re-offer in a new session: the new round is live",
+  "ledger": "reoffer-session.jsonl",
+  "session": "S1",
+  "at": "2026-10-28T12:00:20Z",
+  "live": [
+   "C2"
+  ]
+ },
+ {
+  "name": "a re-offer after a void: the new round's head is live",
+  "ledger": "reoffer-voided.jsonl",
+  "session": "S1",
+  "at": "2026-10-28T12:00:20Z",
+  "live": [
+   "C4"
+  ]
+ }
+]

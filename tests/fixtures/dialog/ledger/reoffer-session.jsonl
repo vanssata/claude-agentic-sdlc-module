@@ -1,0 +1,2 @@
+{"v":1,"type":"pick","id":"C1","decision":"D1","option":2,"order":1,"label":"git commit -m 'it'\"'\"'s done' -- a.py","session":"S0","tool_use_id":"toolu_a","transcript":"/nonexistent/S0.jsonl","runtime":"claude","at":"2026-10-28T12:00:00Z","expires_at":"2026-10-28T12:02:00Z"}
+{"v":1,"type":"pick","id":"C2","decision":"D1","option":2,"order":1,"label":"git commit -m 'it'\"'\"'s done' -- a.py","session":"S1","tool_use_id":"toolu_b","transcript":"/nonexistent/S1.jsonl","runtime":"claude","at":"2026-10-28T12:00:10Z","expires_at":"2026-10-28T12:02:10Z"}

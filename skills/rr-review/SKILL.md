@@ -29,7 +29,8 @@ STATE="python3 $AI_HOME/skills/ai-task/state.py"
 `review` refuses a tier below the mode's. Two passes per task are the budget
 (`review_rounds_max`): one full review and one scoped re-review. The pass past
 it exits 6 `REVIEW_BUDGET` — the next verdict is the human's, from their own
-terminal, with the command it prints. Never a third pass.
+terminal, with the command it prints, or the pick in the dialog (`DIALOG_PENDING`,
+then the picked command verbatim, once). Never a third pass.
 
 ## 2. Brief one `ai-reviewer`
 
@@ -90,7 +91,7 @@ task's record (`task.md`), so there is no separate report to write.
 
 The `verify` after a fix is often the task's third whole-suite run: past
 `tests.max_suite_runs` it exits 6 `SUITE_BUDGET`, and that run is the human's,
-from their own terminal, with the command it prints.
+from their own terminal, with the command it prints, or the pick in the dialog.
 
 A finding whose cause is the plan goes back to `/rr-plan` for that part only. A
 real problem outside the task goes into `.ai/project/known-risks.md`. A mistake

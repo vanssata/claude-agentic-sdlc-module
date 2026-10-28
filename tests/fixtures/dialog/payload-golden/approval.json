@@ -1,0 +1,23 @@
+{
+ "questions": [
+  {
+   "question": "<TASK> — tweak the widget\nmode full · W 0 · tree <TREE>\nverify: green · review: passed\nrollback: git revert\nfacts: (a) suite green on <TREE> (run 1) · (b) 0 changed files, all in the task's files\nApprove this tree for <TASK>?",
+   "header": "Approve",
+   "options": [
+    {
+     "label": "Not now — leave the gate open",
+     "description": "nothing runs"
+    },
+    {
+     "label": "python3 <STATE> --root <ROOT> approve --by '<NAME>'",
+     "description": "the session runs exactly this, once"
+    },
+    {
+     "label": "python3 <STATE> --root <ROOT> reject --by '<NAME>' --why 'rejected in the dialog'",
+     "description": "the session runs exactly this, once"
+    }
+   ],
+   "multiSelect": false
+  }
+ ]
+}

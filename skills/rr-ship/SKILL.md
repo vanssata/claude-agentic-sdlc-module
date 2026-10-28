@@ -70,6 +70,19 @@ When the human says they approved: `$STATE close` again archives the task. A
 rejection is theirs too (`reject --by … --why …`); the reason is journaled, and
 the work changes before the next `close`.
 
+**When the dialog is on** (`.ai/policies/dialog.json`), `close` prints
+`DIALOG_PENDING D<n>` and a JSON instead of the terminal command:
+
+- Call the dialog tool (AskUserQuestion) with exactly that JSON — `$STATE decision
+  show --json` prints it again. Then run the command the human picked,
+  **verbatim, once**; `approve` checks it against the pick, and
+  `full_irreversible` stays in the terminal.
+- "Not now", a decline or any choice: `$STATE decision settle --id D<n>`.
+- A commit after the task: `$STATE decision open --kind commit --command "git
+  commit -m '…' -- <files>" [--command "git push <remote> <branch>"]`.
+- The dialog cannot be used: `$STATE decision fallback --id D<n> --why "…"`
+  prints the terminal commands. `$STATE consent [audit]` lists the picks.
+
 ## 3. The commit message
 
 Write the body from `.ai/reports/<task-id>/task.md` — no new opinion:

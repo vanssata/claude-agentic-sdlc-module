@@ -123,7 +123,9 @@ $STATE verify --scope all --after-fix "<n> regressions: <one line each>"
 - Never edit a test to make it pass.
 - Two whole-suite runs are the budget (`tests.max_suite_runs`). The third
   exits 6 `SUITE_BUDGET`: running it again is the human's decision, from their
-  own terminal, with the command it prints.
+  own terminal, with the command it prints — or the pick: with the dialog on it
+  also prints `DIALOG_PENDING`, and you run the command the human picks,
+  verbatim, once.
 
 `verify` re-scores reversibility and domain from the diff. A `re-score:` line
 can raise the mode; the `next:` it prints is the path from here. A mode never

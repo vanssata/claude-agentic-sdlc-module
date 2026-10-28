@@ -10,6 +10,8 @@ re-run this file under python3.
 import glob
 import os
 import re
+import subprocess
+import sys
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -108,6 +110,21 @@ class TestNewSkills(unittest.TestCase):
                         if AGENT_RE.search(line)]
                 self.assertEqual(hits, [], "names an agent 2.4 removes")
 
+    def test_ship_names_the_dialog_commands(self):
+        """R36 7c: rr-ship lists the decision commands state.py now has; each
+        one it names must be a subcommand state.py accepts."""
+        text = read("rr-ship").replace("\n  ", " ")
+        state_py = os.path.join(SKILLS, "ai-task", "state.py")
+        for phrase in ("$STATE decision show --json", "$STATE decision settle --id", "$STATE decision open --kind commit",
+                       "$STATE decision fallback --id", "$STATE consent"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+        usage = {name: subprocess.run([sys.executable, "-I", state_py, name, "--help"], capture_output=True,
+                                      text=True, check=False) for name in ("decision", "consent")}
+        self.assertTrue(all(done.returncode == 0 for done in usage.values()))
+        self.assertIn("{show,open,settle,fallback}", usage["decision"].stdout)
+        self.assertIn("{audit}", usage["consent"].stdout)
+
     def test_the_checks_bite(self):
         # The two patterns must catch the forms the old text used, or a clean
         # pass above proves nothing.
@@ -115,7 +132,8 @@ class TestNewSkills(unittest.TestCase):
                      "`state.py set review_status passed`", "$STATE questions --sync", "$STATE step s1"):
             self.assertRegex(line, CALL_RE)
         for line in ("$STATE step-done s1", "state.py review --verdict pass", "state.py verify --scope all",
-                     "state.py start --amend", "$STATE handoff --print"):
+                     "state.py start --amend", "$STATE handoff --print", "$STATE decision show --json",
+                     "$STATE consent audit"):
             self.assertNotRegex(line, CALL_RE)
         self.assertRegex("`ai-reviewer-balanced` on Codex", AGENT_RE)
         self.assertNotRegex("one `ai-reviewer` on STRONG", AGENT_RE)

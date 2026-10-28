@@ -1,0 +1,19 @@
+{
+ "questions": [
+  {
+   "question": "<TASK> — tweak the widget\nmode light · W 0 · tree <TREE>\nverify: not green · review: not_started\nrollback: git revert\nbranch <BRANCH> · no uncommitted change\nRun these, in this order?\n  git commit -m 'it'\"'\"'s done' -- src/widget.py",
+   "header": "Commit",
+   "options": [
+    {
+     "label": "Not now — commit nothing",
+     "description": "nothing runs"
+    },
+    {
+     "label": "git commit -m 'it'\"'\"'s done' -- src/widget.py",
+     "description": "the session runs exactly this, once"
+    }
+   ],
+   "multiSelect": false
+  }
+ ]
+}
