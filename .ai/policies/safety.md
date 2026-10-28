@@ -66,6 +66,5 @@ evidence for each, and let the human decide which is the bug.
 
 ## When in doubt
 
-Doubt on reversibility or domain is a blocker: stop and ask. Other doubt is
-written to `task.md` and the work continues. An agent that pauses costs a
-message; an agent that guesses on a payment path costs an incident.
+Stop and ask. An agent that pauses costs a message; an agent that guesses on a
+payment path costs an incident.

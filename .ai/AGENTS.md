@@ -33,9 +33,9 @@ Everything else loads on demand; nothing here is worth reading twice.
 This `.ai/` holds `project/`, `rules/`, `state/`, `reports/`, `VERSION` and, in
 `policies/`, `risk-tiers.json`, `risk-tiers.md`, `path-guard.json`, `testing.md`,
 `coding.md`, `safety.md` and `security.md`. Every other path below ships with the
-plugin at `<home>/claude-agentic/ai/<path>`; `<home>` is `~/.claude`, or
+plugin at `<home>/riskrails/ai/<path>`; `<home>` is `~/.claude`, or
 `$CODEX_HOME` (default `~/.codex`). A file at the same path here overrides it and
-stops receiving its changes; `<home>/claude-agentic/ai-path <path>` prints the
+stops receiving its changes; `<home>/riskrails/ai-path <path>` prints the
 copy that applies.
 
 ## Doing X → read Y

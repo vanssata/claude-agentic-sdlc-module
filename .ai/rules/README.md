@@ -17,7 +17,7 @@ paths: ["src/Payment/**"]               # optional: also a path-scoped rules fil
 ```
 
 - `dirs:` is the list of directories whose `CLAUDE.md` / `AGENTS.md` receive the
-  block `<!-- claude-agentic:rule:<slug>:start -->` … `:end`, created if absent.
+  block `<!-- riskrails:rule:<slug>:start -->` … `:end`, created if absent.
   Text outside the markers is yours and is never touched.
 - The body is what an agent reads: rules, not rationale. Keep it under a screen.
 - This file is the format, not a rule: no rule ships with the plugin. Delete a
