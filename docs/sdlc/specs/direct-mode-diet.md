@@ -5,7 +5,17 @@ written from the 2026-10-22 assessment of the plugin as a project, at the
 developer's request, for points 1–5 of that assessment. Point 6 (a skills-first
 restructuring of `/ai-task`) is out of scope here.
 
-Status: approved in substance by the developer on 2026-10-22 (decisions D2a,
+Status (2026-10-29): tasks 1–4 of §Order of work are shipped — task 1
+`4b3b9e1` (2026-10-22), task 2 `ef6e9a1` (its commit names it part A), task 3
+`ada69e3` (T-2026-10-22-002) with its M2/L4 follow-up `ee838dc`
+(T-2026-10-25-001), task 4 `e2841c4` (T-2026-10-25-002). Q1 is closed. The
+same week the redesign (`docs/sdlc/specs/claude-agentic-redesign.md`) replaced
+the tiers T0–T6 with weight and three modes, so G1, G2 and G5 name a surface
+that no longer exists. What the tasks since then cost, and a verdict per goal,
+are in §Measured after. §1–§5 and every D-, R- and G- identifier stay as
+written below; new requirements go to a spec of their own.
+
+Status (2026-10-22): approved in substance by the developer on 2026-10-22 (decisions D2a,
 D3b-shipped, D4b, D4c below), after one builder check. One question is open
 (§Open questions). Nothing in it is implemented. Line numbers cite HEAD
 `3d923d5` unless marked "working tree"; the working tree carries the
@@ -50,6 +60,214 @@ own read-only commands and treats the plugin's own templates and fixtures as
 control files (§4), and direct mode takes seven to nine `state.py` calls for a
 change that needs three, while any open step blocks every unrelated write,
 scratchpad included (§5).
+
+## Measured after (2026-10-29)
+
+The numbers above came from one task. These come from every task since,
+against every task before. The developer chose the scope on 2026-10-29:
+measurement and status only, with cohorts by date.
+
+**Method.** Two cohorts by task id, both measured by the same script:
+
+- *Before*: T-2026-10-13-001 … T-2026-10-22-002, 17 tasks, all on the tier
+  surface (T0–T6).
+- *After*: T-2026-10-25-003 … T-2026-10-28-012, 32 tasks. Six of them
+  (T-2026-10-25-003 … -008) are still on the tier surface. The other 26 are
+  on the weight surface (light, guarded, full; `state.py` schema 7).
+
+The diet's own tasks, T-2026-10-25-001 and -002, are in neither cohort. The
+script is `python3 -I diet-measure.py <repo>`. Per the plan it lives in the
+session scratchpad, not in the repository. It reads only these sources:
+
+- `.ai/reports/<id>/events.jsonl` gives:
+  - the time from `task_started` to `task_closed`;
+  - the human wait, as the union of `gate_requested→gate_approved` and
+    `question_asked→question_answered`;
+  - suite, step and e2e runs (`verify_run`; on the tier surface,
+    `field_set test_status` with `scope: suite`). A run is red when its exit is
+    non-zero and it was not an `expected_fail`;
+  - review passes, from `review_verdict`. The tier surface has no such event,
+    so a pass there is the larger of two counts: the `## Pass N` and
+    `## Re-review` headings in `review-report.md`, and the `review_status`
+    transitions (a `passed` right after `passed_with_findings` closes findings
+    and does not count as a pass);
+  - `scope_change` events;
+  - journaled `state.py` calls, counted as distinct timestamps other than
+    `handoff_written`.
+- Tokens: `usage-report.py --task <id>` over the local Claude Code transcripts.
+- Lines changed: the `+N −M lines` line of a weight-surface `task.md`.
+- Guard denies: every `PreToolUse:<tool> hook error:` tool result in the
+  local transcripts (subagents included, one per `tool_use_id`) inside the
+  task's window. The journal does not record a deny against the agent.
+
+Token and deny windows are by time, so they count any other session inside
+them. Of the closed tasks, only T-2026-10-28-011 overlaps another (-012).
+
+Medians are over the tasks that closed and were not abandoned: 16 of 17
+before, 27 of 32 after. In the after cohort 3 tasks were abandoned, and
+T-2026-10-28-010 and -012 have no `task_closed` event.
+
+| per task, median (max) | before, 16 | after, 27 | T-2026-10-21-001 (§Intent) |
+|---|---|---|---|
+| calendar time, h | 1.1 (116.2) | 1.0 (8.9) | 21.3 |
+| human wait (gates, questions), h | 0.1 (18.0); 35.5 in all | 0.0 (6.5); 9.2 in all | 18.0 |
+| agent time, upper bound, h | 0.7 (116.0) | 0.7 (8.9) | 3.3 |
+| full-suite runs | 2.5 (5); 6 of 40 red | 2 (5); 12 of 65 red | 5 |
+| step runs | not journaled | 4 (16); 0 in the six tier-surface tasks | not journaled |
+| review passes | 2 (5); 32 in all | 1 (2); 29 in all | 5, all STRONG |
+| journaled `state.py` calls | 17.5 (83) | 19 (61) | 47 |
+| scope amendments (`scope_change`) | 1 in all | 38 in all; 0 in the six tier-surface tasks | 0 |
+| tokens, M | UNKNOWN | 24.3 (131.9) | 25.4 (§Intent) |
+| guard denies against the agent | UNKNOWN | 3 (14); 112 in all | see §Intent |
+
+The after cohort by mode. Both tier-surface rows are tier labels, not modes:
+
+| after | n | calendar h | agent ≤ h | review passes | lines changed | tokens M | denies |
+|---|---|---|---|---|---|---|---|
+| light | 1 | 0.7 | 0.5 | 0 | 716 | 8.9 | 2 |
+| guarded | 11 | 0.4 (8.9) | 0.4 (8.9) | 1 each, BALANCED | 1653 (8487) | 7.9 (53.4) | 2 (8) |
+| full | 9 | 1.8 (7.0) | 1.1 (2.5) | 1 (2), STRONG | 1627 (10526) | 55.9 (131.9) | 4 (14) |
+| T4, tier surface | 5 | 0.4 (8.4) | 0.4 (8.4) | 1 (2), STRONG | UNKNOWN | 4.5 (76.9) | 4 (8) |
+| T3, tier surface | 1 | 0.5 | 0.5 | 1, BALANCED | UNKNOWN | 10.9 | 7 |
+
+**Where the time goes now.**
+
+- KNOWN FACT: full is 9 of 27 tasks and 480.3M of 840.7M tokens (57 %).
+  Without T-2026-10-28-011, whose window also covers -012, it is 49 %.
+  Guarded is 11 tasks and 188.2M (22 %).
+- KNOWN FACT: the median guarded and full task change about the same number
+  of lines, 1653 against 1627. The full one costs about seven times the
+  tokens: 55.9M against 7.9M, or 43.2M against 7.9M without -011.
+- INFERENCE: tokens follow the mode more than the size. These are medians
+  of 11 and 9 tasks, and no correlation was computed. `+N −M lines` is a
+  weak proxy for size, since it counts fixtures and generated files. Full
+  adds a STRONG review and more steps.
+- KNOWN FACT: human wait is 9.2 h over 27 tasks. One task,
+  T-2026-10-26-003, holds 6.5 h of it: a 2.4 h question and a 4.0 h gate.
+  Before, T-2026-10-21-001 waited 17.7 h on one gate.
+- INFERENCE: the agent-time column is an upper bound. Two windows hold
+  17.3 h of its 40.0 h: T-2026-10-26-007 (8.9 h) and T-2026-10-25-008
+  (8.4 h). Both run overnight, 22:16–07:07 and 22:43–07:09 UTC. Before,
+  T-2026-10-15-004 shows 116 h (2026-10-15 to 2026-10-20) and
+  T-2026-10-22-002 66 h. The journal cannot tell idle time from work.
+- KNOWN FACT, the 112 denies after, by kind:
+
+  | kind | denies |
+  |---|---|
+  | scope | 30 |
+  | write to a control file | 27 |
+  | interpreter one-liner | 17 |
+  | read of a control file | 11 |
+  | `state.py approve` from an agent | 9 |
+  | over-long command | 8 |
+  | a human-only or destructive verb | 5 |
+  | a sensitive path | 5 |
+
+  This task added one of each of the first and third kinds on 2026-10-29.
+  The first was a `Write` to the session scratchpad. That is the scope
+  guard's reach, which §Goals keeps out of this spec. The second is under G4
+  below.
+
+**Goals.** Each verdict carries an evidence label:
+
+- **G1: met in substance on the weight surface (INFERENCE); not met by
+  label.**
+  - KNOWN FACT: 24 after tasks touch `hooks/`, `skills/`, `agents/`,
+    `scripts/` or `ai/`, abandoned ones excluded. Six are tier surface: one
+    T3, five T4. The other 18 are on the weight surface: none light, seven
+    guarded, eleven full. Six of the full ones came from the weight table.
+    Five were raised from guarded, by the developer or by the
+    `hooks/CLAUDE.md` and `skills/CLAUDE.md` behaviour-2 rule.
+  - KNOWN FACT, from `weight_set`: 12 of the 18 score behaviour 2 or
+    reversibility 2. Eleven of those 12 ran full and one guarded
+    (T-2026-10-28-003). The other six score behaviour 1 and reversibility 0
+    (T-2026-10-26-004 … -007, T-2026-10-28-002, -007), and all six ran
+    guarded.
+  - INFERENCE: those 12 are G1's own exemption, read through C6 (allowing a
+    deny, changing approval or install scores behaviour 2). Guarded's
+    ceremony, one BALANCED review and no human gate, is what G1 wanted from
+    T3. By that reading, every non-exempt change ran at what G1 asked for.
+  - KNOWN FACT: by the compat label (`MODE_TIER`,
+    `skills/ai-task/state.py:2956`) guarded is T4. By that label, 1 of 24 is
+    T2/T3 (the tier-surface T3).
+  - UNKNOWN: whether the exemption covers the six tier-surface tasks, which
+    record no axes. Before, 5 of 15 such tasks were T2/T3; their exemption
+    is not classified.
+- **G2: not met; superseded.**
+  - KNOWN FACT: none of the 49 journals holds `skipped_green`. They hold 30
+    `sensors: required` events, all on the tier surface.
+  - KNOWN FACT: schema 7 has no `review-gate`; `skipped_green` is in no Python
+    file under `skills/ai-task/`. Its place is taken by light mode, where `close`
+    decides from the two facts whether a review is owed (`ai/using-riskrails.md:30`,
+    `skills/rr-build/SKILL.md:170`). One task took that path,
+    T-2026-10-28-001, and it closed with no review.
+- **G3: met.**
+  - KNOWN FACT: no after task ran more than 2 review passes. Three ran
+    exactly 2: T-2026-10-25-008, T-2026-10-27-007 and T-2026-10-28-011.
+    Before, the most were 5 (T-2026-10-21-001) and 4 (T-2026-10-20-003).
+  - KNOWN FACT: the cap is `review_rounds_max: 2` (`.ai/policies/weight.json:184`;
+    3 for a batch task, `:214`). It is enforced by `state.py review`
+    (`skills/ai-task/state.py:3802`).
+- **G4: partly met.** The pinned spellings hold, but a read-only one-liner
+  was refused in this task.
+  - KNOWN FACT: `tests/test_ai_path_guard.py:704-722` allows seven read-only
+    one-liners (python, perl, node, ruby) and denies the writing ones. `:799`
+    allows a write under the ai-init templates during a task.
+  - KNOWN FACT: on 2026-10-29, in this task, a read-only `python3 -I -c` that
+    read `events.jsonl` was refused as "an interpreter one-liner that writes
+    the task's own control files". It was not reworded; the check moved into
+    the measurement script.
+  - INFERENCE: the trigger was a `->` inside a string literal.
+  - UNKNOWN: whether the 17 one-liner denies and 11 read denies after were
+    reads.
+- **G5: the shape is met; the minimum is not measured.**
+  - KNOWN FACT: light is "plan inline, edit, `verify --scope all`, `close`"
+    (`ai/using-riskrails.md:30`), so the minimum is three calls with `start`.
+  - KNOWN FACT: the weight table put 1 of 21 closed weight-surface tasks in
+    light (1 of 26 with the abandoned and unclosed ones).
+  - KNOWN FACT: that task, T-2026-10-28-001 (W1), has 19 journaled
+    timestamps: `start`, three questions with their answers, two scope
+    amendments, seven notes, two runs and `close`. That is an upper bound on
+    its calls, because the seven notes fall in two same-second bursts.
+  - UNKNOWN: whether a light task with no questions makes three.
+- **G6: met.**
+  - KNOWN FACT: `.ai/policies/safety.md:53-57` states the threat model.
+  - KNOWN FACT: `.ai/project/known-risks.md` names the acceptance
+    `accepted (2026-10-22, docs/sdlc/specs/direct-mode-diet.md)` on seven
+    lines: `:63` (a heading), `:90` and `:165` (the accepted residual of an
+    entry that is otherwise fixed), and `:179`, `:186`, `:193`, `:207`.
+  - KNOWN FACT: `:210`, "Interpreter tripwire residuals after M2/L4", still
+    reads `Status: open`. `:581` (accepted 2026-10-27, T-2026-10-27-005)
+    supersedes it, together with the older path-guard entries, after R22
+    (`:589`).
+  - INFERENCE from the 32 after goals (`task.md:1`): none is a
+    pathological-input fix. The guard work after was the port
+    (T-2026-10-26-006), its suites (T-2026-10-27-001), the R22 rules
+    (T-2026-10-27-005) and the dialog gate (T-2026-10-28-010).
+
+**What the numbers do not show.**
+
+- UNKNOWN: tokens and denies before. No main transcript on this machine is
+  dated 2026-10-04 … 2026-10-23 (file modification time). The one before
+  window with tokens is T-2026-10-22-002, 40.5M. That window runs from
+  2026-10-22 11:49 to 2026-10-25 06:05 UTC, but only its last day has
+  transcripts. That day also holds other sessions, among them the redesign
+  analysis of 2026-10-24. The number is neither the task's whole cost nor
+  its own alone, so it is left out.
+- RISK: `usage-report.py --task` ends an unclosed task's window at "now"
+  (`skills/usage-report/usage-report.py:693`). That makes T-2026-10-28-010 and -012 UNKNOWN.
+  T-2026-10-28-011's window (20:07–21:58) also covers the start of -012
+  (20:38), so its 131.9M include some of -012.
+- RISK: T-2026-10-28-010 and -012 have no `task_closed` event (010 ends at
+  `gate_approved`, 012 at a `close` handoff). Yet no task was in flight on
+  2026-10-29. This was found here and is outside this task.
+- INFERENCE: the review count on the tier surface is reconstructed by the
+  rule above. Twenty passes there have no recorded tier.
+- KNOWN FACT: the cohorts did different work. Before was mostly path-guard
+  hardening; after was the redesign programme. The table compares tasks,
+  not changes of equal size: no before task records its lines changed. The
+  tier surface journaled neither step runs nor scope amendments the way
+  schema 7 does, so those two rows do not compare.
 
 ## Goals, non-goals, anti-goals
 
@@ -725,7 +943,8 @@ suite runs on the tree with the new code, as every `state.py` change has.
 
 ## Open questions
 
-- Q1 (owner: developer) — T-2026-10-21-001. Finish it under the old rules
+- Q1 (owner: developer, closed 2026-10-29; the closing note follows the
+  question) — T-2026-10-21-001. Finish it under the old rules
   (another STRONG re-review), close it as it stands, or abandon it. Recommended:
   close it as it stands, in your own terminal (`state.py set review_status
   passed`, `state.py close`, with a one-line note in `task.md` that the pending
@@ -733,3 +952,17 @@ suite runs on the tree with the new code, as every `state.py` change has.
   suite is green three times over and two STRONG reviews have read it. Task 3's
   golden baseline is then that commit. Nothing in §Order of work can start
   before this.
+
+  Closed (2026-10-29), from the record. The task was finished under the old
+  rules, not closed as it stood:
+  - KNOWN FACT: `.ai/reports/T-2026-10-21-001/review-report.md` holds STRONG
+    passes 2–5, four re-reviews after the first pass. Suite run 5 and e2e
+    run 5 were green.
+  - KNOWN FACT: the developer granted gate G2 from the terminal at
+    2026-10-22T10:54:46Z (`events.jsonl:109`), and the task closed at
+    10:55:27Z (`:110`).
+  - KNOWN FACT: `053bf9a` (13:56 +0300) added its reports. Task 1 of
+    §Order of work, `4b3b9e1`, followed at 14:35 the same day.
+  - KNOWN FACT: its code is `e393224` (13:55 +0300), ten seconds after the
+    close. The commit body names "T-2026-10-21-001, remediations R2-R4 of
+    the batched movers pass (R1 is 3d923d5)".
