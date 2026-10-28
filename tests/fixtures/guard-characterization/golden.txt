@@ -294,6 +294,33 @@ rc=0
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a shell in-place edit of a RiskRails control file: __TMP__/project/.ai/state/state.json\n\nThese files are the guard configuration and the task state. State is written by\nskills/ai-task/state.py, and during a schema migration by\nskills/project-update/update.py; policy files are edited by a human outside an\nagent run, so a change to them is reviewable. See .ai/policies/safety.md."}}
 ### ai-scope-guard | fixture path-guard/111-bash-sed-i-state-json.json
 rc=0
+### ai-git-guard | fixture path-guard/112-dialog-gate-piped-forgery.json
+rc=0
+### ai-path-guard | fixture path-guard/112-dialog-gate-piped-forgery.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to run hooks/dialog-gate.py from a shell: it records the human's answer to the dialog, and only the runtime calls it, after the dialog tool. To answer a decision, send the dialog ('state.py decision show'); a human settles one in their own terminal ('state.py decision settle --id D<n> --pick <n>'). See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/112-dialog-gate-piped-forgery.json
+rc=0
+### ai-git-guard | fixture path-guard/113-dialog-gate-run-directly.json
+rc=0
+### ai-path-guard | fixture path-guard/113-dialog-gate-run-directly.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to run hooks/dialog-gate.py from a shell: it records the human's answer to the dialog, and only the runtime calls it, after the dialog tool. To answer a decision, send the dialog ('state.py decision show'); a human settles one in their own terminal ('state.py decision settle --id D<n> --pick <n>'). See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/113-dialog-gate-run-directly.json
+rc=0
+### ai-git-guard | fixture path-guard/114-dialog-gate-via-env-and-sh-c.json
+rc=0
+### ai-path-guard | fixture path-guard/114-dialog-gate-via-env-and-sh-c.json
+rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing to run hooks/dialog-gate.py from a shell: it records the human's answer to the dialog, and only the runtime calls it, after the dialog tool. To answer a decision, send the dialog ('state.py decision show'); a human settles one in their own terminal ('state.py decision settle --id D<n> --pick <n>'). See .ai/policies/safety.md."}}
+### ai-scope-guard | fixture path-guard/114-dialog-gate-via-env-and-sh-c.json
+rc=0
+### ai-git-guard | fixture path-guard/115-dialog-gate-named-not-run.json
+rc=0
+### ai-path-guard | fixture path-guard/115-dialog-gate-named-not-run.json
+rc=0
+### ai-scope-guard | fixture path-guard/115-dialog-gate-named-not-run.json
+rc=0
 ### ai-git-guard | fixture path-guard/12-migration-sql.json
 rc=0
 ### ai-path-guard | fixture path-guard/12-migration-sql.json

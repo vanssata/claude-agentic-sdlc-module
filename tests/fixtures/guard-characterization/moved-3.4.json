@@ -1,5 +1,5 @@
 {
- "_comment": "Path-guard decisions that moved against the frozen shell guards on purpose in task 3.4 (R22, SQ13, D3, D4), label -> why. test_guard_differential.py compares every other path-guard run by decision, and fails when a label here no longer moves. __TMP__ stands for the test tree's temporary directory.",
+ "_comment": "Path-guard decisions that moved against the frozen shell guards on purpose in task 3.4 (R22, SQ13, D3, D4) and later tasks (each entry names its own), label -> why. test_guard_differential.py compares every other path-guard run by decision, and fails when a label here no longer moves. __TMP__ stands for the test tree's temporary directory.",
  "moved": {
   "'sh' -c rm .ai/state/current.json": "(e) sh -c / eval not re-parsed, SQ13",
   "Edit file_path=__TMP__/home/.claude/agents/ai-reviewer.md": "(b) in-task instruction file",
@@ -49,6 +49,10 @@
   "echo /bin/sh U+205F blanks": "(e) sh -c / eval not re-parsed, SQ13",
   "echo /bin/sh U+3000 blanks": "(e) sh -c / eval not re-parsed, SQ13",
   "find . -name 'sh' -exec sh -c rm .ai/state/current.json": "(e) sh -c / eval not re-parsed, SQ13",
+  "fixture path-guard/103-bash-wget-o-into-task-md.json": "added deny: R7 and H1, task.md through a fetcher",
+  "fixture path-guard/112-dialog-gate-piped-forgery.json": "R36.11 (7d1, T-2026-10-28-009): running hooks/dialog-gate.py from a shell forges the dialog's answer",
+  "fixture path-guard/113-dialog-gate-run-directly.json": "R36.11 (7d1, T-2026-10-28-009): running hooks/dialog-gate.py from a shell forges the dialog's answer",
+  "fixture path-guard/114-dialog-gate-via-env-and-sh-c.json": "R36.11 (7d1, T-2026-10-28-009): running hooks/dialog-gate.py from a shell forges the dialog's answer",
   "fixture path-guard/15-edit-claude-agent-in-task.json": "(b) in-task instruction file",
   "fixture path-guard/20-read-vendor-agents-md.json": "(a) vendor instruction file",
   "fixture path-guard/21-edit-node-modules-claude-md.json": "(a) vendor instruction file",
@@ -65,7 +69,6 @@
   "fixture path-guard/61-bash-cp-dir-onto-claude-agents.json": "(b) in-task instruction file",
   "fixture path-guard/73-bash-sh-c-rm.json": "(e) sh -c / eval not re-parsed, SQ13",
   "fixture path-guard/74-bash-sh-c-seq-rm.json": "(e) sh -c / eval not re-parsed, SQ13",
-  "fixture path-guard/103-bash-wget-o-into-task-md.json": "added deny: R7 and H1, task.md through a fetcher",
   "fixture path-guard/92-edit-task-md.json": "added deny: R7, task.md",
   "fixture path-guard/93-redirect-into-task-md.json": "added deny: R7, task.md",
   "fixture path-guard/98-write-state-log.json": "added deny: R22, all of the state directory",

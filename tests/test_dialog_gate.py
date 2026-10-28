@@ -1,27 +1,41 @@
 #!/usr/bin/env python3
 """R36: the dialog. Task 7c writes the payload half — what state.py prepares
 for the dialog tool (golden payloads, the label rule, the multi-select split);
-7d1 adds the hook half (the recorder, the gate, the effective switch matrix).
+7d1 adds the hook half (the effective switch matrix, the recorder over the
+7.0 fixtures, the ledger lock, Stop, the gate's fast path, the registrations).
 
 The goldens are tests/fixtures/dialog/payload-golden/<case>.json, with the
 scratch project's paths, task id, tree, branch and git user replaced by
 placeholders. DIALOG_GOLDEN_UPDATE=1 rewrites them; review the diff."""
 
+import itertools
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
+import time
 import unittest
+from datetime import datetime, timedelta, timezone
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GOLDEN = os.path.join(ROOT, "tests", "fixtures", "dialog", "payload-golden")
 sys.path.insert(0, os.path.join(ROOT, "skills", "ai-task"))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
+sys.path.insert(0, os.path.join(ROOT, "hooks"))
+from guard import dialog  # noqa: E402  pylint: disable=wrong-import-position
 import state as state_mod  # noqa: E402  pylint: disable=wrong-import-position
 from test_ai_task_state import CLEAN, STATE, DialogProject  # noqa: E402  pylint: disable=wrong-import-position
+from guard_harness import decision as decision_of, hook_output  # noqa: E402  pylint: disable=wrong-import-position
 
 PUSH = "git push origin feat/x"
+SPIKE = os.path.join(ROOT, "tests", "fixtures", "dialog")
+COMMIT = "git commit -m 'it'\"'\"'s done' -- a.py"
+SAFE = "Not now — commit nothing"
+NOW = datetime(2026, 10, 28, 12, 0, 0, tzinfo=timezone.utc)
 
 
 def git(root, *args):
@@ -150,6 +164,558 @@ class TestPayload(unittest.TestCase):
         payload = state_mod.dialog_payload([decision], "codex")
         self.assertEqual([q["id"] for q in payload["questions"]], ["d3_1", "d3_2"])
         self.assertTrue(all("multiSelect" not in q for q in payload["questions"]))
+
+
+def spike(name):
+    with open(os.path.join(SPIKE, name + ".json"), encoding="utf-8") as fh:
+        return json.load(fh)["payload"]
+
+
+class Scratch:
+    """A project root and a runtime home for the hooks' module: dialog.json on
+    or off, a profile whose dialog tool is (or is not) the verified one, and
+    decision.json written the way state.py's open_decision writes it."""
+
+    def __init__(self, on=True, tool=True):
+        self.tmp = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
+        self.root = os.path.join(self.tmp.name, "p")
+        self.home = os.path.join(self.tmp.name, "home")
+        os.makedirs(os.path.join(self.root, ".ai", "policies"))
+        os.makedirs(os.path.join(self.root, ".ai", "state"))
+        if on:
+            self.write(".ai/policies/dialog.json", {"version": 1, "enabled": True, "window_seconds": 120,
+                                                    "stop_blocks_max": 2})
+        for runtime, home in (("claude", self.home), ("codex", self.home + "-codex")):
+            os.makedirs(os.path.join(home, "riskrails"))
+            with open(os.path.join(home, "riskrails", "profile.json"), "w", encoding="utf-8") as fh:
+                json.dump({"plan": "max", "dialog": {"tool": dialog.DIALOG_TOOL[runtime] if tool else None}}, fh)
+        self.vars = {"CLAUDE_CONFIG_DIR": self.home, "CODEX_HOME": self.home + "-codex",
+                     "AI_UNATTENDED": "", "CLAUDE_CODE_SESSION_ATTENDED": "1"}
+        self.env = mock.patch.dict(os.environ, self.vars)
+        self.env.start()
+
+    def close(self):
+        self.env.stop()
+        self.tmp.cleanup()
+
+    def write(self, rel, data):
+        with open(os.path.join(self.root, rel), "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+
+    def decide(self, *decisions):
+        self.write(".ai/state/decision.json", {"version": 1, "open": list(decisions)})
+
+    def ledger(self):
+        path = dialog.ledger_path(self.root)
+        if not os.path.exists(path):
+            return []
+        with open(path, encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh]
+
+
+def decision(did, question, header, options, multi=False):
+    """options: [(kind, label)] in offered order, numbered from 1."""
+    return {"id": did, "kind": "commit", "question": question, "header": header, "multi_select": multi,
+            "options": [{"n": n, "kind": kind, "label": label} for n, (kind, label) in enumerate(options, 1)]}
+
+
+def relabel(payload, mapping, question, header, qid=None):
+    """A recorded 7.0 payload with its question, header and labels renamed to
+    a decision's: the harness's shape stays as recorded, the words become ours."""
+    payload = json.loads(json.dumps(payload))
+    tool_response = payload.get("tool_response")
+    codex = isinstance(tool_response, str)
+    for holder in [payload["tool_input"]] + ([] if codex else [tool_response]):
+        q = holder["questions"][0]
+        old = q["question"]
+        q["question"], q["header"] = question, header
+        for option in q["options"]:
+            option["label"] = mapping.get(option["label"], option["label"])
+        if qid is not None:
+            q["id"] = qid
+        if "answers" in holder:
+            answer = holder["answers"].pop(old)
+            holder["answers"][question] = ", ".join(mapping.get(i, i) for i in answer.split(", "))
+    if codex:
+        [(old, entry)] = json.loads(tool_response)["answers"].items()
+        entry["answers"] = [mapping.get(i, i) for i in entry["answers"]]
+        payload["tool_response"] = json.dumps({"answers": {qid or old: entry}})
+    return payload
+
+
+def answer(payload, *items):
+    """The same payload with the human's answer to its one question replaced."""
+    payload = json.loads(json.dumps(payload))
+    if isinstance(payload["tool_response"], str):
+        [(qid, entry)] = json.loads(payload["tool_response"])["answers"].items()
+        payload["tool_response"] = json.dumps({"answers": {qid: dict(entry, answers=list(items))}})
+        return payload
+    for holder in (payload["tool_input"], payload["tool_response"]):
+        holder["answers"] = {holder["questions"][0]["question"]: ", ".join(items)} if items else {}
+    return payload
+
+
+def commit_payload(name="claude/ask-single", qid=None):
+    """A recorded single-select renamed to the commit decision, the commit picked."""
+    payload = relabel(spike(name), {"A": SAFE, "B": COMMIT}, "Commit a.py?", "Commit", qid)
+    return answer(payload, COMMIT)
+
+
+def run_gate(scratch, payload, env=None):
+    """hooks/dialog-gate.py as a runtime runs it, in the scratch project."""
+    payload = json.loads(json.dumps(payload).replace("__ROOT__", scratch.root))
+    full = dict(os.environ)
+    full.update(scratch.vars)
+    full.update(env or {})
+    proc = subprocess.run(["python3", "-I", "-S", os.path.join(ROOT, "hooks", "dialog-gate.py")],
+                          input=json.dumps(payload), capture_output=True, text=True, env=full, check=False,
+                          cwd=scratch.root)
+    return proc.returncode, proc.stdout + proc.stderr
+
+
+class HookCase(unittest.TestCase):
+    def setUp(self):
+        self.s = Scratch()
+
+    def tearDown(self):
+        self.s.close()
+
+
+class TestEffectiveSwitch(HookCase):
+    """R36.1: on only when enabled, the tool is the verified one, AI_UNATTENDED
+    is unset, the payload is the main session's and it has a session id."""
+
+    def test_effective_switch_matrix(self):
+        main, sub = spike("claude/ask-single"), spike("claude/subagent-pretooluse")
+        for enabled, tool, unattended, subagent, no_session in itertools.product((True, False), repeat=5):
+            with self.subTest(enabled=enabled, tool=tool, unattended=unattended, subagent=subagent,
+                              no_session=no_session):
+                s = Scratch(on=enabled, tool=tool)
+                try:
+                    payload = dict(sub if subagent else main)
+                    if no_session:
+                        payload.pop("session_id")
+                    with mock.patch.dict(os.environ, {"AI_UNATTENDED": "1" if unattended else ""}):
+                        got = dialog.effective_switch(s.root, "claude", payload)
+                finally:
+                    s.close()
+                self.assertEqual(got, enabled and tool and not unattended and not subagent and not no_session)
+
+    def test_runtime_unattended_marker_is_off(self):
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ATTENDED": "0"}):
+            self.assertFalse(dialog.effective_switch(self.s.root, "claude", spike("claude/ask-single")))
+
+    def test_codex_needs_its_own_verified_tool(self):
+        payload = spike("codex/request-single")
+        self.assertTrue(dialog.effective_switch(self.s.root, "codex", payload))
+        with open(os.path.join(self.s.home + "-codex", "riskrails", "profile.json"), "w", encoding="utf-8") as fh:
+            json.dump({"dialog": {"tool": None}}, fh)
+        self.assertFalse(dialog.effective_switch(self.s.root, "codex", payload))
+
+    def test_payload_runtime(self):
+        self.assertEqual(dialog.payload_runtime(spike("codex/posttooluse"), "/x/hooks/dialog-gate.py"), "codex")
+        self.assertEqual(dialog.payload_runtime(spike("claude/stop"), "/x/.codex/hooks/dialog-gate.py"), "claude")
+        self.assertEqual(dialog.payload_runtime({}, "/h/.codex/hooks/dialog-gate.py"), "codex")
+
+
+class TestRecorder(HookCase):
+    """R36.6: the answers come from tool_response; an exact label is a pick,
+    anything else a decline whose text is not stored."""
+
+    def commit_decision(self):
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+
+    def multi_decision(self, first="git commit -m x -- a.py"):
+        self.s.decide(decision("D2", "Commit and push?", "Commit",
+                               [("choice", SAFE), ("command", first), ("command", PUSH)], multi=True))
+
+    def test_pick_from_tool_response(self):
+        self.commit_decision()
+        payload = commit_payload()
+        lines = dialog.record(self.s.root, "claude", payload, NOW)
+        self.assertEqual([line["type"] for line in lines], ["offer", "pick"])
+        pick = lines[1]
+        self.assertEqual((pick["id"], pick["decision"], pick["option"], pick["order"], pick["label"]),
+                         ("C1", "D1", 2, 1, COMMIT))
+        self.assertEqual((pick["session"], pick["tool_use_id"]), (payload["session_id"], payload["tool_use_id"]))
+        self.assertEqual((pick["at"], pick["expires_at"]), ("2026-10-28T12:00:00Z", "2026-10-28T12:02:00Z"))
+        self.assertEqual(self.s.ledger(), [dict({"v": 1}, **line) for line in lines])
+
+    def test_multi_select_picks_in_offered_order(self):
+        self.multi_decision()
+        payload = relabel(spike("claude/ask-multi"), {"A": SAFE, "B": "git commit -m x -- a.py", "C": PUSH},
+                          "Commit and push?", "Commit")
+        payload["tool_response"]["answers"]["Commit and push?"] = "%s, %s" % (PUSH, "git commit -m x -- a.py")
+        picks = [line for line in dialog.record(self.s.root, "claude", payload, NOW) if line["type"] == "pick"]
+        self.assertEqual([(p["id"], p["order"], p["option"], p["label"]) for p in picks],
+                         [("C1", 1, 2, "git commit -m x -- a.py"), ("C2", 2, 3, PUSH)])
+        self.assertEqual(dialog.next_live_pick(self.s.root, payload["session_id"], NOW)["id"], "C1")
+
+    def test_choice_only_is_one_pick(self):
+        self.commit_decision()
+        payload = relabel(spike("claude/ask-single"), {"A": SAFE, "B": COMMIT}, "Commit a.py?", "Commit")
+        lines = dialog.record(self.s.root, "claude", payload, NOW)
+        self.assertEqual([(line["type"], line.get("option")) for line in lines], [("offer", None), ("pick", 1)])
+
+    def test_choice_with_commands_is_ambiguous(self):
+        self.multi_decision()
+        payload = relabel(spike("claude/ask-multi"), {"A": SAFE, "B": "git commit -m x -- a.py", "C": PUSH},
+                          "Commit and push?", "Commit")
+        lines = dialog.record(self.s.root, "claude", payload, NOW)
+        self.assertEqual([(line["type"], line.get("why")) for line in lines],
+                         [("offer", None), ("decline", "ambiguous")])
+
+    def test_other_text_is_decline(self):
+        self.multi_decision()
+        payload = relabel(spike("claude/ask-other"), {"A": SAFE, "B": "git commit -m x -- a.py", "C": PUSH},
+                          "Commit and push?", "Commit")
+        payload["tool_response"]["answers"]["Commit and push?"] = "git commit -m x -- a.py, secret words here"
+        lines = dialog.record(self.s.root, "claude", payload, NOW)
+        self.assertEqual([(line["type"], line.get("why")) for line in lines],
+                         [("offer", None), ("decline", "other text")])
+        self.assertNotIn("secret words", json.dumps(self.s.ledger()))
+        recorded = relabel(spike("claude/ask-other"), {"A": SAFE, "B": "git commit -m x -- a.py", "C": PUSH},
+                           "Commit and push?", "Commit")
+        self.assertEqual([line["type"] for line in dialog.record(self.s.root, "claude", recorded, NOW)],
+                         ["offer", "decline"])
+
+    def test_esc_is_decline(self):
+        """Esc: only the PreToolUse fires (7.0), so nothing consents and the
+        decision stays open until its window; a PreToolUse writes nothing."""
+        self.s.decide(decision("D1", "Pick one?", "Single", [("choice", "A"), ("choice", "B")]))
+        payload = spike("claude/ask-esc")
+        self.assertEqual(payload["hook_event_name"], "PreToolUse")
+        self.assertEqual(run_gate(self.s, payload), (0, ""))
+        self.assertEqual(self.s.ledger(), [])
+        self.assertIsNone(dialog.next_live_pick(self.s.root, payload["session_id"], NOW))
+
+    def test_empty_answer_is_decline(self):
+        self.commit_decision()
+        payload = answer(commit_payload())
+        lines = dialog.record(self.s.root, "claude", payload, NOW)
+        self.assertEqual([(line["type"], line.get("why")) for line in lines],
+                         [("offer", None), ("decline", "no answer")])
+
+    def test_free_dialog_never_consents(self):
+        """A dialog the model wrote itself, not equal to an open decision,
+        records nothing, even when an option is a command label."""
+        self.assertEqual(dialog.record(self.s.root, "claude", commit_payload(), NOW), [])
+        self.commit_decision()
+        reworded = answer(relabel(spike("claude/ask-single"), {"A": SAFE, "B": COMMIT}, "Commit a.py now?",
+                                  "Commit"), COMMIT)
+        self.assertEqual(dialog.record(self.s.root, "claude", reworded, NOW), [])
+        reordered = relabel(spike("claude/ask-single"), {"A": COMMIT, "B": SAFE}, "Commit a.py?", "Commit")
+        self.assertEqual(dialog.record(self.s.root, "claude", reordered, NOW), [])
+        self.assertEqual(self.s.ledger(), [])
+
+    def test_codex_adapter_fixture(self):
+        """R36.19: Codex's string tool_response maps to the same shape;
+        "None of the above" and "user_note: …" are a decline."""
+        self.commit_decision()
+        payload = commit_payload("codex/request-single", "d1")
+        self.assertEqual(dialog.adapt_response("codex", payload), [[COMMIT]])
+        lines = dialog.record(self.s.root, "codex", payload, NOW)
+        self.assertEqual([(line["type"], line.get("label"), line.get("runtime")) for line in lines],
+                         [("offer", None, None), ("pick", COMMIT, "codex")])
+        other = relabel(spike("codex/request-other"), {"A": SAFE, "B": COMMIT}, "Commit a.py?", "Commit", "d1")
+        self.assertEqual(dialog.adapt_response("codex", other),
+                         [["None of the above", "user_note: Some text to test"]])
+        self.assertEqual([line["type"] for line in dialog.record(self.s.root, "codex", other, NOW)],
+                         ["offer", "decline"])
+        self.assertNotIn("Some text", json.dumps(self.s.ledger()))
+
+    def test_duplicate_question_text_is_ambiguous(self):
+        """7c splits a multi-select whose label holds ", " into single-selects
+        sharing the decision's question text; Claude keys answers by that
+        text, so neither answer can be told apart: a decline."""
+        self.multi_decision(first="git commit -m 'a, b' -- a.py")
+        sent = dialog.dialog_payload(dialog.read_decisions(self.s.root), "claude")
+        self.assertEqual(len(sent["questions"]), 2)
+        payload = dict(spike("claude/ask-single"), tool_input=dict(sent),
+                       tool_response=dict(sent, answers={"Commit and push?": PUSH}))
+        lines = dialog.record(self.s.root, "claude", payload, NOW)
+        self.assertEqual([(line["type"], line.get("why")) for line in lines],
+                         [("offer", None), ("decline", "ambiguous")])
+
+    def test_label_rule_checked_again(self):
+        self.s.decide(decision("D1", "Run?", "Run", [("choice", SAFE), ("command", "git status")]))
+        payload = answer(relabel(spike("claude/ask-single"), {"A": SAFE, "B": "git status"}, "Run?", "Run"),
+                         "git status")
+        lines = dialog.record(self.s.root, "claude", payload, NOW)
+        self.assertEqual([(line["type"], line.get("why")) for line in lines], [("offer", None), ("decline", "label")])
+
+    def test_round_without_call_id_or_transcript_writes_nothing(self):
+        """Review L2: a payload with no tool_use_id would merge with another
+        round; none with no transcript could be audited."""
+        self.commit_decision()
+        for key in ("tool_use_id", "transcript_path"):
+            with self.subTest(missing=key):
+                self.assertEqual(dialog.record(self.s.root, "claude", dict(commit_payload(), **{key: ""}), NOW), [])
+        self.assertEqual(self.s.ledger(), [])
+
+    def test_round_lands_whole_or_not_at_all(self):
+        """Review L4: a line over the limit refuses the round before its first write."""
+        self.multi_decision()
+        payload = relabel(spike("claude/ask-multi"), {"A": SAFE, "B": "git commit -m x -- a.py", "C": PUSH},
+                          "Commit and push?", "Commit")
+        payload = answer(payload, "git commit -m x -- a.py", PUSH)
+        offer = len(dialog.encode_line({"type": "offer", "decisions": ["D2"], "session": payload["session_id"],
+                                        "tool_use_id": payload["tool_use_id"]}))
+        with mock.patch.object(dialog, "LINE_MAX", offer + 10), self.assertRaises(OSError):
+            dialog.record(self.s.root, "claude", payload, NOW)
+        self.assertEqual(self.s.ledger(), [])
+
+    def test_state_py_label_by_form_on_every_route(self):
+        """Review M2: on the plugin route the hooks live in the plugin cache and
+        the skills' state.py in <home>; the hook checks the form, state.py the path."""
+        for script in (os.path.abspath(STATE), "/home/u/.claude/skills/ai-task/state.py",
+                       "/home/u/.codex/skills/ai-task/state.py"):
+            with self.subTest(script=script):
+                self.assertIsNone(dialog.validate_label("python3 %s --root /p approve --by me" % script))
+        for label in ("python3 /home/u/x/notstate.py approve --by me", "/usr/bin/python3 /h/state.py approve --by me",
+                      "python3 -X /h/state.py approve --by me", "python3 /h/state.py close"):
+            with self.subTest(label=label):
+                self.assertIsNotNone(dialog.validate_label(label))
+
+    def test_label_rule_matches_state_py(self):
+        here = os.path.abspath(STATE)
+        for label in ["git commit -m 'fix' -- a.py", PUSH, "git push origin +feat", "git push origin HEAD:main",
+                      # another state.py's path: the hook checks the form only, state.py the path (M2)
+                      "python3 %s --root /p approve --by me" % here,
+                      "python3 -I %s --root /p verify --scope all --by me" % here,
+                      "python3 %s --root /p close" % here, "npx riskrails@3.1.0 --target claude --yes",
+                      "npx other@1.0.0 --yes", "git commit -m x; ls", "git status", " git commit",
+                      "git commit -m 'x" + "y" * 400 + "'",
+                      # review L1: ASCII only, as state.py's patterns
+                      "git push origin mäin", "git push origin ma٣in", "npx riskrails@１.0 --yes"]:
+            with self.subTest(label=label):
+                self.assertEqual(dialog.validate_label(label) is None, state_mod.validate_label(label) is None)
+
+
+def prompt(scratch):
+    """A human turn: context-guard.py's UserPromptSubmit counts it in session.json."""
+    subprocess.run([os.path.join(ROOT, "hooks", "context-guard.py")], check=False, capture_output=True, text=True,
+                   input=json.dumps({"hook_event_name": "UserPromptSubmit", "session_id": "s", "cwd": scratch.root,
+                                     "prompt": "go on"}),
+                   env=dict(os.environ, **scratch.vars), cwd=scratch.root)
+
+
+class TestGateHook(HookCase):
+    """hooks/dialog-gate.py: the recorder end to end, and Stop (R36.13)."""
+
+    def stop(self, active=False, **env):
+        code, out = run_gate(self.s, dict(spike("claude/stop"), stop_hook_active=active), env)
+        self.assertEqual(code, 0)
+        return hook_output(out)
+
+    def test_stop_blocks_twice_then_releases(self):
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+        prompt(self.s)
+        with open(os.path.join(self.s.root, ".ai", "state", "session.json"), encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh)["prompt_count"], 1, "an open decision counts turns without a task")
+        for active in (False, True):
+            out = self.stop(active)
+            self.assertEqual(out.get("decision"), "block", out)
+            self.assertTrue(out["reason"].startswith("DECISION_PENDING D1 — call AskUserQuestion"), out)
+            sent = json.loads(out["reason"].split(": ", 1)[1])
+            self.assertEqual(sent, dialog.dialog_payload(dialog.read_decisions(self.s.root), "claude"))
+        released = self.stop(True)
+        self.assertNotIn("decision", released)
+        self.assertIn("decision settle --id D1 --pick", released["systemMessage"])
+        prompt(self.s)
+        self.assertEqual(self.stop().get("decision"), "block", "a new human turn resets the count")
+        self.assertEqual([line["turn"] for line in self.s.ledger()], [1, 1, 2])
+
+    def test_stop_without_a_turn_honours_stop_hook_active(self):
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+        self.assertEqual(self.stop().get("decision"), "block")
+        self.assertIn("systemMessage", self.stop(True))
+
+    def test_stop_silent_without_a_decision_or_switch(self):
+        self.assertEqual(self.stop(), {})
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+        os.remove(os.path.join(self.s.root, ".ai", "policies", "dialog.json"))
+        self.assertEqual(self.stop(), {})
+        self.assertEqual(self.stop(AI_UNATTENDED="1"), {})
+        self.assertEqual(self.s.ledger(), [])
+
+    def test_post_tool_use_records_through_the_hook(self):
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+        self.assertEqual(run_gate(self.s, commit_payload()), (0, ""))
+        self.assertEqual([(line["type"], line.get("label")) for line in self.s.ledger()],
+                         [("offer", None), ("pick", COMMIT)])
+        subagent = dict(commit_payload(), agent_id="a1", tool_use_id="toolu_sub")
+        self.assertEqual(run_gate(self.s, subagent), (0, ""))
+        self.assertEqual(len(self.s.ledger()), 2, "a subagent's dialog consents to nothing")
+
+    def test_off_writes_nothing(self):
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+        os.remove(os.path.join(self.s.root, ".ai", "policies", "dialog.json"))
+        self.assertEqual(run_gate(self.s, commit_payload()), (0, ""))
+        self.assertEqual(self.s.ledger(), [])
+
+    def test_never_a_deny_and_fails_open(self):
+        for stdin in ("", "not json", "[]", json.dumps(spike("claude/subagent-pretooluse"))):
+            proc = subprocess.run(["python3", "-I", "-S", os.path.join(ROOT, "hooks", "dialog-gate.py")],
+                                  input=stdin, capture_output=True, text=True, check=False, cwd=self.s.root)
+            self.assertEqual((proc.returncode, proc.stdout, proc.stderr), (0, "", ""), stdin)
+
+
+class TestGateFastPath(HookCase):
+    """R36.12: with no decision.json the decision check costs one stat; 7d1
+    allows with one open too (the gate is 7d2's)."""
+
+    def guard(self, payload):
+        proc = subprocess.run(["python3", "-I", "-S", os.path.join(ROOT, "hooks", "ai-guard.py")],
+                              input=json.dumps(payload), capture_output=True, text=True, check=False,
+                              cwd=self.s.root)
+        return proc.returncode, proc.stdout + proc.stderr
+
+    def grep(self):
+        return {"hook_event_name": "PreToolUse", "tool_name": "Grep", "cwd": self.s.root,
+                "session_id": "s", "tool_use_id": "toolu_1", "tool_input": {"pattern": "x"}}
+
+    def test_open_decision_still_allows(self):
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+        self.assertEqual(self.guard(self.grep()), (0, ""))
+        self.assertEqual(self.guard(dict(self.grep(), tool_name="Bash", tool_input={"command": "ls"})), (0, ""))
+
+    def test_later_checks_still_run(self):
+        """The new first check must not end the run: git still denies."""
+        payload = dict(self.grep(), tool_name="Bash", tool_input={"command": "git push --force origin main"})
+        self.assertEqual(decision_of(self.guard(payload)[1]), "deny")
+
+    def test_broken_decision_module_keeps_the_other_checks(self):
+        """Review M1: a half-done install — guard/decision.py missing or not
+        importable — must not turn git, paths and scope off."""
+        payload = dict(self.grep(), tool_name="Bash", tool_input={"command": "git push --force origin main"})
+        for broken in (None, "def check(ctx):\n    return (\n"):
+            with self.subTest(broken=broken), tempfile.TemporaryDirectory() as tmp:
+                hooks = os.path.join(tmp, "hooks")
+                shutil.copytree(os.path.join(ROOT, "hooks"), hooks,
+                                ignore=shutil.ignore_patterns("__pycache__"))
+                target = os.path.join(hooks, "guard", "decision.py")
+                if broken is None:
+                    os.remove(target)
+                else:
+                    with open(target, "w", encoding="utf-8") as fh:
+                        fh.write(broken)
+                proc = subprocess.run(["python3", "-I", "-S", os.path.join(hooks, "ai-guard.py")],
+                                      input=json.dumps(payload), capture_output=True, text=True, check=False,
+                                      cwd=self.s.root)
+                self.assertEqual(decision_of(proc.stdout), "deny", proc.stdout + proc.stderr)
+
+    def test_gate_fast_path(self):
+        """timed: the whole ai-guard.py process on a Grep payload, no decision.json."""
+        budget = 0.015 * timed_factor()
+        overhead = min(timed(["python3", "-I", "-S", "-c", "pass"], "") for _ in range(5))
+        median = sorted(timed(["python3", "-I", "-S", os.path.join(ROOT, "hooks", "ai-guard.py")],
+                              json.dumps(self.grep()), self.s.root) for _ in range(5))[2]
+        self.assertLessEqual(median - overhead, budget, "%.1f ms over the interpreter's start" %
+                             ((median - overhead) * 1000))
+
+
+class TestRegistrations(unittest.TestCase):
+    """7d1 step 3: every registration lands in both routes' sources and both
+    plugin files, the same apart from where the hooks live."""
+
+    ROUTES = {"claude": ("settings.common.json", "hooks/hooks.json", "*", "AskUserQuestion"),
+              "codex": ("codex/hooks.json", "hooks/codex-hooks.json", ".*", "^request_user_input$")}
+
+    @staticmethod
+    def entries(path, script):
+        with open(os.path.join(ROOT, path), encoding="utf-8") as fh:
+            hooks = json.load(fh)["hooks"]
+        return sorted((event, group.get("matcher"), hook.get("timeout"),
+                       re.sub(r"^python3 -I -S \"[^\"]*/hooks/", "", hook["command"]))
+                      for event, groups in hooks.items() for group in groups for hook in group["hooks"]
+                      if hook["command"].endswith("/hooks/%s\"" % script))
+
+    def test_registrations_equal_in_both_routes(self):
+        for runtime, (npx, plugin, star, tool) in self.ROUTES.items():
+            with self.subTest(runtime=runtime):
+                gate = self.entries(npx, "dialog-gate.py")
+                self.assertEqual(gate, [("PostToolUse", tool, 5, 'dialog-gate.py"'),
+                                        ("Stop", None, 5, 'dialog-gate.py"')])
+                self.assertEqual(self.entries(plugin, "dialog-gate.py"), gate)
+                guard = self.entries(npx, "ai-guard.py")
+                self.assertEqual(guard, [("PreToolUse", star, 15, 'ai-guard.py"')])
+                self.assertEqual(self.entries(plugin, "ai-guard.py"), guard)
+
+    def test_no_ask_timeout_in_the_sources(self):
+        for path in ("settings.common.json", "hooks/hooks.json"):
+            with open(os.path.join(ROOT, path), encoding="utf-8") as fh:
+                self.assertNotIn("askUserQuestionTimeout", fh.read(), path)
+
+
+def timed(command, stdin, cwd=None):
+    started = time.perf_counter()
+    subprocess.run(command, input=stdin, capture_output=True, text=True, check=False, cwd=cwd)
+    return time.perf_counter() - started
+
+
+def timed_factor():
+    try:
+        return float(os.environ.get("AI_TIMED_FACTOR") or 1)
+    except ValueError:
+        return 1.0
+
+
+class TestPayloadFields(unittest.TestCase):
+    def test_session_fields_read_or_empty(self):
+        from guard import common  # pylint: disable=import-outside-toplevel
+        recorded = spike("claude/subagent-pretooluse")
+        for raw in (json.dumps(recorded), json.dumps(recorded) + "\n{}"):     # the plain and the stream route
+            payload = common.Payload(raw.encode("utf-8"), "/")
+            self.assertEqual([common.b_to_u(getattr(payload, f)) for f in ("session_id", "transcript_path",
+                                                                           "tool_use_id")],
+                             [recorded["session_id"], recorded["transcript_path"], recorded["tool_use_id"]])
+        bare = common.Payload(b'{"tool_name":"Grep","cwd":"/","hook_event_name":"PreToolUse"}', "/")
+        self.assertEqual([common.b_to_u(getattr(bare, f)) for f in ("session_id", "transcript_path", "tool_use_id")],
+                         ["", "", ""])
+
+
+class TestLedger(HookCase):
+    def lock(self, age):
+        path = os.path.join(self.s.root, ".ai", "state", "consent.lock")
+        with open(path, "w", encoding="utf-8"):
+            pass
+        os.utime(path, (time.time() - age, time.time() - age))
+        return path
+
+    def test_stale_lock_taken_over(self):
+        lock = self.lock(dialog.LOCK_STALE_S + 1)
+        started = time.time()
+        with dialog.ledger_lock(self.s.root):
+            dialog.ledger_append(self.s.root, {"type": "void", "ids": ["C1"]})
+        self.assertLess(time.time() - started, dialog.LOCK_STALE_S)
+        self.assertEqual([line["type"] for line in self.s.ledger()], ["void"])
+        self.assertFalse(os.path.exists(lock))
+
+    def test_fresh_lock_is_waited_for(self):
+        """A live writer's lock is not taken until it is LOCK_STALE_S old."""
+        self.lock(0)
+        started = time.time()
+        with mock.patch.object(dialog, "LOCK_STALE_S", 0.3):
+            with dialog.ledger_lock(self.s.root):
+                waited = time.time() - started
+        self.assertGreaterEqual(waited, 0.3)
+
+    def test_line_over_4096_refused(self):
+        with dialog.ledger_lock(self.s.root):
+            with self.assertRaises(OSError):
+                dialog.ledger_append(self.s.root, {"type": "void", "ids": ["C%d" % i for i in range(1000)]})
+            dialog.ledger_append(self.s.root, {"type": "void", "ids": ["C1"]})
+        self.assertEqual([line["ids"] for line in self.s.ledger()], [["C1"]])
+
+    def test_pick_ids_continue_the_ledger(self):
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+        payload = commit_payload()
+        dialog.record(self.s.root, "claude", payload, NOW)
+        later = NOW + timedelta(seconds=5)
+        lines = dialog.record(self.s.root, "claude", dict(payload, tool_use_id="toolu_second"), later)
+        self.assertEqual([line["id"] for line in lines if line["type"] == "pick"], ["C2"])
+        self.assertEqual(dialog.next_live_pick(self.s.root, payload["session_id"], later)["id"], "C2")
 
 
 if __name__ == "__main__":

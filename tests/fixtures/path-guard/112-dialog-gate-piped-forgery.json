@@ -1,0 +1,1 @@
+{"case": "a forged PostToolUse piped into the dialog's recorder is denied (R36.11, review H1 of T-2026-10-28-009)", "expect": "deny", "payload": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": "__ROOT__", "tool_input": {"command": "echo '{}' | python3 -I -S \"$HOME/.claude/hooks/dialog-gate.py\""}}}

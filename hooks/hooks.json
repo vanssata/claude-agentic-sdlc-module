@@ -14,13 +14,13 @@
         ]
       },
       {
-        "matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
             "command": "python3 -I -S \"${CLAUDE_PLUGIN_ROOT}/hooks/ai-guard.py\"",
             "timeout": 15,
-            "statusMessage": "Checking git, paths and scope"
+            "statusMessage": "Checking git, paths, scope and open decisions"
           }
         ]
       },
@@ -86,6 +86,17 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"${CLAUDE_PLUGIN_ROOT}/hooks/dialog-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Recording the dialog's answer"
+          }
+        ]
+      },
+      {
         "matcher": "Agent",
         "hooks": [
           {
@@ -114,6 +125,18 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/runtime-gate.py\"",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"${CLAUDE_PLUGIN_ROOT}/hooks/dialog-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Checking for an open decision"
           }
         ]
       }

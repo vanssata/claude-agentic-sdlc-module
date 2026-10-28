@@ -561,6 +561,12 @@ class TestContextGuard(unittest.TestCase):  # pylint: disable=too-many-public-me
                         "cwd": aip, "prompt": "a secret"}, AI_HANDOFF_NO_PROMPT="1")
         self.assertEqual(read_json(session).get("last_prompt"), "make the fee configurable",
                          "AI_HANDOFF_NO_PROMPT keeps the text out, and the turn is still recorded")
+        # R36.13: the human turn the dialog's Stop counter resets on
+        count = read_json(session).get("prompt_count")
+        self.assertIsInstance(count, int, "a prompt counts the human's turn")
+        self.run_guard({"hook_event_name": "UserPromptSubmit", "session_id": "ai1", "transcript_path": self.t,
+                        "cwd": aip, "prompt": "next"})
+        self.assertEqual(read_json(session).get("prompt_count"), count + 1, "one more per prompt")
         self.run_guard({"hook_event_name": "UserPromptSubmit", "session_id": "p1", "transcript_path": self.t,
                         "cwd": self.project, "prompt": "x"})
         self.assertFalse(os.path.exists(self.project + "/.ai"), "a project without .ai/ gets no session.json")

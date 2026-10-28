@@ -225,7 +225,8 @@ class CodexInstall(ScratchCase):
                   "hooks/ai-path-guard-defaults.json hooks.json config.toml AGENTS.md "
                   "skills/ai-task/state.py skills/ai-init/scaffold-ai.sh skills/usage-report/usage-report.py "
                   "hooks/ai-guard.py hooks/guard/__init__.py hooks/guard/common.py hooks/guard/ere.py "
-                  "hooks/guard/git.py hooks/guard/paths.py hooks/guard/scope.py").split():
+                  "hooks/guard/git.py hooks/guard/paths.py hooks/guard/scope.py "
+                  "hooks/dialog-gate.py hooks/guard/dialog.py hooks/guard/decision.py").split():
             self.check("$f installed".replace("$f", f), os.path.exists(os.path.join(self.dir, f)), "%s missing" % f)
         self.check("the guards are executable", os.access(os.path.join(self.dir, "hooks", "ai-guard.py"), os.X_OK),
                    "guards should be executable")
@@ -269,7 +270,7 @@ class CodexInstall(ScratchCase):
         n = len(commands(data, "PreToolUse"))
         self.check("two PreToolUse hooks registered (ai-guard, runtime-gate)", n == 2, "expected 2 PreToolUse commands, got %s" % n)
         scope = [bool(re.search("ai-guard\\.py", e["hooks"][0]["command"]))
-                 for e in data["hooks"]["PreToolUse"] if re.search("apply_patch", e["matcher"])]
+                 for e in data["hooks"]["PreToolUse"] if re.fullmatch(e["matcher"], "apply_patch")]
         self.check("the guard (its scope check) watches apply_patch", bool(scope) and scope[-1],
                    "the scope guard should match apply_patch")
         self.check("the runtime gate listens on SubagentStop",
@@ -357,8 +358,11 @@ class CodexInstall(ScratchCase):
         self.codex(up, "--codex-plan", "pro")
         data = read_json(os.path.join(up, "hooks.json"))
         self.check("a second install changes nothing",
-                   len([c for c in all_commands(data) if re.search(r"-gate\.py", c)]) == 4,
+                   len([c for c in all_commands(data) if re.search(r"(runtime|model)-gate\.py", c)]) == 4,
                    "reinstall doubled or renamed the gate")
+        self.check("a second install does not double the dialog hook",
+                   len([c for c in all_commands(data) if re.search(r"/hooks/dialog-gate\.py", c)]) == 2,
+                   "dialog-gate.py should be registered once on PostToolUse and once on Stop")
         self.check("the user's own SubagentStop hook survives", "my-stop.sh" in commands(data, "SubagentStop"),
                    "user hook lost")
         self.check("the replacement is reported, with the /hooks re-trust reminder",

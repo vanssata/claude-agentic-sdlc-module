@@ -3,8 +3,11 @@
 
 Reads the hook payload from stdin and either exits 0 silently (allow) or prints
 the deny object and exits 0, the contract of every guard. The checks are the
-three shell guards this replaces, in the order a runtime ran them:
+open-decision gate, then the three shell guards this replaces, in the order a
+runtime ran them:
 
+  decision  the gate while a dialog decision is open, on every tool
+            (guard/decision.py; 7d1 ships its fast path only)
   git    git and deployment safety, on Bash (guard/git.py)
   paths  sensitive paths, control files, the runtime lock, dependency
          instruction files (guard/paths.py)
@@ -12,7 +15,7 @@ three shell guards this replaces, in the order a runtime ran them:
 
 `--only <check>` runs one of them; that is what each hooks/ai-*-guard.sh shim
 passes, so a registration made for the shell guards keeps its meaning. With no
-flag all three run and the first refusal wins.
+flag all of them run and the first refusal wins.
 
 Fail-open: anything unexpected — a payload that is not JSON, a missing file,
 an exception — allows, with no output. A guard is defence-in-depth against an
@@ -22,10 +25,11 @@ Run as `python3 -I -S`: no site packages, no environment-driven imports.
 import os
 import sys
 
-CHECKS = ("git", "paths", "scope")
+CHECKS = ("decision", "git", "paths", "scope")
 # The tools each check reads; any other tool is allowed by its first line, so
-# the module is not even imported for it.
+# the module is not even imported for it. None: every tool.
 TOOLS = {
+    "decision": None,
     "git": ("Bash",),
     "paths": ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"),
     "scope": ("Edit", "Write", "MultiEdit", "NotebookEdit"),
@@ -52,16 +56,23 @@ def main(argv):
             return 0
         ctx = Context(payload, loc, pwd, common.bytes_b(os.fsencode(hook_dir)))
         for name in (only,) if only else CHECKS:
-            if payload.tool not in TOOLS[name]:
+            if TOOLS[name] is not None and payload.tool not in TOOLS[name]:
                 continue
-            module = __import__("guard." + name, fromlist=["check"])
             # Each shell guard was its own process with its own SECONDS: the
-            # first check's clock started with the process, a later one's now.
-            ctx.clock = common.Clock(common.START if name == ((only,) if only else CHECKS)[0] else None)
+            # first shell guard's clock started with the process, a later one's
+            # now. The decision check, new, does not move that.
+            ctx.clock = common.Clock(common.START if name == (only or "git") else None)
             try:
+                module = __import__("guard." + name, fromlist=["check"])
                 module.check(ctx)
             except common.Allow:
                 continue
+            except Exception as exc:        # pylint: disable=broad-exception-caught
+                # The decision gate fails open on its own (R36.12): a missing or
+                # broken module — a half-done install — must not end the run
+                # before git, paths and scope.
+                if name != "decision" or isinstance(exc, common.Deny):
+                    raise
     except Exception as exc:                # pylint: disable=broad-exception-caught
         common = sys.modules.get("guard.common")
         if common is not None and isinstance(exc, common.Deny):

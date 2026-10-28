@@ -341,7 +341,12 @@ class Payload:
             elif isinstance(ti, dict) and _plain(ti.get("command")):
                 self.command = chomp_all(_sh(ti.get("command")))
                 self.command_ok = True
+            # R36 (7d1): what binds a dialog pick to its session; empty when absent.
+            for name in ("session_id", "transcript_path", "tool_use_id"):
+                setattr(self, name, chomp_all(_sh(v.get(name))))
         else:
+            for name in ("session_id", "transcript_path", "tool_use_id"):
+                setattr(self, name, chomp_all(jq_field_r(self.values, name)[0]))
             out, ok = jq_field_r(self.values, "tool_name")
             if not ok:
                 raise Allow()

@@ -88,6 +88,14 @@ SETBY_VERB = ("([[:space:]]+--)?[[:space:]]+" + Q + "set" + END + "([^|;&`]*[[:s
               + Q + "(=|[[:space:]]|$)")
 SETBY_RE = (BOUND + "(python3?[[:space:]]+)?" + Q + "[^[:space:]'\"]*state\\.py" + Q + ARGS + SETBY_VERB + "|"
             + BOUND + "(python3?[[:space:]]+)?" + Q + VAR + Q + ARGS + SETBY_VERB)
+# R36.11: running the dialog's recorder by hand would forge the human's answer.
+# dialog-gate.py in command position — the program itself, or the script a
+# python runs — after a separator, a quote, exec/env/command/nohup/time/sudo
+# and their words; naming it as an argument (grep, git diff, chmod) is not running it.
+DIALOG_GATE_RE = ("(^|[|;&(`{'\"]|\\$\\()[[:space:]]*((exec|env|command|nohup|time|sudo)([[:space:]]+[^[:space:]|;&]+)*"
+                  "[[:space:]]+)?(" + Q + "[^[:space:]'\"|;&]*python[0-9.]*" + Q
+                  + "([[:space:]]+-[^[:space:]]+)*[[:space:]]+)?" + Q + "[^[:space:]'\"|;&]*dialog-gate\\.py" + Q
+                  + "([[:space:]|;&)<>]|$)")
 VERBS_RE = ("(^|[^A-Za-z0-9_.-])(cp|mv|install|rsync|rm|rmdir|unlink|tee|truncate|shred|touch|ln|chmod|chown|"
             "dd|sed|perl|ruby)([^A-Za-z0-9_.-]|$)")
 SEGMENT = "^[[:space:]]*"
@@ -1199,6 +1207,11 @@ class PathGuard:                            # pylint: disable=too-many-instance-
         if length(cmd) > LONG_CMD and (m.search_c(LONG_TRIGGER_RE, cmd) or m.matches_joined(cmd, self.loose)):
             raise Deny("Refusing a %d-character shell command that names a guarded path or a state.py or "
                        "update.py verb: write it to a file and run that, or split it." % length(cmd))
+        if m.ere_match(DIALOG_GATE_RE, cmd_joined):
+            raise Deny("Refusing to run hooks/dialog-gate.py from a shell: it records the human's answer to "
+                       "the dialog, and only the runtime calls it, after the dialog tool. To answer a decision, "
+                       "send the dialog ('state.py decision show'); a human settles one in their own terminal "
+                       "('state.py decision settle --id D<n> --pick <n>'). See .ai/policies/safety.md.")
         if m.ere_match(APPROVE_RE, cmd_joined) and not unattended and self.task_in_flight():
             raise Deny("Refusing 'state.py approve' from an agent session." + WHY_APPROVE)
         if m.ere_match(SETBY_RE, cmd_joined) and not unattended and self.task_in_flight():

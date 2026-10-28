@@ -405,6 +405,16 @@ def write_session(root, updates):
         pass
 
 
+def prompt_count(root):
+    """session.json's count of human turns; 0 when there is none yet."""
+    try:
+        with open(os.path.join(root, ".ai", "state", "session.json"), encoding="utf-8") as fh:
+            count = json.load(fh).get("prompt_count")
+    except (OSError, ValueError, AttributeError):
+        return 0
+    return count if isinstance(count, int) and not isinstance(count, bool) else 0
+
+
 def state_py(root, *args):
     """state.py is the only thing that renders a handoff or reads the questions.
     Three seconds inside a fifteen-second hook, and an empty string on anything
@@ -504,6 +514,7 @@ def on_prompt(payload):
     transcript = payload.get("transcript_path")
     session = payload.get("session_id") or "unknown"
     root = ai_root(payload.get("cwd"))
+    update = None
     if task_in_flight(root):
         # The evidence that a human took a turn — what the gate's file route
         # (R13) reads back. Recorded before any early exit below.
@@ -511,6 +522,10 @@ def on_prompt(payload):
                   "last_prompt_at": stamp()}
         if not os.environ.get("AI_HANDOFF_NO_PROMPT"):
             update["last_prompt"] = (payload.get("prompt") or "")[:PROMPT_MAX_CHARS]
+    if root and (update is not None or os.path.isfile(os.path.join(root, ".ai", "state", "decision.json"))):
+        # R36.13: the human turn dialog-gate.py's Stop counter resets on.
+        update = dict(update or {}, prompt_count=prompt_count(root) + 1)
+    if update is not None:
         write_session(root, update)
     ctx = current_context(transcript) if transcript else None
     marker = state_path(session, "json")

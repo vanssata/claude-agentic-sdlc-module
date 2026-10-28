@@ -42,6 +42,16 @@ Per guard, per tool call, on a project that has opted in (`.ai/` present):
 | `ai-path-guard`, file tool | ≤ 8 | ≤ 110 ms |
 | `ai-scope-guard`, file tool | ≤ 8 | ≤ 80 ms |
 | any guard, project without `.ai/` | ≤ 4 | ≤ 50 ms |
+| `ai-guard.py`, any other tool (the `*` matcher, R36.12), no `decision.json` | 1 | ≤ 15 ms over the interpreter's start |
+
+The last row (B4, task 7d1): the Claude matcher became `*` so the open-decision
+gate sees every tool. For a tool none of git, paths and scope reads (Grep, Glob,
+WebFetch, an MCP tool…) the run is the interpreter, `guard.common` and one
+`stat` per ancestor for `.ai/state/decision.json`. Before 7d1 those tools
+started no guard process at all, so the added cost is one whole process per
+such call: measured 2026-10-28 on the box above, 13.1 ms on a Grep payload,
+of which `python3 -I -S -c pass` is 5.8 ms.
+`tests/test_dialog_gate.py::test_gate_fast_path` pins it (× `AI_TIMED_FACTOR`).
 
 Processes are the number that must not regress: it is deterministic and portable.
 Wall clock is machine-dependent and is a sanity bound, not a contract — the

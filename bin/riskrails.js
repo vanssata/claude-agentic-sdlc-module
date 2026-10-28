@@ -1278,8 +1278,9 @@ function codexRender() {
 }
 
 // The guard scripts Codex can use. cap-large-read.py is absent: Codex has no hookable Read
-// tool. context-guard.py serves both runtimes: it reads its own location to know which.
-const codexHookFiles = () => ['ai-guard.py', 'runtime-gate.py', 'context-guard.py'].map((n) => path.join(SRC, 'hooks', n));
+// tool. context-guard.py serves both runtimes: it reads its own location to know which;
+// dialog-gate.py reads the payload's envelope (R36.19).
+const codexHookFiles = () => ['ai-guard.py', 'runtime-gate.py', 'context-guard.py', 'dialog-gate.py'].map((n) => path.join(SRC, 'hooks', n));
 
 function codexDryRun() {
   out(`== codex: plan=${CODEX_PLAN} (${X.label}) session ${X.s(X.P.session.model)} at ${X.s(X.P.session.model_reasoning_effort)} (dry run, nothing written)`);

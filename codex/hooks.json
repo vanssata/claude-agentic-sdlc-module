@@ -3,13 +3,13 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|apply_patch|Edit|Write",
+        "matcher": ".*",
         "hooks": [
           {
             "type": "command",
             "command": "python3 -I -S \"$HOME/.codex/hooks/ai-guard.py\"",
             "timeout": 15,
-            "statusMessage": "Checking git, paths and scope"
+            "statusMessage": "Checking git, paths, scope and open decisions"
           }
         ]
       },
@@ -34,6 +34,17 @@
             "command": "\"$HOME/.codex/hooks/runtime-gate.py\"",
             "timeout": 5,
             "statusMessage": "Recording expert-model availability"
+          }
+        ]
+      },
+      {
+        "matcher": "^request_user_input$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"$HOME/.codex/hooks/dialog-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Recording the dialog's answer"
           }
         ]
       }
@@ -95,6 +106,18 @@
             "command": "\"$HOME/.codex/hooks/context-guard.py\"",
             "timeout": 15,
             "statusMessage": "Reading the task in flight"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"$HOME/.codex/hooks/dialog-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Checking for an open decision"
           }
         ]
       }

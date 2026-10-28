@@ -42,6 +42,19 @@ def decision(out):
         return "malformed"
 
 
+def hook_output(out):
+    """What a non-PreToolUse hook said: {} when it printed nothing, else its
+    JSON object — a PostToolUse or Stop `decision`/`reason`, a `systemMessage`,
+    a SessionStart `hookSpecificOutput` — or {"malformed": out}."""
+    if not out:
+        return {}
+    try:
+        data = json.loads(out)
+    except ValueError:
+        return {"malformed": out}
+    return data if isinstance(data, dict) else {"malformed": out}
+
+
 def fixtures(directory, root, guard=None):
     """(label, expect, payload text) per fixture file, sorted; `guard` picks Codex ones."""
     for path in sorted(glob.glob(os.path.join(directory, "*.json"))):
