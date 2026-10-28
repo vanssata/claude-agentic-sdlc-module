@@ -664,11 +664,29 @@ class CodexInstall(ScratchCase):
         rc, again, _ = merge(text, "--status-context", "yes")
         self.check("and appended once only", again == text, again)
 
+        # Review T-2026-10-28-006 L3: the user's lines and comments stay; the items go before the closing ].
         multi = head + '\n[tui]\nstatus_line = [\n  "git-branch",  # mine\n  "current-dir",\n]\n\n[agents]\n'
         rc, text, out = merge(multi, "--status-context", "yes")
-        self.check("a multi-line list becomes one line with the user's items first",
-                   rc == 0 and 'status_line = ["git-branch", "current-dir", "model-with-reasoning", "context-used"]\n'
-                   in text and "[agents]" in text, "%s\n%s" % (text, out))
+        want = head + ('\n[tui]\nstatus_line = [\n  "git-branch",  # mine\n  "current-dir",\n'
+                       '  "model-with-reasoning",\n  "context-used",\n]\n\n[agents]\n')
+        self.check("a multi-line list keeps its lines and comments, the items added before ]",
+                   rc == 0 and text == want, "%s\n%s" % (text, out))
+        rc, again, _ = merge(text, "--status-context", "yes")
+        self.check("and a multi-line list is appended once only", again == text, again)
+        bare = head + '\n[tui]\nstatus_line = [\n    "git-branch",  # mine\n    "current-dir"  # dir, ]\n]\n'
+        rc, text, out = merge(bare, "--status-context", "yes")
+        want = head + ('\n[tui]\nstatus_line = [\n    "git-branch",  # mine\n    "current-dir",  # dir, ]\n'
+                       '    "model-with-reasoning",\n    "context-used",\n]\n')
+        self.check("a multi-line list without a trailing comma gets one after its last item",
+                   rc == 0 and text.startswith(want), "%s\n%s" % (text, out))
+        rc, text, out = merge(head + '\n[tui]\nstatus_line = ["git-branch"]  # mine, "x"]\n', "--status-context", "yes")
+        self.check("a one-line list keeps its trailing comment",
+                   rc == 0 and 'status_line = ["git-branch", "model-with-reasoning", "context-used"]  # mine, "x"]\n' in text,
+                   "%s\n%s" % (text, out))
+        rc, text, out = merge(head + '\n[tui]\nstatus_line = ["git-branch",]\n', "--status-context", "yes")
+        self.check("a one-line list with a trailing comma",
+                   rc == 0 and 'status_line = ["git-branch", "model-with-reasoning", "context-used"]\n' in text,
+                   "%s\n%s" % (text, out))
 
         rc, text, _ = merge(head + '\n[tui]\ntheme = "dark"\n', "--status-context", "yes")
         self.check("a [tui] table without the key does not get it",

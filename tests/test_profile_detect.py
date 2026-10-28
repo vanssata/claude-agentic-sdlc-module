@@ -202,15 +202,16 @@ class ProfileDetect(unittest.TestCase):
 RESOLVER = os.path.join(ROOT, "scripts", "resolve-profile.py")
 
 
-def resolved(name, plan, label, fable):
+def resolved(name, plan, label, fable, context="default"):
     out = subprocess.run(["python3", "-I", RESOLVER, name, "--plan", plan, "--label", label, "--fable", fable,
-                          "--print", "agentic"], capture_output=True, text=True, check=True).stdout
+                          "--context", context, "--print", "agentic"], capture_output=True, text=True,
+                         check=True).stdout
     return json.loads(out)
 
 
-def installed_max(**extra):
-    """profile.json as the installer writes it for --plan max --fable yes."""
-    prof = resolved("max", "max", "Max", "yes")
+def installed_max(context="default", **extra):
+    """profile.json as the installer writes it for --plan max --fable yes [--context economy]."""
+    prof = resolved("max", "max", "Max", "yes", context)
     prof.update(plugin_version="3.1.0", written_at="2026-10-01T00:00:00Z", dialog={"tool": "AskUserQuestion"},
                 set_by={"via": "installer", "at": "2026-10-01T00:00:00Z"})
     prof.update(extra)
@@ -265,6 +266,42 @@ class ProfileSet(unittest.TestCase):
         self.assertIn("PROFILE_NEEDS_INSTALLER", done.stderr)
         self.assertIn("npx riskrails@3.1.0 --target claude --plan pro --yes", done.stderr)
         self.assertEqual(self.profile(home), before)
+
+    def test_set_same_tier_keeps_economy(self):
+        """Review T-2026-10-28-006 L4: a same-tier set keeps the record's --context economy."""
+        home = self.home(installed_max("economy"), AI_UNATTENDED="1")
+        done = home.run("profile", "set", "max20", "--runtime", "claude", stdin=subprocess.DEVNULL)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        prof = self.profile(home)
+        self.assertEqual((prof["plan"], prof["context"]), ("max20", {"mode": "economy", "window": 800000}))
+
+    def test_set_cross_tier_refuses_keeps_economy(self):
+        """Review T-2026-10-28-006 L4: the installer command keeps --context economy."""
+        home = self.home(installed_max("economy"), AI_UNATTENDED="1")
+        done = home.run("profile", "set", "pro", "--runtime", "claude", stdin=subprocess.DEVNULL)
+        self.assertEqual(done.returncode, 6, done.stderr)
+        self.assertIn("npx riskrails@3.1.0 --target claude --plan pro --context economy --yes", done.stderr)
+
+    def test_detect_drift_keeps_economy(self):
+        """Review T-2026-10-28-006 L4: detect's installer fix keeps --context economy."""
+        home = Home("claude", {"account": {"oauthAccount": {"organizationType": "claude_pro"}},
+                               "installed": installed_max("economy")})
+        self.addCleanup(home.close)
+        done = home.run("profile", "detect", "--runtime", "claude", "--json")
+        out = json.loads(done.stdout)
+        self.assertEqual((out["status"], out["render"]), ("drift", "installer"), done.stderr)
+        self.assertEqual(out["command"], "npx riskrails@3.1.0 --target claude --plan pro --context economy --yes")
+
+    def test_context_not_an_object_reads_as_default(self):
+        """Review T-2026-10-28-007 L1: a hand-edited non-object `context` is a default record, not a traceback."""
+        for bent in ("economy", ["economy"]):
+            with self.subTest(repr(bent)):
+                prof = installed_max()
+                prof["context"] = bent
+                home = self.home(prof, AI_UNATTENDED="1")
+                done = home.run("profile", "set", "pro", "--runtime", "claude", stdin=subprocess.DEVNULL)
+                self.assertEqual(done.returncode, 6, done.stderr)
+                self.assertIn("npx riskrails@3.1.0 --target claude --plan pro --yes", done.stderr)
 
     def test_codex_plus_pro_needs_the_installer(self):
         prof = resolved("codex-plus", "plus", "Plus", "no")

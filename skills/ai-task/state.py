@@ -717,9 +717,16 @@ def detect_codex():
 SAME_TIER = {"claude": ({"max", "max20"}, {"pro", "team-pro"}, {"max", "team-max"}), "codex": ()}
 
 
-def installer_command(runtime, plan, version):
-    return "npx riskrails%s --target %s %s %s --yes" % (
-        "@%s" % version if version else "", runtime, "--plan" if runtime == "claude" else "--codex-plan", plan)
+def context_mode(prof):
+    """The record's --context: "economy" or None (default, or a record from before it)."""
+    context = (prof or {}).get("context")
+    return "economy" if isinstance(context, dict) and context.get("mode") == "economy" else None
+
+
+def installer_command(runtime, plan, version, context=None):
+    return "npx riskrails%s --target %s %s %s%s --yes" % (
+        "@%s" % version if version else "", runtime, "--plan" if runtime == "claude" else "--codex-plan", plan,
+        " --context %s" % context if context else "")
 
 
 def profile_detect(runtime):
@@ -746,7 +753,8 @@ def profile_detect(runtime):
                 shlex.quote(os.path.abspath(__file__)), live["plan"], runtime)
         else:
             render = "installer"
-            command = installer_command(runtime, live["plan"], installed.get("plugin_version"))
+            command = installer_command(runtime, live["plan"], installed.get("plugin_version"),
+                                        context_mode(prof))
     return {"runtime": runtime, "status": status, "installed": installed, "live": live,
             "render": render, "command": command, "decision": None}
 
@@ -814,7 +822,7 @@ def cmd_profile_set(args):
         return
     refusal = "PROFILE_NEEDS_INSTALLER — %s → %s also changes %s: %s" % (
         have, args.plan, "settings.json and the agents" if runtime == "claude" else "config.toml and the agents",
-        installer_command(runtime, args.plan, prof.get("plugin_version")))
+        installer_command(runtime, args.plan, prof.get("plugin_version"), context_mode(prof)))
     if have not in plans or not any({have, args.plan} <= pair for pair in SAME_TIER[runtime]):
         die(refusal, 6)
     resolver, src = load_resolver(runtime)
@@ -822,9 +830,12 @@ def cmd_profile_set(args):
         die("no resolve-profile.py under %s/riskrails/scripts or the plugin; npx riskrails installs it"
             % runtime_home(runtime))
     fable = bool(prof.get("fable"))
+    # Only an economy record passes context: a resolver installed before --context
+    # has no such parameter, and only a later one writes an economy record.
+    extra = {"context": "economy"} if context_mode(prof) else {}
     try:
-        old = resolver.resolve(src, plans[have][0], have, plans[have][1], fable)
-        new = resolver.resolve(src, plans[args.plan][0], args.plan, plans[args.plan][1], fable)
+        old = resolver.resolve(src, plans[have][0], have, plans[have][1], fable, **extra)
+        new = resolver.resolve(src, plans[args.plan][0], args.plan, plans[args.plan][1], fable, **extra)
     except (OSError, ValueError) as exc:
         die("cannot resolve the %s profile: %s" % (args.plan, exc))
     key = resolver.KEY

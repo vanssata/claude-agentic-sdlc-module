@@ -152,9 +152,77 @@ def status_items(lines, before, changes, notes):
     if end is None:
         return None
     was = " ".join(line.strip() for line in lines[at:end])
-    lines[at:end] = [rendered]
+    kept = append_items(lines[at:end], missing)
+    try:
+        ok = kept is not None and tomllib.loads("\n".join(kept))["status_line"] == value
+    except (tomllib.TOMLDecodeError, KeyError):
+        ok = False
+    # The user's own lines and comments stay; one rendered line only when they cannot.
+    lines[at:end] = kept if ok else [rendered]
     changes.append("set [tui] %s (was: %s)" % (rendered, was))
     return value
+
+
+def array_marks(block):
+    """(line, col) of the closing ] of the array assigned on block[0], and of the last
+    character before it outside strings, comments and blanks; None for an array this
+    scan does not read (nested, or a multi-line string)."""
+    row, col = 0, block[0].index("=") + 1
+    depth, last, quote = 0, None, None
+    while row < len(block):
+        line = block[row]
+        while col < len(line):
+            ch = line[col]
+            if quote:
+                if quote == '"' and ch == "\\":
+                    col += 2
+                    continue
+                if ch == quote:
+                    quote = None
+                    last = (row, col)
+            elif ch in "\"'":
+                if line.startswith(ch * 3, col):
+                    return None
+                quote = ch
+            elif ch == "#":
+                break
+            elif ch == "[":
+                depth += 1
+                if depth > 1:
+                    return None
+                last = (row, col)
+            elif ch == "]":
+                return (row, col), last
+            elif not ch.isspace():
+                last = (row, col)
+            col += 1
+        if quote:
+            return None
+        row, col = row + 1, 0
+    return None
+
+
+def append_items(block, items):
+    """The lines of `block` (one `status_line = [...]` assignment) with `items` added
+    before its closing ], comments and layout kept; None when the scan cannot place them."""
+    marks = array_marks(block)
+    if marks is None or marks[1] is None:
+        return None
+    (row, col), (lrow, lcol) = marks
+    out = list(block)
+    comma = block[lrow][lcol] not in ",["
+    if block[row][:col].strip():
+        # ] shares its line with an item: `["a"]  # c` → `["a", "x", "y"]  # c`.
+        joined = ", ".join(toml_value(item) for item in items)
+        lead = ", " if comma else ("" if block[lrow][lcol] == "[" else " ")
+        out[row] = out[row][:col] + lead + joined + out[row][col:]
+    else:
+        # ] on its own line: one `"item",` line each, at the last item's indentation.
+        indent = re.match(r"\s*", block[lrow]).group(0) if lrow > 0 else re.match(r"\s*", block[row]).group(0) + "  "
+        out[row:row] = ["%s%s," % (indent, toml_value(item)) for item in items]
+        if comma:
+            out[lrow] = out[lrow][:lcol + 1] + "," + out[lrow][lcol + 1:]
+    return out
 
 
 def flatten(data, prefix=""):
