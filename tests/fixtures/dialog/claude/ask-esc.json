@@ -1,0 +1,47 @@
+{
+  "case": "AskUserQuestion dismissed with Esc: only the PreToolUse payload exists; see 'observed'",
+  "runtime": "claude",
+  "runtime_version": "2.1.312",
+  "entrypoint": "TUI (claude --settings <hooks>), permission_mode auto",
+  "recorded": "2026-10-28",
+  "placeholders": {
+    "__ROOT__": "the session's cwd",
+    "__HOME__": "the user's home",
+    "__PROJECT_SLUG__": "Claude Code's slug of the cwd under ~/.claude/projects/",
+    "__SCRATCHPAD__": "the session's scratchpad_dir"
+  },
+  "observed": "Esc on the dialog: this PreToolUse fired, then NO PostToolUse and NO PostToolUseFailure (both were registered). The transcript's tool_result reads: \"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.\" The gate sees no hook after Esc; a decision stays open until the window closes.",
+  "payload": {
+    "session_id": "74336d34-a507-4adf-80e5-08d8c35b4db9",
+    "transcript_path": "__HOME__/.claude/projects/__PROJECT_SLUG__/74336d34-a507-4adf-80e5-08d8c35b4db9.jsonl",
+    "cwd": "__ROOT__",
+    "scratchpad_dir": "__SCRATCHPAD__",
+    "prompt_id": "92423440-c6b0-4827-ab45-78b17b4606cf",
+    "permission_mode": "auto",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "AskUserQuestion",
+    "tool_input": {
+      "questions": [
+        {
+          "question": "Press escape now",
+          "header": "Esc",
+          "options": [
+            {
+              "label": "A",
+              "description": "Option A"
+            },
+            {
+              "label": "B",
+              "description": "Option B"
+            }
+          ],
+          "multiSelect": false
+        }
+      ]
+    },
+    "tool_use_id": "toolu_01BftKNgA1Fq1C3x9WYMRBqx"
+  }
+}

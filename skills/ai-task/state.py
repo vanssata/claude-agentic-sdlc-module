@@ -53,7 +53,11 @@ it; every other command refuses it.
 """
 
 import argparse
+import base64
 import contextlib
+import decimal
+import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -517,6 +521,16 @@ def advise(state):
 
 
 def cmd_profile(args, _root):
+    if args.action == "detect":
+        cmd_profile_detect(args)
+        return
+    if args.action == "set":
+        cmd_profile_set(args)
+        return
+    if args.plan:
+        die("unrecognized argument %r: profile takes detect or set" % args.plan, 2)
+    if args.open or args.detect_runtime:
+        die("--open and --runtime after profile belong to profile detect")
     runtime = other_runtime() if args.other else own_runtime()
     prof = read_profile(runtime)
     if not prof:
@@ -538,6 +552,285 @@ def cmd_profile(args, _root):
         print(json.dumps(value, indent=None if args.field else 2, ensure_ascii=False))
     else:
         print(value)
+
+
+
+def js_number(value):
+    """Number.prototype.toString for a JSON number: shortest digits, exponent
+    form below 1e-6 and from 1e21."""
+    f = float(value)
+    if f == 0:
+        return "0"
+    d = decimal.Decimal(repr(f))
+    if 1e-6 <= abs(f) < 1e21:
+        text = format(d, "f")
+        return text.rstrip("0").rstrip(".") if "." in text else text
+    sign, digits, exp = d.normalize().as_tuple()
+    mant = "".join(map(str, digits))
+    power = exp + len(mant) - 1
+    return "%s%s%s%se%s%d" % ("-" if sign else "", mant[0], "." if len(mant) > 1 else "", mant[1:],
+                               "+" if power >= 0 else "-", abs(power))
+
+
+def js_str(value):
+    """String(value) as bin/riskrails.js wrote it, for the detection port; None
+    is "" because every JS caller had already turned null into ''."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value) if abs(value) <= 2 ** 53 else js_number(value)
+    if isinstance(value, float):
+        return js_number(value)
+    if isinstance(value, list):
+        return ",".join(js_str(v) for v in value)
+    if isinstance(value, dict):
+        return "[object Object]"
+    return str(value)
+
+
+def js_truthy(value):
+    return not (value is None or value is False or value == "" or
+                (isinstance(value, (int, float)) and not isinstance(value, bool) and value == 0))
+
+
+def read_json_object(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else {}
+
+
+def detect_claude():
+    """The port of detectClaudePlan (bin/riskrails.js before R36.16): ~/.claude.json's
+    oauthAccount, the same regular expressions in the same order."""
+    home = os.environ.get("HOME") or os.path.expanduser("~")
+    account = read_json_object(os.path.join(home, ".claude.json")) or {}
+    oauth = account.get("oauthAccount")
+    o = oauth if isinstance(oauth, dict) else {}
+
+    def s(value):
+        return "" if value is False else js_str(value)
+    org = s(o.get("organizationType")) or s(account.get("organizationType"))
+    ratelimit = s(o.get("organizationRateLimitTier"))
+    plan, why = None, ""
+    if re.search(r"^claude_max|max", org):
+        if "max_20x" in ratelimit:
+            plan, why = "max20", "organizationRateLimitTier %s" % ratelimit
+        else:
+            plan, why = "max", "organizationType %s%s" % (org, ", " + ratelimit if ratelimit else "")
+    elif re.search(r"pro", org):
+        plan, why = "pro", "organizationType %s" % org
+    elif re.search(r"team|enterprise", org):
+        seat = " ".join(js_str(v) for v in (o.get("seatTier"), o.get("userRateLimitTier"),
+                                             o.get("organizationRateLimitTier")) if v is not None and v != "")
+        if re.search(r"premium|max", seat):
+            plan, why = "team-max", "%s, seat '%s'" % (org, seat)
+        elif re.search(r"standard|pro", seat):
+            plan, why = "team-pro", "%s, seat '%s'" % (org, seat)
+        else:
+            why = "team"
+    api = not isinstance(oauth, dict) and any(os.environ.get(k) for k in (
+        "ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX"))
+    fields = {k: js_str(o.get(k)) for k in ("organizationType", "organizationRateLimitTier", "seatTier",
+                                            "userRateLimitTier")}
+    fields.update(accountOrganizationType=js_str(account.get("organizationType")), api=api)
+    return {"plan": plan, "from": why or None, "org": org}, api, fields
+
+
+def jwt_plan_type(token):
+    """chatgpt_plan_type from a JWT's body, decoded as leniently as Node's
+    Buffer.from(body, 'base64url'): characters outside the alphabet are skipped,
+    decoding stops at '=', bad UTF-8 becomes U+FFFD. The value is returned as
+    JSON gave it; the caller applies JS truthiness."""
+    try:
+        body = token.split(".")[1].split("=")[0].replace("+", "-").replace("/", "_")
+        body = re.sub(r"[^A-Za-z0-9_-]", "", body)
+        body = body[:len(body) - 1] if len(body) % 4 == 1 else body
+        text = base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)).decode("utf-8", "replace")
+        auth = json.loads(text).get("https://api.openai.com/auth") or {}
+        value = auth.get("chatgpt_plan_type")
+        return value if js_truthy(value) else ""
+    except (IndexError, ValueError, AttributeError, TypeError):
+        return ""
+
+
+def detect_codex():
+    """The port of codexDetectPlan and codexRender's mapping: chatgpt_plan_type from
+    the JWT in <CODEX_HOME>/auth.json, then ~/.codex/auth.json."""
+    home = os.environ.get("HOME") or os.path.expanduser("~")
+    raw, first = "", None
+    for path in (os.path.join(runtime_home("codex"), "auth.json"), os.path.join(home, ".codex", "auth.json")):
+        data = read_json_object(path)
+        if data is None:
+            continue
+        first = data if first is None else first
+        tokens = data.get("tokens") or {}
+        tokens = tokens if isinstance(tokens, dict) else {}
+        for key in ("id_token", "access_token"):
+            value = tokens.get(key)
+            found = jwt_plan_type(js_str(value) if js_truthy(value) else "")
+            if js_truthy(found):
+                raw = js_str(found).lower()
+                break
+        if raw:
+            break
+    plan, why = None, ""
+    if raw in ("plus", "pro"):
+        plan, why = raw, "chatgpt_plan_type"
+    elif re.search(r"^(team|business|enterprise|edu)", raw):
+        plan, why = "pro", "chatgpt_plan_type %s, uses the pro profile" % raw
+    first = first or {}
+    mode = first.get("auth_mode")
+    api = (bool(first.get("OPENAI_API_KEY")) and not first.get("tokens")) or \
+        (mode is not None and mode != "chatgpt")
+    fields = {"chatgpt_plan_type": raw, "auth_mode": js_str(mode), "api": api}
+    return {"plan": plan, "from": why or None, "raw": raw}, api, fields
+
+
+# Pairs whose profiles differ only in profile.json (R36.17), so `profile set` fixes a
+# drift; any other pair needs the installer. Codex plus and pro differ in tiers, session
+# and agents, so every Codex change is the installer's.
+SAME_TIER = {"claude": ({"max", "max20"}, {"pro", "team-pro"}, {"max", "team-max"}), "codex": ()}
+
+
+def installer_command(runtime, plan, version):
+    return "npx riskrails%s --target %s %s %s --yes" % (
+        "@%s" % version if version else "", runtime, "--plan" if runtime == "claude" else "--codex-plan", plan)
+
+
+def profile_detect(runtime):
+    live, api, fields = detect_claude() if runtime == "claude" else detect_codex()
+    live["fingerprint"] = "sha256:" + hashlib.sha256(
+        json.dumps(fields, sort_keys=True).encode("utf-8")).hexdigest()
+    prof = read_profile(runtime)
+    installed = {k: prof.get(k) for k in ("plan", "profile", "plugin_version")} if prof else None
+    have = (installed or {}).get("plan")
+    render = command = None
+    if api:
+        status = "unsupported"
+    elif not live["plan"]:
+        status = "unknown"
+    elif not installed:
+        status = "no_profile"
+    elif have == live["plan"] or (runtime == "claude" and have == "balanced-max" and live["plan"] in ("max", "max20")):
+        status = "same"
+    else:
+        status = "drift"
+        if any({have, live["plan"]} <= pair for pair in SAME_TIER[runtime]):
+            render = "profile"
+            command = "python3 %s profile set %s --runtime %s" % (
+                shlex.quote(os.path.abspath(__file__)), live["plan"], runtime)
+        else:
+            render = "installer"
+            command = installer_command(runtime, live["plan"], installed.get("plugin_version"))
+    return {"runtime": runtime, "status": status, "installed": installed, "live": live,
+            "render": render, "command": command, "decision": None}
+
+
+def cmd_profile_detect(args):
+    """Read-only, exit 0 always (R36.16); `--open` belongs to 7c."""
+    if args.open:
+        die("--open needs state.py decision (task 7c)", 1)
+    if args.field or args.tier or args.other or args.plan:
+        die("--field, --tier, --other and a plan belong to the profile reader or profile set, not to profile detect")
+    found = profile_detect(args.detect_runtime or own_runtime())
+    if args.json:
+        print(json.dumps(found, ensure_ascii=False))
+        return
+    have = (found["installed"] or {}).get("plan") or "none"
+    live = found["live"]
+    print("plan: installed %s · account %s%s → %s" % (
+        have, live["plan"] or "unknown", " (%s)" % live["from"] if live["from"] else "", found["status"]))
+    if found["command"]:
+        print("fix: %s" % found["command"])
+
+# plan -> (profile, label), as bin/riskrails.js maps --plan and --codex-plan; the
+# installer and `profile set` must resolve a plan to the same profile.json.
+PLAN_PROFILES = {
+    "claude": {"pro": ("pro", "Pro"), "team-pro": ("pro", "Team Pro"), "team-max": ("max", "Team Max"),
+               "max": ("max", "Max"), "max20": ("max20", "Max 20x"), "balanced-max": ("balanced-max", "BalancedMax")},
+    "codex": {"plus": ("codex-plus", "Plus"), "pro": ("codex-pro", "Pro"),
+              "balanced-max": ("codex-balanced-max", "BalancedMax")},
+}
+
+
+def load_resolver(runtime):
+    """The installed scripts/resolve-profile.py beside its profiles/ (the installer copies
+    both to <home>/riskrails/), else the plugin's, else this checkout's; None when none."""
+    here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    for base in (os.path.join(runtime_home(runtime), "riskrails"), os.environ.get("CLAUDE_PLUGIN_ROOT"), here):
+        path = os.path.join(base, "scripts", "resolve-profile.py") if base else ""
+        if path and os.path.isfile(path) and os.path.isdir(os.path.join(base, "profiles")):
+            spec = importlib.util.spec_from_file_location("resolve_profile", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module, base
+    return None, None
+
+
+def cmd_profile_set(args):
+    """R36.17: the human route only. A same-tier plan rewrites profile.json alone;
+    one whose settings or tiers differ is the installer's (exit 6)."""
+    if args.open or args.field or args.tier or args.other or args.json:
+        die("profile set takes a plan and --runtime only")
+    runtime = args.detect_runtime or own_runtime()
+    plans = PLAN_PROFILES.get(runtime) or {}
+    if args.plan not in plans:
+        die("profile set needs a %s plan: %s (got %r)" % (runtime, ", ".join(plans), args.plan or ""))
+    via, why = human_route()
+    if not via:
+        die("profile set is the human's: %s" % why, 5)
+    prof = read_profile(runtime)
+    if not prof:
+        die("no plan profile for %s (%s/riskrails/profile.json); npx riskrails writes it"
+            % (runtime, runtime_home(runtime)))
+    have = prof.get("plan")
+    if have == args.plan:
+        print("profile.json: already %s (%s); nothing written" % (have, runtime))
+        return
+    refusal = "PROFILE_NEEDS_INSTALLER — %s → %s also changes %s: %s" % (
+        have, args.plan, "settings.json and the agents" if runtime == "claude" else "config.toml and the agents",
+        installer_command(runtime, args.plan, prof.get("plugin_version")))
+    if have not in plans or not any({have, args.plan} <= pair for pair in SAME_TIER[runtime]):
+        die(refusal, 6)
+    resolver, src = load_resolver(runtime)
+    if resolver is None:
+        die("no resolve-profile.py under %s/riskrails/scripts or the plugin; npx riskrails installs it"
+            % runtime_home(runtime))
+    fable = bool(prof.get("fable"))
+    try:
+        old = resolver.resolve(src, plans[have][0], have, plans[have][1], fable)
+        new = resolver.resolve(src, plans[args.plan][0], args.plan, plans[args.plan][1], fable)
+    except (OSError, ValueError) as exc:
+        die("cannot resolve the %s profile: %s" % (args.plan, exc))
+    key = resolver.KEY
+
+    def rendered(data):
+        return ({k: v for k, v in data.items() if k != key}, data[key].get("tiers"))
+    if rendered(old) != rendered(new):
+        die(refusal, 6)
+    out = dict(new[key], runtime=runtime, written_at=now(), set_by={"via": via, "at": now()})
+    for kept in ("plugin_version", "dialog"):
+        if kept in prof:
+            out[kept] = prof[kept]
+    target = os.path.join(runtime_home(runtime), "riskrails", "profile.json")
+    tmp = "%s.%d.tmp" % (target, os.getpid())
+    try:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(out, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        os.replace(tmp, target)
+    except OSError as exc:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        die("cannot write %s: %s" % (target, exc))
+    print("profile.json: %s → %s (%s); settings and agents unchanged; the managed block and routing.md "
+          "keep the label '%s' until the next npx riskrails" % (have, args.plan, runtime, plans[have][1]))
 
 
 def cmd_weight(args, root):
@@ -3106,7 +3399,11 @@ def main():
     p.add_argument("--why", default="")
     p.set_defaults(func=cmd_handoff)
 
-    p = sub.add_parser("profile"); p.add_argument("--field")
+    p = sub.add_parser("profile"); p.add_argument("action", nargs="?", choices=["detect", "set"])
+    p.add_argument("plan", nargs="?")
+    p.add_argument("--field")
+    p.add_argument("--runtime", dest="detect_runtime", choices=RUNTIMES)
+    p.add_argument("--open", action="store_true")
     p.add_argument("--tier", choices=["FAST", "BALANCED", "STRONG", "EXPERT"])
     p.add_argument("--other", action="store_true"); p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_profile)

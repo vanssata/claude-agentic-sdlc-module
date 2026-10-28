@@ -1,0 +1,26 @@
+{
+  "case": "PostToolUse for an ordinary tool (Bash echo) in the same session: the envelope every Codex hook shares — session_id, turn_id, transcript_path, cwd, model, permission_mode; tool_response is a string",
+  "runtime": "codex",
+  "runtime_version": "0.165.0 (rollout cli_version; `codex --version` of the standalone install prints 0.164.0)",
+  "entrypoint": "TUI (codex, Default mode), hooks from <cwd>/.codex/hooks.json trusted via /hooks",
+  "recorded": "2026-10-28",
+  "placeholders": {
+    "__ROOT__": "the session's cwd",
+    "__HOME__": "the user's home"
+  },
+  "payload": {
+    "session_id": "01a18238-6422-7c81-bec8-0253176dff7a",
+    "turn_id": "01a18239-6002-7900-94e8-047c25c5fbee",
+    "transcript_path": "__HOME__/.codex/sessions/2026/10/28/rollout-2026-10-28T13-14-56-01a18238-6422-7c81-bec8-0253176dff7a.jsonl",
+    "cwd": "__ROOT__",
+    "hook_event_name": "PostToolUse",
+    "model": "gpt-6.1-sol",
+    "permission_mode": "default",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "echo spike-codex"
+    },
+    "tool_response": "spike-codex\n",
+    "tool_use_id": "exec-df5d99db-86b2-4692-ae74-6a446d570814"
+  }
+}

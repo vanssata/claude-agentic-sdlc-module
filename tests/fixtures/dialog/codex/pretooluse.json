@@ -1,0 +1,41 @@
+{
+  "case": "PreToolUse for request_user_input in Default mode (session 3, started as plain `codex`): tool_input.questions[] with header, id, question, options[].label/description; no multiSelect field; tool_use_id is call_<hex>",
+  "runtime": "codex",
+  "runtime_version": "0.165.0 (rollout cli_version; `codex --version` of the standalone install prints 0.164.0)",
+  "entrypoint": "TUI (codex, Default mode), hooks from <cwd>/.codex/hooks.json trusted via /hooks",
+  "recorded": "2026-10-28",
+  "placeholders": {
+    "__ROOT__": "the session's cwd",
+    "__HOME__": "the user's home"
+  },
+  "payload": {
+    "session_id": "01a18238-6422-7c81-bec8-0253176dff7a",
+    "turn_id": "01a18239-6002-7900-94e8-047c25c5fbee",
+    "transcript_path": "__HOME__/.codex/sessions/2026/10/28/rollout-2026-10-28T13-14-56-01a18238-6422-7c81-bec8-0253176dff7a.jsonl",
+    "cwd": "__ROOT__",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-6.1-sol",
+    "permission_mode": "default",
+    "tool_name": "request_user_input",
+    "tool_input": {
+      "questions": [
+        {
+          "header": "Pick one",
+          "id": "pick_a_b",
+          "question": "Pick A or B. plawcanary7",
+          "options": [
+            {
+              "label": "A",
+              "description": "Choose A."
+            },
+            {
+              "label": "B",
+              "description": "Choose B."
+            }
+          ]
+        }
+      ]
+    },
+    "tool_use_id": "call_fa592ce34caa4e01b6180014b118d891"
+  }
+}

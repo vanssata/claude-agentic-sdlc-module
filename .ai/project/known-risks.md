@@ -605,3 +605,9 @@ following; each is open unless marked.
 - **Plugin route: the guard can be switched off for later sessions** (review pass 2 I3, verified): `claude plugin disable riskrails@riskrails`, a Write to `~/.claude/plugins/known_marketplaces.json` or to `~/.claude/plugins/marketplaces/riskrails/**` is allowed; on the npx route the hook entries sit in `settings.json`, frozen during a task. A deliberate act, outside the threat model in `.ai/policies/safety.md`. Status: accepted.
 - **Codex trust after the switch**: the one `ai-guard.py` entry is a changed entry, so Codex skips it until it is reviewed once in `/hooks`; the installer says so when it replaces the shell entries. Manual check on a real Codex: open `/hooks` after the upgrade.
 - **Status**: open
+
+## `profile set` writes the home state.py reads, not the one the installer wrote (found 2026-10-28 by T-2026-10-28-003)
+
+- **Found**: 2026-10-28, review pass 1 of T-2026-10-28-003 (I1, in_scope: no). `bin/riskrails.js:45-46` picks its home from `CLAUDE_DIR`/`CODEX_DIR` or `--home`/`--codex-home`; `skills/ai-task/state.py` (`runtime_home`) picks it from `CLAUDE_CONFIG_DIR`/`CODEX_HOME`. The mismatch is the one already listed above ("The installer still ignores `CLAUDE_CONFIG_DIR` and `CODEX_HOME`"). `profile set` is the first state.py command that writes `profile.json`, so it depends on the mismatch: after `npx riskrails --home /x`, `profile set` and `read_profile` look in `~/.claude`. They then either write another home's `profile.json` or exit with "no plan profile".
+- **Suggested fix**: one rule for choosing the home, shared by the installer and state.py. Either the installer honours `CLAUDE_CONFIG_DIR`/`CODEX_HOME`, or `profile.json` records the home it was written to. Owner: the task that makes the installer read the runtime's own home variables.
+- **Status**: open

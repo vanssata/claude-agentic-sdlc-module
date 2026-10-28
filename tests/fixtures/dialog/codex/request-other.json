@@ -1,0 +1,42 @@
+{
+  "case": "PostToolUse for request_user_input, the human chose Other and typed text: answers = [\"None of the above\", \"user_note: <typed text>\"] — the free text arrives as a second item prefixed 'user_note: '",
+  "runtime": "codex",
+  "runtime_version": "0.165.0 (rollout cli_version; `codex --version` of the standalone install prints 0.164.0)",
+  "entrypoint": "TUI (codex, Default mode), hooks from <cwd>/.codex/hooks.json trusted via /hooks",
+  "recorded": "2026-10-28",
+  "placeholders": {
+    "__ROOT__": "the session's cwd",
+    "__HOME__": "the user's home"
+  },
+  "payload": {
+    "session_id": "01a18236-eb32-7681-a550-d554edd2d82b",
+    "turn_id": "01a18237-6e43-7c12-8a63-4b8eda041f72",
+    "transcript_path": "__HOME__/.codex/sessions/2026/10/28/rollout-2026-10-28T13-13-19-01a18236-eb32-7681-a550-d554edd2d82b.jsonl",
+    "cwd": "__ROOT__",
+    "hook_event_name": "PostToolUse",
+    "model": "gpt-6.1-sol",
+    "permission_mode": "default",
+    "tool_name": "request_user_input",
+    "tool_input": {
+      "questions": [
+        {
+          "header": "Other text",
+          "id": "other_text",
+          "question": "Select Other and type your text. plawcanary7",
+          "options": [
+            {
+              "label": "A",
+              "description": "Choose A."
+            },
+            {
+              "label": "B",
+              "description": "Choose B."
+            }
+          ]
+        }
+      ]
+    },
+    "tool_response": "{\"answers\":{\"other_text\":{\"answers\":[\"None of the above\",\"user_note: Some text to test\"]}}}",
+    "tool_use_id": "call_2988817d6d564e9cbb8ee6adb03ff608"
+  }
+}

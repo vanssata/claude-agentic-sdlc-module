@@ -283,14 +283,29 @@ function agenticProfile(runtime, profile, plan, label, fable) {
   const p = JSON.parse(python([path.join(SRC, 'scripts/resolve-profile.py'), profile, '--src', SRC, '--plan', plan,
     '--label', label, '--fable', fable, '--print', 'agentic']));
   p.runtime = runtime; p.plugin_version = PLUGIN_VERSION; p.written_at = utcStamp();
+  p.dialog = { tool: runtime === 'claude' ? 'AskUserQuestion' : codexDialogTool() };
+  p.set_by = { via: 'installer', at: p.written_at };
   return p;
+}
+
+// The first Codex whose request_user_input fires PreToolUse and PostToolUse outside plan
+// mode (spike 7.0, docs/dialog-spike.md; G1). An older, unknown or missing codex gets null:
+// the dialog stays off for it (R36.19).
+const CODEX_DIALOG_SINCE = [0, 165, 0];
+function codexDialogTool() {
+  const r = spawnSync('codex', ['--version'], { env, encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] });
+  const m = !r.error && r.status === 0 && /(\d+)\.(\d+)\.(\d+)/.exec(r.stdout || '');
+  if (!m) return null;
+  const v = m.slice(1, 4).map(Number);
+  const i = v.findIndex((n, k) => n !== CODEX_DIALOG_SINCE[k]);
+  return i < 0 || v[i] > CODEX_DIALOG_SINCE[i] ? 'request_user_input' : null;
 }
 
 // write_profile — plugin state, replaced rather than backed up, and only when something
 // other than written_at changed, so a second install leaves it alone.
 function writeProfile(home, profile) {
   const dst = path.join(home, 'riskrails/profile.json');
-  const strip = (v) => { const c = clone(v); delete c.written_at; return sortedJSON(c); };
+  const strip = (v) => { const c = clone(v); delete c.written_at; if (isObj(c.set_by)) delete c.set_by.at; return sortedJSON(c); };
   try { if (isFile(dst) && strip(readJSON(dst)) === strip(profile)) return; } catch (e) { /* rewrite */ }
   mkdirp(path.join(home, 'riskrails'));
   fs.writeFileSync(dst, pretty(profile) + '\n');
@@ -323,33 +338,20 @@ function prettyModel(m) {
   return m;
 }
 
-function detectClaudePlan() {
-  let account = {};
-  try { account = readJSON(path.join(HOME, '.claude.json')); } catch (e) { /* none */ }
-  const o = isObj(account.oauthAccount) ? account.oauthAccount : {};
-  const s = (v) => (v === null || v === undefined || v === false ? '' : String(v));
-  const org = s(o.organizationType) || s(account.organizationType);
-  const ratelimit = s(o.organizationRateLimitTier);
-  let detected = '', from = '';
-  if (/^claude_max|max/.test(org)) {
-    if (ratelimit.includes('max_20x')) { detected = 'max20'; from = `organizationRateLimitTier ${ratelimit}`; }
-    else { detected = 'max'; from = `organizationType ${org}${ratelimit ? ', ' + ratelimit : ''}`; }
-  } else if (/pro/.test(org)) {
-    detected = 'pro'; from = `organizationType ${org}`;
-  } else if (/team|enterprise/.test(org)) {
-    const seat = [o.seatTier, o.userRateLimitTier, o.organizationRateLimitTier]
-      .filter((v) => v !== null && v !== undefined && v !== '').join(' ');
-    if (/premium|max/.test(seat)) { detected = 'team-max'; from = `${org}, seat '${seat}'`; }
-    else if (/standard|pro/.test(seat)) { detected = 'team-pro'; from = `${org}, seat '${seat}'`; }
-    else from = 'team';
-  }
-  return { org, detected, from };
+// The plan is read by `state.py profile detect` (R36.16), the one copy of the detection;
+// live.plan is the profile's plan, live.from why, live.org/live.raw the account's own value.
+function detectPlan(runtime) {
+  const out = python([path.join(SRC, 'skills/ai-task/state.py'), 'profile', 'detect', '--runtime', runtime, '--json'],
+    { env: { ...env, HOME, CODEX_HOME: CODEX_DIR }, allowFail: true });
+  try { const live = JSON.parse(out).live; if (isObj(live)) return live; } catch (e) { /* none */ }
+  return {};
 }
 
 function claudeRender() {
   const PREV_PLAN = prevPlan(CLAUDE_DIR);
   if (!PLAN) {
-    const { org, detected, from } = detectClaudePlan();
+    const live = detectPlan('claude');
+    const org = live.org || '', detected = live.plan || '', from = live.from || '';
     if (interactive()) {
       const proposed = PREV_PLAN || detected;
       if (proposed) {
@@ -722,6 +724,10 @@ function installShared(root) {
   out(`installed: riskrails/ai (${countFiles(path.join(home, 'ai'))} files)`);
   installFile(path.join(SRC, 'scripts/ai-path'), path.join(home, 'ai-path'), root);
   chmodX(path.join(home, 'ai-path'));
+  // `state.py profile set` resolves a plan through these, wherever the plugin cache is (R36.17).
+  mkdirp(path.join(home, 'profiles')); mkdirp(path.join(home, 'scripts'));
+  for (const f of glob(path.join(SRC, 'profiles'), '.json')) installFile(f, path.join(home, 'profiles', path.basename(f)), root);
+  installFile(path.join(SRC, 'scripts/resolve-profile.py'), path.join(home, 'scripts/resolve-profile.py'), root);
 }
 
 function homeLine(root) {
@@ -1143,37 +1149,14 @@ function claudeSummary() {
 // ~/.codex/auth.json carries chatgpt_plan_type.
 const X = {};   // the Codex branch's rendered values
 
-function codexDetectPlan() {
-  const claim = (tok) => {
-    try {
-      const body = tok.split('.')[1];
-      const auth = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'))['https://api.openai.com/auth'] || {};
-      return auth.chatgpt_plan_type || '';
-    } catch (e) { return ''; }
-  };
-  for (const p of [path.join(CODEX_DIR, 'auth.json'), path.join(env.HOME || '/nonexistent', '.codex/auth.json')]) {
-    let data;
-    try { data = readJSON(p); } catch (e) { continue; }
-    const tokens = (isObj(data) && data.tokens) || {};
-    for (const key of ['id_token', 'access_token']) {
-      const plan = claim(String(tokens[key] || ''));
-      if (plan) return String(plan).toLowerCase();
-    }
-  }
-  return '';
-}
-
 function codexRender() {
   const prev = prevPlan(CODEX_DIR);
   // BalancedMax is one routing idea on both runtimes: --plan balanced-max selects the Codex
   // balanced-max profile too, unless --codex-plan says otherwise.
   if (!CODEX_PLAN && PLAN === 'balanced-max') CODEX_PLAN = 'balanced-max';
   if (!CODEX_PLAN) {
-    const detected = codexDetectPlan();
-    let det = '', why = '';
-    if (detected === 'plus') { det = 'plus'; why = 'chatgpt_plan_type'; }
-    else if (detected === 'pro') { det = 'pro'; why = 'chatgpt_plan_type'; }
-    else if (/^(team|business|enterprise|edu)/.test(detected)) { det = 'pro'; why = `chatgpt_plan_type ${detected}, uses the pro profile`; }
+    const live = detectPlan('codex');
+    const detected = live.raw || '', det = live.plan || '', why = live.from || '';
     if (interactive()) {
       const proposed = prev || det;
       if (proposed) {

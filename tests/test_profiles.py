@@ -184,6 +184,12 @@ class Profiles(ScratchCase):
                        eff in ("{{%s_EFFORT}}" % tier, "low", "medium", "high"),
                        lbl("$n: effort '$eff' is neither its tier's placeholder nor a literal", n=n, eff=eff))
 
+    def test_05_R36_20_no_profile_sets_a_dialog_timeout(self):
+        for name in self.names():
+            rc, out, _ = resolve(name, "--print", "full")
+            self.check(lbl("$name resolves and sets no askUserQuestionTimeout", name=name),
+                       rc == 0 and "askUserQuestionTimeout" not in out, out)
+
 
 def read_text(path):
     with open(path, encoding="utf-8") as fh:

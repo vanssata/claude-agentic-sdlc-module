@@ -68,3 +68,11 @@ A. yes, enabled:true, the migration prints one line saying the dialog is on and 
 B. no, enabled:false with a printed hint (recommended)
 X. Other — answer as `X: <text>`
 [Answer]: A — by vanssa via prose at 2026-10-27T23:22:08Z
+
+## Q10. G1 (OQ3): is dialog.tool request_user_input enabled for Codex >= 0.165.0 (spike 7.0 evidence)?
+asked: 2026-10-28T11:53:53Z · stage: intent
+context: docs/dialog-spike.md:160-164
+A. yes, the Codex version list is >= 0.165.0 (recommended)
+B. no, the list is empty; dialog.tool stays null for Codex
+X. Other — answer as `X: <text>`
+[Answer]: A — by vanssa via prose at 2026-10-28T11:53:56Z

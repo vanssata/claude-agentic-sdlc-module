@@ -112,10 +112,14 @@ def inventory(home, runtime, plugin_dir=None):
     agents = {n: home_sha(os.path.join(rt, "agents", n), home) for n in sorted(os.listdir(os.path.join(rt, "agents")))}
     profile = json.loads(read(os.path.join(rt, "riskrails", "profile.json")).replace(home, "<HOME>"))
     profile.pop("written_at", None)
+    profile.get("set_by", {}).pop("at", None)
     doc = os.path.join(rt, "CLAUDE.md" if runtime == "claude" else "AGENTS.md")
     block = re.search(r"<!-- riskrails:start -->.*?<!-- riskrails:end -->", read(doc), re.S).group(0).replace(home, "<HOME>")
+    own = os.path.join(rt, "riskrails")
+    resolver = {os.path.relpath(os.path.join(d, f), own): home_sha(os.path.join(d, f), home)
+                for sub in ("profiles", "scripts") for d, _, fs in os.walk(os.path.join(own, sub)) for f in fs}
     inv = {"hooks": sorted(registered(home, runtime, plugin_dir)), "skills": skills, "agents": agents,
-           "profile": profile, "block": block}
+           "profile": profile, "block": block, "resolver": resolver}
     if runtime == "claude":
         settings = read_json(os.path.join(rt, "settings.json"))
         settings.pop("hooks", None)
@@ -324,6 +328,38 @@ class InstallRoutes(ScratchCase):
         self.assertEqual(read_json(os.path.join(PLUGIN, "hooks", "hooks.json"))["hooks"], root(want, "claude"))
         self.assertEqual(read_json(os.path.join(PLUGIN, "hooks", "codex-hooks.json"))["hooks"],
                          root(read_json(os.path.join(PLUGIN, "codex", "hooks.json"))["hooks"], "codex"))
+
+    def test_installed_profiles_and_resolver(self):
+        """R36.17: both routes copy profiles/ and resolve-profile.py into <home>/riskrails/, and the
+        installed state.py's `profile set` resolves through them; profile.json carries dialog and set_by."""
+        for runtime, args, tool in (("claude", ("--plan", "max", "--fable", "yes"), "AskUserQuestion"),
+                                    ("codex", ("--codex-plan", "pro"), None)):
+            with self.subTest(runtime=runtime):
+                home = self.path("resolver-" + runtime)
+                os.makedirs(home)
+                self.npx(home, runtime, *args)
+                own = os.path.join(home, "." + runtime, "riskrails")
+                names = sorted(os.listdir(os.path.join(PLUGIN, "profiles")))
+                self.assertEqual(sorted(os.listdir(os.path.join(own, "profiles"))), names)
+                for n in names:
+                    self.assertEqual(sha(os.path.join(own, "profiles", n)), sha(os.path.join(PLUGIN, "profiles", n)), n)
+                self.assertEqual(sha(os.path.join(own, "scripts", "resolve-profile.py")),
+                                 sha(os.path.join(PLUGIN, "scripts", "resolve-profile.py")))
+                prof = read_json(os.path.join(own, "profile.json"))
+                self.assertEqual(prof["set_by"]["via"], "installer")
+                if runtime == "claude":
+                    self.assertEqual(prof["dialog"], {"tool": tool})
+                    rt = os.path.join(home, ".claude")
+                    env = env_with(HOME=home, CLAUDE_CONFIG_DIR=rt, AI_UNATTENDED="1", CLAUDECODE=None,
+                                   CLAUDE_PLUGIN_ROOT=None)
+                    proc = subprocess.run(["python3", "-I", os.path.join(rt, "skills", "ai-task", "state.py"),
+                                           "profile", "set", "max20", "--runtime", "claude"],
+                                          env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                          check=False)
+                    self.assertEqual(proc.returncode, 0, proc.stderr)
+                    self.assertEqual(read_json(os.path.join(own, "profile.json"))["plan"], "max20")
+                    again = self.npx(home, runtime, *args)
+                    self.assertEqual(read_json(os.path.join(own, "profile.json"))["plan"], "max", again)
 
 
 if __name__ == "__main__":

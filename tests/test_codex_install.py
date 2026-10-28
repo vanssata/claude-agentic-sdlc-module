@@ -603,6 +603,28 @@ class CodexInstall(ScratchCase):
             and os.path.isfile(os.path.join(old, "backups", day, "hooks", "ai-%s-guard.sh" % g))
             for g in ("git", "path", "scope")), out)
 
+    def test_18_dialog_tool_only_on_verified_version(self):
+        """R36.19: request_user_input only for a Codex on spike 7.0's list (>= 0.165.0); else null."""
+        bare = os.pathsep.join(d for d in os.environ.get("PATH", "").split(os.pathsep)
+                               if d and not os.access(os.path.join(d, "codex"), os.X_OK))
+        for version, want in (("codex-cli 0.165.0", "request_user_input"), ("codex-cli 0.166.2", "request_user_input"),
+                              ("codex-cli 1.0.0", "request_user_input"), ("codex-cli 0.164.0", None),
+                              ("not a version", None), (None, None)):
+            with self.subTest(version=version):
+                home = self.path("dialog-%s" % (version or "absent").replace(" ", "-"))
+                fake = os.path.join(home, "fakebin")
+                os.makedirs(fake)
+                if version:
+                    write(os.path.join(fake, "codex"), "#!/bin/sh\necho '%s'\n" % version)
+                    os.chmod(os.path.join(fake, "codex"), 0o755)
+                codex_dir = os.path.join(home, ".codex")
+                rc, out = install("--target", "codex", "--codex-plan", "pro",
+                                  env=env_with(HOME=home, CODEX_DIR=codex_dir, PATH=fake + os.pathsep + bare))
+                self.assertEqual(rc, 0, out)
+                prof = read_json(os.path.join(codex_dir, "riskrails", "profile.json"))
+                self.assertEqual(prof.get("dialog"), {"tool": want})
+                self.assertEqual((prof.get("set_by") or {}).get("via"), "installer")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -752,6 +752,19 @@ class InstallDryRun(ScratchCase):
         rc, out = run("--plan", "pro", CLAUDE_DIR=d7)
         self.ok("a reinstall replaces nothing more", "replaced:" not in out and "retired:" not in out, out)
 
+    # == R36.20: no dialog timeout on any plan
+    def test_23_no_ask_timeout(self):
+        for plan, fable in (("pro", "no"), ("team-pro", "no"), ("team-max", "yes"), ("max", "yes"), ("max", "no"),
+                            ("max20", "yes"), ("balanced-max", "no")):
+            rc, out = self.dry("--target", "claude", "--plan", plan, "--fable", fable)
+            subs = {"$1": plan, "$2": fable}
+            self.ok("--plan $1 --fable $2 renders no askUserQuestionTimeout",
+                    rc == 0 and "askUserQuestionTimeout" not in out, out, subs)
+        d = self.path("claude")
+        if os.path.exists(os.path.join(d, "settings.json")):
+            self.ok("the installed settings.json has no askUserQuestionTimeout",
+                    "askUserQuestionTimeout" not in read(os.path.join(d, "settings.json")))
+
 
 if __name__ == "__main__":
     unittest.main()
