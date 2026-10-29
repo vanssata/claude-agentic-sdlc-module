@@ -235,7 +235,7 @@ is free. **Consumes / Produces**: the exact names neighbouring tasks rely on (sp
   `--apply --risks`, one commit (`memory: migrate 59 tasks and known-risks.md into packages`); `--move-logs
   --confirm-delete <author>` and the printed `git rm --cached`, a second commit (`memory: drop 135 committed
   verify logs from the tree`, C3); then `state.py memory enable --period quarter`, a third commit with
-  `.ai/policies/memory.json` and `memory status` showing the hook `installed`. Tick here: `[ ]`.
+  `.ai/policies/memory.json` and `memory status` showing the hook `installed`. Tick here: `[x]`.
 - **G3 (human).** From M1's baseline and M6's timings: if `FileHistory` recall p95 exceeds 300 ms or search
   exceeds 1 s at 1 000 tasks, M10 runs; otherwise M10 is skipped and this line records the numbers and the
   decision (Q5). Tick here: `[x]` — numbers (`tools/benchmark-memory.py`, seed 1, 4 KB journals): at 1 000
