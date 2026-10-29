@@ -47,6 +47,7 @@ else runs in between.
   which, in one line; silence is not a verdict.
 - A failure in a step's own tests is fixed in that step, before `step-done`;
   the batch rule below is for the two end-of-task runs.
+- After a green suite, a documents-only edit runs `doc_tests` (step scope), not the suite.
 
 ## Reading a failure
 
@@ -66,6 +67,9 @@ Classify before fixing. The four answers are:
   is missing.
 - **UNKNOWN** — you could not tell. Say what you tried.
 
+A review's MEDIUM and LOW findings are recorded with `state.py memory risk add`, not
+fixed in the task; only a BLOCKER, a HIGH or a regression buys an `--after-fix` run.
+
 **Never edit a test to make it pass when production behaviour changed
 unexpectedly.** A test that suddenly disagrees with the code is evidence, and
 deleting evidence is the worst available option.
@@ -84,14 +88,15 @@ the end of the task. A bugfix still shows its new failing test first — that on
 test only, through `single_test`.
 
 ```
-verify_command:      python3 -I -m unittest discover -s tests -p 'test_*.py'
-step_test_command:   bash -c 'rc=0; for t in {files}; do python3 -I -m unittest discover -s tests -p "${t##*/}" || rc=1; done; exit $rc'
+verify_command:      python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath
+step_test_command:   python3 -I tests/run_suite.py {files}
 e2e_command:         AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
 lint_command:        pylint $(git ls-files '*.py')
+doc_tests:           tests/test_memory_risks.py tests/test_rename.py tests/test_no_size_tokens.py tests/test_instruction_budget.py tests/test_skills_surface.py tests/test_shared_prompts_model_free.py tests/test_project_update.py tests/test_shared_tree.py
 typecheck_command:   none
 healthy_output:      unittest prints "Ran N tests" and ends with "OK" (or "OK (skipped=N)")
                      and exit 0. pylint ends with "rated at 10.00/10".
-runtime:             the fast suite ~4-5 min (measured under run-all.sh, before 3.6); the
+runtime:             the fast suite ~1.5 min parallel (tests/run_suite.py); CI's serial unittest discover ~5 min; the
                      e2e suite ~7 s; pylint ~5 s; any single suite seconds, except the install and
                      adopt suites, which scaffold scratch trees and take tens of seconds.
 single_test:         python3 -I -m unittest discover -s tests -p test_<name>.py
