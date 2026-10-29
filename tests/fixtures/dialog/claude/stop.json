@@ -1,0 +1,27 @@
+{
+  "case": "Stop, first time in the turn: stop_hook_active is false; blocking it (exit 2) makes the agent continue once",
+  "runtime": "claude",
+  "runtime_version": "2.1.312",
+  "entrypoint": "sdk-cli (claude -p --settings <hooks>)",
+  "recorded": "2026-10-28",
+  "placeholders": {
+    "__ROOT__": "the session's cwd",
+    "__HOME__": "the user's home",
+    "__PROJECT_SLUG__": "Claude Code's slug of the cwd under ~/.claude/projects/"
+  },
+  "payload": {
+    "session_id": "e32fe652-2cc2-4dbc-9704-3f3c1e8cc914",
+    "transcript_path": "__HOME__/.claude/projects/__PROJECT_SLUG__/e32fe652-2cc2-4dbc-9704-3f3c1e8cc914.jsonl",
+    "cwd": "__ROOT__",
+    "prompt_id": "06204d5e-ea7d-497b-92c9-155c15734dc7",
+    "permission_mode": "default",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "Stop",
+    "stop_hook_active": false,
+    "last_assistant_message": "first",
+    "background_tasks": [],
+    "session_crons": []
+  }
+}

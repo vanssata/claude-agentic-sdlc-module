@@ -1,0 +1,600 @@
+{
+  "task_id": "T-2026-10-25-008",
+  "goal": "Redesign 2.2a: new state.py surface (start/verify/review/close/step-done/status/approve --confirm, task.md, migration 0007) beside the old",
+  "workflow": "feature",
+  "risk_tier": "T4",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "Redesign 2.2a: new state.py surface (start/verify/review/close/step-done/status/approve --confirm, task.md, migration 0007) beside the old",
+        "allowed_files": [
+          "skills/ai-task/sensors.py",
+          "skills/ai-task/weight.py",
+          "tests/test_weight.py",
+          "skills/ai-task/state.py",
+          "tests/test_ai_task_state.py",
+          "skills/status/status.py",
+          "skills/usage-report/usage-report.py",
+          "tests/test_usage_report.py",
+          "tests/fixtures/usage-report/**",
+          "skills/project-update/migrations/0007_weight_model.py",
+          "tests/fixtures/project-update/schema-v6/**",
+          "tests/test_project_update.py",
+          "skills/ai-init/templates/.ai/VERSION",
+          "skills/project-update/history/**",
+          "tests/test-migration-0006.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test_end_to_end.py",
+          "tests/test-end-to-end.sh",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [
+          "tests/test-ai-task-state.sh",
+          "tests/test-end-to-end.sh",
+          "tests/test-ai-status-root.sh",
+          "tests/test-usage-report.sh",
+          "tests/test-project-update.sh"
+        ],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "0be5b9456bab843b6da915046b466134260d887d",
+          "seq": 1,
+          "paths": [
+            "skills/ai-init/templates/.ai/VERSION",
+            "skills/ai-task/sensors.py",
+            "skills/ai-task/state.py",
+            "skills/project-update/history/blobs/10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58",
+            "skills/project-update/history/index.json",
+            "skills/project-update/migrations/0007_weight_model.py",
+            "skills/status/status.py",
+            "skills/usage-report/usage-report.py",
+            "tests/fixtures/project-update/schema-v6/.ai/VERSION",
+            "tests/fixtures/project-update/schema-v6/README.md",
+            "tests/fixtures/project-update/schema-v6/in-flight/.ai/state/current.json",
+            "tests/fixtures/usage-report/schema-6.jsonl",
+            "tests/fixtures/usage-report/schema-7.jsonl",
+            "tests/test-end-to-end.sh",
+            "tests/test-migration-0006.sh",
+            "tests/test_ai_task_state.py",
+            "tests/test_end_to_end.py",
+            "tests/test_project_update.py",
+            "tests/test_usage_report.py"
+          ],
+          "files": 19,
+          "added": 2325,
+          "deleted": 31,
+          "lines": 2356,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "scope amendment approved by the human in this session: 0007 carries a hand-added risk-tier example into weight.json, so the fixture shows two hand-merge choices, not one (3 counts)",
+        "allowed_files": [
+          "skills/ai-task/sensors.py",
+          "skills/ai-task/weight.py",
+          "tests/test_weight.py",
+          "skills/ai-task/state.py",
+          "tests/test_ai_task_state.py",
+          "skills/status/status.py",
+          "skills/usage-report/usage-report.py",
+          "tests/test_usage_report.py",
+          "tests/fixtures/usage-report/**",
+          "skills/project-update/migrations/0007_weight_model.py",
+          "tests/fixtures/project-update/schema-v6/**",
+          "tests/test_project_update.py",
+          "skills/ai-init/templates/.ai/VERSION",
+          "skills/project-update/history/**",
+          "tests/test-migration-0006.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test_end_to_end.py",
+          "tests/test-end-to-end.sh",
+          ".ai/project/known-risks.md",
+          "tests/test-project-update.sh"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "0be5b9456bab843b6da915046b466134260d887d",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "3492e1a8fb894ed701f20d9fd4e133aedabe7c9d",
+          "seq": 2,
+          "paths": [
+            "tests/test-project-update.sh"
+          ],
+          "files": 1,
+          "added": 5,
+          "deleted": 3,
+          "lines": 8,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R2",
+        "description": "1 regression (racy-git stale snapshot: sensors.snapshot_tree's index copy loses its mtime) + 5 self-probe findings: narrowed suite counts as fact (a); rejected gate dead end; re-score undoes a human lowering; R19 red-then-green; no-op --mode",
+        "allowed_files": [
+          "skills/ai-task/sensors.py",
+          "skills/ai-task/weight.py",
+          "tests/test_weight.py",
+          "skills/ai-task/state.py",
+          "tests/test_ai_task_state.py",
+          "skills/status/status.py",
+          "skills/usage-report/usage-report.py",
+          "tests/test_usage_report.py",
+          "tests/fixtures/usage-report/**",
+          "skills/project-update/migrations/0007_weight_model.py",
+          "tests/fixtures/project-update/schema-v6/**",
+          "tests/test_project_update.py",
+          "skills/ai-init/templates/.ai/VERSION",
+          "skills/project-update/history/**",
+          "tests/test-migration-0006.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test_end_to_end.py",
+          "tests/test-end-to-end.sh",
+          ".ai/project/known-risks.md",
+          "tests/test-project-update.sh"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [
+          "tests/test_ai_task_state.py"
+        ],
+        "status": "done",
+        "tree_before": "f575c0bb88fe32dd1e9b2ed10eed0151c45ce310",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "915410c11acd6c7293b5026798651c2b7fb2828b",
+          "seq": 3,
+          "paths": [
+            "skills/ai-task/sensors.py",
+            "skills/ai-task/state.py",
+            "tests/test_ai_task_state.py"
+          ],
+          "files": 3,
+          "added": 92,
+          "deleted": 18,
+          "lines": 110,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R3",
+        "description": "review pass 1: B1, H1, H2, M1-M8",
+        "allowed_files": [
+          "skills/ai-task/sensors.py",
+          "skills/ai-task/weight.py",
+          "tests/test_weight.py",
+          "skills/ai-task/state.py",
+          "tests/test_ai_task_state.py",
+          "skills/status/status.py",
+          "skills/usage-report/usage-report.py",
+          "tests/test_usage_report.py",
+          "tests/fixtures/usage-report/**",
+          "skills/project-update/migrations/0007_weight_model.py",
+          "tests/fixtures/project-update/schema-v6/**",
+          "tests/test_project_update.py",
+          "skills/ai-init/templates/.ai/VERSION",
+          "skills/project-update/history/**",
+          "tests/test-migration-0006.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test_end_to_end.py",
+          "tests/test-end-to-end.sh",
+          ".ai/project/known-risks.md",
+          "tests/test-project-update.sh"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "915410c11acd6c7293b5026798651c2b7fb2828b",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "1c65ee0e11d86337139e6a0db73ab5e652d71f3e",
+          "seq": 4,
+          "paths": [
+            "skills/ai-task/state.py",
+            "skills/project-update/migrations/0007_weight_model.py",
+            "tests/test_ai_task_state.py",
+            "tests/test_project_update.py"
+          ],
+          "files": 4,
+          "added": 367,
+          "deleted": 83,
+          "lines": 450,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R4",
+        "description": "review pass 2: N1, M1, M4, N2 (+ N3-N5)",
+        "allowed_files": [
+          "skills/ai-task/sensors.py",
+          "skills/ai-task/weight.py",
+          "tests/test_weight.py",
+          "skills/ai-task/state.py",
+          "tests/test_ai_task_state.py",
+          "skills/status/status.py",
+          "skills/usage-report/usage-report.py",
+          "tests/test_usage_report.py",
+          "tests/fixtures/usage-report/**",
+          "skills/project-update/migrations/0007_weight_model.py",
+          "tests/fixtures/project-update/schema-v6/**",
+          "tests/test_project_update.py",
+          "skills/ai-init/templates/.ai/VERSION",
+          "skills/project-update/history/**",
+          "tests/test-migration-0006.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test_end_to_end.py",
+          "tests/test-end-to-end.sh",
+          ".ai/project/known-risks.md",
+          "tests/test-project-update.sh"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "1c65ee0e11d86337139e6a0db73ab5e652d71f3e",
+        "closes": [
+          "N1",
+          "M1",
+          "M4",
+          "N2"
+        ],
+        "runs_before": 3,
+        "opened_at_event": 24,
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "514be93c797556928d80fe084837aa7544a31c03",
+          "seq": 5,
+          "paths": [
+            "skills/ai-task/state.py",
+            "tests/test_ai_task_state.py"
+          ],
+          "files": 2,
+          "added": 159,
+          "deleted": 25,
+          "lines": 184,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "R1",
+    "R2",
+    "R3",
+    "R4"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "passed",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "vanssa",
+    "granted_at": "2026-10-26T07:09:06Z",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "terminal",
+    "unattended": false
+  },
+  "created_at": "2026-10-25T22:43:24Z",
+  "updated_at": "2026-10-26T07:09:16Z",
+  "history": [
+    {
+      "at": "2026-10-25T22:43:24Z",
+      "event": "task_started",
+      "detail": "Redesign 2.2a: new state.py surface (start/verify/review/close/step-done/status/approve --confirm, task.md, migration 0007) beside the old (feature)"
+    },
+    {
+      "at": "2026-10-25T22:43:24Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-25T22:43:24Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-25T22:43:24Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-25T22:43:24Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-25T22:43:24Z",
+      "event": "risk_classified",
+      "detail": "T4: T4: changes the process every task runs through + migration of user trees (plan names it); plan approved in plan mode"
+    },
+    {
+      "at": "2026-10-25T22:43:24Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-25T22:43:24Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-25T22:43:24Z",
+      "event": "step_started",
+      "detail": "1: Redesign 2.2a: new state.py surface (start/verify/review/close/step-done/status/approve --confirm, task.md, migration 0007) beside the old"
+    },
+    {
+      "at": "2026-10-25T23:13:48Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-25T23:13:48Z",
+      "event": "remediation",
+      "detail": "R1: scope amendment approved by the human in this session: 0007 carries a hand-added risk-tier example into weight.json, so the fixture shows two hand-merge choices, not one (3 counts)"
+    },
+    {
+      "at": "2026-10-25T23:13:48Z",
+      "event": "step_started",
+      "detail": "R1: scope amendment approved by the human in this session: 0007 carries a hand-added risk-tier example into weight.json, so the fixture shows two hand-merge choices, not one (3 counts)"
+    },
+    {
+      "at": "2026-10-25T23:14:19Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-10-25T23:20:08Z",
+      "event": "field_set",
+      "detail": "test_status = unknown (suite run 1, exit 1)"
+    },
+    {
+      "at": "2026-10-25T23:21:29Z",
+      "event": "remediation",
+      "detail": "R2: 1 regression (racy-git stale snapshot: sensors.snapshot_tree's index copy loses its mtime) + 5 self-probe findings: narrowed suite counts as fact (a); rejected gate dead end; re-score undoes a human lowering; R19 red-then-green; no-op --mode"
+    },
+    {
+      "at": "2026-10-25T23:21:29Z",
+      "event": "step_started",
+      "detail": "R2: 1 regression (racy-git stale snapshot: sensors.snapshot_tree's index copy loses its mtime) + 5 self-probe findings: narrowed suite counts as fact (a); rejected gate dead end; re-score undoes a human lowering; R19 red-then-green; no-op --mode"
+    },
+    {
+      "at": "2026-10-25T23:24:07Z",
+      "event": "step_completed",
+      "detail": "R2"
+    },
+    {
+      "at": "2026-10-25T23:30:02Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-25T23:30:08Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-25T23:33:27Z",
+      "event": "set",
+      "detail": "review_status = blockers_open"
+    },
+    {
+      "at": "2026-10-25T23:34:51Z",
+      "event": "remediation",
+      "detail": "R3: review pass 1: B1, H1, H2, M1-M8"
+    },
+    {
+      "at": "2026-10-25T23:34:51Z",
+      "event": "step_started",
+      "detail": "R3: review pass 1: B1, H1, H2, M1-M8"
+    },
+    {
+      "at": "2026-10-25T23:45:15Z",
+      "event": "step_completed",
+      "detail": "R3"
+    },
+    {
+      "at": "2026-10-25T23:54:37Z",
+      "event": "set",
+      "detail": "review_status = passed_with_findings"
+    },
+    {
+      "at": "2026-10-26T06:45:05Z",
+      "event": "remediation",
+      "detail": "R4: review pass 2: N1, M1, M4, N2 (+ N3-N5)"
+    },
+    {
+      "at": "2026-10-26T06:45:05Z",
+      "event": "step_started",
+      "detail": "R4: review pass 2: N1, M1, M4, N2 (+ N3-N5)"
+    },
+    {
+      "at": "2026-10-26T06:59:52Z",
+      "event": "step_completed",
+      "detail": "R4"
+    },
+    {
+      "at": "2026-10-26T07:07:57Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 3, exit 0)"
+    },
+    {
+      "at": "2026-10-26T07:08:03Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-26T07:08:03Z",
+      "event": "findings_closed",
+      "detail": "N1, M1, M4, N2 closed by suite run 3 on d4b642167"
+    },
+    {
+      "at": "2026-10-26T07:08:03Z",
+      "event": "field_set",
+      "detail": "review_status = passed (findings closed by a green run)"
+    },
+    {
+      "at": "2026-10-26T07:08:07Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval: close"
+    },
+    {
+      "at": "2026-10-26T07:08:07Z",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "2026-10-26T07:09:06Z",
+      "event": "human_approval",
+      "detail": "granted by vanssa via terminal"
+    },
+    {
+      "at": "2026-10-26T07:09:16Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-26T07:09:16Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-25-008/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-26T07:09:16Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "ef0926adf0876400b74813655c1e1b43afde136d",
+    "base_tree": "538fcbaeb4b555ef83ec386ef5351a4d6fadf568",
+    "task": {
+      "files": 20,
+      "added": 2844,
+      "deleted": 36,
+      "lines": 2880,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 63,
+      "tree": "514be93c797556928d80fe084837aa7544a31c03",
+      "measured_at": "2026-10-26T06:59:52Z",
+      "status": "green"
+    },
+    "rescored_tier": "T4",
+    "rescore_reasons": [],
+    "rescore_hints": [],
+    "over_budget": true
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-25-008/sensors.json",
+    "tree": null,
+    "verdict": null,
+    "checked_at": null
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "3492e1a8fb894ed701f20d9fd4e133aedabe7c9d",
+        "exit": 1,
+        "duration_s": 348,
+        "log": ".ai/reports/T-2026-10-25-008/tests-suite-1.log",
+        "at": "2026-10-25T23:20:08Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "915410c11acd6c7293b5026798651c2b7fb2828b",
+        "exit": 0,
+        "duration_s": 355,
+        "log": ".ai/reports/T-2026-10-25-008/tests-suite-2.log",
+        "at": "2026-10-25T23:30:02Z",
+        "env_retry": false
+      },
+      {
+        "n": 1,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "915410c11acd6c7293b5026798651c2b7fb2828b",
+        "exit": 0,
+        "duration_s": 5,
+        "log": ".ai/reports/T-2026-10-25-008/tests-e2e-1.log",
+        "at": "2026-10-25T23:30:08Z",
+        "env_retry": false
+      },
+      {
+        "n": 3,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "d4b642167ee6e570979339d155455e506dce4e54",
+        "exit": 0,
+        "duration_s": 368,
+        "log": ".ai/reports/T-2026-10-25-008/tests-suite-3.log",
+        "at": "2026-10-26T07:07:57Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "d4b642167ee6e570979339d155455e506dce4e54",
+        "exit": 0,
+        "duration_s": 5,
+        "log": ".ai/reports/T-2026-10-25-008/tests-e2e-2.log",
+        "at": "2026-10-26T07:08:03Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 3
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null,
+  "reviews": 2,
+  "findings_verdict_at": 23
+}

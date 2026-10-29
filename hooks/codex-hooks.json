@@ -1,0 +1,126 @@
+{
+  "description": "RiskRails hooks for the Codex plugin route (generated from codex/hooks.json). Codex runs a plugin hook only after you trust it in /hooks.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"${CLAUDE_PLUGIN_ROOT}/hooks/ai-guard.py\"",
+            "timeout": 15,
+            "statusMessage": "Checking git, paths, scope and open decisions"
+          }
+        ]
+      },
+      {
+        "matcher": "^Agent$|spawn_agent$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/runtime-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Checking expert-model availability"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^Agent$|spawn_agent$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/runtime-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Recording expert-model availability"
+          }
+        ]
+      },
+      {
+        "matcher": "^request_user_input$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"${CLAUDE_PLUGIN_ROOT}/hooks/dialog-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Recording the dialog's answer"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/runtime-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Counting running agents"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/runtime-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Recording expert-model availability"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/context-guard.py\"",
+            "timeout": 5,
+            "statusMessage": "Measuring the session context"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/context-guard.py\"",
+            "timeout": 15,
+            "statusMessage": "Writing the handoff before compaction"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/context-guard.py\"",
+            "timeout": 15,
+            "statusMessage": "Reading the task in flight"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"${CLAUDE_PLUGIN_ROOT}/hooks/dialog-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Checking for an open decision"
+          }
+        ]
+      }
+    ]
+  }
+}

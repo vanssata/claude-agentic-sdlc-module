@@ -1,1 +1,1 @@
-{"case":"mv of the whole .claude directory away is denied in a task (a1)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"mv .claude /tmp/x"}}}
+{"case":"moving a whole claude directory with no protected file in it away is allowed in a task since 3.4 (R22)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"mv .claude /tmp/x"}}}

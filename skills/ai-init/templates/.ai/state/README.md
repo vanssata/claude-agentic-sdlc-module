@@ -1,6 +1,6 @@
 # Task state
 
-`current.json` is the machine-readable record of the task in flight. It is
+`state.json` is the machine-readable record of the task in flight. It is
 written by `skills/ai-task/state.py` (atomically), read by `/ai-status`, and
 enforced by `ai-scope-guard`, which derives the files the current step may touch
 from it.
@@ -10,15 +10,18 @@ Two other writers exist, and only these two. A schema migration in
 same atomic write and a `schema_migrated` history entry — that is how a task in
 flight survives a change to the shape of this file. And `hooks/context-guard.py`
 writes `session.json`, the sidecar beside this file, and nothing else: it never
-touches `current.json`. Nothing else writes any of it — an agent never edits
+touches `state.json`. Nothing else writes any of it — an agent never edits
 them by hand, and the path guard refuses when one tries.
 
 It is **not committed**: it describes a session, not the repository. The
 `.gitignore` entry added by `/ai-init` keeps it out of git.
 
-When a task closes, `state.py archive` moves it to
-`.ai/reports/<task-id>/state.json`, which **is** committed — that is the audit
-trail: which stages ran, in what order, who approved what, and when.
+When a task closes, `state.py close` writes the final state to
+`.ai/state/logs/<task-id>/state.json`, beside the task's verify logs — local,
+**not** committed. What is committed is `.ai/reports/<task-id>/events.jsonl`
+and `task.md`, and in packages mode the task's compact record under
+`.ai/memory/` — that is the audit trail: which stages ran, in what order, who
+approved what, and when (the plugin's `docs/local-memory.md`).
 
 It holds facts, never transcripts:
 
@@ -42,10 +45,10 @@ defaults.
 
 | File | Written by | Committed |
 |---|---|---|
-| `current.json` | `state.py`, and `update.py` during a migration | no |
+| `state.json` (legacy `current.json`, still read) | `state.py`, and `update.py` during a migration | no |
 | `session.json` | `context-guard.py`, on SessionStart and each prompt | no |
 | `handoff.md` | `state.py handoff` — never a model | no |
-| `../reports/<task-id>/questions.md` | `state.py ask/answer/questions` | yes |
+| `../reports/<task-id>/task.md` §Questions | `state.py ask/answer/questions` | yes |
 | `../reports/<task-id>/events.jsonl` | `state.py` (`emit`), append-only | yes |
 
 `handoff.md` is the ≤ 30-line frame a session that lost its context reads first:

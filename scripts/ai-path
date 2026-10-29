@@ -5,7 +5,7 @@
     ai-path --tree-hash             sha256 over the shared tree
 
 The policies, agent contracts, workflows and templates every project shares are
-installed once, beside this script, as <home>/claude-agentic/ai/. A project
+installed once, beside this script, as <home>/riskrails/ai/. A project
 overrides one of them by keeping its own regular file at the same path under
 .ai/. A directory there is never an override.
 
@@ -20,7 +20,7 @@ import sys
 
 
 def shared_root():
-    env = os.environ.get("CLAUDE_AGENTIC_SHARED")
+    env = os.environ.get("RISKRAILS_SHARED") or os.environ.get("CLAUDE_AGENTIC_SHARED")  # R35: old name, one version
     if env:
         return env
     here = os.path.dirname(os.path.realpath(__file__))

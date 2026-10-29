@@ -1,0 +1,23 @@
+{
+  "case": "Notification payload (notification_type permission_prompt, 'Claude needs your permission'): the envelope auth_success will share; auth_success itself was not recorded (no /login in the session)",
+  "runtime": "claude",
+  "runtime_version": "2.1.312",
+  "entrypoint": "TUI (claude --settings <hooks>), permission_mode auto",
+  "recorded": "2026-10-28",
+  "placeholders": {
+    "__ROOT__": "the session's cwd",
+    "__HOME__": "the user's home",
+    "__PROJECT_SLUG__": "Claude Code's slug of the cwd under ~/.claude/projects/",
+    "__SCRATCHPAD__": "the session's scratchpad_dir"
+  },
+  "payload": {
+    "session_id": "74336d34-a507-4adf-80e5-08d8c35b4db9",
+    "transcript_path": "__HOME__/.claude/projects/__PROJECT_SLUG__/74336d34-a507-4adf-80e5-08d8c35b4db9.jsonl",
+    "cwd": "__ROOT__",
+    "scratchpad_dir": "__SCRATCHPAD__",
+    "prompt_id": "92423440-c6b0-4827-ab45-78b17b4606cf",
+    "hook_event_name": "Notification",
+    "message": "Claude needs your permission",
+    "notification_type": "permission_prompt"
+  }
+}

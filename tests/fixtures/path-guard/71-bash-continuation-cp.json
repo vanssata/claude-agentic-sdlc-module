@@ -1,1 +1,1 @@
-{"case":"cp split over a backslash-newline continuation is denied in a task (a2)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"cp x \\\n  .claude/agents/"}}}
+{"case":"a copy onto the claude settings split over a backslash-newline continuation is denied in a task (M4: the movers parse it)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"cp x \\\n  .claude/settings.json"}}}

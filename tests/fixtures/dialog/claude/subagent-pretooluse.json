@@ -1,0 +1,31 @@
+{
+  "case": "PreToolUse issued from inside a subagent: agent_id and agent_type are present; a main-session payload has neither",
+  "runtime": "claude",
+  "runtime_version": "2.1.312",
+  "entrypoint": "sdk-cli (claude -p --settings <hooks>)",
+  "recorded": "2026-10-28",
+  "placeholders": {
+    "__ROOT__": "the session's cwd",
+    "__HOME__": "the user's home",
+    "__PROJECT_SLUG__": "Claude Code's slug of the cwd under ~/.claude/projects/"
+  },
+  "payload": {
+    "session_id": "e32fe652-2cc2-4dbc-9704-3f3c1e8cc914",
+    "transcript_path": "__HOME__/.claude/projects/__PROJECT_SLUG__/e32fe652-2cc2-4dbc-9704-3f3c1e8cc914.jsonl",
+    "cwd": "__ROOT__",
+    "prompt_id": "06204d5e-ea7d-497b-92c9-155c15734dc7",
+    "permission_mode": "default",
+    "agent_id": "a9379c42501005322",
+    "agent_type": "general-purpose",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "echo spike-subagent",
+      "description": "Echo spike-subagent string"
+    },
+    "tool_use_id": "toolu_013jQnwhqWZKPDL9xmpAFLu1"
+  }
+}

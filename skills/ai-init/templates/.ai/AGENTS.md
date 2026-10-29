@@ -9,15 +9,16 @@ Everything else loads on demand; nothing here is worth reading twice.
 
 1. Production behaviour is the source of truth. Code that looks wrong may be
    load-bearing: document what you find, change only what the task asked for.
-2. A change runs through `/ai-task`. Each step names the files it may touch; an
-   edit outside them is refused — answer `SCOPE_CHANGE_REQUIRED` and have the
-   plan amended, never widen the step yourself.
-3. No agent commits, pushes, merges or deploys. Approval is given by a human,
-   outside the agent.
+2. A change runs through `/rr-plan` and `/rr-build` (`using-riskrails.md`).
+   The task names the files it may touch; an edit outside them is refused —
+   answer `SCOPE_CHANGE_REQUIRED` and widen the task in place with
+   `state.py start --amend --files "+<path>" --why "…"`, never around the guard.
+3. No agent merges or deploys; commit, push, approval only as the dialog's picked
+   command, or the human runs them outside the agent.
 4. Verify before reporting done: the verification command once, to the end,
    every failure fixed as one batch, the output shown. Run it through
-   `state.py test-run` — it caps the runs, keeps the log out of the context,
-   and a green exit code needs no agent to interpret it.
+   `state.py verify --scope all` — it caps the runs, keeps the log out of the
+   context, and a green exit code needs no agent to interpret it.
 5. A refactoring changes no behaviour and is never mixed with a feature; legacy
    behaviour without a test gets a characterization test first.
 6. Everything written into `project/` carries an evidence label — KNOWN FACT
@@ -32,9 +33,9 @@ Everything else loads on demand; nothing here is worth reading twice.
 This `.ai/` holds `project/`, `rules/`, `state/`, `reports/`, `VERSION` and, in
 `policies/`, `risk-tiers.json`, `risk-tiers.md`, `path-guard.json`, `testing.md`,
 `coding.md`, `safety.md` and `security.md`. Every other path below ships with the
-plugin at `<home>/claude-agentic/ai/<path>`; `<home>` is `~/.claude`, or
+plugin at `<home>/riskrails/ai/<path>`; `<home>` is `~/.claude`, or
 `$CODEX_HOME` (default `~/.codex`). A file at the same path here overrides it and
-stops receiving its changes; `<home>/claude-agentic/ai-path <path>` prints the
+stops receiving its changes; `<home>/riskrails/ai-path <path>` prints the
 copy that applies.
 
 ## Doing X → read Y
@@ -42,18 +43,18 @@ copy that applies.
 | Doing | Read |
 |---|---|
 | anything, first | `policies/safety.md` |
-| starting or resuming a task | `state.py handoff --print`, then the `/ai-task` skill |
-| deciding the tier, who reviews, what a human approves | `policies/risk-tiers.json` (`policies/risk-tiers.md` mirrors it) |
-| choosing an agent or a tier | `policies/model-routing.md`, `policies/review-economy.md` |
-| a large file, logs, a tool or MCP server | `policies/context-management.md`, `policies/tooling.md` |
+| which command when, the three modes | `using-riskrails.md` |
+| starting or resuming a task | `state.py handoff --print`, then `/rr-build` (no task: `/rr-plan`) |
+| the weight, the mode, who reviews, what a human approves | `policies/weight.json` (`policies/weight.md` mirrors it) |
+| choosing an agent or a tier | `policies/model-routing.md` |
 | writing code under `<dir>/` | `policies/coding.md`; `rules/<slug>.md` for that directory |
-| tests | `policies/testing.md` — Verification: the three commands |
-| finishing a step, running the suite, asking whether the review can be skipped | `state.py step-done`, `state.py test-run`, `state.py review-gate` — the measurements are deterministic and the refusals name the way out |
+| tests | `policies/testing.md` — Verification: the three commands, run by `state.py verify` |
+| finishing a step, verifying, recording a review, closing | `state.py step-done`, `verify`, `review`, `close` — the measurements are deterministic and the refusals name the way out |
 | schema, data, migrations | `policies/database.md`, `policies/production.md` |
 | auth, secrets, personal data, payments | `policies/security.md` |
 | git, release | `policies/git.md`, `policies/release.md` |
-| feature / bugfix / refactoring / hotfix / investigation | `workflows/<kind>.md` |
-| acting as a role | `agents/<role>.md`; the manager is `agents/manager.md` |
+| feature / bugfix / refactoring / hotfix / investigation | `workflows.md`, the section of that name |
+| acting as a role | `agents/<role>.md` |
 | an artefact | `templates/<artefact>.md` → `reports/<task-id>/` |
 | understanding the system | `project/overview.md`, then `project/*.md` |
 | principles, intent, spec, plan, decisions | `docs/sdlc/constitution.md`, `docs/sdlc/` |

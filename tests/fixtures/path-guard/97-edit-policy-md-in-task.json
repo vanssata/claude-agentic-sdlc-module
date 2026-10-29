@@ -1,0 +1,1 @@
+{"case":"editing a policy text while a task is in flight is denied (.ai/policies/** in a task, R22)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Edit","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/.ai/policies/safety.md"}}}

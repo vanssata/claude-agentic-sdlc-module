@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers for the claude-agentic PreToolUse guards.
+# Shared helpers for the RiskRails PreToolUse guards.
 # Sourced, never executed directly. Every guard follows the same contract as
 # hooks/cap-large-read.py: read the hook payload from stdin, and
 # either exit 0 silently (allow) or print a deny JSON object and exit 0.

@@ -1,1 +1,1 @@
-{"case":"editing the constitution while a task is in flight is denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Edit","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/docs/sdlc/constitution.md"}}}
+{"case":"editing the constitution while a task is in flight is allowed since 3.4 (R22: no longer frozen)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Edit","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/docs/sdlc/constitution.md"}}}

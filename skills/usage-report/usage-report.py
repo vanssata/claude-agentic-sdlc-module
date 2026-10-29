@@ -22,7 +22,7 @@ Usage:
     usage-report.py --budgets             # the installed plans' budget tables
 
 --task and --budgets read the plan tables install.sh writes to
-<home>/claude-agentic/profile.json. Budgets are reported, never enforced, and
+<home>/riskrails/profile.json. Budgets are reported, never enforced, and
 the task's journal is only read.
 """
 
@@ -134,7 +134,7 @@ def cache_path() -> str:
             _CACHE_PATH = os.path.abspath(os.path.expanduser(env)) if env else ""
         else:
             base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
-            _CACHE_PATH = os.path.join(base, "claude-agentic", "usage-report.json")
+            _CACHE_PATH = os.path.join(base, "riskrails", "usage-report.json")
     return _CACHE_PATH
 
 
@@ -580,10 +580,15 @@ def runtime_home(runtime: str) -> str:
     return os.path.expanduser(os.environ.get("CLAUDE_CONFIG_DIR", "~/.claude"))
 
 
+def profile_file(home: str) -> str:
+    """<home>/riskrails/profile.json, or the pre-3.4b claude-agentic/ one (R35, one version)."""
+    path = os.path.join(home, "riskrails", "profile.json")
+    return path if os.path.exists(path) else os.path.join(home, "claude-agentic", "profile.json")
+
+
 def read_profile(runtime: str) -> dict:
     try:
-        with open(os.path.join(runtime_home(runtime), "claude-agentic", "profile.json"),
-                  encoding="utf-8") as fh:
+        with open(profile_file(runtime_home(runtime)), encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
@@ -598,19 +603,14 @@ def print_budgets() -> int:
         if not isinstance(budgets, dict):
             continue
         found = True
-        fan = budgets.get("fan_out") or {}
         expert = budgets.get("expert") or {}
         tokens = (budgets.get("tokens") or {}).get("per_task") or {}
         print(f"{runtime}: {prof.get('label') or prof.get('plan')} ({prof.get('plan')})")
-        print(f"  fan-out        {fan.get('max_parallel_agents')} agents, "
-              f"{fan.get('max_parallel_on_strong')} on STRONG/EXPERT"
-              + (", serial" if fan.get("serial") else ""))
-        print(f"  direct mode    up to {(budgets.get('direct_mode') or {}).get('max_tier')}")
         print(f"  EXPERT         {'without asking' if expert.get('without_asking') else 'asks first'}, "
               f"at most {expert.get('max_per_task')} per task")
         print("  tokens / task  " + "  ".join(f"{t} {v}M" for t, v in sorted(tokens.items())))
     if not found:
-        print("no plan profile installed (install.sh writes <home>/claude-agentic/profile.json)")
+        print("no plan profile installed (install.sh writes <home>/riskrails/profile.json)")
         return 1
     print("\nBudgets are reported, never enforced. Calibrate them from --task.")
     return 0
@@ -637,20 +637,53 @@ def find_project(start: str) -> str | None:
         d = parent
 
 
+def seal_events(project: str, task: str) -> list:
+    """R20 (compact-project-memory): after cleanup only the record knows the
+    task — its seal's started_at, closed_at, mode and runtimes stand in for
+    the journal's first and last lines."""
+    base = os.path.join(project, ".ai", "memory")
+    seal = None
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        if not name.endswith(".jsonl"):
+            continue
+        with open(os.path.join(base, name), encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                rec = _record(line)
+                if rec and rec.get("kind") == "task" and rec.get("task") == task:
+                    if seal is None or (rec.get("inst") or 0) >= (seal.get("inst") or 0):
+                        seal = rec
+    if not seal or not seal.get("started_at"):
+        return []
+    runtimes = [rt for rt in seal.get("runtimes") or [] if rt in RUNTIMES]
+    out = [{"ts": seal["started_at"], "event": "task_started", "runtime": rt} for rt in runtimes or [None]]
+    out.append({"ts": seal["started_at"], "event": "tier_set",
+                "data": {"tier": seal.get("legacy_tier") or "untiered", "mode": seal.get("mode")}})
+    if seal.get("closed_at"):
+        out.append({"ts": seal["closed_at"], "event": "task_closed"})
+    return out
+
+
 def task_report(args) -> int:
     """One task's window from its journal, the tokens each runtime spent in it,
     and each involved runtime's budget for the task's final tier."""
     project = find_project(args.project or os.getcwd())
     journal = os.path.join(project or "", ".ai", "reports", args.task, "events.jsonl")
-    if not project or not os.path.isfile(journal):
-        print(f"no journal for {args.task} (looked for {journal})")
-        return 1
+    moved = os.path.join(project or "", ".ai", "state", "logs", args.task, "report", "events.jsonl")
     events = []
-    with open(journal, encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            rec = _record(line)
-            if rec is not None:
-                events.append(rec)
+    if project and not os.path.isfile(journal) and os.path.isfile(moved):
+        journal = moved                   # cleanup moved the report directory into the local raw store
+    if not project or not os.path.isfile(journal):
+        events = seal_events(project, args.task) if project else []
+        if not events:
+            print(f"no journal for {args.task} (looked for {journal})")
+            return 1
+        print(f"(no journal: the window is the record's seal for {args.task})")
+    else:
+        with open(journal, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                rec = _record(line)
+                if rec is not None:
+                    events.append(rec)
     stamps = [parse_ts(e.get("ts")) for e in events if parse_ts(e.get("ts"))]
     if not stamps:
         print(f"the journal of {args.task} has no timestamps")
@@ -658,12 +691,14 @@ def task_report(args) -> int:
     start = min(stamps)
     closed = [parse_ts(e.get("ts")) for e in events if e.get("event") == "task_closed"]
     end = max(c for c in closed if c) if any(closed) else dt.datetime.now(dt.timezone.utc)
-    tier = "untiered"
+    tier, mode = "untiered", None
     involved = []
     for e in events:
         data = _obj(e.get("data"))
         if e.get("event") in ("tier_set", "tier_raised"):
             tier = data.get("tier") or data.get("to") or tier
+            # A schema-7 journal's tier_set carries the mode beside its compat T-label (R18).
+            mode = data.get("mode") or mode
         for rt in (e.get("runtime"), data.get("from") if e.get("event") == "runtime_handoff" else None,
                    data.get("to") if e.get("event") == "runtime_handoff" else None):
             if rt in RUNTIMES and rt not in involved:
@@ -692,7 +727,8 @@ def task_report(args) -> int:
         acc[1] += c.cw + c.cr
         acc[2] += c.out
 
-    print(f"task {args.task} tier {tier} window {start.isoformat(timespec='seconds')}"
+    label = f"mode {mode} (tier {tier})" if mode else f"tier {tier}"
+    print(f"task {args.task} {label} window {start.isoformat(timespec='seconds')}"
           f"..{end.isoformat(timespec='seconds')}")
     print("  (by time window: any other session in this project inside it is counted too)")
     for rt in involved or sorted(used):

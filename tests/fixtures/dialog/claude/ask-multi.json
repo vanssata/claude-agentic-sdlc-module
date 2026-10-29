@@ -1,0 +1,82 @@
+{
+  "case": "AskUserQuestion multi-select, the human ticked A and B: answers joins the labels with ', '",
+  "runtime": "claude",
+  "runtime_version": "2.1.312",
+  "entrypoint": "TUI (claude --settings <hooks>), permission_mode auto",
+  "recorded": "2026-10-28",
+  "placeholders": {
+    "__ROOT__": "the session's cwd",
+    "__HOME__": "the user's home",
+    "__PROJECT_SLUG__": "Claude Code's slug of the cwd under ~/.claude/projects/",
+    "__SCRATCHPAD__": "the session's scratchpad_dir"
+  },
+  "payload": {
+    "session_id": "74336d34-a507-4adf-80e5-08d8c35b4db9",
+    "transcript_path": "__HOME__/.claude/projects/__PROJECT_SLUG__/74336d34-a507-4adf-80e5-08d8c35b4db9.jsonl",
+    "cwd": "__ROOT__",
+    "scratchpad_dir": "__SCRATCHPAD__",
+    "prompt_id": "8eb43ed5-460f-45d4-b59c-d0cdfe712708",
+    "permission_mode": "auto",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "AskUserQuestion",
+    "tool_input": {
+      "questions": [
+        {
+          "question": "Pick two?",
+          "header": "Multi",
+          "options": [
+            {
+              "label": "A",
+              "description": "Option A"
+            },
+            {
+              "label": "B",
+              "description": "Option B"
+            },
+            {
+              "label": "C",
+              "description": "Option C"
+            }
+          ],
+          "multiSelect": true
+        }
+      ],
+      "answers": {
+        "Pick two?": "A, B"
+      },
+      "annotations": {}
+    },
+    "tool_response": {
+      "questions": [
+        {
+          "question": "Pick two?",
+          "header": "Multi",
+          "options": [
+            {
+              "label": "A",
+              "description": "Option A"
+            },
+            {
+              "label": "B",
+              "description": "Option B"
+            },
+            {
+              "label": "C",
+              "description": "Option C"
+            }
+          ],
+          "multiSelect": true
+        }
+      ],
+      "answers": {
+        "Pick two?": "A, B"
+      },
+      "annotations": {}
+    },
+    "tool_use_id": "toolu_01YG26NGTKoBRXpn8fRhbm9y",
+    "duration_ms": 0
+  }
+}

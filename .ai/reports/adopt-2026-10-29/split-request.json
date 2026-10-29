@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "source": "CLAUDE.md",
+  "source_sha": "sha256:0f7292e409284c3fee93bfc109b35ae6faa61c50f706e9478e992f356b8d6764",
+  "lines": 40,
+  "block": [
+    28,
+    40
+  ],
+  "block_edited": false,
+  "cover": "1-27",
+  "outline": [
+    {
+      "line": 1,
+      "heading": "# claude-agentic"
+    },
+    {
+      "line": 5,
+      "heading": "## Commands"
+    },
+    {
+      "line": 9,
+      "heading": "## Verification"
+    },
+    {
+      "line": 13,
+      "heading": "## Conventions"
+    },
+    {
+      "line": 17,
+      "heading": "## Architecture"
+    },
+    {
+      "line": 21,
+      "heading": "## Things Claude Code gets wrong"
+    }
+  ],
+  "keep_budget_bytes": 940,
+  "allowed_dest": [
+    ".ai/policies/adopted/<slug>.md",
+    ".ai/rules/<slug>.md",
+    ".ai/project/<slug>.md",
+    "docs/sdlc/constitution.md"
+  ],
+  "proposal": ".ai/reports/adopt-2026-10-29/split-proposal.json"
+}

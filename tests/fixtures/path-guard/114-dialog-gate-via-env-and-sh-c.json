@@ -1,0 +1,1 @@
+{"case": "the recorder behind env or inside sh -c is denied (R36.11)", "expect": "deny", "payload": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": "__ROOT__", "tool_input": {"command": "cat f | env A=1 python3 -I x/dialog-gate.py; sh -c 'python3 h/dialog-gate.py < f'"}}}

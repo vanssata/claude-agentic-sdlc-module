@@ -1,1 +1,1 @@
-{"case":"rm of an instruction file inside a dependency is denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"rm -rf node_modules/foo/CLAUDE.md"}}}
+{"case":"removing an instruction file inside a dependency is allowed since 3.4 (R22: vendor instruction files are not guarded)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"rm -rf node_modules/foo/CLAUDE.md"}}}

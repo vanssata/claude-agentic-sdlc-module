@@ -23,8 +23,15 @@ is evidence; your intuition about how the code "should" look is not.
 - Read production secrets or customer data into the model context.
 
 If you find a problem outside the current task: **write it down, do not fix it.**
-Unrelated findings go to `.ai/project/known-risks.md` or into the report's
-"observations" section, and the human decides whether they become their own task.
+Unrelated findings are recorded with `state.py memory risk add` (in files mode it
+writes `.ai/project/known-risks.md`) or go into the report's "observations"
+section, and the human decides whether they become their own task.
+
+The compact record is the human's to switch: `state.py memory enable`, `disable`,
+`cleanup`, `pack`, `redact` and `migrate --move-logs` take the human route, as
+`approve` does, and `.ai/memory/` and `.ai/local/memory/` are written by
+`state.py` alone — an agent never edits them (`state.py memory --help`; the
+plugin's `docs/local-memory.md`).
 
 ## Scope
 
@@ -42,6 +49,16 @@ A guard is a backstop, not the policy. Some checks exist in only one runtime —
 Codex has no hookable read tool, so the large-read cap is Claude-only there — and
 an agent that behaves correctly only because a hook is watching is not behaving
 correctly. The rules above hold whether or not a hook enforces them.
+
+**The guards' threat model.** The guards defend against an agent's mistakes — a
+careless `rm`, a write to a frozen policy during a task, a commit with a
+secret — not against an agent that constructs a command to exhaust them. A
+command built to time the guard out is visible in the transcript and in the
+journal, and the human gate in full and full_irreversible mode is the boundary
+for anything that matters.
+Approval rests on a guard plus a ledger: a command the agent constructs to pass
+for the human's pick is outside the threat model, and `state.py consent audit`
+detects it afterwards.
 
 ## Evidence labels
 
@@ -62,3 +79,6 @@ evidence for each, and let the human decide which is the bug.
 
 Stop and ask. An agent that pauses costs a message; an agent that guesses on a
 payment path costs an incident.
+
+Doubt on reversibility or domain is a blocker; other doubt is written to
+`task.md` and the work continues.

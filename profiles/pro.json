@@ -8,61 +8,46 @@
     "claude-sonnet-5": { "effortLevel": "medium" },
     "claude-haiku-4-5-20251001": { "effortLevel": "high" }
   },
-  "autoCompactWindow": 300000,
-  "claude_agentic": {
+  "riskrails": {
     "inherits": null,
     "plan": "pro",
     "label": "Pro",
     "runtime": "claude",
+    "economy": {
+      "autoCompactWindow": 300000
+    },
     "tiers": {
       "FAST": {
         "model": "haiku",
         "effort": "low",
         "agents": [
           "Explore",
-          "log-reader",
-          "ai-tester",
-          "ai-indexer"
+          "log-reader"
         ]
       },
       "BALANCED": {
         "model": "sonnet",
         "effort": "medium",
         "agents": [
-          "ai-discovery",
-          "ai-context",
-          "ai-implementer",
-          "ai-release",
-          "ai-risk",
-          "ai-planner"
+          "ai-discovery"
         ]
       },
       "STRONG": {
         "model": "opus",
         "effort": "high",
         "agents": [
-          "ai-reviewer",
-          "ai-security"
+          "ai-reviewer"
         ]
       },
       "EXPERT": {
         "model": "opus",
         "effort": "high",
         "agents": [
-          "ai-expert",
           "architect"
         ]
       }
     },
     "budgets": {
-      "fan_out": {
-        "max_parallel_agents": 1,
-        "max_parallel_on_strong": 1,
-        "serial": true
-      },
-      "direct_mode": {
-        "max_tier": "T3"
-      },
       "expert": {
         "without_asking": false,
         "max_per_task": 1

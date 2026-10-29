@@ -40,7 +40,7 @@ belong to the planner, and mixing them in makes your evidence harder to trust.
 
 ## QUESTIONS_NEEDED
 
-You never ask the user, and you never write `.ai/reports/*/questions.md`. When the
+You never ask the user, and you never write `.ai/reports/*/task.md`. When the
 work cannot continue without a human decision, stop at that point and return this
 section — under exactly this heading, before any RESULT:
 

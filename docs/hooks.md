@@ -1,628 +1,300 @@
 # The hooks
 
-| Hook | Claude Code | Codex |
-|---|---|---|
-| `ai-git-guard` | yes | yes |
-| `ai-path-guard` | yes | yes |
-| `ai-scope-guard` | yes | yes |
-| `cap-large-read.py` | yes | **no** — no hookable read tool |
-| `project-scaffold.sh` | yes (`Setup:init`) | **no** — no equivalent event |
-| `context-guard.py` | yes | yes — everything but the transcript snapshot |
-| `runtime-gate.py` | yes — every plan; `StopFailure` on a Fable install | yes |
-| `fable-gate.py`, `codex-model-gate.py` | shims that exec `runtime-gate.py` | shim |
+Every rule the hooks enforce, where each one runs, and how a project tunes it.
+The hooks are what makes a rule a rule: an instruction file asks, a hook
+refuses.
 
-Three of them come from the routing half and are not guards:
+| Hook | Runtimes | Events | Does |
+|---|---|---|---|
+| `ai-guard.py` | both | `PreToolUse` on every tool (Claude matcher `*`, Codex `.*`) | one process, four checks in order — **decision**, **git**, **paths**, **scope**; the first refusal wins |
+| `cap-large-read.py` | Claude | `PreToolUse:Read` | refuses an unbounded `Read` of a large file |
+| `context-guard.py` | both | `UserPromptSubmit`, `PreCompact`, `SessionStart` (`startup\|resume\|clear\|compact`); Claude also `Notification:auth_success` | measures the context, snapshots before a compaction, injects the handoff at session start, records the session, checks plan drift |
+| `runtime-gate.py` | both | `PreToolUse` / `PostToolUse` on `Agent` (Codex `^Agent$\|spawn_agent$`), `SubagentStart`, `SubagentStop`; Claude with Fable also `StopFailure`; the statusline | reroutes the top model during an outage, asks before an EXPERT launch or past the fan-out, records the quota |
+| `dialog-gate.py` | both | `PostToolUse:AskUserQuestion` (Codex `request_user_input`), `Stop` | records the human's picks from the runtime's own dialog; holds the turn while a decision is open |
+| `project-scaffold.sh` | Claude | `Setup:init` | creates `docs/sdlc/` and the runtime layout on `/init`; never overwrites |
+| `memory-pre-push.py` | both | a git `pre-push` hook, not a runtime hook | validates the compact record before it travels (`docs/local-memory.md`) |
 
-- **`cap-large-read.py`** (`PreToolUse:Read`) refuses an unbounded `Read` of a
-  file over 4 000 lines or 250 KB. It does not cap what can be read — it insists
-  that reading something large is deliberate, because the main session re-reads
-  its whole context every turn, so one 500 KB read is paid for again on every
-  later turn. An explicit `limit` always passes. Thresholds come from
-  `AI_READ_MAX_LINES`/`AI_READ_MAX_BYTES`, or the older
-  `CLAUDE_READ_MAX_LINES`/`CLAUDE_READ_MAX_BYTES`.
-  **Codex has no counterpart**, because its read tool is not on the hook path.
-  The rule is written into `~/.codex/AGENTS.md` instead, where it is policy rather
-  than enforcement — which is worth knowing when you rely on it.
-- **`project-scaffold.sh`** (`Setup:init`) creates the `docs/sdlc/` and runtime
-  layout when `/init` runs. It never overwrites. Under Codex, run it by hand:
-  `~/.codex/hooks/project-scaffold.sh "$PWD"`.
-- **`context-guard.py`** (`UserPromptSubmit`, `PreCompact`, `SessionStart`)
-  watches the context size, snapshots what a compaction must not lose, and —
-  the part that matters here — writes `.ai/state/session.json` and injects the
-  handoff. It is **not** a guard and refuses nothing, but the approval gate
-  reads what it writes, which is why `ai-path-guard` refuses to let an agent run
-  it by hand (below). Installed on both runtimes; only the transcript-derived
-  snapshot stays Claude-only.
-
-The three guards share `hooks/lib/ai-hook-common.sh` and one contract: read the
-payload from stdin, exit 0 silently to allow, or print
-
-```json
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"…"}}
-```
-
-and exit 0 to refuse. The deny shape is identical in both runtimes. They **fail
-open**: a guard that cannot parse its input allows the call.
+All of them read the tool payload on stdin and print nothing when they allow.
+A refusal is a JSON decision on stdout with exit 0, so the runtime shows the
+reason and the agent can answer it. Every hook fails **open** on an internal
+error — a broken hook never locks a session — with two deliberate exceptions
+that fail closed: the git consent rule when the consent ledger cannot be read,
+and `state.py approve` from an agent. The hooks run with `python3 -I -S`, so a
+module planted in the working directory is never imported.
 
 ## Two runtimes, one set of rules
 
-The guards' rules are written once. `ai-hook-common.sh` normalises what arrives
-first, so no rule has to know which runtime it is in:
+The same files are installed under `~/.claude/hooks/` and `~/.codex/hooks/`
+(`hooks/hooks.json` and `hooks/codex-hooks.json` carry the registrations; the
+installer merges them into `settings.json` and Codex's `hooks.json`). The guard
+normalises the payload first: Codex's `apply_patch` becomes an `Edit`,
+`shell` / `exec_command` / `local_shell` become `Bash`. One `apply_patch` can
+touch many files, so every `*** Add/Update/Delete File:` and `*** Move to:`
+path in the patch is checked on its own — a single refused path rejects the
+whole patch; split the patch rather than widening the step.
 
-| Codex sends | The guards see |
-|---|---|
-| `apply_patch` | `Edit`, plus every path in the patch body |
-| `shell`, `exec_command`, `local_shell` | `Bash` |
-
-`apply_patch` is the one that changes behaviour rather than naming. A single call
-can add, update, delete and move many files, so the paths are extracted from its
-`*** Add File:`, `*** Update File:`, `*** Delete File:` and `*** Move to:`
-headers and each is checked separately. **One out-of-scope or protected file
-rejects the whole patch** — split it rather than widening the step. The patch text
-also arrives in `tool_input.command`, which is where a shell command lives for
-`Bash`; the guards only treat that field as a command when the tool really is a
-shell, so a patch body is never parsed as a command line.
-
-**Codex will not run these hooks until you trust them.** A non-managed hook has
-to be reviewed and approved through `/hooks` first. Until you do, everything
-below describes rules that are installed but not being applied.
+Two differences stay. Codex's read tool is not on the hook path, so
+`cap-large-read.py` is Claude-only and the read rule is prose there. And Codex
+runs a hook only after you have **reviewed and trusted it in `/hooks`**; after
+an upgrade changes an entry, that entry is skipped until you trust it again,
+and nothing on screen says so.
 
 ## What these guards are, and are not
 
-They are **defence-in-depth against ordinary agent behaviour**. They stop the
-mistake an agent makes while trying to be helpful: reading `.env` to check a
-config value, editing one more file to finish a step, force-pushing to clean up a
-messy branch.
+A guard is a regular expression over a command line or a path, run on every
+matching tool call. That makes it defence-in-depth against an ordinary mistake:
+reading `.env` to check a value, editing one file too many, a `--force` typed
+out of habit. It is **not a security boundary**. A process that wants to get
+past it can build the command from variables, pipe through base64 or use a tool
+that is not on the hook path. The real backstops are server-side branch
+protection, secrets kept off the developer machine and human review of every
+diff. Each accepted gap is written down in [known-risks.md](known-risks.md).
 
-They are **not a security boundary**. Every rule is a regex over a command line
-or a path, and a determined process can read a file through an interpreter, build
-a command from variables, or pipe base64 into a shell. There is a tripwire for
-the most common obfuscations, and it is a tripwire, not a wall.
+## The git check — every repository
 
-The real backstops are human review and server-side branch protection. Treat these
-hooks as the thing that keeps an honest agent honest.
+Runs on `Bash` in every repository, with or without `.ai/`. A cheap prefilter
+(`git`, `gh`, `argocd`, `helm`, `kubectl`, `terraform`, `dep`, `deployer`,
+`cap`, `flyctl`, `fly`, `vercel`, `netlify`, `npm`) keeps every other command
+off the path. Prose is stripped before matching, so a commit message that
+mentions `--force` is not a force push. The rules, in order:
 
-## ai-git-guard — every repository
+1. **Staging a secret.** `git add` of a path matching
+   `sensitive_staging_patterns` — `.env` and its `.local|prod|production|staging|live`
+   variants, `secrets/`, `credentials/`, `id_rsa|dsa|ecdsa|ed25519`,
+   `*.pem|p12|pfx|jks|keystore`, `.aws/credentials`, `auth.json`, dumps and
+   exports in `.sql|.sql.gz|.csv`. `git add .`, `-A`, `--all` and `*` ask
+   `git status --porcelain --untracked-files=all` what they would stage.
+2. **Force push**: `-f`, `--force`, `--force-with-lease`, `--force-if-includes`.
+   A repository listed in `allow_force_push_repos` (by directory name) is exempt.
+3. **Remote branch delete**: `push --delete` / `-d`, or `push origin :branch`.
+4. **History rewrite**: `filter-branch`, `filter-repo`, `push --mirror`.
+5. **Push to a protected branch** — the target from the refspec, or the current
+   branch for a bare `git push`; `protected_branches` defaults to `main`,
+   `master`, `production`, `prod`, `stable`, `release/*`, `hotfix/*`.
+   `allow_protected_push_repos` exempts a repository.
+6. **Merge while on a protected branch**, `gh pr merge`, and `git reset --hard`
+   on a protected branch.
+7. **`--no-verify`** (or `-n`) on `commit` and `push`.
+8. **Production deploy commands** (`deploy_patterns`): `argocd app
+   sync|rollback|delete`; `helm upgrade|install|rollback|uninstall|delete …`
+   naming `prod`, `production` or `live`; `kubectl --context …prod|production|live`;
+   `kubectl delete|drain|cordon namespace|node|deployment`; `dep|deployer deploy
+   prod`; `cap production deploy`; `terraform apply|destroy`; `fly|flyctl
+   deploy`; `vercel|netlify deploy|--prod`.
+9. **`npm publish`** and **`npm version`** — a release is a human's command.
+10. **Consent.** With the dialog switch on (`.ai/policies/dialog.json`), a
+    `git commit` or `git push` runs only as the next live pick the human made
+    in the runtime's dialog, verbatim; anything else is refused as
+    `CONSENT_REQUIRED`. A pick never lifts rules 1–9.
 
-Registered on `Bash`, active everywhere, whether or not the project uses `.ai/`.
-The operations it refuses are wrong in any repository and are precisely the ones
-that cannot be undone from a chat session.
+**Configuration.** The installer copies `hooks/ai-git-guard-defaults.json` to
+`~/.claude/hooks/ai-git-guard.json` and `~/.codex/hooks/ai-git-guard.json`
+once and never overwrites them, so a local edit survives a re-install; each
+runtime has its own copy. The tunables are `protected_branches`,
+`deploy_patterns`, `sensitive_staging_patterns`, `allow_force_push_repos` and
+`allow_protected_push_repos`. An empty list falls back to the shipped default
+for that key. The shared policy `policies/git.md` says the same rules in prose
+for the agent.
 
-| Rule | Refuses |
-|---|---|
-| secrets | `git add` of a path matching the sensitive list; for `git add .` / `-A` it asks `git status` what would actually be staged |
-| force push | `--force`, `-f`, and `--force-with-lease` alike |
-| branch delete | `git push origin --delete x`, `git push origin :x` |
-| history rewrite | `filter-branch`, `filter-repo`, `push --mirror` |
-| protected branch | push or merge to `main`, `master`, `production`, `prod`, `stable`, `release/*`, `hotfix/*` |
-| pull request merge | `gh pr merge` |
-| hook bypass | `--no-verify` on commit or push |
-| destructive reset | `git reset --hard` while a protected branch is checked out |
-| deployment | `argocd app sync`, `helm upgrade … prod`, `kubectl --context …prod`, `terraform apply`, `deployer deploy prod`, `cap production deploy`, `fly deploy`, `vercel --prod` |
+## The path check — where `.ai/` exists
 
-**Branch resolution.** A bare `git push`, or `git push origin HEAD`, targets
-whatever is checked out — so the guard asks `git branch --show-current` rather
-than matching the string "main" in the command. `git push origin feature/x:main`
-is resolved to its destination, `main`, and refused.
+Runs on `Read`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit` and `Bash`, and
+is inert outside a project with `.ai/` above the working directory — with one
+exception, the `--confirm-delete` rule below, which holds everywhere. Patterns
+are POSIX extended regular expressions over the absolute path, both the literal
+path and its resolved one, so a symlink to a secret is caught, and creating one
+(`ln -s`) is refused too.
 
-**Prose is stripped first.** Commit messages and heredoc bodies are removed before
-any rule matches, so `git commit -m "stop force-pushing in the deploy script"` is
-a commit, not a force push.
+Four lists, from `hooks/ai-path-guard-defaults.json` unioned with the
+project's `.ai/policies/path-guard.json`; `allow_patterns` wins over every other
+list:
 
-Configuration: `~/.claude/hooks/ai-git-guard.json` and
-`~/.codex/hooks/ai-git-guard.json`. The installer seeds each one once from the
-shipped defaults and **never overwrites it**, so your edits survive a re-install.
-Each runtime has its own copy, so edit both if you want the same local rule in
-both. `protected_branches` and `deploy_patterns` are the ones you will want to
-adjust; `allow_force_push_repos` and `allow_protected_push_repos` take repository
-names as an escape hatch.
-
-**Not enforced here:** "do not weaken a test or a static-analysis level to make a
-check pass" is not a property of a git command. It is checked by `ai-reviewer`
-and reported by `ai-release`, and it is stated in `policies/git.md` (shared tree).
-
-## ai-path-guard — where `.ai/` exists
-
-Registered on `Read`, `Edit`, `Write`, `NotebookEdit` and `Bash` — and on
-`apply_patch` under Codex, where the `Read` half does not apply because reads are
-not hookable there. Its first act is
-to look for a `.ai/` directory above the working directory; without one it exits
-immediately, which is why it can be registered globally and still be invisible in
-repositories that never opted in.
-
-It refuses four kinds of path:
-
-**Sensitive** — `.env` and its environment variants, `secrets/`, `credentials/`,
-`.ssh/`, private keys and certificates, cloud credential files, `.sql` dumps and
-customer exports, production logs. Allowed back in: `.env.example` and friends,
-migrations, fixtures, test SQL.
-
-**Control files** — `.ai/state/*.json`, `.ai/state/handoff.md`,
-`.ai/reports/<task-id>/questions.md`, `.ai/reports/<task-id>/events.jsonl`,
-`.ai/policies/*.json`, and the guards' own scripts and configuration under
-`~/.claude/hooks/ai-*` and `~/.codex/hooks/ai-*` (including
-`codex-model-gate.py`, the shim that keeps the protected name). Reading them is fine; writing them is not. State is
-written by `state.py`; policy is edited by a human, outside an agent run, where
-the change is reviewable.
-
-These control files and the runtime configuration below belong to **this
-project and the installed runtime**, so their patterns are anchored
-(direct-mode-diet §4b). A path counts only when it lies under a project root
-or under a runtime home (`~/.claude`, `~/.codex`, `$CLAUDE_CONFIG_DIR`,
-`$CODEX_HOME`). A project root is the `.ai/` root of the session's working
-directory, as written and as resolved, and every ancestor of it that also holds
-`.ai/`. The ancestors matter because a session whose working directory sits in
-a nested `.ai/` tree is still the outer project's session. Such a tree is a
-fixture, the ai-init templates, or a worktree, and the outer project's state
-must stay guarded from there. The pattern is then matched against the path relative to that
-root, so a leading `(^|/)` means the top of the root. A copy elsewhere is an
-ordinary file: a fixture tree in the scratchpad,
-`skills/ai-init/templates/.ai/`, `tests/fixtures/**/.ai/`, or another
-`.claude/hooks/` that is no runtime home. The path is normalised first, so
-`src/../.ai/policies/x.json` and `//.ai/./state/` are still the root's. A path
-that misses as written but would have matched unanchored is resolved and tried
-again, so a link to the root still counts. Its longest existing directory and
-the roots are resolved with `cd -P`, inside the subshell the check already runs
-in, so no process is started. A path that still holds shell text,
-such as `$HOME`, `$PWD`, a backtick, `~` or a glob, cannot be placed under a
-root or outside one, so it is matched unanchored as before. A project pattern
-that starts with `^` was written against the absolute path and is still matched
-against it. The residual is accepted: an agent in project A can write project
-B's `.ai/state/` by absolute path and A's guard does not see it. B's guard
-does, in B's session. `deny_patterns` and `dependency_instruction_patterns` are
-not anchored, because a secret is a secret anywhere and a vendored instruction
-file is third-party data anywhere.
-
-One gap is known and predates the anchoring. A `$CLAUDE_CONFIG_DIR` or
-`$CODEX_HOME` that is not named `.claude` or `.codex` is guarded for the file
-tools only. A shell command reaches the path lists through a text pre-filter
-that looks for `.claude/` and `.codex/`. So `echo x > $CFG/hooks/ai-path-guard.sh`
-with a literal custom directory is not refused, as on HEAD.
-
-The three added with schema 2 are protected for the same reason the state file
-is — each is an input to a decision, not a document. `questions.md` carries the
-`[Answer]:` line that can *grant the approval gate*, so an agent that could edit
-it could approve its own plan. `events.jsonl` is the audit trail: an append-only
-journal that can be rewritten is not one. `handoff.md` is what the next session
-reads before anything else, so a writable handoff is a way to plant instructions
-for a future session. All three are written by `state.py` alone — `ask`,
-`answer`, `questions --sync`, `emit` and `handoff` — and all three stay
-**readable**, because reading them is how the work gets done.
-
-**Runtime configuration, while a task is in flight** — `.claude/settings*.json`,
-`.claude/agents/`, `skills/`, `commands/`, `hooks/`, `plugins/`, the `.codex/`
-equivalents and `config.toml`, and the pipeline's own `.ai/policies/`,
-`.ai/workflows/`, `.ai/templates/` and `.ai/AGENTS.md`, the installed shared tree
-`<home>/claude-agentic/ai/` and its resolver `ai-path`, plus the other runtimes'
-instruction files (`.cursorrules`, `.cursor/rules/`, `.github/copilot-instructions.md`,
-`.junie/guidelines.md`). The rule sources join them: `.ai/rules/` and the
-`.claude/rules/` copies rendered from it are instructions for a directory, and
-`docs/sdlc/constitution.md` is what the spec and the plan are judged against — a
-task that could rewrite either could widen its own scope or drop the principle
-it is failing. Reading is fine; writing is refused **only while an
-`/ai-task` run owns the project** — `.ai/state/current.json` exists and has not
-reached `done`. A run may not edit the rules it is being judged by; `state.py
-close` archives the task and the same files become ordinary files again. A state
-file that does not parse counts as in flight, because refusing to unlock the
-configuration on the strength of a corrupt file costs nothing.
-
-**Instruction files inside a dependency** — a `CLAUDE.md`, `AGENTS.md`,
-`GEMINI.md`, `.cursorrules`, `copilot-instructions.md` or the like under
-`vendor/`, `node_modules/`, `Pods/`, `site-packages/`, `third_party/` and
-friends. Both reading and writing are refused, always. Such a file is
-third-party text that arrived with a package: it is **data**, it carries no
-authority over the task, and the next install overwrites it anyway. Ordinary
-source inside a dependency is untouched — the rule is about instruction files,
-not about the directory.
-
-Both the literal path and its `realpath` are checked, so a symlink pointing at
-`.env` is caught. `ln -s .env public/x` is refused at creation time, because the
-link does not exist yet when the guard runs.
-
-For `Bash`, the guard extracts every argument-looking token and only complains
-when the token is genuinely an argument of a reading, copying or redirecting
-command — a path mentioned inside a message or a heredoc is left alone. There is
-a fast path: if nothing on the command line looks interesting, the guard exits
-after a single `grep`, which keeps it at tens of milliseconds even on a
-200-argument command.
-
-### Three rules that run before the fast path
-
-Everything above is about paths. Three rules are about a **command**, and they
-are evaluated before the fast path rather than after it — deliberately, and at a
-measured cost of two in-process regex matches per `Bash` call, plus a third only
-when the line contains `--co`, and no extra process
-(`docs/hook-performance.md`). The reason is that `state.py`, `update.py` and
-`context-guard.py` live in the *plugin*, not under `.ai/`, so
-`python3 …/skills/ai-task/state.py --root . approve` matches nothing in the
-guard's pattern lists: the fast path would have allowed it and returned before
-any later rule ran.
-
-**`state.py approve` from an agent session is refused.** The approval of a plan
-at T3+ is the one decision the pipeline may not make for itself, and a gate an
-agent can close is not a gate. The deny names the two ways a human closes it:
-
-```bash
-python3 <plugin>/skills/ai-task/state.py --root . approve --by "<name>"
-```
-
-run in **their own terminal** (the command checks for a TTY, so the same line
-run through the agent's shell — a pipe — exits 5 and changes nothing), or the
-`[Answer]: A` line on the gate's question in `.ai/reports/<task-id>/questions.md`,
-after which the session runs `state.py questions --sync`. The file route is the
-weaker of the two and knows it: it is accepted only behind a human turn —
-`last_prompt_at` in `.ai/state/session.json`, from the same session the plan was
-presented in, after the gate was requested.
-
-**Running `hooks/context-guard.py` by hand is refused too**, and only that one
-hook, because only that one writes state: `session.json` is the evidence the
-file route rests on, so an agent that could run the hook could mint the human
-turn it needs and then answer its own gate. Reading, diffing, linting and
-testing the file are untouched — the rule fires only in command position. These
-two rules are inert unless a task is in flight.
-
-**`update.py --apply --confirm-delete` from an agent session is refused** (WP6
-F3), task or no task — a deletion is irreversible either way — though, like
-every rule here, only when the session's working directory is inside a project
-with `.ai/`. The rule looks, within one command segment (a redirect's `&` does
-not end it), for a head (`update.py`, `-m update` with its target optionally
-quoted and short flags before `m`, or a variable in command position) followed by a prefix of `--confirm-delete` (argparse
-takes anything from `--co`) and a prefix of `--apply`; a backslash-newline is
-joined first. A `case *--co*` pre-check keeps it off every other command.
-`AI_UNATTENDED` in the hook's own environment lets a launcher through; typed on
-the command line it does not. The second line is in `adopt.py`: `human_gate()`
-refuses the flag under `CLAUDECODE` or a Codex session marker even with a pty,
-and the record says why the gate passed (`via: terminal | unattended`). Known
-false positive: `update.py` followed on the same segment by `--co…` and `--ap…`
-tokens that are not its own flags — search with the Grep tool instead.
-
-There is a third, cheaper route to the same place, and it is closed by the
-interpreter tripwire further down: `python3 -c 'open(".ai/state/session.json",
-"w")…'` writes the human turn without going through a file tool at all. Any
-interpreter one-liner that mentions `.ai/state/` or `.ai/reports/` **and shows
-a write** is refused for that reason (direct-mode-diet §4a). A one-liner that
-only reads them — `python3 -c "import json; print(json.load(open('.ai/state/current.json'))['current_stage'])"`
-— is allowed, because reading the state is how the work gets done. The write
-indicators are matched in process over the whole line:
-
-- a call that writes, removes, renames, links, copies or runs a command, in
-  Python, Perl, Ruby, Node or PHP: `write_text(`, `json.dump(`, `os.remove(`,
-  `writeFileSync(`, `File.delete(`, `file_put_contents(`, `write_file(`,
-  `system(`, `exec(` and the like. `stdout.write` and `stderr.write` print, so
-  they do not count. `copy(` counts only bare, as PHP spells it, not a dict's
-  `.copy()`; `copy_into(` and `move_into(` (Python 3.14) count anywhere;
-- a name that does the same without a call: `subprocess`, `shutil`,
-  `child_process`, `FileUtils`, the `O_WRONLY`-style flags, `os.replace`,
-  `fileinput`'s `inplace`, a backtick, `$( )`, `%x` and `qx`;
-- on a line that says `Path`, a `.replace(target)` with one argument — a
-  `str.replace(old, new)` has two and is no write — or a `.copy(target)` with
-  an argument (`Path.copy`, Python 3.14) — a dict's `.copy()` has none, and
-  `copy.copy(x)` does not count;
-- `open`, `new` or `FileIO` on the line, with a quoted mode that holds `w`, `a`,
-  `x` or `+` right after the first argument of `open…`, `new`, `new Class` or
-  `FileIO`, after `mode=` or right after `open…(`, or a Perl mode in the same
-  place (`">"`, `"+<"`, `"|-"`). The first argument is read as plain
-  characters, quoted strings and parentheses three deep counting the call's
-  own, so `open(os.path.join(os.getcwd(), p), 'w')`, `open('a,b.md', 'w')`
-  and `new IO::File(p, "w")` are seen; a fourth level of parentheses, or a
-  string holding its own kind of quote escaped, is not. A `count('a')` or a
-  `d.get('x', 'a')` elsewhere on the line is no mode;
-- a shell redirect or a `tee` whose target is under those paths.
-
-An `eval` that mentions them is refused as before, because its body is opaque.
-So is `perl -i` or `ruby -i` (an `i` in a cluster of switches that take no
-argument, such as `-pi`, `-ni`, `-gpi` or `-i.bak`; also after `-C`, `-E`,
-`-I`, `-M`, `-m` or `-r`, which may take a separate argument, as in
-`ruby -r json -i`), because it
-rewrites the files it is given. `ruby -rdigest` and `perl -mio` load a library
-and are no `-i`. Deliberate obfuscation, such
-as a computed mode, `getattr` or base64, is not read: the guards defend against
-mistakes, not against a command built to pass them.
-
-The rule also reaches further than it did. HEAD reached the tripwire only when
-the line named a protected file. Now any line with an interpreter `-c`/`-e` (or
-an in-place `perl`/`ruby`) that names `.ai/state/` or `.ai/reports/` gets there.
-So a write into an unprotected report file, such as
-`.ai/reports/<id>/notes.md`, is refused too. A read of such a file is still
-allowed, unless the line happens to show one of the indicators above. Like the
-rest of the tripwire it is a tripwire, not a wall. It matches text, so it is not
-anchored to the project root the way the path lists are. It also misses an
-interpreter named by its path or version (`/usr/bin/python3`, `python3.12`),
-`perl -E`, and `php -r` on its own, as HEAD did.
-
-**`AI_UNATTENDED=1` turns both off**, because an unattended run has no human to
-take a turn. It is for a launcher — CI, a cron job, a scripted batch — that
-exports it in the *environment it starts the run in*. Do not export it in an
-interactive shell: it disables the gate for every session that inherits it, for
-as long as the shell lives, and nothing will remind you. What it does not do is
-hide: an approval taken this way is recorded in the state and in the journal as
-`via: "unattended"`, `unattended: true`, permanently, and `/ai-status` calls out
-any such approval by name. That is the trade — the gate can be turned off, but
-not quietly.
-
-**Under Codex, both rules exist only once you trust the hooks.** A non-managed
-hook is listed but not run until it is reviewed and approved through `/hooks`.
-Until then `state.py approve` from a Codex agent session is refused by nothing,
-and the gate is policy rather than enforcement. This asymmetry is accepted, not
-fixed: nothing in the plugin can approve a hook on the user's behalf, and a
-runtime that made it possible would have a worse problem than this one. Trust
-the hooks after installing, and `/ai-status` says so under Codex.
-
-Configuration: `hooks/ai-path-guard-defaults.json` (shipped, do not edit) unioned
-with `.ai/policies/path-guard.json` (per project), in five lists —
-`deny_patterns`, `allow_patterns`, `protected_config_patterns`,
-`task_protected_patterns` and `dependency_instruction_patterns`. Allow wins over
-every one of the others. When the guard refuses something it should not,
-**widen the allow list** — do not route around it.
-
-A path is classified against those lists in a fixed order: allow, then
-protected, then dependency, then task, then deny. That matters when you add
-patterns of your own, because the first list to match decides — and `protected`,
-`task` and `dependency` each permit reads that `deny_patterns` would have
-refused. A `task_protected_patterns` regex loose enough to also cover an `.env`
-would therefore *weaken* an existing secret-read rule rather than add to it.
-Keep a new pattern narrow enough that it cannot reach a path another list
-already covers. The shipped lists do not overlap.
-
-The dependency rule recognises a dependency by directory name (`vendor/`,
-`node_modules/`, `third_party/`, `Pods/`, …), so a first-party directory using
-one of those names has its own instruction files refused too. Projects laid out
-that way should put the owned paths in `allow_patterns`.
-
-## ai-scope-guard — during an implementation step
-
-Registered on `Edit`, `Write`, `NotebookEdit` and `apply_patch`. It does nothing unless
-`.ai/state/current.json` exists, its `current_stage` is `implementation`, and a
-step is current.
-
-It then matches the target against that step's `forbidden_files` (refused with the
-reason from the plan) and its `allowed_files` (refused with the literal token
-`SCOPE_CHANGE_REQUIRED`, which is what the manager watches for). Patterns are
-shell globs, so a plan can say `src/Payment/*.php` the way a human would.
-
-When a step is not found while the stage is `implementation`, the guard **allows**
-and the inconsistency is surfaced by `/ai-task` on the next resume. A guard that
-failed closed on its own state bug would strand the task.
-
-This is the hook that makes the plan real. Without it, "the step may touch these
-files" is a sentence in a document; with it, the sentence is enforced by the
-harness, and widening scope requires amending the plan.
-
-## runtime-gate — both runtimes, every plan
-
-`runtime-gate.py` is one hook for both runtimes. It does three jobs on every
-Agent launch — send the top model's launches one tier down while that model
-cannot serve the account, hold launches to the plan's budgets, and keep the
-account's quota — and it never denies, always exits 0, and falls open on any
-error. The runtime is the home it runs from: `~/.codex/hooks/` is Codex,
-anything else is Claude Code.
-
-`fable-gate.py` and `codex-model-gate.py` still exist, as sixteen-line shims
-that exec `runtime-gate.py` with their argv and stdin, so an old registration, an
-old statusline wrapper, or a habit (`fable-gate.py status`) keeps working. On
-Codex an upgrade keeps registering `codex-model-gate.py`. Codex runs only hooks
-the user has reviewed, and `config.toml` keeps each approval as a hash of the
-whole entry at its position (`[hooks.state."<file>:<event>:<group>:<index>"]`),
-so an unchanged entry keeps its approval and a changed one — the gate's
-`PreToolUse`/`PostToolUse` matcher is now `^Agent$|spawn_agent$`, and
-`SubagentStart` is new — needs one look in `/hooks`; until then Codex skips it,
-which leaves the gate as blind to launches as it was before.
-
-**Codex 0.155 agent launches (checked live against codex-cli 0.155.1, 2026-09-22).**
-Multi-agent v2 puts `spawn_agent` in the `collaboration` namespace, and hooks
-see the tool as `collaborationspawn_agent` — namespace and name, no separator,
-no `Agent` alias; v1 calls it `spawn_agent`. `PreToolUse` and `PostToolUse` do
-fire for it. Codex reads a matcher made only of `[A-Za-z0-9_|]` as a list of
-exact names, so the old `Agent|spawn_agent` never matched; any other character
-makes it a regex, tested unanchored, so the gate's matcher is
-`^Agent$|spawn_agent$`. (An MCP tool whose name ends in `spawn_agent` matches
-too; the gate treats it as a launch, which is harmless.) Parallelism is capped
-by Codex itself through `agents.max_concurrent_threads_per_session` in
-`config.toml`; the budgets below only explain.
-
-| Event | Claude Code | Codex |
+| List | On | Shipped default |
 |---|---|---|
-| `PreToolUse` (`Agent`; Codex: `spawn_agent`, `collaborationspawn_agent`) | Fable reroute; budgets | EXPERT reroute; budgets; refreshes the quota |
-| `PostToolUse` (same tools) | a Fable agent that fell back (overload) | an expert launch that returned an availability error |
-| `SubagentStart` / `SubagentStop` | the running-agent count | the running-agent count, rated by the child's resolved `model` when that is STRONG or EXPERT; `SubagentStart` also catches a missed reroute; `SubagentStop` records an EXPERT failure |
-| `StopFailure` (`rate_limit\|model_not_found`) | on a Fable install only | — (Codex has no such event) |
-| `statusline --then <cmd>` | the quota, and the Fable weekly limit | — |
+| `deny_patterns` — secrets | read **and** write | `.env` and its `.local|prod|production|staging|live` variants, `secrets/`, `credentials/`, `.ssh/`, `id_rsa|dsa|ecdsa|ed25519`, `*.pem|p12|pfx|jks|keystore`, `.aws/credentials`, `.docker/config.json`, `kubeconfig` / `.kube/config`, dumps and exports in `.sql|.sql.gz|.sql.bz2|.csv|.xlsx`, any `*.sql|*.sql.gz`, production logs under `var/log/`, `auth.json` |
+| `allow_patterns` | lifts a deny | `.env.dist|example|sample|test|template`, docs and templates under `secrets/`, `migrations/*.sql|.php`, `tests/*.sql`, `fixtures/*.sql|.csv` |
+| `protected_config_patterns` — the pipeline's own files | write refused, read allowed | `.ai/state/` (the task state, the handoff, the consent ledger), `.ai/reports/<id>/task.md`, `questions.md`, `events.jsonl`, `adopt.json`, `migration.json`; `.ai/policies/*.json`; the compact record `.ai/memory/` and `.ai/local/memory/`; the installed guards and their configuration (`.claude/hooks/ai-*`, `.codex/hooks/ai-*`, `runtime-gate.py`, `hooks/guard/`, `hooks/lib/`), `skills/ai-task/` (where `state.py` lives) and the plugin cache `plugins/cache/*/riskrails` |
+| `task_protected_patterns` — the rules a run is judged by | write refused only while a task is in flight (`.ai/state/state.json` exists and has not reached `done`) | `.claude/settings*.json`, `.codex/config.toml`, `.claude/plugins/installed_plugins.json`, `.ai/policies/`, the shared tree `<home>/riskrails/ai/` and its `ai-path` resolver |
 
-State lives in `<home>/state/runtime-gate.json` — the outage record, the quota,
-the per-task EXPERT counts and the running agents. On the first run after an
-upgrade, a live record in the old `fable-gate.json` or `codex-model-gate.json` is
-imported once.
+A project's `dependency_instruction_patterns`, from an older policy file, is
+read as `deny_patterns`.
 
-```bash
-~/.claude/hooks/runtime-gate.py status          # active until …, or inactive
-~/.claude/hooks/runtime-gate.py quota [--json]  # weekly and 5-hour use, when seen, stale?
-~/.claude/hooks/runtime-gate.py clear           # try the top model again now
-~/.claude/hooks/runtime-gate.py set 3600 reason # route one tier down for an hour
-```
+**Shell commands.** A `Bash` command is scanned as text once a loose match
+says it names a guarded path or a `state.py` / `update.py` verb. Top-level
+`sh -c '…'` and `eval` segments are split and each one checked; interpreter
+one-liners (`python3|perl|ruby|node|php -c|-e`) are scanned for a secret
+reference or a write to a control file. A command over 4 096 characters that
+names a guarded path or such a verb is refused outright ("Refusing a
+N-character shell command …"), as is a single token over 4 096 characters that
+carries a glob or an expansion, and a `--co…` / `--ap…` line over 16 384
+characters. A shell `mv`, `cp` or `rm` of a directory that holds a control
+file or a runtime configuration is refused as a whole.
 
-(`~/.codex/hooks/runtime-gate.py` answers the same commands for Codex.)
+**Human-only commands.** These are refused from an agent session and pass
+only as the dialog's pick, or under `AI_UNATTENDED=1`:
 
-### The reroute — Claude Code (Fable)
+- `state.py approve …` while a task is in flight;
+- `state.py profile set …` and any `state.py … --by <name>` verdict while the
+  dialog is on and no pick covers it;
+- `update.py --apply --confirm-delete …` — in every directory, `.ai/` or not;
+  `adopt.py`'s own `human_gate()` refuses it a second time when an agent
+  marker is in the environment;
+- running `hooks/dialog-gate.py` from a shell, unconditionally.
 
-On Max, Max 20x or Team Max with `--fable yes`, `architect` is pinned to
-`model: fable[1m]` — the one agent that runs on Fable; the session and every
-other agent stay on Opus. `fallbackModel` moves such an agent to Opus when Fable
-is **overloaded** — but a rate limit, a used-up usage limit, or a model the
-account cannot reach (`model_not_found`) never triggers that switch: the agent
-just fails, and so does the next one. The gate closes that gap.
+**Fast path.** A path that matches none of the lists exits in one in-process
+regex pass; the timed cases in `tests/test_guard_characterization.py` keep an
+`Edit`, `Write` or `Read` inside the step under 25 ms and a 1 KB `Bash`
+command under 40 ms ([hook-performance.md](hook-performance.md)).
 
-| Event | Does |
-|---|---|
-| `StopFailure` (`rate_limit\|model_not_found`) | when the failure is Fable's, records Fable as unavailable — 1 h for a rate limit, 6 h for model-not-found |
-| `PostToolUse:Agent` | a Fable agent that `resolvedModel`/`modelsUsed` show fell back: recorded for 15 min, so the next ones skip the failed attempt |
-| `PreToolUse:Agent` | while a record is live, returns `updatedInput` with `model: opus` for any agent that would run on Fable — resolved in Claude Code's order: an explicit `model`, then the definition's frontmatter (project before user), then `CLAUDE_CODE_SUBAGENT_MODEL`. Before Claude Code 2.1.251 (the JetBrains ACP adapter still bundles 2.1.219) the variable came first and overrode both; hooks are given no version, so the gate reads it from the `version` of the newest record in the payload's `transcript_path`, and only when the variable and the rest disagree about Fable. With no readable version the reroute assumes the current order — a wrong guess there costs nothing, because an old Claude Code lets the variable override the rewritten `model` just as it overrode the original, while the opposite wrong guess would let a pinned Fable agent launch during an outage and turn a Sonnet call into an Opus one; `PostToolUse` and `StopFailure` do not guess, and leave an agent the two orders disagree on out of the record. On an old Claude Code with the variable itself set to Fable no rewrite can take effect, so unset the variable — and tells Claude (`additionalContext`) and you (`permissionDecisionReason`) why |
+## The scope check — during an implementation step
 
-A failure is Fable's when its message names Fable, the failing agent's definition
-pins Fable, the transcript was last served by Fable, or a Fable agent launched in
-the last five minutes. Authentication, billing and account errors are ignored:
-they are account-wide, and Opus would fail the same way. When an agent was
-already running on Fable and failed, the managed `CLAUDE.md` block has the main
-session re-run that brief once on Opus.
+Runs on `Edit`, `Write`, `MultiEdit` and `NotebookEdit` (an `apply_patch`
+arrives as an `Edit`). It reads `.ai/state/state.json` (or the legacy
+`current.json`) and acts only while `current_stage` is `implementation` and a
+step is current: a write to a file the step does not name in `allowed_files`,
+or names in `forbidden_files`, is refused with `SCOPE_CHANGE_REQUIRED` in the
+reason. Globs use extended-glob syntax. The answer is never to reword the
+write: widen the task in place with `state.py start --amend --files "+<path>"
+--why "…"`, which is journaled, or leave the file for its own task.
 
-### The reroute — Codex (EXPERT → STRONG)
+## The decision check — while a decision is open
 
-`ai-expert` is pinned to the plan's EXPERT model; when it is rate-limited or the
-account cannot reach it, the agent fails, and so does the next one. The gate
-records that and sends EXPERT launches to the STRONG model at the STRONG effort
-(both read from `profile.json`) until it expires.
+The first check `ai-guard.py` runs, on every tool, and only when the dialog
+switch is on and `.ai/state/decision.json` holds a decision of this session.
+While it does, every tool is refused with `DECISION_PENDING …` except: the
+dialog tool itself, when its questions are the ones `state.py` prepared; a
+`Bash` command equal to the next live pick (a git pick is handed to the git
+check); and `state.py decision show|settle|fallback`. A guarded command that is
+not the next live pick voids the picks (`CONSENT_MISMATCH`). An offer the human
+never answered makes the gate run `state.py decision fallback` and refuse once.
 
-| Event | Does |
-|---|---|
-| `SubagentStop` | when the failure text names a rate limit, an unavailable model or an overload **and** the failure is attributable to an EXPERT agent, records the EXPERT model as unavailable — 1 h for a rate limit or overload, 6 h for model-not-found |
-| `PostToolUse` | the same signals in an expert launch's result |
-| `PreToolUse` | while a record is live, reroutes the launch in the one way Codex honours (below), with `permissionDecision: "allow"` and `updatedInput`, and says in `additionalContext` whose answer it is — or, when it cannot reroute, that the launch is **not rerouted** and why |
-| `SubagentStart` | backstop: a child whose resolved `model` is EXPERT while the record is live was missed. `SubagentStart` output accepts only `additionalContext` (it goes to the child; `continue: false` and exit 2 are ignored), so the gate tells the child and journals `missed_reroute {agent, model, reason}` |
+## dialog-gate — the human's picks
 
-**How a launch is rerouted.** Codex applies a role's pinned model *after* the
-call's own `model` (`prepare_agent_spawn_config`), so rewriting `model` cannot
-move a pinned role. What does work is naming another role:
+`state.py` opens a decision — the approval at close, a budget refusal, a
+guarded git command — by writing `.ai/state/decision.json`; the runtime's own
+question tool (`AskUserQuestion` on Claude, `request_user_input` on Codex) shows
+it. `dialog-gate.py` on `PostToolUse` records the answer as a pick or a decline
+in `.ai/state/consent.jsonl` and prints nothing. On `Stop`, while a decision is
+open, it blocks the turn with `DECISION_PENDING <ids> — call <tool> with exactly
+this JSON, then run the picked command verbatim`, at most `stop_blocks_max`
+times (default and maximum 2) per decision per human turn, then ends the turn
+with a `systemMessage` naming the terminal command (`state.py decision settle
+--id … --pick <n>`, or `decision fallback`). It never denies a tool and exits 0
+always.
 
-- **(a) a role that pins EXPERT** (`ai-expert`) becomes its twin: `agent_type`
-  is rewritten to `<role>-strong`, which the installer renders pinned to the
-  STRONG model and effort (`ai-expert-strong`, like `ai-risk-strong` and
-  `ai-planner-strong`). Only a twin whose file declares that `name` and pins a
-  model below EXPERT is used — naming a role Codex has not registered would fail
-  the spawn.
-- **(b) a launch no role pins** — an explicit EXPERT `model`, or EXPERT as
-  `default_subagent_model` — gets `model` and `reasoning_effort` set to the
-  STRONG values. The key is `reasoning_effort` in both v1 and v2; v2's
-  `SpawnAgentArgs` refuses unknown fields, so a `model_reasoning_effort` in the
-  call is dropped rather than passed on, and an effort outside
-  `minimal|low|medium|high|xhigh` is left out.
-- **(c) anything else** — a pinned EXPERT role without a usable twin, or
-  `AI_RUNTIME_GATE_MODE=context` — is explained, not rewritten.
+The switch is `.ai/policies/dialog.json` (`enabled`, `window_seconds` 120
+clamped to 30–600, `stop_blocks_max`), written on by `/rr-setup --update`
+(migration 0010) and off by setting `"enabled": false`. The gate is inert under
+`AI_UNATTENDED=1`, when `CLAUDE_CODE_SESSION_ATTENDED=0`, inside a subagent,
+without a session id, or when the installed profile's `dialog.tool` is not the
+runtime's question tool. Option labels are at most 400 characters and may not
+contain `; & | $( < >`, a backtick or a newline, so a pick can be run verbatim.
 
-**Why `SubagentStop`.** Codex has no `StopFailure` event, so there is no signal
-that says "this agent failed for this reason". The gate therefore only marks the
-record when the evidence actually points at an EXPERT agent: the expert model's
-name in the text, an explicit expert `model` in the payload, an agent file pinned
-to the expert model, or an expert launch within the last five minutes. The
-matching is deliberately narrow — rate limit, quota, 429, model-not-found,
-no-access, overloaded, 503, capacity. A bare "error" or "failed" does not count,
-because a gate that trips on any failure would keep the whole EXPERT tier
-downgraded for an hour over an unrelated bug.
+## cap-large-read — Claude only
 
-To resolve which model a launch would use, it checks the agent's own file first
-(`.codex/agents/` at the payload's `cwd` and each directory above it up to the
-git root, then `~/.codex/agents/`), then the explicit `model`, then `default_subagent_model` in
-`config.toml` — the order in which Codex itself lets them win. So an explicit
-cheap `model` on `ai-expert` does not take it past the gate, and an explicit
-EXPERT `model` on a pinned cheap role is left alone: it runs on the cheap one.
+Refuses an unbounded `Read` of a file over 4 000 lines or 250 KB
+(`AI_READ_MAX_LINES`, `AI_READ_MAX_BYTES`; the older `CLAUDE_READ_MAX_*` names
+still work). An explicit `limit` up to the line budget passes; a larger one is
+refused too, naming the budget. Images, PDFs and notebooks are skipped. The
+rule exists because a large file read into the context is paid for on every
+later turn; the cheap reader (`Explore`, `log-reader`) returns the `file:line`
+excerpts instead.
 
-Every rewrite made while a task is in flight is journaled once, as
-`model_fallback {agent, from, to, reason}` (actor `hook`), where `to` is the
-model the child actually gets, through the project's `state.py event`; a missed
-reroute is journaled as `missed_reroute`; with no task, nothing is written.
-`state.py events --type missed_reroute` lists the misses — each one means an
-untrusted hook entry, a missing twin, a launch shape the gate does not know, or
-a child that inherits the session's model — a spawn with no role, no `model` and
-no `default_subagent_model` (and v2's default `fork_turns: all`, which skips
-role application) runs on the parent's model, which the `PreToolUse` payload
-does not carry. Under `AI_RUNTIME_GATE_MODE=context` nothing is journaled: the
-gate chose not to reroute. Project agent files are looked up from the payload's
-`cwd` up to the first directory holding `.git`, then in `~/.codex/agents/`.
+## context-guard — context, compaction, session
 
-### Budgets
+One file for both runtimes; it reads its own location to know which one it is
+in.
 
-Budgets come from `<home>/claude-agentic/profile.json`, which `install.sh`
-writes per plan (`usage-report --budgets` prints them). Without that file every
-budget check is a no-op.
+- **`UserPromptSubmit`**: reads the context size from the transcript and warns
+  once per 10k tokens from 80% of the point where compaction fires (133k on a
+  200k session, 773k on a `[1m]` one). With `--context economy`, or a window
+  you set yourself, it also holds a prompt back once from 120% — sending the
+  same prompt again goes through. By default it never blocks.
+  `AI_CONTEXT_WARN_TOKENS` / `AI_CONTEXT_BLOCK_TOKENS` set the thresholds in
+  tokens; `0` turns one off. When the prompt starts a different task, it says
+  so and suggests `/clear`.
+- **`PreCompact`**: writes a snapshot — edited files, the latest instructions
+  verbatim, the todo list, the git state, the `.ai/` task state — and tells the
+  summary what to keep; after the compaction the snapshot comes back as
+  "Session state before compaction", which a resumed session trusts over the
+  summary. The snapshot is built from a Claude transcript and is Claude-only.
+- **`SessionStart`**: writes `.ai/state/session.json` (runtime, prompt count,
+  last human turn) and, with a task in flight, injects `handoff.md` and the
+  pending questions. Codex has the same three events, so the handoff crosses.
+- **`Notification:auth_success`** (Claude): after a login, checks whether the
+  account's plan drifted from the installed profile and opens the
+  `profile set` decision; `drift-ack.json` silences a known drift.
 
-- **EXPERT.** A launch of an EXPERT-tier agent asks first unless the plan has
-  `expert.without_asking` (Max 20x, ChatGPT Pro), and asks again once the task
-  in flight has used `expert.max_per_task`.
-- **Fan-out.** `SubagentStart`/`SubagentStop` count the agents running in each
-  session; a launch at `fan_out.max_parallel_agents`, or a STRONG/EXPERT launch
-  at `max_parallel_on_strong`, asks. An entry older than
-  `AI_RUNTIME_GATE_AGENT_TTL` (30 min) stops counting, so a lost `SubagentStop`
-  costs at most an extra question; `clear` empties the count. A launch that
-  goes ahead counts from its `PreToolUse` until its `SubagentStart` claims it
-  (60 s at most), so one message that launches several agents meets the limit
-  too; a launch that asks is counted only once it starts. `claude -p` sets
-  `CLAUDE_CODE_SESSION_ATTENDED=0`, and the gate treats that like
-  `AI_UNATTENDED=1`: nobody can answer, so it explains instead of asking. Every write to
-  the state file holds `<state>.lock` (`flock`), so a fan-out's parallel
-  starts, stops and outage records do not overwrite one another.
+Before a compaction it runs `git branch --show-current` and `git status
+--short` in the working directory — see [known-risks.md](known-risks.md).
 
-A launch's tier is its explicit `model` first, then its name in the plan's tier
-lists, then the model its definition pins — `ai-reviewer` with `model: sonnet` is
-a BALANCED launch. Claude Code gets `permissionDecision: "ask"` with the reason.
-Codex parses `ask` but does not support it, so there — and under
-`AI_UNATTENDED=1`, where nobody would answer — the launch goes through and the
-reason goes into `additionalContext`.
+## runtime-gate — the model ladder, enforced
 
-### Quota
+One hook for both runtimes, registered on the agent-launch events and wrapped
+around the statusline (`runtime-gate.py statusline --then '<your command>'`).
 
-Advice only; the quota never refuses anything. Claude Code gives the
-statusline, not hooks, the account's `rate_limits`, so the installer wraps the
-statusline on **every** Claude plan:
+- **Reroute.** While the top model is rate-limited or unreachable, a launch
+  that asks for it goes one tier down: Fable → Opus on Claude; on Codex an
+  EXPERT launch is rewritten to STRONG — to a `<role>-strong` twin when one is
+  installed, otherwise by setting the model and effort on the call — because a
+  Codex agent file's pinned model beats the model asked for at launch. The
+  outage is learned from `StopFailure`
+  (`rate_limit|model_not_found`, Claude with Fable) or from the error text at
+  `PostToolUse` / `SubagentStop`, and held for a TTL: 1 h after a rate limit,
+  6 h after a model-not-found, 15 min after an overload
+  (`AI_RUNTIME_GATE_TTL`, `_NOT_FOUND_TTL`, `_OVERLOAD_TTL`). Every reroute is
+  journaled as `model_fallback`; an EXPERT child that starts during an outage
+  anyway is journaled as `missed_reroute`.
+- **Budgets.** Before an EXPERT launch, or a launch past the plan's fan-out,
+  it asks on Claude and explains on Codex (a Codex hook cannot ask).
+  `expert.max_per_task` and the agent counts come from
+  `<home>/riskrails/profile.json`; a running-agent entry expires after 30
+  minutes (`AI_RUNTIME_GATE_AGENT_TTL`) if its `SubagentStop` was lost.
+- **Quota.** The statusline payload (Claude) and the newest rollout (Codex)
+  record the weekly usage; from `WEEKLY_PCT` 90 (`AI_RUNTIME_GATE_WEEKLY_PCT`)
+  every Fable launch goes to Opus until the reset. `runtime-gate.py status`
+  shows the gate, `clear` re-enables the top model early and empties the agent
+  count, `quota --json` prints the record with its `stale` and `resets_at`
+  fields.
+- State lives in `<home>/state/runtime-gate.json`; `AI_RUNTIME_GATE=off`
+  disables the hook. The older `CLAUDE_FABLE_GATE_*` and `CODEX_MODEL_GATE_*`
+  variables are still read.
 
-```
-"$HOME/.claude/hooks/runtime-gate.py" statusline --then '<your original command>'
-```
+Codex has no `StopFailure`, so a failure there is attributed at
+`SubagentStop`, and only when the evidence points at an EXPERT agent: its name
+in the text, an explicit expert `model`, an agent file pinned to the expert
+model, or an expert launch inside the last five minutes.
 
-The gate records `rate_limits.seven_day` and `five_hour`, then runs your command
-on the same input and passes its output and exit code through — what you see does
-not change. With no statusline configured, the installer adds the bare check,
-which prints nothing. On a Fable install, at `AI_RUNTIME_GATE_WEEKLY_PCT` (90)
-percent of the week used, Fable agents also go to Opus until `resets_at`.
+## Turning a guard off for one repository
 
-Codex exposes no quota to a hook; the gate reads the last `token_count` event of
-the newest rollout (`~/.codex/sessions/…/rollout-*.jsonl`, the last 64 KB, at most
-once a minute). `quota --json` prints `{runtime, weekly_pct, five_hour_pct,
-resets_at, seen_at, source, stale}`; a reading older than 24 h, or past its
-reset, is `stale`. `state.py` uses the quota for its `preferred runtime:` advice.
+- A git rule: edit `~/.claude/hooks/ai-git-guard.json` (and the Codex copy) —
+  `allow_force_push_repos`, `allow_protected_push_repos`, or a narrower
+  pattern list.
+- A path rule: the project's `.ai/policies/path-guard.json` adds
+  `allow_patterns`; it cannot remove a shipped deny, because the lists are
+  unioned.
+- The dialog: `"enabled": false` in `.ai/policies/dialog.json`.
+- The scope guard: it is the plan; widen the task with `start --amend`.
 
-### Registration and upgrades
-
-Every Claude install merges `settings.gate.json`: `PreToolUse:Agent`,
-`PostToolUse:Agent`, `SubagentStart`, `SubagentStop`, plus `StopFailure` on a
-Fable install. `codex/hooks.json` registers the same four on Codex. Before
-merging, the installer removes every `fable-gate`, `codex-model-gate` or
-`runtime-gate` entry already there — your own hooks on the same events stay — so
-an upgrade ends with exactly one gate per event, and an old
-`fable-gate.py statusline` wrapper is re-pointed with your command kept. Codex
-lists the renamed command as a new hook: review it once in `/hooks`.
-
-Tuning: `AI_RUNTIME_GATE=off` disables every check (the wrapped statusline
-still runs); `AI_RUNTIME_GATE_STATE`, `_TTL`, `_NOT_FOUND_TTL`, `_OVERLOAD_TTL`,
-`_LAUNCH_WINDOW`, `_WEEKLY_PCT`, `_FALLBACK`, `_EXPERT`, `_FALLBACK_EFFORT`,
-`_MODE` and `_AGENT_TTL` override the defaults; `AI_RUNTIME_GATE_CLAUDE_<name>`
-or `AI_RUNTIME_GATE_CODEX_<name>` sets one runtime only and comes first. The
-shared `_FALLBACK`/`_EXPERT` are ignored by the runtime whose model they are not,
-and a number that does not parse keeps its default. The old names —
-`CLAUDE_FABLE_GATE*` on Claude Code, `CODEX_MODEL_GATE*` on Codex — still work;
-the new name wins where both are set.
+A hook removed from `settings.json` or `hooks.json` is simply gone — the
+installer puts it back on the next run.
 
 ## Testing them
 
 ```bash
-bash tests/run-all.sh
+python3 -I tests/run_suite.py tests/test_ai_git_guard.py tests/test_ai_path_guard.py tests/test_ai_scope_guard.py
+python3 -I -m unittest discover -s tests -p test_guard_characterization.py
+python3 -I tools/golden-diff.py            # which golden records moved against HEAD
 ```
 
-`tests/test-fable-gate.sh` and `tests/test-codex-model-gate.sh` drive the gate
-through the old names, every event, with synthetic payloads — including
-malformed input, an unwritable state directory, expiry and explicit-model
-precedence — and install each plan and `--fable` option into scratch directories,
-including switching Fable off and on and upgrading an install from before the
-rename. `tests/test-runtime-gate.sh` covers what is new: the runtime read from the
-home, new names over old, the one-time import, the quota from a statusline
-payload and a rollout, the EXPERT and fan-out budgets on both runtimes, and the
-`model_fallback` journal line.
-
-Each guard has a fixture suite: a JSON payload plus the expected decision, run
-through the real script. `tests/fixtures/codex-hooks/` holds the Codex ones,
-including `apply_patch` payloads that touch several files at once. Adding a rule
-means adding a fixture — including one that proves the rule does **not** fire
-where it should not, which is the half that gets forgotten.
-
-`tests/test-guard-characterization.sh` is the other half: it pins the exact
-behaviour of all three guards — exit code and full deny text, byte for byte —
-against a golden file, so a change made purely for speed can be proved to change
-nothing. See `docs/hook-performance.md` for what the guards cost per tool call,
-the budget they are held to, and what is deliberately not optimised.
+The fixtures under `tests/fixtures/{git,path,scope}-guard/` and
+`tests/fixtures/codex-hooks/` are JSON payloads for both runtimes.
+`tests/fixtures/guard-characterization/golden.txt` holds 1 341 recorded
+decisions — exit code and full deny text — and
+`test_guard_characterization.py` compares the guard against it byte for byte,
+so a performance change or a port proves it moved no decision. A deliberate
+rule change re-records with `tools/golden-diff.py --record` and the diff is
+read record by record; `hooks/CLAUDE.md` says how such a change is weighed.
+`tests/test_dialog_gate.py`, `test_dialog_consent.py`, `test_context_guard.py`
+and `test_runtime_gate_{fable,codex}.py` cover the other hooks; no suite reads
+or writes the real `~/.claude` or `~/.codex`.

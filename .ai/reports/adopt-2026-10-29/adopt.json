@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "mode": "migrate",
+  "adopted_at": "2026-10-29T21:15:46Z",
+  "original_bytes": 2589,
+  "original_skipped": [],
+  "status": "applied",
+  "split": {
+    "CLAUDE.md": {
+      "by": "proposal",
+      "proposal_sha": "sha256:426ab69f4f57bc3bba328110122fc1d09908a9abc80a46549c0613518adbdaa7",
+      "kept_bytes": 870,
+      "moves": 0,
+      "dropped": 2
+    }
+  },
+  "tools": {
+    "claude": {
+      "files": 1
+    }
+  },
+  "sources": [
+    {
+      "path": "CLAUDE.md",
+      "sha": "sha256:940b538787287252efac179c60102de05b56a460407b52a07522dc68b27e730f",
+      "tool": "claude",
+      "transform": "instruction-file",
+      "cleanup": false,
+      "dest": "CLAUDE.md",
+      "dest_sha": "sha256:940b538787287252efac179c60102de05b56a460407b52a07522dc68b27e730f",
+      "original": "original/CLAUDE.md"
+    }
+  ],
+  "dropped": 6,
+  "ignored": [],
+  "unmapped": [],
+  "checks": {
+    "no_line_lost": {
+      "status": "pass",
+      "checked_at": "2026-10-29T21:15:46Z",
+      "lines": 8,
+      "missing": 0
+    },
+    "no_dangling": {
+      "status": "pass",
+      "checked_at": "2026-10-29T21:15:46Z",
+      "hard": 0,
+      "warn": 0
+    },
+    "no_line_added": {
+      "status": "pass",
+      "checked_at": "2026-10-29T21:15:46Z",
+      "added": 0
+    }
+  },
+  "cleanup": {
+    "offered": true,
+    "confirmed_by": null,
+    "at": null,
+    "via": null,
+    "unattended": null,
+    "tty": null,
+    "deleted": []
+  }
+}

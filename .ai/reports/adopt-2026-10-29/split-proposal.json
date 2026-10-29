@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "source": "CLAUDE.md",
+  "source_sha": "sha256:0f7292e409284c3fee93bfc109b35ae6faa61c50f706e9478e992f356b8d6764",
+  "keep": [[1, 2], [21, 22], [25, 27]],
+  "moves": [],
+  "dropped": [
+    {"lines": [3, 20], "why": "empty template scaffolding: Commands, Verification, Conventions, Architecture headings with placeholder comments only; Verification lives in .ai/policies/testing.md and the managed block"},
+    {"lines": [23, 24], "why": "template placeholder comment of 'Things Claude Code gets wrong'"}
+  ]
+}

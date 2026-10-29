@@ -47,6 +47,7 @@ else runs in between.
   which, in one line; silence is not a verdict.
 - A failure in a step's own tests is fixed in that step, before `step-done`;
   the batch rule below is for the two end-of-task runs.
+- After a green suite, a documents-only edit runs `doc_tests` (step scope), not the suite.
 
 ## Reading a failure
 
@@ -66,6 +67,9 @@ Classify before fixing. The four answers are:
   is missing.
 - **UNKNOWN** — you could not tell. Say what you tried.
 
+A review's MEDIUM and LOW findings are recorded with `state.py memory risk add`, not
+fixed in the task; only a BLOCKER, a HIGH or a regression buys an `--after-fix` run.
+
 **Never edit a test to make it pass when production behaviour changed
 unexpectedly.** A test that suddenly disagrees with the code is evidence, and
 deleting evidence is the worst available option.
@@ -84,18 +88,18 @@ the end of the task. A bugfix still shows its new failing test first — that on
 test only, through `single_test`.
 
 ```
-verify_command:      bash tests/run-all.sh
-step_test_command:   bash -c 'rc=0; for t in {files}; do bash "$t" || rc=1; done; exit $rc'
-e2e_command:         bash tests/test-end-to-end.sh
+verify_command:      python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath
+step_test_command:   python3 -I tests/run_suite.py {files}
+e2e_command:         AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
 lint_command:        pylint $(git ls-files '*.py')
+doc_tests:           tests/test_memory_risks.py tests/test_rename.py tests/test_no_size_tokens.py tests/test_instruction_budget.py tests/test_skills_surface.py tests/test_shared_prompts_model_free.py tests/test_project_update.py tests/test_shared_tree.py
 typecheck_command:   none
-healthy_output:      run-all.sh ends with "all suites passed" and exit 0; each suite prints
-                     "<name>: N passed, 0 failed". pylint ends with "rated at 10.00/10".
-                     test-end-to-end.sh ends with "end to end: N passed, 0 failed".
-runtime:             run-all.sh ~4-5 min (the CI job measures 4m21s); test-end-to-end.sh
-                     ~7 s; pylint ~5 s; any single suite seconds, except the install and
+healthy_output:      unittest prints "Ran N tests" and ends with "OK" (or "OK (skipped=N)")
+                     and exit 0. pylint ends with "rated at 10.00/10".
+runtime:             the fast suite ~1.5 min parallel (tests/run_suite.py); CI's serial unittest discover ~5 min; the
+                     e2e suite ~7 s; pylint ~5 s; any single suite seconds, except the install and
                      adopt suites, which scaffold scratch trees and take tens of seconds.
-single_test:         bash tests/test-<name>.sh
+single_test:         python3 -I -m unittest discover -s tests -p test_<name>.py
 ```
 
 `step_test_command` may contain `{files}`, which is replaced by the paths the
@@ -118,43 +122,40 @@ free of them.
 
 ## Project specifics
 
-Every suite is a bash script under `tests/`, self-contained: it scaffolds what it
-needs into a `mktemp -d` and removes it on exit. `tests/lib.sh` holds the
-harness — `pass`, `fail`, `summary`, and the fixture runners for the hook
-payloads under `tests/fixtures/`. There is no unit/integration split: the axis is
-what a suite exercises, not how deep it goes.
+The suites are Python `unittest` modules, `tests/test_*.py`, self-contained: each
+scaffolds what it needs into a temporary directory and removes it on exit.
+`tests/guard_harness.py` holds the fixture runners for the hook payloads under
+`tests/fixtures/`. `tests/` is not a package, so a module is addressed with
+`discover -s tests -p test_<name>.py`, never `tests.test_<name>`. Since 3.5 the
+install suites are Python on `tests/install_harness.py`, and since 3.3e the runtime-gate
+suites are `tests/test_runtime_gate_{fable,codex}.py`; no `.sh` suite is left.
 
-`tests/run-all.sh` names its suites in a literal list, so **a new test file is
-not run until it is added there**. It skips a suite that is missing rather than
-failing, which is deliberate for a partial checkout and worth remembering when a
-suite seems to have disappeared from the count.
-
-`verify_command` includes `test-end-to-end.sh`, so the end-of-task `e2e_command`
-run is a second run of the same suite. At 7 seconds that is cheaper than an
-exception to the rule; keep it.
+`verify_command` is one `unittest discover` over every `tests/test_*.py`, so a new
+suite runs without being listed. `test_end_to_end.py` skips itself without
+`AI_E2E`, so `verify_command` excludes it and `e2e_command` is its only run.
 
 **A step names its own suites, by hand, in `allowed_files`-style paths.** There
 is no mechanical map from a source file to its tests; the useful ones are:
 
 | Touching | Run |
 |---|---|
-| `skills/usage-report/**` | `tests/test-usage-report.sh`, `tests/test-codex-usage-report.sh` |
-| `hooks/ai-*-guard.sh` | `tests/test-ai-path-guard.sh`, `tests/test-ai-scope-guard.sh`, `tests/test-ai-git-guard.sh`, `tests/test-guard-characterization.sh` |
-| `skills/ai-task/state.py` | `tests/test-ai-task-state.sh`, `tests/test-ai-status-root.sh` |
-| `skills/ai-task/sensors.py` | `tests/test-ai-task-sensors.sh` |
-| `skills/project-update/**` | `tests/test-project-update.sh`, `tests/test-merge-migration.sh`, `tests/test-project-adopt.sh`, `tests/test-scaffold-idempotency.sh` |
-| `install.sh`, `profiles/**`, `scripts/resolve-profile.py` | `tests/test-install-dry-run.sh`, `tests/test-profiles.sh`, `tests/test-codex-install.sh`, `tests/test-dual-runtime-install.sh` |
-| `hooks/fable-gate.py`, `hooks/runtime-gate.py`, `hooks/context-guard.py` | `tests/test-fable-gate.sh`, `tests/test-runtime-gate.sh`, `tests/test-context-guard.sh` |
-| `agents/**`, `codex/**`, `instructions/**` | `tests/test-codex-agent-render.sh`, `tests/test-shared-prompts-model-free.sh`, `tests/test-instruction-budget.sh` |
+| `skills/usage-report/**` | `tests/test_usage_report.py`, `tests/test_codex_usage_report.py` |
+| `hooks/ai-guard.py`, `hooks/guard/**` | `tests/test_ai_path_guard.py`, `tests/test_ai_scope_guard.py`, `tests/test_ai_git_guard.py`, `tests/test_guard_characterization.py`, `tests/test_guard_differential.py`, `tests/test_ere_unit.py` |
+| `skills/ai-task/state.py`, `weight.py` | `tests/test_ai_task_state.py`, `tests/test_ai_status_root.py`, `tests/test_weight.py` |
+| `skills/ai-task/sensors.py` | `tests/test_ai_task_sensors.py` |
+| `skills/project-update/**`, `skills/rr-setup/**`, `hooks/project-scaffold.*` | `tests/test_project_update.py`, `tests/test_merge_migration.py`, `tests/test_project_adopt.py`, `tests/test_scaffold_idempotency.py`, `tests/test_scaffold_differential.py`, `tests/test_setup.py` |
+| `bin/riskrails.js`, `profiles/**`, `scripts/resolve-profile.py` | `tests/test_install_dry_run.py`, `tests/test_profiles.py`, `tests/test_codex_install.py`, `tests/test_dual_runtime_install.py`, `tests/test_shared_tree.py`, `tests/test_install_routes.py` |
+| `hooks/runtime-gate.py`, `hooks/context-guard.py` | `tests/test_runtime_gate.py`, `tests/test_context_guard.py`, `tests/test_runtime_gate_fable.py`, `tests/test_runtime_gate_codex.py` |
+| `agents/**`, `codex/**`, `instructions/**`, `skills/*/SKILL.md` | `tests/test_codex_agent_render.py`, `tests/test_shared_prompts_model_free.py`, `tests/test_instruction_budget.py`, `tests/test_skills_surface.py` |
 
-CI runs two workflows on every push and pull request: `.github/workflows/test.yml`
-(`bash tests/run-all.sh`) and `.github/workflows/pylint.yml`
+CI runs two workflows on every push and pull request: `.github/workflows/tests.yml`
+(the fast suite, then the e2e suite, both through `unittest discover`) and `.github/workflows/pylint.yml`
 (`pylint $(git ls-files '*.py')` on Python 3.11, 3.12 and 3.13, with no
 `--exit-zero` and no `--fail-under` — a single warning fails it). `.pylintrc` is
 the config; the house convention for an unavoidable warning is an inline
 `# pylint: disable=<name>` with the reason next to it, not a change to `.pylintrc`.
 
-Required tools: `jq`, `python3`, `git` — `run-all.sh` refuses without them. The
-assertion count quoted in `README.md` under **Tests** is measured, not estimated:
-`bash tests/run-all.sh | grep -oE "[0-9]+ passed" | awk "{s+=\$1} END {print s}"`.
+Required tools: `jq`, `python3`, `git` — the CI workflow checks them first. The
+test count quoted in `README.md` under **Tests** is measured, not estimated: the
+"Ran N tests" line of `verify_command`.
 It changes with almost every task; update it in the same commit.

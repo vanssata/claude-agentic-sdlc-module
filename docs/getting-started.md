@@ -1,194 +1,176 @@
 # Getting started
 
+The first hour: install, set up a project, a small task end to end, a
+dangerous one, then the audit, the update and the bill.
+
 ## 1. Install
 
 ```bash
-cd "/Store/Claude Plugins/claude-agentic"
-./install.sh
+npx riskrails@3.0.0          # detects Claude Code, Codex or both; proposes the plan it detected; Enter confirms
 ```
 
-It detects which runtimes you have — Claude Code, Codex, or both — and installs
-only for those. If it finds neither it stops and tells you to name one with
-`--target`; it never guesses.
+Node 18+ and `python3` are needed. The installer writes the managed block into
+`~/.claude/CLAUDE.md` (or `~/.codex/AGENTS.md`), the plan's settings, the five
+agents with their tiers baked in, the hooks, the skills and the shared tree
+under `<home>/riskrails/`, and prints what the block costs. Restart the
+runtime. In Claude Code, `/skills` lists the `rr-*` skills and `/hooks` lists
+`ai-guard.py`; in Codex, open `/hooks` and **trust the entries** — until you
+do, nothing is enforced. Every option, every limit and the plugin route are in
+[installation.md](installation.md).
 
-**Claude Code.** It detects your plan from `~/.claude.json`, writes the model,
-effort and context settings for it, renders the EXPERT tier accordingly, copies
-the agents, hooks and skills into `~/.claude/`, installs the shared tree
-(`claude-agentic/ai/`, the 29 policies, agent contracts, workflows and
-templates every project reads) and its resolver `claude-agentic/ai-path`,
-registers the hooks in
-`settings.json` and writes one managed block into `~/.claude/CLAUDE.md`.
-
-**Codex.** It renders the agent roster to `~/.codex/agents/*.toml`, copies the
-hooks, skills and the same shared tree, merges `hooks.json`, writes one managed block into
-`~/.codex/AGENTS.md`, and sets six keys in `config.toml`: the session to Sol at
-`high`, and the `[agents]` defaults to Terra at `medium`. Everything else in that
-file — your comments, projects, MCP servers, marketplaces — is preserved, and the
-previous version is kept as `config.toml.bak`.
-
-> If Astra is your current Codex default, this changes it to Sol. That is the
-> point of the routing, not an accident: the session model is the single largest
-> cost, and Astra stays one escalation away.
-
-If you had `claude-routing` installed, this run migrates its block away; see
-[Migrating from claude-routing](installation.md#migrating-from-claude-routing).
-
-Restart the runtime, then check:
+## 2. Set up a project
 
 ```
-Claude Code
-  /config     → the model and effort match your plan
-  /skills     → ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*, usage-report
-  /hooks      → the three guards, cap-large-read, project-scaffold, and runtime-gate (StopFailure too on a Fable install)
-
-Codex
-  /hooks      → the three guards and runtime-gate — REVIEW AND TRUST THEM HERE,
-                or they do not run and nothing is enforced
-  codex --version && grep -E '^model' ~/.codex/config.toml
+/rr-setup
 ```
 
-Try it without committing to anything first:
+In a repository, `/rr-setup` scaffolds `docs/sdlc/` and `.ai/`, surveys the
+code into `.ai/project/` — a light survey by default: it asks what you know,
+confirms it with `grep` and sends two `ai-discovery` agents to the places
+memory is least reliable, legacy and risks, tests and data; `--survey full`
+sends six for a codebase new to you — and never touches application code. It
+ends with three things only you can give it:
 
-```bash
-./install.sh --dry-run
-./install.sh --target codex --dry-run    # one runtime at a time
-```
+- the **Verification commands** in `.ai/policies/testing.md`:
+  `verify_command` (the fast suite, no fail-fast), `step_test_command` (with
+  `{files}`), `e2e_command` or `none`, which every later task runs before
+  reporting done; the skill proposes them from the project's own configuration
+  and writes them only after you say yes;
+- the **weight table** in `.ai/policies/weight.json`: the money, identity and
+  personal-data modules, the customer-visible paths, the hot paths, the
+  directories that need a migration step, the irreversible ones — followed by
+  `state.py weight --mirror`;
+- the **constitution** in `docs/sdlc/constitution.md`: the principles the
+  project does not negotiate, at most fifteen lines, cited as `C<n>` from then
+  on.
 
-## 2. Survey a project
+The project's `CLAUDE.md` or `AGENTS.md` gets the managed block once; the rest
+of the file stays yours. `.ai/policies/dialog.json` ships on, so approvals and
+guarded git commands come to you as a question in the runtime's own dialog.
+Commit `.ai/`, `docs/sdlc` and `.gitignore`.
 
-In the repository you want to work in:
-
-```
-/ai-init
-```
-
-It runs the scaffold, detects the stack, asks you what you already know about
-the project and confirms it with `grep`, sends two discovery agents to the
-places memory is least reliable — legacy and risks, tests and data — and writes
-`.ai/`. For a codebase you do not know, `/ai-init --survey full` fans out six
-agents instead; on a large legacy codebase that costs real tokens, and the
-fan-out is on the cheapest model for exactly that reason.
-
-Before it finishes it asks for the one command that proves the project is
-healthy and writes it into `.ai/policies/testing.md`. That command is the
-feedback loop every later task closes before reporting done.
-
-It does not touch application code. When it finishes, read
-`.ai/project/initial-assessment.md` first: fourteen sections, ending with
-recommendations that it deliberately did **not** implement.
-
-Then read `.ai/project/known-risks.md` and `.ai/project/legacy.md`. Those are the
-two files that will save you later.
-
-Commit it — add whichever instruction files the scaffold reported creating:
-
-```bash
-git add .ai .gitignore CLAUDE.md          # and/or AGENTS.md
-git commit -m "add agentic engineering infrastructure"
-```
-
-If the repository is worked on from both runtimes, scaffold both instruction
-files over the one shared `.ai/` tree:
-
-```bash
-"$AI_HOME/skills/ai-init/scaffold-ai.sh" "$PWD" --runtime both
-```
+A repository that already carries Spec Kit, Kiro, Cursor or Copilot files, or
+an oversized instruction file, starts with `/rr-setup --adopt` instead
+([project-update.md](project-update.md)).
 
 ## 3. A small task, end to end
 
 ```
-/ai-task fix the wording on the admin fee column header
+/rr-build fix the typo in the checkout button label
 ```
 
-What happens:
+1. No task is in flight, so `/rr-plan` runs first: it classifies the request
+   (a bugfix), names the files, recalls what the record holds about them, and
+   weighs them — six lines and a verdict:
 
-1. It classifies this as a **feature** (or you correct it), and starts a task.
-2. You said where the column lives, or it asks; `grep -n` confirms the template
-   and the translation key. The trigger table says **T1**: an isolated
-   presentation change. Discovery, context, impact and the tier go into the
-   audit trail with one `triage` call — a lightweight stage is still a stage.
-3. T1 has no plan stage and no reviews. It says which two files it will touch
-   and edits them.
-4. The verification command from `testing.md` runs once; its last lines are
-   shown. At T1 there is no e2e run — the change cannot reach a flow it covers,
-   and the report says so in a line.
-5. A short release report, which is also the commit message body, and the
-   command that would commit it.
+   ```
+   scope          0  1 reference
+   behaviour      0  a label (declared)
+   reversibility  0  git revert returns everything
+   domain         1  templates/** is customer-visible
+   novelty        0  nothing new (declared)
+   coverage       1  no test names the file
+   W 2 → light
+   ```
 
-Total: a few minutes, no subagent spawned, no report files, and on Pro or Team
-Pro the whole thing ran on Sonnet. Under Codex the same task runs the same way
-on Sol, at `high` on Pro and `medium` on Plus.
+2. **Light**: the plan is inline — the file, the test, the rollback in a few
+   lines — and `state.py start` registers the task and arms the scope guard.
+   Nobody stops.
+3. The session edits. A write to any other file is refused with
+   `SCOPE_CHANGE_REQUIRED`; the answer is `start --amend --files "+<path>"
+   --why "…"`, journaled.
+4. `state.py verify --scope all` runs `verify_command` once, to the end, with
+   the log under `.ai/state/logs/`; a light task runs no e2e.
+5. `/rr-ship` → `state.py close` measures the two facts — the suite is green on
+   this tree, every changed file is inside the task — and closes without a
+   review. It writes the commit message body from `task.md` and suggests the
+   commit, which is yours: with the dialog on, the `git commit` you pick runs
+   once, verbatim.
+
+Three `state.py` calls, no agent, no gate. `/rr-status` at any point shows
+where it stands in twenty lines.
 
 ## 4. A dangerous task, end to end
 
 ```
-/ai-task add a 2% handling fee to card payments
+/rr-build add a 3% surcharge to card payments
 ```
 
-The same pipeline, and a very different shape:
+1. `/rr-plan` weighs it: `src/Payment/**` is in the project's `domain.modules`,
+   so domain is 2 — **full**, whatever the sum. It asks every question the
+   plan depends on now, in the conversation or on record, writes the plan —
+   steps, files, tests, what stays the same, risks, rollback — and, when the
+   design is open, sends `architect` on STRONG for it. You read the plan and
+   accept it before `start`.
+2. `/rr-build` works step by step inside the plan: each step's own tests
+   (`verify --scope step`), `step-done` measures what the step changed, then
+   the suite once and e2e once, every failure fixed as one batch. `verify`
+   re-scores reversibility and domain from the real diff; the mode can only
+   rise.
+3. `/rr-review` sends one `ai-reviewer` on STRONG with `focus: security`,
+   bounded to about eighty tool calls. BLOCKER and HIGH findings in scope are
+   fixed as one batch and closed by a green verify or one scoped re-review;
+   MEDIUM and LOW go into the record.
+4. `/rr-ship` → `close` records the gate and stops: the facts, and the way to
+   approve. In the dialog you pick the approval; `close` runs again and
+   archives the task. A tree that changed after the approval invalidates it.
+5. The commit is yours. Nothing merged, nothing deployed.
 
-1. `ai-risk` returns **T4** — payments.
-2. From the tier table, T4 requires: plan review, human approval of the plan,
-   adversarial review, security review, a rollback section and a monitoring
-   section.
-3. Planning goes to `ai-planner` on `opus`, and the plan must name the
-   characterization tests that pin the current fee behaviour **before** anything
-   changes. This is the tier where the `solo` profile leaves direct mode and
-   runs the full pipeline.
-4. You are shown the plan and the review, and asked to approve it. Nothing is
-   implemented until you do.
-5. Implementation goes step by step, each one scope-guarded; the verification
-   command runs once at the end, the characterization tests as each step lands.
-6. `ai-reviewer` looks for rounding, currency, refunds, existing orders,
-   idempotency and what happens on a retry.
-7. `ai-security` reviews it against the full checklist and reports what it
-   examined and found clean, not only what it found wrong.
-8. `ai-release` assembles the report; you approve the merge.
+A migration that drops a column, or a production manifest, is
+`full_irreversible`: the approval is `state.py approve --confirm <operation>`
+in your own terminal, never the dialog.
 
-At no point does an agent commit, merge or deploy.
-
-## 5. Audit what you already have
-
-```
-/ai-audit
-```
-
-Writes `docs/ai-sdlc-adoption-plan.md`: an inventory of your current AI
-configuration, 0–3 scores against the twelve AI-native SDLC plays with citations,
-three phased adoption phases in dependency order, guardrail fixes, and the
-questions only your team can answer.
-
-It writes that one file and nothing else.
-
-## 6. After the plugin changes
-
-Reinstall — one `./install.sh` updates `~/.claude` and `~/.codex` alike — then
-in each project:
+## 5. A whole plan as one task
 
 ```
-/project-update
+/rr-spec checkout-redesign                     # brainstorm on record, spec with Flagged concerns
+/rr-plan docs/sdlc/specs/checkout-redesign.md  # the programme plan: rows with files, tests, dependencies
+/rr-build-all docs/sdlc/plans/checkout-redesign.md
 ```
 
-It shows what would change, asks you to confirm policy changes, applies the
-rest and merges anything you had edited, for `CLAUDE.md` and `AGENTS.md` alike.
-`/ai-status` tells you when a project is behind.
+Every row becomes a step; the ready ones go to parallel implementers on
+BALANCED, the suite runs once, parallel fixers take the failures as one batch,
+one review at the mode's tier, its findings fixed, then tests and the review
+again until it passes. After three failed review passes the next verdict is
+yours.
 
-## 7. See what it cost
+## 6. Audit what you already have
 
 ```
-/usage-report
+/rr-setup --audit
 ```
 
-Reads local transcripts from both runtimes and prints per-model token counts,
-per-day and per-session cost, the subagent share and a total — at zero model
-cost. Both runtimes' dollar columns use published per-token rates from
-`skills/usage-report/prices.json` — an API-price equivalent, not what a
-subscription bills — and a table marked unverified is labelled an estimate under
-the total rather than quietly presented as fact.
+Scores the repository against the twelve plays of the AI-native SDLC and
+writes `docs/ai-sdlc-adoption-plan.md` — what is in place, what is missing,
+in which order to add it. It writes nothing else.
+
+## 7. After the plugin changes
+
+```bash
+npx -y riskrails@latest --yes   # the home: settings, hooks, agents, the shared tree
+```
+
+```
+/rr-setup --update              # the project: a dry run, then --apply; migrations first, then the merge
+```
+
+`/rr-status` says when a project is behind the installed plugin. In Codex,
+re-trust the changed hook entries in `/hooks`.
+
+## 8. See what it cost
+
+```
+/rr-status --cost
+```
+
+Reads the local transcripts of both runtimes — never the API — and shows
+tokens and cost per task, session, model and tier, with the plan's per-task
+figure beside it for comparison. Zero model cost.
 
 ## Where to go next
 
-- `docs/hooks.md` — what exactly is blocked, and how to adjust it
-- `docs/risk-tiers.md` — tuning the tiers to your codebase
-- `docs/agents.md` — who does what, and why some agents are allowed to say "I do
-  not know"
+- [weight.md](weight.md) — the six axes, the three modes, tuning the table
+- [workflows.md](workflows.md) — feature, bugfix, refactoring, hotfix, investigation
+- [hooks.md](hooks.md) — every rule the guards enforce
+- [routing.md](routing.md) — the tiers per plan and runtime
+- [faq.md](faq.md) — why something was blocked, and how to change it

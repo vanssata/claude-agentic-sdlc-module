@@ -1,134 +1,132 @@
 # Runtimes and model routing
 
-One provider-neutral core, two thin runtime adapters, and the model each tier
-resolves to on each plan.
+The tiers are the contract; the models are the implementation. A task names
+tiers — FAST, BALANCED, STRONG, EXPERT — and the installed profile says which
+model each tier is on this plan and this runtime. `state.py profile --tier
+STRONG` prints it; `/rr-status` shows all four; the shared prompts name no
+model, and `tests/test_shared_prompts_model_free.py` keeps it that way.
 
 ## One module, two runtimes
 
-`.ai/**`, the pipeline state machine, the risk tiers, the workflow contracts and
-the skill bodies are provider-neutral. The runtime-specific part is a thin
-adapter: where the files go, what an agent definition looks like, how hooks are
-registered, and which model each tier resolves to.
+`.ai/**`, `state.py`, the weight table, the workflows and the skill bodies are
+provider-neutral. The runtime-specific part is a thin adapter: where the files
+go, what an agent definition looks like, how hooks are registered, which model
+each tier resolves to.
 
 | | Claude Code | Codex |
 |---|---|---|
 | install root | `~/.claude/` | `~/.codex/` |
 | instruction file | `CLAUDE.md` | `AGENTS.md` |
-| settings | `settings.json` (deep-merged) | `config.toml` (six managed keys) |
-| agents | `agents/*.md`, YAML frontmatter | `agents/*.toml`, rendered from the same prompts |
-| hooks | `settings.json` `hooks` block | `hooks.json` |
+| settings | `settings.json` (deep-merged) | `config.toml` (managed keys only) |
+| agents | `agents/*.md`, YAML frontmatter | `agents/*.toml`, rendered from the same templates |
+| hooks | `settings.json` `hooks` block | `hooks.json`, trusted in `/hooks` |
 | edits arrive as | `Edit` / `Write`, one file | `apply_patch`, possibly many files |
-| FAST | `haiku` | `gpt-5.6-terra` (Terra) |
-| BALANCED | `sonnet` | `gpt-5.6-terra` (Terra) |
-| STRONG | `opus` | `gpt-5.6-sol` (Sol) |
-| EXPERT | Fable 5.1, or Opus 5 with `--fable no` | `gpt-6-astra` (Astra) |
-| session | Opus 5.5 [1m] (`claude-opus-5-5[1m]`, 1M window) at `medium` by default on Max, `/model opus` for a 200k session (Sonnet on Pro) | Sol at `high` |
+| the human's dialog | `AskUserQuestion` | `request_user_input` |
+| FAST | `haiku` | Terra (`gpt-5.6-terra`); Luna on BalancedMax |
+| BALANCED | `sonnet` | Terra |
+| STRONG | `opus` | Sol (`gpt-5.6-sol`) |
+| EXPERT | Fable 5.1 [1m] on `architect`; Opus without Fable | Astra (`gpt-6-astra`) |
+| session | Opus 5.5 [1m] at `medium` on Max; `opusplan` on Pro | Sol at `high` on Pro, `medium` on Plus |
 
 A repository can carry both instruction files over one `.ai/` tree. The task
-state is `.ai/state/current.json` either way, so a task started in one runtime
-resumes in the other.
+state is `.ai/state/state.json` either way, so a task started in one runtime
+resumes in the other: `state.py handoff --to codex` (or `--to claude`) hands
+it over, prints the command to resume it there and runs nothing; until the
+other runtime resumes it, every state change from anywhere else exits 7
+`RUNTIME_HANDOFF_PENDING`. Six files make that resume real, all written by
+`state.py` or a hook, none by a model:
 
-Five files make that resume real, and every one of them is provider-neutral:
-
-| File | Written by | Holds |
-|---|---|---|
-| `.ai/state/current.json` | `state.py`, `update.py` | the task: stage, step, risk tier, approval |
-| `.ai/reports/<task-id>/events.jsonl` | `state.py` | the journal — one append-only line per event, with the runtime that emitted it |
-| `.ai/reports/<task-id>/questions.md` | `state.py` | the open questions, each with an `[Answer]:` line a human fills in |
-| `.ai/state/handoff.md` | `state.py`, rendered | thirty lines a session reads first: where the task is, what it may touch, what is pending |
-| `.ai/reports/<task-id>/sensors.json` | `state.py review-gate` | what each deterministic sensor measured, and on which tree |
-| `.ai/reports/<task-id>/tests-<scope>-<n>.log` | `state.py test-run` | the full test output, so it never reaches a context window |
-| `.ai/state/session.json` | `context-guard.py` | which runtime is driving and when the human last took a turn |
-
-A task also moves on purpose: `state.py handoff --to codex` (or `--to claude`)
-hands it over, prints the command to resume it there and runs nothing; until the
-other runtime resumes it, a state change (and `init --force`) from anywhere else
-exits 7. `--for review` asks the other vendor for a T5+ review; its verdict never
-clears the owner's own `blockers_open`, and moving the task again cancels an
-open request. `init`, `quick` and `risk` print a
-`preferred runtime:` line when the plan's table (refactoring → Codex on Claude
-plans) or the quota rule points at the other runtime — advice only.
-
-A subagent that needs a decision **returns** `QUESTIONS_NEEDED` instead of
-asking; the manager writes the question into `questions.md`, a human answers it
-there or in the session, and `state.py questions --sync` puts the answer back
-into the state. The journal is what `/ai-status` and `/usage-report` read, at
-zero model cost — no model is involved in writing or reading any of these files.
+| File | Holds |
+|---|---|
+| `.ai/state/state.json` | the task: mode, stage, step, files, verify runs, review, gate |
+| `.ai/reports/<task-id>/events.jsonl` | the journal — one append-only line per event, with the runtime that emitted it |
+| `.ai/reports/<task-id>/task.md` | the task record: weight, plan, questions with their `[Answer]:` lines, verify, review, changes, verdict |
+| `.ai/state/handoff.md` | at most thirty lines a session reads first: where the task is, what it may touch, what is pending |
+| `.ai/state/session.json` | which runtime is driving, the prompt count, when the human last took a turn |
+| `.ai/state/logs/<task-id>/` | the full test output, so it never reaches a context window; not committed |
 
 ## Model tiers
 
-Each plan is one file in `profiles/`: the runtime's own settings plus a
-`claude_agentic` object with the tier table (which model and effort each of FAST,
-BALANCED, STRONG and EXPERT is on that plan), the budgets (how many agents may run
-at once and how many of them on STRONG, how far direct mode reaches, whether EXPERT
-runs without asking, and a token figure per tier) and the preferred runtime per
-workflow. `max20.json` is `max.json` with larger budgets; `balanced-max.json` is `max.json`
-with the session pinned to Opus 5.5, no Fable and EXPERT at `high` — only the
-session runs the strong model, every agent keeps its cheap tier. The installer writes the
-resolved object to `<home>/claude-agentic/profile.json`; `runtime-gate` enforces the
-fan-out and EXPERT budgets by asking, `state.py profile --tier <TIER>` prints a
-tier's model, and `/usage-report --task <id>` compares a task's tokens with its
-plan's figure — reported, never enforced. The prompts themselves name tiers only;
-`tests/test-shared-prompts-model-free.sh` keeps it that way.
-
 | Tier | Claude Code | Codex | Does |
 |---|---|---|---|
-| FAST | `haiku`, low | Terra, low | reading and running: file search, inventories, logs, test output (`Explore`, `log-reader`, `ai-tester`, `ai-indexer`) |
-| BALANCED | `sonnet` | Terra, medium | discovery, context, planning up to T3, mechanical edits, release, the T2/T3 review (`ai-discovery`, `ai-context`, `ai-implementer`, `ai-release`) |
-| STRONG | `opus`, high | Sol, high | adversarial and security review (from T4), T5 risk and planning, root cause after a first diagnosis failed, reversible design (`ai-reviewer`, `ai-security`, `architect`) |
-| EXPERT | the session model (Opus 5) on Max, `opus` pinned on Pro; Fable 5.1 [1m] on `architect` only | Astra, `xhigh` | T6, irreversible design, what STRONG could not settle |
+| FAST | `haiku`, `low` | Terra, `low` | reading and running: file search, inventories, logs, test output (`Explore`, `log-reader`) |
+| BALANCED | `sonnet`, `low`–`medium` | Terra, `medium` | discovery with judgement (`ai-discovery`), the review in guarded mode, the implementers and fixers of a batch build |
+| STRONG | `opus`, `high` | Sol, `high` | the review in full mode, security review, `architect` in `/rr-spec`, root cause after a BALANCED diagnosis failed |
+| EXPERT | `opus` at `xhigh` on Max; Fable 5.1 [1m] on `architect`; `opus` at `high` on Pro | Astra, `xhigh` on Pro, `high` on Plus | what STRONG could not settle: an irreversible design with several viable options |
 
-The main session does the implementation itself. Every agent definition pins its
-own `model:` — most of them the BALANCED tier — and `CLAUDE_CODE_SUBAGENT_MODEL` is
-deliberately not set: before Claude Code v2.1.251 it overrides the frontmatter and
-the per-call model, which put every agent on Sonnet. A STRONG or EXPERT agent runs
-only when a named trigger fires; the triggers are listed in `policies/model-routing.md` of the shared tree.
+The main session does the implementation itself, and the planning, the weight,
+the test run and the release are its work too. Every agent definition pins its
+own model, and `CLAUDE_CODE_SUBAGENT_MODEL` is deliberately not set. A STRONG
+or EXPERT agent runs only on a named trigger, one at a time, never a fleet;
+three or more parallel agents run on FAST or BALANCED; a failed reasoning task
+is never retried on a cheaper model. The triggers and the escalation ladder
+are in `policies/model-routing.md` of the shared tree.
 
-On a Max plan the session runs Opus 5.5 [1m] by default at `medium` effort,
-compacting near 767k tokens (`autoCompactWindow` 800 000, uncapped on a 1M model)
-— `/model opus` gives a 200k session that compacts near 167k, cheaper per turn for
-a small task — and escalates from there: `ai-expert` pins `opus` at `xhigh`, so a session switched to
-Sonnet (the JetBrains agent's Model setting, or `/model`) cannot weaken the last-resort tier. Fable 5.1 [1m] is pinned on `architect` alone, at
-`xhigh`, for design questions outside a task; nothing else ever runs on it, and
-`runtime-gate` sends it to Opus while Fable is rate-limited or its weekly limit is
-nearly used. `--fable no` leaves `architect` on the Opus session as well.
+**Each plan is one file in `profiles/`**: the runtime's own settings plus a
+`riskrails` object with the tier table, the budgets and the dialog tool.
+`max20.json` inherits `max.json` with larger budgets; `balanced-max.json`
+inherits it with the session pinned to Opus 5.5 (200k), no Fable and EXPERT at
+`high`. `scripts/resolve-profile.py` resolves the inheritance and writes
+`<home>/riskrails/profile.json`; `runtime-gate` reads the budgets from there.
 
-Team accounts map by seat: a Standard seat installs as `team-pro` and gets the
-Pro profile, a Premium seat installs as `team-max` and gets the Max profile with
-Fable on `architect`. The installer reads the seat from `~/.claude.json` and
-falls back to `team-pro` when it cannot tell; `--plan team-max` overrides.
+### Claude Code
 
-On Pro and Team Pro the session model is `opusplan`:
-Opus 5 in plan mode, Sonnet 5 when executing. That is the playbook's "plan mode"
-play priced for a $20 plan — the expensive model is spent on the plan, and the
-cheaper one on typing it out. Because a subagent that omits `model:` would
-inherit Sonnet outside plan mode, the installer pins `model: opus` on
-`ai-expert` and `architect` for this plan. `log-reader`, `ai-tester` and
-`ai-release` run at `low` effort: they read and report, they do not think.
+| Plan | Session | FAST | BALANCED | STRONG | EXPERT / `architect` | Compaction |
+|---|---|---|---|---|---|---|
+| `pro`, `team-pro` | `opusplan` at `medium`: Opus in plan mode, Sonnet when executing | haiku | sonnet | opus `high` | opus `high`, pinned, so a Sonnet session cannot weaken it | the model window; 300 000 with `--context economy` |
+| `max`, `team-max` | Opus 5.5 [1m] at `medium` | haiku | sonnet | opus `high` | opus `xhigh`; `architect` on `fable[1m]` at `xhigh` | the model window, near 967k; 800 000 with economy |
+| `max20` | as `max` | | | | EXPERT twice per task without asking | as `max` |
+| `balanced-max` | Opus 5.5 (200k) | haiku | sonnet | opus `high` | opus `high`; `architect` inherits the session, no Fable | near 167k |
 
-Under Codex the ChatGPT plan chooses the profile. On Pro the session runs Sol
-at `high` with six agent threads and `ai-expert` runs Astra at `xhigh`. On Plus
-the usage window is a fraction of Pro's, so the session runs Sol at `medium`,
-three agent threads, and `ai-expert` runs Astra at `high` — `xhigh` stays off
-everywhere. The plan is read from `chatgpt_plan_type` in `~/.codex/auth.json`;
-`--codex-plan plus|pro` overrides it, and an install that cannot tell assumes
-Pro and says so.
+`--fable no` on Max leaves `architect` on the Opus session. `/model opus` in a
+Max session gives a 200k window, cheaper per turn for a small task; `claude-1m
+opus|fable` pins the 1M window at launch. Team accounts map by seat: Standard →
+`team-pro`, Premium → `team-max`; the installer reads the seat from
+`~/.claude.json` and falls back to `team-pro` when it cannot tell.
 
-**One difference worth knowing.** Under Claude Code you escalate by spawning
-`ai-risk` or `ai-planner` with `model: opus`. Codex resolves an agent's own file
-*ahead* of the model asked for at spawn time, so that would silently be ignored —
-the Codex roster therefore carries dedicated `ai-risk-strong` and
-`ai-planner-strong` agents that pin Sol. Same tier, same trigger, different
-mechanism. `ai-expert-strong` is the third: the runtime gate reroutes an
-`ai-expert` launch to it while the EXPERT model is unavailable. Every rendered Codex agent writes an explicit `model` and
-`model_reasoning_effort` for the same reason: an omitted `model` falls back to the
-Terra `[agents]` default, which is not the tier a reviewer needs.
+Why the session matters most: in measured usage over 80% of the cost was the
+main session re-reading its context, not output, so the session model and the
+context length are the levers. `/rr-status --cost` shows the split on your
+machine, across both runtimes.
 
-Why route this way: in measured usage, over 80% of the cost was the main session
-re-reading its context (cache read and write), not output, so the session model is
-the lever that matters. `/usage-report` shows the split on your machine, across
-both runtimes.
+### Codex
 
-There is no LOCAL tier: neither runtime has a local-model backend. The work it
-would have done is done by deterministic tools and by `ai-indexer` on the cheapest
-model, and nothing in the design depends on a local model existing.
+| Plan | Session | Threads | FAST | BALANCED | STRONG | EXPERT |
+|---|---|---|---|---|---|---|
+| `plus` | Sol `medium` | 3 | Terra `low` | Terra `medium` | Sol `high` | Astra `high`; `xhigh` never |
+| `pro` | Sol `high` | 6 | Terra `low` | Terra `medium` | Sol `high` | Astra `xhigh`, twice per task without asking |
+| `balanced-max` | Sol `high` | 6 | Luna `low` | Terra `medium` | Sol `high` | Astra `high` |
+
+The plan is read from `chatgpt_plan_type` in `~/.codex/auth.json`;
+`--codex-plan` overrides it, and an install that cannot tell assumes Pro and
+says so. Every rendered Codex agent writes an explicit `model`,
+`model_reasoning_effort` and `sandbox_mode = "read-only"`, because an omitted
+`model` falls back to the Terra `[agents]` default.
+
+**One difference worth knowing.** Codex resolves an agent's own file *ahead*
+of the model asked for at spawn time. So "the same agent on a stronger model"
+cannot work there: a named agent runs on the tier its file pins, and the
+`ai-reviewer` file pins STRONG — a guarded-mode review on Codex therefore runs
+on Sol, where Claude Code runs it on Sonnet. An EXPERT question on Codex is a
+spawn with no agent named and the EXPERT model on the call. Same tier, same
+trigger, different mechanism.
+
+## The runtime gate
+
+`runtime-gate.py` keeps the ladder honest at run time ([hooks.md](hooks.md)):
+while the top model is rate-limited or unreachable, a launch that asks for it
+goes one tier down (Fable → Opus; on Codex an EXPERT launch is rewritten to
+STRONG); from 90% of the weekly limit every Fable launch goes to Opus until the
+reset; an EXPERT launch beyond `expert.max_per_task` asks on Claude and
+explains on Codex. `runtime-gate.py status` shows the gate, `clear` re-enables
+the top model early. A reroute inside a task is journaled as `model_fallback`,
+and every artefact that names a tier names the model that ran — a gate may
+have sent an agent down a tier.
+
+## No LOCAL tier
+
+Neither runtime has a local-model backend. The work a local model would have
+done — indexing, repetitive inspection — is done by deterministic tools (`rg`,
+`git`, `jq`, the framework CLI) and by `Explore` on the cheapest hosted model.
+Nothing in the design depends on a local model existing; one would slot in at
+FAST.

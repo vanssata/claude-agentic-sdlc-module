@@ -1,1 +1,1 @@
-{"case":"cp after do in a for loop is denied in a task (a2)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"for f in a b; do cp \"$f\" .claude/agents/; done"}}}
+{"case":"a copy onto the claude settings after do in a for loop is denied in a task (M4: the movers parse it)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"for f in a b; do cp \"$f\" .claude/settings.json; done"}}}

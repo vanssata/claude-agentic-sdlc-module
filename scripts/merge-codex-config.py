@@ -16,12 +16,19 @@ Exactly five keys are managed:
     agents.default_subagent_reasoning_effort
     agents.max_concurrent_threads_per_session
 
+and, with ``--status-context yes``, ``tui.status_line``: ``model-with-reasoning``
+and ``context-used`` are appended to a list the user set, when missing; the user's
+items are never removed or reordered. An unset key (Codex's own default items) and
+an empty list are left alone, with a note: writing ours would replace either.
+``--status-context no`` (the default) leaves the list alone.
+
 Safety contract: the file is parsed before and after the edit, and the write is
 abandoned unless the *only* difference between the two parses is inside that
 managed set. A prose key name inside a multi-line string cannot slip through
 that check, because it would show up as an unexpected difference.
 
   merge-codex-config.py <config.toml> --profile <codex-plus.json|codex-pro.json> [--dry-run] [--no-backup]
+                        [--status-context yes|no]
 """
 import argparse
 import json
@@ -37,6 +44,7 @@ MANAGED_AGENTS = (
     "default_subagent_reasoning_effort",
     "max_concurrent_threads_per_session",
 )
+STATUS_ITEMS = ("model-with-reasoning", "context-used")  # Codex 0.165 [tui] status_line ids
 TABLE_HEADER = re.compile(r"^\s*\[")
 
 
@@ -46,6 +54,8 @@ def die(message):
 
 
 def toml_value(value):
+    if isinstance(value, list):
+        return "[%s]" % ", ".join(toml_value(v) for v in value)
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (int, float)):
@@ -100,6 +110,121 @@ def set_in_span(lines, start, end, key, value, changes):
     return end + 1
 
 
+def value_end(lines, at):
+    """One past the last line of the value assigned on line `at` (an array may span lines)."""
+    chunk = lines[at].split("=", 1)[1]
+    for j in range(at, len(lines)):
+        if j > at:
+            chunk += "\n" + lines[j]
+        try:
+            tomllib.loads("v = " + chunk)
+            return j + 1
+        except tomllib.TOMLDecodeError:
+            continue
+    return None
+
+
+def status_items(lines, before, changes, notes):
+    """Append STATUS_ITEMS to the user's [tui] status_line where missing; the user's
+    items keep their order. Returns the wanted list, or None when nothing is to change,
+    the key is unset or empty, or it lives somewhere this edit does not reach."""
+    current = before.get("tui.status_line")
+    if current is None or current == []:
+        # Unset is Codex's own default set, and [] a deliberate empty line: writing
+        # our two items would replace either.
+        notes.append("left [tui] status_line alone (%s; add %s to show them)"
+                     % ("not set: Codex's default items" if current is None else "empty on purpose",
+                        " and ".join(STATUS_ITEMS)))
+        return None
+    if not isinstance(current, list):
+        return None
+    missing = [item for item in STATUS_ITEMS if item not in current]
+    if not missing:
+        return None
+    value = current + missing
+    rendered = "status_line = %s" % toml_value(value)
+    span = table_span(lines, "tui")
+    at = key_line(lines, span[0] + 1, span[1], "status_line") if span else None
+    if at is None:
+        notes.append("left [tui] status_line alone (not a status_line key in a [tui] table)")
+        return None
+    end = value_end(lines, at)
+    if end is None:
+        return None
+    was = " ".join(line.strip() for line in lines[at:end])
+    kept = append_items(lines[at:end], missing)
+    try:
+        ok = kept is not None and tomllib.loads("\n".join(kept))["status_line"] == value
+    except (tomllib.TOMLDecodeError, KeyError):
+        ok = False
+    # The user's own lines and comments stay; one rendered line only when they cannot.
+    lines[at:end] = kept if ok else [rendered]
+    changes.append("set [tui] %s (was: %s)" % (rendered, was))
+    return value
+
+
+def array_marks(block):
+    """(line, col) of the closing ] of the array assigned on block[0], and of the last
+    character before it outside strings, comments and blanks; None for an array this
+    scan does not read (nested, or a multi-line string)."""
+    row, col = 0, block[0].index("=") + 1
+    depth, last, quote = 0, None, None
+    while row < len(block):
+        line = block[row]
+        while col < len(line):
+            ch = line[col]
+            if quote:
+                if quote == '"' and ch == "\\":
+                    col += 2
+                    continue
+                if ch == quote:
+                    quote = None
+                    last = (row, col)
+            elif ch in "\"'":
+                if line.startswith(ch * 3, col):
+                    return None
+                quote = ch
+            elif ch == "#":
+                break
+            elif ch == "[":
+                depth += 1
+                if depth > 1:
+                    return None
+                last = (row, col)
+            elif ch == "]":
+                return (row, col), last
+            elif not ch.isspace():
+                last = (row, col)
+            col += 1
+        if quote:
+            return None
+        row, col = row + 1, 0
+    return None
+
+
+def append_items(block, items):
+    """The lines of `block` (one `status_line = [...]` assignment) with `items` added
+    before its closing ], comments and layout kept; None when the scan cannot place them."""
+    marks = array_marks(block)
+    if marks is None or marks[1] is None:
+        return None
+    (row, col), (lrow, lcol) = marks
+    out = list(block)
+    comma = block[lrow][lcol] not in ",["
+    if block[row][:col].strip():
+        # ] shares its line with an item: `["a"]  # c` → `["a", "x", "y"]  # c`.
+        joined = ", ".join(toml_value(item) for item in items)
+        lead = ", " if comma else ("" if block[lrow][lcol] == "[" else " ")
+        out[row] = out[row][:col] + lead + joined + out[row][col:]
+    else:
+        # ] on its own line: one `"item",` line each, at the last item's indentation.
+        indent = re.match(r"\s*", block[lrow]).group(0) if lrow > 0 else re.match(r"\s*", block[row]).group(0) + "  "
+        out[row:row] = ["%s%s," % (indent, toml_value(item)) for item in items]
+        if comma:
+            out[lrow] = out[lrow][:lcol + 1] + "," + out[lrow][lcol + 1:]
+    return out
+
+
 def flatten(data, prefix=""):
     out = {}
     for key, value in data.items():
@@ -117,6 +242,7 @@ def main():
     parser.add_argument("--profile", required=True)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-backup", action="store_true")
+    parser.add_argument("--status-context", choices=("yes", "no"), default="no")
     args = parser.parse_args()
 
     try:
@@ -182,6 +308,12 @@ def main():
             continue
         stop = set_in_span(lines, start + 1, stop, key, wanted["agents.%s" % key], changes)
 
+    notes = []
+    if args.status_context == "yes":
+        status = status_items(lines, before, changes, notes)
+        if status is not None:
+            wanted["tui.status_line"] = status
+
     text = "\n".join(lines)
     if trailing_newline or text:
         text = text.rstrip("\n") + "\n"
@@ -201,6 +333,8 @@ def main():
         if after.get(key) != value:
             die(f"refusing to write: {key} did not end up as {value!r}")
 
+    for note in notes:
+        print("codex config: %s" % note)
     if not changes:
         print("codex config: already set (model=%s, effort=%s)" % (wanted["model"], wanted["model_reasoning_effort"]))
         return 0

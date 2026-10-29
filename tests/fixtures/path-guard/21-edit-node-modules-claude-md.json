@@ -1,1 +1,1 @@
-{"case":"editing a CLAUDE.md inside node_modules is denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Edit","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/node_modules/foo/CLAUDE.md"}}}
+{"case":"editing a CLAUDE.md inside node_modules is allowed since 3.4 (R22: vendor instruction files are not guarded)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Edit","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/node_modules/foo/CLAUDE.md"}}}

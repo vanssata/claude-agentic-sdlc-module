@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Context guard: keep long sessions short, and keep what matters across compaction.
 
-One script, three Claude Code events:
+One script, four Claude Code events:
 
 UserPromptSubmit
     Reads the session's current context size from the transcript (the last
@@ -11,14 +11,19 @@ UserPromptSubmit
     block threshold it holds the prompt back once: sending the same prompt again
     lets it through, so the guard can be overridden but not ignored.
 
-    Both thresholds follow the one knob the profile already sets. Auto-compaction
-    fires about 33k tokens under `autoCompactWindow` (measured over 133 automatic
-    compactions: a 150 000 window compacts at 115–125k, 117k most often), and
-    Claude Code caps that window at the model's own: 200k, or 1M for a [1m] model.
-    The guard warns at 80% of that point and blocks at 120% of it, which is only
-    reached when auto-compaction is off or did not run. An 800 000 window therefore
-    means, on a 200k model, compaction near 167k and a warning from 133k; on a [1m]
-    model, compaction near 767k, a warning from 613k and a block from 920k.
+    Both thresholds follow the window compaction runs against. Auto-compaction
+    fires about 33k tokens under it (measured over 133 automatic compactions: a
+    150 000 window compacts at 115–125k, 117k most often), and Claude Code caps
+    that window at the model's own: 200k, or 1M for a [1m] model. The window is
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW, else settings.json's `autoCompactWindow`, else
+    the economy window in <home>/riskrails/profile.json (`context`, written by
+    `--context economy`), else the model's own; on Codex the first two, Claude Code's
+    own, are skipped. The guard warns at 80% of that
+    point. It blocks at 120% of it — only reached when auto-compaction is off or did
+    not run — and only when a window was configured: in the default mode the runtime
+    compacts on its own and the guard never holds a prompt back. An 800 000 window
+    therefore means, on a 200k model, compaction near 167k and a warning from 133k;
+    on a [1m] model, compaction near 767k, a warning from 613k and a block from 920k.
 
 PreCompact
     Writes a deterministic snapshot of the session — files edited, the latest
@@ -37,6 +42,26 @@ SessionStart
     it: the snapshot belongs to the compaction it was written for, and a startup or a
     /clear simply finds nothing to put back.
 
+    It also asks state.py for the plan drift (R36.18): `profile detect --open --json`
+    with the session id handed on. A drift opens the plan_drift decision (dialog on) or
+    prints the installer command (dialog off, or no .ai/); the account file's mtime is
+    recorded in session.json once detect has answered.
+
+    On a plain startup it also says when npm has a newer `riskrails` than the installed
+    plugin, with the update command (update_notice.py). The hook reads a one-file cache
+    and never waits for the network: a stale cache starts a detached refresh, so the
+    notice appears from the session after the one that found the release. Not repeated
+    on resume, /clear or compact.
+
+Notification
+    auth_success only (the login may have changed the plan): the same detect, which opens
+    the decision and prints nothing. The recorded mtime is left alone, so the next
+    UserPromptSubmit asks again and carries the dialog JSON.
+
+UserPromptSubmit also compares the account file's mtime (~/.claude.json, Codex's
+auth.json) with the one recorded in session.json and, when it moved, runs the drift
+check once for that mtime.
+
 Both runtimes: the script derives which one it serves from its own location, and no
 decision here depends on a payload key. The transcript-derived snapshot stays
 Claude-only — it is built from a Claude transcript and the rollout format differs —
@@ -49,6 +74,7 @@ Environment:
     AI_CONTEXT_GUARD_STATE    state directory, default ~/.claude/state/context-guard
     AI_HOOK_RUNTIME           claude|codex, for tests: normally the script's own path decides
     AI_HANDOFF_NO_PROMPT      1 keeps the user's prompt out of .ai/state/session.json
+    RISKRAILS_NO_UPDATE_CHECK non-empty turns the SessionStart update notice off (CI does too)
 """
 import hashlib
 import json
@@ -71,7 +97,7 @@ FILES_KEPT = 40
 STATUS_LINES = 40
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
-DEFAULT_WINDOW = 800000            # profiles/max.json; capped per model below
+ECONOMY_WINDOW = 800000            # profiles/max.json riskrails.economy; Codex economy uses it too
 MODEL_WINDOW, MODEL_WINDOW_1M = 200000, 1000000
 COMPACT_RESERVE = 33000            # auto-compaction fires this far under the window
 WARN_PCT, BLOCK_PCT = 80, 120      # of the point where auto-compaction fires
@@ -122,25 +148,59 @@ def model_window(session_id, ctx):
     return MODEL_WINDOW
 
 
+def profile_context():
+    """profile.json's `context` ({mode, window}) in this runtime's home; {} when absent."""
+    home = config_dir()
+    if hook_runtime() == "codex":
+        home = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
+    try:
+        with open(os.path.join(home, "riskrails", "profile.json"), encoding="utf-8") as fh:
+            context = json.load(fh).get("context")
+        return context if isinstance(context, dict) else {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def configured_window():
+    """The window someone set — the env var, settings.json, or the economy profile — or 0.
+    The first two are Claude Code's own and never decide for Codex, whose only source is
+    its profile.json; economy without a window of its own (a Codex profile) keeps the 800k
+    it always had."""
+    if hook_runtime() != "codex":
+        for window in (positive_int(os.environ.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW")),
+                       positive_int(user_settings().get("autoCompactWindow"))):
+            if window > COMPACT_RESERVE:
+                return window
+    context = profile_context()
+    if context.get("mode") == "economy":
+        window = positive_int(context.get("window"))
+        return window if window > COMPACT_RESERVE else ECONOMY_WINDOW
+    return 0
+
+
 def compact_window(session_id, ctx):
-    """The window Claude Code compacts against: the env var wins over settings.json, and
-    Claude Code caps either at the model's window (\"capped to … by model\" in /autocompact),
-    so one 800k setting compacts a 1M session near 767k and a 200k session near 167k."""
-    window = positive_int(os.environ.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW"))
-    if not window:
-        window = positive_int(user_settings().get("autoCompactWindow"))
-    window = window if window > COMPACT_RESERVE else DEFAULT_WINDOW
-    return min(window, model_window(session_id, ctx))
+    """The window the runtime compacts against: a configured one, else the model's own.
+    Claude Code caps a configured window at the model's (\"capped to … by model\" in
+    /autocompact), so one 800k setting compacts a 1M session near 767k and a 200k
+    session near 167k."""
+    model = model_window(session_id, ctx)
+    return min(configured_window() or model, model)
 
 
 def thresholds(session_id, ctx):
+    """Warn and block, in tokens; 0 is off. With no window configured the runtime
+    compacts on its own: the guard warns and blocks only when AI_CONTEXT_BLOCK_TOKENS
+    asks it to."""
     fires_at = compact_window(session_id, ctx) - COMPACT_RESERVE
+    blocks = bool(configured_window())
 
-    def one(name, pct):
+    def one(name, pct, on=True):
         raw = os.environ.get(name, "").strip()
-        return positive_int(raw) if raw.lstrip("-").isdigit() else fires_at * pct // 100
+        if raw.lstrip("-").isdigit():
+            return positive_int(raw)
+        return fires_at * pct // 100 if on else 0
 
-    return one("AI_CONTEXT_WARN_TOKENS", WARN_PCT), one("AI_CONTEXT_BLOCK_TOKENS", BLOCK_PCT)
+    return one("AI_CONTEXT_WARN_TOKENS", WARN_PCT), one("AI_CONTEXT_BLOCK_TOKENS", BLOCK_PCT, blocks)
 
 
 def state_dir():
@@ -267,9 +327,9 @@ def scan_session(path):
     return files, prompts[-PROMPTS_KEPT:], todos
 
 
-def run(cmd, cwd):
+def run(cmd, cwd, env=None):
     try:
-        out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=3, check=False)
+        out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=3, check=False, env=env)
         return out.stdout.strip() if out.returncode == 0 else ""
     except (OSError, subprocess.SubprocessError):
         return ""
@@ -329,8 +389,11 @@ def task_in_flight(root):
     shouting its handoff at every new session in the repository."""
     if not root:
         return False
+    state = os.path.join(root, ".ai", "state", "state.json")
+    if not os.path.isfile(state):
+        state = os.path.join(root, ".ai", "state", "current.json")  # R34: legacy name, one version
     try:
-        with open(os.path.join(root, ".ai", "state", "current.json"), encoding="utf-8") as fh:
+        with open(state, encoding="utf-8") as fh:
             return (json.load(fh) or {}).get("current_stage") != "done"
     except (OSError, ValueError):
         return False
@@ -341,7 +404,7 @@ def stamp():
 
 
 def write_session(root, updates):
-    """.ai/state/session.json (I5): the sidecar this hook owns. current.json has
+    """.ai/state/session.json (I5): the sidecar this hook owns. state.json has
     two writers by contract and the hook is not one of them. Atomic, and silent
     about its own failures — a session that cannot be recorded must still start."""
     path = os.path.join(root, ".ai", "state", "session.json")
@@ -363,14 +426,97 @@ def write_session(root, updates):
         pass
 
 
-def state_py(root, *args):
+def prompt_count(root):
+    """session.json's count of human turns; 0 when there is none yet."""
+    try:
+        with open(os.path.join(root, ".ai", "state", "session.json"), encoding="utf-8") as fh:
+            count = json.load(fh).get("prompt_count")
+    except (OSError, ValueError, AttributeError):
+        return 0
+    return count if isinstance(count, int) and not isinstance(count, bool) else 0
+
+
+def state_py(root, *args, session=None):
     """state.py is the only thing that renders a handoff or reads the questions.
     Three seconds inside a fifteen-second hook, and an empty string on anything
-    at all going wrong: the guard fails open."""
+    at all going wrong: the guard fails open. A session id is handed on as the
+    runtime's own variable, which is what state.py binds a dialog to."""
     if not os.path.exists(STATE_PY):
         return ""
+    env = None
+    if session:
+        env = dict(os.environ, **{"CLAUDE_CODE_SESSION_ID" if hook_runtime() == "claude"
+                                  else "CODEX_THREAD_ID": session})
     return run([sys.executable or "python3", STATE_PY, "--root", root,
-                "--runtime", hook_runtime(), *args], root)
+                "--runtime", hook_runtime(), *args], root, env)
+
+
+# ------------------------------------------------------------------ plan drift
+
+def account_file():
+    """The file whose change means the account changed (R36.18)."""
+    if hook_runtime() == "codex":
+        return os.path.join(os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex"), "auth.json")
+    return os.path.join(os.environ.get("HOME") or os.path.expanduser("~"), ".claude.json")
+
+
+def account_mtime():
+    try:
+        return os.path.getmtime(account_file())
+    except OSError:
+        return None
+
+
+def recorded_mtime(root):
+    try:
+        with open(os.path.join(root, ".ai", "state", "session.json"), encoding="utf-8") as fh:
+            return json.load(fh).get("account_mtime")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def detect_drift(root, cwd, session, open_it=True, mtime=None):
+    """`state.py profile detect --open --json`, parsed; None unless it says drift.
+    Without .ai/ there is nowhere to open a decision: the same call, read-only.
+    `mtime`, when given, is recorded in session.json only once detect printed JSON."""
+    if root:
+        raw = state_py(root, "profile", "detect", *(("--open",) if open_it else ()), "--json", session=session)
+    elif os.path.exists(STATE_PY):
+        raw = run([sys.executable or "python3", STATE_PY, "--runtime", hook_runtime(), "profile", "detect",
+                   "--json"], cwd or os.getcwd())
+    else:
+        raw = ""
+    try:
+        found = json.loads(raw)
+    except ValueError:
+        return None
+    if root and mtime is not None and isinstance(found, dict):
+        write_session(root, {"account_mtime": mtime})
+    return found if isinstance(found, dict) and found.get("status") == "drift" else None
+
+
+def drift_notice(root, found, session):
+    """(systemMessage, additionalContext) for one drift. With a decision open
+    the context carries the dialog JSON; otherwise the terminal command."""
+    installed = (found.get("installed") or {}).get("plan") or "unknown"
+    live = (found.get("live") or {}).get("plan") or "unknown"
+    names = {"max20": "Max 20x", "max": "Max", "pro": "Pro", "team-pro": "Team Pro", "team-max": "Team Max",
+             "plus": "Plus"}
+    account = names.get(live, live)
+    installed = names.get(installed, installed)
+    decision = found.get("decision")
+    if decision and root:
+        payload = state_py(root, "decision", "show", "--id", decision, "--json", session=session)
+        if payload:
+            tool = "request_user_input" if hook_runtime() == "codex" else "AskUserQuestion"
+            return (f"RiskRails: this account is {account}; RiskRails is installed for {installed}. "
+                    "The session asks before anything else.",
+                    f"DIALOG_PENDING {decision} — call {tool} with exactly this JSON, then run the picked "
+                    f"command verbatim or 'state.py decision settle --id {decision}': {payload}")
+    command = found.get("command") or ""
+    return (f"RiskRails: this account is {account}; RiskRails is installed for {installed}.",
+            f"RiskRails: the account's plan is {account} but RiskRails is installed for {installed}, so its "
+            f"budgets do not match. Tell the user; in their own terminal, outside the agent, they run: {command}")
 
 
 def handoff_block(root, reason):
@@ -462,6 +608,7 @@ def on_prompt(payload):
     transcript = payload.get("transcript_path")
     session = payload.get("session_id") or "unknown"
     root = ai_root(payload.get("cwd"))
+    update = None
     if task_in_flight(root):
         # The evidence that a human took a turn — what the gate's file route
         # (R13) reads back. Recorded before any early exit below.
@@ -469,7 +616,41 @@ def on_prompt(payload):
                   "last_prompt_at": stamp()}
         if not os.environ.get("AI_HANDOFF_NO_PROMPT"):
             update["last_prompt"] = (payload.get("prompt") or "")[:PROMPT_MAX_CHARS]
+    if root and (update is not None or os.path.isfile(os.path.join(root, ".ai", "state", "decision.json"))):
+        # R36.13: the human turn dialog-gate.py's Stop counter resets on.
+        update = dict(update or {}, prompt_count=prompt_count(root) + 1)
+    if update is not None:
         write_session(root, update)
+    doc = prompt_warning(payload, session, transcript)
+    if (doc or {}).get("decision") != "block":
+        doc = with_drift(doc, root, payload, session)
+    if doc:
+        emit(doc)
+    sys.exit(0)
+
+
+def with_drift(doc, root, payload, session):
+    """R36.18: when the account file's mtime is not the one recorded, ask for the
+    drift again and put what it says into the prompt's output. Unchanged mtime,
+    no .ai/ or no account file: `doc` as it was."""
+    mtime = account_mtime()
+    if not root or mtime is None or mtime == recorded_mtime(root):
+        return doc
+    found = detect_drift(root, payload.get("cwd"), session, mtime=mtime)
+    if not found:
+        return doc
+    message, context = drift_notice(root, found, session)
+    doc = dict(doc or {})
+    out = dict(doc.get("hookSpecificOutput") or {}, hookEventName="UserPromptSubmit")
+    out["additionalContext"] = "\n\n".join(p for p in (context, out.get("additionalContext")) if p)
+    doc["hookSpecificOutput"] = out
+    doc["systemMessage"] = "\n".join(p for p in (message, doc.get("systemMessage")) if p)
+    return doc
+
+
+def prompt_warning(payload, session, transcript):
+    """The context-size warning or block for this prompt, as the hook's output
+    document, or None."""
     ctx = current_context(transcript) if transcript else None
     marker = state_path(session, "json")
     try:
@@ -486,7 +667,7 @@ def on_prompt(payload):
     if ctx is None or (not warn or ctx < warn) and (not block or ctx < block):
         if state:
             os.remove(marker)       # back under the threshold, e.g. after a compaction
-        sys.exit(0)
+        return None
 
     k = round(ctx / 1000)
     if block and ctx >= block:
@@ -494,20 +675,20 @@ def on_prompt(payload):
         if state.get("blocked") != digest:
             state["blocked"] = digest
             save()
-            emit({"decision": "block", "reason": (
+            return ({"decision": "block", "reason": (
                 f"Context is {k}k tokens, past the {block // 1000}k limit: every turn re-reads all of it. "
                 "Run /compact (or /clear if this is a new task) and send the prompt again. "
                 "To go ahead anyway, send the same prompt once more.")})
         state.pop("blocked")
         save()
-        sys.exit(0)             # the same prompt a second time: the user has decided
+        return None            # the same prompt a second time: the user has decided
 
     band = ctx // 10000
     if band <= state.get("band", -1):
-        sys.exit(0)
+        return None
     state["band"] = band
     save()
-    emit({
+    return ({
         "systemMessage": f"Context is {k}k tokens (warning from {warn // 1000}k). "
                          "/compact keeps the thread, /clear starts a new task.",
         "hookSpecificOutput": {
@@ -558,8 +739,26 @@ def take_snapshot(session, transcript):
     return text
 
 
+def update_notice_for(payload):
+    """The npm update notice for a startup, as (systemMessage, additionalContext); fails open."""
+    if payload.get("source") not in (None, "", "startup"):
+        return "", ""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import update_notice  # pylint: disable=import-outside-toplevel
+        runtime = hook_runtime()
+        home = config_dir()
+        if runtime == "codex":
+            home = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
+        plugin_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return update_notice.notice(runtime, home, plugin_root, time.time())
+    except Exception:  # pylint: disable=broad-except
+        return "", ""
+
+
 def on_session_start(payload):
     session = payload.get("session_id") or "unknown"
+    drift_session = payload.get("session_id") or None
     model = payload.get("model")
     if isinstance(model, str) and model:
         with open(state_path(session, "model"), "w", encoding="utf-8") as fh:
@@ -577,11 +776,19 @@ def on_session_start(payload):
     snapshot = take_snapshot(session, payload.get("transcript_path"))
     if snapshot:
         head = snapshot          # it already carries handoff.md verbatim, at its head
-    text = "\n\n".join(part for part in (head, tail) if part)
+    # R36.18: a drift between the installed plan and the account's, asked about first.
+    mtime = account_mtime()
+    found = detect_drift(root, payload.get("cwd"), drift_session, mtime=mtime)
+    message, notice = drift_notice(root, found, session) if found else ("", "")
+    update, update_context = update_notice_for(payload)
+    message = "\n".join(part for part in (message, update) if part)
+    text = "\n\n".join(part for part in (notice, head, tail, update_context) if part)
     if not text:
         sys.exit(0)
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "SessionStart", "additionalContext": text}}))
+    doc = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}
+    if message:
+        doc = dict({"systemMessage": message}, **doc)
+    print(json.dumps(doc))
     sys.stdout.flush()
     if snapshot:
         try:
@@ -593,11 +800,23 @@ def on_session_start(payload):
     sys.exit(0)
 
 
+def on_notification(payload):
+    """auth_success (Claude): the login may have changed the plan. Only opens the
+    decision and prints nothing; account_mtime is left as it was, so the next
+    prompt asks again and carries the JSON (R36.18)."""
+    if payload.get("notification_type") not in (None, "auth_success"):
+        sys.exit(0)
+    root = ai_root(payload.get("cwd"))
+    if root:
+        detect_drift(root, payload.get("cwd"), payload.get("session_id") or None)
+    sys.exit(0)
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
         handler = {"UserPromptSubmit": on_prompt, "PreCompact": on_precompact,
-                   "SessionStart": on_session_start}.get(payload.get("hook_event_name"))
+                   "SessionStart": on_session_start, "Notification": on_notification}.get(payload.get("hook_event_name"))
         if handler:
             handler(payload)
     except Exception:  # pylint: disable=broad-exception-caught  # fail open: the guard never blocks work by crashing

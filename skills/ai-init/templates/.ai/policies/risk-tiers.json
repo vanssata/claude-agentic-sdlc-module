@@ -402,7 +402,7 @@
     }
   },
   "diff_budget": {
-    "_comment": "A per-tier ceiling on what one step and one task may change, measured by skills/ai-task/sensors.py between two tree objects. ADVISORY unless `enforce` is true: over the budget, state.py step-done finishes the step and prints a warning that names step-split, and the re-score records `over_budget` without raising the tier — the tier comes from the scope of a change (path_scopes and the trigger table), never from its size. Advisory never means unread: a task over its budget cannot close on skipped_green, a reviewer reads it. With `enforce: true` the old behaviour returns: step-done exits 6 and a task over its budget is re-scored one tier up. lines = added + deleted after `exclude` and `unbudgeted_scopes`. The numbers sit near the band where a review still finds defects (a few hundred lines); T3/T4 are wider because a resource and its screens, or shared-domain work and its callers, legitimately span many files; T5/T6 are tighter because those reviews read every line. Adjust them to the project and calibrate from /usage-report.",
+    "_comment": "A per-tier size measurement of what one step and one task changed, taken by skills/ai-task/sensors.py between two tree objects. ALWAYS advisory: over the budget, state.py step-done finishes the step and prints a warning that names step-split, the re-score records `over_budget`, and neither the tier nor the review depends on it — the tier comes from the scope of a change (the trigger table), never from its size. `enforce` is still read and ignored, `true` included. lines = added + deleted after `exclude` and `unbudgeted_scopes`. The numbers sit near the band where a review still finds defects (a few hundred lines); T3/T4 are wider because a resource and its screens, or shared-domain work and its callers, legitimately span many files; T5/T6 are tighter because those reviews read every line. Adjust them to the project and calibrate from /usage-report.",
     "enforce": false,
     "per_step": {
       "T0": {
@@ -576,9 +576,9 @@
       ]
     }
   ],
-  "_path_scopes_comment": "Ordered, first match wins per file — that is why `pipeline` stands above `docs` (an instruction file is pipeline, not documentation), `dependencies` above `docs` (requirements.txt is a manifest, not a text file) and `tests` above `payments` (a test for the payment code is a test). A file matching nothing is scope `source` and demands no tier. min_tier is the lowest tier a change touching that scope may have, and every floor that changes a process — pipeline, dependencies, migrations, config — is T4, above the ceiling at which the sensors may stand in for a reader: a migration file is T4 at least (it changes a process, even when it only adds a table — a destructive or data migration is T6 by the trigger table), money and identity are T5, infrastructure is T6. state.py step-done re-scores the task from the real diff and raises the tier when it must. It never lowers one, and it never raises one for size alone.",
+  "_path_scopes_comment": "Ordered, first match wins per file — that is why `pipeline` stands above `docs` (an instruction file is pipeline, not documentation), `dependencies` above `docs` (requirements.txt is a manifest, not a text file) and `tests` above `payments` (a test for the payment code is a test). A file matching nothing is scope `source` and demands no tier. min_tier is a HINT, not a floor: the tier a change touching that scope usually deserves. Every scope that changes a process — pipeline, dependencies, migrations, config — says T4, above the ceiling at which the sensors may stand in for a reader: a migration file is T4 (it changes a process, even when it only adds a table — a destructive or data migration is T6 by the trigger table), money and identity are T5, infrastructure is T6. state.py step-done prints `hint: <scope> (<file>) — path_scopes says <tier>; tier unchanged` once per scope and never moves the tier: raising it is `state.py risk`, lowering it a human's, in writing.",
   "sensors": {
-    "_comment": "The deterministic checks that run before any model review. A red sensor costs one review at the tier's model — today's price. A green one must therefore be impossible to fake: every ambiguity resolves to red, `unavailable` or `stale`, never to green. A missing lint_command is NOT green; only a human writing `lint_command: none` in testing.md makes it not_applicable. At or below skip_review_at_or_below, all green replaces the model review (risk-tiers.md, 'When the sensors replace the review'); a task over its diff budget never qualifies, whatever its sensors say. The `diff` sensor is red over the budget only when diff_budget.enforce is true; otherwise it reports the size and stays green.",
+    "_comment": "The deterministic checks that run before any model review. A red sensor costs one review at the tier's model — today's price. A green one must therefore be impossible to fake: every ambiguity resolves to red, `unavailable` or `stale`, never to green. A missing lint_command is NOT green; only a human writing `lint_command: none` in testing.md makes it not_applicable. At or below skip_review_at_or_below, all green replaces the model review (risk-tiers.md, 'When the sensors replace the review'); size never decides it. The `diff` sensor is red only for a file outside the step: over the budget it reports the size and stays green.",
     "skip_review_at_or_below": "T3",
     "required_for_skip": [
       "tests",
@@ -593,7 +593,7 @@
     "tests": {
       "timeout_seconds": 1800,
       "env_retries": 1,
-      "max_suite_runs": 5,
+      "max_suite_runs": 2,
       "log_max_bytes": 2097152
     },
     "lint": {

@@ -1,0 +1,1 @@
+{"case":"editing the installed guard engine is denied: one edit there turns every guard off (H2)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Edit","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/.claude/hooks/guard/paths.py"}}}

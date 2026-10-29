@@ -1,0 +1,1 @@
+{"case":"reading a key file under .ai/state/ is denied: a secret pattern wins over the free read of a control file (L2)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Read","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/.ai/state/x.pem"}}}

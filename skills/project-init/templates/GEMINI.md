@@ -20,7 +20,7 @@
 
 ## Workflow
 
-`/sdlc-intent` → `/sdlc-spec` → `/sdlc-plan` → `/ai-task`; artefacts in `docs/sdlc/`. Run `/ai-init` if there is no `.ai/`.
+`/rr-spec` → `/rr-plan` → `/rr-build` → `/rr-review` → `/rr-ship`; artefacts in `docs/sdlc/`. Run `/rr-setup` if there is no `.ai/`.
 
 ## Things Gemini gets wrong
 

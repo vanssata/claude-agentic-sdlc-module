@@ -1,0 +1,1 @@
+{"case": "running the recorder as a program, input from a file, is denied (R36.11)", "expect": "deny", "payload": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": "__ROOT__", "tool_input": {"command": "./hooks/dialog-gate.py < /tmp/answer.json"}}}

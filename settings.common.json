@@ -26,35 +26,13 @@
         ]
       },
       {
-        "matcher": "Bash",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.claude/hooks/ai-git-guard.sh\"",
+            "command": "python3 -I -S \"$HOME/.claude/hooks/ai-guard.py\"",
             "timeout": 15,
-            "statusMessage": "Checking git and deploy safety"
-          }
-        ]
-      },
-      {
-        "matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/.claude/hooks/ai-path-guard.sh\"",
-            "timeout": 10,
-            "statusMessage": "Checking sensitive paths"
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/.claude/hooks/ai-scope-guard.sh\"",
-            "timeout": 10,
-            "statusMessage": "Checking task scope"
+            "statusMessage": "Checking git, paths, scope and open decisions"
           }
         ]
       }
@@ -103,6 +81,43 @@
             "type": "command",
             "command": "\"$HOME/.claude/hooks/context-guard.py\"",
             "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "auth_success",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/context-guard.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"$HOME/.claude/hooks/dialog-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Recording the dialog's answer"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"$HOME/.claude/hooks/dialog-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Checking for an open decision"
           }
         ]
       }

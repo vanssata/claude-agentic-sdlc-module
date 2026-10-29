@@ -1,0 +1,40 @@
+  ok    r10: one section, the note kept, every other line as the plugin ships it
+  ok    r10: and the run after that is quiet
+== R9: an edited CRLF router gets the section before the table, in CRLF
+  ok    r9: section before the table, line endings all CRLF
+== undeclared files in the shared tree are never deletion candidates
+  ok    a planted policies/security.md or VERSION is not offered for deletion
+  ok    the extra files are named in a hint
+  ok    the declared shared set is 0006's 29
+== R6: a symlinked router stops the confirmed run before any deletion
+  ok    exit 3 at the router item
+  ok    every shared copy is still there, VERSION 5
+== Q5: a Gemini project keeps safety.md and security.md
+  ok    gemini: neither is named
+  ok    gemini: both remain after the confirmed run, the shared copies are gone
+== M2: no deletion while a fallback is missing
+  ok    no shared tree: exit 2, nothing written
+  ok    and the confirmed run writes nothing either
+  ok    a local tree missing one file exits 2 and names it
+  ok    a declared home with the plugin but no tree exits 2 and names the home
+  ok    with no such home on this machine it proceeds
+== M9: never through a symlink, never outside the project
+  ok    a symlinked directory: a hint per file, no deletion
+  ok    a symlinked file: a hint
+  ok    neither is proposed for deletion
+  ok    after the confirmed run the outside files and the link are intact
+== M3: the hash sweep — every shared version stays on record without its blob; real bytes are deleted, a flipped byte never is
+  hash sweep: 29 keys, 90 versions; 0 not on record; 0 with a blob; bytes: 2 rounds, 3 old fixtures; 0 not deleted; flipped: 0 not an override
+  ok    every shared version is on record by hash alone; real bytes are deleted; one flipped byte makes it an override
+== rollback rehearsal: git first
+  ok    a 0001-0005 plugin refuses the migrated project (exit 2)
+  ok    git checkout restores every file byte- and exec-bit-identical, router included
+  ok    and VERSION 5
+  ok    the 0001-0005 plugin reads the restored project (exit 1)
+  ok    the new plugin re-plans the same delete? list
+  ok    the jq fallback restores every deletion
+  ok    but leaves the router new and VERSION 6 — its limit: git is the rollback
+
+migration 0006: 86 passed, 0 failed
+
+all suites passed

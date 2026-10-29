@@ -1,0 +1,24 @@
+{
+  "_doc": "state.py profile detect --runtime codex. auth is <CODEX_HOME>/auth.json (null: no file); a token written \"<jwt:X>\" is replaced by an unsigned JWT whose https://api.openai.com/auth claim has chatgpt_plan_type X. raw is chatgpt_plan_type lower-cased; plan and from are what the installer printed (tests/test_codex_install.py:207-215).",
+  "cases": [
+    {"name": "chatgpt_plan_type plus", "auth": {"auth_mode": "chatgpt", "tokens": {"id_token": "<jwt:plus>"}},
+     "installed": {"plan": "plus"}, "expect": {"status": "same", "plan": "plus", "from": "chatgpt_plan_type", "raw": "plus"}},
+    {"name": "chatgpt_plan_type pro in the access token", "auth": {"auth_mode": "chatgpt", "tokens": {"id_token": "not-a-jwt", "access_token": "<jwt:Pro>"}},
+     "installed": {"plan": "pro"}, "expect": {"status": "same", "plan": "pro", "from": "chatgpt_plan_type", "raw": "pro"}},
+    {"name": "a team workspace uses the pro profile", "auth": {"auth_mode": "chatgpt", "tokens": {"id_token": "<jwt:team>"}},
+     "installed": {"plan": "pro"}, "expect": {"status": "same", "plan": "pro", "from": "chatgpt_plan_type team, uses the pro profile", "raw": "team"}},
+    {"name": "an unknown plan type", "auth": {"auth_mode": "chatgpt", "tokens": {"id_token": "<jwt:free>"}},
+     "installed": {"plan": "pro"}, "expect": {"status": "unknown", "plan": null, "raw": "free"}},
+    {"name": "no auth.json", "auth": null,
+     "installed": {"plan": "pro"}, "expect": {"status": "unknown", "plan": null, "raw": ""}},
+    {"name": "an API key and no tokens", "auth": {"OPENAI_API_KEY": "sk-test-not-a-key"},
+     "installed": {"plan": "pro"}, "expect": {"status": "unsupported", "plan": null, "raw": ""}},
+    {"name": "auth_mode other than chatgpt", "auth": {"auth_mode": "apikey", "tokens": {"id_token": "<jwt:plus>"}},
+     "installed": {"plan": "plus"}, "expect": {"status": "unsupported", "plan": "plus"}},
+    {"name": "no installed profile", "auth": {"auth_mode": "chatgpt", "tokens": {"id_token": "<jwt:plus>"}},
+     "installed": null, "expect": {"status": "no_profile", "plan": "plus"}},
+    {"name": "plus installed, pro account", "auth": {"auth_mode": "chatgpt", "tokens": {"id_token": "<jwt:pro>"}},
+     "installed": {"plan": "plus", "plugin_version": "3.1.0"},
+     "expect": {"status": "drift", "plan": "pro"}}
+  ]
+}

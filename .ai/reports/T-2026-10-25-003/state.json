@@ -1,0 +1,582 @@
+{
+  "task_id": "T-2026-10-25-003",
+  "goal": "Redesign phase 1 (1.1–1.4): suite cap 2, size/paths stop gating, shims+stale agents+.bak removed, /status script",
+  "workflow": "feature",
+  "risk_tier": "T4",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "Redesign phase 1 (1.1–1.4): suite cap 2, size/paths stop gating, shims+stale agents+.bak removed, /status script",
+        "allowed_files": [
+          "skills/ai-init/templates/.ai/policies/risk-tiers.json",
+          "skills/ai-init/templates/.ai/policies/risk-tiers.md",
+          "skills/project-update/history/**",
+          "docs/sdlc/plans/claude-agentic-redesign.md",
+          "skills/ai-task/sensors.py",
+          "skills/ai-task/state.py",
+          "skills/ai-task/SKILL.md",
+          "hooks/fable-gate.py",
+          "hooks/codex-model-gate.py",
+          "install.sh",
+          "instructions/routing.md",
+          "settings.common.json",
+          "codex/hooks.json",
+          ".ai/project/known-risks.md",
+          "skills/status/status.py",
+          "skills/status/SKILL.md",
+          "skills/ai-status/SKILL.md",
+          "tests/test-ai-task-state.sh",
+          "tests/test-ai-task-sensors.sh",
+          "tests/test-end-to-end.sh",
+          "tests/test-fable-gate.sh",
+          "tests/test-codex-model-gate.sh",
+          "tests/test-runtime-gate-fable.sh",
+          "tests/test-runtime-gate-codex.sh",
+          "tests/run-all.sh",
+          "tests/test-install-dry-run.sh",
+          "tests/test-codex-install.sh",
+          "tests/test-runtime-gate.sh",
+          "tests/test-dual-runtime-install.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test-ai-status-root.sh"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [
+          "tests/test-ai-task-state.sh",
+          "tests/test-ai-task-sensors.sh",
+          "tests/test-install-dry-run.sh",
+          "tests/test-codex-install.sh",
+          "tests/test-runtime-gate.sh",
+          "tests/test-runtime-gate-fable.sh",
+          "tests/test-runtime-gate-codex.sh",
+          "tests/test-ai-status-root.sh",
+          "tests/test-project-update.sh"
+        ],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "4d7ddcf2a4016f58de0a55540bc5d4d99e7c7859",
+          "seq": 1,
+          "paths": [
+            "hooks/codex-model-gate.py",
+            "hooks/fable-gate.py",
+            "install.sh",
+            "skills/ai-init/templates/.ai/policies/risk-tiers.json",
+            "skills/ai-task/sensors.py",
+            "skills/ai-task/state.py",
+            "skills/project-update/history/blobs/52de8807d56e2683431ec08a4a81c8c922219105a33bdc545d0e758b63849832",
+            "skills/project-update/history/blobs/80cf708a42ad6d7851f4063e0d9127b850f274dcb6633c9a9773d01173d437f8",
+            "skills/project-update/history/index.json",
+            "skills/status/status.py",
+            "tests/run-all.sh",
+            "tests/test-ai-status-root.sh",
+            "tests/test-ai-task-sensors.sh",
+            "tests/test-ai-task-state.sh",
+            "tests/test-codex-install.sh",
+            "tests/test-codex-model-gate.sh",
+            "tests/test-dual-runtime-install.sh",
+            "tests/test-fable-gate.sh",
+            "tests/test-install-dry-run.sh",
+            "tests/test-runtime-gate-codex.sh",
+            "tests/test-runtime-gate-fable.sh",
+            "tests/test-runtime-gate.sh"
+          ],
+          "files": 22,
+          "added": 1897,
+          "deleted": 803,
+          "lines": 2700,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "1 regression: risk-tiers.md header hash stale after the risk-tiers.json comment rewording (test-scaffold-idempotency)",
+        "allowed_files": [
+          "skills/ai-init/templates/.ai/policies/risk-tiers.json",
+          "skills/ai-init/templates/.ai/policies/risk-tiers.md",
+          "skills/project-update/history/**",
+          "docs/sdlc/plans/claude-agentic-redesign.md",
+          "skills/ai-task/sensors.py",
+          "skills/ai-task/state.py",
+          "skills/ai-task/SKILL.md",
+          "hooks/fable-gate.py",
+          "hooks/codex-model-gate.py",
+          "install.sh",
+          "instructions/routing.md",
+          "settings.common.json",
+          "codex/hooks.json",
+          ".ai/project/known-risks.md",
+          "skills/status/status.py",
+          "skills/status/SKILL.md",
+          "skills/ai-status/SKILL.md",
+          "tests/test-ai-task-state.sh",
+          "tests/test-ai-task-sensors.sh",
+          "tests/test-end-to-end.sh",
+          "tests/test-fable-gate.sh",
+          "tests/test-codex-model-gate.sh",
+          "tests/test-runtime-gate-fable.sh",
+          "tests/test-runtime-gate-codex.sh",
+          "tests/run-all.sh",
+          "tests/test-install-dry-run.sh",
+          "tests/test-codex-install.sh",
+          "tests/test-runtime-gate.sh",
+          "tests/test-dual-runtime-install.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test-ai-status-root.sh"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "4d7ddcf2a4016f58de0a55540bc5d4d99e7c7859",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "096d4088dcc7b55857b5820cf5fb8a57eb9b98be",
+          "seq": 2,
+          "paths": [
+            "skills/project-update/history/blobs/0b0a7e354e1d1c86351700d5fb63d16426536875f5fecb759d15e326b7f30289",
+            "skills/project-update/history/blobs/52de8807d56e2683431ec08a4a81c8c922219105a33bdc545d0e758b63849832",
+            "skills/project-update/history/index.json"
+          ],
+          "files": 3,
+          "added": 181,
+          "deleted": 181,
+          "lines": 362,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R2",
+        "description": "review pass 1: M1 config.toml same-day backup overwrite, I1 symlink backup, L2 bin/*.bak, L3 status one-line values",
+        "allowed_files": [
+          "skills/ai-init/templates/.ai/policies/risk-tiers.json",
+          "skills/ai-init/templates/.ai/policies/risk-tiers.md",
+          "skills/project-update/history/**",
+          "docs/sdlc/plans/claude-agentic-redesign.md",
+          "skills/ai-task/sensors.py",
+          "skills/ai-task/state.py",
+          "skills/ai-task/SKILL.md",
+          "hooks/fable-gate.py",
+          "hooks/codex-model-gate.py",
+          "install.sh",
+          "instructions/routing.md",
+          "settings.common.json",
+          "codex/hooks.json",
+          ".ai/project/known-risks.md",
+          "skills/status/status.py",
+          "skills/status/SKILL.md",
+          "skills/ai-status/SKILL.md",
+          "tests/test-ai-task-state.sh",
+          "tests/test-ai-task-sensors.sh",
+          "tests/test-end-to-end.sh",
+          "tests/test-fable-gate.sh",
+          "tests/test-codex-model-gate.sh",
+          "tests/test-runtime-gate-fable.sh",
+          "tests/test-runtime-gate-codex.sh",
+          "tests/run-all.sh",
+          "tests/test-install-dry-run.sh",
+          "tests/test-codex-install.sh",
+          "tests/test-runtime-gate.sh",
+          "tests/test-dual-runtime-install.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test-ai-status-root.sh"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "096d4088dcc7b55857b5820cf5fb8a57eb9b98be",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "9749ddc829b1284a96112d000c5ac1a542d7266e",
+          "seq": 3,
+          "paths": [
+            "install.sh",
+            "skills/status/status.py",
+            "tests/test-ai-status-root.sh",
+            "tests/test-codex-install.sh",
+            "tests/test-install-dry-run.sh"
+          ],
+          "files": 5,
+          "added": 49,
+          "deleted": 14,
+          "lines": 63,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R3",
+        "description": "save the review report (pass 1)",
+        "allowed_files": [
+          "skills/ai-init/templates/.ai/policies/risk-tiers.json",
+          "skills/ai-init/templates/.ai/policies/risk-tiers.md",
+          "skills/project-update/history/**",
+          "docs/sdlc/plans/claude-agentic-redesign.md",
+          "skills/ai-task/sensors.py",
+          "skills/ai-task/state.py",
+          "skills/ai-task/SKILL.md",
+          "hooks/fable-gate.py",
+          "hooks/codex-model-gate.py",
+          "install.sh",
+          "instructions/routing.md",
+          "settings.common.json",
+          "codex/hooks.json",
+          ".ai/project/known-risks.md",
+          "skills/status/status.py",
+          "skills/status/SKILL.md",
+          "skills/ai-status/SKILL.md",
+          "tests/test-ai-task-state.sh",
+          "tests/test-ai-task-sensors.sh",
+          "tests/test-end-to-end.sh",
+          "tests/test-fable-gate.sh",
+          "tests/test-codex-model-gate.sh",
+          "tests/test-runtime-gate-fable.sh",
+          "tests/test-runtime-gate-codex.sh",
+          "tests/run-all.sh",
+          "tests/test-install-dry-run.sh",
+          "tests/test-codex-install.sh",
+          "tests/test-runtime-gate.sh",
+          "tests/test-dual-runtime-install.sh",
+          "tests/test-shared-tree.sh",
+          "tests/test-ai-status-root.sh",
+          ".ai/reports/T-2026-10-25-003/review-report.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "tree_before": "9749ddc829b1284a96112d000c5ac1a542d7266e",
+        "kind": "remediation",
+        "diff": {
+          "tree_after": "9749ddc829b1284a96112d000c5ac1a542d7266e",
+          "seq": 4,
+          "paths": [],
+          "files": 0,
+          "added": 0,
+          "deleted": 0,
+          "lines": 0,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "R1",
+    "R2",
+    "R3"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "passed",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "ikakarov",
+    "granted_at": "2026-10-25T20:09:18Z",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "terminal",
+    "unattended": false
+  },
+  "created_at": "2026-10-25T18:59:28Z",
+  "updated_at": "2026-10-25T20:09:27Z",
+  "history": [
+    {
+      "at": "2026-10-25T18:59:28Z",
+      "event": "task_started",
+      "detail": "Redesign phase 1 (1.1–1.4): suite cap 2, size/paths stop gating, shims+stale agents+.bak removed, /status script (feature)"
+    },
+    {
+      "at": "2026-10-25T18:59:28Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-25T18:59:28Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-25T18:59:28Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-25T18:59:28Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-25T18:59:28Z",
+      "event": "risk_classified",
+      "detail": "T4: T4: weakens a refusal (1.2) + installer change (1.3); plan approved in plan mode"
+    },
+    {
+      "at": "2026-10-25T18:59:28Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-25T18:59:28Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-25T18:59:28Z",
+      "event": "step_started",
+      "detail": "1: Redesign phase 1 (1.1–1.4): suite cap 2, size/paths stop gating, shims+stale agents+.bak removed, /status script"
+    },
+    {
+      "at": "2026-10-25T19:22:25Z",
+      "event": "field_set",
+      "detail": "test_status = unknown (suite run 1, exit 1)"
+    },
+    {
+      "at": "2026-10-25T19:22:55Z",
+      "event": "set",
+      "detail": "test_status = new_regression"
+    },
+    {
+      "at": "2026-10-25T19:22:55Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-25T19:22:55Z",
+      "event": "remediation",
+      "detail": "R1: 1 regression: risk-tiers.md header hash stale after the risk-tiers.json comment rewording (test-scaffold-idempotency)"
+    },
+    {
+      "at": "2026-10-25T19:22:55Z",
+      "event": "step_started",
+      "detail": "R1: 1 regression: risk-tiers.md header hash stale after the risk-tiers.json comment rewording (test-scaffold-idempotency)"
+    },
+    {
+      "at": "2026-10-25T19:29:11Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-25T19:29:16Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-25T19:33:17Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-10-25T19:33:17Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-10-25T19:33:17Z",
+      "event": "remediation",
+      "detail": "R2: review pass 1: M1 config.toml same-day backup overwrite, I1 symlink backup, L2 bin/*.bak, L3 status one-line values"
+    },
+    {
+      "at": "2026-10-25T19:33:17Z",
+      "event": "step_started",
+      "detail": "R2: review pass 1: M1 config.toml same-day backup overwrite, I1 symlink backup, L2 bin/*.bak, L3 status one-line values"
+    },
+    {
+      "at": "2026-10-25T19:40:50Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 3, exit 0)"
+    },
+    {
+      "at": "2026-10-25T19:40:55Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-25T19:43:31Z",
+      "event": "step_completed",
+      "detail": "R2"
+    },
+    {
+      "at": "2026-10-25T19:43:31Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval: close"
+    },
+    {
+      "at": "2026-10-25T19:43:31Z",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "2026-10-25T20:07:54Z",
+      "event": "human_approval",
+      "detail": "granted by ikakarov via terminal"
+    },
+    {
+      "at": "2026-10-25T20:08:07Z",
+      "event": "remediation",
+      "detail": "R3: save the review report (pass 1)"
+    },
+    {
+      "at": "2026-10-25T20:08:07Z",
+      "event": "step_started",
+      "detail": "R3: save the review report (pass 1)"
+    },
+    {
+      "at": "2026-10-25T20:08:44Z",
+      "event": "step_completed",
+      "detail": "R3"
+    },
+    {
+      "at": "2026-10-25T20:08:44Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval: close"
+    },
+    {
+      "at": "2026-10-25T20:08:44Z",
+      "event": "gate_requested",
+      "detail": "G2: human_approval"
+    },
+    {
+      "at": "2026-10-25T20:09:18Z",
+      "event": "human_approval",
+      "detail": "granted by ikakarov via terminal"
+    },
+    {
+      "at": "2026-10-25T20:09:27Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-25T20:09:27Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-25-003/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-25T20:09:27Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "8f82e03ce0b468b851cf252d266b066a96a5f678",
+    "base_tree": "9c4cd15e22f263c65bd6852a8db409dd5e74db56",
+    "task": {
+      "files": 22,
+      "added": 1932,
+      "deleted": 803,
+      "lines": 2735,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 376,
+      "tree": "9749ddc829b1284a96112d000c5ac1a542d7266e",
+      "measured_at": "2026-10-25T20:08:44Z",
+      "status": "green"
+    },
+    "rescored_tier": "T4",
+    "rescore_reasons": [],
+    "over_budget": true
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-25-003/sensors.json",
+    "tree": null,
+    "verdict": null,
+    "checked_at": null
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "4d7ddcf2a4016f58de0a55540bc5d4d99e7c7859",
+        "exit": 1,
+        "duration_s": 332,
+        "log": ".ai/reports/T-2026-10-25-003/tests-suite-1.log",
+        "at": "2026-10-25T19:22:25Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "096d4088dcc7b55857b5820cf5fb8a57eb9b98be",
+        "exit": 0,
+        "duration_s": 330,
+        "log": ".ai/reports/T-2026-10-25-003/tests-suite-2.log",
+        "at": "2026-10-25T19:29:11Z",
+        "env_retry": false
+      },
+      {
+        "n": 1,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "096d4088dcc7b55857b5820cf5fb8a57eb9b98be",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-25-003/tests-e2e-1.log",
+        "at": "2026-10-25T19:29:16Z",
+        "env_retry": false
+      },
+      {
+        "n": 3,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "9749ddc829b1284a96112d000c5ac1a542d7266e",
+        "exit": 0,
+        "duration_s": 327,
+        "log": ".ai/reports/T-2026-10-25-003/tests-suite-3.log",
+        "at": "2026-10-25T19:40:50Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "9749ddc829b1284a96112d000c5ac1a542d7266e",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-25-003/tests-e2e-2.log",
+        "at": "2026-10-25T19:40:55Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 3
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null,
+  "reviews": 1
+}

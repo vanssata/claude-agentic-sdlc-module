@@ -1,1 +1,1 @@
-{"case":"rsync of a directory's contents into .claude/ is denied in a task (a1)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"rsync -a /tmp/evil/ .claude/"}}}
+{"case":"rsync of a directory's contents into the claude directory is allowed in a task since 3.4 (R22: no longer frozen)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"rsync -a /tmp/evil/ .claude/"}}}

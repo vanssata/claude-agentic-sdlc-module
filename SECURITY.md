@@ -7,27 +7,28 @@ against an older version.
 
 | Version | Supported |
 |---|---|
-| 2.0.x | yes |
-| < 2.0 | no |
+| 3.0.x | yes |
+| < 3.0 | no |
 
 ## What counts as a vulnerability
 
-claude-agentic installs hooks, guards and routing rules into Claude Code and
-Codex. These are in scope:
+RiskRails installs hooks, guards and routing rules into Claude Code and Codex.
+These are in scope:
 
-- a guard (`ai-path-guard`, `ai-scope-guard`, `ai-git-guard`) letting through a case it is documented to block, for example reading
-  a production secret, editing outside the approved step, force-pushing or
+- a guard check (`git`, `paths`, `scope` or `decision` in `hooks/ai-guard.py`)
+  letting through a case it is documented to block, for example reading a
+  production secret, editing outside the approved step, force-pushing or
   deploying
-- a way for a tool call from the agent to grant human approval or answer a gate
-  question without a human
-- the installer or `/project-update` overwriting, leaking or corrupting a user's
-  configuration, credentials or unrelated files
+- a way for a tool call from the agent to grant human approval, consume a
+  dialog pick it was not given, or answer a gate question without a human
+- the installer or `/rr-setup --update` overwriting, leaking or corrupting a
+  user's configuration, credentials or unrelated files
 - command injection or path traversal in any script, hook or skill this plugin
   ships
 - anything that sends user data to a place the user did not configure
 
 These are **not** vulnerabilities, because they are documented limits. See
-[Known risks](docs/known-risks.md):
+[docs/known-risks.md](docs/known-risks.md):
 
 - bypassing a guard on purpose through obfuscation. The guards are a tripwire,
   not a sandbox.
@@ -35,7 +36,7 @@ These are **not** vulnerabilities, because they are documented limits. See
 - Codex hooks that the user has not reviewed and trusted
 - budgets and quotas being advisory
 
-A report that shows one of these limits is wider than the Known risks entry
+A report that shows one of these limits is wider than the known-risks entry
 says is welcome.
 
 ## Reporting a vulnerability
@@ -47,8 +48,8 @@ Report it privately through GitHub:
 
 Include:
 
-- the version (`version` in `.codex-plugin/plugin.json`), the runtime (Claude
-  Code or Codex) and the operating system
+- the version (`version` in `package.json`), the runtime (Claude Code or
+  Codex) and the operating system
 - the smallest input that reproduces it, for example the hook payload, the
   command or the file layout
 - what happened and what you expected

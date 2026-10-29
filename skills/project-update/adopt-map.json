@@ -18,6 +18,37 @@
   "claude":  {"signature": ["CLAUDE.md"], "roots": []},
   "codex":   {"signature": ["AGENTS.md"], "roots": []}
  },
+ "own": {
+  "_doc": "setup.py survey|adopt: a project's own toolbox, inventoried in place (SQ5) — never copied, never moved; update.py --adopt does not read this key",
+  "inventory": [
+   {"glob": ".claude/skills/*/SKILL.md", "kind": "skill", "router": "skill"},
+   {"glob": ".claude/commands/**/*.md", "kind": "command", "router": "command"},
+   {"glob": ".claude/rules/**/*.md", "kind": "rule"},
+   {"glob": ".claude/agents/*.md", "kind": "agent"},
+   {"glob": ".claude/hooks/*", "kind": "hook"},
+   {"glob": ".agents/skills/*/SKILL.md", "kind": "skill", "router": "skill"},
+   {"glob": ".codex/skills/*/SKILL.md", "kind": "skill", "router": "skill"},
+   {"glob": ".codex/prompts/*.md", "kind": "command", "router": "command"},
+   {"glob": ".codex/agents/*", "kind": "agent"},
+   {"glob": ".codex/hooks/*", "kind": "hook"},
+   {"glob": "bin/*.sh", "kind": "script"},
+   {"glob": "Makefile", "kind": "make"}
+  ],
+  "guards": {
+   "ai-git-guard": ["git", "commit", "push", "merge"],
+   "ai-path-guard": ["path", "protect", "protected", "secret", "secrets", "dotenv"],
+   "ai-scope-guard": ["scope"]
+  },
+  "verify": [
+   {"file": "Makefile", "make_target": ["test", "tests", "check", "qa"], "command": "make {name}"},
+   {"file": "composer.json", "script": ["test", "tests", "qa", "check"], "command": "composer {name}"},
+   {"file": "package.json", "script": ["test"], "command": "npm test"},
+   {"file": "bin/*.sh", "stem": ["test", "tests", "run-tests", "check"], "command": "bin/{name}.sh"},
+   {"file": "phpunit.xml.dist", "command": "vendor/bin/phpunit"},
+   {"file": "phpunit.xml", "command": "vendor/bin/phpunit"},
+   {"file": "pytest.ini", "command": "python3 -m pytest"}
+  ]
+ },
  "rows": [
   {"tool":"speckit","source":".specify/memory/constitution.md","dest":"docs/sdlc/constitution.md","transform":"append-section","cleanup":true},
   {"tool":"speckit","source":"specs/*/spec.md","dest":"docs/sdlc/specs/{dir}.md","transform":"copy","cleanup":true,"router":"an adopted Spec Kit spec"},

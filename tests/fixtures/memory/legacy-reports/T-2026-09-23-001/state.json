@@ -1,0 +1,233 @@
+{
+  "task_id": "T-2026-09-23-001",
+  "goal": "Route multi-hop traces of installed third-party code to a BALANCED reader; plain lookups stay on Explore (FAST)",
+  "workflow": "feature",
+  "risk_tier": "T2",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "Route multi-hop traces of installed third-party code to a BALANCED reader; plain lookups stay on Explore (FAST)",
+        "allowed_files": [
+          "instructions/routing.md",
+          "skills/ai-init/templates/.ai/policies/model-routing.md",
+          "skills/project-update/history/index.json",
+          "skills/project-update/history/blobs/**"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "1eda46328aa38776fc54247d358e8909f92ff5da",
+          "paths": [],
+          "files": 0,
+          "added": 0,
+          "deleted": 0,
+          "lines": 0,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      },
+      {
+        "step_id": "R1",
+        "description": "1 BLOCKER: Codex bullet wrongly says ai-discovery is FAST and advises an unnamed spawn",
+        "allowed_files": [
+          "instructions/routing.md",
+          "skills/ai-init/templates/.ai/policies/model-routing.md",
+          "skills/project-update/history/index.json",
+          "skills/project-update/history/blobs/**"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [],
+        "status": "done",
+        "kind": "remediation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "795075c1f877667fdc0e51ac7c1184f4cea0fc6c",
+          "paths": [],
+          "files": 0,
+          "added": 0,
+          "deleted": 0,
+          "lines": 0,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1",
+    "R1"
+  ],
+  "test_status": "not_run",
+  "e2e_status": "not_applicable",
+  "review_status": "passed",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": false,
+    "granted_by": null,
+    "granted_at": null,
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": null,
+    "unattended": false
+  },
+  "created_at": "2026-09-23T15:57:57Z",
+  "updated_at": "2026-09-23T16:08:39Z",
+  "history": [
+    {
+      "at": "2026-09-23T15:57:57Z",
+      "event": "task_started",
+      "detail": "Route multi-hop traces of installed third-party code to a BALANCED reader; plain lookups stay on Explore (FAST) (feature)"
+    },
+    {
+      "at": "2026-09-23T15:57:57Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-09-23T15:57:57Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-09-23T15:57:57Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-09-23T15:57:57Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-09-23T15:57:57Z",
+      "event": "risk_classified",
+      "detail": "T2: T2: shipped instruction text reaching every install; no code path"
+    },
+    {
+      "at": "2026-09-23T15:57:57Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-09-23T15:57:57Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-09-23T15:57:57Z",
+      "event": "step_started",
+      "detail": "1: Route multi-hop traces of installed third-party code to a BALANCED reader; plain lookups stay on Explore (FAST)"
+    },
+    {
+      "at": "2026-09-23T15:58:23Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-09-23T16:02:39Z",
+      "event": "set",
+      "detail": "e2e_status = not_applicable"
+    },
+    {
+      "at": "2026-09-23T16:02:39Z",
+      "event": "field_set",
+      "detail": "sensors: review required"
+    },
+    {
+      "at": "2026-09-23T16:05:11Z",
+      "event": "remediation",
+      "detail": "R1: 1 BLOCKER: Codex bullet wrongly says ai-discovery is FAST and advises an unnamed spawn"
+    },
+    {
+      "at": "2026-09-23T16:05:11Z",
+      "event": "step_started",
+      "detail": "R1: 1 BLOCKER: Codex bullet wrongly says ai-discovery is FAST and advises an unnamed spawn"
+    },
+    {
+      "at": "2026-09-23T16:08:34Z",
+      "event": "step_completed",
+      "detail": "R1"
+    },
+    {
+      "at": "2026-09-23T16:08:35Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-09-23T16:08:39Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-09-23T16:08:39Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-09-23-001/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-09-23T16:08:39Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "1047cd5bad4e4768651b61ea07d4f6a48c5b77c7",
+    "base_tree": "5888b34f649228f32aa78973e20dd628373db9c4",
+    "task": {
+      "files": 0,
+      "added": 0,
+      "deleted": 0,
+      "lines": 0,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 2,
+      "tree": "795075c1f877667fdc0e51ac7c1184f4cea0fc6c",
+      "measured_at": "2026-09-23T16:08:34Z",
+      "status": "green"
+    },
+    "rescored_tier": "T2",
+    "rescore_reasons": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-09-23-001/sensors.json",
+    "tree": "1eda46328aa38776fc54247d358e8909f92ff5da",
+    "verdict": "required",
+    "checked_at": "2026-09-23T16:02:39Z"
+  },
+  "tests": {
+    "runs": [],
+    "suite_runs": 0
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null
+}

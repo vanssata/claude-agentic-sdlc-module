@@ -1,1 +1,1 @@
-{"case":"cat of the event journal is denied: state.py events reads it","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"cat __ROOT__/.ai/reports/T-1/events.jsonl"}}}
+{"case":"cat of the event journal is allowed since 3.4 (R22: only secrets are read-denied through the shell)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"cat __ROOT__/.ai/reports/T-1/events.jsonl"}}}

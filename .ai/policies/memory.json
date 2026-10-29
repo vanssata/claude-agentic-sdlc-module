@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "mode": "packages",
+  "period": "quarter",
+  "package_max_bytes": 1048576,
+  "cleanup": false,
+  "excerpt_max_bytes": 1024,
+  "keep_rules": 1,
+  "recall": {
+    "budget_tokens": 1500,
+    "max_items": 40
+  }
+}

@@ -1,0 +1,270 @@
+{
+  "task_id": "T-2026-10-25-006",
+  "goal": "M1: the rule writer in project-update skips nested git trees, so writer and take-back cover the same directories; close adopt-test findings L1/L2",
+  "workflow": "bugfix",
+  "risk_tier": "T4",
+  "current_stage": "done",
+  "affected_modules": [],
+  "context_summary_ref": null,
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": null,
+    "steps": [
+      {
+        "step_id": "1",
+        "description": "M1: the rule writer in project-update skips nested git trees, so writer and take-back cover the same directories; close adopt-test findings L1/L2",
+        "allowed_files": [
+          "skills/project-update/update.py",
+          "tests/test-project-update.sh",
+          "tests/test-project-adopt.sh",
+          ".ai/project/known-risks.md"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [
+          "tests/test-project-update.sh",
+          "tests/test-project-adopt.sh"
+        ],
+        "status": "done",
+        "kind": "implementation",
+        "tree_before": null,
+        "diff": {
+          "tree_after": "b7a24c4ca98db8773b9a9fdd49e7b43492aad41f",
+          "seq": 1,
+          "paths": [
+            "skills/project-update/update.py",
+            "tests/test-project-adopt.sh",
+            "tests/test-project-update.sh"
+          ],
+          "files": 3,
+          "added": 55,
+          "deleted": 4,
+          "lines": 59,
+          "unscoped": [],
+          "binary": [],
+          "status": "green"
+        }
+      }
+    ]
+  },
+  "completed_steps": [
+    "1"
+  ],
+  "test_status": "passing",
+  "e2e_status": "passing",
+  "review_status": "passed",
+  "security_status": "not_started",
+  "open_risks": [],
+  "next_action": "none — task closed",
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "vanssata",
+    "granted_at": "2026-10-25T21:45:19Z",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "terminal",
+    "unattended": false
+  },
+  "created_at": "2026-10-25T21:19:26Z",
+  "updated_at": "2026-10-25T21:45:33Z",
+  "history": [
+    {
+      "at": "2026-10-25T21:19:26Z",
+      "event": "task_started",
+      "detail": "M1: the rule writer in project-update skips nested git trees, so writer and take-back cover the same directories; close adopt-test findings L1/L2 (bugfix)"
+    },
+    {
+      "at": "2026-10-25T21:19:26Z",
+      "event": "stage",
+      "detail": "discovery -> discovery: inline"
+    },
+    {
+      "at": "2026-10-25T21:19:26Z",
+      "event": "stage",
+      "detail": "discovery -> context: inline"
+    },
+    {
+      "at": "2026-10-25T21:19:26Z",
+      "event": "stage",
+      "detail": "context -> impact_analysis: inline"
+    },
+    {
+      "at": "2026-10-25T21:19:26Z",
+      "event": "stage",
+      "detail": "impact_analysis -> risk_classification: inline"
+    },
+    {
+      "at": "2026-10-25T21:19:26Z",
+      "event": "risk_classified",
+      "detail": "T4: risk-tiers.json:278 project example (project-update merge); plan approved in plan mode"
+    },
+    {
+      "at": "2026-10-25T21:19:26Z",
+      "event": "plan_approved",
+      "detail": "1 step, inline (quick)"
+    },
+    {
+      "at": "2026-10-25T21:19:26Z",
+      "event": "stage",
+      "detail": "risk_classification -> plan -> implementation: quick"
+    },
+    {
+      "at": "2026-10-25T21:19:26Z",
+      "event": "step_started",
+      "detail": "1: M1: the rule writer in project-update skips nested git trees, so writer and take-back cover the same directories; close adopt-test findings L1/L2"
+    },
+    {
+      "at": "2026-10-25T21:31:37Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-25T21:31:42Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 1, exit 0)"
+    },
+    {
+      "at": "2026-10-25T21:38:27Z",
+      "event": "step_completed",
+      "detail": "1"
+    },
+    {
+      "at": "2026-10-25T21:44:19Z",
+      "event": "field_set",
+      "detail": "test_status = passing (suite run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-25T21:44:24Z",
+      "event": "field_set",
+      "detail": "e2e_status = passing (e2e run 2, exit 0)"
+    },
+    {
+      "at": "2026-10-25T21:44:24Z",
+      "event": "set",
+      "detail": "review_status = passed"
+    },
+    {
+      "at": "2026-10-25T21:44:24Z",
+      "event": "stage",
+      "detail": "implementation -> human_approval: close"
+    },
+    {
+      "at": "2026-10-25T21:44:24Z",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "2026-10-25T21:45:19Z",
+      "event": "human_approval",
+      "detail": "granted by vanssata via terminal"
+    },
+    {
+      "at": "2026-10-25T21:45:33Z",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "owner_runtime": "claude",
+  "resume_point": {
+    "stage": "done",
+    "step_id": null,
+    "next_action": "none — task closed",
+    "at": "2026-10-25T21:45:33Z",
+    "runtime": "claude"
+  },
+  "questions": {
+    "file": ".ai/reports/T-2026-10-25-006/questions.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "2026-10-25T21:45:33Z",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "diff": {
+    "base_commit": "4be2ce9ac84ee5500b43976a322213b81bc857f6",
+    "base_tree": "f63d4c32dd63629e705b5c4f186a1e8cc8e018fd",
+    "task": {
+      "files": 3,
+      "added": 55,
+      "deleted": 4,
+      "lines": 59,
+      "excluded_lines": 0,
+      "unbudgeted_lines": 13,
+      "tree": "b7a24c4ca98db8773b9a9fdd49e7b43492aad41f",
+      "measured_at": "2026-10-25T21:38:27Z",
+      "status": "green"
+    },
+    "rescored_tier": "T4",
+    "rescore_reasons": [],
+    "rescore_hints": [],
+    "over_budget": false
+  },
+  "sensors": {
+    "file": ".ai/reports/T-2026-10-25-006/sensors.json",
+    "tree": null,
+    "verdict": null,
+    "checked_at": null
+  },
+  "tests": {
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "b6bafc51988ad826094613ed1403f5e098af3c10",
+        "exit": 0,
+        "duration_s": 343,
+        "log": ".ai/reports/T-2026-10-25-006/tests-suite-1.log",
+        "at": "2026-10-25T21:31:37Z",
+        "env_retry": false
+      },
+      {
+        "n": 1,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "b6bafc51988ad826094613ed1403f5e098af3c10",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-25-006/tests-e2e-1.log",
+        "at": "2026-10-25T21:31:42Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "suite",
+        "command": "bash tests/run-all.sh",
+        "tree": "b7a24c4ca98db8773b9a9fdd49e7b43492aad41f",
+        "exit": 0,
+        "duration_s": 338,
+        "log": ".ai/reports/T-2026-10-25-006/tests-suite-2.log",
+        "at": "2026-10-25T21:44:19Z",
+        "env_retry": false
+      },
+      {
+        "n": 2,
+        "scope": "e2e",
+        "command": "bash tests/test-end-to-end.sh",
+        "tree": "b7a24c4ca98db8773b9a9fdd49e7b43492aad41f",
+        "exit": 0,
+        "duration_s": 4,
+        "log": ".ai/reports/T-2026-10-25-006/tests-e2e-2.log",
+        "at": "2026-10-25T21:44:24Z",
+        "env_retry": false
+      }
+    ],
+    "suite_runs": 2
+  },
+  "risk_tier_lowered": {
+    "by": null,
+    "at": null,
+    "from": null
+  },
+  "cross_vendor_review": null,
+  "reviews": 1
+}

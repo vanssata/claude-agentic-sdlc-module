@@ -1,0 +1,1 @@
+{"case": "naming the recorder as an argument is not running it: grep, git diff and chmod pass (R36.11)", "expect": "allow", "payload": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": "__ROOT__", "tool_input": {"command": "grep -n dialog-gate.py hooks/hooks.json && git diff hooks/dialog-gate.py && chmod +x hooks/dialog-gate.py"}}}

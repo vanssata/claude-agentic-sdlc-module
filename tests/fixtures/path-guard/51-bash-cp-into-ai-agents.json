@@ -1,1 +1,1 @@
-{"case":"cp with a destination under .ai/agents/ while a task is in flight is denied","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"cp src/Service.php .ai/agents/reviewer.md"}}}
+{"case":"a copy with a destination under the agents override directory while a task is in flight is allowed since 3.4 (R22: no longer frozen)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"cp src/Service.php .ai/agents/reviewer.md"}}}

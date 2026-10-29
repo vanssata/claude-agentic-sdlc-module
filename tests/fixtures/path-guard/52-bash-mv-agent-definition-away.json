@@ -1,1 +1,1 @@
-{"case":"mv of an agent definition while a task is in flight is denied: the source is destroyed","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"mv .claude/agents/ai-reviewer.md /tmp/x"}}}
+{"case":"moving an agent definition away while a task is in flight is allowed since 3.4 (R22: no longer frozen)","expect":"allow","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"mv .claude/agents/ai-reviewer.md /tmp/x"}}}

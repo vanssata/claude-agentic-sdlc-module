@@ -1,0 +1,4 @@
+{"v":1,"type":"pick","id":"C9","decis
+{"v":2,"type":"pick","id":"C8","decision":"D1","option":2,"order":1,"label":"git commit -m 'it'\"'\"'s done' -- a.py","session":"S1","tool_use_id":"toolu_C8","transcript":"/nonexistent/S1.jsonl","runtime":"claude","at":"2026-10-28T12:00:00Z","expires_at":"2026-10-28T12:02:00Z"}
+not json
+{"v":1,"type":"pick","id":"C1","decision":"D1","option":2,"order":1,"label":"git commit -m 'it'\"'\"'s done' -- a.py","session":"S1","tool_use_id":"toolu_C1","transcript":"/nonexistent/S1.jsonl","runtime":"claude","at":"2026-10-28T12:00:00Z","expires_at":"2026-10-28T12:02:00Z"}

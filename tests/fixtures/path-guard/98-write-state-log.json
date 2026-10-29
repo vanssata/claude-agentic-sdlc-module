@@ -1,0 +1,1 @@
+{"case":"writing under .ai/state/logs/ is denied: everything under .ai/state/ is state.py's (R22)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"__ROOT__","tool_input":{"file_path":"__ROOT__/.ai/state/logs/T-1/step-1.log"}}}

@@ -1,12 +1,1 @@
-{
-  "case": "a python one-liner that reads .env is denied",
-  "expect": "deny",
-  "payload": {
-    "hook_event_name": "PreToolUse",
-    "tool_name": "Bash",
-    "cwd": "__ROOT__",
-    "tool_input": {
-      "command": "python3 -c \"print(open('.env').read())\""
-    }
-  }
-}
+{"case":"a python one-liner that names a secret is denied (H3: the interpreter tripwire stays)","expect":"deny","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"__ROOT__","tool_input":{"command":"python3 -c \"print(open('.env').read())\""}}}

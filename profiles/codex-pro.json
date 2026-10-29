@@ -35,11 +35,6 @@
   },
   "_roles_comment": "One entry per rendered custom agent. `source` is the shared prompt body in agents/; when it is absent the agent is a rendered variant of another agent's body (see `variant_of`). `sandbox_mode` mirrors the Claude definition's tool surface: every agent that disallows Edit/Write is read-only.",
   "roles": {
-    "ai-indexer": {
-      "source": "ai-indexer.md.tmpl",
-      "tier": "FAST",
-      "sandbox_mode": "read-only"
-    },
     "Explore": {
       "source": "Explore.md.tmpl",
       "tier": "FAST",
@@ -56,43 +51,8 @@
       "tier": "FAST",
       "sandbox_mode": "read-only"
     },
-    "ai-context": {
-      "source": "ai-context.md.tmpl",
-      "tier": "BALANCED",
-      "sandbox_mode": "read-only"
-    },
-    "ai-risk": {
-      "source": "ai-risk.md.tmpl",
-      "tier": "BALANCED",
-      "sandbox_mode": "read-only"
-    },
-    "ai-planner": {
-      "source": "ai-planner.md.tmpl",
-      "tier": "BALANCED",
-      "sandbox_mode": "read-only"
-    },
-    "ai-tester": {
-      "source": "ai-tester.md.tmpl",
-      "tier": "FAST",
-      "sandbox_mode": "read-only"
-    },
-    "ai-release": {
-      "source": "ai-release.md.tmpl",
-      "tier": "BALANCED",
-      "sandbox_mode": "workspace-write"
-    },
-    "ai-implementer": {
-      "source": "ai-implementer.md.tmpl",
-      "tier": "BALANCED",
-      "sandbox_mode": "workspace-write"
-    },
     "ai-reviewer": {
       "source": "ai-reviewer.md.tmpl",
-      "tier": "STRONG",
-      "sandbox_mode": "read-only"
-    },
-    "ai-security": {
-      "source": "ai-security.md.tmpl",
       "tier": "STRONG",
       "sandbox_mode": "read-only"
     },
@@ -100,57 +60,16 @@
       "source": "architect.md.tmpl",
       "tier": "STRONG",
       "sandbox_mode": "read-only"
-    },
-    "ai-risk-strong": {
-      "variant_of": "ai-risk",
-      "tier": "STRONG",
-      "sandbox_mode": "read-only",
-      "description_prefix": "STRONG re-run of ai-risk. Use only when ai-risk on the BALANCED tier answered T3+ or confidence: uncertain.",
-      "escalation_note": "You are the STRONG re-run of `ai-risk`. A cheaper tier already classified this change and returned T3+ or `confidence: uncertain`. Read its answer first and say explicitly whether you confirm or raise its tier."
-    },
-    "ai-planner-strong": {
-      "variant_of": "ai-planner",
-      "tier": "STRONG",
-      "sandbox_mode": "read-only",
-      "description_prefix": "STRONG planner. Use for T3 and T4 plans; T5 goes to ai-expert instead.",
-      "escalation_note": "You are the STRONG planner, spawned because the risk tier is T3 or T4. Plan with the care that tier demands: name the files each step may touch, the compatibility risk, the rollback and what a human must approve."
-    },
-    "ai-expert-strong": {
-      "variant_of": "ai-expert",
-      "tier": "STRONG",
-      "sandbox_mode": "read-only",
-      "description_prefix": "STRONG stand-in for ai-expert, launched by runtime-gate while the EXPERT model is unavailable. Do not spawn it directly.",
-      "escalation_note": "You stand in for `ai-expert` because the EXPERT model is unavailable (rate-limited or unreachable), and runtime-gate rerouted this launch to the STRONG tier. Your answer is the STRONG model's, not the EXPERT model's: say so under residual risk, and say plainly when the question should wait for the EXPERT model instead of being settled now."
-    },
-    "ai-reviewer-balanced": {
-      "variant_of": "ai-reviewer",
-      "tier": "BALANCED",
-      "sandbox_mode": "read-only",
-      "description_prefix": "BALANCED run of ai-reviewer for the T2 review. Use at T2 only; T3+ reviews go to ai-reviewer on the STRONG tier.",
-      "escalation_note": "You are the T2 review, run on the BALANCED tier. Review with the same adversarial checklist, keep the report short, and say so if the change looks T3+ and needs the STRONG `ai-reviewer` instead."
-    },
-    "ai-expert": {
-      "source": "ai-expert.md.tmpl",
-      "tier": "EXPERT",
-      "sandbox_mode": "read-only"
     }
   },
   "plan": "pro",
-  "plan_rule": "- On Pro, `xhigh` is allowed only for `ai-expert` and verify/judge stages on {{EXPERT_MODEL}}; `max` and `ultra` stay off.",
-  "claude_agentic": {
+  "plan_rule": "- On Pro, `xhigh` is allowed only for an EXPERT question and verify/judge stages on {{EXPERT_MODEL}}; `max` and `ultra` stay off.",
+  "riskrails": {
     "inherits": null,
     "plan": "pro",
     "label": "Pro",
     "runtime": "codex",
     "budgets": {
-      "fan_out": {
-        "max_parallel_agents": 6,
-        "max_parallel_on_strong": 2,
-        "serial": false
-      },
-      "direct_mode": {
-        "max_tier": "T3"
-      },
       "expert": {
         "without_asking": true,
         "max_per_task": 2
