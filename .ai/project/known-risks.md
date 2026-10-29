@@ -749,3 +749,13 @@ following; each is open unless marked.
 - **Suggested fix**: decide whether `export` should report a task sealed by a concurrent export as its own (code), or the test should accept it (test) — a task of its own on `skills/ai-task/memory_sync.py`
 - **Status**: open
 - **Label**: KNOWN FACT (failure, isolated passes), INFERENCE (cause)
+
+## C5 wording drift across spec, instructions and the constitution template
+
+- **Found**: 2026-10-29, by T-2026-10-29-1636-shorten-c5-and-c6-in-the
+- **Where**: `skills/project-init/templates/constitution.md:10`
+- **What could go wrong**: The constitution template new projects get lacks C5's harness-recorded-pick condition; instructions/routing.md:49, instructions/stub.md:50 and docs/sdlc/specs/command-choice-dialog.md:354-356 each phrase C5 differently; no test pins the wording (review I3, T-2026-10-29-1636)
+- **How likely / how bad**: 
+- **Suggested fix**: 
+- **Status**: open
+- **Label**: RISK
