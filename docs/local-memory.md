@@ -47,10 +47,11 @@ per developer, in the git-ignored `.ai/local/memory/config.json`. `disable`
 returns to files mode, removes only our hook and keeps the packages and the
 local data.
 
-In this repository the order is fixed (plan, gate G2): migrate first, then
-enable, so the record is complete from the first push. Enabling first is safe —
-V5 skips a legacy id no package seals, and `memory status` lists those tasks as
-"legacy, not migrated" — but recall then reads them from their directories.
+Migrate first, then enable, so the record is complete from the first push
+(this repository did so on 2026-10-29 and runs in packages mode, period
+quarter). Enabling first is safe — V5 skips a legacy id no package seals, and
+`memory status` lists those tasks as "legacy, not migrated" — but recall then
+reads them from their directories.
 
 ## Packages
 

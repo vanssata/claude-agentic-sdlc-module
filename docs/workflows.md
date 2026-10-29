@@ -1,88 +1,103 @@
 # Workflows
 
-`/ai-task` classifies the request into one of five shapes and follows
-`workflows/<shape>.md` — the project's `.ai/` copy when it has one, else the
-shared tree's. The shape does not change which stages exist — it
-changes what each stage pays attention to. Who runs a stage is a third,
-independent axis: `pipeline_profile` in `.ai/policies/risk-tiers.json`
-(see `docs/risk-tiers.md`).
+Five kinds of change. The kind is named at `state.py start --workflow <kind>`
+(`/rr-plan` classifies the request and says which); the **mode** — light,
+guarded, full — comes from the weight ([weight.md](weight.md)) and decides how
+deep each part goes. Every kind runs the same path: `/rr-plan`, `/rr-build`,
+`/rr-review` when the mode or a red fact asks, `/rr-ship`. The kind only adds
+what follows. The binding text is `workflows.md` in the shared tree; this page
+is the summary.
 
 ## feature
 
-New behaviour someone asked for. The default.
+New behaviour someone asked for; the default.
 
-The thing that goes wrong: a feature quietly changes an existing behaviour. So
-the plan states what must stay the same, not only what changes, and the review
-looks for drift rather than only for bugs.
+- The plan states what stays the same, not only what changes. A feature that
+  quietly alters existing behaviour is the most common source of regressions.
+- New code paths get their negative cases tested: not authorised, not found,
+  invalid input, the external system down.
+- A new dependency is a decision with its own line in the plan, and raises the
+  novelty axis.
 
 ## bugfix
 
-Something behaves wrongly; fix it with the smallest possible change.
+Something behaves wrongly; the goal is the smallest change that fixes it and
+nothing else.
 
-**Write the failing test first.** A bugfix without a test that failed before it is
-a bugfix nobody can prove. Then find out *why* the bug exists — a "bug" that turns
-out to be deliberate behaviour someone depends on is a requirements conflict, and
-it goes back to the human rather than being fixed.
-
-Resist fixing the surrounding code. If the same bug exists in three places, fix
-the reported one and list the other two in `.ai/project/known-risks.md`.
+- **The failing test comes first, and is shown failing** (C2):
+  `state.py verify --scope step --files <the test> --expect fail` before the
+  fix. `expected fail: … it bites` is the proof; a test that passes without the
+  fix does not bite — rewrite it, not the code.
+- Find out *why* the bug exists first. Behaviour somebody depends on is a
+  requirements conflict, not a bug: it goes back to the human.
+- A bug in a payment, tax or identity path is still full mode.
+- The same bug in three places: fix the one reported, record the others with
+  `state.py memory risk add`.
 
 ## refactoring
 
-Changing shape without changing behaviour. The most dangerous workflow in a
+The shape of code changes; what it does does not. The most dangerous kind in a
 legacy codebase, because success is invisible.
 
-The order is not negotiable:
-
 ```
-characterization test → refactor → verify identical behaviour → (a different task) feature change
+characterization test → refactor → identical behaviour verified → (another task) the feature
 ```
 
-A test that has to be modified during a refactoring means behaviour changed —
-stop and say so. Renaming something that appears in a string (a service id, a
-queue name, a route name, a column) is not a rename, it is a migration. Plan
-review is required whatever the tier, because "this is cleaner" is not a
-justification for risk.
+- **Never** combined with a feature change (C3): a plan holding both is two
+  tasks.
+- Characterization tests are the first step, before anything moves; the same
+  tests, unchanged, pass at the end. A test that must change is a sign
+  behaviour changed — stop and say so.
+- Renaming what appears in a string — a service id, template, queue, route or
+  column name — is a migration, not a rename.
+- The plan is reviewed before the edit whatever the mode; the review looks for
+  behaviour drift. "Cleaner" alone needs a human to confirm it is worth it.
 
 ## hotfix
 
-Production is broken now. Stages get shorter; none disappears.
+Production is broken now. Each part gets shorter; none disappears.
 
-Urgency lowers the *depth* of a stage, never its existence, and the risk tier is a
-property of the code being touched, not of how loudly someone is asking. The
-hotfix is the smallest change that stops the bleeding; the real fix, the cleanup
-and the missing test become follow-up tasks, **written down before the hotfix is
-approved** so they do not evaporate when the incident closes.
-
-Never disable a test or a check to get a hotfix out. If CI is the obstacle, a
-human decides that explicitly.
+- The mode is the weight of the code touched, never of the urgency.
+- The smallest change that stops the bleeding, with a test that reproduces the
+  incident. The real fix, the cleanup and the missing tests become follow-up
+  tasks, written down before the hotfix is approved.
+- e2e runs only when the incident is in a flow it covers; the rollback line is
+  mandatory.
+- Record the trigger, the detection and what would have caught it earlier as a
+  risk. Never disable a test or a check to ship it; if CI is the obstacle, a
+  human decides that, explicitly.
 
 ## investigation
 
-A question, not a change. The deliverable is an answer with evidence.
+A question, not a change — "why does this happen", "where is this handled",
+"can we do X". The deliverable is an answer with evidence, written by the
+session.
 
-There is no implementation stage. Nothing is edited — not a comment, not a
-formatting fix. Every claim is labelled and cited: KNOWN FACT with `file:line`,
-INFERENCE with what it rests on, UNKNOWN with what would settle it.
-
-If the investigation concludes something should change, that is a **new task**
-with its own plan and approval.
+- Nothing is edited, not a comment. An investigation registers no task; one
+  that concludes something should change becomes a new task.
+- Every claim is labelled and cited: KNOWN FACT with `file:line`, INFERENCE
+  with what it rests on, UNKNOWN with what would settle it. Documentation and
+  code that disagree are both reported.
+- When the question is "what would it take", say the mode the change would
+  weigh: `state.py weight --files … --goal …`.
+- Findings worth acting on go into the record with `state.py memory risk add`.
+  Say what you could not determine.
 
 ## Choosing
 
-`/ai-task` says which workflow it picked and why. Correct it if it picked wrong —
-the difference between "bugfix" and "refactoring" in particular changes whether
-characterization tests are mandatory.
+Named by the request, confirmed by the code. "Add", "support", "allow" is a
+feature; "broken", "wrong", "fails" a bugfix; "clean up", "extract", "rename" a
+refactoring; "production is down" a hotfix; "why", "where", "could we" an
+investigation. A request that mixes two is two tasks, and `/rr-plan` says so
+before `start`.
 
 ## Where the SDLC skills fit
 
-`/sdlc-intent` → `/sdlc-spec` → `/sdlc-plan` is a documentation chain, not a
-sixth workflow. Use it when the work needs a written problem statement and an
-agreed design before anyone touches code — a new subsystem, a change several
-people must agree on, anything a reviewer will ask "why" about in six months.
-
-It produces `docs/sdlc/plans/<slug>.md`. Hand that to `/ai-task`, which then runs
-the same pipeline as any other task, with the tier's gates. The intent and the
-spec become the context the discovery stage would otherwise have to reconstruct.
-
-For an ordinary change, skip it. `/ai-task` writes its own plan.
+`/rr-spec` and the programme plan from `/rr-plan` come before a task when the
+work needs a written intent and design first: the spec records the brainstorm,
+the requirements and the flagged concerns; the plan maps every requirement to
+the files that change and the test that proves it; each row then becomes one
+task through `/rr-plan` and `/rr-build`, or the whole plan one task through
+`/rr-build-all`. The workflow kind is still named per task — a programme plan
+usually mixes features with a characterization-first refactoring, and they stay
+separate rows.

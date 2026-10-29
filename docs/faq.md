@@ -1,504 +1,239 @@
 # FAQ
 
+Why something was blocked, why a stage ran or did not, and how to change it.
+
 ## Something was blocked and I think it should not have been
 
-Read the refusal: every deny names the rule and the pattern that matched, and
-says what to do instead.
+Read the reason first: every refusal names the rule and the way out.
 
-- **A sensitive path** — if the path really is safe (a `.dist` file, a fixture),
-  add a regex to `allow_patterns` in `.ai/policies/path-guard.json`. Widening the
-  allow list is the supported way; working around the guard is not.
-- **Out of scope** — the current step does not name that file. Amend the step in
-  the plan and re-register it, or finish the step first. That is the entire point
-  of the guard.
-- **A git operation** — adjust `ai-git-guard.json` in your runtime's hooks
-  directory (`protected_branches`, `deploy_patterns`, or the per-repository allow
-  lists). It is your file; the installer never overwrites it. Each runtime has its
-  own copy, so edit both if you use both.
-- **Runtime configuration, while a task is in flight** — settings, agent and
-  skill definitions, commands, hooks and the pipeline's policies are frozen for
-  the length of a run, so a task cannot change the rules it is being judged by.
-  Reading them is allowed. Finish or archive the task (`state.py close`) and the
-  same edit goes through; if it genuinely belongs inside the run, it belongs in
-  the plan, not in a side edit.
-- **An instruction file inside `vendor/` or `node_modules/`** — a `CLAUDE.md` or
-  `.cursorrules` that came with a package is data, not an instruction, and the
-  next install overwrites it. If you really need to read one, add a regex to
-  `allow_patterns` and say why. Ordinary source inside a dependency is not
-  affected.
-- **A whole `apply_patch` rejected over one file** — that is the rule, not a bug.
-  A patch is checked path by path, and one out-of-scope or protected file rejects
-  all of it. Split the patch; do not widen the step to make the patch fit.
+- **`SCOPE_CHANGE_REQUIRED`** — the file is not in the task's files. Widen the
+  task in place, `state.py start --amend --files "+<path>" --why "…"`; it is
+  journaled, the task is not re-planned. A file that belongs to a different
+  change is recorded with `state.py memory risk add` and left for its own task.
+- **A secret** (`.env`, `secrets/`, a key, a dump) — refused for read and
+  write everywhere under `.ai/`. A test fixture that trips it goes into
+  `allow_patterns` of the project's `.ai/policies/path-guard.json`
+  (`.env.example`, `fixtures/*.sql` and `migrations/*.sql` are allowed
+  already).
+- **A control file** (`.ai/state/`, `task.md`, `events.jsonl`,
+  `.ai/policies/*.json`, the installed hooks) — write-refused always; the
+  policies and the runtime settings also while a task is in flight. Edit them
+  between tasks, in your own editor.
+- **A git command** — force push, a protected branch, `--no-verify`, a deploy
+  command, `npm publish`. The list and the per-repository exemptions are in
+  `~/.claude/hooks/ai-git-guard.json` ([hooks.md](hooks.md)).
+- **`CONSENT_REQUIRED`** — a `git commit` or `git push` that was not the
+  command you picked in the dialog. Pick it, or run it yourself.
+- **`DECISION_PENDING`** — a decision is open in the dialog; answer it, or
+  settle it in your terminal with the command the message prints.
 
-## How do I widen scope in the middle of a step?
+A guard's refusal is not a hint to reword the command. If the rule is wrong
+for your repository, change the rule.
 
-Have the agent report `SCOPE_CHANGE_REQUIRED` with the file it needs and why,
-then amend that one step in the plan and re-register it:
+## Why did my task's mode go up by itself?
 
-```bash
-python3 "$AI_HOME/skills/ai-task/state.py" plan --ref <plan> --steps steps.json
-python3 "$AI_HOME/skills/ai-task/state.py" step <step_id>
-```
+`verify` and `close` re-score reversibility and domain from the real diff. A
+hunk that reaches `**/Payment/**`, a migration that matches
+`irreversible_content` (`DROP`, `TRUNCATE`, `DELETE FROM`, `ALTER … DROP`,
+`RENAME`), a file in `config/` — the re-score prints the axis that moved and
+the mode rises. It never falls during a task; lowering it is yours, from your
+own terminal (`start --mode light --by <name>` is refused from an agent).
 
-where `$AI_HOME` is `~/.claude` or `~/.codex` — the two copies are the same
-script and both write the project's `.ai/state/state.json`.
+## Why was there no review?
 
-One step is amended, not the whole task replanned.
+Light mode: `close` runs a review only when one of the two facts is red. A
+green suite on this tree and every change inside the task is the review for
+a W ≤ 2 change. Guarded and full always get one pass, and the mode is the
+weight's — `--mode guarded --by <name>` on `start` raises it for free when you
+want a review anyway.
 
-## `step-done` refused my step. Now what?
+## `verify` refused to run the suite again
 
-It printed which of the two it was and the command that answers it.
+Two whole-suite runs are the budget per task (`tests.max_suite_runs` in
+`weight.json`; eight in a batch task). The third exits 6 `SUITE_BUDGET` and
+prints the command; running it is yours, from your terminal or as the pick in
+the dialog. The budget exists because "one failure, one fix, one run" is the
+expensive loop: read the log, classify every failure, fix the regressions as
+one batch, run once more with `--after-fix "<what the batch fixed>"`.
 
-`DIFF_BUDGET_EXCEEDED` means the step changed more than its tier's budget
-allows — not that the work is wrong, but that it has become two steps and would
-be reviewed as one. `SCOPE_CHANGE_REQUIRED` means it touched a file the plan did
-not give it. Both leave the step in progress, so nothing is lost:
+## `close` says `verify required` although the suite was green
 
-```bash
-python3 "$AI_HOME/skills/ai-task/state.py" step-split <step_id> --files "<the other concern>"
-```
+The tree changed after the green run — an edit, a formatter, a generated
+file. `close` compares tree hashes, not timestamps. Run `verify --scope all`
+again, or, when only documents changed since the green run and `testing.md`
+names `doc_tests`, the scoped command `close` prints.
 
-The moved files become a sibling step that inherits the tree the original
-started from, and the original is told they are no longer its business — which
-the scope guard reads too. Then finish the original and run `step <new_id>`.
+## `close` exits 4
 
-The budgets live in `.ai/policies/risk-tiers.json` under `diff_budget`, and
-they are a project's to adjust, like the triggers. `--force` exists for when a
-refusal is genuinely wrong; it records the step anyway, and the record shows
-that it was forced.
+A question is pending. `step-done`, `verify`, `close` and `approve` all wait
+for it. Answer in the conversation (`state.py answer Q1=B`) or on the
+`[Answer]:` line of `.ai/reports/<task-id>/task.md` §Questions followed by
+`state.py questions --sync`. Never on the human's behalf.
 
-## Why did my task's risk tier go up by itself?
+## Why does the pipeline never commit, merge or deploy?
 
-Because the diff reached something the tier did not predict. After every step
-the task's changed files are matched against `path_scopes` — `**/Payment/**`,
-`**/Security/**`, `**/migrations/**`, `config/**` and so on — and the highest
-`min_tier` among them wins, as does one tier more when the task is over its
-budget. A tier is a guess made before the work; this is the correction after it.
+Because the commit is the point where a human reads the diff, and the guards
+exist to keep that reading honest. `/rr-ship` writes the commit message and
+suggests the command; with the dialog on, the command you pick runs once,
+verbatim; otherwise you run it. `gh pr merge`, a push to a protected branch
+and every deploy command are refused from an agent whatever the mode.
 
-It only ever goes up. `downgrade_rule` has always said that only a human lowers
-a tier, in writing; now `state.py risk T2` from an agent exits 5 and prints the
-command for a human to run in their own terminal, with `--by`.
+## Why did `/rr-build` not spawn any agents?
 
-If a raise is wrong for your project, the scope patterns are yours to narrow.
+Because the session implements, and a light task needs nothing read that
+`grep -n` cannot find. Agents are for reading a lot (`Explore`,
+`log-reader`), judging a lot (`ai-discovery`), arguing (`ai-reviewer`) and
+design (`architect`); each runs on a named trigger ([agents.md](agents.md)).
+A batch build is the exception: its implementers and fixers are subagents.
 
-## Why was there no adversarial review on my T2 change?
+## How do I get a review on STRONG for a guarded task?
 
-Because every deterministic sensor was green and the tier allowed it — the
-intent's decision 6, and `review-economy.md` §8. `state.py review-gate` records
-that as `review_status: skipped_green`, and `.ai/reports/<task-id>/sensors.json`
-says exactly what was measured and on which tree.
-
-"All green" is narrow on purpose: the suite passed **on this tree**, the
-project's linter and type checker passed (or say `none` in `testing.md`), the
-diff is inside its budget, the re-scored tier is still T2 or lower, every
-finished step named a test that exists, no block of eight lines is repeated,
-and the named tests **fail when the change is reverted**. That last one is the
-point: a suite that never reaches the change passes just as green before it as
-after, and a review skipped on that would have been skipped on nothing.
-
-Anything missing is `unavailable`, which keeps the review. Nobody can assert
-the skip either — `state.py set review_status skipped_green` is refused.
-
-## How do I turn a guard off for one repository?
-
-The path and scope guards are already off in any repository without `.ai/`. The
-git guard is global by design, but takes per-repository escape hatches:
-
-```json
-{ "allow_force_push_repos": ["my-sandbox"],
-  "allow_protected_push_repos": ["my-notes"] }
-```
-
-in `ai-git-guard.json`, matched against the repository's directory name.
-
-## Why does the pipeline never commit or deploy?
-
-Because the failure mode of an agent that can deploy is unbounded, and the cost of
-a human typing one command is not. The pipeline ends at a release report and an
-approval; the commands that would run next are printed, not executed.
-
-If you ask for a commit in your own message, the agent commits. That is a person
-deciding, which is the distinction that matters.
-
-## Why did `/ai-task` not spawn any agents?
-
-Because the project's `pipeline_profile` is `solo` and the tier was T0–T2:
-direct mode. Every stage still ran, in a line each (at T2 the `state.py quick`
-record shows them in `history[]`; at T0/T1 there is no state file at all — the
-commit message is the record), but the session did them inline: your request plus `grep -n` was the discovery, the trigger
-table was the risk classification, the verification command was the test. A
-subagent costs its own context window, and for a change you could describe in
-one sentence it buys nothing. From T2 the review is always a separate context,
-and from T3 planning is too.
-
-## Why was there no plan, and why did the scope guard not fire?
-
-T0 and T1 have no plan stage — `stages_required` in `risk-tiers.json` says so.
-The scope guard arms only for a registered step, so for those tiers the scope
-is the line where the session says which files it will touch, and the
-verification run at the end. From T2 there is always a registered step list,
-and the guard is live.
-
-## Why did the tests run only once?
-
-The full suite did. By design there are three scopes, and each runs at its own
-moment: a step runs **only the tests its plan step names**, through
-`step_test_command` scoped to the files it touched; the verification command
-runs **once, after the last step**; the e2e suite runs **once after that**, at
-the end of the task. A bugfix still shows its failing test first.
-
-Running the full suite per step multiplied the slowest part of a task by the
-number of steps and found nothing the final run would not — and the e2e suite
-is slower still, so it runs once, at the end, when there is a finished change
-for it to exercise. What a step does need is its own tests, immediately: a
-regression in the code you just wrote is cheapest to fix while you are still
-in it.
-
-## Why can't I run the suite a sixth time?
-
-Because `sensors.max_suite_runs` says five, and a sixth run is not the next
-move — the human deciding what is happening is. `state.py test-run` counts the
-runs, writes each one's full output to `.ai/reports/<task-id>/tests-suite-<n>.log`
-and prints six lines. A green run needs no agent at all: exit 0 is the verdict.
-A red one goes to `ai-tester`, which reads the log file and never re-runs
-anything; one `--env-retry` is allowed, and only after a failure was classified
-as an environment failure.
-
-## What if the project has no e2e suite?
-
-Write `e2e_command: none` in `.ai/policies/testing.md`. An empty line means
-"not written down yet", and the next task will go looking for it.
-
-## Where is Fable used on Max?
-
-Only on `architect`, and only when installed with `--fable yes` (the default on
-Max and Team Max). The session itself is Opus 5.5 [1m] by default (`claude-opus-5-5[1m]`) (`/model opus` for a 200k session), `ai-expert` is pinned
-to `opus` at `xhigh`, and every reader and reviewer runs on Sonnet or Opus. Design questions
-outside a task are the one place a stronger model changes the outcome enough
-to pay for.
-
-## How do I get the fully delegated pipeline back?
-
-Set `"pipeline_profile": "team"` in `.ai/policies/risk-tiers.json`. Every stage
-then goes to its agent at every tier, as in the tables in `docs/agents.md`. You
-can also delegate a single stage in `solo` without switching: say so in the
-request, or hit one of the `delegate_anyway_when` triggers.
-
-## Why is the session model `opusplan` on Pro and Team Pro?
-
-Opus consumes the usage window far faster than Sonnet, and the main session
-re-reads its whole context every turn, so the session model is the largest cost
-lever there is. `opusplan` spends Opus where it changes the outcome — the plan —
-and Sonnet on implementing it. Because a subagent that omits `model:` would
-inherit Sonnet outside plan mode, the installer pins `model: opus` on
-`ai-expert` and `architect` for this plan. Prefer Opus everywhere? Set `model` to
-`opus` in `~/.claude/settings.json` and reinstall with `--plan pro`; nothing else
-changes.
-
-## Which plan does a Team account get?
-
-It depends on the seat. A Standard seat has Pro's models and limits, so it
-installs as `team-pro` and gets the Pro profile. A Premium seat has Max's, so it
-installs as `team-max` and gets the Max profile, Fable on `architect` included.
-The installer reads the seat from `~/.claude.json`; when it cannot tell, it
-uses `team-pro` and says so — pass `--plan team-max` for a Premium seat.
-
-## What changes between ChatGPT Plus and Pro under Codex?
-
-The Plus usage window is a fraction of Pro's, so `profiles/codex-plus.json`
-runs the session on Sol at `medium`, caps agent threads at three and runs
-`ai-expert` on Astra at `high`; `xhigh` is never used. `profiles/codex-pro.json`
-keeps Sol at `high`, six threads and Astra at `xhigh` for `ai-expert`. The plan
-is read from `chatgpt_plan_type` in `~/.codex/auth.json`; `--codex-plan plus|pro`
-overrides it.
+Raise the mode: `state.py start … --mode full --by <name>`. Raising is free
+and journaled; the review, the written plan and the approval gate follow.
 
 ## Where does the verification command come from?
 
-`.ai/policies/testing.md`, section **Verification**. It holds three commands:
-`step_test_command` (a scoped subset, for one step), `verify_command` (the full
-fast suite, e2e excluded) and `e2e_command` (once, at the end of a task).
-`/ai-init` asks for them; if one is empty when a task reaches TEST, the task
-takes it from the project `CLAUDE.md` or the CI config and writes it there.
-One command per scope, one healthy-output example — that is the feedback loop
-the playbook asks for.
+From `.ai/policies/testing.md`, which `/rr-setup` proposes and you confirm.
+`verify_command` must run the whole fast suite without fail-fast and exclude
+e2e; `e2e_command` runs once at the end of a guarded or full task, or is
+`none`. If the block is empty, `/rr-build` takes the command from CI or the
+project's instruction file, says so, and asks you to write it down.
+
+## What if the project has no e2e suite?
+
+Write `e2e_command: none`. An empty line means "not written down yet" and the
+next task goes looking for it. A task whose change reaches no e2e flow passes
+`verify --scope all --e2e not-applicable "<why>"`.
 
 ## I reinstalled the plugin. Why does my project still follow the old rules?
 
-The installer updates `~/.claude/`, including the shared tree
-`riskrails/ai/` that every project reads its shared policies, agent
-contracts, workflows and templates from — those take effect at once, unless the
-project overrides one with its own file under `.ai/`. The project-owned rest of
-`.ai/`, the `docs/sdlc/` templates and the `CLAUDE.md` block are copies made when
-it was initialised. Run
-`/project-update` in the project — or `/ai-init` again, which does the same.
-Files you never edited are replaced, edited ones are merged keeping your edits,
-and a real conflict is never overwritten: the plugin's version lands in
-`.ai/local/plugin-update/` and the skill merges it with you. Policy JSON changes
-are shown key by key and applied only after you confirm.
-
-If the tree layout itself changed since your project was initialised, the dry
-run opens with a `schema 0 -> N` line: migrations run first, in order, moving or
-adding files before anything is merged. A file that moves takes your edits with
-it, and the original is kept under `.ai/reports/project-update-<date>/`. A
-migration can *propose* a deletion; it never performs one. Confirming it is
-yours to type, in your own terminal outside Claude Code or Codex (not through
-the `!` prefix, whose shell is the agent's), because an agent is not allowed to:
-
-```bash
-python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/project-update/update.py" . --apply --confirm-delete "<your name>"
-```
-
-(under Codex, `${CODEX_HOME:-$HOME/.codex}` instead — the skill prints the path
-it resolved.)
-
-Until you run that — or delete the file yourself — the schema version stays
-where it is and the project keeps reporting as behind. There is no way to
-decline a proposed deletion and carry on. `.ai/VERSION` is the schema of the `.ai/`
-tree; the `"version"` inside `.ai/policies/risk-tiers.json` is that one file's
-content version, and the two are unrelated.
+Because a project owns its copies: `weight.json`, `testing.md`, the router,
+the managed block. `/rr-setup --update` brings them up — migrations first,
+then a three-way merge that keeps every edit — and `/rr-status` says when a
+project is behind ([project-update.md](project-update.md)). The shared files
+under `<home>/riskrails/ai/` update with the plugin unless the project
+overrides one.
 
 ## My `CLAUDE.md` block got much shorter. Where did the rules go?
 
-Nowhere — they moved off the always-loaded path. What stays in the managed block
-is what an agent is unsafe without: production behaviour as the source of truth,
-`/ai-task` and `.ai/AGENTS.md`, the scope rule and `SCOPE_CHANGE_REQUIRED`, no
-commit / push / merge / deploy, verify before reporting done, the context rules,
-and tiers rather than model names. Everything else is one hop away:
-
-- **the model ladder, the context-guard thresholds, the launcher, the guard
-  list** → `~/.claude/riskrails/routing.md` (`~/.codex/` under Codex),
-  installed beside the block and read when a routing question actually comes up;
-- **the pipeline's procedure** → `/ai-task` itself, and the project's
-  `.ai/AGENTS.md`, which is now a router: one row per job, pointing at the
-  policy under `.ai/policies/` that answers it;
-- **the project's own non-negotiables** → `docs/sdlc/constitution.md`, cited as
-  `C<n>` by `/sdlc-spec`, `/sdlc-plan` and `ai-planner`;
-- **a rule that only applies in one directory** → `.ai/rules/<slug>.md`, which
-  `/project-update` renders into that directory's instruction file.
-
-An always-loaded file is re-read on every turn of every task, so its size is a
-tax on every task, including the ones it has nothing to do with. The budget is
-2 048 B for a project block and 2 560 B for the global one; `install.sh` prints
-what yours costs after every install, and `/ai-status` prints it for a project.
-Both are advisory for a file the plugin does not own: it measures, it never
-trims your text.
-
-Existing projects are migrated by schema 3, which removes the `## SDLC workflow`
-section the plugin used to write into the root instruction file — only when it
-is still verbatim what the plugin shipped, and the original is kept under
-`.ai/reports/project-update-<date>/original/`. A block you edited inside the
-markers is never rewritten; you get a hint saying so instead, and a second one
-naming the byte count whenever the block is over budget.
-
-## Do I have to run `/ai-init` before `/ai-task`?
-
-Yes. Without `.ai/` there are no policies, no tier table, no state directory and
-no path or scope guard — `/ai-task` would be a name for improvisation.
-
-## What happened to claude-routing?
-
-It is part of this plugin now, and the routing it did for Claude Code is one half
-of what this does for two runtimes. Installing this one migrates its managed
-`CLAUDE.md` block into a single block carrying both sets of rules, and retires
-the `reviewer` agent that `ai-reviewer` replaces. Your model, effort and limits
-do not change — they come from the same `profiles/`. The old directory can be
-deleted afterwards.
-
-## When do I still use `architect`?
-
-For a design question that is not a task — "how should we structure this", "what
-are the options" — and in repositories that have no `.ai/`. Inside a task,
-`ai-planner` plans and `ai-expert` handles what it cannot settle.
-
-## Why is there no local model?
-
-Neither runtime has a local-model backend. The work a LOCAL tier would have done —
-indexing, listing, summarising git history — is done by deterministic tools and by
-`ai-indexer` on the cheapest hosted model. Nothing depends on a local model
-existing, so one can be added later without redesigning anything.
-
-## Can I use this from Codex as well as Claude Code?
-
-Yes, and from both over the same repository. `./install.sh` detects which CLIs
-are on `PATH` and installs for each; `--target auto|claude|codex|both` overrides it. The `.ai/`
-tree, the pipeline, the tiers and the task state are shared — a task started in
-one runtime resumes in the other. What differs is the install root, the
-instruction file (`CLAUDE.md` / `AGENTS.md`) and which model each tier resolves
-to. See the table at the top of the README.
-
-## The installer changed my Codex model from Astra to Sol
-
-Deliberately. The session model is the largest single cost in a long session —
-most of it is re-reading context, not generating output — so the routing puts the
-session on Sol at `high` (`medium` on Plus) and keeps Astra as the EXPERT escalation, one named
-trigger away. If you want it back, set `model` in `~/.codex/config.toml`; the
-installer will set it again on the next run, so change `profiles/codex-pro.json`
-(or `codex-plus.json`) instead if you want the decision to stick.
-
-## Will installing overwrite my `config.toml`?
-
-No. Six keys are managed: `model`, `model_reasoning_effort`, and four under
-`[agents]`. The merge edits those lines in place, then parses the file before and
-after and **refuses to write** unless the only keys that differ are those six.
-Comments, `[projects.*]`, `[mcp_servers.*]`, `[marketplaces.*]` and everything
-else survive; a malformed file aborts the merge untouched. The previous version
-is kept as `config.toml.bak`.
-
-## Why do the Codex guards not seem to do anything?
-
-Almost certainly because they have not been trusted yet. Codex does not run a
-non-managed hook until you review and approve it in `/hooks`. Until then they are
-installed and inert.
-
-This matters most for one rule: the deny that stops an agent session from
-running `state.py approve`. Under Claude Code it is enforced; under an untrusted
-Codex install the approval gate is policy, not enforcement. Nothing in the
-plugin can approve a hook for you — that is the point of the review — so trust
-them right after installing. `/ai-status` says whether you have.
-
-## Why does Codex have `ai-risk-strong`, `ai-planner-strong` and `ai-expert-strong`?
-
-Because Codex resolves a value in an agent's own file *ahead* of the value passed
-when the agent is spawned. "Run `ai-risk` on a stronger model" is silently ignored
-there, so the STRONG re-run is a separate agent that pins Sol. Under Claude Code
-the same escalation is `model: opus` on the ordinary agent. Same tier, same
-trigger. `ai-expert-strong` exists for the same reason in the other direction:
-while the EXPERT model is rate-limited or unreachable, the runtime gate cannot
-move `ai-expert` by rewriting its `model`, so it rewrites `agent_type` to the
-twin, which pins Sol.
+Into files that load on demand. The block holds only the rules an agent is
+unsafe without (2 048 B in a project, 2 560 B globally); `.ai/AGENTS.md`
+routes every job to the policy that answers it; `routing.md` in the home holds
+the model ladder. Everything you wrote outside the block is untouched.
 
 ## Why are my MCP servers off in this project?
 
-Because every connected server is in the system prompt of every turn, used or
-not, and the context is re-read each turn. The scaffolded `.claude/settings.json`
-sets `enableAllProjectMcpServers: false`, so a checked-in `.mcp.json` is a
-catalogue rather than a start-up list. Put a server in `enabledMcpjsonServers`
-when nearly every task in the repository needs it, and record why in
-the tooling policy (`policies/tooling.md`; a project that needs its own copies it
-to `.ai/policies/tooling.md` as an override). For a server one task needs, enable it, write one
-`tools_for_this_task:` line in the task record, and turn it off when the task
-closes.
+A connected server is in the system prompt of every turn whether a task calls
+it or not. The scaffolded `.claude/settings.json` sets
+`enableAllProjectMcpServers: false`; a project enables what nearly every task
+needs in `policies/tooling.md`, and a task names anything extra in one line and
+turns it off again.
 
 ## Why did Claude send a subagent to read one file?
 
-Because the file was too large to read into the session. Over ~4000 lines or
-~250KB the `cap-large-read` hook refuses an unbounded `Read` — and a `limit`
-larger than that budget, since it costs the same. The file is then read by the
-cheapest model: `Explore` for code, `log-reader` for logs and test output, both
-on `haiku`. What comes back is the matching ranges with `file:line` and one line
-on why each matters — never the file. Paying the session model to scroll through
-a file is the most expensive way to do the cheapest job in the pipeline.
+Because the file is over 4 000 lines or 250 KB and `cap-large-read.py` refused
+the unbounded `Read`. The cheap reader returns the matching ranges with
+`file:line`; an explicit `limit` within the budget passes when you really need
+the range in the session. Codex has no read hook, so there the rule is prose.
 
-## Why is there no large-read cap under Codex?
+## Why is the session model `opusplan` on Pro?
 
-Its read tool is not on the hook path, so there is nothing to hook. The rule is
-written into `~/.codex/AGENTS.md`, which makes it policy rather than enforcement.
-Worth knowing before you rely on it: under Codex, context hygiene is something the
-agent follows, not something the harness imposes.
+Opus in plan mode, Sonnet when executing: the expensive model is spent on the
+plan, the cheaper one on typing it out. `architect` and `ai-reviewer` pin
+`opus` so a Sonnet session cannot weaken them. On Max the session is Opus 5.5
+[1m]; `/model opus` gives a 200k window, cheaper per turn for a small task.
 
-## The Codex costs in `/usage-report` look wrong
+## Where is Fable used?
 
-The token columns are measured. The dollar column uses OpenAI's published
-Standard rates, checked on the date in `verified_on` in
-`skills/usage-report/prices.json`; `_rates_note` there lists what is not
-modelled — long-context rates past 272K input, Batch/Flex/Fast mode, the
-data-residency uplift — and that `codex-auto-review`, which is not on the price
-list, is priced as `gpt-5.6-terra`; a model matching no family is priced as
-`gpt-5.6-sol`, the default. `gpt-5.6-sol` is on promotional pricing until
-at least 2026-11-21. When the price list moves, update the file; the parser does
-not need touching. A provider whose table has `rates_verified: false` gets an
-ESTIMATE note under the total.
+On `architect` only, on Max with `--fable yes` (the default there), at
+`xhigh`, for design questions. Nothing else ever runs on it; `runtime-gate`
+sends it to Opus while Fable is rate-limited or the weekly limit is 90% used.
+`--fable no` leaves `architect` on the Opus session.
 
-## Why does the main session implement instead of a subagent?
+## The installer changed my Codex model from Astra to Sol
 
-The session already holds the plan and the context; handing a step to a subagent
-means rebuilding both. And the property that matters — that only the step's files
-change — comes from a hook, not from which process makes the edit.
+By design: the session model is the largest single cost. Sol at `high` (Pro)
+or `medium` (Plus) is the session; Astra stays the EXPERT escalation.
+`config.toml` is edited key by key and the previous version kept under
+`backups/<date>/` ([installation.md](installation.md)).
 
-`ai-implementer` exists for mechanical pattern-copying work and for when you ask
-for it.
+## Why do the Codex guards not seem to do anything?
 
-## The risk tier looks too high for what I want to do
+Codex runs a hook only after you trusted it in `/hooks`, and an entry that
+changed in an upgrade loses its trust. Open `/hooks` and approve. Nothing on
+screen says a hook is skipped ([known-risks.md](known-risks.md)).
 
-Say so. Tiers are raised by an agent and lowered by a human, in writing, in the
-task record. That asymmetry is deliberate: an agent that can talk itself down a
-tier has no tier system.
+## Why is a guarded review on Codex running on Sol?
 
-## `/ai-status` says the risk-tier mirror is stale
-
-`risk-tiers.json` changed and `risk-tiers.md` did not. The JSON is the source of
-truth, so nothing is broken — update the markdown and the sha256 comment in its
-first line when you get a moment.
+A Codex agent file's model beats the model asked for at launch, and the
+`ai-reviewer` file pins STRONG. Claude Code passes the tier per call, so a
+guarded review runs on Sonnet there ([routing.md](routing.md)).
 
 ## Can an agent edit these policies?
 
-No. `.ai/policies/*.json`, `.ai/state/*.json`, `.ai/state/handoff.md`, the task's
-`task.md` and `events.jsonl`, and the guards' own files are refused by the
-path guard. A human edits them, outside an agent run, where the change shows up
-in review. An agent that can rewrite its own constraints does not have
-constraints.
+Not during a task: `.ai/policies/` and the runtime settings are
+write-protected while a task is in flight, so a run cannot change the rules it
+is judged by; `.ai/policies/*.json` and the installed guards are protected
+always. Between tasks, in your editor, every file is yours — the weight table,
+the path-guard additions, the dialog switch, `testing.md`.
 
 ## Where do the questions, the journal and the handoff live?
 
-With the task, and each has one writer:
-
-| File | Written by | For |
+| What | Where | Written by |
 |---|---|---|
-| `.ai/reports/<task-id>/task.md` §Questions | `state.py ask` / `answer` / `questions --sync` | decisions a human has to make |
-| `.ai/reports/<task-id>/events.jsonl` | `state.py emit` | the append-only journal `/ai-status` and `/usage-report` read |
-| `.ai/state/handoff.md` | `state.py handoff` | the thirty lines a session reads first after a `/clear` or a compaction |
-| `.ai/state/session.json` | `hooks/context-guard.py` | which runtime is driving, and when you last took a turn |
-
-`task.md` and `events.jsonl` are archived with the task; `handoff.md` and
-`session.json` are git-ignored, because they describe a session and not the
-repository. You edit the `[Answer]:` lines in `task.md` §Questions by hand — that
-section is kept when the rest of `task.md` is rewritten — and then tell the session to run `state.py questions --sync`.
-Nothing else in there is yours to edit, and the guard enforces it.
+| the task | `.ai/state/state.json` | `state.py` |
+| the journal | `.ai/reports/<task-id>/events.jsonl` | `state.py`, the hooks through `event` |
+| the record | `.ai/reports/<task-id>/task.md` | `state.py`, rendered; questions answered on the `[Answer]:` lines |
+| the handoff | `.ai/state/handoff.md` | `state.py`, thirty lines, injected at session start |
+| the session | `.ai/state/session.json` | `context-guard.py` |
+| the decision and the picks | `.ai/state/decision.json`, `consent.jsonl` | `state.py`, `dialog-gate.py` |
+| the compact record | `.ai/memory/` | `close`, in packages mode ([local-memory.md](local-memory.md)) |
 
 ## A subagent asked me a question and then stopped. Why?
 
-Because a subagent has no user to ask. It returns `QUESTIONS_NEEDED` with the
-question instead of guessing, the manager writes it into `task.md` §Questions, and the
-stage commands exit 4 while a question is pending. The alternative — a subagent
-that invents the answer it needed — is how a plan quietly ends up built on an
-assumption nobody made.
+It did not ask; it returned `QUESTIONS_NEEDED` and stopped, which is the
+contract. The session records the questions (`state.py ask --batch`), you
+answer, and the work resumes with the answer in the brief.
 
 ## Why can the agent not approve its own plan?
 
-Because then it is not an approval. At T3+ the pipeline stops at a gate, and the
-gate has exactly two doors. Run, in **your own terminal**:
-
-```bash
-python3 <plugin>/skills/ai-task/state.py --root . approve --by "<your name>"
-```
-
-`approve` checks for a TTY, so the same line run through the agent's shell exits
-5 and changes nothing (unless you picked it in the dialog). Or set `[Answer]: A` on the gate's question in
-`.ai/reports/<task-id>/task.md` and tell the session to run `state.py
-questions --sync`; that door opens only behind a turn you actually took —
-`context-guard.py` records it in `.ai/state/session.json`, and the path guard
-refuses to let an agent run that hook by hand. And `state.py approve` from an
-agent session is refused unless it is the command you picked in the dialog
-(`.ai/policies/dialog.json` `enabled: true`), run verbatim and once.
+Because the point of full mode is a human reading the tree before it is
+committed. `approve` refuses without a terminal on stdin and is refused from
+an agent session by the path guard; the dialog's pick is yours to make and is
+consumed once. `AI_UNATTENDED=1` is the one way around it, for CI, and it
+stamps every approval `unattended`.
 
 ## How do I approve in CI, where there is no human?
 
-Export `AI_UNATTENDED=1` in the environment your launcher starts the run in. It
-turns off both deny rules and lets `approve` succeed without a terminal.
+Export `AI_UNATTENDED=1` in the job's environment — never in an interactive
+shell — and read `/rr-status` afterwards: it names every unattended approval
+and deletion.
 
-Two things to know. **Do not export it in an interactive shell** — every session
-that inherits it runs without the gate, for as long as the shell lives, and
-nothing will remind you. And it does not hide: the approval is recorded as
-`via: "unattended"`, `unattended: true` in the state and in the journal,
-permanently, and `/ai-status` calls out any such approval. The gate can be
-turned off; it cannot be turned off quietly.
+## I moved a task to Codex and now Claude refuses every command
 
-## What is schema 2?
+`handoff --to codex` hands the task over; until Codex resumes it, every state
+change from elsewhere exits 7 `RUNTIME_HANDOFF_PENDING`. Resume it there with
+the command the handoff printed, or take it back with `handoff --to claude`.
 
-`.ai/VERSION`. Schema 2 adds the journal, the questions file, the handoff and
-the keys that go with them (`owner_runtime`, `resume_point`, `questions`,
-`handoff`, and the gate's fields under `human_approval`). `/project-update`
-migrates an existing project: the keys are added only where absent, and the
-journal is backfilled from `history[]` with every backfilled line marked as
-such. A task in flight keeps working before and after. Running it twice changes
-nothing the second time.
+## `/rr-build` says `old surface`
+
+The task was started by a plugin older than 3.0. The new commands refuse it;
+`status`, `handoff` and `questions` still answer. Finish it with the version
+that started it, or drop it with `state.py close --abandon`.
+
+## What do the old command names do?
+
+`/ai-task`, `/ai-init`, `/ai-status`, `/ai-audit`, `/project-init`,
+`/project-update`, `/sdlc-intent`, `/sdlc-spec`, `/sdlc-plan` and
+`/usage-report` are aliases of the `rr-*` skills for one version
+(`ROADMAP.md`). `/ai-init` → `/rr-setup`, `/project-update` → `/rr-setup
+--update`, `/ai-task` → `/rr-build`, `/sdlc-*` → `/rr-spec` and `/rr-plan`,
+`/usage-report` → `/rr-status --cost`.
+
+## What is `.ai/VERSION`?
+
+The project's schema, 10 today; a project initialised before the file existed
+is 0. Migrations under `skills/project-update/migrations/` bring it up during
+`/rr-setup --update`, in order, inside the dry run, and the version is written
+last ([project-update.md](project-update.md)). It is separate from the task
+state's own schema (7), which `state.py` carries in `state.json`.

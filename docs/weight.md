@@ -13,16 +13,15 @@ state.py weight --files "a,b" [--goal "…"] [--declare axis=n:"evidence"]… [-
 
 Seven lines, one per axis plus the verdict. `--long` adds the evidence lists
 (per-file reference counts, hints, replaced declarations), ≤ 20 lines. `--json`
-gives the machine form. It needs no task and writes nothing. Since task 2.1 it
-only prints; it decides nothing until the new `start`/`close` surface (task 2.2a)
-records it.
+gives the machine form. It needs no task and writes nothing; `start` records
+the same measurement into the task, and `verify` and `close` re-score it.
 
 ```
-scope          2  hooks/ai-path-guard.sh matches hot_paths hooks/**
+scope          2  hooks/guard/paths.py matches hot_paths hooks/**
 behaviour      1  changes an existing path, limited (declared)
 reversibility  0  git revert returns everything
 domain         0  no money, identity or personal data (declared)
-novelty        0  SH_RE family exists (declared)
+novelty        0  the pattern family exists (declared)
 coverage       0  1 of 1 code files have a test
 W 3 → guarded   hints none · unknown none · light ≤2 · guarded 3–7 · full ≥8 or reversibility/domain=2
 ```
@@ -102,11 +101,11 @@ The limits are deliberate (FC-D1):
 - **Scope is not re-scored after the work.** A raise there would only move light
   to guarded once the work is done. Re-scoring is upward only, and only on
   reversibility and domain, the two hard axes (`rules.rescore_axes`), from the
-  real diff at `verify`/`close`. That lands with task 2.2a.
+  real diff at `verify`/`close`.
 
 ## Reversibility and domain
 
-Both are measured from paths now. Re-scoring (2.2a) adds content: a diff hunk in
+Both are measured from paths at `start`. Re-scoring adds content: a diff hunk in
 a `needs_step` file that matches `irreversible_content` raises reversibility to 2.
 The shipped `irreversible_content` list is SQL-shaped (FC-D3). A repository
 whose irreversible operations are file deletions in user trees adds its own
@@ -119,7 +118,7 @@ reaches domain 2, and therefore full. The spec's font-in-login case is light
 because its template sits in a theme directory that `customer_visible` does
 not list. A project whose login templates live under `templates/` and that
 wants font changes there to be light narrows its `customer_visible` or its
-hint paths. This is recorded for the 2.H policy reword.
+hint paths.
 
 ## Modes and the old tiers (FC-B1)
 
@@ -165,4 +164,5 @@ and is the human's, from their own terminal.
 Edit `.ai/policies/weight.json`, then run `state.py weight --mirror` and commit
 both. `tests/test_weight.py::test_mirror_fresh` fails while the shipped mirror is
 stale. Lowering a measured axis, or a mode, for one task is a human's act:
-`--mode … --by <name>` (task 2.2a), journaled.
+`--mode … --by <name>` on `start`, journaled; raising a mode the same way is
+anyone's.

@@ -1,341 +1,173 @@
 # Architecture
 
-Five moving parts: host-wide routing settings, a knowledge base on disk, a
-pipeline that runs in a session, a state file that connects them, and hooks that
-make the boundaries real.
+How the pieces fit: the installed home, a project's `.ai/`, the pipeline, the
+state, the hooks, the two adapters. Everything below is provider-neutral
+except the last section.
 
-Everything below is the same under Claude Code and under Codex except where it
-says otherwise. The runtime-specific part is deliberately thin — see
-[The two adapters](#the-two-adapters) at the end.
-
-## The routing layer
-
-`install.sh` writes the settings a session runs on: the session model, its
-fallback behaviour, the default effort and the output caps. Agent models are pinned
-in each agent definition, never through `CLAUDE_CODE_SUBAGENT_MODEL`.
-
-Under Claude Code that is a deep merge into `~/.claude/settings.json` from
-`profiles/{pro,max}.json` plus `settings.common.json`. Under Codex it is six
-managed keys in `~/.codex/config.toml` — `model`, `model_reasoning_effort`, and
-four under `[agents]` — taken from `profiles/codex-{plus,pro}.json`, one file
-per ChatGPT plan, which is also what the agent renderer reads, so a Codex routing decision has exactly one home.
-
-It also writes one managed block into the global instruction file —
-`~/.claude/CLAUDE.md` or `~/.codex/AGENTS.md` — carrying the tier table, the
-effort rules, the context hygiene rules and the pipeline rules. The two blocks
-say the same things with the models of their runtime substituted in.
-
-This half used to be a separate plugin. It is here because the two were giving
-contradictory instructions — which agent reviews, where a change starts, who
-designs — and a rule that exists twice in two places is a rule nobody follows.
-The same reasoning is why there is one module for both runtimes rather than two
-that drift.
-
-## The knowledge base
-
-`/ai-init` writes `.ai/` into the project. It is committed, and it is meant to be
-edited by humans afterwards — the scaffold never overwrites an existing file.
+## Three layers
 
 ```
-.ai/
-  AGENTS.md            the entry point: read this first
-  project/             what this system IS, discovered from the code
-  policies/            what agents may and may not do here (incl. tooling/MCP)
-  agents/              the role contract for each pipeline agent
-  workflows/           feature, bugfix, refactoring, hotfix, investigation
-  templates/           the shape of every artifact a task produces
-  state/state.json     the task in flight (NOT committed)
-  reports/<task-id>/   that task's artifacts (committed — the audit trail)
+~/.claude/  or  ~/.codex/               the installed home (npx riskrails)
+├── CLAUDE.md | AGENTS.md               the managed block: the rules an agent is unsafe without (≤ 2 560 B)
+├── settings.json | config.toml         model, effort, limits, hooks — from profiles/<plan>.json
+├── agents/                             Explore, log-reader, ai-discovery, ai-reviewer, architect — tier baked in
+├── hooks/                              ai-guard.py + guard/, cap-large-read, context-guard, runtime-gate, dialog-gate, …
+├── skills/                             rr-setup, rr-spec, rr-plan, rr-build, rr-build-all, rr-review, rr-ship, rr-status (+ aliases)
+│   └── ai-task/state.py                the state machine every skill drives
+└── riskrails/
+    ├── ai/                             the shared tree: policies, agent contracts, workflows, templates, using-riskrails.md
+    ├── ai-path                         prints which copy of a shared file applies to a project
+    ├── routing.md                      the model ladder and thresholds, read on demand
+    └── profile.json                    the plan resolved: tiers, budgets, the dialog tool
+
+<project>/
+├── CLAUDE.md | AGENTS.md               the same block, project scope (≤ 2 048 B), the rest is yours
+├── docs/sdlc/                          constitution.md; intent/, specs/, plans/, adr/
+└── .ai/
+    ├── AGENTS.md                       the router: one row per job → the policy that answers it
+    ├── VERSION                         the schema (10)
+    ├── project/                        the surveyed knowledge base, every claim labelled
+    ├── policies/                       weight.json + weight.md, dialog.json, path-guard.json, testing.md, coding.md, safety.md, security.md
+    ├── rules/                          rules scoped to directories, rendered into their instruction files
+    ├── state/                          state.json, handoff.md, session.json, decision.json, consent.jsonl, logs/   (not committed)
+    ├── reports/<task-id>/              task.md + events.jsonl per task
+    └── memory/                         the compact record, in packages mode
 ```
 
-There is exactly one `.ai/` tree however many runtimes the project uses. Only the
-instruction file that points at it differs — `CLAUDE.md`, `AGENTS.md`, or both —
-and `scaffold-ai.sh --runtime both` creates both over the same tree.
-
-The split matters: the installed agent definitions (`~/.claude/agents/*.md`,
-`~/.codex/agents/*.toml`) are **static** and identical in every project, so their
-prompts stay cache-friendly; the policies and agent contracts are the layer they
-read at the start of a run.
-
-That layer has two homes. The **shared tree**, `<home>/riskrails/ai/`
-(`policies/`, `agents/`, `workflows/`, `templates/` — 29 files), ships with the
-plugin, is installed by `install.sh` and is the same in every project. The
-**project tree**, `.ai/`, holds what is the project's own: `project/`, `rules/`,
-`state/`, `reports/`, `AGENTS.md`, `VERSION` and the policies `risk-tiers.json`,
-`risk-tiers.md`, `path-guard.json`, `testing.md`, `coding.md`, `safety.md` and
-`security.md`. For a shared path the project's file wins when it exists — an
-override — else the shared one is read; `<home>/riskrails/ai-path <path>`
-prints which, and `ai-path --tree-hash` fingerprints the installed tree. An
-override no longer receives the plugin's changes; `/project-update` says so
-every time it runs. Migration 0006 moves an existing project to this layout
-(README, "Updating a project"). Nothing dynamic — a ticket, a
-diff, test output — is ever read from disk by an agent; it arrives in the prompt.
+A project reads a shared file from `riskrails/ai/<path>` unless it has its own
+at `.ai/<path>`, which overrides it and stops receiving the plugin's changes.
+`.ai/AGENTS.md` is a router, not a rulebook: a job → the one file to read, so
+nothing loads that the task does not need.
 
 ## The pipeline
 
 ```
-REQUEST
-  → DISCOVERY            ai-indexer, then ai-discovery in parallel per area
-  → CONTEXT              ai-context, one structured summary
-  → IMPACT ANALYSIS      ai-discovery again, this time on blast radius
-  → RISK CLASSIFICATION  ai-risk, one tier from risk-tiers.json
-  → PLAN                 ai-planner (STRONG at T5, ai-expert at T6)
-  → PLAN REVIEW          ai-reviewer, T5 and above (the human, in plan mode, at T4)
-  → IMPLEMENTATION       the session itself, one step at a time
-  → TEST                 step tests in each step; the suite once after the last
-                         step, then e2e once (ai-tester in team)
-  → ADVERSARIAL REVIEW   ai-reviewer, T2 and above (up to T3, all sensors green is the review)
-  → SECURITY REVIEW      ai-security, T5 and T6
-  → RELEASE REPORT       ai-release
-  → HUMAN APPROVAL       the pipeline stops here, always
+/rr-spec   idea → docs/sdlc/specs/<slug>.md        brainstorm on record, architect on STRONG, Flagged concerns
+/rr-plan   spec → docs/sdlc/plans/<slug>.md        files, order, risks, proof per requirement, rollback
+           task → weight → mode → plan → start     six axes, three modes; the plan shaped by the mode; the scope guard armed
+/rr-build  edit inside the task's files; each step's own tests; the suite once, to the end; failures as one batch
+/rr-review one adversarial pass at the mode's tier; BLOCKER and HIGH fixed as one batch; one scoped re-review
+/rr-ship   close measures the two facts; full mode asks the human; the commit is the human's
 ```
 
-The manager is the **main session**, not a subagent. Neither runtime has a cheap
-orchestrator process, and an orchestrator that cannot see the conversation is
-worse than none. What keeps the session's context small is that reading is
-delegated or bounded, and every artifact is written to a file and referred to by
-path.
+`/rr-build-all` runs a whole plan as one task: every row a step with its
+`after` dependencies, the ready rows to parallel implementers on BALANCED,
+the suite once, parallel fixers, the review loop until it passes or the budget
+stops at the human. `/rr-status` shows where a task stands at zero model cost;
+`/rr-setup` builds `.ai/` and keeps it current.
 
-Stages are lightweight for a T0 change and heavy for a T6 one. None is skipped —
-that judgement is exactly what risk classification exists to replace.
+**The weight picks the mode, the mode picks the ceremony.** Scope,
+reversibility and coverage are measured from the tree; behaviour, domain and
+novelty are declared by the session with evidence; hints from the project's
+table raise an axis by one. W ≤ 2 is **light**: an inline plan, no review
+unless a fact is red, no human stop. W 3–7 is **guarded**: the plan in plan
+mode, which the human accepts; one review on BALANCED; e2e runs. W ≥ 8, or
+reversibility or domain at 2, is **full**: a written plan, `architect` when
+the design is open, one review on STRONG with a security focus when domain is
+2, and the human approves the tree. Reversibility and domain are re-scored
+from the real diff at `verify` and `close`; the mode only rises during a task,
+and lowering it is the human's ([weight.md](weight.md)).
 
-## Who does a stage: the pipeline profile
+**The session implements.** Reading is delegated — a lookup to `Explore`, a
+long log to `log-reader`, a trace that needs judgement to `ai-discovery` —
+because a file read into the session is paid for on every later turn and an
+agent returning twenty lines is cheaper than five tool results that stay. The
+edit itself is not delegated: the session holds the plan, the scope and the
+reason for every change, and a subagent that writes code loses all three at
+the handoff. The one exception is the batch build, where each step is small
+enough to brief completely.
 
-`pipeline_profile` in `.ai/policies/risk-tiers.json` decides who runs each
-stage, never whether it runs. The default, `solo`, is for one developer who
-knows the codebase — the setting the playbook describes for a team of one to
-five: CLAUDE.md, plan mode and a feedback loop, with light review. It runs
-T0–T4 in direct mode (no ceremony, cheap readers, one `sonnet` review at T2 or
-T3 only when a sensor is red, one `opus` review and a plan-mode plan the human
-approves at T4) and the full pipeline from T5. The tier is the scope of the
-change — a process, money, the irreversible — never its size: the diff budget
-is measured and reported, and raises nothing unless the project asks it to.
+## The state
 
-- Discovery, context, impact and risk come from the request plus `grep -n`,
-  and up to T4 are recorded in one `state.py quick` call — four audit-trail
-  entries, one round trip. `ai-risk` on `opus` only when a T4+ answer is not
-  obvious.
-- T0 and T1 have no plan stage: the session says which files it will touch and
-  edits. T2 and T3 get a short inline step list; at T4 the session writes the
-  plan in plan mode and the human approves it; `ai-planner` on `opus` from T5,
-  `ai-expert` at T6.
-- Tests come in three scopes: a step runs only the tests its plan step names
-  (`step_test_command`, scoped to its files), the project's verification
-  command runs once after the last step, and the e2e suite runs once after
-  that, at the end of the task. Output piped through `tail`; `log-reader` when
-  it is long.
-- The adversarial review is always a subagent — a context that did not write
-  the code — on `sonnet` at T2 and T3, where it runs only when `review-gate`
-  finds a red sensor, and on `opus` from T4, where it always runs.
-- Security review at T5/T6 is unchanged. The release report is inline up to T4
-  and becomes the commit message body.
+`state.py` is the only writer of the task state, and every decision it makes
+is deterministic — a measurement, never a judgement. No model writes or reads
+these files on the pipeline's behalf; the skills call the commands and read
+their one-line answers.
 
-Each subagent costs its own context window and a system prompt; in `solo` the
-pipeline spawns none for a T1 change and one for a T2 change, against nine or
-ten in `team`. That is the whole difference, and it is the difference between a
-task that fits a Pro or Plus usage window and one that does not.
-
-## Why the session implements
-
-The original design has a separate Implementer agent. Here the main session
-implements, for two reasons: it already holds the plan and the context, so
-handing a step to a subagent means re-establishing both; and the property that
-actually matters — that only the step's files change — is enforced by a hook
-rather than by which process makes the edit.
-
-`ai-implementer` still exists, for mechanical pattern-copying work and for when
-you ask for it explicitly.
-
-## The state file
-
-`.ai/state/state.json` is written by `skills/ai-task/state.py`, atomically —
-and, during a schema migration, by `skills/project-update/update.py` the same
-way.
-It holds facts, never transcripts:
-
-```
-task_id · goal · workflow · risk_tier · current_stage · affected_modules
-context_summary_ref · approved_plan { ref, current_step_id, steps[] }
-completed_steps · test_status · e2e_status · review_status · security_status · open_risks
-next_action · human_approval · created_at · updated_at · history[]
-owner_runtime · resume_point · questions { file, pending[] } · handoff { file, written_at, reason }
-human_approval { …, requested_at, gate_id, requested_session, rejected_at, via, unattended }
-```
-
-The last two lines are schema 2 (`.ai/VERSION`). Migration
-`skills/project-update/migrations/0002_task_journal.py` adds those keys to an
-existing project and backfills a journal from `history[]`, marking every
-backfilled line so nobody mistakes reconstruction for observation.
-
-It does three jobs at once:
-
-- **survival** — a task resumes after `/clear`, a crash, or a day off;
-- **enforcement** — `ai-scope-guard` derives the current step's allowed files
-  from it, so the plan is not advice;
-- **audit** — `history[]` records every stage transition with a timestamp;
-  `state.py close` archives the finished state into the local
-  `.ai/state/logs/<task-id>/state.json` (not committed), while the journal and
-  `task.md` under `.ai/reports/<task-id>/` — and, in packages mode, the task's
-  compact record under `.ai/memory/` — are committed alongside the change they
-  describe (`docs/local-memory.md`).
-
-It is git-ignored on purpose: it describes a session, not the repository.
-
-### Four files around it
-
-The state file answers "where is the task". Schema 2 adds four files that answer
-questions a single JSON document was the wrong shape for, and each has exactly
-one writer:
-
-| File | Written by | Answers |
+| File | Written by | Holds |
 |---|---|---|
-| `.ai/reports/<task-id>/events.jsonl` | `state.py emit` | what happened, in order, and **which runtime** did it |
-| `.ai/reports/<task-id>/task.md` §Questions | `state.py ask` / `answer` / `questions --sync` | what the pipeline needs a human to decide |
-| `.ai/state/handoff.md` | `state.py handoff` | what a session that has just lost its context needs first |
-| `.ai/state/session.json` | `hooks/context-guard.py` | which runtime is driving, and when the human last took a turn |
+| `.ai/state/state.json` | `state.py` | the task (schema 7): id, goal, workflow, mode, stage, files, tests, steps, the weight with its axes and re-scores, verify runs, review passes, the gate, the batch flag, the facts |
+| `.ai/reports/<task-id>/events.jsonl` | `state.py`, the hooks | the journal, append-only: `weight_set`, `mode_set`, `verify_run`, `review_verdict`, `question_asked`, `question_answered`, `gate_requested`, `gate_approved`, `decision_*`, `consent_*`, `model_fallback`, `risk_recorded` … with the runtime and the actor of each |
+| `.ai/reports/<task-id>/task.md` | `state.py`, rendered from the state and the journal | the record a human reads: `## Weight`, `## Plan`, `## Questions` (kept as written, with the `[Answer]:` lines), `## Verify`, `## Review` (one fenced pass each), `## Changes`, `## Verdict` |
+| `.ai/state/handoff.md` | `state.py` | at most thirty lines: mode, step, files, decisions, pending questions, the resume point; injected at session start; removed at close |
+| `.ai/state/session.json` | `context-guard.py` | the runtime driving, the prompt count, the last human turn |
+| `.ai/state/decision.json`, `consent.jsonl` | `state.py`, `dialog-gate.py` | an open decision for the runtime's dialog, and the picks the human made |
+| `.ai/state/logs/<task-id>/` | `state.py verify` | the full test output per run; the archived `state.json` after close; never committed |
 
-**The journal** is append-only: one complete line per `os.write`, under
-`flock`, never rewritten — and not writable by the actor it audits: `state.py
-event`, the command a hook uses to add a line, refuses the gate and lifecycle
-types, because those are emitted by the transition that earns them. A journal an
-agent can author is not an audit trail. It is deliberately **best-effort** — a journal append
-that fails never fails the command that emitted it, because the state write is
-the contract and the journal is the record of it. Readers skip an unparseable
-line and say how many they skipped. Nothing treats the journal as complete, and
-no alert depends on it; what it buys is `/ai-status` and `/usage-report` reading
-a task's history at zero model cost.
+The commands, by group: `start` (with `--amend`, `--mode --by`, `--plan-file`,
+`--batch`), `step-done`, `steps`, `batch`, `verify`, `review`, `close`;
+`approve`, `reject`; `weight`, `status`, `handoff`; `ask`, `answer`,
+`questions`, `decision`, `consent`; `event` (the hooks' channel, which refuses
+the forgeable types); `profile`; `recall` and `memory`. A task started by an
+older plugin answers `status`, `handoff` and `questions` and can be dropped
+with `close --abandon`; everything else refuses it as `old surface`.
 
-**The questions file** is how a subagent asks without being able to ask. A
-subagent has no user; the eight agent contracts therefore tell it to **return**
-`QUESTIONS_NEEDED` with the question rather than guess, and the manager writes
-it into `task.md` §Questions, where a human fills in an `[Answer]:` line. `state.py
-questions --sync` parses the section, writes the answers back into the state, and
-leaves the question text byte-identical. A pending question blocks the stage
-commands with exit 4: the pipeline stops on an unanswered question instead of
-picking an answer for itself.
+**The two facts.** `close` measures, never asks: (a) a green whole-suite
+`verify` on the tree as it is now; (b) every changed file inside the task's
+files. Green and green in light mode closes the task. A red fact in light mode
+makes a review owed; guarded and full owe one anyway, and e2e. A change whose
+files since the green run are all documents may close on the documents' own
+tests (`doc_tests` in `testing.md`) without a second full run.
 
-**The handoff** is derived — a pure function of the state, the journal and
-`session.json`, thirty lines, rewritten on every stage change and injected by
-`context-guard.py` at a session start or after a compaction. Because it is
-derived, nothing about it may fail a task: a handoff that cannot be rendered is
-a missing convenience, not a broken run.
+**The approval gate** exists in full mode only. `close` records
+`gate_requested`, prints the facts and the way to approve, and stops. With the
+dialog switch on, the approval is a pick in the runtime's own question tool,
+recorded by `dialog-gate.py` and consumed once; otherwise it is `state.py
+approve --by <name>` in the human's own terminal, which refuses without a TTY.
+A `full_irreversible` task (reversibility and domain both 2, or irreversible
+content in the diff) takes `approve --confirm <operation>` in the terminal,
+never the dialog. The approval covers the tree presented; a changed tree
+invalidates it. `reject --by --why` holds `close` at exit 5 until the tree
+changes. `AI_UNATTENDED=1` passes every human check and stamps the record
+`unattended`.
 
-**Approval is the one thing none of this can grant.** At T4+ the pipeline stops
-at a gate that only a human closes — by picking the `approve` command in the
-runtime's dialog (the switch is `.ai/policies/dialog.json`; a pick is recorded
-by the harness, and the agent runs that command verbatim and once), from their
-own terminal, where `approve` checks for a TTY, or by answering the gate's question in `task.md`, which
-is accepted only behind a human turn recorded in `session.json` by a hook the
-agent is forbidden to run. `ai-path-guard` refuses `state.py approve` from an
-agent session unless it is the command the human picked in the dialog. An unattended launcher can set `AI_UNATTENDED=1` and
-skip all of it — and the approval is then stamped `unattended` in the state and
-in the journal, for ever, where `/ai-status` reads it out. See
-[hooks.md](hooks.md) for the rules themselves.
+**Budgets** are refusals with a printed command, and running past one is the
+human's: two whole-suite runs per task (`SUITE_BUDGET` on the third), two
+review passes (`REVIEW_BUDGET`), three review rounds and eight suite runs in a
+batch task, one EXPERT launch per task on most plans.
 
 ## The hooks
 
-Registered once per runtime — in `~/.claude/settings.json`, in
-`~/.codex/hooks.json`:
-
-| Hook | Event | Scope | Armed by | Runtimes |
-|---|---|---|---|---|
-| `ai-git-guard` | `PreToolUse:Bash` | every repository | always | both |
-| `ai-path-guard` | `PreToolUse` on reads and writes | this project | the presence of `.ai/` | both |
-| `ai-scope-guard` | `PreToolUse` on writes | this step | `current_stage == "implementation"` and a current step | both |
-| `cap-large-read.py` | `PreToolUse:Read` | every session | always | Claude |
-| `project-scaffold.sh` | `Setup:init` | a new project | `/init` | Claude |
-| `runtime-gate.py` | `PreToolUse`/`PostToolUse:Agent`, `SubagentStart`/`SubagentStop`, `StopFailure` (Fable) | the top tier, the plan's budgets, the quota | always; budgets only with `profile.json` | both (`fable-gate.py`, `codex-model-gate.py` are shims) |
-| `context-guard.py` | `UserPromptSubmit`, `PreCompact`, `SessionStart` | the session's context, and `session.json` | always | both — snapshot Claude-only |
-
-The path and scope guards check for their arming condition in their first few
-lines and exit silently otherwise, which is why they can be registered globally
-and still change nothing in a repository that never ran `/ai-init`.
-
-All three share `hooks/lib/ai-hook-common.sh` and the same contract: read the
-payload from stdin, exit 0 silently to allow, or print a deny object and exit 0.
-They **fail open** — a guard that cannot parse its input allows the call, because
-these are defence-in-depth, and a broken guard must never make the tool unusable.
-
-Under Codex there is one extra thing they must do first. The runtime calls its
-tools by different names, and one of them edits several files at once, so
-`ai-hook-common.sh` normalises before any rule runs: `apply_patch` becomes
-`Edit`, `shell`/`exec_command`/`local_shell` become `Bash`, and the paths inside
-an `apply_patch` body are extracted from its `*** Add/Update/Delete File:` and
-`*** Move to:` headers so each one is checked on its own. The guards' rules are
-written once and see the same shapes in both runtimes.
-
-Two Codex facts shape the rest. Its hooks must be reviewed and trusted through
-`/hooks` before they run at all — until you do, nothing is enforced, including
-the rule that keeps an agent from running `state.py approve`. The plugin cannot
-close that gap for you: approving a hook is the user's act by design, and a
-runtime where a plugin could do it would have the larger problem. `/ai-status`
-says so under Codex, and the installer ends with the same reminder. And its read
-tool is not on the hook path, which is why `cap-large-read.py` has no Codex
-counterpart; the rule is written into `AGENTS.md` instead of being mechanical.
+The rules an instruction file states, the hooks enforce ([hooks.md](hooks.md)):
+one guard process on every tool call (decision, git, paths, scope), the read
+cap, the context guard, the runtime gate, the dialog gate. A guard is regex
+over a command line or a path — a tripwire for the honest mistake, not a
+sandbox — and it fails open, so a broken hook never locks a session. The
+characterization golden of 1 341 recorded decisions proves that a change to
+the engine moved no decision.
 
 ## Cost
 
-Context length, not model choice, dominates the cost of a session, so:
-
-- the main session delegates reading and keeps summaries, not output;
-- in the `solo` profile the fan-out happens once, in `/ai-init`, and a task
-  spawns an agent only where the tier needs a second context window;
-- where discovery does fan out, it is on the cheapest tier, and `ai-indexer`
-  runs first so each agent gets a file list instead of globbing the repository;
-- on Pro and Team Pro the session model is `opusplan`, so Opus is paid for the
-  plan and Sonnet for the implementation; on Max and Team Max the session is
-  Opus 5 and Fable is spent only on `architect`; under Codex the Plus profile
-  keeps the session at `medium`, three threads and no `xhigh`;
-- below T4 a task writes no report files and runs the test suite once;
-- a file too large to open is read by the cheapest model, which returns the
-  matching ranges with `file:line` rather than the file;
-- tools and MCP servers are off by default — they sit in the system prompt of
-  every turn whether a task calls them or not — and are enabled per project
-  only when nearly every task needs them, per task otherwise
-  (`policies/tooling.md`);
-- artifacts live on disk and are referenced by path between stages.
-
-The expensive tier is reserved for design, adversarial review and the conclusions
-a human reads.
+Three things cost tokens: the session re-reading its context on every turn,
+the agents it spawns, and the suite runs that print into the context. The
+design answers each: one short always-loaded file per runtime and a router for
+the rest; readers on the cheapest tier returning `file:line` excerpts; test
+output written to a log and read by `log-reader`, never into the session. The
+mode keeps the expensive parts — a written plan, a STRONG review, a human
+stop — for the changes whose weight earns them. `/rr-status --cost` reads the
+local transcripts of both runtimes and shows the split per task, model and
+tier at zero model cost; the per-task figures in the installed profile are
+reported next to it, never enforced.
 
 ## The two adapters
 
-Everything above is provider-neutral. What is not:
+Claude Code and Codex differ in four places, and each is handled once:
 
-| Concern | Claude Code | Codex |
-|---|---|---|
-| install root | `~/.claude/` | `~/.codex/` |
-| settings | deep merge into `settings.json` | six managed keys in `config.toml` |
-| instruction block | `~/.claude/CLAUDE.md` | `~/.codex/AGENTS.md` |
-| agent definition | Markdown + YAML frontmatter | one TOML file per agent |
-| hook registration | a `hooks` block in settings | `hooks.json`, trusted via `/hooks` |
-| model ladder | haiku → sonnet → opus → Fable/Opus | Terra → Terra → Sol → Astra |
+- **Where files go and what an agent looks like.** `npx riskrails` renders the
+  same templates to `agents/*.md` with YAML frontmatter, or to `agents/*.toml`
+  with the model, effort and `sandbox_mode` pinned, because a Codex agent
+  file's model beats the one asked for at launch.
+- **How hooks are registered.** A `hooks` block in `settings.json`, or
+  `hooks.json` trusted in `/hooks`. Codex has no `Read` hook, no `Setup`, no
+  `Notification`, no `StopFailure`; the guard sees `apply_patch` as an `Edit`
+  with every path checked, and `runtime-gate` learns an outage at
+  `SubagentStop` instead of `StopFailure`.
+- **How a human is asked.** `AskUserQuestion` or `request_user_input` for
+  the dialog; a Codex hook cannot ask, so a budget check that asks on Claude
+  Code explains on Codex.
+- **Which model a tier is.** `profiles/<plan>.json` per runtime, resolved into
+  `profile.json` ([routing.md](routing.md)).
 
-Two consequences are worth naming, because they are not cosmetic.
-
-**Agent precedence is inverted.** Codex resolves a value written in an agent's own
-file *ahead* of the value passed when it is spawned. Asking for a stronger model
-at spawn time therefore does nothing there. The renderer handles this by writing
-an explicit `model` and `model_reasoning_effort` into every agent — an omitted
-`model` would fall back to the Terra `[agents]` default — and by emitting
-`ai-risk-strong` and `ai-planner-strong`, which pin Sol, for the T4/T5 re-runs
-that Claude Code does with `model: opus` — and `ai-expert-strong`, which the
-runtime gate reroutes `ai-expert` to, by `agent_type`, while the EXPERT model
-is unavailable. `tests/test_codex_agent_render.py`
-asserts each role's *effective* model, not the one that was requested.
-
-**There is no `StopFailure`.** On Claude Code `runtime-gate` learns about a Fable rate limit
-from a dedicated failure event. Codex has no such event, so there it
-watches `SubagentStop` and marks the gate only when the evidence actually points
-at an EXPERT agent: its name in the text, an explicit expert `model`, an agent
-file pinned to the expert model, or an expert launch inside the last five minutes.
-Both sides then do the same thing — rewrite an EXPERT launch to the tier below,
-say so in the agent's context, and expire on their own. The budget checks differ
-in one way: Codex parses `ask` but does not support it, so where Claude Code asks,
-Codex allows the launch and explains it in `additionalContext`.
-
-`config.toml` gets one more piece of care. There is no comment-preserving TOML
-writer in the standard library, so `scripts/merge-codex-config.py` edits the
-managed lines surgically, then parses the file before and after and refuses to
-write unless the only keys that differ are the ones it manages. That check, not
-the editing, is the safety contract.
+Everything else — `.ai/`, `state.py`, the skills, the weight, the guards'
+rules — is one implementation, and `tests/test_end_to_end.py` drives one task
+through both runtimes over one `.ai/` tree to prove it.
