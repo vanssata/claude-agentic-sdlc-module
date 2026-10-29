@@ -6,7 +6,7 @@ dangerous one, then the audit, the update and the bill.
 ## 1. Install
 
 ```bash
-npx riskrails@3.0.0          # detects Claude Code, Codex or both; proposes the plan it detected; Enter confirms
+npx riskrails@3.0.1          # detects Claude Code, Codex or both; proposes the plan it detected; Enter confirms
 ```
 
 Node 18+ and `python3` are needed. The installer writes the managed block into
