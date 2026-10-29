@@ -41,3 +41,36 @@ B. стъпка 5 отпада от задачата (печалбата е ~8 s
 C. A плюс нов sensor в rr-status --cost: минути suite и минути ревю на задача, за да се вижда ефектът след това
 X. Other — answer as `X: <text>`
 [Answer]: A — by vanssa via prose at 2026-10-29T18:46:56Z
+
+## Q6. Ред 4: правилото documents-only нулира ли и domain и novelty, или само behaviour?
+asked: 2026-10-29T19:11:41Z · stage: intent
+context: concern 8: behaviour 0 само не прави документна промяна light — domain и novelty остават unknown = 1 (weight.py:239-240)
+A. и трите (behaviour, domain, novelty) — както е в дизайна (c) (recommended)
+B. само behaviour; light примерът казва на сесията да декларира domain/novelty 0
+X. Other — answer as `X: <text>`
+[Answer]: A — by vanssa via picker at 2026-10-29T19:16:02Z
+
+## Q7. Шаблоните за user проекти (documents ключ, doc_tests ред): сега или отделна задача след G1/G2?
+asked: 2026-10-29T19:11:41Z · stage: intent
+context: concern 10: шаблоните в skills/ai-init/templates и weight.md mirror остават непипнати; правилата са изключени за user проекти
+A. отделна задача след измерване (R6) и G1/G2 (recommended)
+B. сега, като ред 6 в batch-а
+X. Other — answer as `X: <text>`
+[Answer]: A — by vanssa via picker at 2026-10-29T19:16:02Z
+
+## Q8. Таванът ~40 tool calls на reviewer-а важи ли и във full режим?
+asked: 2026-10-29T19:11:41Z · stage: intent
+context: ai-reviewer.md.tmpl:63-64 — в full режим списъкът 'look for' е неограничен
+A. да, един таван за всички режими; недостигнатото се изброява като 'not reached (budget)'
+B. full получава по-висок таван (~80) (recommended)
+C. full е без таван; таванът е само за guarded/light
+X. Other — answer as `X: <text>`
+[Answer]: B — by vanssa via picker at 2026-10-29T19:16:02Z
+
+## Q9. Правилото за документи в close (2b, D1-D5): в batch-а сега или отлагане, докато ред 1 е измерен?
+asked: 2026-10-29T19:11:41Z · stage: intent
+context: concern 3: след ред 1 пълният suite е ~60-100 s, правилото за документи спестява ~1 мин на повторение, но отслабва отказ (behaviour 2)
+A. сега, както Q1=C (recommended)
+B. отлагане: ред 2 прави само 2a (политика за находки); 2b става отделна задача, ако R6 не стигне
+X. Other — answer as `X: <text>`
+[Answer]: A — by vanssa via picker at 2026-10-29T19:16:02Z
