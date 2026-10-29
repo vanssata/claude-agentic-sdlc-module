@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>RiskRails compared — processes, not benchmarks</title>
+<meta name="description" content="How RiskRails compares with plain Claude Code, Spec Kit, Kiro, Cursor rules and hooks, and AI-DLC: what each enforces, where each is strong, and what it leaves to you.">
+<meta name="theme-color" content="#232B27">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@400;700&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="assets/rr.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><span class="lamp" aria-hidden="true"></span>RiskRails <small>3.0.1</small></a>
+    <button class="navbtn" aria-expanded="false" aria-controls="nav">Menu</button>
+    <ul class="nav" id="nav">
+      <li><a href="index.html">How it works</a></li>
+      <li><a href="demo.html">Demo</a></li>
+      <li><a href="compare.html" aria-current="page">Compare</a></li>
+      <li><a href="storage.html">Storage</a></li>
+      <li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li>
+    </ul>
+  </div>
+  <div class="track-progress" aria-hidden="true"><i></i></div>
+</header>
+
+<main id="main">
+<section class="panel hero" style="padding-bottom:56px">
+  <div class="wrap">
+    <span class="eyebrow">Compare</span>
+    <h1 style="margin-top:16px;font-size:clamp(44px,6.4vw,80px)">Processes, <em>not</em> benchmarks.</h1>
+    <p class="lead">Every tool here makes an agent more useful. They differ in what happens when the agent is wrong: who notices, what stops it and what it costs you on a change that does not need the ceremony. Each row says where an approach is strong and where it leaves the work to you.</p>
+  </div>
+</section>
+
+<section class="sheet band">
+  <div class="wrap">
+    <div class="ds rv">
+      <div class="ds-head"><span><b>RR301</b> · process comparison</span><span>October 2026 · public documentation of each tool</span></div>
+      <div class="tbl"><table style="min-width:900px">
+        <caption><span>6.1</span>What enforces what</caption>
+        <tr><th>Concern</th><th>Plain Claude Code</th><th>Spec Kit</th><th>Kiro</th><th>Cursor rules + hooks</th><th>AI-DLC</th><th>RiskRails</th></tr>
+        <tr><td>An edit outside the task is refused</td><td class="part">hooks exist; you write the rule</td><td class="no">tasks.md guides</td><td class="no">steering guides</td><td class="part">shell hook can deny; file scope is yours</td><td class="no">rules ask the agent</td><td class="yes">a hook refuses, every call</td></tr>
+        <tr><td>The process scales with the change</td><td class="part">plan mode, your call each time</td><td class="no">one flow per feature</td><td class="part">spec or chat, your call</td><td class="no">not built in</td><td class="yes">adapts depth to the task</td><td class="yes">six-axis weight, three modes</td></tr>
+        <tr><td>"Done" is measured on the tree</td><td class="no">the model reports</td><td class="no">the agent reports</td><td class="no">the agent reports</td><td class="no">the agent reports</td><td class="no">the agent reports</td><td class="yes">green suite + files in scope</td></tr>
+        <tr><td>A human gate before risky work</td><td class="part">permission prompts</td><td class="part">you review each artefact</td><td class="yes">you approve each spec file</td><td class="part">per-command approval</td><td class="yes">approval at each phase</td><td class="yes">by mode, in the dialog</td></tr>
+        <tr><td>Starts on legacy code with no spec</td><td class="yes">yes</td><td class="part">spec first</td><td class="part">spec first, or chat</td><td class="yes">yes</td><td class="part">inception first</td><td class="yes">survey once; light tasks need none</td></tr>
+        <tr><td>A spec for a new feature</td><td class="no">plan mode only</td><td class="yes">its core</td><td class="yes">its core</td><td class="no">not built in</td><td class="yes">its core</td><td class="yes"><code>/rr-spec</code></td></tr>
+        <tr><td>Where it runs</td><td>Claude Code</td><td>many coding agents</td><td>Kiro IDE and CLI</td><td>Cursor</td><td>rule files for several tools</td><td>Claude Code and Codex</td></tr>
+        <tr><td>Setup</td><td>none</td><td><code>specify init</code></td><td>install the IDE</td><td>rule and hook files</td><td>copy the rule files</td><td><code>npx</code>, then <code>/rr-setup</code></td></tr>
+      </table></div>
+      <p class="fn">✓ the tool does it by design. ◐ possible, but left to you. ✕ not what the tool is for. Read from each tool's public documentation in October 2026; tools change fast, so check the current docs before you decide.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sheet band" style="padding-top:0">
+  <div class="wrap">
+    <div class="head rv">
+      <span class="eyebrow">One by one</span>
+      <h2 class="h2">Strong at, <em>weak at,</em> and with RiskRails.</h2>
+    </div>
+    <div class="verdicts">
+      <div class="alt rv">
+        <div><h3>Plain Claude Code</h3><p class="what">CLAUDE.md, permissions, plan mode, hooks and subagents, with nothing on top.</p></div>
+        <div class="pro"><h4>Strong at</h4><ul><li>No setup and nothing new to learn.</li><li>The fastest path for a one-off change.</li><li>Every building block is there if you write the rules.</li></ul></div>
+        <div class="con"><h4>Weak at</h4><ul><li>A rule in CLAUDE.md is a request the model may skip.</li><li>A typo and a payment change get the same process unless you choose.</li><li>"Tests pass" is the model's word.</li></ul><p class="with">RiskRails is built on these same hooks, skills and subagents. It adds the rules, a state machine and the tests that prove both.</p></div>
+      </div>
+      <div class="alt rv">
+        <div><h3>Spec Kit</h3><p class="what">GitHub's spec-driven toolkit: constitution, specify, plan, tasks, implement.</p></div>
+        <div class="pro"><h4>Strong at</h4><ul><li>A clear path from intent to tasks for a new feature.</li><li>A constitution that later specs are checked against.</li><li>Works with many coding agents.</li></ul></div>
+        <div class="con"><h4>Weak at</h4><ul><li>The same flow for every size of change.</li><li>The task list guides the agent; nothing refuses a step outside it.</li><li>Completion is what the agent reports.</li></ul><p class="with"><code>/rr-setup --adopt</code> moves <code>.specify/</code> and <code>specs/</code> into <code>docs/sdlc/</code> and <code>.ai/</code>, checks that no line was lost and keeps the originals.</p></div>
+      </div>
+      <div class="alt rv">
+        <div><h3>Kiro</h3><p class="what">An agentic IDE with specs (requirements, design, tasks), steering files and agent hooks.</p></div>
+        <div class="pro"><h4>Strong at</h4><ul><li>Specs and their review inside one editor.</li><li>Steering files give every session the project's context.</li><li>Hooks start agent actions on file events.</li></ul></div>
+        <div class="con"><h4>Weak at</h4><ul><li>Tied to its own IDE and CLI.</li><li>Its hooks start work; they are not a refusal layer.</li><li>No measured weight per change.</li></ul><p class="with"><code>/rr-setup --adopt</code> moves <code>.kiro/</code> into this layout and keeps the originals; <code>--mode coexist</code> leaves them in place and only routes to them.</p></div>
+      </div>
+      <div class="alt rv">
+        <div><h3>Cursor rules + hooks</h3><p class="what">Rules files scoped by glob, plus hooks such as <code>beforeShellExecution</code>.</p></div>
+        <div class="pro"><h4>Strong at</h4><ul><li>Lives in the editor many teams already use.</li><li>A shell hook can allow, deny or ask.</li><li>Rules load only where their glob matches.</li></ul></div>
+        <div class="con"><h4>Weak at</h4><ul><li>You write and maintain the whole policy and its tests.</li><li>No task state, no weighing, no measured close.</li><li>Cursor only.</li></ul><p class="with"><code>/rr-setup --adopt</code> moves <code>.cursorrules</code> and <code>.cursor/rules/</code> into this layout and keeps the originals.</p></div>
+      </div>
+      <div class="alt rv">
+        <div><h3>AI-DLC</h3><p class="what">AWS's AI-Driven Development Lifecycle: Inception, Construction and Operations, shipped as rule files.</p></div>
+        <div class="pro"><h4>Strong at</h4><ul><li>A full methodology from intent to operations.</li><li>Depth adapts: a small fix skips phases.</li><li>Approval at each phase and an audit trail.</li></ul></div>
+        <div class="con"><h4>Weak at</h4><ul><li>Rules in markdown; the model has to follow them.</li><li>No hook stops an action between approvals.</li><li>Built around team rituals more than one developer.</li></ul><p class="with">A different layer: AI-DLC tells the agent what to do; RiskRails adds what it cannot do. <code>--adopt</code> moves its files.</p></div>
+      </div>
+      <div class="alt rv" style="border-color:var(--co)">
+        <div><h3>RiskRails</h3><p class="what">Weight, three modes, one guard hook, deterministic gates in <code>state.py</code>, a shared <code>.ai/</code> tree.</p></div>
+        <div class="pro"><h4>Strong at</h4><ul><li>A hook refuses scope creep, secrets, force pushes and deploys.</li><li>Light work stays light; payments get a plan, a STRONG review and you.</li><li>Close is measured on the tree, and the record keeps the why.</li></ul></div>
+        <div class="con"><h4>Weak at</h4><ul><li>Setup costs a survey and three answers per project.</li><li>Claude Code and Codex only; needs Node and Python.</li><li>Guards are regex: a tripwire, not a sandbox.</li><li>Full mode spends time and tokens on purpose.</li></ul><p class="with">Tuned for one developer who knows the codebase. <a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/known-risks.md">Known risks</a> lists what it does not protect.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="panel band">
+  <div class="wrap">
+    <div class="head rv">
+      <span class="eyebrow">Choosing</span>
+      <h2 class="h2">Pick by what <em>breaks</em> if the agent is wrong.</h2>
+    </div>
+    <div class="cards">
+      <div class="card rv"><h3>A prototype or a new service</h3><p>Nothing in production depends on it yet. Plain Claude Code, or Spec Kit or Kiro when you want the spec written down.</p></div>
+      <div class="card rv"><h3>A team that runs a methodology</h3><p>Rituals, phases and sign-offs across roles. AI-DLC gives the shape; add hooks where an approval alone is not enough.</p></div>
+      <div class="card rv"><h3>Legacy code customers rely on</h3><p>Undocumented rules, old workarounds, money and personal data. That is the case RiskRails is built for.</p></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div class="grid">
+      <div><h4>RiskRails</h4><ul><li>Version 3.0.1 · MIT</li><li>Claude Code and Codex</li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li></ul></div>
+      <div><h4>Site</h4><ul><li><a href="index.html">How it works</a></li><li><a href="demo.html">Demo</a></li><li><a href="compare.html">Compare</a></li><li><a href="storage.html">Storage</a></li></ul></div>
+      <div><h4>Docs</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/getting-started.md">Getting started</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/weight.md">The weight</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/hooks.md">The guards</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/known-risks.md">Known risks</a></li></ul></div>
+      <div><h4>Project</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/ROADMAP.md">Roadmap</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/SECURITY.md">Security</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/CONTRIBUTING.md">Contributing</a></li></ul></div>
+    </div>
+    <p class="small">No agent merges or deploys. A commit, a push or an approval runs only as the command you picked.</p>
+  </div>
+</footer>
+<script src="assets/rr.js" defer></script>
+</body>
+</html>
