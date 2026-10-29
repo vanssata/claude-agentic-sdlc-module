@@ -10,8 +10,8 @@ mode) and ends at human approval. No agent commits (C5). The spec's §Design tab
 fixes the order, names the files per task, and records where it departs from the table and why.
 
 **Status (2026-10-29): done.** Every agent row, 1.1–3.6, is closed (the last, 3.3e + 3.6, by
-T-2026-10-29-1035); G0, G1, G2, 2.H, 3.H and 3.H2 are ticked below. One human item stays open: 2.H's
-`safety.md` sentence.
+T-2026-10-29-1035); G0, G1, G2, 2.H, 3.H and 3.H2 are ticked below. 2.H's `safety.md` sentence, the
+last human item, went in on 2026-10-29 (T-2026-10-29-1724, on the developer's instruction).
 
 ## Decisions taken before planning (2026-10-25, developer)
 
@@ -190,8 +190,8 @@ top of `verify_command` once to the end and `e2e_command` once.
   blocker; other doubt is written to `task.md` and the work continues". Run
   `python3 -I skills/project-update/update.py --apply` (migration 0007 on this repository). Check:
   `/status` shows schema 7. `[x]` 2026-10-29: `.ai/rules/hooks.md:5-6`, `skills.md:5`, constitution C6 and
-  `CLAUDE.md` lesson 2 weigh by modes; `/rr-status` shows schema 8 (0007 and 0008 applied). Open: the
-  `safety.md` sentence is not in `.ai/policies/safety.md:77-80` ("When in doubt") — the human's edit.
+  `CLAUDE.md` lesson 2 weigh by modes; `/rr-status` shows schema 8 (0007 and 0008 applied). The
+  `safety.md` sentence went in on 2026-10-29 (T-2026-10-29-1724, on the developer's instruction).
 - **G1 (human, before 2.3).** OQ9: no built-in or installed-plugin collision for `/plan`, `/review`,
   `/status`, `/setup`, `/spec`, `/build`, `/ship`, or a decision to document `riskrails:<name>`. `[x]`
   2026-10-26: three collide; decided `rr-<name>` for all seven and no bare `status` (Decisions, G1 / OQ9).

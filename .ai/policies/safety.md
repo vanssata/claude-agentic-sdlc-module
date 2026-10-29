@@ -78,3 +78,6 @@ evidence for each, and let the human decide which is the bug.
 
 Stop and ask. An agent that pauses costs a message; an agent that guesses on a
 payment path costs an incident.
+
+Doubt on reversibility or domain is a blocker; other doubt is written to
+`task.md` and the work continues.

@@ -221,8 +221,11 @@ The after cohort by mode. Both tier-surface rows are tier labels, not modes:
   - INFERENCE: from the regexes, not run: `WRITE_WORD_RE` counts `$(` as a
     write indicator (`hooks/guard/paths.py:160-161`) and `interpreter_text`
     scans the whole line (`:1229-1235`), so the unrelated shell part
-    triggered the deny; `->` cannot match `WRITE_REDIR_RE` (`:168`) because
-    a space follows `",`. Recorded in `.ai/project/known-risks.md` ("Guard
+    triggered the deny; `->` matches `WRITE_REDIR_RE` (`:168`) only when a
+    `.ai/state/` or `.ai/reports/` path follows the `>` (spaces after it
+    allowed) with no quote, space, `|`, `;`, `&`, `<` or `>` before the path;
+    the command was not kept, so whether it did is UNKNOWN.
+    Recorded in `.ai/project/known-risks.md` ("Guard
     denies a compound line …").
   - UNKNOWN: whether the 17 one-liner denies and 11 read denies after were
     reads.
