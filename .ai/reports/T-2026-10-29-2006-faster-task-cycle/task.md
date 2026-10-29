@@ -122,11 +122,41 @@ closed by a green run: H1
 
 ## Changes
 
-measured at close
+| File | Change | New/Edit/Delete |
+|---|---|---|
+| .ai/project/known-risks.md | +100 −0 | Edit |
+| CONTRIBUTING.md | +5 −1 | Edit |
+| README.md | +3 −2 | Edit |
+| agents/ai-reviewer.md.tmpl | +5 −3 | Edit |
+| docs/sdlc/specs/faster-task-cycle.md | +7 −2 | Edit |
+| docs/weight.md | +7 −0 | Edit |
+| skills/ai-task/sensors.py | +1 −1 | Edit |
+| skills/ai-task/state.py | +109 −4 | Edit |
+| skills/rr-build-all/SKILL.md | +8 −4 | Edit |
+| skills/rr-build/SKILL.md | +1 −1 | Edit |
+| skills/rr-review/SKILL.md | +10 −5 | Edit |
+| skills/rr-ship/SKILL.md | +2 −1 | Edit |
+| tests/fixtures/run-suite/test_crash.py | +29 −0 | New |
+| tests/fixtures/run-suite/test_error.py | +29 −0 | New |
+| tests/fixtures/run-suite/test_fail.py | +29 −0 | New |
+| tests/fixtures/run-suite/test_green.py | +35 −0 | New |
+| tests/fixtures/run-suite/test_hang.py | +31 −0 | New |
+| tests/fixtures/run-suite/test_import_error.py | +16 −0 | New |
+| tests/fixtures/run-suite/test_serial.py | +16 −0 | New |
+| tests/fixtures/run-suite/test_skip.py | +29 −0 | New |
+| tests/fixtures/run-suite/test_unexpected_success.py | +30 −0 | New |
+| tests/run_suite.py | +396 −0 | New |
+| tests/test_ai_task_sensors.py | +4 −0 | Edit |
+| tests/test_ai_task_state.py | +320 −0 | Edit |
+| tests/test_run_suite.py | +272 −0 | New |
+| tests/test_skills_surface.py | +53 −0 | Edit |
+| tests/test_weight.py | +138 −0 | Edit |
+
++1685 −24 lines, 27 files
 
 ## Verdict
 
-close: open — the human approves in their own terminal, then 'state.py close' again
+close: closed
 facts: (a) green — suite green on 2d091b623 (run 3) · (b) green — 27 changed files, all in the task's files
 gate: requested G1 at 2026-10-29T20:49:47Z; approved by vanssa at 2026-10-29T20:50:50Z via terminal
 confirm: none

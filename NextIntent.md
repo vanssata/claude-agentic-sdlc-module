@@ -1,1 +1,0 @@
-/rr-build-all docs/sdlc/specs/agentic-sdlc-modes.md
