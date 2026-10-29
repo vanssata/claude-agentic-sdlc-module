@@ -28,6 +28,10 @@ import sensors  # noqa: E402  pylint: disable=wrong-import-position
 import weight  # noqa: E402  pylint: disable=wrong-import-position
 
 TWIN_OF = "test-ai-task-state.sh"
+# The default entry: state.py imported from its cached bytecode, about half the
+# start-up of running it as a script; state_py=STATE keeps the script entry.
+SHIM = "import sys; sys.argv[0] = %r; sys.path.insert(0, %r); import state; state.main()" % (
+    STATE, os.path.dirname(STATE))
 
 ZERO = ["--declare", "behaviour=0:synthetic", "--declare", "domain=0:synthetic",
         "--declare", "novelty=0:synthetic"]
@@ -74,9 +78,9 @@ class Project:
         elif os.path.exists(path):
             os.remove(path)
 
-    def run(self, *args, runtime="claude", human=False, stdin=None, env=None, state_py=STATE):
+    def run(self, *args, runtime="claude", human=False, stdin=None, env=None, state_py=None):
         """runtime=None leaves AI_RUNTIME unset, so detection decides; env adds
-        variables after the agent markers are removed."""
+        variables after the agent markers are removed; state_py=None runs SHIM."""
         base = {k: v for k, v in os.environ.items()
                 if k not in state_mod.AGENT_MARKERS and k not in ("AI_UNATTENDED", "AI_RUNTIME",
                                                                    "AI_HANDOFF_NO_PROMPT")}
@@ -86,7 +90,8 @@ class Project:
             base["AI_UNATTENDED"] = "1"
         base.update(env or {})
         env = base
-        return subprocess.run([sys.executable, "-I", state_py, "--root", self.root] + list(args),
+        entry = ["-c", SHIM] if state_py is None else [state_py]
+        return subprocess.run([sys.executable, "-I"] + entry + ["--root", self.root] + list(args),
                               input=stdin if stdin is not None else "", capture_output=True, text=True,
                               env=env, check=False)
 
@@ -95,9 +100,9 @@ class Project:
         assert done.returncode == 0, (args, done.returncode, done.stdout, done.stderr)
         return done
 
-    def start(self, *extra, files="src/widget.py"):
+    def start(self, *extra, files="src/widget.py", **kwargs):
         return self.ok("start", "--goal", "tweak the widget", "--workflow", "feature", "--files", files,
-                       "--tests", "tests/test_widget.py", *ZERO, *extra)
+                       "--tests", "tests/test_widget.py", *ZERO, *extra, **kwargs)
 
     def state_file(self):
         """The file the task sits in: state.json, or a legacy current.json."""
@@ -212,7 +217,7 @@ class Base(unittest.TestCase):
 
 class TestStart(Base):
     def test_start_writes_schema_7_and_arms_the_scope_guard(self):
-        out = self.p.start().stdout
+        out = self.p.start(state_py=STATE).stdout
         s = self.p.state()
         self.assertEqual((s["schema"], s["mode"], s["stage"]), (7, "light", "build"))
         self.assertEqual(len(s["weight"]["lines"]), 7)
