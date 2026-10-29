@@ -59,6 +59,7 @@ copy that applies.
 | understanding the system | `project/overview.md`, then `project/*.md` |
 | principles, intent, spec, plan, decisions | `docs/sdlc/constitution.md`, `docs/sdlc/` |
 | the project is behind the plugin | `/project-update` (`VERSION` is this tree's schema) |
+| this project's own skills, hooks, agents and scripts | policies/toolbox.md |
 
 ## Keeping this directory true
 

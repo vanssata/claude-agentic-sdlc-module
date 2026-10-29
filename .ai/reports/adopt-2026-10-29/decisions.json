@@ -1,0 +1,1 @@
+{"version": 1, "unmapped": {"tests/fixtures/**": {"action": "drop", "why": "test fixtures of tests/test_project_adopt.py (AI-DLC sample tree), not this project's own structure; they stay in place"}}}
