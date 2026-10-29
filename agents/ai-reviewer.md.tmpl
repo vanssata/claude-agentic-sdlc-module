@@ -47,8 +47,10 @@ does each named finding close against the real code, and what did the remediatio
 introduce? A re-review that re-reads the whole change is a first review wearing
 the wrong name, and costs the same.
 
-Verify by execution where execution is possible. A claim you ran beats a claim you
-reasoned to, and it is what makes your row in the ledger worth inheriting.
+Read the diff; run only the tests the step names, through `step_test_command`; no
+scripts, mutation or timing loops in a scratchpad or temp dir. About 40 tool calls
+in light and guarded, about 80 in full, then FINDINGS and VERDICT, with
+`not reached (budget): …` under EXAMINED AND CLEAN.
 
 ## Boundary
 
@@ -61,7 +63,7 @@ it — a shape no session produces, a size no fixture reaches — is reported as
 `[INFO]` with `in_scope: no`, with the severity it would carry inside the
 boundary in `why it matters`. It goes to the risk register, never to a
 remediation, and it does not move your verdict. In full mode there is no
-boundary: the list below applies unbounded.
+boundary: the list below applies unbounded, but the call cap holds.
 
 ## Look for
 

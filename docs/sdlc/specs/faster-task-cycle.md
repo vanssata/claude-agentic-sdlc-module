@@ -257,7 +257,7 @@ FAILED (failures=1, errors=1)
 ```
 verify_command:      python3 -I tests/run_suite.py
 step_test_command:   python3 -I tests/run_suite.py {files}
-doc_tests:           tests/test_memory_risks.py tests/test_rename.py tests/test_no_size_tokens.py tests/test_instruction_budget.py tests/test_skills_surface.py tests/test_shared_prompts_model_free.py tests/test_end_to_end.py
+doc_tests:           tests/test_memory_risks.py tests/test_rename.py tests/test_no_size_tokens.py tests/test_instruction_budget.py tests/test_skills_surface.py tests/test_shared_prompts_model_free.py tests/test_project_update.py tests/test_shared_tree.py
 ```
 
 Plus: `runtime:` becomes "~1.5 min parallel"; under "Reading a failure": "A
@@ -273,7 +273,7 @@ and tree walks.
 
 ```json
 "documents": {"globs": ["**/*.md", "docs/**/*.json", ".ai/**/*.json"],
-              "except": ["skills/**", "hooks/**", "agents/**", "instructions/**", "codex/**"]}
+              "except": ["skills/**", "hooks/**", "agents/**", "instructions/**", "codex/**", "ai/**"]}
 ```
 
 Appended to `examples.light`: "this repository: a change whose files are all
@@ -281,6 +281,11 @@ documents (weight.json `documents`) or all tests — none of hooks/, skills/,
 state.py; it measures behaviour, domain, novelty 0; deleting, skipping or
 loosening a test, or re-recording the guard golden, is not one: declare
 behaviour=1".
+
+The hard floor in state.py is `.ai/policies/**` and `.ai/rules/**`. `ai/**` (the
+plugin's shared tree, read by every user project and hash-pinned by
+`tests/test_project_update.py`) is in `except` so it never counts as documents
+(review H1 of T-2026-10-29-2006).
 
 **state.json**: `facts.documents {since_run, since_tree, run, paths, tests}`;
 `weight.documents_only {zeroed: {behaviour, domain, novelty}}`;

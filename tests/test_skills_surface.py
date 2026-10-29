@@ -145,6 +145,59 @@ class TestNewSkills(unittest.TestCase):
         self.assertIn("{on,off}", usage["batch"].stdout)
         self.assertIn("--no-batch", usage["start"].stdout)
 
+    def test_medium_and_low_findings_go_to_the_register(self):
+        """R8 (2a): pass_with_findings fixes the in-scope HIGHs; each MEDIUM and LOW is one
+        `memory risk add`; only a BLOCKER, a HIGH or a regression buys an --after-fix run."""
+        for name, marker in (("rr-review", "- **pass_with_findings:**"), ("rr-build-all", "- **pass_with_findings**")):
+            text = read(name)
+            start = text.index(marker)
+            bullet = re.split(r"\n- \*\*|\n\n", text[start + 2:], maxsplit=1)[0]
+            with self.subTest(skill=name):
+                self.assertIn("memory risk add", bullet)
+                self.assertIn("MEDIUM", bullet)
+                self.assertIn("regression", bullet)
+                self.assertNotIn("the MEDIUMs worth it", text)
+
+    def test_the_reviewer_is_bounded(self):
+        """R11 (3): the reviewer runs only the named tests and stops at about 40 tool calls in
+        light and guarded, about 80 in full; what it did not reach is listed, not hidden."""
+        with open(os.path.join(ROOT, "agents", "ai-reviewer.md.tmpl"), encoding="utf-8") as fh:
+            tmpl = fh.read()
+        for needle in ("step_test_command", "40 tool calls", "80", "not reached (budget)"):
+            with self.subTest(needle=needle):
+                self.assertIn(needle, tmpl)
+        self.assertNotIn("Verify by execution where execution is possible", tmpl)
+        text = read("rr-review")
+        brief = text[text.index("## 2. Brief"):text.index("## 3.")]
+        self.assertIn("40 tool calls", brief)
+        self.assertIn("80", brief)
+
+    def test_the_chains_are_named(self):
+        """R15 (5): the calls that always follow each other are one `&&` line; `review && close`
+        only after `pass` (concern 13: `review` exits 0 for every verdict)."""
+        def section(text, head, nxt):
+            return text[text.index(head):text.index(nxt, text.index(head))]
+
+        build = section(read("rr-build"), "## 4.", "## 5.")
+        self.assertIn("step-done <id> && $STATE verify --scope all", build)
+        self.assertRegex(build, r"(?i)last step")
+        review = read("rr-review")
+        review = review[review.index("## 4."):]
+        self.assertRegex(review, r"--verdict pass\b[^\n]*&& \$STATE close")
+        self.assertRegex(review, r"`pass` only")
+        chain = 'verify --scope step --files "<doc_tests>" && $STATE verify --scope e2e && $STATE close'
+        self.assertIn(chain, section(read("rr-ship"), "## 1.", "## 2."))
+        self.assertIn("only documents changed since run", section(read("rr-ship"), "## 1.", "## 2."))
+        # M3: `close` prints that text under `review required`, never `verify required`.
+        rows = [r for r in section(read("rr-ship"), "## 1.", "## 2.").splitlines()
+                if "only documents changed since run" in r and r.startswith("|")]
+        self.assertEqual(len(rows), 1, rows)
+        self.assertIn("review required", rows[0])
+        self.assertNotIn("verify required", rows[0])
+        build_all = read("rr-build-all")
+        self.assertIn("step-done <id> && $STATE verify --scope all", section(build_all, "## 4.", "## 5."))
+        self.assertIn(chain, section(build_all, "## 6.", "## Switching"))
+
     def test_the_checks_bite(self):
         # The two patterns must catch the forms the old text used, or a clean
         # pass above proves nothing.

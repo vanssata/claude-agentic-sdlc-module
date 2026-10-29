@@ -107,6 +107,8 @@ tree you need between waves.
 
 ## 4. Tests once, failures fixed as one parallel batch
 
+After the last wave, `$STATE step-done <id> && $STATE verify --scope all`:
+
 ```bash
 $STATE verify --scope all
 $STATE verify --scope all --e2e not-applicable "<why the change reaches no e2e flow>"
@@ -142,9 +144,10 @@ EOF
 ```
 
 - **pass** → §6.
-- **pass_with_findings** → the in-scope HIGHs (and the MEDIUMs worth it), grouped by file, one
-  fixer per group in parallel; `$STATE verify --scope all --after-fix "H1,H2: …"`;
-  `$STATE review --closes "H1,H2"` → §6.
+- **pass_with_findings** → the in-scope HIGHs, grouped by file, one fixer per group in
+  parallel; `$STATE verify --scope all --after-fix "H1,H2: …"`; `$STATE review --closes "H1,H2"`
+  → §6. Each MEDIUM and LOW is one `$STATE memory risk add`, not a fix; only a BLOCKER, a HIGH
+  or a regression buys an `--after-fix` run.
 - **blockers_open** → every in-scope BLOCKER and HIGH, grouped by file, one fixer per group in
   parallel; `$STATE verify --scope all --after-fix "B1,H1: …"` (red: §4's batch); then
   **§5 again, a full pass** — a fix batch across many files is a new change, not a scoped one.
@@ -157,7 +160,8 @@ this loop is `SUITE_BUDGET`, handled the same way.
 ## 6. Ship
 
 `/rr-ship` — `close` measures the two facts and, in full mode, asks the human to approve,
-exactly as for any task. Suggest `/clear` after it.
+exactly as for any task; for a documents-only change since the green suite it is
+`$STATE verify --scope step --files "<doc_tests>" && $STATE verify --scope e2e && $STATE close`. Suggest `/clear` after it.
 
 ## Switching
 

@@ -28,9 +28,13 @@ restart the runtime afterwards.
 
 ## Tests
 
-The same two checks run in CI on every pull request:
+Locally, run the parallel runner: one process per test file, the same test ids, the
+same `Ran N tests` / `OK` tail, exit 1 on anything red (about a minute and a half).
+CI runs the serial `unittest discover` below as the oracle, plus the end-to-end suite,
+on every pull request:
 
 ```bash
+python3 -I tests/run_suite.py
 python3 -I -m unittest discover -s tests -p 'test_*.py'
 AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
 ```

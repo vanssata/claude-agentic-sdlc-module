@@ -180,6 +180,10 @@ class TestSensors(unittest.TestCase):
         self.assertEqual(done.stdout.strip(), "0 notty read=1",
                          "run_command gives the command /dev/null, not a terminal, as stdin")
 
+    def test_read_commands_reads_doc_tests(self):
+        self.write(".ai/policies/testing.md", TESTING_MD + "doc_tests:          tests/test_a.py tests/test_b.py\n")
+        self.assertEqual(sensors.read_commands(self.root)["doc_tests"], "tests/test_a.py tests/test_b.py")
+
     # section 4: the old sensors are gone (R6)
 
     def test_the_old_sensors_are_gone(self):

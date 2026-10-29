@@ -202,7 +202,7 @@ def scope_any(path, patterns):
 # ------------------------------------------------------------------- running
 
 TESTING_FIELDS = ("verify_command", "step_test_command", "e2e_command",
-                  "lint_command", "typecheck_command", "single_test")
+                  "lint_command", "typecheck_command", "single_test", "doc_tests")
 
 SCOPE_FIELD = {"suite": "verify_command", "step": "step_test_command",
                "e2e": "e2e_command", "single": "single_test"}

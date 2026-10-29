@@ -60,11 +60,13 @@ it; every other command refuses it.
 import argparse
 import base64
 import contextlib
+import copy
 import decimal
 import hashlib
 import importlib.util
 import json
 import os
+import posixpath
 import re
 import shlex
 import subprocess
@@ -1017,13 +1019,16 @@ def cmd_weight(args, root):
                 % item)
         declared[m.group(1)] = (int(m.group(2)), m.group(3).strip())
     try:
-        result = weight.compute(root, files, declared, args.goal, policy=policy)
+        result = weigh(root, files, declared, args.goal, policy)
     except ValueError as exc:
         die(str(exc))
     except (TypeError, AttributeError) as exc:     # a table whose values have the wrong shape
         die("%s is malformed: %s" % (path, exc))
     if args.json:
-        print(json.dumps(dict(result.as_dict(), policy=path), indent=2, ensure_ascii=False))
+        out = dict(result.as_dict(), policy=path)
+        if result.documents_only is not None:
+            out["documents_only"] = result.documents_only
+        print(json.dumps(out, indent=2, ensure_ascii=False))
     else:
         print(weight.render(result, long=args.long))
 
@@ -3478,7 +3483,7 @@ def cmd_start(args, root):
     check_steps(steps, implied)
     concrete = [f for f in files if not any(c in f for c in "*?[")]
     try:
-        result = weight.compute(root, concrete, parse_declares(args.declare), args.goal, policy=policy)
+        result = weigh(root, concrete, parse_declares(args.declare), args.goal, policy)
     except ValueError as exc:
         die(str(exc))
     except (TypeError, AttributeError) as exc:
@@ -3525,6 +3530,8 @@ def cmd_start(args, root):
         "gate": None, "owner_runtime": RUNTIME if RUNTIME in RUNTIMES else None,
         "created": now(), "created_at": now(), "history": [],
     }
+    if result.documents_only is not None:
+        state["weight"]["documents_only"] = result.documents_only
     if os.path.exists(ledger_path(root)):
         # The ledger is per project: a task mirrors only the lines after its start.
         state["dialog"] = {"ledger_pos": os.path.getsize(ledger_path(root))}
@@ -3602,6 +3609,18 @@ def rescore_v7(root, state, policy, at):
         return
     current = state["weight"].get("axes") or {}
     got = rescore_weight(root, state["diff"].get("base_tree"), [d["path"] for d in diff], current, policy)
+    # The documents rule (faster-task-cycle (c)): the axes it zeroed come back, upward, once the
+    # diff holds a path that is neither a document nor a test — `start --amend` does not re-weigh.
+    zeroed = (state["weight"].get("documents_only") or {}).get("zeroed") or {}
+    tests = ((policy.get("axes") or {}).get("coverage") or {}).get("test_globs")
+    outside = next((d["path"] for d in diff if not is_document(d["path"], policy)
+                    and not weight.match(d["path"], tests)), None)
+    if outside:
+        for axis, value in zeroed.items():
+            if int(got["axes"].get(axis) or 0) < int(value):
+                got["raised"].append({"axis": axis, "from": int(got["axes"].get(axis) or 0), "to": int(value),
+                                      "evidence": "a non-document changed (%s)" % outside})
+                got["axes"][axis] = int(value)
     before = state["mode"]
     ops = sorted(set(state["weight"].get("operations") or []) | set(got["operations"]))
     # Only what the diff moved can move the mode: an unchanged measurement must
@@ -3636,6 +3655,86 @@ def full_suite(run):
 
 def suite_green(state):
     return any(full_suite(r) and r.get("exit") == 0 for r in state["verify"]["runs"])
+
+
+# Never a document, whatever weight.json's `documents` says: the policies and the per-directory rules bind the agents.
+NEVER_DOCUMENTS = (".ai/policies/**", ".ai/rules/**")
+
+
+def is_document(path, policy):
+    """The one definition of a document (faster-task-cycle D4): `documents.globs`, minus
+    `documents.except`, NEVER_DOCUMENTS, code and tests; no `documents` key, no document."""
+    docs = policy.get("documents") or {}
+    cov = (policy.get("axes") or {}).get("coverage") or {}
+    return bool(weight.match(path, docs.get("globs"))
+                and not any(weight.match(path, pats) for pats in (
+                    docs.get("except"), NEVER_DOCUMENTS, cov.get("code_globs"), cov.get("test_globs"))))
+
+
+DOCUMENTS_ZEROED = ("behaviour", "domain", "novelty")
+
+
+def weigh(root, files, declared, goal, policy):
+    """weight.compute, plus the documents rule (faster-task-cycle (c), in state.py because
+    weight.py is at its line cap). Predicate P: at least one concrete file, every file a
+    document (is_document) or a test, at least one a document. When P holds, file text no
+    longer scores behaviour (the goal's keyword still does, exactly as in compute), and
+    behaviour, domain and novelty still UNKNOWN become 0 with the evidence "documents only"; hints and
+    declarations were applied inside compute. `documents_only` is {"zeroed": {axis: what it
+    would have scored}}, None when P does not hold or the policy has no `documents` key."""
+    concrete = [posixpath.normpath(f.strip().replace(os.sep, "/")) for f in files if f.strip()]
+    tests = ((policy.get("axes") or {}).get("coverage") or {}).get("test_globs")
+    inside = all(not f.startswith(("/", "../")) and f != ".." for f in concrete)
+    if not (inside and any(is_document(f, policy) for f in concrete)
+            and all(is_document(f, policy) or weight.match(f, tests) for f in concrete)):
+        result = weight.compute(root, files, declared, goal, policy=policy)
+        result.documents_only = None
+        return result
+    scored = copy.deepcopy(policy)
+    keywords = list(((policy.get("axes") or {}).get("behaviour") or {}).get("keywords") or [])
+    if not (goal and any(re.search(r"\b%s\b" % re.escape(k), goal, re.I) for k in keywords)):
+        # No goal keyword: file text must not score. With one, compute reads the goal first
+        # (value 1 whatever the files hold), so keeping the list scores exactly as plain compute does.
+        scored["axes"]["behaviour"] = dict(scored["axes"].get("behaviour") or {}, keywords=[])
+    result = weight.compute(root, files, declared, goal, policy=scored)
+    zeroed = {}
+    for axis in DOCUMENTS_ZEROED:
+        if axis not in result.unknown:
+            continue
+        if result.axes[axis] != 0:
+            zeroed[axis] = result.axes[axis]
+        result.axes[axis], result.evidence[axis] = 0, "documents only"
+        result.unknown.remove(axis)
+    result.w = sum(result.axes.values())
+    result.mode = mode_for(result.axes, policy)
+    result.documents_only = {"zeroed": zeroed}
+    return result
+
+
+def documents_cover(root, state, policy, tree):
+    """Fact (a) through the documents rule (faster-task-cycle D1-D5): (ok, why, facts).
+    why is "" when the rule is off or does not apply: today's refusal text stands."""
+    off = (False, "", None)
+    tests = (safe_sensor(sensors.read_commands, root) or {}).get("doc_tests", "").split()
+    if not (policy.get("documents") or {}).get("globs") or not tests or tests == ["none"]:
+        return off                                                              # D1
+    runs = [r for r in state["verify"]["runs"] if full_suite(r) and r.get("exit") is not None and r.get("tree")]
+    g = runs[-1] if runs else None
+    if not g or g["exit"] != 0 or any(r["tree"] == g["tree"] and r["exit"] != 0 for r in runs):
+        return off                                                              # D2
+    diff = safe_sensor(sensors.diff_files, root, g["tree"], tree)
+    if not diff or not all(is_document(d["path"], policy) for d in diff):
+        return off                                                              # D3, D4
+    paths = [d["path"] for d in diff]
+    steps = [r for r in state["verify"]["runs"] if r.get("scope") == "step" and not r.get("expected_fail")
+             and r.get("tree") == tree]
+    s = steps[-1] if steps else None                                            # D5
+    if not (s and s["n"] > g["n"] and s.get("exit") == 0 and all(t in (s.get("files") or []) for t in tests)):
+        return (False, "only documents changed since run %d (%d files): 'verify --scope step --files \"%s\"'"
+                % (g["n"], len(paths), ",".join(tests)), None)
+    return (True, "documents only since run %d (%d files: %s); doc_tests green in run %d on %s"
+            % (g["n"], len(paths), ", ".join(paths[:5]) + (", …" if len(paths) > 5 else ""), s["n"], tree[:9]),
+            {"since_run": g["n"], "since_tree": g["tree"], "run": s["n"], "paths": paths[:20], "tests": tests})
 
 
 def run_v7(root, state, scope, args, tcfg):
@@ -3983,6 +4082,7 @@ def two_facts(root, state, tree):
     runs = [r for r in state["verify"]["runs"] if full_suite(r)]
     here = [r for r in runs if tree and r.get("tree") == tree]
     green = [r for r in here if r.get("exit") == 0]
+    documents = None
     if not tree:
         a = (False, "the tree cannot be measured (not a git repository)")
     elif not runs:
@@ -3990,6 +4090,9 @@ def two_facts(root, state, tree):
     elif not here:
         a = (False, "the tree changed after the last verify (run %d on %s, now %s)"
              % (runs[-1]["n"], (runs[-1].get("tree") or "?")[:9], tree[:9]))
+        ok, why, documents = documents_cover(root, state, weight_policy(root), tree)
+        if ok or why:
+            a = (ok, why)
     elif not green:
         a = (False, "the suite is red on this tree (run %d, exit %s)" % (here[-1]["n"], here[-1].get("exit")))
     else:
@@ -4022,7 +4125,7 @@ def two_facts(root, state, tree):
              + (" (+%d more)" % (len(outside) - 5) if len(outside) > 5 else ""))
     else:
         b = (True, "%d changed files, all in the task's files" % len(diff))
-    return {"a": a, "b": b, "diff": diff or [], "outside": outside}
+    return {"a": a, "b": b, "diff": diff or [], "outside": outside, "documents": documents}
 
 
 def close_owed(state, facts, tree, policy):
@@ -4127,6 +4230,8 @@ def cmd_close_v7(args, root):
     rescore_v7(root, state, policy, "close")
     facts = two_facts(root, state, tree)
     state["facts"] = {"a": list(facts["a"]), "b": list(facts["b"]), "tree": tree, "at": now()}
+    if facts["documents"]:
+        state["facts"]["documents"] = facts["documents"]
     owed = close_owed(state, facts, tree, policy)
     if owed:
         state["next_action"] = owed[0][1]

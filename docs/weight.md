@@ -67,6 +67,13 @@ case in the spec's SQ1 table lands where it should, and no other case moves.
   is 0: nothing existing changes. If every declared file matches
   `coverage.test_globs`, behaviour, domain and novelty are 0: a test-only
   change presents nothing to users.
+- **Documents only.** With a `documents` table in weight.json, a change whose
+  files are all documents or tests (and at least one a document) scores
+  behaviour, domain and novelty 0 with the evidence "documents only"; file text
+  no longer counts toward behaviour, the goal's keyword still does, and a hint
+  or `--declare` still raises. `start --amend` adding a code file restores the
+  zeroed axes at the next `verify` or `close`. Without the `documents` key
+  nothing changes.
 - **Hints raise by one, once per axis** (`rules.hint_raises_by`,
   `hint_raises_once_per_axis`). A hint raises the measurement, and a declaration
   below it is replaced. So an auth-shaped path cannot be declared down to 0.

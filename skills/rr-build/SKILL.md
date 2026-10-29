@@ -102,7 +102,7 @@ at `close` is finished by `close`.
 
 ## 4. Verify once, to the end
 
-After the last edit:
+After the last edit (after the last step: `$STATE step-done <id> && $STATE verify --scope all`):
 
 ```bash
 $STATE verify --scope all

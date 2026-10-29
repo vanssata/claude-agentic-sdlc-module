@@ -55,7 +55,8 @@ defaults, the test fixtures). A finding that needs anything outside them comes
 back `[INFO]` with `in_scope: no`; record it with `$STATE memory risk add`
 as one entry — it never opens a fix. You may move a finding to
 `in_scope: yes`, never the other way. **In full mode** the reviewer's own "look
-for" list applies unbounded.
+for" list applies unbounded. Tell it the cap: about 40 tool calls in light and
+guarded, about 80 in full, then FINDINGS and VERDICT.
 
 Before you delegate, probe the change yourself for a minute: the few inputs its
 own threat model makes interesting, through the real code, and hand the
@@ -80,12 +81,16 @@ task's record (`task.md`), so there is no separate report to write.
 
 ## 4. After the verdict
 
-- **pass:** `/rr-ship`.
-- **pass_with_findings:** fix every in-scope HIGH (and the MEDIUMs worth it) in
-  one batch, then
+- **pass:** `/rr-ship`; the record and the close are one call,
+  `$STATE review --verdict pass … <<'EOF' && $STATE close`. `review` exits 0 for every
+  verdict, so the chain is for `pass` only.
+- **pass_with_findings:** fix every in-scope HIGH in one batch, then
   `$STATE verify --scope all --after-fix "H1,H2: <one line>"` and
   `$STATE review --closes "H1,H2"`. The findings close on that green run, on a
-  tree the fix changed — no second review.
+  tree the fix changed — no second review. Each MEDIUM and LOW is one
+  `$STATE memory risk add` (`.ai/project/known-risks.md` amended into the task
+  if missing), not a fix; only a BLOCKER, a HIGH or a regression buys an
+  `--after-fix` run.
 - **blockers_open:** fix every BLOCKER and HIGH together, `verify --scope all
   --after-fix "…"`, then **one scoped re-review** (`/rr-review B1,H1`): brief a fresh `ai-reviewer`
   with the named findings and the fix's diff only — do they close, and what did

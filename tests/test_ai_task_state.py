@@ -946,6 +946,61 @@ class TestRescore(unittest.TestCase):
                            ({"domain": 2}, "full"), ({"domain": 2, "reversibility": 2}, "full_irreversible")):
             self.assertEqual(state_mod.mode_for(axes, self.policy), mode)
 
+    def documents_project(self):
+        """A scratch project whose own table has the `documents` key, and a task over README.md alone."""
+        with open(os.path.join(ROOT, "skills", "ai-init", "templates", ".ai", "policies", "weight.json"),
+                  encoding="utf-8") as fh:
+            table = json.load(fh)
+        table["documents"] = {"globs": ["**/*.md"], "except": ["skills/**", "hooks/**"]}
+        p = Project(files={".ai/policies/weight.json": json.dumps(table), "README.md": "# r\n"})
+        self.addCleanup(p.close)
+        p.ok("start", "--goal", "fix a typo", "--workflow", "feature", "--files", "README.md",
+             "--tests", "tests/test_widget.py")
+        s = p.state()
+        self.assertEqual((s["mode"], s["weight"]["w"], s["weight"]["documents_only"]["zeroed"]),
+                         ("light", 0, {"behaviour": 1, "domain": 1, "novelty": 1}))
+        p.ok("start", "--amend", "--files", "+src/widget.py", "--why", "the typo is in a docstring")
+        p.write("src/widget.py", "x = 2\n")
+        return p
+
+    def test_a_non_document_after_amend_raises_the_zeroed_axes(self):
+        # R13: start --amend does not re-weigh; verify restores what the documents rule zeroed.
+        p = self.documents_project()
+        out = p.ok("verify", "--scope", "all").stdout
+        for axis in ("behaviour", "domain", "novelty"):
+            self.assertIn("re-score: %s 0 → 1" % axis, out)
+        self.assertIn("a non-document changed (src/widget.py)", out)
+        s = p.state()
+        self.assertEqual((s["mode"], s["weight"]["w"]), ("guarded", 3))
+        raised = [e["data"] for e in p.events(s["task_id"]) if e["event"] == "weight_raised"]
+        self.assertEqual([(r["axis"], r["mode_to"]) for r in raised],
+                         [(a, "guarded") for a in ("behaviour", "domain", "novelty")])
+        self.assertIn("a non-document changed (src/widget.py)", raised[0]["evidence"])
+
+    def test_a_non_document_after_amend_raises_the_zeroed_axes_at_close(self):
+        # The same raise when only close sees the diff: it re-scores before it names what is owed.
+        p = self.documents_project()
+        done = p.run("close")
+        self.assertEqual(done.returncode, 2, done.stderr)
+        self.assertIn("re-score: behaviour 0 → 1", done.stdout)
+        self.assertIn("a non-document changed (src/widget.py)", done.stdout)
+        s = p.state()
+        self.assertEqual((s["mode"], s["weight"]["w"]), ("guarded", 3))
+        self.assertEqual(len([e for e in p.events(s["task_id"]) if e["event"] == "weight_raised"]), 3)
+
+    def test_documents_only_still_light_when_only_documents_changed(self):
+        with open(os.path.join(ROOT, "skills", "ai-init", "templates", ".ai", "policies", "weight.json"),
+                  encoding="utf-8") as fh:
+            table = json.load(fh)
+        table["documents"] = {"globs": ["**/*.md"], "except": []}
+        p = Project(files={".ai/policies/weight.json": json.dumps(table), "README.md": "# r\n"})
+        self.addCleanup(p.close)
+        p.ok("start", "--goal", "fix a typo", "--workflow", "feature", "--files", "README.md",
+             "--tests", "tests/test_widget.py")
+        p.write("README.md", "# r2\n")
+        self.assertNotIn("re-score", p.ok("verify", "--scope", "all").stdout)
+        self.assertEqual(p.state()["mode"], "light")
+
     def test_snapshot_sees_a_same_size_edit_made_in_the_index_second(self):
         # Racy git: an edit that keeps the size, made in the second the index was
         # written, must not vanish from a snapshot taken a second later. The copy
@@ -2725,6 +2780,271 @@ class TestBatch(Base):
                          [("s1", "pending"), ("s2", "in_progress")])
         self.assertEqual(self._ready(), ["s2"])
         self.assertIn("current s2", self.p.ok("status").stdout)
+
+
+class TestDocumentsOnly(unittest.TestCase):
+    """2b (docs/sdlc/specs/faster-task-cycle.md, D1-D5): after a green suite, a documents-only
+    edit closes on a green run of `doc_tests`. Every project builds its own policy."""
+
+    DOCUMENTS = {"globs": ["**/*.md", "docs/**/*.json", ".ai/**/*.json"],
+                 "except": ["skills/**", "hooks/**", "agents/**", "instructions/**", "codex/**"]}
+    FILES = "src/widget.py,README.md,docs/guide.md,skills/guide.md,.ai/policies/x.md,tests/test_docs.py"
+    DOC_RUN = ("verify", "--scope", "step", "--files", "tests/test_docs.py")
+    ACTIONABLE = 'only documents changed since run %d (%d files): \'verify --scope step --files "%s"\''
+    OLD = "the tree changed after the last verify"
+
+    def setUp(self):
+        self.p = None
+
+    def tearDown(self):
+        if self.p:
+            self.p.close()
+
+    def project(self, documents=True, doc_tests="tests/test_docs.py"):
+        """A scratch project; documents=False has no `documents` key, doc_tests=None no such line."""
+        with open(os.path.join(ROOT, "skills", "ai-init", "templates", ".ai", "policies", "weight.json"),
+                  encoding="utf-8") as fh:
+            policy = json.load(fh)
+        if documents:
+            policy["documents"] = self.DOCUMENTS
+        self.p = Project(files={".ai/policies/weight.json": json.dumps(policy), "README.md": "# r\n",
+                                "docs/guide.md": "g\n", "skills/guide.md": "s\n", ".ai/policies/x.md": "x\n",
+                                "tests/test_docs.py": "assert True\n"})
+        if doc_tests is not None:
+            with open(os.path.join(self.p.root, ".ai", "policies", "testing.md"), "a", encoding="utf-8") as fh:
+                fh.write("doc_tests: %s\n" % doc_tests)
+        return self.p
+
+    def green_then(self, *edits, mode=()):
+        """start, one green whole-suite run (G, run 1), then the edits (path, text)."""
+        self.p.start(*mode, files=self.FILES)
+        self.p.ok("verify", "--scope", "all")
+        for rel, text in edits:
+            self.p.write(rel, text)
+
+    def close_refused(self, text):
+        done = self.p.run("close")
+        self.assertEqual(done.returncode, 2, done.stderr)
+        self.assertIn(text, done.stderr)
+        self.assertTrue(self.p.in_flight())
+
+    # R10: without the key and the line, nothing changes (C2) — green before and after 2b.
+
+    def test_without_the_key_a_document_edit_after_green_still_refuses(self):
+        self.project(documents=False, doc_tests=None)
+        self.green_then(("README.md", "# edited\n"))
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.OLD)
+
+    def test_without_the_key_red_on_this_tree_refuses(self):
+        self.project(documents=False, doc_tests=None)
+        self.p.start(files=self.FILES)
+        self.p.flag("red")
+        self.assertEqual(self.p.run("verify", "--scope", "all").returncode, 1)
+        self.close_refused("the suite is red on this tree")
+
+    # D1
+
+    def test_globs_without_doc_tests_is_off(self):
+        self.project(doc_tests=None)
+        self.green_then(("README.md", "# edited\n"))
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.OLD)
+
+    def test_doc_tests_none_is_off(self):
+        self.project(doc_tests="none")
+        self.green_then(("README.md", "# edited\n"))
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.OLD)
+
+    def test_doc_tests_without_globs_is_off(self):
+        self.project(documents=False)
+        self.green_then(("README.md", "# edited\n"))
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.OLD)
+
+    # D2
+
+    def test_no_green_full_run_is_off(self):
+        self.project()
+        self.p.start(files=self.FILES)
+        self.p.flag("red")
+        self.assertEqual(self.p.run("verify", "--scope", "all").returncode, 1)
+        self.p.flag("red", False)
+        self.p.write("README.md", "# edited\n")
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.OLD)
+
+    def test_red_full_run_on_g_tree_under_another_runtime_refuses(self):
+        self.project()
+        self.p.start(files=self.FILES)
+        self.p.flag("red")
+        self.assertEqual(self.p.run("verify", "--scope", "suite", runtime="codex").returncode, 1)
+        self.p.flag("red", False)
+        self.p.ok("verify", "--scope", "all")               # G: green, on a tree that also has a red run
+        self.p.write("README.md", "# edited\n")
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.OLD)
+
+    def test_a_red_run_after_g_is_not_g(self):
+        self.project()
+        self.green_then()
+        self.p.flag("red")
+        self.assertEqual(self.p.run("verify", "--scope", "suite", runtime="codex").returncode, 1)
+        self.p.flag("red", False)
+        self.p.write("README.md", "# edited\n")
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.OLD)
+
+    # D3, D4
+
+    def test_a_code_file_in_the_diff_refuses(self):
+        self.project()
+        self.green_then(("README.md", "# edited\n"), ("src/widget.py", "x = 2\n"))
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.OLD)
+
+    def test_a_test_file_in_the_diff_refuses(self):
+        self.project()
+        self.green_then(("README.md", "# edited\n"), ("tests/test_docs.py", "assert 1\n"))
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.OLD)
+
+    def test_a_policy_path_refuses_even_when_globs_match(self):
+        self.project()
+        self.green_then((".ai/policies/x.md", "changed\n"))
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.OLD)
+
+    def test_a_rules_path_refuses_even_when_globs_match(self):
+        self.project()
+        self.p.start(files=self.FILES + ",.ai/rules/x.md")
+        self.p.ok("verify", "--scope", "all")
+        self.p.write(".ai/rules/x.md", "changed\n")
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.OLD)
+
+    def test_the_documents_refusal_is_a_review_required_line(self):
+        # rr-ship's table matches this line by its `review required (` start. close writes it
+        # through die(), so it is on stderr behind the `state.py: ` prefix.
+        self.project()
+        self.green_then(("README.md", "# edited\n"))
+        done = self.p.run("close")
+        self.assertEqual(done.returncode, 2, done.stderr)
+        lines = [ln for ln in (done.stdout + done.stderr).splitlines() if "only documents changed since run" in ln]
+        self.assertEqual(len(lines), 1, done.stdout + done.stderr)
+        self.assertRegex(lines[0], r"^(state\.py: )?review required \(\w+ mode\) — .*only documents changed since run")
+
+    def test_except_glob_refuses(self):
+        self.project()
+        self.green_then(("skills/guide.md", "changed\n"))
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.OLD)
+
+    def test_rename_py_to_md_refuses(self):
+        self.project()
+        self.green_then()
+        os.rename(os.path.join(self.p.root, "src", "widget.py"), os.path.join(self.p.root, "docs", "widget.md"))
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.OLD)
+
+    def test_is_document_is_one_predicate(self):
+        policy = dict(weight.load_policy(ROOT)[0], documents=self.DOCUMENTS)
+        paths = ("README.md", "docs/a/b.md", "docs/x.json", ".ai/state/x.json", ".ai/policies/weight.json",
+                 ".ai/policies/x.md", "skills/a.md", "src/a.py", "tests/test_a.py", "notes.txt")
+        self.assertEqual([p for p in paths if state_mod.is_document(p, policy)],
+                         ["README.md", "docs/a/b.md", "docs/x.json", ".ai/state/x.json"])
+        self.assertFalse(state_mod.is_document("README.md", {}), "no `documents` key: nothing is a document")
+        self.assertEqual(state_mod.NEVER_DOCUMENTS, (".ai/policies/**", ".ai/rules/**"))
+
+    # D5
+
+    def test_without_a_scoped_run_the_refusal_names_the_command(self):
+        self.project()
+        self.green_then(("README.md", "# edited\n"))
+        self.close_refused(self.ACTIONABLE % (1, 1, "tests/test_docs.py"))
+
+    def test_scoped_run_missing_a_doc_test_refuses(self):
+        self.project(doc_tests="tests/test_docs.py tests/test_more.py")
+        self.green_then(("README.md", "# edited\n"))
+        self.p.ok(*self.DOC_RUN)
+        self.close_refused(self.ACTIONABLE % (1, 1, "tests/test_docs.py,tests/test_more.py"))
+
+    def test_scoped_run_naming_every_doc_test_closes(self):
+        self.project(doc_tests="tests/test_docs.py tests/test_more.py")
+        self.green_then(("README.md", "# edited\n"))
+        self.p.ok("verify", "--scope", "step", "--files", "tests/test_docs.py,tests/test_more.py")
+        self.p.ok("close")
+        self.assertFalse(self.p.in_flight())
+
+    def test_red_scoped_run_refuses(self):
+        self.project()
+        self.green_then(("README.md", "# edited\n"))
+        self.p.flag("stepred")
+        self.assertEqual(self.p.run(*self.DOC_RUN).returncode, 1)
+        self.close_refused(self.ACTIONABLE % (1, 1, "tests/test_docs.py"))
+
+    def test_scoped_run_expected_fail_refuses(self):
+        self.project()
+        self.green_then(("README.md", "# edited\n"))
+        self.assertEqual(self.p.run(*self.DOC_RUN, "--expect", "fail").returncode, 1)   # exit 0 inside: no bite
+        self.assertTrue(self.p.state()["verify"]["runs"][-1]["expected_fail"])
+        self.close_refused(self.ACTIONABLE % (1, 1, "tests/test_docs.py"))
+
+    def test_scoped_run_before_g_refuses(self):
+        self.project()
+        self.p.start(files=self.FILES)
+        self.p.write("README.md", "# edited\n")
+        self.p.ok(*self.DOC_RUN)                             # run 1, on the edited tree
+        self.p.write("README.md", "# r\n")
+        self.p.ok("verify", "--scope", "all")                # G is run 2, on the unedited tree
+        self.p.write("README.md", "# edited\n")              # the tree of run 1 again: n <= G.n
+        self.close_refused(self.ACTIONABLE % (2, 1, "tests/test_docs.py"))
+
+    def test_scoped_run_on_another_tree_refuses(self):
+        self.project()
+        self.green_then(("README.md", "# edited\n"))
+        self.p.ok(*self.DOC_RUN)
+        self.p.write("README.md", "# edited again\n")
+        self.close_refused(self.ACTIONABLE % (1, 1, "tests/test_docs.py"))
+
+    # the green path and what must not move
+
+    def test_green_doc_tests_after_g_closes(self):
+        self.project()
+        self.green_then(("README.md", "# edited\n"), ("docs/guide.md", "g2\n"))
+        self.p.ok(*self.DOC_RUN)
+        task = self.p.state()["task_id"]
+        self.p.ok("close")
+        self.assertFalse(self.p.in_flight())
+        archived = self.p.archived(task)
+        self.assertEqual(archived["facts"]["documents"],
+                         {"since_run": 1, "since_tree": archived["verify"]["runs"][0]["tree"], "run": 2,
+                          "paths": ["README.md", "docs/guide.md"], "tests": ["tests/test_docs.py"]})
+        self.assertTrue(archived["facts"]["a"][0])
+        self.assertIn("documents only since run 1", archived["facts"]["a"][1])
+        self.assertIn("documents only since run 1", self.p.task_md(task))
+
+    def test_e2e_is_still_owed_on_this_tree(self):
+        self.project()
+        self.green_then(mode=("--mode", "guarded", "--by", "test"))
+        self.p.write("README.md", "# edited\n")
+        self.p.ok("review", "--verdict", "pass", "--tier", "BALANCED", "--report", "-", stdin=CLEAN)
+        self.p.ok(*self.DOC_RUN)
+        done = self.p.run("close")
+        self.assertEqual(done.returncode, 2, done.stderr)
+        self.assertTrue(done.stderr.startswith("state.py: verify required"), done.stderr)
+        self.assertIn("e2e on this tree", done.stderr)
+
+    def test_review_closes_still_needs_a_full_suite(self):
+        self.project()
+        self.green_then(mode=("--mode", "guarded", "--by", "test"))
+        self.p.ok("review", "--verdict", "pass_with_findings", "--tier", "BALANCED", "--report", "-", stdin=FINDINGS)
+        self.p.write("README.md", "# edited\n")
+        self.p.ok(*self.DOC_RUN)
+        done = self.p.run("review", "--closes", "H1")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("stay open", done.stderr)
 
 
 if __name__ == "__main__":

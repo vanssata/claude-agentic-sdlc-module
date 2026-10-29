@@ -33,7 +33,8 @@ Then the mode table decides:
 |---|---|---|
 | 0, `closed` | archived: `task.md` holds the changes and the verdict | §3 |
 | 0, `ready for approval` | full mode: the gate is requested | §2 |
-| 2 `review required` | light with a red fact, or guarded/full without its review | `/rr-review` |
+| 2 `review required` whose text holds `only documents changed since run …` (read this row first) | a green suite, then documents only | `$STATE verify --scope step --files "<doc_tests>" && $STATE verify --scope e2e && $STATE close` — `close` prints the files comma-joined; use its text |
+| 2 `review required`, any other reason | light with a red fact, or guarded/full without its review | `/rr-review` |
 | 2 `verify required` | e2e owed, or not on this tree | `$STATE verify --scope all` (or `--scope e2e`, or `--e2e not-applicable "<why>"`) |
 | 4 | a question is pending | show it; §4 |
 | 5 `APPROVAL_REFUSED` | rejected, and nothing changed since | address the rejection, `verify --scope all`, close again |

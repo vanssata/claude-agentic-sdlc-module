@@ -444,5 +444,143 @@ class TestCLI(unittest.TestCase):
             tree.close()
 
 
+class TestDocumentsOnly(TestCLI):
+    """faster-task-cycle (c), R12 and R14: behaviour 0 in `weight`. Every case builds its own table
+    in a temp root, with or without the `documents` key — the repository's own table is not read."""
+
+    DOCUMENTS = {"globs": ["**/*.md", "docs/**/*.json", ".ai/**/*.json"],
+                 "except": ["skills/**", "hooks/**", "agents/**", "instructions/**", "codex/**"]}
+
+    def tree(self, documents=True, hints=(), readme="# readme\n"):
+        with open(os.path.join(SHIPPED_DIR, "weight.json"), encoding="utf-8") as fh:
+            table = json.load(fh)
+        if documents:
+            table["documents"] = self.DOCUMENTS
+        table["hints"] = list(table["hints"]) + list(hints)
+        tree = Tree({".ai/policies/weight.json": json.dumps(table), ".ai/policies/testing.md": "x\n",
+                     "README.md": readme, "docs/guide.md": "guide\n", "tests/test_x.py": "assert True\n",
+                     "src/a.py": "x = 1\n"})
+        self.addCleanup(tree.close)
+        return tree
+
+    def weigh(self, files, goal="fix a typo", extra=(), tree=None, **kwargs):
+        """The parsed `weight --json` of `files` in a temp root."""
+        tree = tree or self.tree(**kwargs)
+        done = self.run_state("--files", ",".join(files), "--goal", goal, "--json", *extra, root=tree.root)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout)
+
+    def test_without_the_key_a_document_still_scores_unknown_one(self):
+        # R14: green before and after the feature.
+        data = self.weigh(["README.md"], documents=False)
+        self.assertEqual([data["axes"][a] for a in ("behaviour", "domain", "novelty")], [1, 1, 1])
+        self.assertEqual(data["unknown"], ["behaviour", "domain", "novelty"])
+        self.assertEqual(data["mode"], "guarded")
+        self.assertNotIn("documents_only", data)
+        self.assertNotIn("documents only", json.dumps(data["evidence"]))
+
+    def test_documents_only_scores_zero(self):
+        data = self.weigh(["README.md", "docs/guide.md"])
+        self.assertEqual([data["axes"][a] for a in ("behaviour", "domain", "novelty")], [0, 0, 0])
+        for axis in ("behaviour", "domain", "novelty"):
+            self.assertIn("documents only", data["evidence"][axis])
+        self.assertEqual((data["w"], data["mode"], data["unknown"]), (0, "light", []))
+        self.assertEqual(data["documents_only"]["zeroed"], {"behaviour": 1, "domain": 1, "novelty": 1})
+        done = self.run_state("--files", "README.md,docs/guide.md", "--goal", "fix a typo", root=self.tree().root)
+        self.assertRegex(done.stdout.splitlines()[-1], r"^W 0 → light ")
+
+    def test_goal_keyword_still_scores_one(self):
+        data = self.weigh(["README.md"], goal="document the workflow")
+        self.assertEqual((data["axes"]["behaviour"], data["axes"]["domain"], data["axes"]["novelty"]), (1, 0, 0))
+        self.assertIn("keyword 'workflow' in the goal", data["evidence"]["behaviour"])
+        self.assertEqual(data["documents_only"]["zeroed"], {"domain": 1, "novelty": 1})
+
+    def test_file_text_keyword_does_not_score(self):
+        tree = self.tree(readme="the workflow and the queue\n")
+        self.assertEqual(self.weigh(["README.md"], tree=tree)["axes"]["behaviour"], 0)
+        # Without the key the same text still scores, as today.
+        table = os.path.join(tree.root, ".ai", "policies", "weight.json")
+        with open(table, encoding="utf-8") as fh:
+            policy = json.load(fh)
+        del policy["documents"]
+        with open(table, "w", encoding="utf-8") as fh:
+            json.dump(policy, fh)
+        self.assertIn("keyword 'workflow' in README.md", self.weigh(["README.md"], tree=tree)["evidence"]["behaviour"])
+
+    def test_a_hint_still_adds_one(self):
+        hint = {"paths": ["docs/**"], "axis": "behaviour", "note": "docs are read by agents"}
+        data = self.weigh(["README.md", "docs/guide.md"], hints=[hint])
+        self.assertEqual((data["axes"]["behaviour"], data["axes"]["domain"]), (1, 0))
+        self.assertTrue(any("docs are read by agents" in h for h in data["hints"]))
+        self.assertEqual(data["documents_only"]["zeroed"], {"domain": 1, "novelty": 1})
+
+    def test_declare_replaces_zero(self):
+        data = self.weigh(["README.md"], extra=("--declare", "behaviour=1:rewrites the install steps"))
+        self.assertEqual(data["axes"]["behaviour"], 1)
+        self.assertIn("rewrites the install steps (declared)", data["evidence"]["behaviour"])
+        self.assertEqual(data["axes"]["domain"], 0)
+
+    def test_docs_plus_tests_still_zero(self):
+        data = self.weigh(["README.md", "tests/test_x.py"])
+        self.assertEqual([data["axes"][a] for a in ("behaviour", "domain", "novelty")], [0, 0, 0])
+        self.assertEqual(data["mode"], "light")
+        self.assertIn("documents_only", data)
+
+    def test_tests_alone_are_not_documents_only(self):
+        self.assertNotIn("documents_only", self.weigh(["tests/test_x.py"]))
+
+    def test_docs_plus_code_is_unchanged(self):
+        data = self.weigh(["README.md", "src/a.py"])
+        self.assertEqual([data["axes"][a] for a in ("behaviour", "domain", "novelty")], [1, 1, 1])
+        self.assertEqual(data["unknown"], ["behaviour", "domain", "novelty"])
+        self.assertNotIn("documents_only", data)
+
+    def test_policy_path_is_not_a_document(self):
+        data = self.weigh(["README.md", ".ai/policies/testing.md"])
+        self.assertEqual((data["axes"]["domain"], data["axes"]["novelty"]), (1, 1))
+        self.assertNotIn("documents_only", data)
+
+    def test_rules_path_is_not_a_document(self):
+        data = self.weigh(["README.md", ".ai/rules/x.md"])
+        self.assertEqual((data["axes"]["domain"], data["axes"]["novelty"]), (1, 1))
+        self.assertNotIn("documents_only", data)
+
+    def keyword_hint(self):
+        return {"paths": ["docs/flow.md"], "axis": "behaviour", "note": "flow is read by agents"}
+
+    def plain_behaviour(self, files, goal, tree):
+        """The behaviour the same CLI gives without the `documents` key: plain compute."""
+        table = os.path.join(tree.root, ".ai", "policies", "weight.json")
+        with open(table, encoding="utf-8") as fh:
+            policy = json.load(fh)
+        del policy["documents"]
+        with open(table, "w", encoding="utf-8") as fh:
+            json.dump(policy, fh)
+        return self.weigh(files, goal=goal, tree=tree)["axes"]["behaviour"]
+
+    def test_goal_keyword_on_a_new_document_still_scores_one(self):
+        goal = "document the workflow transition"
+        tree = self.tree()
+        data = self.weigh(["docs/new.md"], goal=goal, tree=tree)
+        self.assertEqual(data["axes"]["behaviour"], 1)
+        self.assertIn("keyword 'workflow' in the goal", data["evidence"]["behaviour"])
+        self.assertIn("documents_only", data)
+        self.assertEqual(data["axes"]["behaviour"], self.plain_behaviour(["docs/new.md"], goal, tree))
+
+    def test_goal_keyword_plus_hint_scores_as_compute_does(self):
+        goal = "document the workflow transition"
+        tree = self.tree(hints=[self.keyword_hint()])
+        with open(os.path.join(tree.root, "docs", "flow.md"), "w", encoding="utf-8") as fh:
+            fh.write("flow\n")
+        data = self.weigh(["docs/flow.md"], goal=goal, tree=tree)
+        self.assertIn("documents_only", data)
+        self.assertEqual(data["axes"]["behaviour"], 2)
+        self.assertEqual(data["axes"]["behaviour"], self.plain_behaviour(["docs/flow.md"], goal, tree))
+
+    def test_a_path_outside_the_root_is_still_refused(self):
+        done = self.run_state("--files", "../README.md", root=self.tree().root)
+        self.assertEqual((done.returncode, "Traceback" in done.stderr), (1, False))
+
+
 if __name__ == "__main__":
     unittest.main()

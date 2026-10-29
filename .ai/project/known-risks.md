@@ -790,3 +790,103 @@ following; each is open unless marked.
 - **Suggested fix**: look for write indicators in the one-liner text only — behaviour 2 (allows what was denied), so full mode under hooks/CLAUDE.md; a task of its own, if done at all
 - **Status**: open
 - **Label**: KNOWN FACT (deny), INFERENCE (cause)
+
+## Runner exit 2 counts as a bite under verify --expect fail
+
+- **Found**: 2026-10-29, by T-2026-10-29-2006-faster-task-cycle
+- **Where**: `skills/ai-task/state.py:3795`
+- **What could go wrong**: verify --expect fail treats any non-zero exit as the test biting; tests/run_suite.py exits 2 on a usage error (as unittest exits 5 on no tests), so a mistyped step run would count as the failing-first proof (spec faster-task-cycle concern 12)
+- **How likely / how bad**: low: needs a usage error in the step command
+- **Suggested fix**: accept only exit 1 as a bite when the runner is step_test_command
+- **Status**: open
+- **Label**: RISK
+
+## A doc-reading test left off doc_tests lets a documents-only close through red
+
+- **Found**: 2026-10-29, by T-2026-10-29-2006-faster-task-cycle
+- **Where**: `.ai/policies/testing.md (doc_tests`, `after G1)`
+- **What could go wrong**: close's documents rule (D5) trusts a scoped run of doc_tests after the last green full run; a test that reads repository documents but is missing from the list is never run, so a doc edit that breaks it closes green (spec faster-task-cycle concern 4)
+- **How likely / how bad**: medium as tests are added
+- **Suggested fix**: CI's serial oracle (.github/workflows/tests.yml) and the next task's full suite catch it; refresh the list from the plan's row 2 grep
+- **Status**: open
+- **Label**: RISK
+
+## test_gate_fast_path is red under the parallel runner's default jobs
+
+- **Found**: 2026-10-29, by T-2026-10-29-2006-faster-task-cycle
+- **Where**: `tests/test_dialog_gate.py (TestGateFastPath.test_gate_fast_path)`
+- **What could go wrong**: a 15 ms budget measured 61 ms in 2 of 2 default 'python3 -I tests/run_suite.py' runs (T-2026-10-29-2006 s1); green with '--serial test_dialog_gate.TestGateFastPath'. The spec fixes DEFAULT_SERIAL to test_guard_characterization.TestTimed only, so a plain runner run is red
+- **How likely / how bad**: certain under default jobs
+- **Suggested fix**: G1: verify_command gains '--serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath', or a follow-up adds the id to DEFAULT_SERIAL (plan risk P2)
+- **Status**: open
+- **Label**: KNOWN FACT
+
+## Documents rule D2 ignores a red full-suite run after G with no tree
+
+- **Found**: 2026-10-29, by T-2026-10-29-2006-faster-task-cycle
+- **Where**: `skills/ai-task/state.py:3722`
+- **What could go wrong**: documents_cover picks G as the last full-suite run with an exit and a tree; a later red run whose tree moved (tree None) or with exit None is ignored, so the rule rests on doc_tests alone (review L1, T-2026-10-29-2006)
+- **How likely / how bad**: 
+- **Suggested fix**: off when any full-suite run after G is red, whatever its tree
+- **Status**: open
+- **Label**: KNOWN FACT
+
+## MEDIUM/LOW register rule sits only on the pass_with_findings bullet
+
+- **Found**: 2026-10-29, by T-2026-10-29-2006-faster-task-cycle
+- **Where**: `skills/rr-review/SKILL.md:84-93`, `skills/rr-build-all/SKILL.md:147-150`
+- **What could go wrong**: a pass verdict with in-scope MEDIUM/LOW closes through the review && close chain without registering them (R8 short); under pass_with_findings the text does not say to register before the --after-fix run, and a known-risks.md edit after it moves the tree so review --closes needs another suite run (review L2, T-2026-10-29-2006)
+- **How likely / how bad**: 
+- **Suggested fix**: one sentence: register MEDIUM/LOW first, then the after-fix run or the pass chain
+- **Status**: open
+- **Label**: KNOWN FACT
+
+## A task glob beside documents weighs light at start
+
+- **Found**: 2026-10-29, by T-2026-10-29-2006-faster-task-cycle
+- **Where**: `skills/ai-task/state.py:3484`
+- **What could go wrong**: cmd_start hands weigh only concrete files, so --files README.md,src/** satisfies P and starts light; the first verify/close re-score raises it once a code path is in the diff (review L3, T-2026-10-29-2006)
+- **How likely / how bad**: 
+- **Suggested fix**: P fails when a task file is a glob not under a document glob
+- **Status**: open
+- **Label**: KNOWN FACT
+
+## rr-review asks for a pass verdict to be recorded twice
+
+- **Found**: 2026-10-29, by T-2026-10-29-2006-faster-task-cycle
+- **Where**: `skills/rr-review/SKILL.md:84-86`
+- **What could go wrong**: section 3 records the verdict with review --verdict; section 4's pass chain records it again with && close; read in order, a duplicate pass spends a review round (review L4, T-2026-10-29-2006)
+- **How likely / how bad**: 
+- **Suggested fix**: section 3 says a pass is recorded by section 4's chain
+- **Status**: open
+- **Label**: KNOWN FACT
+
+## run_suite children survive a SIGKILL of the runner
+
+- **Found**: 2026-10-29, by T-2026-10-29-2006-faster-task-cycle
+- **Where**: `tests/run_suite.py`
+- **What could go wrong**: sensors.run_command's timeout SIGKILLs the runner; children run with start_new_session=True and survive with no per-file timeout; a child spawned between Popen and children.add escapes kill_all on SIGTERM; SIGHUP unhandled. Lingering processes, not a false green (review I1, T-2026-10-29-2006)
+- **How likely / how bad**: 
+- **Suggested fix**: parent-death check in the child (poll the parent pid)
+- **Status**: open
+- **Label**: INFERENCE
+
+## The bounded reviewer can no longer time a regex
+
+- **Found**: 2026-10-29, by T-2026-10-29-2006-faster-task-cycle
+- **Where**: `agents/ai-reviewer.md.tmpl:50-53`
+- **What could go wrong**: the reviewer bound forbids scripts and timing loops; this repository's recurring blocker class, a regex's running time (CLAUDE.md), can then be confirmed only by the manager's probe (review I3, T-2026-10-29-2006; accepted by R11)
+- **How likely / how bad**: 
+- **Suggested fix**: allow one timed probe for regex/performance claims, or rr-review section 2 says the manager runs it
+- **Status**: open
+- **Label**: RISK
+
+## testing.md fields keep a trailing comment
+
+- **Found**: 2026-10-29, by T-2026-10-29-2006-faster-task-cycle
+- **Where**: `skills/ai-task/sensors.py (read_commands)`
+- **What could go wrong**: read_commands does not strip a trailing comment (pre-existing), so 'doc_tests: none  # ...' reads as switched on; the documents rule then refuses with an odd --files command, not a false green (review I4, T-2026-10-29-2006)
+- **How likely / how bad**: 
+- **Suggested fix**: compare against the first token, or document that the line takes no comment
+- **Status**: open
+- **Label**: KNOWN FACT
