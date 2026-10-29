@@ -15,7 +15,7 @@ here.
 that may be optimised freely — as long as the decisions do not move.**
 
 Every change made for speed is proved behaviour-preserving by
-`tests/test-guard-characterization.sh`: 721 guard runs — every fixture payload,
+`tests/test_guard_characterization.py`: 721 guard runs — every fixture payload,
 ~120 shell commands aimed at each individual rule, the file tools, the Codex
 payloads, malformed input, a protected and a feature branch, the shipped defaults
 and user/project overrides — compared with
@@ -27,8 +27,8 @@ golden file has to move, the change was not a performance change; it is a rule
 change, and it goes through review as one.
 
 ```bash
-bash tests/test-guard-characterization.sh            # must be byte-identical
-bash tests/test-guard-characterization.sh --record   # only after a deliberate rule change
+python3 -I -m unittest discover -s tests -p test_guard_characterization.py   # must be byte-identical
+python3 tools/golden-diff.py --record                                        # only after a deliberate rule change
 ```
 
 ## The budget
@@ -103,7 +103,7 @@ which has the fnmatch semantics the plan globs want (`*` crosses `/`, `[!x]`
 negates). `dirname` is gone from the `HOOK_DIR` line, as it already was in the
 path guard.
 15 → 6 processes per Edit, 158 → 62 ms; a denied edit 16 → 7 and 162 → 68 ms.
-`tests/test-guard-characterization.sh` passed unchanged across the whole change.
+`tests/test_guard_characterization.py` passed unchanged across the whole change.
 
 **WP7 on top of it, at no cost.** The two rule lists added afterwards — the
 runtime configuration frozen while a task is in flight, and instruction files

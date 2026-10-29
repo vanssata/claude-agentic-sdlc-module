@@ -560,10 +560,10 @@ the new name wins where both are set.
 ## Testing them
 
 ```bash
-bash tests/run-all.sh
+python3 -I -m unittest discover -s tests -p 'test_*.py'
 ```
 
-`tests/test-fable-gate.sh` and `tests/test-codex-model-gate.sh` drive the gate
+`tests/test_runtime_gate_fable.py` and `tests/test_runtime_gate_codex.py` drive the gate
 through the old names, every event, with synthetic payloads — including
 malformed input, an unwritable state directory, expiry and explicit-model
 precedence — and install each plan and `--fable` option into scratch directories,
@@ -579,7 +579,7 @@ including `apply_patch` payloads that touch several files at once. Adding a rule
 means adding a fixture — including one that proves the rule does **not** fire
 where it should not, which is the half that gets forgotten.
 
-`tests/test-guard-characterization.sh` is the other half: it pins the exact
+`tests/test_guard_characterization.py` is the other half: it pins the exact
 behaviour of all three guards — exit code and full deny text, byte for byte —
 against a golden file, so a change made purely for speed can be proved to change
 nothing. See `docs/hook-performance.md` for what the guards cost per tool call,

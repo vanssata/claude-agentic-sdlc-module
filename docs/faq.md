@@ -304,12 +304,6 @@ the `reviewer` agent that `ai-reviewer` replaces. Your model, effort and limits
 do not change — they come from the same `profiles/`. The old directory can be
 deleted afterwards.
 
-## Which do I use, `/ai-task` or the `/sdlc-*` skills?
-
-`/ai-task` for a change. The `/sdlc-*` chain when the work needs a written intent
-and specification agreed before any code exists; it ends by handing its plan to
-`/ai-task`, which runs the pipeline and the tier's gates as usual.
-
 ## When do I still use `architect`?
 
 For a design question that is not a task — "how should we structure this", "what

@@ -853,10 +853,10 @@ one; nothing references it any more.
 ## Tests
 
 ```bash
-bash tests/run-all.sh
+python3 -I -m unittest discover -s tests -p 'test_*.py'
 ```
 
-Twenty-seven suites, 2,904 assertions. The guards against JSON fixtures in both runtimes (including
+Fifty-five suites, 905 tests. The guards against JSON fixtures in both runtimes (including
 `apply_patch` payloads that touch several files at once); the state machine and
 its `triage` call; scaffold idempotency for one runtime, the other, and both
 over a single `.ai/` tree; installer rendering for every plan combination and

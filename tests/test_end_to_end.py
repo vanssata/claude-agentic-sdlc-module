@@ -5,8 +5,8 @@ either runtime (R5, R19), the guarded path writes the handoff at its boundaries
 only (R21) and asks nothing after the weight (R24), and a closed task leaves
 the journal and task.md under reports/ (R8).
 
-Skipped unless AI_E2E=1, so `unittest discover` in run-all.sh leaves it to
-tests/test-end-to-end.sh, which runs it once, at the end.
+Skipped unless AI_E2E=1, so the fast `unittest discover` leaves it out; run it once
+with AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py.
 """
 import json
 import os
@@ -22,12 +22,12 @@ from test_ai_task_state import ZERO, Project  # noqa: E402  pylint: disable=wron
 
 TWIN_OF = "test-end-to-end.sh"
 # The shell suite's last case ran this module under unittest and passed with its
-# "Ran N tests" line; tests/test-end-to-end.sh now runs the whole module itself.
+# "Ran N tests" line; the whole module runs under AI_E2E=1.
 # The label as test_suite_parity reads it: up to the first inner double quote.
 SHELL_MECHANICS = ("test_end_to_end.py: $(grep -oE '^Ran [0-9]+ tests?' <<<",)
 
 
-@unittest.skipUnless(os.environ.get("AI_E2E"), "end to end: AI_E2E=1 (tests/test-end-to-end.sh)")
+@unittest.skipUnless(os.environ.get("AI_E2E"), "end to end: AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py")
 class TestEndToEnd(unittest.TestCase):
     def setUp(self):
         self.p = Project()
@@ -125,7 +125,7 @@ def patch(*paths):
         "*** Update File: %s\n@@\n-old\n+new\n" % p for p in paths)
 
 
-@unittest.skipUnless(os.environ.get("AI_E2E"), "end to end: AI_E2E=1 (tests/test-end-to-end.sh)")
+@unittest.skipUnless(os.environ.get("AI_E2E"), "end to end: AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py")
 class TestInstalledPipeline(unittest.TestCase):
     """The whole thing, wired together the way it runs in practice: install into a
     scratch CLAUDE_DIR, scaffold a throwaway repository, then drive one task
@@ -320,7 +320,7 @@ class TestInstalledPipeline(unittest.TestCase):
         self.check("src/ is untouched", out == "", out)
 
 
-@unittest.skipUnless(os.environ.get("AI_E2E"), "end to end: AI_E2E=1 (tests/test-end-to-end.sh)")
+@unittest.skipUnless(os.environ.get("AI_E2E"), "end to end: AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py")
 class TestCompactMemory(unittest.TestCase):
     """compact-project-memory M12: enable → start → close → record → pre-push →
     fresh clone → show, through state.py, the installed hook and git."""

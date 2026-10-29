@@ -31,7 +31,8 @@ restart the runtime afterwards.
 The same two checks run in CI on every pull request:
 
 ```bash
-bash tests/run-all.sh
+python3 -I -m unittest discover -s tests -p 'test_*.py'
+AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
 ```
 
 ```bash
@@ -44,7 +45,7 @@ Ubuntu); no `pip` install is needed — `pylint` on `PATH` is what
 
 Run the suite to the end and fix every failure before you push.
 
-- A new suite goes into the list in `tests/run-all.sh`, otherwise it never runs.
+- A new suite is a `tests/test_*.py` file; `unittest discover` picks it up.
 - No test may read or write the real `~/.claude` or `~/.codex`. Build a scratch
   directory and point the code at it, the way the existing suites do.
 - A guard change comes with fixtures that show the new rule catching what it

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """exec" python3 -I "$0" "$@"
-runtime-gate.py: the one gate behind both old names (R5). test-runtime-gate-fable.sh
-and test-runtime-gate-codex.sh prove the behaviour per runtime (the shims they
+runtime-gate.py: the one gate behind both old names (R5). test_runtime_gate_fable.py
+and test_runtime_gate_codex.py prove the behaviour per runtime (the shims they
 once ran through are gone since redesign 1.3); this one proves what is new — the
 AI_RUNTIME_GATE names winning over the old ones, the runtime read from the home
 the hook runs from, the one-time import of an old gate's state, and failing open.

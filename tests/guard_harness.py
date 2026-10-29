@@ -1,4 +1,4 @@
-"""The guard suites' shared harness, the Python side of tests/lib.sh.
+"""The guard suites' shared harness, the Python side of the retired tests/lib.sh.
 
 A fixture is a JSON file: { "case": "...", "expect": "allow" | "deny",
 "payload": { ...hook stdin... } }; the literal __ROOT__ inside a payload is
@@ -76,7 +76,7 @@ def bash(command, cwd, event="PreToolUse"):
 
 
 class HookAsserts(unittest.TestCase):
-    """The lib.sh assertions, for a suite's TestCase to inherit."""
+    """The retired lib.sh assertions, for a suite's TestCase to inherit."""
 
     def assertFixtures(self, hook, cases, env=None):
         for label, expect, payload in cases:
