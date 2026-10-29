@@ -194,7 +194,8 @@
       "a font or copy change in one template",
       "a test-only change",
       "a message-text change",
-      "this repository: a change that moves no guard decision and no state.py refusal — skill or agent text, usage-report, installer paths, performance work that keeps the guard golden byte-identical"
+      "this repository: a change that moves no guard decision and no state.py refusal — skill or agent text, usage-report, installer paths, performance work that keeps the guard golden byte-identical",
+      "this repository: a change whose files are all documents (weight.json `documents`) or all tests — none of hooks/, skills/, state.py; it measures behaviour, domain, novelty 0; deleting, skipping or loosening a test, or re-recording the guard golden, is not one: declare behaviour=1"
     ],
     "guarded": [
       "a regex fix in a hot guard script",
@@ -215,5 +216,9 @@
     "max_suite_runs": 8,
     "parallel": 3,
     "tier": "BALANCED"
+  },
+  "documents": {
+    "globs": ["**/*.md", "docs/**/*.json", ".ai/**/*.json"],
+    "except": ["skills/**", "hooks/**", "agents/**", "instructions/**", "codex/**", "ai/**"]
   }
 }
