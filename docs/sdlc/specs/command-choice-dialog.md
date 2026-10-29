@@ -397,7 +397,8 @@ picked in the dialog — verbatim, once — or the human runs them outside the a
    all conflict with Q5. Ship with 7f.
 3. `.ai/policies/safety.md:46-50`: guards defend "against an agent's mistakes … not against an agent that
    constructs a command"; "the human gate at T4+ is the boundary". Approval now rests on a guard plus a ledger —
-   the same class as today's tty route (`state.py:628-629`), but safety.md must say so.
+   the same class as today's tty route (`state.py:628-629`), but safety.md must say so. (2026-10-29: safety.md
+   now says "the human gate in full and full_irreversible mode", T-2026-10-29-1756, T-2026-10-29-1806.)
 4. `hooks/ai-guard.py:17-19` "Fail-open … must never make a tool unusable" vs Q2's deny-all gate and the
    fail-closed consent rule (R36.9). Docstring to amend.
 5. Q2 "Stop blocks until settled" vs Claude's `stop_hook_active` loop rule: at most twice per turn (R36.13).

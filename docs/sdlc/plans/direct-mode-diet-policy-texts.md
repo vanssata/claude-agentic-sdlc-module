@@ -352,6 +352,10 @@ new file mode 100644
 +- A change to a shipped template or to `ai/` runs `tools/build-template-history.py` in the same task, or `tests/test-project-update.sh` goes red.
 ```
 
+Note (2026-10-29): the patch above is kept as it was applied. Since redesign 2.H the threat-model
+paragraph in `.ai/policies/safety.md` reads "the human gate in full and full_irreversible mode" where this patch says
+"the human gate at T4+" (T-2026-10-29-1756, T-2026-10-29-1806).
+
 ## Part B — apply after diet task 4 is committed
 
 <!-- patch:B -->

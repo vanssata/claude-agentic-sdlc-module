@@ -50,6 +50,16 @@ Codex has no hookable read tool, so the large-read cap is Claude-only there — 
 an agent that behaves correctly only because a hook is watching is not behaving
 correctly. The rules above hold whether or not a hook enforces them.
 
+**The guards' threat model.** The guards defend against an agent's mistakes — a
+careless `rm`, a write to a frozen policy during a task, a commit with a
+secret — not against an agent that constructs a command to exhaust them. A
+command built to time the guard out is visible in the transcript and in the
+journal, and the human gate in full and full_irreversible mode is the boundary
+for anything that matters.
+Approval rests on a guard plus a ledger: a command the agent constructs to pass
+for the human's pick is outside the threat model, and `state.py consent audit`
+detects it afterwards.
+
 ## Evidence labels
 
 Anything an agent writes into `.ai/project/` carries one of four labels:

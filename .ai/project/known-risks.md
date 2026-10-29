@@ -305,6 +305,7 @@ following; each is open unless marked.
 - **How likely / how bad**: certain for every project if 0007 moves or deletes before the templates are retired.
 - **Suggested fix**: 0007 as shipped converts the edits into `weight.json` and leaves `risk-tiers.*` alone; the move and the deletion belong with the template retirement (2.6), in a migration of their own — which renumbers 3.4b's `0008_renames.py`. Decide whether that is the plan, or whether the templates retire in 2.2a after all.
 - **Status**: open — a decision for the human (task.md §Plan of T-2026-10-25-008)
+- **Also retires with them** (2026-10-29, T-2026-10-29-1756 review I1): the template mirror `risk-tiers.md:104` (repo copy `.ai/policies/risk-tiers.md:120`) still says "`ai-risk` on STRONG when a T4+ classification is not obvious" — an agent `agents/` no longer ships and a tier label 2.H replaced. Not reworded on its own: the whole file is tier vocabulary and matches its JSON (`risk-tiers.json:41`, "T4 or above … (ai-risk on STRONG)").
 
 ## A template shipped in one version only has no merge base, so any project edit to it is a conflict on every run (found 2026-10-26 by T-2026-10-25-008)
 
@@ -745,7 +746,7 @@ following; each is open unless marked.
 - **Found**: 2026-10-29, by T-2026-10-29-1035-redesign-3-6, suite run 1 (`.ai/state/logs/T-2026-10-29-1035-redesign-3-6/suite-1.log`)
 - **Where**: `tests/test_memory_sync.py:320`, `TestConcurrency.test_two_exports_at_once_serialise_on_the_lock`
 - **What could go wrong**: KNOWN FACT — under the whole `unittest discover` run (905 tests, 295 s) it failed with `AssertionError: 'T-2026-10-29-1108-alpha' not found in []`: the export thread that lost the lock reported nothing sealed for its own task, while both tasks did land in the package. Run alone it passed 5 of 5. The task's diff touches no file under `skills/ai-task/` and not the test. INFERENCE — a timing race between the two exports (the loser finds its task already sealed by the winner and reports an empty `sealed`), more likely under load.
-- **How likely / how bad**: intermittent but frequent — KNOWN FACT: it failed in T-2026-10-29-0852 suite 1, -1035 suite 1, -1145 suite 3, T-2026-10-29-1655 suites 1 and 2 (twice in a row) and T-2026-10-29-1724 suite 1 (`'T-2026-10-29-1728-beta' not found in []`); a red whole-suite verify with no regression behind it, costing one suite run
+- **How likely / how bad**: intermittent but frequent — KNOWN FACT: it failed in T-2026-10-29-0852 suite 1, -1035 suite 1, -1145 suite 3, T-2026-10-29-1655 suites 1 and 2 (twice in a row), T-2026-10-29-1724 suite 1 (`'T-2026-10-29-1728-beta' not found in []`) and T-2026-10-29-1806 suite 1 (`'T-2026-10-29-1811-beta' not found in []`); a red whole-suite verify with no regression behind it, costing one suite run
 - **Suggested fix**: decide whether `export` should report a task sealed by a concurrent export as its own (code), or the test should accept it (test) — a task of its own on `skills/ai-task/memory_sync.py`
 - **Status**: open
 - **Label**: KNOWN FACT (failure, isolated passes), INFERENCE (cause)
@@ -774,7 +775,7 @@ following; each is open unless marked.
 
 - **Found**: 2026-10-29, by T-2026-10-29-1655-record-three-out-of-task
 - **Where**: `.ai/reports/T-2026-10-28-010/events.jsonl` (last event: gate_approved, 2026-10-28T20:02:36Z); `.ai/reports/T-2026-10-28-012/events.jsonl` (last event: handoff_written after gate_requested, 21:40:51Z)
-- **What could go wrong**: KNOWN FACT — on 2026-10-29 handoff --print found no current.json, yet neither journal ends in task_closed. Everything that reads a duration or tokens from a journal counts them as unclosed. UNKNOWN — how the state was cleared without close.
+- **What could go wrong**: KNOWN FACT — on 2026-10-29 handoff --print found no current.json, yet neither journal ends in task_closed. Everything that reads a duration or tokens from a journal counts them as unclosed. UNKNOWN — how the state was cleared without close. A lead (T-2026-10-29-1655 review I1): `.ai/reports/T-2026-10-28-010/task.md:128` records `close: open — the human approves in their own terminal, then 'state.py close' again`, and commit 520e065 ("close record (approved)") added the gate_approved event, so the final close after the approval was most likely never run for -010; -012 stops at gate_requested.
 - **How likely / how bad**: two journals today; skewed duration and cost figures
 - **Suggested fix**: find how the state was cleared without close — an investigation of its own
 - **Status**: open

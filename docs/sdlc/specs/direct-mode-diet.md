@@ -780,7 +780,8 @@ Tests: `tests/test-ai-task-state.sh` — `test-run --scope all` records two
 runs and skips e2e on a red suite; `remediate` finishes an open step first and
 refuses on SCOPE_CHANGE_REQUIRED; `close` finishes an open step, refuses with
 exit 2 when a review is owed, still exits 4 on a pending question and 5 after
-a rejection, requests the gate at T4 and archives after `approve`;
+a rejection, requests the gate at T4 (since redesign 2.H: in full and
+full_irreversible mode) and archives after `approve`;
 `tests/test-end-to-end.sh` — the three-call path on a fixture project with
 green sensors ends in `skipped_green` and an archived state.
 

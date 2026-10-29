@@ -54,7 +54,8 @@ correctly. The rules above hold whether or not a hook enforces them.
 careless `rm`, a write to a frozen policy during a task, a commit with a
 secret — not against an agent that constructs a command to exhaust them. A
 command built to time the guard out is visible in the transcript and in the
-journal, and the human gate at T4+ is the boundary for anything that matters.
+journal, and the human gate in full and full_irreversible mode is the boundary
+for anything that matters.
 Approval rests on a guard plus a ledger: a command the agent constructs to pass
 for the human's pick is outside the threat model, and `state.py consent audit`
 detects it afterwards.
