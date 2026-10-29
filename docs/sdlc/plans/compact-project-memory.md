@@ -174,7 +174,7 @@ is free. **Consumes / Produces**: the exact names neighbouring tasks rely on (sp
 - **G1 (human, after M5).** Apply the staged edits: `.ai/policies/security.md:59-61` (packages and
   `.ai/memory/` as evidence inputs and as always read-only for an agent), `.ai/AGENTS.md:33-35`
   (`memory.json` among the policy files), `.ai/state/README.md:19-21` (the archived state lives in
-  `.ai/state/logs/`). Tick here: `[ ]`. The text, staged by T-2026-10-28-011:
+  `.ai/state/logs/`). Tick here: `[x]`. The text, staged by T-2026-10-28-011:
   - `.ai/policies/security.md:59-61`, the first sentence becomes: "Always read-only for an agent: the
     task's state under `.ai/state/`, its `task.md` and `events.jsonl`, `.ai/policies/*.json`, the compact
     record under `.ai/memory/` and `.ai/local/memory/` (written by `state.py` alone), and the installed
