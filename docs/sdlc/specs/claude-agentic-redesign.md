@@ -785,7 +785,9 @@ kept verbatim after the groups; the groups below are the ones a human must decid
 - **FC-A3 — "Questions collected once, only a real blocker stops" (intent :193) vs `safety.md:67-70` "When
   in doubt, stop and ask".** Proposed: R24 defines a blocker (guard refusal, re-score of reversibility or
   domain to 2, a plan assumption proven false), and the human adds one sentence to `safety.md` in 2.H. Until
-  that sentence exists, the stricter rule (`safety.md`) wins.
+  that sentence exists, the stricter rule (`safety.md`) wins. Resolved 2026-10-29: the sentence went into
+  `.ai/policies/safety.md` and the `ai-init` template, written by the agent on the developer's instruction
+  (T-2026-10-29-1724, T-2026-10-29-1746).
 - **FC-A4 — T2/T3/T4 vocabulary in binding policy** (C6 :11, `.ai/rules/hooks.md:6`, `skills.md:6`,
   `CLAUDE.md` lesson 2, `risk-tiers.json` "this repository:" examples) vs the rename. The spec cannot edit
   these files (human-edited, task-protected). Proposed: human row 2.H with exact text. **Bootstrap
@@ -935,7 +937,8 @@ Each: side A (file:line) vs side B (file:line) → what the spec proposes.
 7. **Questions collected once, only a real blocker stops** (intent :193; second analysis :687) vs
    **`safety.md:67-70` "When in doubt, stop and ask"** → the spec defines a real blocker (R24); `safety.md`
    gains one human-written sentence ("doubt on reversibility or domain is a blocker; other doubt is written
-   to `task.md` and the work continues") in 2.H.
+   to `task.md` and the work continues") in 2.H. Done 2026-10-29, written by the agent on the developer's
+   instruction (T-2026-10-29-1724; the `ai-init` template in T-2026-10-29-1746).
 8. **T2/T3/T4 labels** in C6 (constitution :11), `.ai/rules/hooks.md:6`, `skills.md:6`, `CLAUDE.md` "Things
    Claude Code gets wrong" vs the rename → human rewords in 2.H with the map T2 → light, T3 → guarded,
    T4 → full; the spec cannot edit these files (policy, task-protected).
