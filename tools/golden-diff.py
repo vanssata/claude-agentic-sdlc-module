@@ -34,7 +34,7 @@ def records(data):
 def record():
     """The corpus through the port, written over the golden."""
     sys.path.insert(0, ROOT)
-    from tests.test_guard_characterization import Tree, port_argv, run_corpus  # pylint: disable=import-outside-toplevel
+    from tests.test_guard_characterization import Tree, port_argv, run_corpus  # pylint: disable=import-outside-toplevel,import-error  # ROOT is put on sys.path just above
     tree = Tree()
     try:
         got = b"".join(rec for _, _, rec in run_corpus(tree, port_argv))

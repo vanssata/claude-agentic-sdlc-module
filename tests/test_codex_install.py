@@ -226,7 +226,7 @@ class CodexInstall(ScratchCase):
                   "skills/ai-task/state.py skills/ai-init/scaffold-ai.sh skills/usage-report/usage-report.py "
                   "hooks/ai-guard.py hooks/guard/__init__.py hooks/guard/common.py hooks/guard/ere.py "
                   "hooks/guard/git.py hooks/guard/paths.py hooks/guard/scope.py "
-                  "hooks/dialog-gate.py hooks/guard/dialog.py hooks/guard/decision.py").split():
+                  "hooks/dialog-gate.py hooks/update_notice.py hooks/guard/dialog.py hooks/guard/decision.py").split():
             self.check("$f installed".replace("$f", f), os.path.exists(os.path.join(self.dir, f)), "%s missing" % f)
         self.check("the guards are executable", os.access(os.path.join(self.dir, "hooks", "ai-guard.py"), os.X_OK),
                    "guards should be executable")

@@ -1,0 +1,117 @@
+# Release the npm package `riskrails` when a human pushes a tag v<version>.
+#
+# How a human releases:
+#   python3 tools/sync-version.py X.Y.Z     # the five version files
+#   git commit -am "release X.Y.Z"
+#   git tag vX.Y.Z
+#   git push origin vX.Y.Z                  # this workflow does the rest
+#
+# One-time setup, either of:
+#   - Trusted publishing (preferred, gives provenance with no secret): npmjs.com ->
+#     riskrails -> Settings -> Trusted Publisher = GitHub Actions, repository
+#     vanssata/claude-agentic-sdlc-module, workflow npm-publish.yml, environment npm.
+#   - An NPM_TOKEN repository secret (a fallback; the publish step passes it along).
+#
+# Nothing here merges or deploys code: the job publishes the tagged tree and opens a
+# GitHub Release, which notifies the repository's watchers.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Check required tools
+      run: |
+        for tool in bash jq git python3 patch diff; do
+          command -v "$tool" || { echo "missing $tool"; exit 1; }
+        done
+    - name: The tag matches the five version files
+      run: python3 tools/sync-version.py --check --tag "$GITHUB_REF_NAME"
+    - name: Run the test suite
+      run: python3 -I -m unittest discover -s tests -p 'test_*.py'
+    - name: Run the end-to-end suite
+      run: AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
+    - name: Lint
+      run: |
+        pip install pylint
+        pylint $(git ls-files '*.py')
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    - name: Pack dry run
+      run: npm pack --dry-run
+    - name: This version is not on the registry yet
+      run: |
+        set -euo pipefail
+        V="${GITHUB_REF_NAME#v}"
+        FOUND="$(npm view "riskrails@$V" version 2>/dev/null || true)"
+        if [ -n "$FOUND" ]; then
+          echo "riskrails@$V is already on the registry; bump the version and tag again."
+          exit 1
+        fi
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    # The environment lets the repository owner require a manual approval before this job
+    # runs: GitHub -> Settings -> Environments -> npm -> Required reviewers.
+    environment: npm
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        registry-url: https://registry.npmjs.org
+    - name: Upgrade npm (trusted publishing needs 11.5.1 or newer)
+      run: npm install -g npm@11
+    - name: Publish to npm with provenance
+      env:
+        # Trusted publishing needs no token. NPM_TOKEN is only the fallback for the time
+        # before the trusted publisher is configured; empty or unset, it is ignored.
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      run: npm publish --provenance --access public
+    - name: Announce as a GitHub Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        V="${GITHUB_REF_NAME#v}"
+        if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+          echo "Release $GITHUB_REF_NAME exists; nothing to do."
+          exit 0
+        fi
+        {
+          echo "RiskRails $V is on npm."
+          echo
+          echo "Update in a terminal:"
+          echo
+          echo '    npx -y riskrails@latest --yes'
+          echo
+          echo "Inside Claude Code or Codex CLI:"
+          echo
+          echo '    ! npx -y riskrails@latest --yes'
+          echo
+          echo 'Then run `/rr-setup --update` in each project.'
+          echo
+          echo "npm: https://www.npmjs.com/package/riskrails/v/$V"
+        } > "$RUNNER_TEMP/notes.md"
+        gh release create "$GITHUB_REF_NAME" --title "RiskRails $V" \
+          --notes-file "$RUNNER_TEMP/notes.md" --verify-tag

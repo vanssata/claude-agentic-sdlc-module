@@ -1,6 +1,6 @@
 {
   "name": "riskrails",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "RiskRails: a weight-based engineering pipeline for Claude Code and Codex — scoped steps, enforcement hooks, adversarial review, model routing.",
   "keywords": ["claude-code", "codex", "sdlc", "agents", "guardrails", "code-review"],
   "homepage": "https://github.com/vanssata/claude-agentic-sdlc-module#readme",

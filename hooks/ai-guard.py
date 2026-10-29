@@ -80,7 +80,7 @@ def main(argv):
                     # though a later rule refuses the command (review focus 1).
                     if isinstance(exc, common.Deny) and name != "decision" and ctx.consent:
                         from guard import dialog    # pylint: disable=import-outside-toplevel
-                        exc.reason += common.text_to_b(dialog.used_note(ctx.consent))
+                        exc.reason += common.text_to_b(dialog.used_note(ctx.consent))  # pylint: disable=no-member  # exc is a common.Deny by the isinstance above
                     raise
     except Exception as exc:                # pylint: disable=broad-exception-caught
         common = sys.modules.get("guard.common")

@@ -409,7 +409,8 @@ MIGRATION_0008 = os.path.join(ROOT, "skills", "project-update", "migrations", "0
 def to_schema_7(root):
     """Today's scaffold as a schema-7 project had it: the old marker and route
     names, and .ai/VERSION from the fixture."""
-    shutil.copytree(os.path.join(FIXTURE_V7, ".ai"), os.path.join(root, ".ai"), dirs_exist_ok=True)
+    shutil.copytree(os.path.join(FIXTURE_V7, ".ai"), os.path.join(root, ".ai"), dirs_exist_ok=True,
+                    copy_function=shutil.copy)   # a fresh mtime: see TestMigration0009.setUp
     for rel, old, new in (("CLAUDE.md", b"<!-- riskrails:", b"<!-- claude-agentic:"),
                           (".ai/AGENTS.md", b"/riskrails/ai", b"/claude-agentic/ai")):
         path = os.path.join(root, rel)
@@ -504,7 +505,11 @@ class TestMigration0009(unittest.TestCase):
 
     def setUp(self):
         self.p = Project()
-        shutil.copytree(os.path.join(FIXTURE_V8, ".ai"), os.path.join(self.p.root, ".ai"), dirs_exist_ok=True)
+        # shutil.copy, not copy2: a checkout writes the schema-6 and schema-8 VERSION files in
+        # the same second, and with the fixture's mtime and size git's stat cache would take
+        # the copied '8' for the committed '6' — 'nothing to commit' on a fresh clone.
+        shutil.copytree(os.path.join(FIXTURE_V8, ".ai"), os.path.join(self.p.root, ".ai"), dirs_exist_ok=True,
+                        copy_function=shutil.copy)
 
     def tearDown(self):
         self.p.close()
