@@ -9,6 +9,8 @@ SessionStart:compact it puts the snapshot back. It fails open everywhere.
 The sections share one home, one state directory and one transcript, in the
 shell suite's order: test_NN_ names keep it.
 """
+import importlib.machinery
+import importlib.util
 import json
 import os
 import re
@@ -662,6 +664,185 @@ class TestContextGuard(unittest.TestCase):  # pylint: disable=too-many-public-me
         self.write(self.config + "/settings.json", "{}")
         shutil.rmtree(codex, ignore_errors=True)
         shutil.rmtree(self.config + "/riskrails", ignore_errors=True)
+
+
+class TestPlanDrift(unittest.TestCase):  # pylint: disable=too-many-public-methods
+    """R36.18 (7e): the guard asks state.py for the plan drift at SessionStart, on
+    the auth_success Notification and when the account file changes. Every home
+    and project is a scratch directory; the real ~/.claude is never read."""
+
+    MAX20 = {"oauthAccount": {"organizationType": "claude_max",
+                              "organizationRateLimitTier": "default_claude_max_20x"}}
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.home = self.tmp + "/home"
+        self.config = self.home + "/.claude"
+        self.project = self.tmp + "/project"
+        os.makedirs(self.config + "/riskrails")
+        os.makedirs(self.home + "/.codex")
+        os.makedirs(self.project + "/.git")
+        self.env = {k: v for k, v in os.environ.items() if k not in (
+            "CLAUDE_CODE_AUTO_COMPACT_WINDOW", "AI_CONTEXT_WARN_TOKENS", "AI_CONTEXT_BLOCK_TOKENS", "AI_UNATTENDED",
+            "CLAUDE_CODE_SESSION_ATTENDED", "ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
+            "AI_HOOK_RUNTIME", "CLAUDECODE", "CLAUDE_CODE_SESSION_ID")}
+        self.env.update(HOME=self.home, CLAUDE_CONFIG_DIR=self.config, CODEX_HOME=self.home + "/.codex",
+                        AI_CONTEXT_GUARD_STATE=self.tmp + "/guard-state")
+        self.account(self.MAX20)
+        self.write(self.config + "/riskrails/profile.json",
+                   {"plan": "max", "profile": "max", "plugin_version": "3.1.0", "dialog": {"tool": "AskUserQuestion"}})
+
+    @staticmethod
+    def write(path, data):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+
+    def account(self, data, bump=0):
+        path = self.home + "/.claude.json"
+        self.write(path, data)
+        if bump:
+            stamp = os.path.getmtime(path) + bump
+            os.utime(path, (stamp, stamp))
+
+    def dialog_on(self):
+        self.write(self.project + "/.ai/policies/dialog.json", {"version": 1, "enabled": True})
+
+    def ai(self):
+        os.makedirs(self.project + "/.ai/state", exist_ok=True)
+
+    def guard(self, event, **extra):
+        payload = dict({"hook_event_name": event, "session_id": "s7", "cwd": self.project}, **extra)
+        proc = subprocess.run([GUARD], input=json.dumps(payload), capture_output=True, text=True, cwd=self.project,
+                              env=self.env, check=False)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return proc.stdout
+
+    def start(self):
+        return self.guard("SessionStart", source="startup")
+
+    def decisions(self):
+        try:
+            with open(self.project + "/.ai/state/decision.json", encoding="utf-8") as fh:
+                return json.load(fh)["open"]
+        except OSError:
+            return []
+
+    def test_drift_session_start_on(self):
+        self.ai()
+        self.dialog_on()
+        doc = json.loads(self.start())
+        self.assertIn("Max 20x", doc["systemMessage"])
+        out = doc["hookSpecificOutput"]
+        self.assertEqual(out["hookEventName"], "SessionStart")
+        self.assertRegex(out["additionalContext"], r"DIALOG_PENDING D1 ")
+        payload = json.loads(out["additionalContext"][out["additionalContext"].index('{"questions"'):])
+        self.assertEqual(len(payload["questions"][0]["options"]), 2)
+        self.assertEqual([(d["id"], d["kind"]) for d in self.decisions()], [("D1", "plan_drift")])
+
+    def test_two_sessions_each_get_their_own_decision(self):
+        self.ai()
+        self.dialog_on()
+        self.start()                                    # s7 opens D1
+        doc = json.loads(self.guard("SessionStart", session_id="s8", source="startup"))
+        self.assertRegex(doc["hookSpecificOutput"]["additionalContext"], r"DIALOG_PENDING D\d+ ")
+        (decision,) = self.decisions()
+        self.assertEqual((decision["kind"], decision["session"]), ("plan_drift", "s8"))
+
+    def test_resolved_drift_removes_the_decision(self):
+        self.ai()
+        self.dialog_on()
+        self.start()
+        self.assertEqual(len(self.decisions()), 1)
+        self.account({"oauthAccount": {"organizationType": "claude_max"}}, bump=5)
+        self.assertEqual(self.guard("UserPromptSubmit", prompt="hi"), "")
+        self.assertEqual(self.decisions(), [])
+
+    def test_drift_session_start_off(self):
+        self.ai()                                       # no dialog.json: the switch is off
+        doc = json.loads(self.start())
+        self.assertIn("profile set max20 --runtime claude", doc["hookSpecificOutput"]["additionalContext"])
+        self.assertNotIn("DIALOG_PENDING", doc["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("systemMessage", doc)
+        self.assertEqual(self.decisions(), [])
+
+    def test_drift_no_ai(self):
+        doc = json.loads(self.start())                  # no .ai/ at all: a warning only
+        self.assertIn("profile set max20 --runtime claude", doc["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("systemMessage", doc)
+        self.assertFalse(os.path.exists(self.project + "/.ai"), "nothing is created")
+
+    def test_no_drift_is_silent(self):
+        self.account({"oauthAccount": {"organizationType": "claude_max"}})
+        self.ai()
+        self.dialog_on()
+        self.assertEqual(self.start(), "")
+        self.assertEqual(self.guard("UserPromptSubmit", prompt="hi"), "")
+        self.assertEqual(self.decisions(), [])
+
+    def test_auth_success_opens(self):
+        self.ai()
+        self.dialog_on()
+        self.account({"oauthAccount": {"organizationType": "claude_max"}})
+        self.assertEqual(self.start(), "", "no drift at start")
+        self.account(self.MAX20, bump=5)                # /login moved the account to Max 20x
+        self.assertEqual(self.guard("Notification", notification_type="auth_success"), "",
+                         "a Notification only opens the decision")
+        self.assertEqual([d["kind"] for d in self.decisions()], ["plan_drift"])
+        doc = json.loads(self.guard("UserPromptSubmit", prompt="hi"))
+        self.assertRegex(doc["hookSpecificOutput"]["additionalContext"], r"DIALOG_PENDING D1 ")
+        self.assertEqual(len(self.decisions()), 1, "the prompt reuses the open decision")
+
+    def test_prompt_rechecks_on_mtime_change(self):
+        self.ai()
+        self.dialog_on()
+        self.account({"oauthAccount": {"organizationType": "claude_max"}})
+        self.start()
+        self.assertEqual(self.guard("UserPromptSubmit", prompt="one"), "", "same mtime, same account: silent")
+        self.account(self.MAX20, bump=5)
+        doc = json.loads(self.guard("UserPromptSubmit", prompt="two"))
+        self.assertRegex(doc["hookSpecificOutput"]["additionalContext"], r"DIALOG_PENDING D1 ")
+        recorded = read_json(self.project + "/.ai/state/session.json")["account_mtime"]
+        self.assertEqual(recorded, os.path.getmtime(self.home + "/.claude.json"))
+        self.assertEqual(self.guard("UserPromptSubmit", prompt="three"), "", "checked once per mtime")
+
+    def test_ack_silences(self):
+        self.ai()
+        self.dialog_on()
+        self.start()
+        state = [sys.executable, STATE_PY, "--root", self.project, "--runtime", "claude"]
+        env = dict(self.env, AI_UNATTENDED="1")
+        done = subprocess.run(state + ["decision", "settle", "--id", "D1", "--pick", "1"], env=env,
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        ack = read_json(self.config + "/riskrails/drift-ack.json")
+        self.assertRegex(ack["claude"]["fingerprint"], r"^sha256:[0-9a-f]{64}$")
+        self.assertEqual((ack["claude"]["kept"], ack["claude"]["via"], ack["codex"]), ("max", "unattended", None))
+        self.assertNotIn("claude_max", json.dumps(ack), "the file holds no account field")
+        self.assertEqual(self.start(), "", "the acknowledged fingerprint is not asked again")
+        self.assertEqual(self.decisions(), [])
+        self.account({"oauthAccount": {"organizationType": "claude_max",
+                                       "organizationRateLimitTier": "default_claude_max_5x"}})
+        self.write(self.config + "/riskrails/profile.json",
+                   {"plan": "pro", "plugin_version": "3.1.0", "dialog": {"tool": "AskUserQuestion"}})
+        self.assertIn("DIALOG_PENDING", self.start(), "another fingerprint is a new question")
+
+    def test_detect_within_3s(self):
+        """The inner run() gives state.py three seconds, inside the hook's fifteen."""
+        self.ai()
+        fake = self.tmp + "/slow-state.py"
+        with open(fake, "w", encoding="utf-8") as fh:
+            fh.write("import time\ntime.sleep(30)\n")
+        loader = importlib.machinery.SourceFileLoader("context_guard_under_test", GUARD)
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        module.STATE_PY = fake
+        began = time.monotonic()
+        self.assertEqual(module.state_py(self.project, "profile", "detect", "--open", "--json"), "")
+        took = time.monotonic() - began
+        self.assertTrue(2.5 <= took < 5, "a hung state.py is given up after three seconds (took %.1f)" % took)
 
 
 if __name__ == "__main__":

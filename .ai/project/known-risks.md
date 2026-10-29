@@ -709,3 +709,23 @@ following; each is open unless marked.
 - **Effect today**: `.github/workflows/pylint.yml` fails on a single warning; if the CI pylint version reports them, the branch is red regardless of this task. Not observed in CI from this worktree.
 - **Suggested fix**: an inline `# pylint: disable=<name>` with its reason (the house convention) or the rename, in its own light task.
 - **Status**: open
+
+## Plan drift is per user, the dialog switch per project (D2)
+
+- **Found**: 2026-10-29, by T-2026-10-29-0755-plan-drift-7e (decision D2, developer 2026-10-28)
+- **Where**: `skills/ai-task/state.py:824` (`open_drift` opens only when `dialog_on(root)`), `skills/ai-task/state.py:800` (`drift_ack_path`: `<home>/riskrails/drift-ack.json`), `hooks/context-guard.py:607` (`with_drift`)
+- **What could go wrong**: KNOWN FACT: drift is read from the user's account file, the switch from `.ai/policies/dialog.json`. INFERENCE: the same drift therefore gates the session in a project with the dialog on and only warns (terminal command, no decision) in one with it off or without `.ai/`. KNOWN FACT: `drift-ack.json` is per user, so "Keep" in one project silences that fingerprint in every project on the machine, including one whose owner never saw the question.
+- **How likely / how bad**: certain for anyone with two projects of different switch state; low harm: budgets run for the installed plan until `profile set` or the installer is run, nothing is lost.
+- **Suggested fix**: none planned; if it bites, key the ack by project or show the warning once per project.
+- **Status**: accepted (D2, developer 2026-10-28)
+- **Label**: KNOWN FACT (file:line above), INFERENCE (cross-project effect)
+
+## With the dialog off there is no route to "Keep" (D2 follow-up)
+
+- **Found**: 2026-10-29, STRONG review of T-2026-10-29-0755-plan-drift-7e (finding M2)
+- **Where**: `skills/ai-task/state.py` `open_drift` (opens only when `dialog_on(root)`; `write_drift_ack` is reached only by settling option 1 of a plan_drift decision), `hooks/context-guard.py` `on_session_start` and `with_drift` (warn on every drift they see)
+- **What could go wrong**: KNOWN FACT: the only writer of `drift-ack.json` is the "Keep" choice of the plan_drift decision, which exists only with the dialog on. INFERENCE: with the dialog off, a user who deliberately runs a plan other than the account's is warned at every SessionStart, and on every prompt after the account file's mtime changes, in every project and in every directory without `.ai/`, until 7f turns the dialog on or a terminal acknowledgement is added.
+- **How likely / how bad**: certain for such a user while the dialog is off; low harm (a warning), but it is noise with no way to silence it.
+- **Suggested fix**: a spec decision for a human: either 7f turns the dialog on, or a human-route terminal ack (for example `state.py profile ack`, refused inside an agent like `profile set`) is added.
+- **Status**: open
+- **Label**: KNOWN FACT (writers above), INFERENCE (effect)

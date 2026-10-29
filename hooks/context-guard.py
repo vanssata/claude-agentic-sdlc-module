@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Context guard: keep long sessions short, and keep what matters across compaction.
 
-One script, three Claude Code events:
+One script, four Claude Code events:
 
 UserPromptSubmit
     Reads the session's current context size from the transcript (the last
@@ -41,6 +41,20 @@ SessionStart
     task before it reads anything else. It also puts the snapshot back, and consumes
     it: the snapshot belongs to the compaction it was written for, and a startup or a
     /clear simply finds nothing to put back.
+
+    It also asks state.py for the plan drift (R36.18): `profile detect --open --json`
+    with the session id handed on. A drift opens the plan_drift decision (dialog on) or
+    prints the installer command (dialog off, or no .ai/); the account file's mtime is
+    recorded in session.json once detect has answered.
+
+Notification
+    auth_success only (the login may have changed the plan): the same detect, which opens
+    the decision and prints nothing. The recorded mtime is left alone, so the next
+    UserPromptSubmit asks again and carries the dialog JSON.
+
+UserPromptSubmit also compares the account file's mtime (~/.claude.json, Codex's
+auth.json) with the one recorded in session.json and, when it moved, runs the drift
+check once for that mtime.
 
 Both runtimes: the script derives which one it serves from its own location, and no
 decision here depends on a payload key. The transcript-derived snapshot stays
@@ -306,9 +320,9 @@ def scan_session(path):
     return files, prompts[-PROMPTS_KEPT:], todos
 
 
-def run(cmd, cwd):
+def run(cmd, cwd, env=None):
     try:
-        out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=3, check=False)
+        out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=3, check=False, env=env)
         return out.stdout.strip() if out.returncode == 0 else ""
     except (OSError, subprocess.SubprocessError):
         return ""
@@ -415,14 +429,87 @@ def prompt_count(root):
     return count if isinstance(count, int) and not isinstance(count, bool) else 0
 
 
-def state_py(root, *args):
+def state_py(root, *args, session=None):
     """state.py is the only thing that renders a handoff or reads the questions.
     Three seconds inside a fifteen-second hook, and an empty string on anything
-    at all going wrong: the guard fails open."""
+    at all going wrong: the guard fails open. A session id is handed on as the
+    runtime's own variable, which is what state.py binds a dialog to."""
     if not os.path.exists(STATE_PY):
         return ""
+    env = None
+    if session:
+        env = dict(os.environ, **{"CLAUDE_CODE_SESSION_ID" if hook_runtime() == "claude"
+                                  else "CODEX_THREAD_ID": session})
     return run([sys.executable or "python3", STATE_PY, "--root", root,
-                "--runtime", hook_runtime(), *args], root)
+                "--runtime", hook_runtime(), *args], root, env)
+
+
+# ------------------------------------------------------------------ plan drift
+
+def account_file():
+    """The file whose change means the account changed (R36.18)."""
+    if hook_runtime() == "codex":
+        return os.path.join(os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex"), "auth.json")
+    return os.path.join(os.environ.get("HOME") or os.path.expanduser("~"), ".claude.json")
+
+
+def account_mtime():
+    try:
+        return os.path.getmtime(account_file())
+    except OSError:
+        return None
+
+
+def recorded_mtime(root):
+    try:
+        with open(os.path.join(root, ".ai", "state", "session.json"), encoding="utf-8") as fh:
+            return json.load(fh).get("account_mtime")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def detect_drift(root, cwd, session, open_it=True, mtime=None):
+    """`state.py profile detect --open --json`, parsed; None unless it says drift.
+    Without .ai/ there is nowhere to open a decision: the same call, read-only.
+    `mtime`, when given, is recorded in session.json only once detect printed JSON."""
+    if root:
+        raw = state_py(root, "profile", "detect", *(("--open",) if open_it else ()), "--json", session=session)
+    elif os.path.exists(STATE_PY):
+        raw = run([sys.executable or "python3", STATE_PY, "--runtime", hook_runtime(), "profile", "detect",
+                   "--json"], cwd or os.getcwd())
+    else:
+        raw = ""
+    try:
+        found = json.loads(raw)
+    except ValueError:
+        return None
+    if root and mtime is not None and isinstance(found, dict):
+        write_session(root, {"account_mtime": mtime})
+    return found if isinstance(found, dict) and found.get("status") == "drift" else None
+
+
+def drift_notice(root, found, session):
+    """(systemMessage, additionalContext) for one drift. With a decision open
+    the context carries the dialog JSON; otherwise the terminal command."""
+    installed = (found.get("installed") or {}).get("plan") or "unknown"
+    live = (found.get("live") or {}).get("plan") or "unknown"
+    names = {"max20": "Max 20x", "max": "Max", "pro": "Pro", "team-pro": "Team Pro", "team-max": "Team Max",
+             "plus": "Plus"}
+    account = names.get(live, live)
+    installed = names.get(installed, installed)
+    decision = found.get("decision")
+    if decision and root:
+        payload = state_py(root, "decision", "show", "--id", decision, "--json", session=session)
+        if payload:
+            tool = "request_user_input" if hook_runtime() == "codex" else "AskUserQuestion"
+            return (f"RiskRails: this account is {account}; RiskRails is installed for {installed}. "
+                    "The session asks before anything else.",
+                    f"DIALOG_PENDING {decision} — call {tool} with exactly this JSON, then run the picked "
+                    f"command verbatim or 'state.py decision settle --id {decision}': {payload}")
+    command = found.get("command") or ""
+    return (f"RiskRails: this account is {account}; RiskRails is installed for {installed}.",
+            f"RiskRails: the account's plan is {account} but RiskRails is installed for {installed}, so its "
+            f"budgets do not match. Tell the user; in their own terminal, outside the agent, they run: {command}")
 
 
 def handoff_block(root, reason):
@@ -527,6 +614,36 @@ def on_prompt(payload):
         update = dict(update or {}, prompt_count=prompt_count(root) + 1)
     if update is not None:
         write_session(root, update)
+    doc = prompt_warning(payload, session, transcript)
+    if (doc or {}).get("decision") != "block":
+        doc = with_drift(doc, root, payload, session)
+    if doc:
+        emit(doc)
+    sys.exit(0)
+
+
+def with_drift(doc, root, payload, session):
+    """R36.18: when the account file's mtime is not the one recorded, ask for the
+    drift again and put what it says into the prompt's output. Unchanged mtime,
+    no .ai/ or no account file: `doc` as it was."""
+    mtime = account_mtime()
+    if not root or mtime is None or mtime == recorded_mtime(root):
+        return doc
+    found = detect_drift(root, payload.get("cwd"), session, mtime=mtime)
+    if not found:
+        return doc
+    message, context = drift_notice(root, found, session)
+    doc = dict(doc or {})
+    out = dict(doc.get("hookSpecificOutput") or {}, hookEventName="UserPromptSubmit")
+    out["additionalContext"] = "\n\n".join(p for p in (context, out.get("additionalContext")) if p)
+    doc["hookSpecificOutput"] = out
+    doc["systemMessage"] = "\n".join(p for p in (message, doc.get("systemMessage")) if p)
+    return doc
+
+
+def prompt_warning(payload, session, transcript):
+    """The context-size warning or block for this prompt, as the hook's output
+    document, or None."""
     ctx = current_context(transcript) if transcript else None
     marker = state_path(session, "json")
     try:
@@ -543,7 +660,7 @@ def on_prompt(payload):
     if ctx is None or (not warn or ctx < warn) and (not block or ctx < block):
         if state:
             os.remove(marker)       # back under the threshold, e.g. after a compaction
-        sys.exit(0)
+        return None
 
     k = round(ctx / 1000)
     if block and ctx >= block:
@@ -551,20 +668,20 @@ def on_prompt(payload):
         if state.get("blocked") != digest:
             state["blocked"] = digest
             save()
-            emit({"decision": "block", "reason": (
+            return ({"decision": "block", "reason": (
                 f"Context is {k}k tokens, past the {block // 1000}k limit: every turn re-reads all of it. "
                 "Run /compact (or /clear if this is a new task) and send the prompt again. "
                 "To go ahead anyway, send the same prompt once more.")})
         state.pop("blocked")
         save()
-        sys.exit(0)             # the same prompt a second time: the user has decided
+        return None            # the same prompt a second time: the user has decided
 
     band = ctx // 10000
     if band <= state.get("band", -1):
-        sys.exit(0)
+        return None
     state["band"] = band
     save()
-    emit({
+    return ({
         "systemMessage": f"Context is {k}k tokens (warning from {warn // 1000}k). "
                          "/compact keeps the thread, /clear starts a new task.",
         "hookSpecificOutput": {
@@ -617,6 +734,7 @@ def take_snapshot(session, transcript):
 
 def on_session_start(payload):
     session = payload.get("session_id") or "unknown"
+    drift_session = payload.get("session_id") or None
     model = payload.get("model")
     if isinstance(model, str) and model:
         with open(state_path(session, "model"), "w", encoding="utf-8") as fh:
@@ -634,11 +752,17 @@ def on_session_start(payload):
     snapshot = take_snapshot(session, payload.get("transcript_path"))
     if snapshot:
         head = snapshot          # it already carries handoff.md verbatim, at its head
-    text = "\n\n".join(part for part in (head, tail) if part)
+    # R36.18: a drift between the installed plan and the account's, asked about first.
+    mtime = account_mtime()
+    found = detect_drift(root, payload.get("cwd"), drift_session, mtime=mtime)
+    message, notice = drift_notice(root, found, session) if found else ("", "")
+    text = "\n\n".join(part for part in (notice, head, tail) if part)
     if not text:
         sys.exit(0)
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "SessionStart", "additionalContext": text}}))
+    doc = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}
+    if message:
+        doc = dict({"systemMessage": message}, **doc)
+    print(json.dumps(doc))
     sys.stdout.flush()
     if snapshot:
         try:
@@ -650,11 +774,23 @@ def on_session_start(payload):
     sys.exit(0)
 
 
+def on_notification(payload):
+    """auth_success (Claude): the login may have changed the plan. Only opens the
+    decision and prints nothing; account_mtime is left as it was, so the next
+    prompt asks again and carries the JSON (R36.18)."""
+    if payload.get("notification_type") not in (None, "auth_success"):
+        sys.exit(0)
+    root = ai_root(payload.get("cwd"))
+    if root:
+        detect_drift(root, payload.get("cwd"), payload.get("session_id") or None)
+    sys.exit(0)
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
         handler = {"UserPromptSubmit": on_prompt, "PreCompact": on_precompact,
-                   "SessionStart": on_session_start}.get(payload.get("hook_event_name"))
+                   "SessionStart": on_session_start, "Notification": on_notification}.get(payload.get("hook_event_name"))
         if handler:
             handler(payload)
     except Exception:  # pylint: disable=broad-exception-caught  # fail open: the guard never blocks work by crashing

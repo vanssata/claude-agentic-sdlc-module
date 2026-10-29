@@ -105,7 +105,7 @@ class ProfileDetect(unittest.TestCase):
                     self.assertIn(want["command_has"], out["command"] or "")
                 if want["status"] != "drift":
                     self.assertIsNone(out["command"], "only drift proposes a command")
-                self.assertIsNone(out["decision"], "detect opens no decision before 7c")
+                self.assertIsNone(out["decision"], "detect without --open opens no decision")
                 self.assertTrue(out["live"]["fingerprint"].startswith("sha256:"))
                 installed = case.get("installed")
                 self.assertEqual((out["installed"] or {}).get("plan"), installed and installed["plan"])
@@ -181,12 +181,130 @@ class ProfileDetect(unittest.TestCase):
                       out)
         self.assertIn("fix: ", out)
 
-    def test_open_is_refused_until_7e(self):
-        home = Home("claude", {"account": {"oauthAccount": {"organizationType": "claude_max"}}})
+    MAX20 = {"oauthAccount": {"organizationType": "claude_max",
+                              "organizationRateLimitTier": "default_claude_max_20x"}}
+
+    def opening(self, account, switch=True, **env):
+        """A Home whose project (Home/project) has .ai/ and, with switch, dialog.json on."""
+        home = Home("claude", {"account": account, "installed": {"plan": "max", "plugin_version": "3.1.0",
+                                                                    "dialog": {"tool": "AskUserQuestion"}},
+                               "env": dict({"CLAUDE_CODE_SESSION_ID": "s1"}, **env)})
         self.addCleanup(home.close)
-        done = home.run("profile", "detect", "--runtime", "claude", "--open")
-        self.assertEqual(done.returncode, 1)
-        self.assertIn("--open opens the plan_drift decision (task 7e)", done.stderr)
+        home.project = os.path.join(home.home, "project")
+        os.makedirs(os.path.join(home.project, ".ai", "state"))
+        if switch:
+            write(os.path.join(home.project, ".ai", "policies", "dialog.json"), {"version": 1, "enabled": True})
+        return home
+
+    def open_decisions(self, home):
+        try:
+            with open(os.path.join(home.project, ".ai", "state", "decision.json"), encoding="utf-8") as fh:
+                return json.load(fh)["open"]
+        except OSError:
+            return []
+
+    def detect_open(self, home, *extra):
+        done = home.run("--root", home.project, "profile", "detect", "--runtime", "claude", "--open", *extra)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done
+
+    def test_open_writes_decision(self):
+        home = self.opening(self.MAX20)
+        out = json.loads(self.detect_open(home, "--json").stdout)
+        self.assertEqual((out["status"], out["decision"]), ("drift", "D1"))
+        (decision,) = self.open_decisions(home)
+        self.assertEqual((decision["id"], decision["kind"], decision["runtime"]), ("D1", "plan_drift", "claude"))
+        keep, switch = decision["options"]
+        self.assertEqual((keep["kind"], keep["effect"]), ("choice", "ack"))
+        self.assertTrue(keep["label"].startswith("Keep max"), keep["label"])
+        self.assertEqual((switch["kind"], switch["label"]), ("command", out["command"]))
+        self.assertIn("profile set max20 --runtime claude", switch["label"])
+        again = json.loads(self.detect_open(home, "--json").stdout)
+        self.assertEqual((again["decision"], len(self.open_decisions(home))), ("D1", 1), "one open decision per drift")
+        self.assertIn("decision: D1", self.detect_open(home).stdout)
+        # Keep: the human's terminal settles option 1 and the fingerprint is written, with no account field.
+        home.env["AI_UNATTENDED"] = "1"
+        done = home.run("--root", home.project, "decision", "settle", "--id", "D1", "--pick", "1",
+                        stdin=subprocess.DEVNULL)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        with open(os.path.join(home.claude, "riskrails", "drift-ack.json"), encoding="utf-8") as fh:
+            ack = json.load(fh)
+        self.assertEqual(ack["version"], 1)
+        self.assertIsNone(ack["codex"])
+        self.assertEqual((ack["claude"]["kept"], ack["claude"]["via"]), ("max", "unattended"))
+        self.assertEqual(ack["claude"]["fingerprint"], out["live"]["fingerprint"])
+        self.assertNotIn("claude_max", json.dumps(ack))
+        del home.env["AI_UNATTENDED"]
+        after = json.loads(self.detect_open(home, "--json").stdout)
+        self.assertEqual((after["status"], after["decision"]), ("acknowledged", None))
+        self.assertEqual(self.open_decisions(home), [])
+
+    def test_open_with_dialog_off_opens_nothing(self):
+        for name, home in (("switch off", self.opening(self.MAX20, switch=False)),
+                           ("run declared unattended", self.opening(self.MAX20, AI_UNATTENDED="1"))):
+            with self.subTest(name):
+                out = json.loads(self.detect_open(home, "--json").stdout)
+                self.assertEqual((out["status"], out["decision"]), ("drift", None))
+                self.assertEqual(self.open_decisions(home), [])
+        home = Home("claude", {"account": self.MAX20, "installed": {"plan": "max", "plugin_version": "3.1.0"}})
+        self.addCleanup(home.close)
+        out = json.loads(home.run("profile", "detect", "--runtime", "claude", "--open", "--json").stdout)
+        self.assertEqual((out["status"], out["decision"]), ("drift", None), "no .ai/: nothing to open")
+
+    def test_same_opens_nothing(self):
+        home = self.opening({"oauthAccount": {"organizationType": "claude_max"}})
+        out = json.loads(self.detect_open(home, "--json").stdout)
+        self.assertEqual((out["status"], out["decision"]), ("same", None))
+        self.assertEqual(self.open_decisions(home), [])
+        self.assertFalse(os.path.exists(os.path.join(home.project, ".ai", "state", "decision.json")))
+
+    def test_open_is_per_session(self):
+        home = self.opening(self.MAX20)
+        self.detect_open(home, "--json")
+        home.env["CLAUDE_CODE_SESSION_ID"] = "s2"
+        out = json.loads(self.detect_open(home, "--json").stdout)
+        (decision,) = self.open_decisions(home)
+        self.assertEqual((out["decision"], decision["id"], decision["session"]), (decision["id"], out["decision"], "s2"))
+        self.assertNotEqual(out["decision"], "D1", "the first session's decision is not reused")
+
+    def test_resolved_drift_removes_the_decision(self):
+        home = self.opening(self.MAX20)
+        self.detect_open(home, "--json")
+        write(os.path.join(home.home, ".claude.json"), {"oauthAccount": {"organizationType": "claude_max"}})
+        out = json.loads(self.detect_open(home, "--json").stdout)
+        self.assertEqual((out["status"], out["decision"]), ("same", None))
+        self.assertEqual(self.open_decisions(home), [])
+
+    def test_ack_needs_the_plan_kept(self):
+        home = self.opening(self.MAX20)
+        fingerprint = json.loads(self.detect_open(home, "--json").stdout)["live"]["fingerprint"]
+        ack = os.path.join(home.claude, "riskrails", "drift-ack.json")
+        write(ack, {"version": 1, "claude": {"fingerprint": fingerprint, "kept": "max"}, "codex": None})
+        self.assertEqual(json.loads(self.detect_open(home, "--json").stdout)["status"], "acknowledged")
+        prof = os.path.join(home.claude, "riskrails", "profile.json")
+        write(prof, {"plan": "pro", "runtime": "claude", "plugin_version": "3.1.0",
+                     "dialog": {"tool": "AskUserQuestion"}})
+        self.assertEqual(json.loads(self.detect_open(home, "--json").stdout)["status"], "drift")
+
+    def test_ack_entry_not_an_object_is_ignored(self):
+        home = self.opening(self.MAX20)
+        write(os.path.join(home.claude, "riskrails", "drift-ack.json"), {"version": 1, "claude": "x"})
+        done = home.run("profile", "detect", "--runtime", "claude", "--json")
+        self.assertEqual((done.returncode, json.loads(done.stdout)["status"]), (0, "drift"), done.stderr)
+
+    def test_open_with_unreadable_decision_file_stays_read_only(self):
+        home = self.opening(self.MAX20)
+        path = os.path.join(home.project, ".ai", "state", "decision.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("{not json")
+        out = json.loads(self.detect_open(home, "--json").stdout)
+        self.assertEqual((out["status"], out["decision"]), ("drift", None))
+
+    def test_detect_without_open_writes_nothing(self):
+        home = self.opening(self.MAX20)
+        done = home.run("--root", home.project, "profile", "detect", "--runtime", "claude", "--json")
+        self.assertIsNone(json.loads(done.stdout)["decision"])
+        self.assertEqual(self.open_decisions(home), [])
 
     def test_needs_no_ai_dir_and_profile_reader_unchanged(self):
         case = {"installed": {"plan": "max20", "tiers": {"FAST": {"model": "claude-haiku-5-5"}}}}

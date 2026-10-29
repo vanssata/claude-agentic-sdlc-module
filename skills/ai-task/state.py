@@ -578,7 +578,7 @@ def advise(state):
 
 def cmd_profile(args, _root):
     if args.action == "detect":
-        cmd_profile_detect(args)
+        cmd_profile_detect(args, find_root_quiet(args.root))
         return
     if args.action == "set":
         cmd_profile_set(args)
@@ -781,6 +781,8 @@ def profile_detect(runtime):
         status = "no_profile"
     elif have == live["plan"] or (runtime == "claude" and have == "balanced-max" and live["plan"] in ("max", "max20")):
         status = "same"
+    elif acknowledged(runtime, live["fingerprint"], have):
+        status = "acknowledged"           # the human kept this very plan for this very account (R36.18)
     else:
         status = "drift"
         if any({have, live["plan"]} <= pair for pair in SAME_TIER[runtime]):
@@ -795,13 +797,89 @@ def profile_detect(runtime):
             "render": render, "command": command, "decision": None}
 
 
-def cmd_profile_detect(args):
-    """Read-only, exit 0 always (R36.16); `--open` belongs to 7c."""
-    if args.open:
-        die("--open opens the plan_drift decision (task 7e)", 1)
+def acknowledged(runtime, fingerprint, installed_plan):
+    """True when drift-ack.json holds this fingerprint AND the plan kept is the installed one."""
+    entry = read_drift_ack(runtime).get(runtime)
+    return isinstance(entry, dict) and entry.get("fingerprint") == fingerprint and \
+        entry.get("kept") == installed_plan
+
+
+def drift_ack_path(runtime):
+    return os.path.join(runtime_home(runtime), "riskrails", "drift-ack.json")
+
+
+def read_drift_ack(runtime):
+    """<home>/riskrails/drift-ack.json, or {}: per user, never per project (D2)."""
+    return read_json_object(drift_ack_path(runtime)) or {}
+
+
+def write_drift_ack(runtime, fingerprint, kept, via):
+    """"Keep" on a plan_drift decision: the fingerprint, the plan kept and when. Plan
+    fields hashed, never an email, an id or a token (R36.16). Atomic."""
+    data = read_drift_ack(runtime)
+    data = {"version": 1, "claude": data.get("claude"), "codex": data.get("codex")}
+    data[runtime] = {"fingerprint": fingerprint, "kept": kept, "at": now(), "via": via}
+    path = drift_ack_path(runtime)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2)
+        fh.write("\n")
+    os.replace(tmp, path)
+
+
+def open_drift(root, found):
+    """`profile detect --open` (R36.18): on drift, with the dialog on, the plan_drift
+    decision — option 1 keeps the installed plan (and writes drift-ack.json when
+    settled), option 2 is the `command` detect prints. The id of the decision, an
+    open one for the same fingerprint included; None when nothing was opened."""
+    runtime = found["runtime"]
+    if not root or runtime != own_runtime():
+        return None
+    fingerprint = found["live"]["fingerprint"]
+    on = dialog_on(root) if found["status"] == "drift" else None
+    session = (on or {}).get("session")
+    reuse = None
+    for decision in read_decisions(root)["open"]:
+        drift = decision.get("drift") or {}
+        if decision.get("kind") != "plan_drift" or drift.get("runtime") != runtime:
+            continue
+        if on and reuse is None and drift.get("fingerprint") == fingerprint and \
+                decision.get("session") == session:
+            reuse = decision["id"]
+        else:
+            # resolved, acknowledged elsewhere, another account or another session's: stale
+            settle_decision(root, decision["id"], "fallback")
+    if not on:
+        return None
+    if reuse:
+        return reuse
+    kept = found["installed"]["plan"]
+    live = found["live"]
+    question = "This %s account is %s (%s); RiskRails is installed for %s.\nKeep %s, or run the command below?" % (
+        runtime, live["plan"], live["from"] or "no detail", kept, kept)
+    state = load(root, required=False, claim=False)
+    state = state if state and is_v7(state) else None
+    options = [{"kind": "choice", "effect": "ack", "label": "Keep %s — do not ask again for this account" % kept},
+               {"kind": "command", "label": found["command"]}]
+    decision, why = open_decision(root, state, "plan_drift", "Plan drift", question, options, "profile detect",
+                                  drift={"runtime": runtime, "fingerprint": fingerprint, "kept": kept})
+    if decision is None:
+        print("state.py: no dialog — %s" % why, file=sys.stderr)
+        return None
+    return decision["id"]
+
+
+def cmd_profile_detect(args, root):
+    """Read-only, exit 0 always (R36.16); `--open` also opens the plan_drift decision (R36.18)."""
     if args.field or args.tier or args.other or args.plan:
         die("--field, --tier, --other and a plan belong to the profile reader or profile set, not to profile detect")
     found = profile_detect(args.detect_runtime or own_runtime())
+    if args.open:
+        try:
+            found["decision"] = open_drift(root, found)
+        except SystemExit:               # decision.json unreadable: stay read-only, exit 0 (R36.16)
+            found["decision"] = None
     if args.json:
         print(json.dumps(found, ensure_ascii=False))
         return
@@ -811,6 +889,8 @@ def cmd_profile_detect(args):
         have, live["plan"] or "unknown", " (%s)" % live["from"] if live["from"] else "", found["status"]))
     if found["command"]:
         print("fix: %s" % found["command"])
+    if found["decision"]:
+        print("decision: %s" % found["decision"])
 
 # plan -> (profile, label), as bin/riskrails.js maps --plan and --codex-plan; the
 # installer and `profile set` must resolve a plan to the same profile.json.
@@ -2226,7 +2306,7 @@ INTERPRETER_RE = re.compile(r"^python3?$")   # a bare name: a path could be any 
 PUSH_REF_RE = re.compile(r"^[A-Za-z0-9._/-]+$")  # no '+' (a force push), no ':' (a refspec), no option
 INTERPRETER_FLAG_RE = re.compile(r"^-[IS]+$")
 NPX_PACKAGE_RE = re.compile(r"^riskrails@[0-9A-Za-z.+-]+$")
-SETTLE_EFFECT = {"defer": "defer", "keep": "ack", "answer": "answered"}
+SETTLE_EFFECT = {"defer": "defer", "keep": "ack", "ack": "ack", "answer": "answered"}
 DIALOG_PICK = None                        # the pick human_route() consumed in this process
 
 
@@ -2891,6 +2971,9 @@ def decision_settle(args, root, decision):
 
 def apply_choice(root, decision, option, pick_id, by, via):
     effect = SETTLE_EFFECT.get(option.get("effect"), "defer")
+    drift = decision.get("drift") or {}
+    if decision.get("kind") == "plan_drift" and effect == "ack" and drift.get("fingerprint"):
+        write_drift_ack(drift.get("runtime") or own_runtime(), drift["fingerprint"], drift.get("kept"), via)
     if effect == "answered":
         cmd_answer(argparse.Namespace(topic=None, prose=None, by=by, via=via,
                                       assignment=["%s=%s" % (decision.get("question_id"), option["answer"])]),
