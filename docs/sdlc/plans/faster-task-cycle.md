@@ -165,7 +165,7 @@ Riskiest step is row 1; it is already first and nothing consumes it inside the t
 | R3 | one fixture test per case: fail, error, import error, crash, timeout, garbled result, unexpected success; `test_no_fail_fast` |
 | R4 | `test_serial_runs_alone_after_the_parallel_phase`, `test_default_serial_is_the_timed_class` |
 | R5 | `test_timeout_kills_the_group`, `test_sigterm_kills_children_and_exits_1` |
-| R6 | M: ten runs < 120 s, `git status --porcelain` empty — numbers: _(filled by M)_ |
+| R6 | M: ten runs < 120 s, `git status --porcelain` empty — numbers: 2026-10-29, `verify_command` (with its two `--serial`), 32 CPUs: ten greens, 979 tests, 72.96–73.76 s, median 73.44 s; porcelain unchanged. A first attempt without the `--serial` flags found two tests still on the pre-migration layout (fixed in T-2026-10-29-2125) and `TestGateFastPath` over budget when run in parallel |
 | R7 | 1F: 174 ids, no `-.*assert` line, seconds before/after in its report |
 | R8 | `test_medium_and_low_findings_go_to_the_register` |
 | R9 | `TestDocumentsOnly` in `test_ai_task_state.py`, one case per predicate |
@@ -175,7 +175,7 @@ Riskiest step is row 1; it is already first and nothing consumes it inside the t
 | R13 | `TestRescore::test_a_non_document_after_amend_raises_the_zeroed_axes` |
 | R14 | `test_without_the_key…` in `test_weight.py`; `test_argocd_dev_manifest` unchanged |
 | R15 | `test_instruction_budget.py:68-74` |
-| R16 | M: `suite_runs` median over the following tasks — _(filled by M)_ |
+| R16 | M: `suite_runs` median over the following tasks — baseline 2 (38 tasks to T-2026-10-29-2006); after: T-2026-10-29-2125 used 3 (one environment rerun: `TestGateFastPath` 15.1 ms against 15; one after the plan edit, which `close` did not take as documents-only). Open until more tasks close: `jq .verify.suite_runs .ai/state/logs/*/state.json` |
 
 Verification: `verify_command` once to the end, then `e2e_command`; the batch's STRONG review.
 

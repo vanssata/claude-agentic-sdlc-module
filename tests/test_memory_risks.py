@@ -23,7 +23,11 @@ ADD = ["memory", "risk", "add", "--title", "Widget cache key ignores locale", "-
 class TestParser(unittest.TestCase):
     def test_this_repository_renders_byte_for_byte(self):
         with open(KNOWN, encoding="utf-8") as fh:
-            text = fh.read()
+            known = fh.read()
+        self.assertEqual(mc.render_known_risks(*mc.parse_known_risks(known)), known)
+        # since the migration (packages mode) this repository's risks live in the record
+        text = mh.subprocess.run([sys.executable, "-I", mh.STATE, "--root", mh.ROOT, "memory", "risks", "--md"],
+                                 capture_output=True, text=True, check=True, env=mh.clean_env()).stdout
         risks, leftovers = mc.parse_known_risks(text)
         self.assertGreater(len(risks), 10)
         self.assertEqual(mc.render_known_risks(risks, leftovers), text)

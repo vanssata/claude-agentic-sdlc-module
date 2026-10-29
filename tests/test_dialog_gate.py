@@ -969,7 +969,7 @@ class TestC5Text(unittest.TestCase):
            "the pipeline ends at human approval",
            "never commits, pushes or approves")
     SKIP = ("skills/project-update/history/", "tests/fixtures/", "docs/sdlc/specs/", "docs/sdlc/plans/",
-            "docs/sdlc/intent/", ".ai/reports/", "tests/test_dialog_gate.py")
+            "docs/sdlc/intent/", ".ai/reports/", ".ai/memory/", "tests/test_dialog_gate.py")
 
     def test_c5_text_everywhere(self):
         listed = subprocess.run(["git", "-C", ROOT, "ls-files", "-z", "--cached", "--others", "--exclude-standard"], capture_output=True, text=True,
