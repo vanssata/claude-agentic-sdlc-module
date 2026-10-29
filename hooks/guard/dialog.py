@@ -508,7 +508,9 @@ def next_live_pick(root, session_id, now):
     """The one pick a command may match now, or None: the live pick picked
     first (R36.7, 'only the next live pick in order')."""
     live = live_picks(read_ledger(root), session_id, now) if session_id else []
-    return min(live, key=lambda p: (p.get("at") or "", p["order"])) if live else None
+    if not live:
+        return None
+    return min(live, key=lambda p: (p.get("at") or "", p["order"]))
 
 
 # -- the recorder (PostToolUse on the dialog tool) ----------------------------

@@ -1,6 +1,6 @@
 {
   "name": "riskrails",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "A weight-based engineering pipeline for Claude Code and Codex: each change is weighed on six axes, runs light, guarded or full, edits only the files its plan names, and ends at human approval — enforced by hooks, reviewed adversarially, routed to the cheap model tier by default.",
   "author": {
     "name": "Ivan Kakurov"

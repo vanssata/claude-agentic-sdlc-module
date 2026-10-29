@@ -97,7 +97,8 @@ class TestContextGuard(unittest.TestCase):  # pylint: disable=too-many-public-me
         # Isolate from the developer's own ~/.claude: settings, state and env.
         env = {k: v for k, v in os.environ.items()
                if k not in ("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "AI_CONTEXT_WARN_TOKENS", "AI_CONTEXT_BLOCK_TOKENS")}
-        env.update(HOME=tmp + "/home", CLAUDE_CONFIG_DIR=tmp + "/home/.claude", AI_CONTEXT_GUARD_STATE=tmp + "/state")
+        env.update(HOME=tmp + "/home", CLAUDE_CONFIG_DIR=tmp + "/home/.claude", AI_CONTEXT_GUARD_STATE=tmp + "/state",
+                   RISKRAILS_NO_UPDATE_CHECK="1")    # no registry fetch from a test (test_update_notice.py covers it)
         cls.env = env
         cls.config = env["CLAUDE_CONFIG_DIR"]
         cls.state = env["AI_CONTEXT_GUARD_STATE"]
@@ -696,7 +697,7 @@ class TestPlanDrift(unittest.TestCase):  # pylint: disable=too-many-public-metho
             "CLAUDE_CODE_SESSION_ATTENDED", "ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
             "AI_HOOK_RUNTIME", "CLAUDECODE", "CLAUDE_CODE_SESSION_ID")}
         self.env.update(HOME=self.home, CLAUDE_CONFIG_DIR=self.config, CODEX_HOME=self.home + "/.codex",
-                        AI_CONTEXT_GUARD_STATE=self.tmp + "/guard-state")
+                        AI_CONTEXT_GUARD_STATE=self.tmp + "/guard-state", RISKRAILS_NO_UPDATE_CHECK="1")
         self.account(self.MAX20)
         self.write(self.config + "/riskrails/profile.json",
                    {"plan": "max", "profile": "max", "plugin_version": "3.1.0", "dialog": {"tool": "AskUserQuestion"}})

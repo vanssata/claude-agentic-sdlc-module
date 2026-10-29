@@ -47,6 +47,12 @@ SessionStart
     prints the installer command (dialog off, or no .ai/); the account file's mtime is
     recorded in session.json once detect has answered.
 
+    On a plain startup it also says when npm has a newer `riskrails` than the installed
+    plugin, with the update command (update_notice.py). The hook reads a one-file cache
+    and never waits for the network: a stale cache starts a detached refresh, so the
+    notice appears from the session after the one that found the release. Not repeated
+    on resume, /clear or compact.
+
 Notification
     auth_success only (the login may have changed the plan): the same detect, which opens
     the decision and prints nothing. The recorded mtime is left alone, so the next
@@ -68,6 +74,7 @@ Environment:
     AI_CONTEXT_GUARD_STATE    state directory, default ~/.claude/state/context-guard
     AI_HOOK_RUNTIME           claude|codex, for tests: normally the script's own path decides
     AI_HANDOFF_NO_PROMPT      1 keeps the user's prompt out of .ai/state/session.json
+    RISKRAILS_NO_UPDATE_CHECK non-empty turns the SessionStart update notice off (CI does too)
 """
 import hashlib
 import json
@@ -732,6 +739,23 @@ def take_snapshot(session, transcript):
     return text
 
 
+def update_notice_for(payload):
+    """The npm update notice for a startup, as (systemMessage, additionalContext); fails open."""
+    if payload.get("source") not in (None, "", "startup"):
+        return "", ""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import update_notice  # pylint: disable=import-outside-toplevel
+        runtime = hook_runtime()
+        home = config_dir()
+        if runtime == "codex":
+            home = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
+        plugin_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return update_notice.notice(runtime, home, plugin_root, time.time())
+    except Exception:  # pylint: disable=broad-except
+        return "", ""
+
+
 def on_session_start(payload):
     session = payload.get("session_id") or "unknown"
     drift_session = payload.get("session_id") or None
@@ -756,7 +780,9 @@ def on_session_start(payload):
     mtime = account_mtime()
     found = detect_drift(root, payload.get("cwd"), drift_session, mtime=mtime)
     message, notice = drift_notice(root, found, session) if found else ("", "")
-    text = "\n\n".join(part for part in (notice, head, tail) if part)
+    update, update_context = update_notice_for(payload)
+    message = "\n".join(part for part in (message, update) if part)
+    text = "\n\n".join(part for part in (notice, head, tail, update_context) if part)
     if not text:
         sys.exit(0)
     doc = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}
