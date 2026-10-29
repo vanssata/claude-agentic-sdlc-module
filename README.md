@@ -1,6 +1,6 @@
 # RiskRails
 
-[![Version](https://img.shields.io/badge/version-3.0.0-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v3.0.0)
+[![Version](https://img.shields.io/badge/version-3.0.1-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v3.0.1)
 [![Runtimes](https://img.shields.io/badge/runtimes-Claude%20Code%20%7C%20Codex-d2f878?labelColor=101210)](docs/routing.md)
 [![Known risks](https://img.shields.io/badge/known%20risks-documented-d2f878?labelColor=101210)](docs/known-risks.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-d2f878?labelColor=101210)](LICENSE)
@@ -18,7 +18,7 @@ approval. Risky actions are stopped by a hook, not by a polite request in a
 prompt.
 
 ```bash
-npx riskrails@3.0.0   # detects Claude Code, Codex or both (Node 18+, python3)
+npx riskrails@3.0.1   # detects Claude Code, Codex or both (Node 18+, python3)
 ```
 
 Then, in any project: `/rr-setup` once, and `/rr-build <what you want>` for
@@ -50,7 +50,7 @@ Tuned for **one developer who knows the codebase**, on a Claude Pro, Max or
 Team plan, or a ChatGPT Plus or Pro plan, following the
 [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook).
 
-**Version 3.0.0.** The guards have limits: read [Known risks](docs/known-risks.md)
+**Version 3.0.1.** The guards have limits: read [Known risks](docs/known-risks.md)
 before relying on them. What is decided but not built is in [ROADMAP.md](ROADMAP.md).
 
 ## Upgrade to 3.0
@@ -70,7 +70,7 @@ version. Step by step, in this order:
 3. **Update the home** on every machine, for every runtime:
 
    ```bash
-   npx riskrails@3.0.0              # or: npx -y riskrails@latest --yes
+   npx riskrails@3.0.1              # or: npx -y riskrails@latest --yes
    ```
 
    It moves `<home>/claude-agentic/` to `<home>/riskrails/` and leaves a
@@ -108,12 +108,12 @@ home-side details in [docs/installation.md](docs/installation.md).
 ## Install
 
 ```bash
-npx riskrails@3.0.0                       # detects Claude Code, Codex, or both; proposes the detected plan
-npx riskrails@3.0.0 --target codex        # auto | claude | codex | both
-npx riskrails@3.0.0 --plan max --fable no # pro | team-pro | team-max | max | max20 | balanced-max
-npx riskrails@3.0.0 --codex-plan plus     # plus | pro | balanced-max
-npx riskrails@3.0.0 --context economy     # the plan's compaction window; the context guard also blocks
-npx riskrails@3.0.0 --dry-run             # print what would be written, write nothing
+npx riskrails@3.0.1                       # detects Claude Code, Codex, or both; proposes the detected plan
+npx riskrails@3.0.1 --target codex        # auto | claude | codex | both
+npx riskrails@3.0.1 --plan max --fable no # pro | team-pro | team-max | max | max20 | balanced-max
+npx riskrails@3.0.1 --codex-plan plus     # plus | pro | balanced-max
+npx riskrails@3.0.1 --context economy     # the plan's compaction window; the context guard also blocks
+npx riskrails@3.0.1 --dry-run             # print what would be written, write nothing
 npx -y riskrails@latest --yes             # update in place, keeping the recorded plan
 ```
 
