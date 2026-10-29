@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import unittest
+from unittest import mock
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -300,24 +301,41 @@ class TestConcurrency(unittest.TestCase):
         b, _ = p.light_task("beta", change="x = 3\n")
         p.ok("memory", "enable", "--author", "dev", human=True)
         cfg = ms.load_config(p.root)
-        errors, sealed = [], {}
+        errors, sealed, already = [], {}, {}
+        # Both outboxes are written before either export takes the lock (B2), so
+        # the first to lock seals both tasks — the interleaving that used to
+        # happen only under load happens on every run. The staggered case, where
+        # each export seals its own task, is the sequential path the tests above pin.
+        both_written = threading.Barrier(2, timeout=30)
+        real_crash = ms.crash
+
+        def crash(point):
+            if point == "B2":
+                both_written.wait()
+            real_crash(point)
 
         def run(task):
             try:
                 result = ms.export(p.root, [task], cfg)
                 errors.extend(result.failures)
                 sealed[task] = [k.rsplit("#", 1)[0] for k in result.sealed]
+                already[task] = [k.rsplit("#", 1)[0] for k in result.already]
             except Exception as exc:  # pylint: disable=broad-except
                 errors.append(exc)
         threads = [threading.Thread(target=run, args=(t,)) for t in (a, b)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+        with mock.patch.object(ms, "crash", crash):
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
         self.assertEqual(errors, [])
         self.assertEqual({e["task"] for e in package_entries(p) if e["kind"] == "task"}, {a, b})
-        for task in (a, b):                   # review L3: each export reports its own task sealed
-            self.assertIn(task, sealed[task])
+        # Review L3/L5: each export reports its own task — sealed by this call, or
+        # already sealed by the other; each task is sealed by exactly one of them.
+        for task in (a, b):
+            self.assertIn(task, sealed[task] + already[task])
+        self.assertEqual(sorted(sealed[a] + sealed[b]), sorted([a, b]))
+        self.assertEqual(sorted(len(sealed[t]) for t in (a, b)), [0, 2])
 
 
 class TestTwoClones(unittest.TestCase):
