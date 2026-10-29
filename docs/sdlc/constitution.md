@@ -7,7 +7,7 @@ C1. Production behaviour is the source of truth; what looks wrong may be load-be
 C2. A bugfix starts with the failing test; legacy behaviour gets a characterization test before it changes.
 C3. A refactoring changes no behaviour and is never mixed with a feature.
 C4. Every step names its files; scope grows only by amending the plan.
-C5. No agent commits, merges or deploys; a human approves outside the agent.
+C5. No agent merges or deploys; an agent commits, pushes or approves only by running, verbatim and once, a command a human picked in the runtime's dialog as recorded by the harness — otherwise a human runs it outside the agent.
 C6. Weigh a change to this plugin's hooks, skills or state machine by what it does to a user project's decisions — allowing a deny, changing approval or install scores behaviour 2 — never by its being a process.
 C7. <!-- project principle -->
 C8. <!-- project principle -->

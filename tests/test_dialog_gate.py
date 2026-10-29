@@ -303,6 +303,18 @@ class TestEffectiveSwitch(HookCase):
                     s.close()
                 self.assertEqual(got, enabled and tool and not unattended and not subagent and not no_session)
 
+    def test_scaffolded_project_is_on(self):
+        """the matrix row "scaffolded project is on": the template the scaffold and
+        migration 0010 write is read by effective_switch as the switch on."""
+        s = Scratch(on=False)
+        try:
+            shutil.copy(os.path.join(ROOT, "skills", "ai-init", "templates", ".ai", "policies", "dialog.json"),
+                        os.path.join(s.root, ".ai", "policies", "dialog.json"))
+            self.assertEqual(dialog.dialog_policy(s.root), {"window_seconds": 120, "stop_blocks_max": 2})
+            self.assertTrue(dialog.effective_switch(s.root, "claude", spike("claude/ask-single")))
+        finally:
+            s.close()
+
     def test_runtime_unattended_marker_is_off(self):
         with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ATTENDED": "0"}):
             self.assertFalse(dialog.effective_switch(self.s.root, "claude", spike("claude/ask-single")))
@@ -944,6 +956,36 @@ class TestLedger(HookCase):
         lines = dialog.record(self.s.root, "claude", dict(payload, tool_use_id="toolu_second"), later)
         self.assertEqual([line["id"] for line in lines if line["type"] == "pick"], ["C2"])
         self.assertEqual(dialog.next_live_pick(self.s.root, payload["session_id"], later)["id"], "C2")
+
+
+class TestC5Text(unittest.TestCase):
+    """R36.21: the three sentences C5 replaced are gone from every shipped file."""
+
+    OLD = ("No agent commits, merges or deploys; approval is given by a human outside the agent",
+           "No agent commits, pushes, merges or deploys; the pipeline ends at human approval, given outside the agent",
+           "You cannot approve",
+           "No agent commits, merges or deploys; a human approves outside the agent",
+           "Approval is given by a human, outside the agent",
+           "the pipeline ends at human approval",
+           "never commits, pushes or approves")
+    SKIP = ("skills/project-update/history/", "tests/fixtures/", "docs/sdlc/specs/", "docs/sdlc/plans/",
+            "docs/sdlc/intent/", ".ai/reports/", "tests/test_dialog_gate.py")
+
+    def test_c5_text_everywhere(self):
+        listed = subprocess.run(["git", "-C", ROOT, "ls-files", "-z", "--cached", "--others", "--exclude-standard"], capture_output=True, text=True,
+                                check=True).stdout.split("\0")
+        hits = []
+        for rel in filter(None, listed):
+            path = os.path.join(ROOT, rel)
+            if rel.startswith(self.SKIP) or not os.path.isfile(path):
+                continue
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    text = " ".join(fh.read().split())
+            except (OSError, UnicodeDecodeError):
+                continue
+            hits += ["%s: %s" % (rel, old) for old in self.OLD if old in text]
+        self.assertEqual(hits, [])
 
 
 if __name__ == "__main__":

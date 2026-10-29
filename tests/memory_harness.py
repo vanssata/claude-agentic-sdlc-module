@@ -154,7 +154,8 @@ class Project:
         return [line.split()[0] for line in out.splitlines() if " started: " in line][0]
 
     def state(self):
-        with open(self.path(".ai/state/current.json"), encoding="utf-8") as fh:
+        name = "state.json" if self.exists(".ai/state/state.json") else "current.json"
+        with open(self.path(".ai/state/" + name), encoding="utf-8") as fh:
             return json.load(fh)
 
     def task_id(self):

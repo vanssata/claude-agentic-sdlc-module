@@ -1,6 +1,6 @@
 # Task state
 
-`current.json` is the machine-readable record of the task in flight. It is
+`state.json` is the machine-readable record of the task in flight. It is
 written by `skills/ai-task/state.py` (atomically), read by `/ai-status`, and
 enforced by `ai-scope-guard`, which derives the files the current step may touch
 from it.
@@ -10,7 +10,7 @@ Two other writers exist, and only these two. A schema migration in
 same atomic write and a `schema_migrated` history entry — that is how a task in
 flight survives a change to the shape of this file. And `hooks/context-guard.py`
 writes `session.json`, the sidecar beside this file, and nothing else: it never
-touches `current.json`. Nothing else writes any of it — an agent never edits
+touches `state.json`. Nothing else writes any of it — an agent never edits
 them by hand, and the path guard refuses when one tries.
 
 It is **not committed**: it describes a session, not the repository. The
@@ -45,7 +45,7 @@ defaults.
 
 | File | Written by | Committed |
 |---|---|---|
-| `current.json` | `state.py`, and `update.py` during a migration | no |
+| `state.json` (legacy `current.json`, still read) | `state.py`, and `update.py` during a migration | no |
 | `session.json` | `context-guard.py`, on SessionStart and each prompt | no |
 | `handoff.md` | `state.py handoff` — never a model | no |
 | `../reports/<task-id>/task.md` §Questions | `state.py ask/answer/questions` | yes |

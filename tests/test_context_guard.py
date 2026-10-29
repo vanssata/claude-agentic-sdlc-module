@@ -72,6 +72,14 @@ def read_json(path):
         return json.load(fh)
 
 
+def read_task_file(root):
+    """The task file the product reads: state.json, else the legacy current.json."""
+    new = os.path.join(root, ".ai", "state", "state.json")
+    if os.path.exists(new):
+        return read_json(new)
+    return read_json(os.path.join(root, ".ai", "state", "current.json"))
+
+
 def merge(a, b):
     """jq's `*`: objects merge recursively, everything else is replaced."""
     if isinstance(a, dict) and isinstance(b, dict):
@@ -499,7 +507,7 @@ class TestContextGuard(unittest.TestCase):  # pylint: disable=too-many-public-me
                         "--workflow", "feature", "--files", "src/Checkout/*.php", "--declare", "behaviour=0:fixture",
                         "--declare", "domain=0:fixture", "--declare", "novelty=0:fixture"],
                        capture_output=True, env=env, check=False)
-        task = read_json(aip + "/.ai/state/current.json")["task_id"]
+        task = read_task_file(aip)["task_id"]
         # A decision as the journal holds it (the `note` command went in redesign 2.6).
         subprocess.run([sys.executable, STATE_PY, "--root", aip, "event", "note", "--detail", "keep the legacy gateway",
                         "--data", '{"kind": "decision", "text": "keep the legacy gateway", "why": "two callers"}'],

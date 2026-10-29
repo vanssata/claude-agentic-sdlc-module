@@ -1,6 +1,6 @@
 ---
 name: rr-ship
-description: Close the task — state.py close measures the two facts (a green whole-suite verify on the tree as it is now; every changed file inside the task's files), applies the mode table and either archives the task or, in full mode, requests the human's approval and prints the exact approve command for their own terminal. Writes the commit message body and suggests the commit; never commits, pushes or approves. Use on "/rr-ship", "close the task", "ship it", "ready for approval", after /rr-build or /rr-review.
+description: Close the task — state.py close measures the two facts (a green whole-suite verify on the tree as it is now; every changed file inside the task's files), applies the mode table and either archives the task or, in full mode, requests the human's approval and prints the exact approve command for their own terminal. Writes the commit message body and suggests the commit; never merges or deploys, and commits, pushes or approves only as the command the human picked in the dialog, verbatim, once. Use on "/rr-ship", "close the task", "ship it", "ready for approval", after /rr-build or /rr-review.
 argument-hint: [--abandon]
 ---
 
@@ -54,9 +54,13 @@ Show the human the summary (§3), the open findings, the rollback, and that
 command **verbatim** — paths absolute and quoted, because they paste it into
 their own shell, where `$AI_HOME` is not set. Then **stop**.
 
-- **You cannot approve.** `approve` refuses without a terminal on stdin or
-  `AI_UNATTENDED` in its own environment — neither of which a tool call from this
-  session has — and the path guard denies it. Never try another route.
+- **You approve only through the dialog.** With `.ai/policies/dialog.json`
+  `enabled: true`, `close` offers the `approve` command in the runtime's dialog;
+  once the human picks it, run exactly that command, verbatim and once. With the
+  switch off, or no pick, you cannot approve: `approve` refuses without a terminal
+  on stdin or `AI_UNATTENDED` in its own environment — neither of which a tool
+  call from this session has — and the path guard denies it. Never try another
+  route.
 - **full_irreversible:** the command carries
   `--confirm "<what it does, naming DROP …>"`; the human names every operation
   the re-score found, in their own words.
@@ -97,8 +101,8 @@ Write the body from `.ai/reports/<task-id>/task.md` — no new opinion:
 Suggest the commit command — `git add` of the task's files and its
 `.ai/reports/<task-id>/` (in packages mode also `.ai/memory/`, which holds the
 task's record — the pre-push check refuses a closed task without it), then
-`git commit` with that body — for the human to run. You never commit, push,
-merge or deploy.
+`git commit` with that body — for the human to run. You never merge or deploy; you commit, push or
+approve only as the command the human picked in the dialog (§2), verbatim, once.
 
 ## 4. Pending questions
 

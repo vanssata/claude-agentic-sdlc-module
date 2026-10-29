@@ -44,7 +44,7 @@ edited by humans afterwards — the scaffold never overwrites an existing file.
   agents/              the role contract for each pipeline agent
   workflows/           feature, bugfix, refactoring, hotfix, investigation
   templates/           the shape of every artifact a task produces
-  state/current.json   the task in flight (NOT committed)
+  state/state.json     the task in flight (NOT committed)
   reports/<task-id>/   that task's artifacts (committed — the audit trail)
 ```
 
@@ -148,7 +148,7 @@ you ask for it explicitly.
 
 ## The state file
 
-`.ai/state/current.json` is written by `skills/ai-task/state.py`, atomically —
+`.ai/state/state.json` is written by `skills/ai-task/state.py`, atomically —
 and, during a schema migration, by `skills/project-update/update.py` the same
 way.
 It holds facts, never transcripts:
@@ -221,11 +221,13 @@ derived, nothing about it may fail a task: a handoff that cannot be rendered is
 a missing convenience, not a broken run.
 
 **Approval is the one thing none of this can grant.** At T4+ the pipeline stops
-at a gate that only a human closes — from their own terminal, where `approve`
-checks for a TTY, or by answering the gate's question in `task.md`, which
+at a gate that only a human closes — by picking the `approve` command in the
+runtime's dialog (the switch is `.ai/policies/dialog.json`; a pick is recorded
+by the harness, and the agent runs that command verbatim and once), from their
+own terminal, where `approve` checks for a TTY, or by answering the gate's question in `task.md`, which
 is accepted only behind a human turn recorded in `session.json` by a hook the
 agent is forbidden to run. `ai-path-guard` refuses `state.py approve` from an
-agent session outright. An unattended launcher can set `AI_UNATTENDED=1` and
+agent session unless it is the command the human picked in the dialog. An unattended launcher can set `AI_UNATTENDED=1` and
 skip all of it — and the approval is then stamped `unattended` in the state and
 in the journal, for ever, where `/ai-status` reads it out. See
 [hooks.md](hooks.md) for the rules themselves.

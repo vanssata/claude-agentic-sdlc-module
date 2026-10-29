@@ -1,7 +1,7 @@
 exit 0
 root: <ROOT>
 task: none — no task in flight
-schema: project 0 · plugin 8 — behind: run /project-update
+schema: project 0 · plugin 10 — behind: run /project-update
 
 exit 0
 root: <ROOT>
@@ -18,5 +18,5 @@ review: not_started (0 of 2) · tier -
 gate: none in light mode
 findings: 0 recorded in task.md
 questions: 0 pending
-schema: project 0 · plugin 8 — behind: run /project-update
+schema: project 0 · plugin 10 — behind: run /project-update
 last event: <TS> handoff_written start

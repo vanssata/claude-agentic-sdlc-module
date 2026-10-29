@@ -46,7 +46,7 @@ Facts are collected cheaply; thinking is paid for. Session model {{SESSION_MODEL
 # Guards
 
 <!-- stub: runtime=claude -->
-- `ai-git-guard` runs in every repository: no force push, history rewrite, push or merge to a protected branch, `--no-verify`, staged secret or production deploy. `ai-path-guard` and `ai-scope-guard` arm only where `.ai/` exists. No agent commits, merges or deploys on its own; the pipeline ends at human approval.
+- `ai-git-guard` runs in every repository: no force push, history rewrite, push or merge to a protected branch, `--no-verify`, staged secret or production deploy. `ai-path-guard` and `ai-scope-guard` arm only where `.ai/` exists. No agent merges or deploys; commit, push and approval run only as the command the human picked in the dialog — verbatim, once — or the human runs them outside the agent.
 - `context-guard` measures the context on every prompt and holds a prompt back once at the block threshold above, when there is one; its "Session state before compaction" block and `.ai/state/handoff.md` are what a resumed session trusts over the summary.
 
 <!-- stub: runtime=codex -->
@@ -130,7 +130,7 @@ The main session re-reads its whole context every turn, so context length — mo
 # Guards
 
 <!-- stub: runtime=codex -->
-- `ai-git-guard` runs in every repository: no force push, history rewrite, push or merge to a protected branch, `--no-verify`, staged secret or production deploy. `ai-path-guard` and `ai-scope-guard` arm only where `.ai/` exists. All three see `Bash` and `apply_patch`; run `/hooks` once after installing to review and trust them, or they are skipped. No agent commits, merges or deploys on its own; the pipeline ends at human approval.
+- `ai-git-guard` runs in every repository: no force push, history rewrite, push or merge to a protected branch, `--no-verify`, staged secret or production deploy. `ai-path-guard` and `ai-scope-guard` arm only where `.ai/` exists. All three see `Bash` and `apply_patch`; run `/hooks` once after installing to review and trust them, or they are skipped. No agent merges or deploys; commit, push and approval run only as the command the human picked in the dialog — verbatim, once — or the human runs them outside the agent.
 - `architect` is for design questions outside a task, in a repository without `.ai/`, and in a full-mode task whose design is open (`/rr-plan`). Otherwise the session plans, and an EXPERT spawn is the escalation.
 
 <!-- stub: runtime=claude,codex -->

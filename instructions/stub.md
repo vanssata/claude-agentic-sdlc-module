@@ -24,7 +24,7 @@ Rules for every repository; everything else loads on demand. `{{HOME}}/riskrails
 - With `.ai/`: read `.ai/AGENTS.md` first, run every change through `/rr-build <request>`, treat `.ai/policies/` as binding; `/rr-setup --update` after a plugin reinstall. Without `.ai/`: `/rr-setup` first.
 - Production behaviour is the source of truth: document problems outside the task, do not fix them. Never mix a refactoring with a feature change.
 - Each step names the files it may touch; an edit outside them is refused — answer `SCOPE_CHANGE_REQUIRED`, do not widen the step.{{MULTI_EDIT}}
-- No agent commits, pushes, merges or deploys; the pipeline ends at human approval, given outside the agent. A guard's refusal is not a hint to reword.{{TRUST}}
+- No agent merges or deploys. Commit, push and approval run only as the command the human picked in the dialog — verbatim, once — or the human runs them outside the agent. A guard's refusal is not a hint to reword.{{TRUST}}
 - Verify before reporting done: the verification command once, to the end, every failure fixed as one batch, output shown.
 - Context: `grep -n`, then read the hits; never `cat` logs, lockfiles or generated code; a file over ~{{READ_LINES}} lines is read by a FAST reader (`Explore`, `log-reader`) that returns `file:line` excerpts, never the file. Deterministic tools first. {{NEW_CONTEXT}} between tasks. `/rr-status --cost` shows where tokens went.
 - Models are tiers, not names: runners and verbatim extraction on FAST at `low`, readers that judge on BALANCED; the session implements; STRONG and EXPERT only on a named trigger, one agent at a time, never a fleet on the top tier; a failed thinking task is never retried on a cheaper model.
@@ -47,7 +47,7 @@ This repository runs an agentic pipeline under `.ai/`. Read `.ai/AGENTS.md` firs
 
 <!-- stub: scope=project runtime=* -->
 - Verify before reporting done: `verify_command` from `.ai/policies/testing.md` once, to the end, then `e2e_command` once; every failure fixed as one batch; show the output.
-- No agent commits, merges or deploys; approval is given by a human outside the agent. When a review flags the same mistake twice, the correction goes into this file.
+- No agent merges or deploys; commit, push, approval only as the dialog picks, else a human outside. When a review flags the same mistake twice, the correction goes into this file.
 - Files, not chat, carry decisions: `.ai/reports/<task-id>/task.md` (answer by filling `[Answer]:`), `.ai/state/handoff.md` (read first when resuming), `docs/sdlc/constitution.md` (this project's principles).
 
 <!-- stub: scope=skeleton,skeleton-sdlc runtime=* -->

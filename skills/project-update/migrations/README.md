@@ -16,7 +16,8 @@ this directory, named `NNNN_slug.py`, numbered contiguously from `0001`, with
 - A migration that deletes must retire the template in the same release,
   otherwise the next run re-creates the file.
 - `ctx.patch_state` is the only way to change a task in flight, and the only
-  writer of `.ai/state/current.json` other than `state.py`. A migration that
+  writer of the task's state file (`.ai/state/state.json`, `current.json` in a
+  project not yet at schema 9) other than `state.py`. A migration that
   moves a path a task's step may touch must patch it, or the scope guard will
   stop that task on a file that no longer exists.
 - Operations are planned, never written: the dry run must list everything.

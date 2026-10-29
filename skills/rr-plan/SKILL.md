@@ -71,7 +71,7 @@ The table is `.ai/policies/weight.json` (`weight.md` mirrors it).
 
 **3. The mode is the weight's**, not yours: raising it is free
 (`--mode <m> --by "<name>"` on `start`); lowering it is the human's, from their
-own terminal. Shape the plan by it:
+own terminal, or the command they picked in the dialog. Shape the plan by it:
 
 | Mode | Plan | Who sees it before the first edit |
 |---|---|---|

@@ -218,12 +218,12 @@ STATE_NAMES = ("state.json", "current.json")
 
 
 def state_path(root):
-    """The task's state file, read and written where it is: state.json when a
-    later version wrote one, else current.json, where every task starts. R34 is
-    expand/contract: this version reads both names and moves nothing, so a
-    revert of the move that comes later still finds the task."""
+    """The task's state file, read and written where it is: state.json, or
+    current.json when that is the file a task in flight sits in. A new task
+    starts in state.json (R34's contract half, migration 0009 moves an old one);
+    both names stay readable, so a revert of that move still finds the task."""
     new, legacy = (os.path.join(root, ".ai", "state", name) for name in STATE_NAMES)
-    return new if os.path.exists(new) else legacy
+    return legacy if not os.path.exists(new) and os.path.exists(legacy) else new
 
 
 def remove_state(root):
@@ -340,7 +340,7 @@ def read_journal(root, task_id):
 def apply_defaults(state):
     """Schema 2 keys (I6) in memory, so a v1 state answers every command before
     migration 0002 has run; save() then persists them. A reader that opens
-    current.json directly — update.py does — sees the file, not these."""
+    the state file directly — update.py does — sees the file, not these."""
     if is_v7(state):
         return apply_defaults_v7(state)
     task_id = state.get("task_id") or ""
@@ -1094,7 +1094,7 @@ def _split_files(text):
 
 def cmd_event(args, root):
     """For hooks and for WP5's model fallback: one journal line, no state write.
-    current.json keeps its two writers; this command is not one of them."""
+    The state file keeps its two writers; this command is not one of them."""
     if args.type not in EVENT_TYPES:
         die("unknown event type '%s' (have: %s)" % (args.type, ", ".join(EVENT_TYPES)))
     if args.type in FORGEABLE_EVENTS:
@@ -1885,7 +1885,7 @@ def write_handoff(root, state, reason):
     nothing validates.
 
     It mutates `state` in memory only. The caller that is already changing the
-    task persists it; `handoff` on its own never writes current.json, because
+    task persists it; `handoff` on its own never writes the state file, because
     the hook calls it while another command may be mid-write."""
     path = handoff_path(root)
     try:
@@ -1962,7 +1962,7 @@ def handoff_to(args, root):
     emit(root, state, "runtime_handoff", "%s -> %s (%s)" % (source, args.to, via), data)
     write_handoff(root, state, "manual")
     save(root, state)
-    print("Handed %s to %s (%s). In %s, run /ai-task: it resumes from .ai/state/current.json."
+    print("Handed %s to %s (%s). In %s, run /ai-task: it resumes from the state file in .ai/state/."
           % (state.get("task_id"), args.to, via, args.to))
     print("headless (not run): cd %s && %s" % (shlex.quote(root), RESUME_COMMAND[args.to]))
 

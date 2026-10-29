@@ -13,8 +13,8 @@ next: edit, then 'state.py verify --scope all', then 'state.py close'
 .ai/policies/testing.md
 .ai/reports/<ID>/events.jsonl
 .ai/reports/<ID>/task.md
-.ai/state/current.json
 .ai/state/handoff.md
+.ai/state/state.json
 .gitignore
 src/widget.py
 tests/test_widget.py
@@ -35,14 +35,14 @@ review: not_started (0 of 2) · tier -
 gate: none in light mode
 findings: 0 recorded in task.md
 questions: 0 pending
-schema: project 0 · plugin 8 — behind: run /project-update
+schema: project 0 · plugin 10 — behind: run /project-update
 last event: <TS> handoff_written start
 -- files
 .ai/policies/testing.md
 .ai/reports/<ID>/events.jsonl
 .ai/reports/<ID>/task.md
-.ai/state/current.json
 .ai/state/handoff.md
+.ai/state/state.json
 .gitignore
 src/widget.py
 tests/test_widget.py
@@ -65,8 +65,8 @@ Pending questions: none
 .ai/policies/testing.md
 .ai/reports/<ID>/events.jsonl
 .ai/reports/<ID>/task.md
-.ai/state/current.json
 .ai/state/handoff.md
+.ai/state/state.json
 .gitignore
 src/widget.py
 tests/test_widget.py
@@ -82,9 +82,9 @@ suite runs used: 1 of 2
 .ai/policies/testing.md
 .ai/reports/<ID>/events.jsonl
 .ai/reports/<ID>/task.md
-.ai/state/current.json
 .ai/state/handoff.md
 .ai/state/logs/<ID>/suite-1.log
+.ai/state/state.json
 .gitignore
 src/widget.py
 tests/test_widget.py
@@ -106,7 +106,7 @@ $ state.py status
 exit 0
 root: <ROOT>
 task: none — no task in flight
-schema: project 0 · plugin 8 — behind: run /project-update
+schema: project 0 · plugin 10 — behind: run /project-update
 -- files
 .ai/policies/testing.md
 .ai/reports/<ID>/events.jsonl

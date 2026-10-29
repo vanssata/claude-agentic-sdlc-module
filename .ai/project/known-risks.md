@@ -729,3 +729,13 @@ following; each is open unless marked.
 - **Suggested fix**: a spec decision for a human: either 7f turns the dialog on, or a human-route terminal ack (for example `state.py profile ack`, refused inside an agent like `profile set`) is added.
 - **Status**: open
 - **Label**: KNOWN FACT (writers above), INFERENCE (effect)
+
+## State-file move vs runtime homes still on v2.x (review M3, T-2026-10-29-0852)
+
+- **Found**: 2026-10-29, by T-2026-10-29-0852-r36-rest
+- **Where**: `skills/ai-task/state.py:226; skills/project-update/migrations/0009_state_file.py`
+- **What could go wrong**: 0009 and state.py start write .ai/state/state.json; v2.0.2 reads only current.json. A second runtime home (Codex) or plugin cache on v2.x sees no task: guards silently disarmed; rollback to v2.x loses the task in flight.
+- **How likely / how bad**: low: one installer updates both homes, but a stale home is possible
+- **Suggested fix**: update.py refuses or hints when another installed home lacks the state.json reader, as require_shared does
+- **Status**: open
+- **Label**: RISK

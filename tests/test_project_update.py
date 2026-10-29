@@ -46,6 +46,10 @@ def load_migration():
 
 
 def read_json(path):
+    """A JSON file; the task's current.json is read from state.json once migration
+    0009 has moved it (R34), so a test reads the task before and after an update."""
+    if path.endswith(os.path.join("state", "current.json")) and not os.path.exists(path):
+        path = os.path.join(os.path.dirname(path), "state.json")
     with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
@@ -189,12 +193,12 @@ class TestMigration0007(unittest.TestCase):
         p = Project(edited=True)
         try:
             dry = p.update()
-            self.assertIn("schema    6 -> 8", dry.stdout)
+            self.assertIn("schema    6 -> 10", dry.stdout)
             self.assertNotIn("delete?", dry.stdout)
             self.assertEqual([line for line in dry.stdout.split("\n") if "[0007]" in line and "risk-tiers" in line], [])
             done = p.update("--apply")
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            self.assertEqual(p.version(), "8")
+            self.assertEqual(p.version(), "10")
             weight = json.loads(p.read("policies", "weight.json"))
             self.assertIn("the order export job", weight["examples"]["guarded"])
             self.assertIn("weight --mirror", done.stdout)
@@ -217,7 +221,7 @@ class TestMigration0007(unittest.TestCase):
             p = Project(weight=False, edited=edited)
             try:
                 done = p.update("--apply")
-                self.assertEqual((done.returncode, p.version()), (0, "8"), done.stdout + done.stderr)
+                self.assertEqual((done.returncode, p.version()), (0, "10"), done.stdout + done.stderr)
                 with open(os.path.join(POLICIES, "weight.json"), "rb") as fh:
                     shipped = fh.read()
                 if edited:
@@ -235,7 +239,7 @@ class TestMigration0007(unittest.TestCase):
         try:
             done = p.update("--apply")
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            state = json.loads(p.read("state", "current.json"))
+            state = json.loads(p.read("state", "state.json"))
             self.assertEqual(state["mode"], "guarded")
             self.assertEqual(state["weight"], {"w": None, "axes": {}, "unknown": ["migrated"]})
             self.assertNotIn("schema", state)
@@ -244,9 +248,9 @@ class TestMigration0007(unittest.TestCase):
             self.assertEqual(state["approved_plan"]["steps"][0]["allowed_files"],
                              ["src/Shared/Clock.php", "tests/ClockTest.php"])
             self.assertEqual(state["history"][-1]["event"], "schema_migrated")
-            first = p.read("state", "current.json")
+            first = p.read("state", "state.json")
             p.update("--apply")
-            self.assertEqual(p.read("state", "current.json"), first)
+            self.assertEqual(p.read("state", "state.json"), first)
             env = dict(p.env, AI_RUNTIME="claude")
             self.assertEqual(state["risk_tier"], "T4")
             got = subprocess.run([sys.executable, "-I", STATE, "--root", p.root, "status"],
@@ -418,7 +422,8 @@ def to_schema_7(root):
 
 class TestMigration0008(unittest.TestCase):
     """R35: the markers and routes take the new name, the text around them stays
-    byte for byte the project's, and the state file stays where it is (R34)."""
+    byte for byte the project's, and the task's state is not rewritten (R34; the
+    file moves in 0009)."""
 
     def setUp(self):
         self.p = Project()
@@ -445,13 +450,14 @@ class TestMigration0008(unittest.TestCase):
                                   "--declare", "behaviour=0:none", "--declare", "novelty=0:none"],
                                  env=env, capture_output=True, text=True, check=False)
         self.assertEqual(started.returncode, 0, started.stderr)
+        os.rename(self.p.path("state", "state.json"), self.p.path("state", "current.json"))  # schema 7 named it so
         state = self.p.read("state", "current.json")
         self.commit()
         done = self.p.update("--apply")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertEqual(self.p.version(), "8")
-        self.assertEqual(self.p.read("state", "current.json"), state, "0008 leaves the task's state alone (R34)")
-        self.assertFalse(os.path.exists(self.p.path("state", "state.json")), "and moves nothing")
+        self.assertEqual(self.p.version(), "10")
+        self.assertEqual(self.p.read("state", "state.json"), state, "0008 leaves the task's state alone; 0009 moves it as it is (R34)")
+        self.assertFalse(os.path.exists(self.p.path("state", "current.json")))
         with open(os.path.join(self.p.root, "CLAUDE.md"), "rb") as fh:
             self.assertEqual(fh.read(), self.claude.replace(b"<!-- claude-agentic:", b"<!-- riskrails:"),
                              "only the marker word changes; the project's text is byte-identical")
@@ -468,8 +474,8 @@ class TestMigration0008(unittest.TestCase):
     def test_without_a_task(self):
         self.commit()
         done = self.p.update("--apply")
-        self.assertEqual((done.returncode, self.p.version()), (0, "8"), done.stdout + done.stderr)
-        self.assertFalse(os.path.exists(self.p.path("state", "state.json")))
+        self.assertEqual((done.returncode, self.p.version()), (0, "10"), done.stdout + done.stderr)
+        self.assertFalse(os.path.exists(self.p.path("state", "state.json")), "no task, no file is invented")
         self.assertNotIn(b"claude-agentic", open(os.path.join(self.p.root, "CLAUDE.md"), "rb").read())
 
     def test_rule_markers_keep_their_spacing(self):
@@ -483,6 +489,152 @@ class TestMigration0008(unittest.TestCase):
                          b"<!-- riskrails:rule:payments:end-->\n")
         self.assertEqual(mod.rename_routes(b"`~/.claude/claude-agentic/ai-path x` and /claude-agentic/aix"),
                          b"`~/.claude/riskrails/ai-path x` and /claude-agentic/aix")
+
+
+FIXTURE_V8 = os.path.join(ROOT, "tests", "fixtures", "project-update", "schema-v8")
+MIGRATION_0009 = os.path.join(ROOT, "skills", "project-update", "migrations", "0009_state_file.py")
+
+
+class TestMigration0009(unittest.TestCase):
+    """R34's contract half: a task in flight moves from current.json to
+    state.json, byte for byte, and the readers 3.4b shipped still arm on it."""
+
+    LEGACY = os.path.join(".ai", "state", "current.json")
+    NEW = os.path.join(".ai", "state", "state.json")
+
+    def setUp(self):
+        self.p = Project()
+        shutil.copytree(os.path.join(FIXTURE_V8, ".ai"), os.path.join(self.p.root, ".ai"), dirs_exist_ok=True)
+
+    def tearDown(self):
+        self.p.close()
+
+    def commit(self):
+        subprocess.run(GIT + ["-C", self.p.root, "add", "-A"], check=True)
+        subprocess.run(GIT + ["-C", self.p.root, "commit", "-qm", "schema 8"], check=True)
+
+    def start_task(self):
+        """A task started with today's state.py, put back under its schema-8 name."""
+        env = dict(self.p.env, AI_RUNTIME="claude")
+        put(os.path.join(self.p.root, "src", "Clock.php"), "x\n")
+        self.commit()
+        started = subprocess.run([sys.executable, "-I", STATE, "--root", self.p.root, "start", "--goal", "mid-build",
+                                  "--workflow", "feature", "--files", "src/Clock.php", "--tests", "tests/ClockTest.php",
+                                  "--declare", "behaviour=0:none", "--declare", "novelty=0:none"],
+                                 env=env, capture_output=True, text=True, check=False)
+        self.assertEqual(started.returncode, 0, started.stderr)
+        os.rename(os.path.join(self.p.root, self.NEW), os.path.join(self.p.root, self.LEGACY))
+        self.commit()
+        with open(os.path.join(self.p.root, self.LEGACY), "rb") as fh:
+            return fh.read()
+
+    def has(self, rel):
+        return os.path.exists(os.path.join(self.p.root, rel))
+
+    def test_in_flight_moves_and_is_still_read(self):
+        before = self.start_task()
+        done = self.p.update("--apply")
+        self.assertEqual((done.returncode, self.p.version()), (0, "10"), done.stdout + done.stderr)
+        self.assertFalse(self.has(self.LEGACY), "current.json moved away")
+        self.assertEqual(self.p.read("state", "state.json"), before, "the task's bytes are unchanged")
+        env = dict(self.p.env, AI_RUNTIME="claude")
+        status = subprocess.run([sys.executable, "-I", STATE, "--root", self.p.root, "status"],
+                                env=env, capture_output=True, text=True, check=False)
+        self.assertEqual(status.returncode, 0, status.stderr)
+        self.assertIn("mid-build", status.stdout)
+        self.assertEqual(self.p.update("--check").returncode, 0)
+
+    def test_second_run_is_a_no_op(self):
+        self.start_task()
+        self.p.update("--apply")
+        moved = self.p.read("state", "state.json")
+        again = self.p.update("--apply")
+        self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+        self.assertNotIn("schema ", again.stdout)
+        self.assertEqual(self.p.read("state", "state.json"), moved)
+        self.assertFalse(self.has(self.LEGACY))
+
+    def test_without_a_task(self):
+        self.commit()
+        done = self.p.update("--apply")
+        self.assertEqual((done.returncode, self.p.version()), (0, "10"), done.stdout + done.stderr)
+        self.assertFalse(self.has(self.NEW) or self.has(self.LEGACY), "no task, no file is invented")
+
+    def test_state_json_already_there_is_untouched(self):
+        self.commit()
+        put(os.path.join(self.p.root, self.NEW), "{\"task_id\": \"T-new\"}\n")
+        done = self.p.update("--apply")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.p.read("state", "state.json"), b"{\"task_id\": \"T-new\"}\n")
+        self.assertFalse(self.has(self.LEGACY))
+
+    def test_both_files_is_a_conflict_and_nothing_changes(self):
+        legacy = "{\"task_id\": \"T-old\"}\n"
+        put(os.path.join(self.p.root, self.LEGACY), legacy)
+        put(os.path.join(self.p.root, self.NEW), "{\"task_id\": \"T-new\"}\n")
+        self.commit()
+        done = self.p.update("--apply")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("conflict  .ai/state/current.json", done.stdout)
+        self.assertIn("already exists", done.stdout)
+        self.assertEqual(self.p.version(), "8", "the schema is held at 8")
+        self.assertEqual(self.p.read("state", "state.json"), b"{\"task_id\": \"T-new\"}\n")
+        self.assertEqual(self.p.read("state", "current.json"), legacy.encode())
+
+    def test_move_leaves_no_copy_of_the_task_state_in_the_report(self):
+        self.start_task()
+        done = self.p.update("--apply")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        copies = []
+        for dirpath, _, names in os.walk(os.path.join(self.p.root, ".ai", "reports")):
+            copies += [os.path.join(dirpath, n) for n in names if n in ("current.json", "state.json")]
+        self.assertEqual(copies, [], "git-ignored task state is not copied into a tracked report")
+
+    def test_revert_runs_the_real_3_4b_state_py_on_the_moved_task(self):
+        self.start_task()
+        self.assertEqual(self.p.update("--apply").returncode, 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = subprocess.run(["git", "-C", ROOT, "archive", "c361c54", "skills/ai-task"],
+                                     capture_output=True, check=True).stdout
+            subprocess.run(["tar", "-x", "-C", tmp], input=archive, check=True)
+            old = os.path.join(tmp, "skills", "ai-task", "state.py")
+            env = dict(self.p.env, AI_RUNTIME="claude")
+            status = subprocess.run([sys.executable, "-I", old, "--root", self.p.root, "status"],
+                                    env=env, capture_output=True, text=True, check=False)
+        self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
+        self.assertIn("mid-build", status.stdout)
+
+    def test_revert_check_the_3_4b_readers_arm_on_the_moved_file(self):
+        """Reverting to 3.4b after the move: its state.py and its scope guard read
+        state.json, so the task in flight is still guarded."""
+        self.start_task()
+        self.assertEqual(self.p.update("--apply").returncode, 0)
+        root = self.p.root
+        sys.path.insert(0, os.path.join(ROOT, "skills", "ai-task"))
+        sys.path.insert(0, os.path.join(ROOT, "tests"))
+        try:
+            import state as state_mod  # pylint: disable=import-outside-toplevel
+            from guard_harness import guard, run  # pylint: disable=import-outside-toplevel
+        finally:
+            del sys.path[:2]
+        self.assertEqual(state_mod.state_path(root), os.path.join(root, self.NEW))
+        self.assertEqual(state_mod.load(root, claim=False)["goal"], "mid-build")
+        outside = {"hook_event_name": "PreToolUse", "tool_name": "Edit", "cwd": root,
+                   "tool_input": {"file_path": root + "/src/Elsewhere.php"}}
+        inside = dict(outside, tool_input={"file_path": root + "/src/Clock.php"})
+        self.assertIn("SCOPE_CHANGE_REQUIRED", run(guard("scope"), outside)[1], "the scope guard arms on state.json")
+        self.assertEqual(run(guard("scope"), inside)[1], "")
+        with open(os.path.join(ROOT, "hooks", "guard", "paths.py"), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("/.ai/state/state.json", text, "the path guard reads state.json first")
+        self.assertIn("/.ai/state/current.json", text, "and current.json otherwise")
+
+    def test_migration_declares_the_move(self):
+        spec = importlib.util.spec_from_file_location("migration_0009_under_test", MIGRATION_0009)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertEqual(mod.VERSION, 9)
+        self.assertEqual(mod.MOVES, [(".ai/state/current.json", ".ai/state/state.json")])
 
 
 class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-methods

@@ -61,6 +61,14 @@ def read_json(path):
         return json.load(fh)
 
 
+def read_task_file(root):
+    """The task file the product reads: state.json, else the legacy current.json."""
+    new = os.path.join(root, ".ai", "state", "state.json")
+    if os.path.exists(new):
+        return read_json(new)
+    return read_json(os.path.join(root, ".ai", "state", "current.json"))
+
+
 def write_json(path, data):
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(data, fh)
@@ -343,7 +351,7 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
                         "--goal", "g", "--workflow", "feature", "--files", "src/a.py",
                         "--declare", "behaviour=0:fixture", "--declare", "domain=0:fixture",
                         "--declare", "novelty=0:fixture"], capture_output=True, env=self.env, check=False)
-        task = type(self).task = read_json(proj + "/.ai/state/current.json")["task_id"]
+        task = type(self).task = read_task_file(proj)["task_id"]
         g = self.g
         out = self.launch(g, "architect")
         self.assertTrue(decision(out) == "ask"

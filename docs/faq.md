@@ -41,7 +41,7 @@ python3 "$AI_HOME/skills/ai-task/state.py" step <step_id>
 ```
 
 where `$AI_HOME` is `~/.claude` or `~/.codex` — the two copies are the same
-script and both write the project's `.ai/state/current.json`.
+script and both write the project's `.ai/state/state.json`.
 
 One step is amended, not the whole task replanned.
 
@@ -479,12 +479,13 @@ python3 <plugin>/skills/ai-task/state.py --root . approve --by "<your name>"
 ```
 
 `approve` checks for a TTY, so the same line run through the agent's shell exits
-5 and changes nothing. Or set `[Answer]: A` on the gate's question in
+5 and changes nothing (unless you picked it in the dialog). Or set `[Answer]: A` on the gate's question in
 `.ai/reports/<task-id>/task.md` and tell the session to run `state.py
 questions --sync`; that door opens only behind a turn you actually took —
 `context-guard.py` records it in `.ai/state/session.json`, and the path guard
 refuses to let an agent run that hook by hand. And `state.py approve` from an
-agent session is refused outright.
+agent session is refused unless it is the command you picked in the dialog
+(`.ai/policies/dialog.json` `enabled: true`), run verbatim and once.
 
 ## How do I approve in CI, where there is no human?
 

@@ -24,14 +24,15 @@ change.
 Upgrading from `claude-agentic`: `npx riskrails` moves `<home>/claude-agentic/` to
 `<home>/riskrails/` and leaves a symlink at the old path for one version, and
 `/rr-setup --update` renames each project's managed-block markers (migration
-0008). The task state stays in `.ai/state/current.json`; a later release moves
-it to `state.json`, and this one already reads either.
+0008). The task state is `.ai/state/state.json` (migration 0009 moves the legacy
+`current.json`, which is still read).
 
 **What you get**
 
 - **Guards, not guidelines.** Hooks refuse edits outside the approved step,
-  reads of production secrets, force-pushes and deploys. No agent commits,
-  merges or deploys: every task ends at your approval.
+  reads of production secrets, force-pushes and deploys. No agent merges or
+  deploys; commit, push and approval run only as the command you picked in the dialog,
+  or you run them outside the agent.
 - **Risk-tiered pipeline.** Each change gets a tier from T0 to T6, by what it
   reaches, never by how many files it touches. A typo fix stays a one-line
   edit. A new resource with its screens gets the sensors. A payment change gets
@@ -75,14 +76,14 @@ registered, and which model each tier resolves to.
 | session | Opus 5.5 [1m] (`claude-opus-5-5[1m]`, 1M window) at `medium` by default on Max, `/model opus` for a 200k session (Sonnet on Pro) | Sol at `high` |
 
 A repository can carry both instruction files over one `.ai/` tree. The task
-state is `.ai/state/current.json` either way, so a task started in one runtime
+state is `.ai/state/state.json` either way, so a task started in one runtime
 resumes in the other.
 
 Five files make that resume real, and every one of them is provider-neutral:
 
 | File | Written by | Holds |
 |---|---|---|
-| `.ai/state/current.json` | `state.py`, `update.py` | the task: stage, step, risk tier, approval |
+| `.ai/state/state.json` | `state.py`, `update.py` | the task: stage, step, risk tier, approval |
 | `.ai/reports/<task-id>/events.jsonl` | `state.py` | the journal — one append-only line per event, with the runtime that emitted it |
 | `.ai/reports/<task-id>/task.md` §Questions | `state.py` | the open questions, each with an `[Answer]:` line a human fills in |
 | `.ai/state/handoff.md` | `state.py`, rendered | thirty lines a session reads first: where the task is, what it may touch, what is pending |

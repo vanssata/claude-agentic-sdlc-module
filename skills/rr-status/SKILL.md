@@ -24,8 +24,8 @@ After the output, at most one line, and only when a line asks for it:
 - `questions: N pending` with N > 0: the task is halted until they are
   answered — `/rr-build` shows them. The count can lag an `[Answer]:` line the
   human filled in the file; `state.py handoff --print` re-reads the file.
-- `gate: requested`: the human runs the `approve` command `/rr-ship` printed,
-  in their own terminal; you cannot.
+- `gate: requested`: the `approve` command `/rr-ship` printed is run by the human in their
+  own terminal, or by you only if they picked it in the dialog (verbatim, once).
 
 Exit 1 with `root: none` means no `.ai/` governs this directory: `/rr-setup`
 sets one up.

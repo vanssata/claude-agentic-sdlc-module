@@ -13,8 +13,8 @@ Everything else loads on demand; nothing here is worth reading twice.
    The task names the files it may touch; an edit outside them is refused —
    answer `SCOPE_CHANGE_REQUIRED` and widen the task in place with
    `state.py start --amend --files "+<path>" --why "…"`, never around the guard.
-3. No agent commits, pushes, merges or deploys. Approval is given by a human,
-   outside the agent.
+3. No agent merges or deploys; commit, push, approval only as the dialog's picked
+   command, or the human runs them outside the agent.
 4. Verify before reporting done: the verification command once, to the end,
    every failure fixed as one batch, the output shown. Run it through
    `state.py verify --scope all` — it caps the runs, keeps the log out of the

@@ -262,7 +262,7 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
         stub = self.stdout_of("render", "--scope", "global", "--runtime", "claude", "--kind", "block",
                               "--var", "PLAN_LABEL=Max", "--var", "READ_LINES=4000")
         for phrase in ("/rr-build <request>", ".ai/AGENTS.md", "SCOPE_CHANGE_REQUIRED", "/rr-setup",
-                       "human approval", "source of truth", "one batch", "routing.md"):
+                       "the human runs them outside the agent", "picked in the dialog", "verbatim, once", "source of truth", "one batch", "routing.md"):
             with self.subTest(STUB_PHRASE_CASE, phrase=phrase):
                 self.assertIn(phrase, stub, "the stub no longer says %r: it is what makes the stub safe alone" % phrase)
 

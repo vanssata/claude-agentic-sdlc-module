@@ -99,8 +99,13 @@ class Project:
         return self.ok("start", "--goal", "tweak the widget", "--workflow", "feature", "--files", files,
                        "--tests", "tests/test_widget.py", *ZERO, *extra)
 
+    def state_file(self):
+        """The file the task sits in: state.json, or a legacy current.json."""
+        new = os.path.join(self.root, ".ai", "state", "state.json")
+        return new if os.path.exists(new) else os.path.join(self.root, ".ai", "state", "current.json")
+
     def state(self):
-        with open(os.path.join(self.root, ".ai", "state", "current.json"), encoding="utf-8") as fh:
+        with open(self.state_file(), encoding="utf-8") as fh:
             return json.load(fh)
 
     def archived(self, task_id):
@@ -116,7 +121,7 @@ class Project:
             return fh.read()
 
     def in_flight(self):
-        return os.path.exists(os.path.join(self.root, ".ai", "state", "current.json"))
+        return os.path.exists(self.state_file())
 
     def close(self):
         self.tmp.cleanup()
@@ -221,23 +226,23 @@ class TestStart(Base):
         tier = [e for e in self.p.events(s["task_id"]) if e["event"] == "tier_set"][0]["data"]
         self.assertEqual((tier["tier"], tier["mode"]), ("T2", "light"))
 
-    def test_reads_legacy_state_name(self):
-        """R34, expand/contract: a task starts in current.json and stays there;
-        one a later version wrote to state.json is read and saved in place."""
+    def test_start_writes_state_json_and_resumes_a_legacy_task_in_place(self):
+        """R34's contract half: a task starts in state.json; one a version before
+        left in current.json is read and saved where it is."""
         self.p.start()
         task = self.task_id()
         new = os.path.join(self.p.root, ".ai", "state", "state.json")
         legacy = os.path.join(self.p.root, ".ai", "state", "current.json")
-        self.assertTrue(os.path.exists(legacy) and not os.path.exists(new), "start writes current.json")
+        self.assertTrue(os.path.exists(new) and not os.path.exists(legacy), "start writes state.json")
         self.p.write("src/other.py", "y = 1\n")
         self.p.ok("start", "--amend", "--files", "+src/other.py", "--why", "a save")
-        self.assertFalse(os.path.exists(new), "a save moves nothing")
-        os.rename(legacy, new)
+        self.assertFalse(os.path.exists(legacy), "a save creates no second file")
+        os.rename(new, legacy)
         self.assertIn(task, self.p.ok("status").stdout)
         self.p.write("src/third.py", "z = 1\n")
         self.p.ok("start", "--amend", "--files", "+src/third.py", "--why", "a save")
-        self.assertTrue(os.path.exists(new) and not os.path.exists(legacy), "state.json is saved where it is")
-        with open(new, encoding="utf-8") as fh:
+        self.assertTrue(os.path.exists(legacy) and not os.path.exists(new), "current.json is saved where it is")
+        with open(legacy, encoding="utf-8") as fh:
             self.assertIn("src/third.py", json.load(fh)["files"])
 
     def test_declared_evidence_cannot_add_a_heading_to_task_md(self):
@@ -1302,7 +1307,7 @@ class TestQuestions(Ported):
 
     def test_a_pending_question_blocks_what_moves_the_task_and_nothing_else(self):
         self.p.ok("ask", "Which rule?", "--option", "A: one", "--option", "B: two")
-        state_file = os.path.join(self.p.root, ".ai", "state", "current.json")
+        state_file = self.p.state_file()
         with open(state_file, encoding="utf-8") as fh:
             before = fh.read()
         qbefore = self.qtext()
@@ -1379,7 +1384,7 @@ class TestGate(Ported):
 
     def test_a_piped_approve_is_refused_and_names_every_route(self):
         self.open_gate()
-        with open(os.path.join(self.p.root, ".ai", "state", "current.json"), encoding="utf-8") as fh:
+        with open(self.p.state_file(), encoding="utf-8") as fh:
             before = fh.read()
         done = self.p.run("approve", "--by", "ivan")
         self.assertEqual(done.returncode, 5)
@@ -1392,7 +1397,7 @@ class TestGate(Ported):
                       % self.task_id(), done.stderr)
         self.assertIn("AI_UNATTENDED=1 in the launcher's environment; the journal then records the approval as "
                       "unattended.", done.stderr)
-        with open(os.path.join(self.p.root, ".ai", "state", "current.json"), encoding="utf-8") as fh:
+        with open(self.p.state_file(), encoding="utf-8") as fh:
             self.assertEqual(fh.read(), before)
         self.assertFalse(self.approval()["granted"])
 
@@ -1660,7 +1665,7 @@ class TestHandoffFile(Ported):
         self.assertEqual(self.p.state()["handoff"]["file"], ".ai/state/handoff.md")
         before = self.p.state()["updated_at"]
         self.p.ok("handoff", "--reason", "precompact")
-        self.assertEqual(self.p.state()["updated_at"], before)        # handoff alone never writes current.json
+        self.assertEqual(self.p.state()["updated_at"], before)        # handoff alone never writes the state file
         render = lambda: self.p.ok("handoff", "--print").stdout.split("\n")[1:]   # noqa: E731
         self.assertEqual(render(), render())
 
@@ -2295,7 +2300,7 @@ class TestDialogRoute(DialogBase):
         self.p.start()
         self.p.ok("ask", "Which?", "--option", "A: a", "--option", "B: b", "--option", "C: c", "--option", "D: d")
         self.p.append(type="decline", decision="D9", why="empty")
-        path = os.path.join(self.p.root, ".ai", "state", "current.json")
+        path = self.p.state_file()
         with open(path, encoding="utf-8") as fh:
             before = fh.read()
         self.assertEqual(self.p.run("verify", "--scope", "suite").returncode, 4)

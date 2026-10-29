@@ -81,12 +81,18 @@ ROUTER_FILE = ".ai/AGENTS.md"
 SHARED_SECTION_RE = re.compile(rb"(?m)^## Shared files[ \t]*\r?$")
 SHARED_SCHEMA = 6  # the schema from which shared copies are overrides (0006)
 STATE_FILE = ".ai/state/state.json"
-LEGACY_STATE_FILE = ".ai/state/current.json"  # R34: the name until migration 0008 moves it
+LEGACY_STATE_FILE = ".ai/state/current.json"  # R34: the name until migration 0009 moves it
+
+
+# Templates a migration creates exactly once, on the step to the given schema.
+# From that schema on, a missing file is the human's choice (dialog.json missing
+# means the dialog is off), so the template walk must not re-create it.
+CREATE_ONCE = {".ai/policies/dialog.json": 10}
 
 
 def state_file(plan):
     """The task state's path as this run leaves the project: state.json once it
-    exists there (migration 0008 moved it, or the task started under it), else
+    exists there (migration 0009 moved it, or the task started under it), else
     the legacy current.json."""
     if not plan.exists(STATE_FILE) and plan.exists(LEGACY_STATE_FILE):
         return LEGACY_STATE_FILE
@@ -1263,6 +1269,8 @@ def build_plan(root, confirm_delete=None, confirm_via=None):
                 continue
             if rel in plan.removed:  # a migration moved it away in this run
                 continue
+            if rel in CREATE_ONCE and version >= CREATE_ONCE[rel] and not plan.exists(rel):
+                continue  # past the step that created it: its absence is the human's choice
             content = read(os.path.join(tpl, rel))
             if rel.startswith(".ai/project/") or rel.startswith(".ai/reports/"):
                 if not plan.exists(rel):
@@ -1433,7 +1441,8 @@ def apply_item(plan, item, written, recorded):
         if action == "move":
             check(plan, item, target, item["expect"], written)
             mode = os.stat(os.path.join(plan.root, source)).st_mode & 0o7777
-        keep_original(plan, source)
+        if not source.startswith(".ai/state/"):  # git-ignored task state: a move is byte-identical
+            keep_original(plan, source)
         recorded.append(target)
         # Recorded before the file is gone: an abort later must not lose the note
         # of what was taken away, or of who approved a deletion.

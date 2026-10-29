@@ -207,7 +207,6 @@ class TestInstalledPipeline(unittest.TestCase):
                    self.decide(path_guard, "Read", self.edit("src/Payment/Gateway.php")) == "allow")
 
         # a task through the pipeline
-        state_file = os.path.join(repo, ".ai", "state", "current.json")
         done = self.state("start", "--goal", "add a handling fee to the payment gateway", "--workflow", "feature",
                           "--files", "src/Payment/Gateway.php,tests/Payment/*.php",
                           "--tests", "tests/Payment/FeeTest.php",
@@ -215,6 +214,9 @@ class TestInstalledPipeline(unittest.TestCase):
                           "--declare", "novelty=0:an existing gateway")
         self.check("start registers the task and arms the scope guard", done.returncode == 0, done.stderr)
         self.assertEqual(done.returncode, 0)
+        state_file = os.path.join(repo, ".ai", "state", "state.json")
+        if not os.path.exists(state_file):
+            state_file = os.path.join(repo, ".ai", "state", "current.json")
         with open(state_file, encoding="utf-8") as fh:
             current = json.load(fh)
         task = current["task_id"]
