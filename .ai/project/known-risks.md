@@ -745,7 +745,7 @@ following; each is open unless marked.
 - **Found**: 2026-10-29, by T-2026-10-29-1035-redesign-3-6, suite run 1 (`.ai/state/logs/T-2026-10-29-1035-redesign-3-6/suite-1.log`)
 - **Where**: `tests/test_memory_sync.py:320`, `TestConcurrency.test_two_exports_at_once_serialise_on_the_lock`
 - **What could go wrong**: KNOWN FACT — under the whole `unittest discover` run (905 tests, 295 s) it failed with `AssertionError: 'T-2026-10-29-1108-alpha' not found in []`: the export thread that lost the lock reported nothing sealed for its own task, while both tasks did land in the package. Run alone it passed 5 of 5. The task's diff touches no file under `skills/ai-task/` and not the test. INFERENCE — a timing race between the two exports (the loser finds its task already sealed by the winner and reports an empty `sealed`), more likely under load.
-- **How likely / how bad**: intermittent; a red whole-suite verify with no regression behind it, costing one suite run
+- **How likely / how bad**: intermittent but frequent — KNOWN FACT: it failed in T-2026-10-29-0852 suite 1, -1035 suite 1, -1145 suite 3 and T-2026-10-29-1655 suites 1 and 2 (twice in a row); a red whole-suite verify with no regression behind it, costing one suite run
 - **Suggested fix**: decide whether `export` should report a task sealed by a concurrent export as its own (code), or the test should accept it (test) — a task of its own on `skills/ai-task/memory_sync.py`
 - **Status**: open
 - **Label**: KNOWN FACT (failure, isolated passes), INFERENCE (cause)
@@ -759,3 +759,33 @@ following; each is open unless marked.
 - **Suggested fix**: 
 - **Status**: open
 - **Label**: RISK
+
+## usage-report --task counts an unclosed task's tokens up to now (T-2026-10-28-2221)
+
+- **Found**: 2026-10-29, by T-2026-10-29-1655-record-three-out-of-task
+- **Where**: `skills/usage-report/usage-report.py:693`
+- **What could go wrong**: KNOWN FACT — with no task_closed in the journal the window ends at datetime.now(). On 2026-10-29 T-2026-10-28-010 showed 180.5M and -012 121.1M: both include every later session in the project. Affects /rr-status --cost and every measurement made with --task.
+- **How likely / how bad**: every unclosed journal; wrong cost figures, no wrong decision
+- **Suggested fix**: end the window at the journal's last event when there is no task_closed, and say so in the output — a light task of its own
+- **Status**: open
+- **Label**: KNOWN FACT
+
+## T-2026-10-28-010 and -012 have no task_closed although no task is in flight (T-2026-10-28-2221)
+
+- **Found**: 2026-10-29, by T-2026-10-29-1655-record-three-out-of-task
+- **Where**: `.ai/reports/T-2026-10-28-010/events.jsonl (last: gate_approved`, `2026-10-28T20:02:36Z); .ai/reports/T-2026-10-28-012/events.jsonl (last: handoff_written after gate_requested`, `21:40:51Z)`
+- **What could go wrong**: KNOWN FACT — on 2026-10-29 handoff --print found no current.json, yet neither journal ends in task_closed. Everything that reads a duration or tokens from a journal counts them as unclosed. UNKNOWN — how the state was cleared without close.
+- **How likely / how bad**: two journals today; skewed duration and cost figures
+- **Suggested fix**: find how the state was cleared without close — an investigation of its own
+- **Status**: open
+- **Label**: KNOWN FACT
+
+## Guard denies a compound line where a read-only one-liner on .ai/reports/ sits beside a shell $(...) (T-2026-10-28-2221)
+
+- **Found**: 2026-10-29, by T-2026-10-29-1655-record-three-out-of-task
+- **Where**: `hooks/guard/paths.py:160-161`, `1229-1235`
+- **What could go wrong**: KNOWN FACT — on 2026-10-29, in T-2026-10-28-2221, a command line holding a read-only python3 -I -c over events.jsonl and a shell $(grep ...) was refused as an interpreter one-liner that writes control files; T-2026-10-29-1655 hit the same deny recording this entry. INFERENCE (from the regexes, not run) — WRITE_WORD_RE counts $( as a write indicator and interpreter_text scans the whole line, so the unrelated shell part triggers it; -> cannot match WRITE_REDIR_RE (:168) since a space follows the closing quote and comma. A false deny on the safe side; splitting the command avoids it. Related to the entries at :210 and :581.
+- **How likely / how bad**: occasional; one refused command, no wrong allow
+- **Suggested fix**: look for write indicators in the one-liner text only — behaviour 2 (allows what was denied), so full mode under hooks/CLAUDE.md; a task of its own, if done at all
+- **Status**: open
+- **Label**: KNOWN FACT

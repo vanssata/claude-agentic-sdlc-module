@@ -208,16 +208,22 @@ The after cohort by mode. Both tier-surface rows are tier labels, not modes:
   - KNOWN FACT: the cap is `review_rounds_max: 2` (`.ai/policies/weight.json:184`;
     3 for a batch task, `:214`). It is enforced by `state.py review`
     (`skills/ai-task/state.py:3802`).
-- **G4: partly met.** The pinned spellings hold, but a read-only one-liner
-  was refused in this task.
+- **G4: partly met.** The pinned spellings hold, but a command
+  line that held a read-only one-liner beside a shell `$(…)` was refused in
+  this task.
   - KNOWN FACT: `tests/test_ai_path_guard.py:704-722` allows seven read-only
     one-liners (python, perl, node, ruby) and denies the writing ones. `:799`
     allows a write under the ai-init templates during a task.
-  - KNOWN FACT: on 2026-10-29, in this task, a read-only `python3 -I -c` that
-    read `events.jsonl` was refused as "an interpreter one-liner that writes
-    the task's own control files". It was not reworded; the check moved into
-    the measurement script.
-  - INFERENCE: the trigger was a `->` inside a string literal.
+  - KNOWN FACT: on 2026-10-29, in this task, a command line with a
+    read-only `python3 -I -c` that read `events.jsonl` was refused as "an
+    interpreter one-liner that writes the task's own control files". It was not
+    reworded; the check moved into the measurement script.
+  - INFERENCE: from the regexes, not run: `WRITE_WORD_RE` counts `$(` as a
+    write indicator (`hooks/guard/paths.py:160-161`) and `interpreter_text`
+    scans the whole line (`:1229-1235`), so the unrelated shell part
+    triggered the deny; `->` cannot match `WRITE_REDIR_RE` (`:168`) because
+    a space follows `",`. Recorded in `.ai/project/known-risks.md` ("Guard
+    denies a compound line …").
   - UNKNOWN: whether the 17 one-liner denies and 11 read denies after were
     reads.
 - **G5: the shape is met; the minimum is not measured.**
