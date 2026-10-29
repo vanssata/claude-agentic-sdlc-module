@@ -36,16 +36,32 @@ suite passing · e2e not_required · suite runs 2
 
 ## Review
 
-none yet
+### Pass 1 — BALANCED, pass
+
+```
+## FINDINGS
+- [INFO] I1 Shim also reaches tests/test_end_to_end.py:21, tests/test_dialog_gate.py:31, tests/test_dialog_consent.py:27 via imported Project/DialogProject/DialogBase; no behaviour difference found, suite green — state it in the report — tests/test_ai_task_state.py:81-93 — in_scope: yes
+- [INFO] I2 Shim loads state.py from skills/ai-task/__pycache__ (mtime+size validation); same-second same-size edit could run stale bytecode — negligible; __pycache__ gitignored — tests/test_ai_task_state.py:31-34 — in_scope: yes
+- [INFO] I3 Commit 0142ec7 also carries NextIntent.md, docs/sdlc/intent/agentic-sdlc-modes.questions.md, .ai/reports/… outside this task — commit 0142ec7 — in_scope: yes
+
+## VERDICT
+verdict: pass
+```
 
 ## Changes
 
-measured at close
+| File | Change | New/Edit/Delete |
+|---|---|---|
+| NextIntent.md | +1 −0 | New |
+| docs/sdlc/intent/agentic-sdlc-modes.questions.md | +1 −1 | Edit |
+| tests/test_ai_task_state.py | +11 −6 | Edit |
+
++13 −7 lines, 3 files
 
 ## Verdict
 
-close: open — edit, then 'state.py verify --scope all', then 'state.py close'
-facts: (a) not measured · (b) not measured
+close: closed
+facts: (a) green — suite green on d50be0436 (run 3) · (b) RED — outside the task's files: NextIntent.md, docs/sdlc/intent/agentic-sdlc-modes.questions.md
 gate: none
 confirm: none
-handoffs: 3 · suite runs: 2 · review passes: 0
+handoffs: 5 · suite runs: 2 · review passes: 1
