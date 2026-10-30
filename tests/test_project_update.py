@@ -254,6 +254,47 @@ class TestMigration0007(unittest.TestCase):
         for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
             self.assertNotIn("Traceback", out, out)
             self.assertNotRegex(out, r"conflict .*risk-tiers\.json", out)
+        self.assertEqual((dry.returncode, applied.returncode), (0, 0), dry.stdout + applied.stdout)
+        self.assertIn("0007 carry", dry.stdout, "the dry run lists migration 0007")
+
+    def converts_clean(self, text, fname="risk-tiers.json"):
+        """L1: a `fname` convert reads without a crash converts, with no conflict, in a dry run and --apply"""
+        dry, applied, _ = self.deep_project(fname, text)
+        for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+            self.assertNotIn("Traceback", out, out)
+            self.assertNotRegex(out, r"conflict .*%s" % fname.replace(".", r"\."), out)
+        self.assertEqual((dry.returncode, applied.returncode), (0, 0), dry.stdout + applied.stdout)
+
+    def test_a_risk_tiers_json_convert_reads_without_a_crash_converts(self):
+        """L1: examples on a tier convert ignores, path_scopes as an object or a string, a scope named 0 or true
+        with string paths (R-5f4c): no conflict"""
+        self.converts_clean('{"tiers": {"T9": {"examples": "x"}}}')
+        self.converts_clean('{"path_scopes": {"a": 1}}')
+        self.converts_clean('{"path_scopes": "abc"}')
+        self.converts_clean('{"path_scopes": [{"scope": 0, "paths": ["custom/**"]}]}')
+        self.converts_clean('{"path_scopes": [{"scope": true, "paths": ["custom/**"]}]}')
+
+    def test_a_risk_tiers_json_that_is_not_an_object_names_the_type_with_its_article(self):
+        """R-4207: the reason reads "is an int, not an object", not "is a int, not a object" """
+        dry, _, _ = self.deep_project("risk-tiers.json", '{"tiers": 5}')
+        self.assertIn("tiers is an int, not an object", dry.stdout)
+        self.assertNotIn("a object", dry.stdout + dry.stderr)
+
+    def edited_weight(self, edit):
+        """the shipped weight.json as text, after `edit(doc)`"""
+        doc = read_json(os.path.join(POLICIES, "weight.json"))
+        edit(doc)
+        return json.dumps(doc)
+
+    def test_a_weight_json_with_a_null_where_convert_writes_holds_the_schema_not_a_crash(self):
+        """R-30c9: the edited table carries domain modules, and `"modules": null` made _add run on None"""
+        self.malformed_project("weight.json", self.edited_weight(
+            lambda doc: doc["axes"]["domain"].__setitem__("modules", None)), r"weight\.json")
+
+    def test_a_weight_json_hint_with_null_paths_holds_the_schema_not_a_crash(self):
+        """R-30c9: the edited table carries a domain hint, and its `"paths": null` made _add run on None"""
+        self.malformed_project("weight.json", self.edited_weight(
+            lambda doc: doc.update(hints=[{"axis": "domain", "paths": None, "note": "x"}])), r"weight\.json")
 
     def test_a_risk_tiers_json_with_a_list_scope_name_holds_the_schema_not_a_crash(self):
         """R-6ab7: a path scope named by a list made shipped_scopes.get unhashable: a conflict on the table"""
@@ -2074,6 +2115,21 @@ sys.exit(update.main())
         rows = [x for x in out.splitlines() if x.lstrip().startswith("conflict") and "risk-tiers.json" in x]
         self.assertEqual(2, len(rows), out)
         self.assertTrue(any("another reason" in x for x in rows), out)
+
+    def test_a_non_str_note_on_any_action_does_not_crash_the_dedup_check(self):
+        """R-4207: _add reads note.startswith only for a str conflict note, so a non-str note raises nothing"""
+        d = self.v0_project("add-non-str-note")
+        synth = self.synth_0003("synth-non-str-note", "def plan(ctx):\n"
+                                "    n = len(ctx.plan.items)\n"
+                                "    ctx._add(\"create\", \".ai/new-4207.txt\", 5, content=b\"x\")\n"
+                                "    ctx._add(\"conflict\", \".ai/policies/risk-tiers.json\", 5)\n"
+                                "    ctx._add(\"conflict\", \".ai/policies/risk-tiers.json\", 5)\n"
+                                "    ctx._add(\"conflict\", \".ai/policies/risk-tiers.json\", \"nested too deeply\")\n"
+                                "    assert len(ctx.plan.items) - n == 3, ctx.plan.items\n"
+                                "    del ctx.plan.items[n:]\n")
+        _, out = self.upd(d, merge=True, **synth)
+        self.assertNotIn("Traceback", out, out)
+        self.assertNotIn("AttributeError", out, out)
 
     def test_the_nul_safe_untrack_command_does_nothing_when_nothing_is_tracked(self):
         """I2: xargs -r: with no tracked, ignored .ai/state file the printed command exits 0 and leaves the index"""

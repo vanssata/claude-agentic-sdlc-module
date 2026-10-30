@@ -647,10 +647,11 @@ class MigrationContext:
         if not isinstance(kw.get("content", b""), bytes):
             raise SchemaError("%04d: %s content must be bytes, not %s"
                               % (self.module.VERSION, target, type(kw["content"]).__name__))
-        deep = note.startswith("nested too deeply")
+        deep = action == "conflict" and isinstance(note, str) and note.startswith("nested too deeply")
         if action == "conflict" and any(i["action"] == "conflict" and i["target"] == target
                                         and i["migration"] == self.module.VERSION
-                                        and (i["note"] == note or deep and i["note"].startswith("nested too deeply"))
+                                        and (i["note"] == note or deep and isinstance(i["note"], str)
+                                             and i["note"].startswith("nested too deeply"))
                                         for i in self.plan.items):
             return  # one deep file read twice, or read then edited: one row, one held schema
         self.plan.add(action, target, note, migration=self.module.VERSION, **kw)
