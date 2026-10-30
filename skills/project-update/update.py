@@ -606,6 +606,10 @@ class MigrationContext:
         if text not in self.plan.hints:
             self.plan.hints.append(text)
 
+    def conflict(self, path, note):
+        """Hold the schema version on a file this migration could not handle; `note` says why."""
+        self._add("conflict", path, note)
+
     def exists(self, path):
         return self.read(path) is not None
 
@@ -643,9 +647,12 @@ class MigrationContext:
         if not isinstance(kw.get("content", b""), bytes):
             raise SchemaError("%04d: %s content must be bytes, not %s"
                               % (self.module.VERSION, target, type(kw["content"]).__name__))
-        if action == "conflict" and any(i["action"] == "conflict" and i["target"] == target and i["note"] == note
-                                        and i["migration"] == self.module.VERSION for i in self.plan.items):
-            return  # the same file read twice: one row, one held schema
+        deep = note.startswith("nested too deeply")
+        if action == "conflict" and any(i["action"] == "conflict" and i["target"] == target
+                                        and i["migration"] == self.module.VERSION
+                                        and (i["note"] == note or deep and i["note"].startswith("nested too deeply"))
+                                        for i in self.plan.items):
+            return  # one deep file read twice, or read then edited: one row, one held schema
         self.plan.add(action, target, note, migration=self.module.VERSION, **kw)
 
     def create(self, path, content):
@@ -682,7 +689,12 @@ class MigrationContext:
 
     def edit_json(self, path, fn):
         """Rewrite a JSON file the project has. A policy file's leaf changes are
-        listed for confirmation, exactly as a merged policy change is."""
+        listed for confirmation, exactly as a merged policy change is. fn gets a
+        deep copy of the document and returns the new one. It must not walk the
+        document with Python recursion (a file that just passed copy.deepcopy can
+        be 470-490 levels deep at the default limit), or it guards RecursionError
+        itself: an unguarded fn's RecursionError is reported as its own, the run
+        fails and no file is blamed."""
         raw = self.read(path)
         if raw is None:
             return
@@ -701,7 +713,7 @@ class MigrationContext:
         except RecursionError:
             self._add("conflict", path, "nested too deeply, so this migration could not run")
             return
-        # Outside the guard: a RecursionError in the migration's own edit is its bug, not the file's.
+        # Outside the guard: an unguarded fn's RecursionError is reported as its own, not the file's.
         after = fn(copied)
         try:
             if after == before:

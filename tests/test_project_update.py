@@ -236,6 +236,67 @@ class TestMigration0007(unittest.TestCase):
             self.assertRegex(out, r"conflict .*weight\.json.*nested too deeply")
         self.assertEqual("6", version, "a conflict holds the schema version, so the next run tries again")
 
+    def malformed_project(self, name, text, fname):
+        """R-6ab7: a type-malformed `name` policy file is a conflict on `fname`, not a crash, whatever the run"""
+        dry, applied, version = self.deep_project(name, text)
+        for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+            self.assertNotIn("Traceback", out, out)
+            self.assertRegex(out, r"conflict .*%s.*could not run" % fname)
+        self.assertEqual("6", version, "a conflict holds the schema version, so the next run tries again")
+
+    def test_a_risk_tiers_json_with_tiers_a_list_holds_the_schema_not_a_crash(self):
+        """R-6ab7: `"tiers": []` made convert call .items() on a list: a conflict on the table"""
+        self.malformed_project("risk-tiers.json", '{"tiers": []}', r"risk-tiers\.json")
+
+    def test_a_risk_tiers_json_with_a_list_scope_name_holds_the_schema_not_a_crash(self):
+        """R-6ab7: a path scope named by a list made shipped_scopes.get unhashable: a conflict on the table"""
+        self.malformed_project("risk-tiers.json", '{"path_scopes": [{"scope": ["x"], "paths": ["custom/**"]}]}',
+                               r"risk-tiers\.json")
+
+    def test_a_weight_json_that_is_a_list_holds_the_schema_not_a_crash(self):
+        """R-6ab7: a weight.json holding `[]` made convert call new.setdefault on a list: a conflict on it"""
+        self.malformed_project("weight.json", "[]", r"weight\.json")
+
+    # R-5e7a: the encoder does not fail on input json.loads accepts (Python 3.14: the parser stops near
+    # 20000 levels, the encoder writes 19900), so the create path's dump is pinned by an injected fault:
+    # json.dumps raises for a weight table whose tests.timeout_seconds carries "dump_probe".
+    CREATE_DUMP_FAULT = """
+import json, os, sys
+sys.path.insert(0, os.path.dirname(sys.argv[1]))
+import update
+real = json.dumps
+def dumps(obj, *a, **kw):
+    probe = obj.get("tests", {}).get("timeout_seconds") if isinstance(obj, dict) else None
+    if isinstance(probe, dict) and "dump_probe" in probe:
+        raise RecursionError("injected")
+    return real(obj, *a, **kw)
+json.dumps = dumps
+sys.argv = sys.argv[1:]
+sys.exit(update.main())
+"""
+
+    def test_a_carried_scalar_too_deep_to_dump_on_the_create_path_is_a_conflict(self):
+        """R-5e7a: with no weight.json, the create path's compare and dump met a RecursionError (an injected
+        fault): a conflict on risk-tiers.json and a default weight.json, no crash"""
+        p = Project(edited=True, weight=False)
+        try:
+            doc = read_json(p.path("policies", "risk-tiers.json"))
+            doc["sensors"]["tests"]["timeout_seconds"] = {"dump_probe": 1}
+            with open(p.path("policies", "risk-tiers.json"), "w", encoding="utf-8") as fh:
+                json.dump(doc, fh, indent=2)
+            subprocess.run(GIT + ["-C", p.root, "commit", "-qam", "probe"], check=True)
+            for args in ((), ("--apply",)):
+                run = subprocess.run([sys.executable, "-I", "-c", self.CREATE_DUMP_FAULT, UPDATE, p.root, *args],
+                                     env=p.env, capture_output=True, text=True, check=False)
+                out = run.stdout + run.stderr
+                self.assertNotIn("Traceback", out, out)
+                self.assertTrue(has(r"conflict .*risk-tiers\.json.*nested too deeply, so this migration could not run",
+                                    out), out)
+            self.assertEqual("6", p.version(), "a conflict holds the schema version, so the next run tries again")
+            self.assertTrue(os.path.exists(p.path("policies", "weight.json")), "a default weight.json beside it")
+        finally:
+            p.close()
+
     def test_full_apply(self):
         p = Project(edited=True)
         try:
@@ -1981,6 +2042,31 @@ sys.exit(update.main())
         self.assertNotIn("Traceback", out, out)
         rows = [x for x in out.splitlines() if x.lstrip().startswith("conflict") and "risk-tiers.json" in x]
         self.assertEqual(1, len(rows), out)
+
+    def test_reading_then_editing_one_deep_file_reports_one_conflict(self):
+        """R-7f26: read_json then edit_json on one deep file records one conflict row, not two"""
+        d = self.v0_project("read-then-edit-deep")
+        put(os.path.join(d, ".ai", "policies", "risk-tiers.json"), "[" * 200000 + "]" * 200000)
+        synth = self.synth_0003("synth-read-then-edit", "def plan(ctx):\n"
+                                "    ctx.read_json(\".ai/policies/risk-tiers.json\")\n"
+                                "    ctx.edit_json(\".ai/policies/risk-tiers.json\", lambda d: d)\n")
+        _, out = self.upd(d, merge=True, **synth)
+        self.assertNotIn("Traceback", out, out)
+        rows = [x for x in out.splitlines() if x.lstrip().startswith("conflict") and "risk-tiers.json" in x]
+        self.assertEqual(1, len(rows), out)
+
+    def test_another_reason_on_a_deep_file_stays_its_own_conflict_row(self):
+        """R-7f26: the deep-file dedup does not swallow a different reason on the same path"""
+        d = self.v0_project("deep-and-other-reason")
+        put(os.path.join(d, ".ai", "policies", "risk-tiers.json"), "[" * 200000 + "]" * 200000)
+        synth = self.synth_0003("synth-deep-other", "def plan(ctx):\n"
+                                "    ctx.read_json(\".ai/policies/risk-tiers.json\")\n"
+                                "    ctx.conflict(\".ai/policies/risk-tiers.json\", \"another reason\")\n")
+        _, out = self.upd(d, merge=True, **synth)
+        self.assertNotIn("Traceback", out, out)
+        rows = [x for x in out.splitlines() if x.lstrip().startswith("conflict") and "risk-tiers.json" in x]
+        self.assertEqual(2, len(rows), out)
+        self.assertTrue(any("another reason" in x for x in rows), out)
 
     def test_the_nul_safe_untrack_command_does_nothing_when_nothing_is_tracked(self):
         """I2: xargs -r: with no tracked, ignored .ai/state file the printed command exits 0 and leaves the index"""

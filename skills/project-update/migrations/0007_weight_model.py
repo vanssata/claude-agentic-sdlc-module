@@ -168,19 +168,91 @@ def _mode(state):
     return state
 
 
+def _kind(value):
+    return type(value).__name__ if value is not None else "null"
+
+
+def _bad(doc, key, want, what):
+    """A reason when `doc[key]`, present and not null, is not a `want`; else None."""
+    value = doc.get(key)
+    if value is not None and not isinstance(value, want):
+        return "%s is a %s, not a %s" % (what, _kind(value), "list" if want is list else "object")
+    return None
+
+
+def _old_problem(old):
+    """Why the old table cannot be converted (a wrong type where convert reads), or None."""
+    if not isinstance(old, dict):
+        return "risk-tiers.json is a %s, not an object" % _kind(old)
+    why = _bad(old, "tiers", dict, "tiers")
+    for tier, entry in (old.get("tiers") or {}).items() if why is None else ():
+        if isinstance(entry, dict) and entry.get("examples"):
+            why = why or _bad(entry, "examples", list, "tiers.%s.examples" % tier)
+    why = why or (old.get("path_scopes") and _bad(old, "path_scopes", list, "path_scopes"))
+    for scope in old.get("path_scopes") or [] if not why else ():
+        if isinstance(scope, dict):
+            if scope.get("scope") is not None and not isinstance(scope["scope"], str):
+                why = "a path scope's name is a %s, not a string" % _kind(scope["scope"])
+            elif scope.get("paths"):
+                why = _bad(scope, "paths", list, "a path scope's paths")
+            if why:
+                break
+    return why
+
+
+def _new_problem(doc):
+    """Why the weight table `doc` cannot take the conversion (a wrong type where convert writes), or None."""
+    if not isinstance(doc, dict):
+        return "weight.json is a %s, not an object" % _kind(doc)
+    nodes = [(doc, "axes", dict, "axes"), (doc, "examples", dict, "examples"),
+             (doc, "hints", list, "hints"), (doc, "tests", dict, "tests")]
+    axes = doc.get("axes") if isinstance(doc.get("axes"), dict) else {}
+    nodes += [(axes, "domain", dict, "axes.domain"), (axes, "reversibility", dict, "axes.reversibility")]
+    for parent, key, want, what in nodes:
+        why = _bad(parent, key, want, what)
+        if why:
+            return why
+    domain, rev = axes.get("domain"), axes.get("reversibility")
+    for parent, key, what in ((domain, "modules", "axes.domain.modules"),
+                              (rev, "irreversible", "axes.reversibility.irreversible"),
+                              (rev, "needs_step", "axes.reversibility.needs_step")):
+        why = _bad(parent, key, list, what) if isinstance(parent, dict) else None
+        if why:
+            return why
+    for key, value in (doc.get("examples") or {}).items() if isinstance(doc.get("examples"), dict) else ():
+        if value is not None and not isinstance(value, list):
+            return "examples.%s is a %s, not a list" % (key, _kind(value))
+    return None
+
+
 def plan(ctx):
     old = ctx.read_json(OLD)
+    why = _old_problem(old) if old is not None else None
+    if why:
+        ctx.conflict(OLD, "%s, so this migration could not run" % why)
+        old = None
     shipped = _shipped(ctx)
     before = ctx.read(NEW)
     if before is None:
         template = ctx.template(NEW)
         doc = convert(old, _loads(template), shipped) if old is not None else None
-        if doc is None or doc == _loads(template):
-            ctx.create(NEW, template)
-        else:
-            ctx.create(NEW, (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode())
+        try:
+            body = None if doc is None or doc == _loads(template) else \
+                (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode()
+        except RecursionError:  # a deep value carried from the old table: the default beside it holds the schema
+            ctx.conflict(OLD, "nested too deeply, so this migration could not run")
+            body = None
+        ctx.create(NEW, template if body is None else body)
     elif old is not None:
-        ctx.edit_json(NEW, lambda new: convert(old, new, shipped))
+        try:
+            current = json.loads(before)
+        except (ValueError, RecursionError):  # invalid or too deep: edit_json holds the schema
+            current = {}
+        why = _new_problem(current)
+        if why:
+            ctx.conflict(NEW, "%s, so this migration could not run" % why)
+        else:
+            ctx.edit_json(NEW, lambda new: convert(old, new, shipped))
     after = ctx.read(NEW)
     if old is not None and _loads(after) != _loads(before or ctx.template(NEW)):
         ctx.hint("%s now carries this project's risk-tier edits: run `state.py weight --mirror` to "
