@@ -231,7 +231,7 @@ def realpath_m(path):
 
 def find_print(start, maxdepth, prune):
     """`find START -maxdepth N \\( -name A -o … \\) -prune -o -print`, in
-    readdir order, links not followed, errors silent."""
+    name order (not find's readdir order), links not followed, errors silent."""
     def walk(path, name, depth):
         if name in prune:
             return
@@ -243,7 +243,9 @@ def find_print(start, maxdepth, prune):
                 entries = list(it)
         except OSError:
             return
-        for e in entries:
+        # by name, not readdir order: which held file a refusal names must not depend
+        # on the filesystem (ext4 here put .ai/policies first, the CI runner .ai/state)
+        for e in sorted(entries, key=lambda e: e.name):
             try:
                 is_d = e.is_dir(follow_symlinks=False)
             except OSError:

@@ -268,7 +268,8 @@ class ScaffoldDifferentialTest(unittest.TestCase):
                                cwd=cwd, env=e, check=False, timeout=60)
             subst = lambda b: (b.replace(os.fsencode(root), b"<ROOT>").replace(os.fsencode(parent), b"<WORK>")
                                .replace(os.fsencode(plugin), b"<PLUGIN>"))
-            err = subst(p.stderr)
+            # bash 5.2 (the CI runner) prints cd's usage as 5.2 does; the port prints 5.3's
+            err = subst(p.stderr).replace(b"cd [-L|[-P [-e]] [-@]] [dir]", b"cd [-L|[-P [-e]]] [-@] [dir]")
             if case.loose:
                 err = BASH_PREFIX.sub(b"", err)
             records.append((p.returncode, subst(p.stdout), err, snapshot(parent)))
