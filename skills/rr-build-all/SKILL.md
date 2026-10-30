@@ -146,8 +146,8 @@ EOF
 - **pass** → §6.
 - **pass_with_findings** → the in-scope HIGHs, grouped by file, one fixer per group in
   parallel; `$STATE verify --scope all --after-fix "H1,H2: …"`; `$STATE review --closes "H1,H2"`
-  → §6. Each MEDIUM and LOW is one `$STATE memory risk add`, not a fix; only a BLOCKER, a HIGH
-  or a regression buys an `--after-fix` run.
+  → §6. MEDIUM and LOW: `memory risk add` as `/rr-review` §4 says, for every verdict; only a
+  BLOCKER, a HIGH or a regression buys an `--after-fix` run.
 - **blockers_open** → every in-scope BLOCKER and HIGH, grouped by file, one fixer per group in
   parallel; `$STATE verify --scope all --after-fix "B1,H1: …"` (red: §4's batch); then
   **§5 again, a full pass** — a fix batch across many files is a new change, not a scoped one.

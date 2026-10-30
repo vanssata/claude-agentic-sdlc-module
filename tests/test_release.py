@@ -153,6 +153,14 @@ class TestReleaseWorkflow(unittest.TestCase):
         self.assertIn('[ "$RUN_ATTEMPT" = "1" ]', self.verify)
         self.assertIn("github.run_attempt", self.verify)
 
+    def test_a_rerun_fails_when_the_registry_commit_differs(self):
+        head = self.publish.index('npm view "riskrails@$V" gitHead')
+        self.assertLess(self.publish.index('npm view "riskrails@$V" version'), head)
+        self.assertLess(head, self.publish.index("exit 0"))
+        self.assertIn('"$HEAD_SHA" != "$GITHUB_SHA"', self.publish)
+        self.assertIn("exit 1", self.publish[head:self.publish.index("exit 0")])
+        self.assertIn("::warning::", self.publish)
+
     def test_the_empty_token_comment_states_the_unknown(self):
         self.assertIn("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}", self.publish)
         self.assertIn("Not verified here", self.publish)
@@ -204,6 +212,22 @@ class TestSmokeWorkflow(unittest.TestCase):
 
     def test_end_to_end_step_stays(self):
         self.assertIn("AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py", self.text)
+
+    def test_full_job_runs_nightly_and_on_demand_with_the_release_command(self):
+        on = self.text.partition("\non:\n")[2].partition("\npermissions:")[0]
+        self.assertIn("schedule:\n    - cron:", on)
+        self.assertIn("workflow_dispatch:", on)
+        self.assertEqual(on.count("cron:"), 1)
+        smoke, _, full = self.text.partition("\n  full:\n")
+        self.assertIn("github.event_name != 'schedule'", smoke)
+        self.assertIn("github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'", full)
+        release = read(ROOT, ".github/workflows/npm-publish.yml")
+        cmd = re.search(r"run: (python3 -I tests/run_suite\.py .*)\n", release).group(1)
+        self.assertIn("run: " + cmd + "\n", full)
+        self.assertIn('python-version: "3.12"', full)
+        self.assertEqual(full.count("python-version:"), 1)
+        self.assertIn("AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py", full)
+        self.assertIn('AI_TIMED_FACTOR: "3"', full)
 
     def test_matrix_and_tools_check_stay(self):
         self.assertIn('python-version: ["3.11", "3.12", "3.13"]', self.text)

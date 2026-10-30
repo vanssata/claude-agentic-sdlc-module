@@ -36,8 +36,8 @@ npx riskrails@3.0.1 --context default     # the default: each runtime's own wind
 npx riskrails@3.0.1 --statusline-context no  # no model and context line in the statusline (default yes)
 ```
 
-Node 18 or newer and `python3` on `PATH` are required; the installer stops
-with one line when either is missing. From a checkout, `node bin/riskrails.js`
+Node 18 or newer and `python3` (Python 3.11 or newer) on `PATH` are required;
+the installer stops with one line when either is missing. From a checkout, `node bin/riskrails.js`
 takes the same flags. `./install.sh` only prints the `npx` line and exits 2.
 
 **Which runtimes.** `--target auto` installs for each runtime whose CLI is on

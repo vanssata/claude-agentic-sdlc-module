@@ -1,18 +1,23 @@
 # The SMOKE gate: a few fast, environment-independent test files on every push to main and
-# every pull request. The FULL suite runs on release tags (npm-publish.yml) and locally via
-# verify_command in .ai/policies/testing.md.
+# every pull request. The FULL suite runs nightly and on demand (the `full` job below, one
+# Python), on release tags (npm-publish.yml) and locally via verify_command in
+# .ai/policies/testing.md.
 name: Tests
 
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   smoke:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -37,6 +42,35 @@ jobs:
         done
     - name: Run the smoke tests
       run: python3 -I tests/run_suite.py $SMOKE_FILES
+    - name: Run the end-to-end suite
+      if: ${{ !cancelled() }}
+      run: AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
+
+  # The nightly and on-demand full suite: the release command, on the release Python.
+  full:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      AI_TIMED_FACTOR: "3"
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        # The migration test runs `git archive` on an old commit.
+        fetch-depth: 0
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    - name: Check required tools
+      run: |
+        for tool in bash jq git python3 patch diff node; do
+          command -v "$tool" || { echo "missing $tool"; exit 1; }
+        done
+    - name: Run the test suite
+      run: python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath
     - name: Run the end-to-end suite
       if: ${{ !cancelled() }}
       run: AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py

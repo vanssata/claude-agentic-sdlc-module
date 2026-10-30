@@ -92,7 +92,7 @@ PROFILE_SET_VERB = "([[:space:]]+--)?[[:space:]]+" + Q + "profile" + Q + "[[:spa
 PROFILE_SET_RE = (BOUND + "(python3?[[:space:]]+)?" + Q + "[^[:space:]'\"]*state\\.py" + Q + ARGS + PROFILE_SET_VERB
                   + "|" + BOUND + "(python3?[[:space:]]+)?" + Q + VAR + Q + ARGS + PROFILE_SET_VERB)
 BY_TOK = Q + "--by?" + Q + "(=|[[:space:]]|$)"
-MODE_LIGHT = Q + "--mode" + Q + "(=|[[:space:]]+)" + Q + "light" + END
+MODE_LIGHT = Q + "--m(o(d(e)?)?)?" + Q + "(=|[[:space:]]+)" + Q + "light" + END
 SKIP = "([^|;&`]*[[:space:]])?"
 HUMAN_BY_VERB = ("([[:space:]]+--)?[[:space:]]+" + Q + "(verify|review|reject)" + END + SKIP + BY_TOK)
 START_LIGHT_VERB = ("([[:space:]]+--)?[[:space:]]+" + Q + "start" + END + SKIP + "("

@@ -14,12 +14,15 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from guard_harness import PLUGIN  # noqa: E402  pylint: disable=wrong-import-position
 
 GUARD = os.path.join(PLUGIN, "hooks", "context-guard.py")
 NOTICE = os.path.join(PLUGIN, "hooks", "update_notice.py")
+sys.path.insert(0, os.path.join(PLUGIN, "hooks"))
+import update_notice  # noqa: E402  pylint: disable=wrong-import-position,wrong-import-order
 COMMAND = "npx -y riskrails@latest --yes"
 
 
@@ -111,11 +114,15 @@ class TestUpdateNotice(unittest.TestCase):
 
     def test_no_installer_directory_spawns_nothing(self):
         shutil.rmtree(self.config + "/riskrails")
-        self.write_registry(bump(installed("claude")))
-        self.env["RISKRAILS_REGISTRY_URL"] = "file://" + self.registry
-        self.start()
-        time.sleep(0.5)
-        self.assertFalse(os.path.exists(self.config + "/riskrails"))
+        spawned = []
+        env = {k: v for k, v in os.environ.items() if k not in ("CI", "RISKRAILS_NO_UPDATE_CHECK")}
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(update_notice, "spawn_refresh", spawned.append):
+            update_notice.notice("claude", self.config, PLUGIN, time.time())
+            self.assertEqual(spawned, [])
+            os.makedirs(self.config + "/riskrails")      # control: with the directory it spawns
+            update_notice.notice("claude", self.config, PLUGIN, time.time())
+        self.assertEqual(len(spawned), 1)
 
     def test_stale_cache_starts_a_refresh(self):
         self.write_registry(bump(installed("claude"), 2))
@@ -141,6 +148,23 @@ class TestUpdateNotice(unittest.TestCase):
         data = self.read_cache("claude")
         self.assertEqual(data["latest"], "2.0.0")
         self.assertLess(abs(time.time() - data["checked_at"]), 60)
+
+    def test_checked_at_moves_before_the_fetch(self):
+        # A fetch that never returns (killed child) must still have moved checked_at.
+        class Killed(BaseException):
+            pass
+
+        def hang(*_args, **_kwargs):
+            raise Killed()
+
+        path = self.cache_path("claude")
+        self.cache("claude", "2.0.0", age=10 * 86400)
+        with mock.patch.object(update_notice.urllib.request, "urlopen", hang):
+            with self.assertRaises(Killed):
+                update_notice.refresh(path)
+        data = self.read_cache("claude")
+        self.assertLess(abs(time.time() - data["checked_at"]), 60)
+        self.assertEqual(data["latest"], "2.0.0")
 
     def test_failed_first_refresh_records_the_attempt(self):
         self.refresh()

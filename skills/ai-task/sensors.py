@@ -205,7 +205,8 @@ def scope_any(path, patterns):
 # ------------------------------------------------------------------- running
 
 TESTING_FIELDS = ("verify_command", "step_test_command", "e2e_command",
-                  "lint_command", "typecheck_command", "single_test", "doc_tests")
+                  "lint_command", "typecheck_command", "single_test", "doc_tests",
+                  "bite_codes")
 
 SCOPE_FIELD = {"suite": "verify_command", "step": "step_test_command",
                "e2e": "e2e_command", "single": "single_test"}
@@ -235,8 +236,24 @@ def read_commands(root):
         value = match.group(1).strip()
         if value.startswith("#"):
             value = ""
+        # A trailing `  # comment` is not part of `none` or of the code list; a
+        # command value is left exactly as written (a `#` can be part of it).
+        bare = re.sub(r"\s+#.*$", "", value)
+        if field == "bite_codes" or bare.lower() == "none":
+            value = bare
         commands[field] = value
     return commands
+
+
+def bite_codes(root):
+    """The exit codes that count as "the test fails" under --expect fail: the
+    testing.md `bite_codes` list of integers, 1 when absent or not a clean list."""
+    raw = read_commands(root).get("bite_codes", "")
+    try:
+        codes = tuple(int(part) for part in raw.split(","))
+    except ValueError:
+        return (1,)
+    return codes or (1,)
 
 
 def command_for(root, scope):

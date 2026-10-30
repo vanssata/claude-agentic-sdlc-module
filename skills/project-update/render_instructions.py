@@ -166,7 +166,7 @@ def vocabulary(source, runtime):
 
 # The budgets an installed plugin uses: install.sh copies skills/, not
 # instructions/, so runtimes.json is only there in a checkout. Kept equal to
-# `_budgets` in instructions/runtimes.json by tests/test-project-update.sh.
+# `_budgets` in instructions/runtimes.json by tests/test_project_update.py.
 DEFAULT_BUDGETS = {"global": 2560, "project": 2048, "skeleton": 2048, "skeleton-sdlc": 2048}
 
 

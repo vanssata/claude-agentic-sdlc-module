@@ -29,7 +29,12 @@ NAME_RE = re.compile(r"(\d{4})_[a-z0-9_]+\.py")
 # A successor key here joins the rename chain, so an edited file still merges
 # against the version it was installed from. None means the template is simply
 # gone: the key is not an orphan, and there is nothing to merge against.
-RETIRED = {}
+RETIRED = {
+    # Migration 0011: weight.json replaced the tier policy; the project's copies
+    # are proposed for deletion and the plugin no longer ships either file.
+    "ai-init/.ai/policies/risk-tiers.json": None,
+    "ai-init/.ai/policies/risk-tiers.md": None,
+}
 
 
 class SchemaError(Exception):

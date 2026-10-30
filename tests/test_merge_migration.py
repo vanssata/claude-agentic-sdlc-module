@@ -24,7 +24,7 @@ INSTALL = os.path.join(ROOT, "bin", "riskrails.js")  # the installer since 3.5
 TWIN_OF = "test-merge-migration.sh"
 
 CREATED = ("docs/sdlc/README.md", "docs/sdlc/constitution.md", ".claude/settings.json",
-           ".claude/memory/README.md", ".ai/AGENTS.md", ".ai/policies/risk-tiers.json", "CLAUDE.md", ".gitignore")
+           ".claude/memory/README.md", ".ai/AGENTS.md", ".ai/policies/weight.json", "CLAUDE.md", ".gitignore")
 # The plugin supplies the SDLC templates; a project copy is only an override.
 NOT_CREATED = ("docs/sdlc/intent/TEMPLATE.md", "docs/sdlc/specs/TEMPLATE.md",
                "docs/sdlc/plans/TEMPLATE.md", "docs/sdlc/adr/TEMPLATE.md")

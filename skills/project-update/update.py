@@ -20,7 +20,7 @@ Exit codes:
   5  refused: --confirm-delete without a human (ADOPT_REFUSED on stdout line 1)
 
 What it manages, and how:
-  .ai/** the project owns (risk-tiers, path-guard,   three-way update
+  .ai/** the project owns (weight, path-guard,       three-way update
     testing, coding, safety, security, AGENTS.md)
   .ai/** the plugin shares (the other policies,      read from the plugin's shared tree; a project
     agents, workflows, templates)                     copy is an override and is never merged — an
@@ -46,7 +46,7 @@ Three-way update: a file whose content is a version this plugin once shipped was
 never edited, so it is replaced. An edited file is merged against the shipped
 version closest to it (git merge-file for text, per key for JSON), keeping every
 edit. A real conflict leaves the project file alone and puts the plugin's version
-in a git-ignored local directory for a human or /project-update to merge.
+in a git-ignored local directory for a human or /rr-setup --update to merge.
 """
 import argparse, contextlib, copy, difflib, hashlib, importlib.util, io, json, os, re, subprocess, sys, tempfile
 from collections import OrderedDict
@@ -125,7 +125,6 @@ def renamed_markers(block):
 find_block = render_instructions.find_block
 current_markers = render_instructions.current_markers
 MISSING = object()
-HASH_RE = re.compile(rb"sha256:[0-9a-f]{64}")
 
 PROJECT_INIT_MAP = [  # template -> target, kind
     ("sdlc-README.md", "docs/sdlc/README.md", "update"),
@@ -309,6 +308,53 @@ def git_dirty_ai(root):
     return res.returncode == 0 and bool(res.stdout.strip())
 
 
+def git_states(root, rel_dir):
+    """A function path -> how git holds a file under `rel_dir` (project-relative):
+    "tracked" (committed and unchanged), "uncommitted" (changed, staged or not yet
+    tracked, so git has no copy to restore) or "ignored"; None outside a work tree
+    or for a path git does not know."""
+    def run(*args):
+        res = subprocess.run(["git", "-C", root] + list(args), stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, timeout=30)
+        return res.stdout.decode("utf-8", "replace") if res.returncode == 0 else None
+    try:
+        prefix = run("rev-parse", "--show-prefix")
+        tracked = run("ls-files", "-z", "--", rel_dir)
+        status = run("status", "--porcelain=v1", "-z", "--ignored", "-uall", "--", rel_dir)
+    except (OSError, subprocess.SubprocessError):
+        return lambda path: None
+    if prefix is None or tracked is None or status is None:
+        return lambda path: None
+    prefix = prefix.strip()
+    tracked = set(tracked.split("\0"))
+    dirty, ignored = set(), []
+    entries = status.split("\0")
+    skip = False
+    for entry in entries:
+        if skip:  # the origin path of a rename
+            skip = False
+            continue
+        if len(entry) < 4:
+            continue
+        xy, path = entry[:2], entry[3:]
+        if prefix and path.startswith(prefix):
+            path = path[len(prefix):]
+        if "R" in xy or "C" in xy:
+            skip = True
+        if xy == "!!":
+            ignored.append(path)
+        else:
+            dirty.add(path)
+
+    def classify(path):
+        if path in dirty:
+            return "uncommitted"
+        if any(path == i or (i.endswith("/") and path.startswith(i)) for i in ignored):
+            return "ignored"
+        return "tracked" if path in tracked else None
+    return classify
+
+
 # ---------------------------------------------------------------- merging
 def closest(candidates, ours, score):
     best, best_score = None, -1.0
@@ -412,6 +458,22 @@ def detect_version(plan):
     if not re.fullmatch(r"\d+", text):
         raise SchemaError("%s is not a schema number: %r" % (VERSION_FILE, raw[:40]))
     return int(text)
+
+
+def unsafe_path(root, path):
+    """Why a project-relative path must not be deleted: a symlink on the way to it,
+    or a real path outside the project; None when it is safe. Run at plan time and
+    again right before the delete."""
+    real_root = os.path.realpath(root)
+    here = root
+    for part in path.split("/"):
+        here = os.path.join(here, part)
+        if os.path.islink(here):
+            return "%s is a symlink" % os.path.relpath(here, root).replace(os.sep, "/")
+    real = os.path.realpath(os.path.join(root, path))
+    if real != real_root and not real.startswith(real_root + os.sep):
+        return "%s resolves outside the project (%s)" % (path, real)
+    return None
 
 
 class MigrationContext:
@@ -530,16 +592,7 @@ class MigrationContext:
         """Why a file must not be deleted through this path, or None: it is a
         symlink, it is reached through one, or it resolves outside the project."""
         self._check_path(path)
-        root = os.path.realpath(self.root)
-        here = self.root
-        for part in path.split("/"):
-            here = os.path.join(here, part)
-            if os.path.islink(here):
-                return "%s is a symlink" % os.path.relpath(here, self.root).replace(os.sep, "/")
-        real = os.path.realpath(os.path.join(self.root, path))
-        if real != root and not real.startswith(root + os.sep):
-            return "%s resolves outside the project (%s)" % (path, real)
-        return None
+        return unsafe_path(self.root, path)
 
     def override_note(self, path):
         """What an edited copy of a shared file now means."""
@@ -724,6 +777,7 @@ class Plan:
         self.removed = set()  # targets this run takes away
         self.seen = {}    # target -> sha of what was on disk when it was first read,
         #                   or None when nothing was there: apply's precondition
+        self.git_kept = set()  # [cleanup] targets git holds or should hold: a hint and an original/ copy
         self.report_dir = ".ai/reports/project-update-%s" % datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # The project as this run leaves it: planned content first, then the disk.
@@ -779,12 +833,10 @@ def three_way(plan, history, key, target, theirs):
     if ours is None:
         plan.add("create", target, content=theirs)
         return
-    is_mirror = target.endswith(".ai/policies/risk-tiers.md")
-    norm = (lambda b: HASH_RE.sub(b"sha256:" + b"0" * 64, b)) if is_mirror else (lambda b: b)
-    if norm(ours) == norm(theirs):
+    if ours == theirs:
         return
-    versions = [v for v in history.versions(key) if norm(v) != norm(theirs)]
-    if any(norm(v) == norm(ours) for v in versions):
+    versions = [v for v in history.versions(key) if v != theirs]
+    if any(v == ours for v in versions):
         policy = None
         if target.endswith(".json") and "/policies/" in "/" + target:
             try:
@@ -793,7 +845,7 @@ def three_way(plan, history, key, target, theirs):
             except ValueError:
                 policy = None
         plan.add("update", target, "unchanged since it was installed",
-                 content=fix_mirror(plan, target, theirs, ours), policy=policy)
+                 content=theirs, policy=policy)
         return
 
     if target.endswith(".json"):
@@ -814,28 +866,21 @@ def three_way(plan, history, key, target, theirs):
             plan.add("merge", target, "your edits kept", content=dump_json(merged), policy=policy)
         if conflicts:
             plan.add("conflict", target, "kept your value for: " + ", ".join(conflicts), conflict_copy=theirs)
-            model_keys = [c for c in conflicts if c.split(".")[0] == "model_tiers" or ".review_model" in "." + c]
-            if target.endswith("policies/risk-tiers.json") and model_keys:
-                hint = ("%s: %s — the plugin now names tiers (FAST/BALANCED/STRONG/EXPERT), not models; "
-                        "the model of a tier comes from the installed plan: state.py profile --tier <TIER>"
-                        % (target, ", ".join(model_keys)))
-                if hint not in plan.hints:
-                    plan.hints.append(hint)
         return
 
     if target == ROUTER_FILE and len(SHARED_SECTION_RE.findall(ours)) == 1:
         router_merge(plan, ours, versions, theirs)
         return
-    base = closest(versions, norm(ours), lambda b, o: text_ratio(norm(b), o)) if versions else None
-    merged = merge_text(norm(ours), norm(base), norm(theirs)) if base is not None else None
+    base = closest(versions, ours, text_ratio) if versions else None
+    merged = merge_text(ours, base, theirs) if base is not None else None
     if merged is not None and target == ROUTER_FILE and len(SHARED_SECTION_RE.findall(merged)) != 1:
         plan.add("conflict", target, "the merge would not name the shared files exactly once "
                  "(## Shared files)", conflict_copy=theirs)
         return
     if merged is None:
         plan.add("conflict", target, "edited here and changed in the plugin", conflict_copy=theirs)
-    elif merged != norm(ours):
-        plan.add("merge", target, "your edits kept", content=fix_mirror(plan, target, merged, ours))
+    elif merged != ours:
+        plan.add("merge", target, "your edits kept", content=merged)
 
 
 def split_shared_section(text):
@@ -847,8 +892,9 @@ def split_shared_section(text):
         return None
     start = found[0].start()
     nxt = re.compile(rb"(?m)^## ").search(text, found[0].end())
-    if nxt is None:
-        return text[:start], text[start:], b""
+    if nxt is None:  # at the end: the blank line before it belongs to the section
+        head = text[:start]
+        return (head[:-1] if head.endswith(b"\n\n") else head), text[start:], b""
     end = nxt.start()
     eol = text.find(b"\n", end)
     follow = text[end:eol + 1] if eol >= 0 else text[end:]
@@ -872,7 +918,9 @@ def router_merge(plan, ours, versions, theirs):
     if o_rest == t_rest or (base is not None and base == t_rest):
         return
     merged = merge_text(o_rest, base, t_rest) if base is not None else None
-    if merged is not None:
+    if merged is not None and not follow:  # the project had it at the end: it stays there
+        merged = merged + (b"" if merged.endswith(b"\n") else b"\n") + b"\n" + o_sec
+    elif merged is not None:
         merged = put_section(merged, o_sec, [follow, t_split[2] if t_split else b""])
     if merged is None or len(SHARED_SECTION_RE.findall(merged)) != 1:
         plan.add("conflict", ROUTER_FILE, "edited here and changed in the plugin", conflict_copy=theirs)
@@ -893,27 +941,6 @@ def put_section(text, section, follows):
         if m:
             return text[:m.start()] + section + text[m.start():]
     return text + (b"" if text.endswith(b"\n") else b"\n") + section
-
-
-def fix_mirror(plan, target, content, ours):
-    """risk-tiers.md carries the sha256 of risk-tiers.json. Carry the project's sync
-    state forward: a mirror that matched its JSON before this run points at the JSON
-    this run leaves behind; a mirror that was already stale, or a JSON left with a
-    conflict, keeps its old hash so /ai-status keeps warning."""
-    if not target.endswith(".ai/policies/risk-tiers.md"):
-        return content
-    old = HASH_RE.search(ours)
-    # The disk, not the plan: the question is whether the mirror matched the JSON
-    # the project had before this run.
-    json_target = target[:-3] + ".json"
-    json_path = os.path.join(plan.root, json_target)
-    before = read(json_path) if os.path.exists(json_path) else None
-    in_sync = old is not None and before is not None and old.group(0) == b"sha256:" + sha(before).encode()
-    conflicted = any(i["action"] == "conflict" and i["target"] == json_target for i in plan.items)
-    after = plan.final.get(json_target, None if json_target in plan.removed else before)
-    if in_sync and not conflicted and after is not None:
-        return HASH_RE.sub(b"sha256:" + sha(after).encode(), content, count=1)
-    return HASH_RE.sub(old.group(0), content, count=1) if old else content
 
 
 def block_update(plan, history, runtime):
@@ -994,7 +1021,7 @@ def shared_update(plan, history, version):
             edited.append(path)
         elif not named:
             ctx.hint("%s: unedited, but %s does not name the shared files (## Shared files), so the "
-                     "copy stays — restore that section, then run /project-update again"
+                     "copy stays — restore that section, then run /rr-setup --update again"
                      % (path, ROUTER_FILE))
         else:
             candidates.append(path)
@@ -1099,9 +1126,9 @@ def cleanup_update(plan, now=None):
             try:
                 flight = json.loads(raw).get("task_id")
             except (ValueError, AttributeError):
-                pass
+                return  # unreadable: a task may be in flight, so no task is proposed as stale
             break
-    reports = os.path.join(plan.root, ".ai", "reports")
+    reports =os.path.join(plan.root, ".ai", "reports")
     logs = os.path.join(plan.root, ".ai", "state", "logs")
 
     def files(base, rel, only_logs=False, keep=()):
@@ -1129,19 +1156,33 @@ def cleanup_update(plan, now=None):
             why, targets = "[cleanup] log of closed task %s" % task_id, files(logs, task_id, only_logs=True)
         else:
             continue
+        # .ai/reports/ is usually git-tracked; only .ai/state/ is git-ignored run state
+        held = git_states(plan.root, ".ai/reports/" + task_id)
         for target in sorted(targets):
+            note = why
+            state = held(target) if target.startswith(".ai/reports/") else None
+            if state == "tracked":
+                note += "; tracked: git can restore a committed copy"
+            elif state == "uncommitted":
+                note += "; uncommitted: git holds no copy of it"
+            elif state == "ignored":
+                note += "; git-ignored: not recoverable through git"
+            if state in ("tracked", "uncommitted"):
+                plan.git_kept.add(target)
             if plan.confirm_cleanup:
-                plan.add("delete", target, why, reason=why)
+                plan.add("delete", target, note, reason=why)
                 plan.remove(target)
             else:
-                plan.add("delete?", target, why, reason=why)
+                plan.add("delete?", target, note, reason=why)
 
 
 def deletion_hint(plan):
     """M4: git is the rollback of a migration's deletion; it must hold .ai/ first.
-    A [cleanup] deletion is not counted: it is git-ignored run state, not rolled back by git."""
+    A [cleanup] deletion of git-ignored run state is not counted: git does not roll it back;
+    one under .ai/reports/ that git tracks, or should, is."""
     if any(i["action"] in ("delete?", "delete") and i["target"].startswith(".ai/")
-           and not (i.get("reason") or "").startswith("[cleanup]") for i in plan.items) \
+           and (not (i.get("reason") or "").startswith("[cleanup]") or i["target"] in plan.git_kept)
+           for i in plan.items) \
             and git_dirty_ai(plan.root):
         plan.hints.append("commit .ai/ first: git is this migration's rollback "
                           "(`git status -- .ai` lists what it does not hold yet)")
@@ -1364,7 +1405,7 @@ def build_plan(root, confirm_delete=None, confirm_via=None, confirm_cleanup=None
             if stuck:
                 plan.held = version
                 plan.hints.append("the schema stays at %d until %s — resolve a conflict by hand, confirm a "
-                                  "deletion with --apply --confirm-delete NAME, then run /project-update again"
+                                  "deletion with --apply --confirm-delete NAME, then run /rr-setup --update again"
                                   % (version, ", ".join("%s (%s)" % (i["target"], i["action"]) for i in stuck)))
             else:
                 # Last of the migration items: an apply that stops short leaves the
@@ -1428,8 +1469,8 @@ def build_plan(root, confirm_delete=None, confirm_via=None, confirm_cleanup=None
                 ("verify_command", "the feedback loop needs it"),
                 ("step_test_command", "a step runs only its own tests"),
                 ("e2e_command", "e2e runs once at the end of a task; write 'none' if there is no suite"),
-                ("lint_command", "a sensor reads it; run `sensors.py detect`, and write 'none' if there is none"),
-                ("typecheck_command", "a sensor reads it; run `sensors.py detect`, and write 'none' if there is none"),
+                ("lint_command", "a sensor reads it; read the project's config files for it, and write 'none' if there is none"),
+                ("typecheck_command", "a sensor reads it; read the project's config files for it, and write 'none' if there is none"),
             ):
                 if re.search(rb"(?m)^" + field.encode() + rb":[ \t]*(#.*)?$", testing):
                     plan.hints.append(".ai/policies/testing.md: %s is empty — %s" % (field, why))
@@ -1576,14 +1617,19 @@ def apply_item(plan, item, written, recorded):
     mode = None
     if action in ("move", "delete"):
         source = item["src"] if action == "move" else target
+        # the plan-time symlink check is repeated: a path swapped since is refused
+        why = unsafe_path(plan.root, source)
+        if why:
+            raise Abort(item, why)
         check(plan, item, source, item["src_expect"] if action == "move" else item["expect"], written)
         if action == "move":
             check(plan, item, target, item["expect"], written)
             mode = os.stat(os.path.join(plan.root, source)).st_mode & 0o7777
-        # git-ignored task state: a move is byte-identical; a [cleanup] deletion is NOT
+        # git-ignored task state: a move is byte-identical; a [cleanup] deletion of it is NOT
         # recoverable through git (the logs are git-ignored), and copying what it removes
-        # would defeat the cleanup, so no original/ copy is kept
-        if not source.startswith(".ai/state/") and not (item.get("reason") or "").startswith("[cleanup]"):
+        # would defeat the cleanup, so no original/ copy is kept. A report file git tracks,
+        # or should, is kept like any other deletion.
+        if not source.startswith(".ai/state/") and (not cleanup or source in plan.git_kept):
             keep_original(plan, source)
         recorded.append(target)
         # Recorded before the file is gone: an abort later must not lose the note
@@ -1831,7 +1877,7 @@ def main():
         print("project-update: %s" % exc, file=sys.stdout if args.check else sys.stderr)
         return 2
     if plan is None:
-        print("project-update: %s has neither .ai/ nor docs/sdlc/ — run /ai-init or /project-init first" % root,
+        print("project-update: %s has neither .ai/ nor docs/sdlc/ — run /rr-setup first" % root,
               file=sys.stderr)
         return 2
     if not args.check:
@@ -1858,7 +1904,7 @@ def main():
                 bits.append("%d deletion(s) a human must confirm" % deletions)
             if plan.held is not None:
                 bits.append("the schema stays at %d until they are settled" % plan.held)
-            print("project is behind the installed plugin: %s — run /project-update" % ", ".join(bits))
+            print("project is behind the installed plugin: %s — run /rr-setup --update" % ", ".join(bits))
             return 1
         print("project matches the installed plugin" + (" (%d file(s) differ by hand-merge choice)" % conflicts if conflicts else ""))
         return 0

@@ -194,7 +194,7 @@ def find_root(start):
             return d
         parent = os.path.dirname(d)
         if parent == d:
-            die("no .ai/ directory found above %s — run /ai-init first" % start)
+            die("no .ai/ directory found above %s — run /rr-setup first" % start)
         d = parent
 
 
@@ -405,7 +405,7 @@ def claim_runtime(root, state):
                     "state.py --runtime %s handoff --to %s (this shell is neither runtime; "
                     "name the one taking it)" % ((other_runtime(pending),) * 2))
             die("RUNTIME_HANDOFF_PENDING: task %s was handed to %s at %s. Resume it there "
-                "(/ai-task), or take it back here with: %s"
+                "(/rr-build), or take it back here with: %s"
                 % (state.get("task_id"), pending, state["handoff"].get("pending_since"), back), 7)
         # The receiving runtime's first change: the handoff is complete. The
         # move itself was journaled when it was made, so there is no second event.
@@ -1135,7 +1135,7 @@ def find_docs_root(start):
             return d
         parent = os.path.dirname(d)
         if parent == d:
-            die("no docs/sdlc/ directory found above %s — run /sdlc-intent first" % start)
+            die("no docs/sdlc/ directory found above %s — run /rr-spec first" % start)
         d = parent
 
 
@@ -1864,7 +1864,7 @@ def handoff_lines(root, state, reason):
     pending_to = (state.get("handoff") or {}).get("pending_to")
     if pending_to:
         review = state.get("cross_vendor_review") or {}
-        out.append("Handed to %s at %s%s — resume there with /ai-task" % (
+        out.append("Handed to %s at %s%s — resume there with /rr-build" % (
             pending_to, (state.get("handoff") or {}).get("pending_since"),
             " for the cross-vendor review" if review.get("status") == "requested" else ""))
     advice = advisory_line(state)
@@ -1968,7 +1968,7 @@ def handoff_to(args, root):
     emit(root, state, "runtime_handoff", "%s -> %s (%s)" % (source, args.to, via), data)
     write_handoff(root, state, "manual")
     save(root, state)
-    print("Handed %s to %s (%s). In %s, run /ai-task: it resumes from the state file in .ai/state/."
+    print("Handed %s to %s (%s). In %s, run /rr-build: it resumes from the state file in .ai/state/."
           % (state.get("task_id"), args.to, via, args.to))
     print("headless (not run): cd %s && %s" % (shlex.quote(root), RESUME_COMMAND[args.to]))
 
@@ -3252,7 +3252,10 @@ def rescore_weight(root, base_tree, files, current, policy):
                 if line is not None:
                     # The operation's keyword (DROP, ALTER …), not the pattern's
                     # source: it is what a human names in approve --confirm.
-                    operations.append(rx.search(line).group(0).split()[0].upper())
+                    # The first word of the match; a match of only blanks or punctuation
+                    # is named IRREVERSIBLE, never an IndexError.
+                    word = re.search(r"[A-Za-z]+", rx.search(line).group(0))
+                    operations.append(word.group(0).upper() if word else "IRREVERSIBLE")
                     if found.get("reversibility", (0,))[0] < 2:
                         found["reversibility"] = (2, "%s adds %r (irreversible_content %r)"
                                                   % (rel, line.strip()[:60], pattern))
@@ -3899,7 +3902,9 @@ def cmd_verify(args, root):
         run = run_v7(root, state, "suite" if scope == "all" else scope, args, tcfg)
         code = run["exit"]
         if args.expect == "fail":
-            run["bites"] = code == 1       # exit 1 is a failing test; the runner's own usage error (2) is not
+            # exit 1 is a failing test; the runner's own usage error (2) is not, unless
+            # testing.md's bite_codes names it (pytest 1,2 — 2 is a collection error)
+            run["bites"] = code in (safe_sensor(sensors.bite_codes, root) or (1,))
             print("expected fail: %s" % ("the test fails without the fix — it bites" if run["bites"]
                                          else "the test passes without the fix — it does not bite yet"))
             code = 0 if run["bites"] else 1
@@ -4700,9 +4705,11 @@ def abandon_old(_args, root):
     ensure_logs(root, state["task_id"])
     target = os.path.join(logs_dir(root, state["task_id"]), "state.json")
     state["updated_at"] = now()
-    with open(target, "w", encoding="utf-8") as fh:
+    tmp = "%s.%d.tmp" % (target, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(state, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
+    os.replace(tmp, target)
     with contextlib.suppress(OSError):
         os.remove(handoff_path(root))
     remove_state(root)

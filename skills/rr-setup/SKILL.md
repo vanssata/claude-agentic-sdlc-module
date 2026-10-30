@@ -143,9 +143,13 @@ it cannot.
    now supplies (an edited one stays as the project's override); `[cleanup]` —
    the `*.log` files of closed tasks, and the report and log files of an
    abandoned task (its `state.json` stays) or of one unclosed for more than seven
-   days (never the task in flight). `--confirm-delete` does not settle `[cleanup]`
-   rows: they are git-ignored, git cannot restore them, and they have their own
-   command, the human's too, never passed by the agent:
+   days (never the task in flight; and none when `.ai/state/state.json` is unreadable).
+   `--confirm-delete` does not settle `[cleanup]` rows, and the rows differ by kind:
+   files under `.ai/state/logs/` are git-ignored and git cannot restore them; files
+   under `.ai/reports/` are usually tracked, and the row says "tracked: git can restore
+   a committed copy" or, when git holds no committed copy, "uncommitted" — then
+   commit `.ai/` first (the hint says so), and an `original/` copy is kept as for any
+   other deletion. They have their own command, the human's too, never passed by the agent:
    `python3 "<home>/skills/project-update/update.py" "<project>" --apply --confirm-cleanup "<your name>"`.
    Show both groups as printed. For 0006 (shared files) the order is:
    `install.sh` for every runtime used, commit `.ai/`, read the `delete?` list,

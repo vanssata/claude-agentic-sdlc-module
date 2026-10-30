@@ -109,6 +109,15 @@ jobs:
         set -euo pipefail
         V="${GITHUB_REF_NAME#v}"
         if [ "$(npm view "riskrails@$V" version 2>/dev/null || true)" = "$V" ]; then
+          # A rerun must publish the same commit: a tag re-pointed since the upload fails here.
+          HEAD_SHA="$(npm view "riskrails@$V" gitHead 2>/dev/null || true)"
+          if [ -n "$HEAD_SHA" ] && [ "$HEAD_SHA" != "$GITHUB_SHA" ]; then
+            echo "riskrails@$V on the registry was built from $HEAD_SHA, not $GITHUB_SHA: the tag was re-pointed."
+            exit 1
+          fi
+          if [ -z "$HEAD_SHA" ]; then
+            echo "::warning::riskrails@$V has no gitHead on the registry; cannot compare it with $GITHUB_SHA."
+          fi
           echo "riskrails@$V is already on the registry; skipping the upload, going on to the Release."
           exit 0
         fi

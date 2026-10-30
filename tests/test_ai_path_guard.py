@@ -5,6 +5,7 @@ ai-path-guard: fixtures plus the "no .ai/ means no guard" property.
 The sections run in the shell suite's order against one project tree, and each
 moves the task state file as the shell one did: test_NN_ names keep the order.
 """
+import json
 import os
 import shutil
 import sys
@@ -184,6 +185,10 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             st + " start --goal g --mode=light --by=ivan",
             st + " start --goal g --mode 'light' --by ivan",
             'S=/h/state.py; $S start --mode light --by ivan',
+            st + " start --goal g --mo light --by ivan",
+            st + " start --goal g --mod=light --by ivan",
+            st + " start --m light --by ivan",
+            st + " start --by ivan --mod light",
         ]:
             self.decide("denied: " + c, "deny", self.b(c))
         for c in [
@@ -195,6 +200,7 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             st + " batch off --by ivan --why w",
             st + " start --goal g --mode light",
             st + " start --goal g --mode lighter --by ivan",
+            st + " start --goal g --mo lighter --by ivan",
             st + " verify --scope all",
             "echo 'state.py start --mode light' && git log --by-me",
         ]:
@@ -212,6 +218,15 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
                    self.b("S=/h/state.py\n" + "$S start --mode light " * 10000 + "--by x"), 1000)
         self.timed("a 20 KB state.py verify line of --b padding ending in --by is denied", "deny",
                    self.b("python3 /h/state.py verify " + "--b " * 5000 + "--by x"), 1000)
+        # START_LIGHT_VERB on the Python path (4096 characters or fewer never reach grep_q): 270
+        # repeated `$S start --by ` heads and a trailing `xlight`, the dialog off (register #3).
+        self.timed("a 3.8 KB line of repeated $S start --by heads ending in xlight is allowed", "allow",
+                   self.b("S=/h/state.py; " + "$S start --by " * 270 + "xlight"), 1000)
+        # register #42 I1: jq skips a leading UTF-8 BOM, so the payload decides as it does without one.
+        denied = json.dumps(self.b(st + " verify --by ivan"))
+        for label, raw in (("without a BOM", denied), ("with a leading BOM", "\ufeff" + denied)):
+            with self.subTest("a denied payload " + label + " is denied"):
+                self.assertEqual(decision(run(GUARD, raw)[1]), "deny", label)
         self.state("{}\n")
 
     def test_07_the_context_guard_is_the_runtimes_to_run(self):

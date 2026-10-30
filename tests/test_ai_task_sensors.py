@@ -180,6 +180,22 @@ class TestSensors(unittest.TestCase):
         self.assertEqual(done.stdout.strip(), "0 notty read=1",
                          "run_command gives the command /dev/null, not a terminal, as stdin")
 
+    def test_read_commands_strips_a_trailing_comment_only_for_none_and_bite_codes(self):
+        self.write(".ai/policies/testing.md", TESTING_MD + "doc_tests: none  # no docs suite\n"
+                   "lint_command: make lint  # all of it\nbite_codes: 1, 2  # pytest\n")
+        commands = sensors.read_commands(self.root)
+        self.assertEqual(commands["doc_tests"], "none")
+        self.assertEqual(commands["lint_command"], "make lint  # all of it")
+        self.assertEqual(sensors.bite_codes(self.root), (1, 2))
+
+    def test_bite_codes_default_and_invalid(self):
+        self.assertEqual(sensors.bite_codes(self.root), (1,))
+        for text in ("bite_codes: x\n", "bite_codes: 1,,2\n", "bite_codes:\n"):
+            self.write(".ai/policies/testing.md", TESTING_MD + text)
+            self.assertEqual(sensors.bite_codes(self.root), (1,), text)
+        self.write(".ai/policies/testing.md", TESTING_MD + "bite_codes: 101\n")
+        self.assertEqual(sensors.bite_codes(self.root), (101,))
+
     def test_read_commands_reads_doc_tests(self):
         self.write(".ai/policies/testing.md", TESTING_MD + "doc_tests:          tests/test_a.py tests/test_b.py\n")
         self.assertEqual(sensors.read_commands(self.root)["doc_tests"], "tests/test_a.py tests/test_b.py")
