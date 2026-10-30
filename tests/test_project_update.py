@@ -245,8 +245,15 @@ class TestMigration0007(unittest.TestCase):
         self.assertEqual("6", version, "a conflict holds the schema version, so the next run tries again")
 
     def test_a_risk_tiers_json_with_tiers_a_list_holds_the_schema_not_a_crash(self):
-        """R-6ab7: `"tiers": []` made convert call .items() on a list: a conflict on the table"""
-        self.malformed_project("risk-tiers.json", '{"tiers": []}', r"risk-tiers\.json")
+        """R-6ab7: `"tiers": ["x"]` made convert call .items() on a list: a conflict on the table"""
+        self.malformed_project("risk-tiers.json", '{"tiers": ["x"]}', r"risk-tiers\.json")
+
+    def test_a_risk_tiers_json_with_tiers_empty_converts_as_before(self):
+        """R-c34d: `"tiers": []` is falsy, so convert reads it as no tiers, as before the shape checks: no conflict"""
+        dry, applied, _ = self.deep_project("risk-tiers.json", '{"tiers": []}')
+        for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+            self.assertNotIn("Traceback", out, out)
+            self.assertNotRegex(out, r"conflict .*risk-tiers\.json", out)
 
     def test_a_risk_tiers_json_with_a_list_scope_name_holds_the_schema_not_a_crash(self):
         """R-6ab7: a path scope named by a list made shipped_scopes.get unhashable: a conflict on the table"""

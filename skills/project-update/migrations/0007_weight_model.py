@@ -184,7 +184,7 @@ def _old_problem(old):
     """Why the old table cannot be converted (a wrong type where convert reads), or None."""
     if not isinstance(old, dict):
         return "risk-tiers.json is a %s, not an object" % _kind(old)
-    why = _bad(old, "tiers", dict, "tiers")
+    why = _bad(old, "tiers", dict, "tiers") if old.get("tiers") else None  # falsy: convert reads no tiers
     for tier, entry in (old.get("tiers") or {}).items() if why is None else ():
         if isinstance(entry, dict) and entry.get("examples"):
             why = why or _bad(entry, "examples", list, "tiers.%s.examples" % tier)
