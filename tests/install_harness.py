@@ -14,7 +14,9 @@ import unittest
 
 TESTS = os.path.dirname(os.path.abspath(__file__))
 PLUGIN = os.path.dirname(TESTS)
-INSTALLER = ["node", os.path.join(PLUGIN, "bin", "riskrails.js")]
+# node by its absolute path, found on this process's PATH: a suite that cuts PATH to
+# /usr/bin:/bin would otherwise miss a node installed elsewhere (CI's setup-node).
+INSTALLER = [shutil.which("node") or "node", os.path.join(PLUGIN, "bin", "riskrails.js")]
 
 
 def env_with(**overrides):

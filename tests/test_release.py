@@ -8,6 +8,7 @@ Every case works on a copy in a temporary directory.
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -114,11 +115,21 @@ class TestReleaseWorkflow(unittest.TestCase):
 
     def test_verify_job_runs_the_gates(self):
         for needle in ('tools/sync-version.py --check --tag "$GITHUB_REF_NAME"',
-                       "unittest discover -s tests -p 'test_*.py'",
+                       "python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed"
+                       " --serial test_dialog_gate.TestGateFastPath",
                        "AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py",
                        "pylint $(git ls-files '*.py')", "npm pack --dry-run", "npm view"):
             self.assertIn(needle, self.verify)
         self.assertIn("contents: read", self.verify)
+
+    def test_verify_job_prepares_the_full_suite(self):
+        suite = self.verify.index("tests/run_suite.py")
+        self.assertNotIn("unittest discover -s tests -p 'test_*.py'", self.verify)
+        self.assertEqual(self.verify.count("actions/setup-node@v4"), 1)
+        self.assertLess(self.verify.index("actions/setup-node@v4"), suite)
+        self.assertIn("fetch-depth: 0", self.verify[:self.verify.index("Set up Python")])
+        self.assertIn('AI_TIMED_FACTOR: "3"', self.verify)
+        self.assertLess(self.verify.index('AI_TIMED_FACTOR: "3"'), suite)
 
     def test_publish_job_is_gated_and_has_provenance(self):
         self.assertIn("needs: verify", self.publish)
@@ -136,6 +147,56 @@ class TestReleaseWorkflow(unittest.TestCase):
         if not os.path.exists(notice):
             self.skipTest("hooks/update_notice.py not written yet")
         self.assertIn(COMMAND, read(ROOT, "hooks/update_notice.py"))
+
+
+SMOKE = ("test_release.py", "test_update_notice.py", "test_install_routes.py",
+         "test_shared_tree.py", "test_skills_surface.py", "test_context_guard.py")
+
+
+class TestSmokeWorkflow(unittest.TestCase):
+    """The smoke gate (tests.yml), checked as text."""
+
+    def setUp(self):
+        self.text = read(ROOT, ".github/workflows/tests.yml")
+
+    def test_triggers_on_pull_request_and_push_to_main(self):
+        on = self.text.partition("\non:\n")[2].partition("\npermissions:")[0]
+        self.assertIn("push:\n    branches: [main]", on)
+        self.assertIn("pull_request:", on)
+        self.assertNotIn("tags", on)
+
+    def test_runs_the_smoke_files_through_the_parallel_runner(self):
+        self.assertIn("python3 -I tests/run_suite.py $SMOKE_FILES", self.text)
+        listed = re.search(r"SMOKE_FILES: >-\n((?:\s+tests/\S+.*\n)+)", self.text)
+        self.assertIsNotNone(listed)
+        files = listed.group(1).split()
+        self.assertEqual(sorted(files), sorted("tests/" + n for n in SMOKE))
+        for name in files:
+            self.assertTrue(os.path.isfile(os.path.join(ROOT, name)), name)
+        self.assertNotIn("unittest discover -s tests -p 'test_*.py'", self.text)
+
+    def test_end_to_end_step_stays(self):
+        self.assertIn("AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py", self.text)
+
+    def test_matrix_and_tools_check_stay(self):
+        self.assertIn('python-version: ["3.11", "3.12", "3.13"]', self.text)
+        self.assertIn("for tool in bash jq git python3 patch diff", self.text)
+
+
+class TestInstallHarnessNode(unittest.TestCase):
+    """The install suites run the installer with PATH cut to /usr/bin:/bin. A bare "node"
+    is looked up on that PATH, and setup-node installs under /opt/hostedtoolcache: the
+    release run 40973600734 failed with FileNotFoundError 'node' (review B1)."""
+
+    def test_the_installer_names_node_by_its_absolute_path(self):
+        sys.path.insert(0, os.path.join(ROOT, "tests"))
+        try:
+            import install_harness  # pylint: disable=import-outside-toplevel
+        finally:
+            sys.path.pop(0)
+        node = install_harness.INSTALLER[0]
+        self.assertTrue(os.path.isabs(node), "INSTALLER runs %r, resolved on the caller's PATH" % node)
+        self.assertEqual(os.path.realpath(node), os.path.realpath(shutil.which("node")))
 
 
 if __name__ == "__main__":
