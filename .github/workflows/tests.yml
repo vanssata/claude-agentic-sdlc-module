@@ -1,3 +1,6 @@
+# The SMOKE gate: a few fast, environment-independent test files on every push to main and
+# every pull request. The FULL suite runs on release tags (npm-publish.yml) and locally via
+# verify_command in .ai/policies/testing.md.
 name: Tests
 
 on:
@@ -9,13 +12,18 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  smoke:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         # 3.10 joins once the suite is green on it (known-risks: "The suite is red on Python 3.10")
         python-version: ["3.11", "3.12", "3.13"]
+    env:
+      # The smoke list, one place. Keep it to files that are fast and need no network.
+      SMOKE_FILES: >-
+        tests/test_release.py tests/test_update_notice.py tests/test_install_routes.py
+        tests/test_shared_tree.py tests/test_skills_surface.py tests/test_context_guard.py
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
@@ -27,8 +35,8 @@ jobs:
         for tool in bash jq git python3 patch diff; do
           command -v "$tool" || { echo "missing $tool"; exit 1; }
         done
-    - name: Run the test suite
-      run: python3 -I -m unittest discover -s tests -p 'test_*.py'
+    - name: Run the smoke tests
+      run: python3 -I tests/run_suite.py $SMOKE_FILES
     - name: Run the end-to-end suite
       if: ${{ !cancelled() }}
       run: AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
