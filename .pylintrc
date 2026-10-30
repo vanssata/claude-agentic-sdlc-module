@@ -7,6 +7,10 @@
 
 [MAIN]
 py-version=3.11
+# The gate (CI, release, lint_command): any error or fatal fails, and so does a score
+# under 9.9; warnings and refactor messages are reported without failing the run.
+fail-on=E,F
+fail-under=9.9
 
 [MESSAGES CONTROL]
 disable=
