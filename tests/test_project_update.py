@@ -1460,6 +1460,31 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertFalse(has("tracked by git but ignored", out), "outside a git work tree there is no hint\n" + out)
         self.assertNotIn("Traceback", out, "and no crash")
 
+    def test_tracked_ignored_hint_quotes_the_path(self):
+        """M1: the untrack command quotes a name with a space; a name with a control character is shown
+        escaped and gets the NUL-safe command instead, so it neither forges a line nor prints a raw name"""
+        def git(d, *args):
+            subprocess.run(GIT + ["-C", d] + list(args), env=self.env, check=True, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+
+        d = self.current_project("tracked-ignored-odd-names")
+        git(d, "init", "-q")
+        spaced, forged = ".ai/state/a b.jsonl", ".ai/state/n\nl; touch pwn #.jsonl"
+        for rel in (spaced, forged):
+            put(os.path.join(d, rel), '{"v":1}\n')
+            git(d, "add", "-f", "--", rel)
+        git(d, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "track odd names")
+
+        _, out = self.upd(d, merge=True)
+        self.assertIn("git rm --cached -- '.ai/state/a b.jsonl'", out, "a space is quoted\n" + out)
+        self.assertFalse(any(line.lstrip().startswith("l; touch pwn") for line in out.splitlines()),
+                         "a newline in a name forges no line\n" + out)
+        self.assertIn(".ai/state/n\\nl; touch pwn #.jsonl: tracked by git", out, "the name is shown escaped\n" + out)
+        self.assertNotIn("git rm --cached -- .ai/state/n", out, "no command with the raw name\n" + out)
+        self.assertNotIn("git rm --cached -- '.ai/state/n", out, "nor a quoted one that spans lines\n" + out)
+        self.assertIn("git ls-files -z -ci --exclude-standard -- .ai/state | xargs -0 git rm --cached --", out,
+                      "the NUL-safe command instead\n" + out)
+
     def test_every_history_key_is_accounted_for(self):
         """every key in the template history is accounted for"""
         rc, out = self.run_([sys.executable, "-I", "-c", HISTORY_KEYS, ROOT], merge=True)

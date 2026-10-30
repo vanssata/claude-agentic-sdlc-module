@@ -48,7 +48,7 @@ version closest to it (git merge-file for text, per key for JSON), keeping every
 edit. A real conflict leaves the project file alone and puts the plugin's version
 in a git-ignored local directory for a human or /rr-setup --update to merge.
 """
-import argparse, contextlib, copy, difflib, hashlib, importlib.util, io, json, os, re, subprocess, sys, tempfile
+import argparse, contextlib, copy, difflib, hashlib, importlib.util, io, json, os, re, shlex, subprocess, sys, tempfile
 from collections import OrderedDict
 from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
@@ -1247,11 +1247,16 @@ def tracked_ignored_hint(plan):
     for raw in res.stdout.split(b"\0"):
         path = raw.decode("utf-8", "replace")
         if path:
+            # A control character in the name would forge a report line or break the
+            # copy-paste command: show it escaped, and untrack by the NUL-safe listing.
+            shown = "".join(c if c.isprintable() else repr(c)[1:-1] for c in path)
+            command = ("git rm --cached -- %s" % shlex.quote(path) if shown == path else
+                       "git ls-files -z -ci --exclude-standard -- .ai/state | xargs -0 git rm --cached --")
             plan.hints.append("%s: tracked by git but ignored by .gitignore — the rule has no "
                               "effect on a tracked file, so every run leaves the tree dirty and "
                               "`git commit -a` sweeps it in; untrack it yourself: "
-                              "`git rm --cached -- %s` and commit (the file stays on disk)"
-                              % (path, path))
+                              "`%s` and commit (the file stays on disk)"
+                              % (shown, command))
 
 
 def rendered_rules(plan):
