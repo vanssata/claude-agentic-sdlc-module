@@ -171,10 +171,11 @@ it cannot.
    (`paths:` and a body). `overrides the plugin's shared copy`: offer to diff
    each and delete those that add nothing. `foreign structure detected`: offer
    **--adopt**. `tracked by git but ignored`: show the line as printed and give
-   the human the command it prints, exactly, plus a commit, for their own
-   terminal (never build one from the path; the NUL-safe form untracks every such
-   file; a second machine runs the same before its next pull, else a
-   modify/delete conflict); never run it yourself.
+   the human the command it prints, exactly as printed, plus a commit, for their
+   own terminal (never rebuilt from the path; only the xargs form untracks every
+   such file under `.ai/state`, a printed `rm --cached -- <path>` one file; a
+   second machine runs the same before its next pull, else a modify/delete
+   conflict); never run it yourself.
 7. `$UPDATE --check` and `git diff --stat`; say what changed, what you merged
    and what is the human's. Suggest `git add -A .ai docs/sdlc .gitignore` plus
    the runtime directories and instruction files.

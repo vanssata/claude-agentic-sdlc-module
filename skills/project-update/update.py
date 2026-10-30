@@ -629,6 +629,12 @@ class MigrationContext:
             return json.loads(raw, object_pairs_hook=OrderedDict)
         except ValueError:
             return None
+        except RecursionError:
+            # Not "absent": a file nested past the parser's limit is there. None would let a
+            # migration create or overwrite what it cannot read; the conflict holds the schema
+            # version (the next run tries again), and the migration goes on as if it were absent.
+            self._add("conflict", path, "nested too deeply, so this migration could not read it")
+            return None
 
     # ---- operations. Each is idempotent: a target already in its final state
     # records nothing, so a re-run after an interrupted apply is a no-op.
@@ -684,11 +690,19 @@ class MigrationContext:
             # the schema version, so the next run tries again.
             self._add("conflict", path, "is not valid JSON, so this migration could not run (%s)" % exc)
             return
-        after = fn(copy.deepcopy(before))
-        if after == before:
+        except RecursionError:
+            self._add("conflict", path, "nested too deeply, so this migration could not run")
             return
-        policy = leaf_changes(before, after) if "/policies/" in "/" + path else None
-        self._add("update", path, "migrated", content=dump_json(after), policy=policy)
+        try:
+            after = fn(copy.deepcopy(before))
+            if after == before:
+                return
+            policy = leaf_changes(before, after) if "/policies/" in "/" + path else None
+            content = dump_json(after)
+        except RecursionError:  # copying, the migration's edit, comparing, or writing past the limit
+            self._add("conflict", path, "nested too deeply, so this migration could not run")
+            return
+        self._add("update", path, "migrated", content=content, policy=policy)
 
     def patch_state(self, fn):  # noqa: D401
         """Change the task in flight. update.py writes the state file the
@@ -861,6 +875,7 @@ def weight_mirror(plan, history, theirs):
     disk = read(path) if os.path.isfile(path) and not os.path.islink(path) else None
     after = plan.read(WEIGHT_JSON)
     fresh = None
+    rendering_raised = False
     if ours is not None and disk is not None and after is not None:
         try:
             if ours == render_weight(disk):
@@ -869,12 +884,14 @@ def weight_mirror(plan, history, theirs):
             # not a table the renderer reads (or too deep, or no temp dir, or no renderer):
             # the text merge decides, and it is always safe
             fresh = None
+            rendering_raised = True
             # L3: say so, so a renderer bug is not read as a hand-edited mirror
             plan.hints.append("%s: not rendered from weight.json (%s); merged as text"
                               % (WEIGHT_MD, type(exc).__name__))
     if fresh is None:
         three_way(plan, history, "ai-init/" + WEIGHT_MD, WEIGHT_MD, theirs)
-        stale = stale_mirror_hint(ours, disk)
+        # L4: not when the renderer raised: `state.py weight --mirror` would fail the same way
+        stale = None if rendering_raised else stale_mirror_hint(ours, disk)
         if stale:
             plan.hints.append(stale)
     elif fresh != ours:
@@ -910,7 +927,7 @@ def three_way(plan, history, key, target, theirs):
             try:
                 policy = leaf_changes(json.loads(ours, object_pairs_hook=OrderedDict),
                                       json.loads(theirs, object_pairs_hook=OrderedDict))
-            except (ValueError, RecursionError):  # nested past the recursion limit: no policy lines
+            except ValueError:  # ours or the template is not JSON: no policy lines
                 policy = None
         plan.add("update", target, "unchanged since it was installed",
                  content=theirs, policy=policy)
@@ -932,13 +949,14 @@ def three_way(plan, history, key, target, theirs):
             conflicts = []
             merged = merge_json(base, o, t, [], conflicts)
             policy = leaf_changes(o, merged) if "/policies/" in "/" + target else None
+            content = dump_json(merged) if merged != o else None
         except RecursionError:
             plan.add("conflict", target, "nested too deeply; not merged", conflict_copy=theirs)
             return
         if merged == o and not conflicts:
             return
         if merged != o:
-            plan.add("merge", target, "your edits kept", content=dump_json(merged), policy=policy)
+            plan.add("merge", target, "your edits kept", content=content, policy=policy)
         if conflicts:
             plan.add("conflict", target, "kept your value for: " + ", ".join(conflicts), conflict_copy=theirs)
         return

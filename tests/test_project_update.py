@@ -199,6 +199,35 @@ class TestMigration0007(unittest.TestCase):
         finally:
             p.close()
 
+    def deep_project(self, name, deep, **kw):
+        """A schema-6 project (edited risk tiers) whose `name` policy file is `deep`; the output of --apply"""
+        p = Project(edited=True)
+        try:
+            with open(p.path("policies", name), "w", encoding="utf-8") as fh:
+                fh.write(deep)
+            subprocess.run(GIT + ["-C", p.root, "commit", "-qam", "deep"], check=True)
+            dry = p.update()
+            applied = p.update("--apply")
+            return dry, applied, p.version()
+        finally:
+            p.close()
+
+    def test_a_risk_tiers_json_nested_past_the_parser_limit_holds_the_schema_not_a_crash(self):
+        """L2: read_json meets a RecursionError (200000 levels): a conflict on the table, the schema stays put"""
+        dry, applied, version = self.deep_project("risk-tiers.json", "[" * 200000 + "]" * 200000)
+        for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+            self.assertNotIn("Traceback", out, out)
+            self.assertRegex(out, r"conflict .*risk-tiers\.json.*nested too deeply")
+        self.assertEqual("6", version, "a conflict holds the schema version, so the next run tries again")
+
+    def test_a_weight_json_nested_past_the_copy_limit_holds_the_schema_in_the_migration(self):
+        """L2: edit_json's copy.deepcopy meets a RecursionError (parses at 3000 levels): a conflict, no crash"""
+        dry, applied, version = self.deep_project("weight.json", '{"a":' * 3000 + "1" + "}" * 3000)
+        for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+            self.assertNotIn("Traceback", out, out)
+            self.assertRegex(out, r"conflict .*weight\.json.*nested too deeply")
+        self.assertEqual("6", version, "a conflict holds the schema version, so the next run tries again")
+
     def test_full_apply(self):
         p = Project(edited=True)
         try:
@@ -1834,6 +1863,41 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertTrue(has("conflict .*weight.json.*nested too deeply", out), out)
         rc, out = self.upd(d, "--apply", merge=True)
         self.assertNotIn("Traceback", out, out)
+
+    def test_a_weight_json_nested_past_the_parser_limit_is_a_conflict_not_a_crash(self):
+        """M1: json.loads itself raises RecursionError (200000 levels, past the C scanner's limit): a conflict"""
+        d = self.current_project("weight-json-unparseable-deep")
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        put(wj, "[" * 200000 + "]" * 200000)
+        rc, out = self.upd(d, merge=True)
+        self.assertNotIn("Traceback", out, out)
+        self.assertTrue(has("conflict .*weight.json.*nested too deeply", out), out)
+        rc, out = self.upd(d, "--apply", merge=True)
+        self.assertNotIn("Traceback", out, out)
+
+    def test_a_renderer_that_raises_on_a_stale_mirror_draws_no_regenerate_hint(self):
+        """L4: when the renderer raised, the stale hint (state.py weight --mirror fails the same way) is left out"""
+        d = self.mirrored_project("weight-mirror-render-raises-stale")
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        put(wj, '{"axes": [1]}')  # the renderer cannot read it, and the mirror names another JSON
+        rc, out = self.upd(d, merge=True)
+        self.assertNotIn("Traceback", out, out)
+        self.assertTrue(has(r"weight\.md: not rendered from weight\.json \(AttributeError\); merged as text", out), out)
+        self.assertNotIn("rendered from a different weight.json", out, out)
+        self.assertNotIn("state.py weight --mirror", out, out)
+
+    def test_a_policy_nested_past_the_parser_limit_makes_a_migrations_edit_json_a_conflict(self):
+        """L2: edit_json's json.loads meets a RecursionError (200000 levels; 0007's own loads cannot get this far,
+        so the synthetic 0003 edits the table): a conflict on the path, the schema stays unwritten, no crash"""
+        d = self.v0_project("edit-json-deep")
+        put(os.path.join(d, ".ai", "policies", "risk-tiers.json"), "[" * 200000 + "]" * 200000)
+        synth = {"CLAUDE_AGENTIC_MIGRATIONS": SYNTH, "CLAUDE_AGENTIC_TEMPLATES": self.next_templates()}
+        for args in ((), ("--apply",)):
+            _, out = self.upd(d, *args, merge=True, **synth)
+            self.assertNotIn("Traceback", out, out)
+            self.assertTrue(has(r"conflict .*risk-tiers\.json.*nested too deeply", out), out)
+        self.assertFalse(os.path.exists(os.path.join(d, ".ai", "VERSION")),
+                         "a conflict holds the schema version, so the next run tries again")
 
     def test_the_nul_safe_untrack_command_does_nothing_when_nothing_is_tracked(self):
         """I2: xargs -r: with no tracked, ignored .ai/state file the printed command exits 0 and leaves the index"""
