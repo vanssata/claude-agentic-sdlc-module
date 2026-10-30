@@ -128,11 +128,15 @@ class TestUpdateNotice(unittest.TestCase):
         self.write_registry(bump(installed("claude"), 2))
         self.env["RISKRAILS_REGISTRY_URL"] = "file://" + self.registry
         self.start()
+        # The refresh writes the cache twice (checked_at first, then latest): wait for the value.
+        latest = None
         for _ in range(50):
             if os.path.exists(self.cache_path("claude")):
-                break
+                latest = self.read_cache("claude").get("latest")
+                if latest is not None:
+                    break
             time.sleep(0.1)
-        self.assertEqual(self.read_cache("claude")["latest"], bump(installed("claude"), 2))
+        self.assertEqual(latest, bump(installed("claude"), 2))
 
     def test_refresh_writes_the_cache(self):
         self.write_registry("9.9.9")
