@@ -10,3 +10,4 @@ __pycache__/
 .ai/state/*.tmp
 .ai/local/
 files
+.ai/state/*.jsonl

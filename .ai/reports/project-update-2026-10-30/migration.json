@@ -1,7 +1,9 @@
 {
   "from": null,
   "to": 10,
-  "applied_at": "2026-10-30T01:00:15Z",
+  "target": 11,
+  "held_at": 10,
+  "applied_at": "2026-10-30T09:50:37Z",
   "ops": [
     {
       "action": "delete",

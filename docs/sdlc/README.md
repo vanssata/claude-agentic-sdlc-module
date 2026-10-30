@@ -22,9 +22,9 @@ and the next stage reads it.
 | `constitution.md` | `/rr-setup`, then you | the principles the project does not negotiate, cited as `C<n>` in specs, plans and reviews; at most 15 lines |
 
 The skills fill in the plugin's templates
-(`skills/project-init/templates/{spec,plan,adr}.md`); a folder holds a
-`TEMPLATE.md` only when this project overrides the plugin's, and the skills read
-that one first. Commit the artefacts with the code they describe, so the
+(`$AI_HOME/skills/project-init/templates/{intent,spec,plan,adr}.md`, in the
+installed plugin); to override one, copy it to `docs/sdlc/<folder>/TEMPLATE.md`
+and edit it — the skills read that one first. Commit the artefacts with the code they describe, so the
 reasoning survives the pull request. A task's own record — weight, plan, questions, verify runs, review,
 verdict — is not here but in `.ai/reports/<task-id>/task.md`, written by
 `state.py`.
