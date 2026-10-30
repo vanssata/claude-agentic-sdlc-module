@@ -954,6 +954,19 @@ class TestProjectAdopt(unittest.TestCase):  # pylint: disable=too-many-public-me
         self.assertTrue(rc == 4 and has("^ADOPT_INCOMPLETE: .*CLAUDE.md: a split needs a proposal", first(out)),
                         "a split candidate with no proposal exits 4 and writes nothing (R8)\n" + out)
 
+    def test_apply_reports_a_migration_schema_error_as_exit_2_not_a_traceback(self):
+        """R-adopt-turns-a-migration-schemaerror: a migration's SchemaError reaches plain_pending through the
+        gates; --adopt --apply says why on stderr and exits 2 (not 5, not a traceback), as update.py does"""
+        d = self.fixture("cursor", "schema-error")
+        mig = self.path("migrations-schema-error")
+        shutil.copytree(os.path.join(PU, "migrations"), mig, ignore=shutil.ignore_patterns("__pycache__"))
+        put(os.path.join(mig, "0012_bad_note.py"), 'VERSION = 12\nTITLE = "a note that is not a str"\nMOVES = []\n\n\n'
+            'def plan(ctx):\n    ctx.conflict(".ai/policies/risk-tiers.json", 5)\n')
+        rc, out = self.upd(d, "--adopt", "--apply", merge=True, CLAUDE_AGENTIC_MIGRATIONS=mig)
+        self.assertEqual(2, rc, out)
+        self.assertIn("note must be str, not int", out, out)
+        self.assertNotIn("Traceback", out, out)
+
     def test_r6_r15_apply_once_keep_originals(self):  # pylint: disable=too-many-statements
         """R6, R15: apply once, keep the originals, and a second run changes nothing"""
         a = self.fixture("speckit", "applied")

@@ -1413,7 +1413,11 @@ def apply_run(plan, args, u, skeleton_cap, instruction_files=frozenset(), shippe
     tools = [t.strip() for t in args.tool.split(",")] if args.tool else None
     resume_dir, resume = partial_record(root)
     planned_writes = set(resume.get("planned_writes", [])) if resume else set()
-    refusal = gates(root, u, planned_writes)
+    try:
+        refusal = gates(root, u, planned_writes)
+    except u.SchemaError as exc:  # plain_pending builds the plan: a migration's error is exit 2, as in update.py
+        print("project-update: %s" % exc, file=sys.stderr)
+        return 2
     if refusal:
         return refuse(*refusal)
     plan.report_dir = plan.adopt_report_dir = resume_dir or ".ai/reports/adopt-%s" % today()

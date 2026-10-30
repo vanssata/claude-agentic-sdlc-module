@@ -352,10 +352,10 @@ class TestMigration0007(unittest.TestCase):
                                r"risk-tiers\.json")
         boolean = '{"tiers": {"T1": {"examples": true}}}'
         self.malformed_project("risk-tiers.json", boolean, r"risk-tiers\.json")
-        self.assertIn("is a boolean, not a list", self.conflict_line("risk-tiers.json", boolean))
+        self.assertIn("tiers.T1.examples is a boolean, not a list", self.conflict_line("risk-tiers.json", boolean))
         string = '{"path_scopes": [{"scope": "payments", "paths": "abc"}]}'
         self.malformed_project("risk-tiers.json", string, r"risk-tiers\.json")
-        self.assertIn("is a string, not a list", self.conflict_line("risk-tiers.json", string))
+        self.assertIn("a path scope's paths is a string, not a list", self.conflict_line("risk-tiers.json", string))
 
     def test_a_risk_tiers_json_that_is_not_an_object_names_the_type_with_its_article(self):
         """R-4207: the reason reads "is a number, not an object", with the article of the JSON word"""

@@ -23,7 +23,10 @@ this directory, named `NNNN_slug.py`, numbered contiguously from `0001`, with
 - Operations are planned, never written: the dry run must list everything.
   Paths are project-relative and normalised, and content is `bytes`; the
   `note` of `ctx.conflict` / `ctx.edit_text` and the `reason` of `ctx.delete` are
-  `str`. Any other type stops the update with a SchemaError (exit 2).
+  `str`. The type is checked when the operation is planned: any other type stops
+  the update with a SchemaError (exit 2). A call that changes nothing (an
+  `edit_text` whose `fn` returns its input, a `delete` of a path that is not
+  there) plans nothing and is not checked.
 - `ctx.edit_json(path, fn)` hands `fn` a deep copy of the document and takes the
   new one back. `fn` must not recurse in Python over the document (a file that
   passed the deep copy can still be ~470-490 levels deep), or it guards
