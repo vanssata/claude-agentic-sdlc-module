@@ -23,9 +23,11 @@ INSTALL = os.path.join(ROOT, "bin", "riskrails.js")  # the installer since 3.5
 
 TWIN_OF = "test-merge-migration.sh"
 
-CREATED = ("docs/sdlc/README.md", "docs/sdlc/intent/TEMPLATE.md", "docs/sdlc/specs/TEMPLATE.md",
-           "docs/sdlc/plans/TEMPLATE.md", "docs/sdlc/adr/TEMPLATE.md", ".claude/settings.json",
-           ".claude/memory/README.md", ".ai/AGENTS.md", ".ai/policies/risk-tiers.json", "CLAUDE.md", ".gitignore")
+CREATED = ("docs/sdlc/README.md", "docs/sdlc/constitution.md", ".claude/settings.json",
+           ".claude/memory/README.md", ".ai/AGENTS.md", ".ai/policies/weight.json", "CLAUDE.md", ".gitignore")
+# The plugin supplies the SDLC templates; a project copy is only an override.
+NOT_CREATED = ("docs/sdlc/intent/TEMPLATE.md", "docs/sdlc/specs/TEMPLATE.md",
+               "docs/sdlc/plans/TEMPLATE.md", "docs/sdlc/adr/TEMPLATE.md")
 
 
 def read(path):
@@ -162,6 +164,9 @@ class TestScaffoldsCompose(unittest.TestCase):
         for f in CREATED:
             with self.subTest(Template("$f created").substitute(f=f)):
                 self.assertTrue(os.path.lexists(os.path.join(self.repo, f)), f + " missing")
+        for f in NOT_CREATED:
+            with self.subTest(Template("$f not created").substitute(f=f)):
+                self.assertFalse(os.path.lexists(os.path.join(self.repo, f)), f + " scaffolded")
 
     def test_project_files(self):
         claude_md = read(os.path.join(self.repo, "CLAUDE.md"))

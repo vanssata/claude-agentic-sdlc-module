@@ -523,7 +523,7 @@ class TestContextGuard(unittest.TestCase):  # pylint: disable=too-many-public-me
         ctx = ctx_of(self.ai_event("SessionStart", "startup"))
         self.assertIn("# Handoff — " + task, ctx, "the frame is handoff.md, rendered by state.py")
         self.assertIn("keep the legacy gateway", ctx, "with the decisions the journal holds")
-        self.assertIn("Resume with: /ai-task --resume", ctx, "and it says how to resume")
+        self.assertIn("Resume with: /rr-build --resume", ctx, "and it says how to resume")
 
         # R7: no decision depends on a payload key.
         bare = self.run_guard({"hook_event_name": "SessionStart", "session_id": "ai1"}, cwd=aip)

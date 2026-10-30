@@ -18,7 +18,7 @@ approval. Risky actions are stopped by a hook, not by a polite request in a
 prompt.
 
 ```bash
-npx riskrails@3.0.1   # detects Claude Code, Codex or both (Node 18+, python3)
+npx riskrails@3.0.1   # detects Claude Code, Codex or both (Node 18+, Python 3.11+)
 ```
 
 Then, in any project: `/rr-setup` once, and `/rr-build <what you want>` for
@@ -96,11 +96,11 @@ version. Step by step, in this order:
    constitution C5 as `0010` hints) or set `"enabled": false`; and tune the
    weight table — `domain.modules`, `customer_visible`, `hot_paths`,
    `needs_step`, `irreversible` — then `state.py weight --mirror`.
-6. **Verify**: `/rr-status` shows schema 10 and no task in flight; a
+6. **Verify**: `/rr-status` shows schema 11 and no task in flight; a
    `/rr-build` on a small change runs light and closes on the two facts.
    Commit `.ai/`.
 
-Every machine of a team upgrades the plugin before a project at schema 10 is
+Every machine of a team upgrades the plugin before a project at schema 11 is
 committed; an older plugin refuses such a project. Rollback and the full
 migration table are in [docs/project-update.md](docs/project-update.md); the
 home-side details in [docs/installation.md](docs/installation.md).
@@ -263,7 +263,7 @@ python3 -I -m unittest discover -s tests -p 'test_*.py'      # CI's serial oracl
 AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
 ```
 
-Fifty-six suites, 979 tests, about 75 seconds in parallel. The guards against JSON fixtures for both runtimes and a
+Fifty-nine suites, 1045 tests, about 75 seconds in parallel. The guards against JSON fixtures for both runtimes and a
 golden of 1 341 recorded decisions, byte for byte, with timed cases that hold
 the hot path under its budget; the state machine, the weight, the batch loop,
 the dialog contract and the documents rule; the compact record and its

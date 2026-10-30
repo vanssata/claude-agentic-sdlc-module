@@ -72,8 +72,8 @@ The ledger is what replaces agent memory. Without it, every pass is pass one.
 ## 3. Findings are fixed as one batch, and re-review is scoped, not repeated
 
 A review returns all its findings at once, and they are fixed at once: one
-`state.py remediate` step whose scope is the finished steps plus what the
-findings name, every BLOCKER and HIGH addressed in it, then the verification
+fix batch (`state.py start --amend` widens the task to the finished steps plus
+what the findings name), every BLOCKER and HIGH addressed in it, then the verification
 command once. Never one fix, one run, one re-review per finding — that is the
 serial loop the measurements below describe, and the remediation of one finding
 is where the next regression comes from.
@@ -98,13 +98,12 @@ shipped), each after a fix batch — before the same stop: the pass past that
 number is the human's. The reviewer's verdict says which closing rule applies:
 `blockers_open` (a BLOCKER) takes the remediation and the scoped re-review;
 `pass_with_findings` (a HIGH, no BLOCKER) takes the remediation and a green
-verification run, no re-review; `pass` closes. `state.py` has no value of its
-own for `pass_with_findings` yet: it is recorded as `blockers_open`, stays so
-after the green run, and the close summary names the labels that run closed.
+verification run, no re-review; `pass` closes. `state.py review --verdict`
+takes all three values.
 
-## 3a. The boundary of a direct-mode review
+## 3a. The boundary of a light or guarded review
 
-Below T5 the review is bounded. Its inputs are the task goal, the diff, the
+In light and guarded the review is bounded. Its inputs are the task goal, the diff, the
 tests the step names, and the project's own fixture corpus and threat model —
 `.ai/policies/safety.md`, the guards' `*-defaults.json`, the test fixtures.
 The reviewer works its whole list inside that corpus; what it may not do is
@@ -117,8 +116,8 @@ it only towards `yes`.
 
 A guard whose input is any shell line is a bottomless well for an unbounded
 reviewer: every pass finds a new input nobody will type, and every fix for one
-is the next pass's target. The boundary is what lets a review end. At T5 and
-T6 there is none — the reviewer's list applies unbounded, as the cost of being
+is the next pass's target. The boundary is what lets a review end. In full
+mode there is none — the reviewer's list applies unbounded, as the cost of being
 wrong there warrants.
 
 ## 4. Split one pass into parallel dimensions, not serial rounds
@@ -174,37 +173,35 @@ script, or run it yourself:
 A review pass spent on a self-contradictory risk register is a pass not spent on
 the code. When a task closes a gap that a register entry calls open, the entry is
 corrected **in the same step as the fix**, not later. When the plan gains a
-remediation, the plan gains a section — at T4 and above the artefact a human
+remediation, the plan gains a section — in guarded and full the artefact a human
 approves must describe the change that exists, and a diff wider than the plan is
 invisible to the path guard, because the file set never changed.
 
 ## 8. The one thing the sensors may replace
 
-At T3 and below, when every sensor in `risk-tiers.json` `required_for_skip` is
-green or explicitly not applicable **on the tree as it is now**, the model
-review is replaced by the sensor set and `state.py review-gate` records
-`review_status: skipped_green`. This is the intent's decision 6, and it is an
-exception to the rule below, written here so the two do not contradict each
-other.
+In light mode, when the two facts `close` measures are green **on the tree as
+it is now** — a green whole-suite `verify` and every changed file inside the
+task's files — the model review is replaced by the sensor set and the task
+closes without one. This is the intent's decision 6, and it is an exception to
+the rule below, written here so the two do not contradict each other.
 
 It is narrow on purpose. The skip requires that the suite passed on this exact
-tree, that the tests the plan named **fail without the change** (`bite` — a
-green suite that never reaches the diff is not evidence), that the diff is
-inside its budget — the budget is advisory for the tier, never for the skip —
-and that the tier re-scored from the real diff is still T3 or lower. A missing
-linter is not green: `unavailable` keeps the review, and only a human writing
-`lint_command: none` says the project has no linter. No
-sensor writes `skipped_green` by asserting it — `review-gate` reaches it from
-measurements, and `state.py set review_status skipped_green` is refused.
+tree, and that the tests the plan named **fail without the change** (`bite` — a
+green suite that never reaches the diff is not evidence). The mode is the one
+re-scored from the real diff: a diff that raises it to guarded or full keeps the
+review. A missing linter is not green: `unavailable` keeps the review, and only
+a human writing `lint_command: none` says the project has no linter. No
+sensor skips the review by asserting it — `close` reaches it from
+measurements.
 
-From T4 the review always runs. What the sensors change there is where it
-starts: their rows are in the ledger, CONFIRMED, before the reviewer plans its
-work.
+In guarded and full the review always runs. What the sensors change there is
+where it starts: their rows are in the ledger, CONFIRMED, before the reviewer
+plans its work.
 
 ## What this policy will not trade away
 
-- No review stage the tier requires is skipped, shortened, or merged — except
-  the T2/T3 model review, and only under §8's measured conditions.
+- No review stage the mode requires is skipped, shortened, or merged — except
+  the light-mode model review, and only under §8's measured conditions.
 - No reviewer is moved to a cheaper model to go faster. Narrow the surface, never
   the mind.
 - A blocker still returns to implementation, however late it arrives. Past the

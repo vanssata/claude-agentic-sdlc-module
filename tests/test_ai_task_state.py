@@ -19,6 +19,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(ROOT, "skills", "ai-task", "state.py")
@@ -584,6 +585,86 @@ class TestSurface(Base):
         self.assertEqual(self.p.run("verify", "--scope", "suite", "--expect", "fail").returncode, 1)
         self.assertEqual(self.p.state()["verify"]["suite_runs"], 0)       # a step run is not a suite run
 
+    def test_expect_fail_a_runner_usage_error_is_not_a_bite(self):
+        # Register E3: exit 2 is the runner's own usage error, not a failing test.
+        self.p.write(".ai/policies/testing.md", "verify_command: true\nstep_test_command: sh -c 'exit 2' {files}\n"
+                                                "e2e_command: true\n")
+        self.p.start()
+        done = self.p.run("verify", "--scope", "step", "--files", "tests/test_widget.py", "--expect", "fail")
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn("does not bite", done.stdout)
+        self.assertFalse(self.p.state()["verify"]["runs"][-1]["bites"])
+
+    def _bite_run(self, extra, code=2):
+        self.p.write(".ai/policies/testing.md", "verify_command: true\nstep_test_command: sh -c 'exit %d' {files}\n"
+                                                "e2e_command: true\n%s" % (code, extra))
+        self.p.start()
+        return self.p.run("verify", "--scope", "step", "--files", "tests/test_widget.py", "--expect", "fail")
+
+    def test_bite_codes_default_is_exit_1_only(self):
+        for extra in ("", "bite_codes:   # the template's comment, no value\n", "bite_codes: one,two\n"):
+            self.assertEqual(self._bite_run(extra).returncode, 1, extra)
+            self.assertFalse(self.p.state()["verify"]["runs"][-1]["bites"], extra)
+            self.p.ok("close", "--abandon")
+
+    def test_bite_codes_name_the_runners_failing_codes(self):
+        done = self._bite_run("bite_codes: 1,2\n")
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertIn("it bites", done.stdout)
+        self.assertTrue(self.p.state()["verify"]["runs"][-1]["bites"])
+        self.p.ok("close", "--abandon")
+        done = self._bite_run("bite_codes: 101  # cargo\n", code=101)
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertTrue(self.p.state()["verify"]["runs"][-1]["bites"])
+        self.p.ok("close", "--abandon")
+        self.assertEqual(self._bite_run("bite_codes: 101\n", code=1).returncode, 1)   # 1 is no longer listed
+
+    def test_abandon_old_writes_the_archive_atomically(self):
+        # Register #9: a failed write leaves no torn state.json at the target.
+        target = os.path.join(self.p.root, ".ai", "state", "logs", "T-OLD", "state.json")
+        for patched in (mock.patch.object(state_mod.json, "dump", side_effect=OSError("disk full")),
+                        mock.patch.object(state_mod.os, "replace", side_effect=OSError("disk full"))):
+            self.p.write(".ai/state/current.json", json.dumps({
+                "task_id": "T-OLD", "goal": "g", "workflow": "feature", "risk_tier": "T2",
+                "current_stage": "implementation", "approved_plan": {"ref": "inline", "steps": []}}))
+            with patched, self.assertRaises(OSError):
+                state_mod.abandon_old(None, self.p.root)
+            self.assertFalse(os.path.exists(target))
+        with mock.patch.object(state_mod.os, "replace", wraps=os.replace) as replaced:
+            state_mod.abandon_old(None, self.p.root)
+        self.assertIn(target, [call.args[1] for call in replaced.call_args_list])
+        self.assertEqual(self.p.archived("T-OLD")["result"], "abandoned")
+
+    def test_event_note_is_the_agents_and_a_hook_event_stays_the_hooks(self):
+        # Register E5: only the hooks write model_fallback; a note comes from the agent.
+        self.p.start()
+        self.p.ok("event", "note", "--data", '{"kind":"decision","text":"x"}')
+        self.p.ok("event", "model_fallback", "--data", "{}")
+        actors = {e["event"]: e["actor"] for e in self.p.events(self.task_id())}
+        self.assertEqual((actors["note"], actors["model_fallback"]), ("agent", "hook"))
+
+    def test_archive_writes_the_archived_state_atomically(self):
+        # Register E7: temp file, then os.replace onto .ai/state/logs/<task>/state.json.
+        self.p.start()
+        state = self.p.state()
+        target = os.path.join(self.p.root, ".ai", "state", "logs", state["task_id"], "state.json")
+        with mock.patch.object(state_mod.os, "replace", wraps=os.replace) as replaced:
+            state_mod.archive_v7(self.p.root, state, state_mod.current_tree(self.p.root), "abandoned")
+        self.assertIn(target, [call.args[1] for call in replaced.call_args_list])
+        self.assertEqual(self.p.archived(state["task_id"])["task_id"], state["task_id"])
+
+    def test_status_rereads_a_filled_answer(self):
+        # Register E10: a hand-filled [Answer]: is not pending, with no `questions --sync` between.
+        self.p.start()
+        self.p.ok("ask", "Which rule?", "--option", "A: a", "--option", "B: b", "--by", "planner")
+        self.assertIn("questions: 1 pending", self.p.ok("status").stdout)
+        path = os.path.join(self.p.root, ".ai", "reports", self.task_id(), "task.md")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(re.sub(r"(?m)^\[Answer\]:.*$", "[Answer]: B", text, count=1))
+        self.assertIn("questions: 0 pending", self.p.ok("status").stdout)
+
     def test_drop_table_rescores_to_full_irreversible(self):
         # R26: the diff adds DROP TABLE to a migration; verify raises the mode.
         self.p.start(files="db/migrations/0002_drop.sql")
@@ -945,6 +1026,24 @@ class TestRescore(unittest.TestCase):
         for axes, mode in (({}, "light"), ({"scope": 2, "behaviour": 1}, "guarded"),
                            ({"domain": 2}, "full"), ({"domain": 2, "reversibility": 2}, "full_irreversible")):
             self.assertEqual(state_mod.mode_for(axes, self.policy), mode)
+
+    def test_an_irreversible_pattern_that_starts_with_a_blank_is_nameable(self):
+        # Register #46: the keyword is the first run of letters, so no IndexError and a confirm can name it.
+        with open(os.path.join(ROOT, "skills", "ai-init", "templates", ".ai", "policies", "weight.json"),
+                  encoding="utf-8") as fh:
+            table = json.load(fh)
+        table["axes"]["reversibility"]["irreversible_content"] = [r"[;\s]+PURGE", r"\s\s"]
+        p = Project(files={".ai/policies/weight.json": json.dumps(table), "db/migrations/0002.sql": "-- x\n"})
+        self.addCleanup(p.close)
+        p.ok("start", "--goal", "g", "--workflow", "feature", "--files", "db/migrations/0002.sql",
+             "--tests", "tests/test_widget.py")
+        p.write("db/migrations/0002.sql", "SELECT 1; PURGE t;\n")
+        p.ok("verify", "--scope", "suite")
+        self.assertEqual(p.state()["weight"]["operations"], ["PURGE"])
+        self.assertTrue(state_mod.confirm_names("PURGE the table", ["PURGE"]))
+        p.write("db/migrations/0002.sql", "a  b\n")          # only the blank-only pattern matches
+        p.ok("verify", "--scope", "suite")
+        self.assertIn("IRREVERSIBLE", p.state()["weight"]["operations"])
 
     def documents_project(self):
         """A scratch project whose own table has the `documents` key, and a task over README.md alone."""
@@ -1810,7 +1909,7 @@ class TestWP5(Ported):
                           line["data"]["reason"], line["actor"]),
                          ("claude", "codex", "manual", False, "claude quota", "agent"))
         with open(os.path.join(self.p.root, ".ai", "state", "handoff.md"), encoding="utf-8") as fh:
-            self.assertRegex(fh.read(), r"(?m)^Handed to codex at .* resume there with /ai-task")
+            self.assertRegex(fh.read(), r"(?m)^Handed to codex at .* resume there with /rr-build")
         self.assertEqual(self.s("claude", "handoff", "--to", "codex").returncode, 2)
         ask = ("ask", "q", "--option", "A: a", "--option", "B: b")
         refused = self.s("claude", *ask)
@@ -1927,7 +2026,7 @@ class TestNoTask(unittest.TestCase):
             self.assertEqual(fh.read(), "not json at all", "and is left exactly as it was")
 
     def test_no_ai_at_all(self):
-        self.assertIn("run /ai-init first", self.run_state(self.tmp.name, "status"),
+        self.assertIn("run /rr-setup first", self.run_state(self.tmp.name, "status"),
                       "a project without .ai/ says what to do")
 
     def test_topic_questions_live_with_the_document(self):
@@ -2956,6 +3055,27 @@ class TestDocumentsOnly(unittest.TestCase):
                          ["README.md", "docs/a/b.md", "docs/x.json", ".ai/state/x.json"])
         self.assertFalse(state_mod.is_document("README.md", {}), "no `documents` key: nothing is a document")
         self.assertEqual(state_mod.NEVER_DOCUMENTS, (".ai/policies/**", ".ai/rules/**"))
+
+    def test_a_red_full_run_after_g_with_no_tree_is_off(self):
+        # Register E2: a red whole-suite run whose tree moved (tree None) after G still stops the rule.
+        self.project()
+        self.green_then(("README.md", "# edited\n"))
+        self.p.ok(*self.DOC_RUN)
+        state = self.p.state()
+        state["verify"]["runs"].append({"n": 3, "scope": "suite", "exit": 1, "tree": None})
+        with open(self.p.state_file(), "w", encoding="utf-8") as fh:
+            json.dump(state, fh)
+        self.close_refused(self.OLD)
+
+    def test_a_glob_beside_documents_does_not_start_light(self):
+        # Register E4: README.md,src/** — the glob can hold code, so P fails and the task is not light.
+        self.project()
+        start = ("start", "--goal", "fix a typo", "--workflow", "feature", "--tests", "tests/test_docs.py")
+        self.p.ok(*start, "--files", "README.md")
+        self.assertEqual(self.p.state()["mode"], "light")
+        self.p.ok("close", "--abandon")
+        self.p.ok(*start, "--files", "README.md,src/**")
+        self.assertNotEqual(self.p.state()["mode"], "light")
 
     # D5
 

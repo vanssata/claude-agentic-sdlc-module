@@ -47,13 +47,15 @@ else runs in between.
   which, in one line; silence is not a verdict.
 - A failure in a step's own tests is fixed in that step, before `step-done`;
   the batch rule below is for the two end-of-task runs.
+- After a green suite, a documents-only edit runs `doc_tests` (step scope), not the suite.
 
 ## Reading a failure
 
 **Run to the end, then fix as one batch.** The verification command runs with
 no fail-fast flag and is never interrupted at the first failure. Collect every
-failure, classify each one, fix all the new regressions in a single remediation
-step (`state.py remediate`), and run the command once more. One failure never
+failure, classify each one, fix all the new regressions in one batch
+(`state.py start --amend` widens the task when a fix needs more files), and run the
+command once more. One failure never
 sends the task back to the start: the plan, the tier and the finished steps
 stand. At most two remediation rounds; a third means the human decides.
 
@@ -65,6 +67,9 @@ Classify before fixing. The four answers are:
 - **TEST ENVIRONMENT FAILURE** — database, fixtures, network, container. Say what
   is missing.
 - **UNKNOWN** — you could not tell. Say what you tried.
+
+A review's MEDIUM and LOW findings are recorded with `state.py memory risk add`, not
+fixed in the task; only a BLOCKER, a HIGH or a regression buys an `--after-fix` run.
 
 **Never edit a test to make it pass when production behaviour changed
 unexpectedly.** A test that suddenly disagrees with the code is evidence, and
@@ -88,6 +93,7 @@ verify_command:      # the full fast suite, e2e excluded — e.g. make test   | 
 step_test_command:   # the same runner, scoped to a path or filter — e.g. vendor/bin/phpunit {files} | pytest {files}
 e2e_command:         # the end-to-end suite, run once at the end of a task — e.g. make e2e | vendor/bin/behat | npx playwright test
 lint_command:        # e.g. vendor/bin/php-cs-fixer fix --dry-run | ruff check . | npm run lint — write `none` if the project has none
+doc_tests:           # the suites a documents-only edit runs after a green suite — e.g. tests/test_docs.py; `none` if the project has none
 typecheck_command:   # e.g. vendor/bin/phpstan analyse --no-progress | mypy . | npx tsc --noEmit — `none` if the project has none
 healthy_output:      # two or three lines of what a green run ends with
 runtime:             # roughly, for each command, so a hang is recognisable
@@ -99,12 +105,19 @@ step names; without it the paths are appended. The placeholder is what lets
 `sensors.py` run a step's own tests for the "test must bite" check, so a runner
 that only takes a `--filter` gets `bite: unavailable` rather than a wrong answer.
 
+`bite_codes` (optional) lists the exit codes that mean "a test failed" when a
+test is shown failing before its fix; the default is `1`. Runners that exit
+differently say so here — `bite_codes: 1,2` for pytest (2 is a collection
+error, such as a missing import), `1,2` for phpunit, `101` for cargo. Any other
+code is the runner's own usage error and does not count as a bite.
+
 `lint_command` and `typecheck_command` are read by the deterministic sensors,
-never by a model. They decide, together with the test run, whether a T2 change
-can skip its model review (`risk-tiers.json`, `sensors`). A **missing** line is
+never by a model. They decide, together with the test run, whether a light-mode change
+can skip its model review (`state.py close` measures them). A **missing** line is
 `unavailable` and keeps the review; only the literal `none`, written by a human,
-says the project has no such tool. `sensors.py detect` proposes the exact line
-from the config files it finds, and never runs what it detected.
+says the project has no such tool. Read the exact line from the project's
+config files (`package.json`, `composer.json`, `pyproject.toml`, `Makefile`), and
+never run a command just to find it out.
 
 If the project has no e2e suite, write `e2e_command: none` and say so — an
 empty line is read as "not written down yet" and the next task will go looking

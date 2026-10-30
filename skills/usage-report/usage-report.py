@@ -690,7 +690,8 @@ def task_report(args) -> int:
         return 1
     start = min(stamps)
     closed = [parse_ts(e.get("ts")) for e in events if e.get("event") == "task_closed"]
-    end = max(c for c in closed if c) if any(closed) else dt.datetime.now(dt.timezone.utc)
+    unclosed = not any(closed)
+    end = max(stamps) if unclosed else max(c for c in closed if c)   # unclosed: the last event, not now
     tier, mode = "untiered", None
     involved = []
     for e in events:
@@ -729,7 +730,8 @@ def task_report(args) -> int:
 
     label = f"mode {mode} (tier {tier})" if mode else f"tier {tier}"
     print(f"task {args.task} {label} window {start.isoformat(timespec='seconds')}"
-          f"..{end.isoformat(timespec='seconds')}")
+          f"..{end.isoformat(timespec='seconds')}"
+          + (" (unclosed: window ends at the last event)" if unclosed else ""))
     print("  (by time window: any other session in this project inside it is counted too)")
     for rt in involved or sorted(used):
         inp, cache, out = used.get(rt, [0, 0, 0])

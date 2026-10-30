@@ -33,6 +33,9 @@ STATE = os.path.join(ROOT, "skills", "ai-task", "state.py")
 MIGRATION = os.path.join(ROOT, "skills", "project-update", "migrations", "0007_weight_model.py")
 FIXTURE = os.path.join(ROOT, "tests", "fixtures", "project-update", "schema-v6")
 POLICIES = os.path.join(ROOT, "skills", "ai-init", "templates", ".ai", "policies")
+# The tier policy the plugin stopped shipping in migration 0011: a frozen copy of the
+# last shipped version, for the projects that were scaffolded before and for 0007's input.
+OLD_TIERS = os.path.join(ROOT, "tests", "fixtures", "project-update", "risk-tiers")
 GIT = ["git", "-c", "user.name=tester", "-c", "user.email=tester@example.invalid", "-c", "commit.gpgsign=false"]
 
 TWIN_OF = "test-project-update.sh"
@@ -55,8 +58,8 @@ def read_json(path):
 
 
 def shipped_tables():
-    """What _shipped() returns, from today's shipped risk-tiers.json and weight.json."""
-    doc = read_json(os.path.join(POLICIES, "risk-tiers.json"))
+    """What _shipped() returns, from the last shipped risk-tiers.json and today's weight.json."""
+    doc = read_json(os.path.join(OLD_TIERS, "risk-tiers.json"))
     examples = {t: set(e.get("examples") or []) for t, e in doc["tiers"].items() if isinstance(e, dict)}
     scopes = {s["scope"]: set(s["paths"]) for s in doc["path_scopes"]}
     scalars = {k: [v] for k, v in load_migration()._scalars(doc).items()}  # pylint: disable=protected-access
@@ -82,7 +85,7 @@ def edit_tiers(doc):
 
 
 class Project:
-    def __init__(self, in_flight=False, weight=True, edited=False):
+    def __init__(self, in_flight=False, weight=True, edited=False, tiers=False):
         self.tmp = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with  # close() ends it
         self.home = os.path.join(self.tmp.name, "home")
         self.root = os.path.join(self.tmp.name, "p")
@@ -98,6 +101,8 @@ class Project:
         if in_flight:
             shutil.copytree(os.path.join(FIXTURE, "in-flight", ".ai"), os.path.join(self.root, ".ai"),
                             dirs_exist_ok=True)
+        if tiers or edited:               # scaffolded before 0011 retired the tier policy
+            shutil.copytree(OLD_TIERS, self.path("policies"), dirs_exist_ok=True)
         if not weight:                    # scaffolded before the weight table shipped (2.1)
             for name in ("weight.json", "weight.md"):
                 os.remove(self.path("policies", name))
@@ -117,6 +122,11 @@ class Project:
         return subprocess.run([sys.executable, "-I", UPDATE, self.root] + list(args), env=self.env,
                               capture_output=True, text=True, check=False)
 
+    def confirm(self):
+        """--apply --confirm-delete, as a human at a terminal (AI_UNATTENDED stands in for one)."""
+        return subprocess.run([sys.executable, "-I", UPDATE, self.root, "--apply", "--confirm-delete", "tester"],
+                              env=dict(self.env, AI_UNATTENDED="1"), capture_output=True, text=True, check=False)
+
     def read(self, *parts):
         with open(self.path(*parts), "rb") as fh:
             return fh.read()
@@ -133,7 +143,7 @@ class TestMigration0007(unittest.TestCase):
         mod = load_migration()
         base = read_json(os.path.join(POLICIES, "weight.json"))
         before = json.dumps(base, sort_keys=True)
-        old = edit_tiers(read_json(os.path.join(POLICIES, "risk-tiers.json")))
+        old = edit_tiers(read_json(os.path.join(OLD_TIERS, "risk-tiers.json")))
         new = mod.convert(old, base, shipped_tables())
         self.assertEqual(json.dumps(base, sort_keys=True), before, "the base is not changed")
         self.assertEqual(new["examples"]["light"][-1], "a theme colour")
@@ -159,7 +169,7 @@ class TestMigration0007(unittest.TestCase):
         # Twice is once: a re-run adds nothing.
         self.assertEqual(mod.convert(old, new, shipped_tables()), new)
         # An unedited table converts to the shipped weight table exactly.
-        plain = read_json(os.path.join(POLICIES, "risk-tiers.json"))
+        plain = read_json(os.path.join(OLD_TIERS, "risk-tiers.json"))
         self.assertEqual(mod.convert(plain, base, shipped_tables()), base)
 
     def test_a_projects_own_weight_values_survive(self):
@@ -169,9 +179,9 @@ class TestMigration0007(unittest.TestCase):
         base = read_json(os.path.join(POLICIES, "weight.json"))
         base["tests"].update(max_suite_runs=1, timeout_seconds=3600)
         base["remediation_rounds"] = 4
-        plain = read_json(os.path.join(POLICIES, "risk-tiers.json"))
+        plain = read_json(os.path.join(OLD_TIERS, "risk-tiers.json"))
         self.assertEqual(mod.convert(plain, base, shipped_tables()), base)
-        edited = edit_tiers(read_json(os.path.join(POLICIES, "risk-tiers.json")))
+        edited = edit_tiers(read_json(os.path.join(OLD_TIERS, "risk-tiers.json")))
         got = mod.convert(edited, base, shipped_tables())
         self.assertEqual((got["tests"]["max_suite_runs"], got["tests"]["timeout_seconds"], got["remediation_rounds"]),
                          (1, 3600, 4))
@@ -193,21 +203,24 @@ class TestMigration0007(unittest.TestCase):
         p = Project(edited=True)
         try:
             dry = p.update()
-            self.assertIn("schema    6 -> 10", dry.stdout)
-            self.assertNotIn("delete?", dry.stdout)
+            self.assertIn("schema    6 -> 11", dry.stdout)
+            # 0007 neither moves nor deletes the old table; 0011 proposes it, edited copy flagged.
             self.assertEqual([line for line in dry.stdout.split("\n") if "[0007]" in line and "risk-tiers" in line], [])
+            self.assertEqual(len([l for l in dry.stdout.split("\n") if l.startswith("  delete?") and "[0011]" in l]), 2)
             done = p.update("--apply")
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            self.assertEqual(p.version(), "10")
+            self.assertEqual(p.version(), "6", "the deletions wait for a human, and the schema stays")
             weight = json.loads(p.read("policies", "weight.json"))
             self.assertIn("the order export job", weight["examples"]["guarded"])
             self.assertIn("weight --mirror", done.stdout)
-            # The old surface's table stays where it is, with the project's edits (the
-            # template walk merges it as before; 0007 neither moves nor deletes it).
+            # The old surface's table stays where it is, with the project's edits, until confirmed.
             self.assertIn("the order export job",
                           json.loads(p.read("policies", "risk-tiers.json"))["tiers"]["T4"]["examples"])
             self.assertTrue(os.path.isfile(p.path("policies", "risk-tiers.md")))
-            # 0007 runs once: the second run plans no migration and changes no file.
+            confirmed = p.confirm()
+            self.assertEqual((confirmed.returncode, p.version()), (0, "11"), confirmed.stdout + confirmed.stderr)
+            self.assertFalse(os.path.exists(p.path("policies", "risk-tiers.json")))
+            # The second run plans no migration and changes no file.
             snapshot = {n: p.read("policies", n) for n in os.listdir(p.path("policies"))}
             again = p.update("--apply")
             self.assertNotIn("schema ", again.stdout)
@@ -221,7 +234,8 @@ class TestMigration0007(unittest.TestCase):
             p = Project(weight=False, edited=edited)
             try:
                 done = p.update("--apply")
-                self.assertEqual((done.returncode, p.version()), (0, "10"), done.stdout + done.stderr)
+                self.assertEqual((done.returncode, p.version()), (0, "11" if not edited else "6"),
+                                 done.stdout + done.stderr)
                 with open(os.path.join(POLICIES, "weight.json"), "rb") as fh:
                     shipped = fh.read()
                 if edited:
@@ -456,7 +470,7 @@ class TestMigration0008(unittest.TestCase):
         self.commit()
         done = self.p.update("--apply")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertEqual(self.p.version(), "10")
+        self.assertEqual(self.p.version(), "11")
         self.assertEqual(self.p.read("state", "state.json"), state, "0008 leaves the task's state alone; 0009 moves it as it is (R34)")
         self.assertFalse(os.path.exists(self.p.path("state", "current.json")))
         with open(os.path.join(self.p.root, "CLAUDE.md"), "rb") as fh:
@@ -475,7 +489,7 @@ class TestMigration0008(unittest.TestCase):
     def test_without_a_task(self):
         self.commit()
         done = self.p.update("--apply")
-        self.assertEqual((done.returncode, self.p.version()), (0, "10"), done.stdout + done.stderr)
+        self.assertEqual((done.returncode, self.p.version()), (0, "11"), done.stdout + done.stderr)
         self.assertFalse(os.path.exists(self.p.path("state", "state.json")), "no task, no file is invented")
         self.assertNotIn(b"claude-agentic", open(os.path.join(self.p.root, "CLAUDE.md"), "rb").read())
 
@@ -539,7 +553,7 @@ class TestMigration0009(unittest.TestCase):
     def test_in_flight_moves_and_is_still_read(self):
         before = self.start_task()
         done = self.p.update("--apply")
-        self.assertEqual((done.returncode, self.p.version()), (0, "10"), done.stdout + done.stderr)
+        self.assertEqual((done.returncode, self.p.version()), (0, "11"), done.stdout + done.stderr)
         self.assertFalse(self.has(self.LEGACY), "current.json moved away")
         self.assertEqual(self.p.read("state", "state.json"), before, "the task's bytes are unchanged")
         env = dict(self.p.env, AI_RUNTIME="claude")
@@ -562,7 +576,7 @@ class TestMigration0009(unittest.TestCase):
     def test_without_a_task(self):
         self.commit()
         done = self.p.update("--apply")
-        self.assertEqual((done.returncode, self.p.version()), (0, "10"), done.stdout + done.stderr)
+        self.assertEqual((done.returncode, self.p.version()), (0, "11"), done.stdout + done.stderr)
         self.assertFalse(self.has(self.NEW) or self.has(self.LEGACY), "no task, no file is invented")
 
     def test_state_json_already_there_is_untouched(self):
@@ -767,6 +781,12 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
             put(path, insert_line(text_of(path), 2, "A line the next plugin version inserted near the top.", after=False))
         return nxt
 
+    def apply_all(self, d):
+        """--apply, then the human's --confirm-delete: a project that holds the retired tier policy
+        (migration 0011) reaches the current schema only through both."""
+        self.upd(d, "--apply")
+        return self.upd(d, "--apply", "--confirm-delete", "tester", AI_UNATTENDED="1")
+
     def version(self, d):
         return text_of(os.path.join(d, ".ai", "VERSION")).strip()
 
@@ -817,8 +837,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         doc = read_json(rt)
         doc["tiers"]["T0"]["examples"].append("Fiscal printer bridge")
         put_json(rt, doc)
-        first, rest = text_of(md).split("\n", 1)                      # the human kept the mirror in sync
-        put(md, re.sub(r"sha256:[0-9a-f]*", "sha256:" + sha256(rt), first, count=1) + "\n" + rest)
+        edited_tiers = (raw(rt), raw(md))
         # Line 4 differs between the oldest state README and the current one, so this edit conflicts.
         replace_line(os.path.join(p, ".ai", "state", "README.md"), 4, "my own wording of who writes current.json")
         put(os.path.join(p, ".ai", "project", "overview.md"), "the overview a human wrote\n")
@@ -830,8 +849,9 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         rc, out = self.upd(p, merge=True)
         self.assertEqual(rc, 0, "the dry run exits 0\n" + out)
         self.assertEqual(tree_sum(p), before, "the dry run writes nothing")
-        self.assertTrue(has(r"policy .*\+ pipeline_profile$", out), "policy changes are listed for confirmation")
-        self.assertFalse(has(r"pipeline_profiles\.", out), "a new subtree is listed once")
+        self.assertTrue(has(r"policy .*\+ batch$", out), "policy changes are listed for confirmation")
+        self.assertEqual(len(re.findall(r"(?m)^  delete\?   .ai/policies/risk-tiers\.(json|md) .*\[0011\]", out)), 2,
+                         "migration 0011 proposes the retired tier policy for deletion\n" + out)
         rc, out = self.upd(p, "--check")
         self.assertEqual(rc, 1, "--check exits 1 while an update is pending")
         # The exact shape /ai-status reads: one line, the reasons, the command (R21 keeps it byte-identical).
@@ -842,16 +862,13 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         # It conflicted while no such base existed.
         self.assertTrue(len(out.splitlines()) == 1 and has(
             r"^project is behind the installed plugin: schema 0 -> [0-9]+, [0-9]+ file\(s\) to update, "
-            r"1 need a manual merge — run /project-update$", out), "the plain --check line keeps its exact shape\n" + out)
+            r"1 need a manual merge, 2 deletion\(s\) a human must confirm, the schema stays at 0 until they are "
+            r"settled — run /rr-setup --update$", out), "the plain --check line keeps its exact shape\n" + out)
 
         # apply
         _, out = self.upd(p, "--apply", merge=True)
-        doc = read_json(rt)
-        self.assertEqual(doc.get("pipeline_profile"), "solo", "new policy keys are added")
-        self.assertEqual(doc["tiers"]["T0"]["stages_required"], ["discovery", "context", "implementation"],
-                         "an untouched policy value takes the plugin's new value")
-        self.assertIn("Fiscal printer bridge", doc["tiers"]["T0"]["examples"], "a project edit to the same JSON is kept")
-        self.assertEqual(mirror_hashes(md), [sha256(rt)], "a mirror that was in sync stays in sync with the merged JSON")
+        self.assertEqual((raw(rt), raw(md)), edited_tiers,
+                         "the retired tier policy is no longer merged: it waits, as the project had it, for a human")
         testing = text_of(os.path.join(p, ".ai", "policies", "testing.md"))
         self.assertTrue(has("^## Verification", testing) and "phpunit: vendor/bin/phpunit" in testing,
                         "an edited markdown policy is merged: new section and the edit")
@@ -879,24 +896,17 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         # idempotent
         snap = tree_sum(p)
         _, out = self.upd(p, "--apply", merge=True)
-        self.assertTrue(has("^0 automatic, 1 conflict", out), "a second run has nothing automatic left\n" + out)
+        self.assertTrue(has("^0 automatic, 1 conflict\\(s\\), 2 deletion", out),
+                        "a second run has nothing automatic left\n" + out)
         self.assertEqual(tree_sum(p), snap, "a second run changes nothing")
+        rc, out = self.upd(p, "--apply", "--confirm-delete", "tester", AI_UNATTENDED="1", merge=True)
+        self.assertEqual(rc, 0, "a human confirms the deletions\n" + out)
+        self.assertEqual(self.version(p), self.cur(), "and the schema moves on")
+        self.assertFalse(os.path.exists(rt) or os.path.exists(md), "the retired tier policy is gone")
         rc, out = self.upd(p, "--check")
         self.assertEqual(rc, 0, "--check exits 0 once only a hand-merge choice remains")
         self.assertEqual(out.rstrip("\n"), "project matches the installed plugin (1 file(s) differ by hand-merge choice)",
                          "the plain --check line is byte-identical")
-
-    def test_stale_mirror_stays_stale(self):
-        """a stale mirror stays stale"""
-        p2 = self.dir("proj2")
-        self.agentic(p2, templates=self.tpl("ai-init"))
-        rt = os.path.join(p2, ".ai", "policies", "risk-tiers.json")
-        doc = read_json(rt)
-        doc["tiers"]["T0"]["examples"].append("x")
-        put_json(rt, doc)
-        self.upd(p2, "--apply")
-        self.assertNotEqual(sha256(rt), "\n".join(mirror_hashes(os.path.join(p2, ".ai", "policies", "risk-tiers.md"))),
-                            "a mirror that was already stale is not silently marked in sync")
 
     def test_codex_project(self):
         """a Codex project gets its AGENTS.md block and .codex/ layer, and no stray CLAUDE.md"""
@@ -970,7 +980,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         before = tree_sum(s0)
         self.upd(s0)
         self.assertEqual(tree_sum(s0), before, "the migration dry run writes nothing")
-        self.upd(s0, "--apply")
+        self.apply_all(s0)
         self.assertEqual(self.version(s0), cur, "the apply records the schema version")
         _, out = self.upd(s0)
         self.assertTrue(has("^0 automatic", out), "a second run has nothing left to migrate\n" + out)
@@ -1011,7 +1021,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertTrue(has("^  schema    1 -> " + cur, out), "the dry run names the schema step\n" + out)
         journal = os.path.join(s7, ".ai", "reports", t7, "events.jsonl")
         self.assertFalse(os.path.lexists(journal), "and writes no journal yet")
-        self.upd(s7, "--apply")
+        self.apply_all(s7)
         self.assertEqual(self.version(s7), cur, "the apply reaches the current schema")
         state = read_json(current)
         self.assertTrue(state["current_stage"] == "implementation" and self.status(s7, unset=("CLAUDECODE",))[0] == 0,
@@ -1075,7 +1085,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
                          "a pristine block under the pre-3.4b markers is the shipped one (review M1)")
         self.assertEqual(tree_sum(s8), before, "the dry run writes nothing")
 
-        self.upd(s8, "--apply")
+        self.apply_all(s8)
         claude = text_of(os.path.join(s8, "CLAUDE.md"))
         self.assertNotIn("SDLC workflow", claude, "the shipped section is removed")
         self.assertTrue("keep me" in claude and grep("riskrails:start", claude) == 1,
@@ -1120,6 +1130,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertIn("CLAUDE.md: the SDLC workflow section was edited", out,
                       "and the human is told it is now theirs to keep")
         self.assertFalse(has(r"^  update    CLAUDE.md .*\[0003\]", out), "0003 plans no rewrite it cannot match verbatim")
+        self.upd(s9, "--apply", "--confirm-delete", "tester", AI_UNATTENDED="1")   # 0011's retired tier policy
         self.assertEqual(self.version(s9), self.cur(), "and the schema still advances")
 
     def test_migrations_name_no_runtime(self):
@@ -1302,7 +1313,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         """both runtimes reach the same schema"""
         for rt in ("claude", "codex", "both"):
             d = self.v0_project("schema-" + rt, rt)
-            self.upd(d, "--apply")
+            self.apply_all(d)
             with self.subTest(Template("Claude-only, Codex-only and dual-runtime projects all reach schema $CURRENT")
                               .substitute(CURRENT=self.cur()), runtime=rt):
                 self.assertEqual(self.version(d), self.cur())
@@ -1471,26 +1482,6 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertEqual(len([h for h in state["history"] if str(h.get("detail")).startswith("0005 ")]), 1,
                          "schema_migrated 0005 is recorded in the task's history")
 
-    def test_model_key_conflict_prints_the_tier_hint(self):
-        """a conflict on a model key in risk-tiers.json prints the tier hint (R21)"""
-        p21 = self.dir("proj21")
-        self.agentic(p21, templates=self.tpl("ai-init"))
-        rt = os.path.join(p21, ".ai", "policies", "risk-tiers.json")
-        doc = read_json(rt)
-        doc["model_tiers"]["EXPERT"]["model"] = "my own expert"
-        put_json(rt, doc)
-        _, out = self.upd(p21, merge=True)
-        self.assertTrue(has("kept your value for: .*model_tiers.EXPERT.model", out),
-                        "the edited model value is a conflict\n" + out)
-        self.assertEqual(grep(re.escape("the plugin now names tiers (FAST/BALANCED/STRONG/EXPERT), not models; the "
-                                        "model of a tier comes from the installed plan: state.py profile --tier <TIER>"),
-                              out), 1, "one hint names the tier vocabulary and state.py profile --tier")
-        p22 = self.dir("proj22")
-        self.agentic(p22, templates=self.tpl("ai-init"))
-        replace_line(os.path.join(p22, ".ai", "state", "README.md"), 4, "my own wording of who writes current.json")
-        _, out = self.upd(p22, merge=True)
-        self.assertNotIn("names tiers", out, "any other conflict prints no tier hint")
-
     def test_check_budget(self):
         """--check --budget: a root instruction file over its byte budget exits 1 (WP6 R21)"""
         b = self.current_project("budget", "--runtime", "claude")
@@ -1581,6 +1572,295 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         _, out = self.upd(pb, merge=True, CLAUDE_AGENTIC_TEMPLATES=pt)
         self.assertTrue(has("AGENTS.md: the managed block is .* trimming it is yours", out),
                         "an edited legacy block over budget is the project's\n" + out)
+
+    # -- the weight table's mirror ------------------------------------------
+
+    def mirrored_project(self, name):
+        """A project whose weight.json has an example of its own and whose weight.md is
+        `state.py weight --mirror` of it, as /rr-setup leaves it."""
+        d = self.current_project(name)
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        doc = read_json(wj)
+        doc["examples"]["light"].append("a README typo")
+        put_json(wj, doc)
+        rc, out = self.run_([sys.executable, "-I", STATE, "--root", d, "weight", "--mirror"], merge=True)
+        self.assertEqual(0, rc, out)
+        return d
+
+    def test_a_generated_weight_mirror_is_not_a_conflict(self):
+        """weight.md: a mirror of the project's own weight.json is not merged with the template's"""
+        # R-weight-md-conflict-recurs-on-every-rr-se-1d6e: the mirror's sha256 line names the
+        # project's JSON and the template's names the template's, so a text merge reported a
+        # conflict on every update.
+        d = self.mirrored_project("weight-mirror")
+        _, out = self.upd(d, merge=True)
+        self.assertNotIn("weight.md", out, "a faithful mirror of the project's JSON needs nothing\n" + out)
+
+    def test_a_hand_edited_weight_mirror_is_not_rendered_over(self):
+        """weight.md: a mirror edited by hand is merged as text, never rendered over"""
+        d = self.mirrored_project("weight-mirror-edited")
+        wm = os.path.join(d, ".ai", "policies", "weight.md")
+        edited = text_of(wm) + "\nA note of the project's own.\n"
+        put(wm, edited)
+        rc, out = self.upd(d, "--apply", merge=True)
+        self.assertEqual(0, rc, out)
+        self.assertNotIn("rendered from weight.json", out, out)
+        self.assertIn("A note of the project's own.", text_of(wm), "the hand edit is kept")
+
+    def test_a_weight_mirror_follows_the_merged_json(self):
+        """weight.md: when the update merges weight.json, the mirror is rendered from the merged JSON"""
+        pt = os.path.join(self.t, "weight-tpl")
+        shutil.copytree(TEMPLATES, pt, symlinks=True)
+        wj = os.path.join(pt, ".ai", "policies", "weight.json")
+        doc = read_json(wj)
+        doc["examples"]["full"].append("a change the plugin added")
+        put_json(wj, doc)
+        d = self.mirrored_project("weight-mirror-merge")
+        rc, out = self.upd(d, "--apply", merge=True, CLAUDE_AGENTIC_TEMPLATES=pt)
+        self.assertEqual(0, rc, out)
+        self.assertNotIn("  conflict  ", out, out)
+        merged = read_json(os.path.join(d, ".ai", "policies", "weight.json"))
+        self.assertIn("a README typo", merged["examples"]["light"], "the project's edit is kept")
+        self.assertIn("a change the plugin added", merged["examples"]["full"], "the plugin's change is merged")
+        rc, mirror = self.run_([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, sys.argv[1]); import weight; "
+                                "sys.stdout.write(weight.mirror(sys.argv[2]))", os.path.join(ROOT, "skills", "ai-task"),
+                                os.path.join(d, ".ai", "policies", "weight.json")])
+        self.assertEqual(0, rc)
+        self.assertEqual(mirror, text_of(os.path.join(d, ".ai", "policies", "weight.md")),
+                         "weight.md is the mirror of the merged weight.json")
+
+    # -- SDLC templates the plugin supplies, and the cleanup proposals ------
+
+    SDLC_TEMPLATES = (("intent.md", "intent"), ("spec.md", "specs"), ("plan.md", "plans"), ("adr.md", "adr"))
+
+    def sdlc_project(self, name, keep=()):
+        """A current project with the SDLC TEMPLATE.md of `keep` as the plugin ships them
+        (an older scaffold left all four) and the others absent."""
+        d = self.current_project(name)
+        for src, sub in self.SDLC_TEMPLATES:
+            target = os.path.join(d, "docs", "sdlc", sub, "TEMPLATE.md")
+            if sub in keep:
+                put(target, text_of(os.path.join(ROOT, "skills", "project-init", "templates", src)))
+            elif os.path.exists(target):
+                os.remove(target)
+        return d
+
+    def test_sdlc_templates_are_retired(self):
+        """an unedited TEMPLATE.md is offered for deletion, an edited one stays with one hint,
+        a missing one is never created, and --check stays 0"""
+        d = self.sdlc_project("retire", keep=("intent", "specs", "adr"))
+        put(os.path.join(d, "docs", "sdlc", "adr", "TEMPLATE.md"), "\n# our own wording\n", "a")
+        _, out = self.upd(d)
+        for sub in ("intent", "specs"):
+            self.assertTrue(has(r"^  delete\?   docs/sdlc/%s/TEMPLATE.md .*\[sdlc\] the plugin supplies it: "
+                                r"skills/project-init/templates/" % sub, out), out)
+        self.assertFalse(has(r"delete\?   docs/sdlc/adr/TEMPLATE.md", out), "an edited copy is kept\n" + out)
+        self.assertTrue(has(r"^  hint      1 file\(s\) override the plugin's SDLC template.*adr/TEMPLATE.md", out), out)
+        self.assertFalse(os.path.exists(os.path.join(d, "docs", "sdlc", "plans", "TEMPLATE.md")),
+                         "a missing copy is not created again")
+        self.assertEqual(self.upd(d, "--check")[0], 0, "a deletion a human must confirm is not a pending update")
+        crlf = self.sdlc_project("retire-crlf")
+        shipped = raw(os.path.join(ROOT, "skills", "project-init", "templates", "plan.md"))
+        put(os.path.join(crlf, "docs", "sdlc", "plans", "TEMPLATE.md"), shipped.replace(b"\n", b"\r\n"), "wb")
+        self.assertTrue(has(r"delete\?   docs/sdlc/plans/TEMPLATE.md .*\[sdlc\]", self.upd(crlf)[1]),
+                        "a CRLF copy of the shipped template is still unedited")
+        bare = self.sdlc_project("retire-bare")
+        rc, out = self.upd(bare, "--check")
+        self.assertEqual(rc, 0, "a project without the four files is complete\n" + out)
+        self.assertNotIn("TEMPLATE.md", self.upd(bare)[1])
+        rc, out = self.upd(d, "--apply", "--confirm-delete", "tester", AI_UNATTENDED="1", merge=True)
+        self.assertEqual(rc, 0, out)
+        self.assertFalse(os.path.exists(os.path.join(d, "docs", "sdlc", "intent", "TEMPLATE.md")))
+        self.assertTrue(os.path.exists(os.path.join(d, "docs", "sdlc", "adr", "TEMPLATE.md")))
+
+    def task_dir(self, d, task_id, events, logs=()):
+        """A task's journal (events: [(days ago, event, data)]), one report file and its run logs."""
+        lines = [json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - ago * 86400)),
+                             "task": task_id, "event": ev, "detail": (more[0] if more else ""), "data": data})
+                 for ago, ev, data, *more in events]
+        put(os.path.join(d, ".ai", "reports", task_id, "events.jsonl"), "\n".join(lines) + "\n")
+        put(os.path.join(d, ".ai", "reports", task_id, "task.md"), "x\n")
+        for name in logs:
+            put(os.path.join(d, ".ai", "state", "logs", task_id, name), "log\n")
+
+    def cleanup_project(self, name):
+        d = self.current_project(name)
+        self.task_dir(d, "T-2026-01-01-001", [(30, "task_started", {}), (29, "task_closed", {"abandoned": False})],
+                      logs=("verify.log", "review.log", "state.json"))
+        self.task_dir(d, "T-2026-01-02-001", [(30, "task_started", {}), (29, "task_closed", {"abandoned": True})],
+                      logs=("verify.log", "state.json"))
+        self.task_dir(d, "T-2026-01-03-001", [(9, "task_started", {}), (8, "step_started", {})], logs=("a.log",))
+        self.task_dir(d, "T-2026-01-04-001", [(3, "task_started", {}), (2, "step_started", {})], logs=("b.log",))
+        self.task_dir(d, "T-2026-01-05-001", [(40, "task_started", {})], logs=("c.log",))
+        put_json(os.path.join(d, ".ai", "state", "state.json"), {"task_id": "T-2026-01-05-001"})
+        # finished by other evidence than a whole task_closed line (M1)
+        self.task_dir(d, "T-2026-01-06-001", [(40, "task_started", {}), (39, "gate_approved", {})], logs=("g.log",))
+        self.task_dir(d, "T-2026-01-07-001", [(40, "task_started", {})], logs=("h.log",))
+        put_json(os.path.join(d, ".ai", "state", "logs", "T-2026-01-07-001", "state.json"), {"result": "done"})
+        # a torn task_closed line and no state.json: still unclosed
+        self.task_dir(d, "T-2026-01-08-001", [(40, "task_started", {})], logs=("i.log",))
+        put(os.path.join(d, ".ai", "reports", "T-2026-01-08-001", "events.jsonl"),
+            '{"ts": "2000-01-01T00:00:00Z", "event": "task_closed", "da', "a")
+        # abandoned by the detail alone
+        self.task_dir(d, "T-2026-01-09-001", [(30, "task_started", {}), (29, "task_closed", {}, "abandoned")],
+                      logs=("j.log", "state.json"))
+        # a symlink in a closed task's logs is never followed or listed
+        os.symlink(os.path.join(d, ".ai", "state", "logs", "T-2026-01-01-001", "verify.log"),
+                   os.path.join(d, ".ai", "state", "logs", "T-2026-01-01-001", "link.log"))
+        return d
+
+    def test_cleanup_proposals(self):
+        """the logs of a closed task, an abandoned and a long-idle unclosed task are proposed; a recent
+        and the in-flight task are not; --check is unaffected"""
+        d = self.cleanup_project("cleanup")
+        before = tree_sum(d)
+        _, out = self.upd(d)
+        self.assertTrue(has(r"^  delete\?   \.ai/state/logs/T-2026-01-01-001/ \(2 files\) +\[cleanup\] "
+                            r"log of closed task T-2026-01-01-001", out), "one line per task, *.log only\n" + out)
+        self.assertTrue(has(r"delete\?   \.ai/reports/T-2026-01-02-001/ \(2 files\) +\[cleanup\] abandoned task "
+                            r"T-2026-01-02-001", out), out)
+        self.assertTrue(has(r"delete\?   \.ai/state/logs/T-2026-01-02-001/ \(1 file\) +\[cleanup\] abandoned task"
+                            r".*--confirm-cleanup NAME.*not recoverable through git", out),
+                        "an abandoned task keeps its state.json; the row says git cannot restore the logs\n" + out)
+        self.assertTrue(has(r"delete\?   \.ai/reports/T-2026-01-09-001/ .*abandoned task", out),
+                        "abandonment by the event detail alone\n" + out)
+        self.assertEqual(grep(r"unclosed task T-2026-01-0[67]-001", out), 0,
+                         "gate_approved, or a state.json result, finishes a task\n" + out)
+        self.assertTrue(has(r"unclosed task T-2026-01-08-001", out), "a torn task_closed alone is unclosed\n" + out)
+        self.assertEqual(grep(r"link\.log", out), 0, "a symlink is skipped\n" + out)
+        self.assertEqual(grep(r"commit \.ai/ first", out), 0,
+                         "cleanup rows alone do not raise the commit-first hint\n" + out)
+        self.assertTrue(has(r"delete\?   \.ai/reports/T-2026-01-03-001/ \(2 files\) +\[cleanup\] unclosed task "
+                            r"T-2026-01-03-001, last event \d{4}-\d\d-\d\d", out), out)
+        self.assertEqual(grep(r"T-2026-01-04-001", out), 0, "an open task idle for 2 days is left alone\n" + out)
+        self.assertEqual(grep(r"T-2026-01-05-001", out), 0, "the task in flight is never proposed\n" + out)
+        self.assertEqual(self.upd(d, "--check")[0], 0)
+        self.assertEqual(tree_sum(d), before, "a dry run writes nothing")
+
+    def test_cleanup_malformed_now_and_flight(self):
+        """a malformed RISKRAILS_NOW is a usage error, not a traceback; the task named by the legacy
+        current.json is in flight"""
+        d = self.cleanup_project("cleanup-now")
+        rc, out = self.upd(d, merge=True, RISKRAILS_NOW="yesterday")
+        self.assertEqual(rc, 2, out)
+        self.assertTrue("RISKRAILS_NOW" in out and "Traceback" not in out, out)
+        self.assertEqual(len(out.strip().splitlines()), 1, "one line\n" + out)
+        os.remove(os.path.join(d, ".ai", "state", "state.json"))
+        put_json(os.path.join(d, ".ai", "state", "current.json"), {"task_id": "T-2026-01-03-001"})
+        _, out = self.upd(d)
+        self.assertEqual(grep(r"T-2026-01-03-001", out), 0, "current.json names the task in flight\n" + out)
+
+    def test_cleanup_confirmed_deletes_and_prunes(self):
+        """--apply --confirm-cleanup removes the proposed files and the directories they leave empty;
+        --confirm-delete alone does not settle them"""
+        d = self.cleanup_project("cleanup-apply")
+        before = tree_sum(d)
+        rc, out = self.upd(d, "--apply", "--confirm-delete", "tester", AI_UNATTENDED="1", merge=True)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(tree_sum(d), before, "--confirm-delete leaves every [cleanup] row\n" + out)
+        self.assertEqual(self.upd(d, "--confirm-cleanup", "tester")[0], 2, "--confirm-cleanup needs --apply")
+        self.assertEqual(self.upd(d, "--apply", "--confirm-cleanup", "")[0], 2, "an empty name is refused")
+        rc, out = self.upd(d, "--apply", "--confirm-cleanup", "tester")
+        self.assertEqual(rc, 5, "--confirm-cleanup without a human present is refused\n" + out)
+        self.assertEqual(out.split("\n")[0].split(":")[0], "ADOPT_REFUSED")
+        self.assertEqual(tree_sum(d), before)
+        if self.has_pty():
+            tty = self.cleanup_project("cleanup-tty")
+            rc, out = self.pty(["env", "CLAUDECODE=1", sys.executable, "-I", UPDATE, tty, "--apply",
+                                "--confirm-cleanup", "tester"], unset=NOMARK)
+            self.assertTrue(rc == 5 and "CLAUDECODE" in out, "an agent marker with a terminal is refused\n" + out)
+            rc, out = self.pty([sys.executable, "-I", UPDATE, tty, "--apply", "--confirm-cleanup", "tester"],
+                               unset=NOMARK)
+            self.assertEqual(rc, 0, out)
+            self.assertEqual(read_json(only(os.path.join(tty, ".ai", "reports", "project-update-*",
+                                                         "migration.json")))["deletions"][0]["via"], "terminal")
+        rc, out = self.upd(d, "--apply", "--confirm-cleanup", "tester", AI_UNATTENDED="1", merge=True)
+        self.assertEqual(rc, 0, out)
+        report = glob.glob(os.path.join(d, ".ai", "reports", "project-update-*"))
+        rec = read_json(os.path.join(report[0], "migration.json"))
+        self.assertEqual((rec["deletions"][0]["confirmed_by"], rec["deletions"][0]["via"]),
+                         ("tester", "unattended"))
+        self.assertFalse(os.path.exists(os.path.join(report[0], "original")), "no original/ copy of a [cleanup]")
+        logs = os.path.join(d, ".ai", "state", "logs")
+        self.assertEqual(sorted(os.listdir(os.path.join(logs, "T-2026-01-01-001"))), ["link.log", "state.json"],
+                         "the closed task's logs go, its state.json stays (and a symlink is never followed)")
+        self.assertEqual(os.listdir(os.path.join(logs, "T-2026-01-02-001")), ["state.json"],
+                         "an abandoned task's state.json stays")
+        self.assertTrue(os.path.islink(os.path.join(logs, "T-2026-01-01-001", "link.log")), "the symlink stays")
+        self.assertFalse(os.path.exists(os.path.join(d, ".ai", "reports", "T-2026-01-02-001")))
+        self.assertFalse(os.path.exists(os.path.join(d, ".ai", "reports", "T-2026-01-03-001")))
+        self.assertFalse(os.path.exists(os.path.join(logs, "T-2026-01-03-001")))
+        self.assertTrue(os.path.exists(os.path.join(logs, "T-2026-01-04-001", "b.log")))
+        self.assertTrue(os.path.exists(os.path.join(logs, "T-2026-01-05-001", "c.log")))
+        self.assertTrue(os.path.isdir(os.path.join(d, ".ai", "reports")))
+
+    def git_(self, d, *args):
+        subprocess.run(GIT + ["-C", d] + list(args), env=self.env, check=True, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+
+    def abandoned(self, d, task_id):
+        self.task_dir(d, task_id, [(30, "task_started", {}), (29, "task_closed", {"abandoned": True})],
+                      logs=("verify.log",))
+
+    def test_cleanup_reports_are_tracked_not_git_ignored(self):
+        """#5: a report dir git holds is worded 'tracked'; one it does not hold keeps the commit-first
+        hint; both keep an original/ copy; the git-ignored logs keep their wording and no copy"""
+        d = self.current_project("cleanup-git")
+        subprocess.run(["git", "-C", d, "init", "-q"], env=self.env, check=True)
+        put(os.path.join(d, ".gitignore"), ".ai/state/logs/\n")
+        self.abandoned(d, "T-2026-01-01-001")
+        self.git_(d, "add", "-A")
+        self.git_(d, "commit", "-qm", "base")
+        _, out = self.upd(d)
+        self.assertFalse(has(r"commit \.ai/ first", out), "a committed report needs no hint\n" + out)
+        self.assertTrue(has(r"delete\?   \.ai/reports/T-2026-01-01-001/ \(2 files\) +\[cleanup\] abandoned task "
+                            r"T-2026-01-01-001; tracked: git can restore a committed copy", out), out)
+        self.assertTrue(has(r"delete\?   \.ai/state/logs/T-2026-01-01-001/ .*not recoverable through git", out), out)
+        self.abandoned(d, "T-2026-01-02-001")            # written after the commit: untracked
+        _, out = self.upd(d)
+        self.assertTrue(has(r"hint +commit \.ai/ first", out), "an untracked report keeps the hint\n" + out)
+        self.assertTrue(has(r"T-2026-01-02-001/ \(2 files\) .*uncommitted: git holds no copy", out), out)
+        rc, out = self.upd(d, "--apply", "--confirm-cleanup", "tester", AI_UNATTENDED="1", merge=True)
+        self.assertEqual(rc, 0, out)
+        orig = os.path.join(glob.glob(os.path.join(d, ".ai", "reports", "project-update-*"))[0], "original")
+        for task_id in ("T-2026-01-01-001", "T-2026-01-02-001"):
+            self.assertTrue(os.path.isfile(os.path.join(orig, ".ai", "reports", task_id, "task.md")),
+                            "an original/ copy of a report file")
+            self.assertFalse(os.path.exists(os.path.join(d, ".ai", "reports", task_id)))
+        self.assertFalse(os.path.exists(os.path.join(orig, ".ai", "state")), "no copy of git-ignored logs")
+
+    def test_cleanup_unreadable_state_json_is_a_task_in_flight(self):
+        """#11: an unparsable state.json proposes nothing as stale"""
+        d = self.cleanup_project("cleanup-torn")
+        put(os.path.join(d, ".ai", "state", "state.json"), "{ not json")
+        _, out = self.upd(d)
+        self.assertEqual(grep(r"\[cleanup\]", out), 0, "nothing is proposed while a task may be in flight\n" + out)
+
+    SWAP = """
+import os, sys
+sys.path.insert(0, os.path.join(sys.argv[1], "skills", "project-update"))
+import update                                            # noqa: E402
+root = sys.argv[2]
+plan = update.build_plan(root, confirm_cleanup="tester", cleanup_via="unattended")
+reports = os.path.join(root, ".ai", "reports")
+os.rename(os.path.join(reports, "T-2026-01-02-001"), os.path.join(reports, "moved"))
+os.symlink("moved", os.path.join(reports, "T-2026-01-02-001"))     # same bytes, now behind a symlink
+try:
+    update.apply(plan)
+except update.Abort as exc:
+    print("ABORT", exc.why)
+    sys.exit(0)
+print("DELETED")
+"""
+
+    def test_cleanup_apply_refuses_a_path_swapped_to_a_symlink(self):
+        """#70 (n): unsafe_target's check is repeated right before the delete"""
+        d = self.cleanup_project("cleanup-swap")
+        done = subprocess.run([sys.executable, "-I", "-c", self.SWAP, ROOT, d], env=self.env,
+                              capture_output=True, text=True)
+        self.assertTrue(done.stdout.startswith("ABORT") and "is a symlink" in done.stdout,
+                        done.stdout + done.stderr)
+        self.assertTrue(os.path.isfile(os.path.join(d, ".ai", "reports", "moved", "task.md")), "nothing deleted")
 
 
 class TestMemoryPolicy(unittest.TestCase):

@@ -28,6 +28,7 @@ import urllib.request
 REGISTRY_URL = "https://registry.npmjs.org/riskrails/latest"
 MAX_AGE = 24 * 3600
 TIMEOUT = 3
+MAX_BODY = 65536
 COMMAND = "npx -y riskrails@latest --yes"
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")   # no prerelease, no build metadata
 
@@ -103,20 +104,7 @@ def notice(runtime, home, plugin_root, now):
     return message, context
 
 
-def refresh(path):
-    """Ask the registry and write the cache; on failure only move checked_at."""
-    latest = None
-    try:
-        url = os.environ.get("RISKRAILS_REGISTRY_URL") or REGISTRY_URL
-        with urllib.request.urlopen(url, timeout=TIMEOUT) as resp:  # nosec: the registry, or a test's file URL
-            version = json.loads(resp.read().decode("utf-8")).get("version")
-        if parse(version):
-            latest = version
-    except (OSError, ValueError, AttributeError):
-        pass
-    if latest is None:
-        previous = read_cache(path).get("latest")
-        latest = previous if isinstance(previous, str) else None
+def write_cache(path, latest):
     tmp = f"{path}.{os.getpid()}.tmp"
     try:
         with open(tmp, "w", encoding="utf-8") as fh:
@@ -127,6 +115,24 @@ def refresh(path):
             os.remove(tmp)
         except OSError:
             pass
+
+
+def refresh(path):
+    """Ask the registry and write the cache; checked_at moves first, so a fetch that hangs
+    or is killed still costs one spawn a day, and a failed fetch keeps the previous latest."""
+    previous = read_cache(path).get("latest")
+    previous = previous if isinstance(previous, str) else None
+    write_cache(path, previous)
+    latest = None
+    try:
+        url = os.environ.get("RISKRAILS_REGISTRY_URL") or REGISTRY_URL
+        with urllib.request.urlopen(url, timeout=TIMEOUT) as resp:  # nosec: the registry, or a test's file URL
+            version = json.loads(resp.read(MAX_BODY).decode("utf-8")).get("version")
+        if parse(version):
+            latest = version
+    except (OSError, ValueError, AttributeError):
+        pass
+    write_cache(path, latest if latest is not None else previous)
 
 
 if __name__ == "__main__":

@@ -1,24 +1,30 @@
 # SDLC artefacts
 
-Feature work in this repo follows the AI-Native SDLC flow: **intent → spec → plan → build**.
-Each stage has a skill that produces one file here, and the next stage reads it.
+Work that needs a written intent and design before any code follows
+**spec → plan → build**. Each stage has a skill that produces one file here,
+and the next stage reads it.
 
 ```
- /sdlc-intent <topic>        →  docs/sdlc/intent/<slug>.md   (problem, outcome, constraints)
+ /rr-spec <idea | intent/<slug>.md>  →  docs/sdlc/specs/<slug>.md    (## Intent, requirements, design, Flagged concerns)
+        │                               docs/sdlc/intent/<slug>.questions.md  (the brainstorm, recorded by state.py)
+ /rr-plan specs/<slug>.md            →  docs/sdlc/plans/<slug>.md    (files that change, order, risks, proof, rollback)
         │
- /sdlc-spec  intent/<slug>.md →  docs/sdlc/specs/<slug>.md    (requirements, design, flagged concerns)
-        │
- /sdlc-plan  specs/<slug>.md  →  docs/sdlc/plans/<slug>.md    (files, order, risks, proof)
-        │
-      build (main session, one plan step at a time; `ai-reviewer` before commit)
+ /rr-build  — one row at a time (each row is one task, weighed and started by /rr-plan)
+ /rr-build-all plans/<slug>.md — the whole plan as one task: parallel implementers, one review loop
 ```
 
 | Folder | Produced by | Contains |
 |---|---|---|
-| `intent/` | `/sdlc-intent` | one file per idea; what and why, not how |
-| `specs/` | `/sdlc-spec` | requirements + design; ends with **Flagged concerns** |
-| `plans/` | `/sdlc-plan` | ordered implementation steps with verification |
-| `adr/` | you / `architect` | Architecture Decision Records (MADR style) |
+| `intent/` | `/rr-spec`'s brainstorm (`state.py ask --topic`) | `<slug>.questions.md`, one question at a time with the answer on record; an `intent/<slug>.md` written by hand is accepted instead of the brainstorm |
+| `specs/` | `/rr-spec`, `architect` on STRONG | `## Intent` (problem, outcome, affected users and systems, constraints, decisions taken), requirements, design; ends with **Flagged concerns**, which a human resolves or accepts before planning |
+| `plans/` | `/rr-plan` | Files that change / Order of work / Risks / Proof (every requirement to a test or command) / Rollback; each row carries its files and its *Consumes* line |
+| `adr/` | you, or `architect` | Architecture Decision Records (MADR style) |
+| `constitution.md` | `/rr-setup`, then you | the principles the project does not negotiate, cited as `C<n>` in specs, plans and reviews; at most 15 lines |
 
-Each folder holds a `TEMPLATE.md`; the skills copy it and fill it in. Commit the artefacts with the
-code they describe so the reasoning survives the pull request.
+The skills fill in the plugin's templates
+(`$AI_HOME/skills/project-init/templates/{intent,spec,plan,adr}.md`, in the
+installed plugin); to override one, copy it to `docs/sdlc/<folder>/TEMPLATE.md`
+and edit it — the skills read that one first. Commit the artefacts with the code they describe, so the
+reasoning survives the pull request. A task's own record — weight, plan, questions, verify runs, review,
+verdict — is not here but in `.ai/reports/<task-id>/task.md`, written by
+`state.py`.

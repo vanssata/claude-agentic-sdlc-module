@@ -24,7 +24,9 @@ first: a task already in flight is finished or abandoned before another starts.
 
 When `$ARGUMENTS` is a spec (default: the newest `docs/sdlc/specs/*.md`):
 
-1. `docs/sdlc/plans/TEMPLATE.md` exists, else `/rr-setup`. If the spec's
+1. `docs/sdlc/constitution.md` exists, else `/rr-setup`. The template is
+   `docs/sdlc/plans/TEMPLATE.md` when the project overrides it, else
+   `$AI_HOME/skills/project-init/templates/plan.md`. If the spec's
    **Flagged concerns** holds unresolved items, list them and have the human
    resolve or explicitly accept each one before planning.
 2. If `superpowers:writing-plans` is available, use it for the step

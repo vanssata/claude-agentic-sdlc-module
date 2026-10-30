@@ -192,8 +192,10 @@ class TestInstalledPipeline(unittest.TestCase):
         self.sh("bash", os.path.join(self.dir, "skills", "ai-init", "scaffold-ai.sh"), repo,
                 env={"CLAUDE_AGENTIC_TEMPLATES": os.path.join(self.dir, "skills", "ai-init", "templates")})
         self.check(".ai/ scaffolded into the project", os.path.isfile(os.path.join(repo, ".ai", "AGENTS.md")))
-        self.check("the risk tiers are in place",
-                   os.path.isfile(os.path.join(repo, ".ai", "policies", "risk-tiers.json")))
+        self.check("the weight table is in place",
+                   os.path.isfile(os.path.join(repo, ".ai", "policies", "weight.json")))
+        self.check("the retired risk tiers are not shipped",
+                   not os.path.exists(os.path.join(repo, ".ai", "policies", "risk-tiers.json")))
 
         # One registered command runs all three checks (3.5): the one settings.json names.
         path_guard = scope_guard = git_guard = ["python3", "-I", "-S", os.path.join(hooks, "ai-guard.py")]

@@ -53,8 +53,9 @@ else runs in between.
 
 **Run to the end, then fix as one batch.** The verification command runs with
 no fail-fast flag and is never interrupted at the first failure. Collect every
-failure, classify each one, fix all the new regressions in a single remediation
-step (`state.py remediate`), and run the command once more. One failure never
+failure, classify each one, fix all the new regressions in one batch
+(`state.py start --amend` widens the task when a fix needs more files), and run the
+command once more. One failure never
 sends the task back to the start: the plan, the tier and the finished steps
 stand. At most two remediation rounds; a third means the human decides.
 
@@ -107,12 +108,19 @@ step names; without it the paths are appended. The placeholder is what lets
 `sensors.py` run a step's own tests for the "test must bite" check, so a runner
 that only takes a `--filter` gets `bite: unavailable` rather than a wrong answer.
 
+`bite_codes` (optional) lists the exit codes that mean "a test failed" when a
+test is shown failing before its fix; the default is `1`. Runners that exit
+differently say so here — `bite_codes: 1,2` for pytest (2 is a collection
+error, such as a missing import), `1,2` for phpunit, `101` for cargo. Any other
+code is the runner's own usage error and does not count as a bite.
+
 `lint_command` and `typecheck_command` are read by the deterministic sensors,
-never by a model. They decide, together with the test run, whether a T2 change
-can skip its model review (`risk-tiers.json`, `sensors`). A **missing** line is
+never by a model. They decide, together with the test run, whether a light-mode change
+can skip its model review (`state.py close` measures them). A **missing** line is
 `unavailable` and keeps the review; only the literal `none`, written by a human,
-says the project has no such tool. `sensors.py detect` proposes the exact line
-from the config files it finds, and never runs what it detected.
+says the project has no such tool. Read the exact line from the project's
+config files (`package.json`, `composer.json`, `pyproject.toml`, `Makefile`), and
+never run a command just to find it out.
 
 If the project has no e2e suite, write `e2e_command: none` and say so — an
 empty line is read as "not written down yet" and the next task will go looking

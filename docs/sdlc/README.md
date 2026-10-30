@@ -21,8 +21,10 @@ and the next stage reads it.
 | `adr/` | you, or `architect` | Architecture Decision Records (MADR style) |
 | `constitution.md` | `/rr-setup`, then you | the principles the project does not negotiate, cited as `C<n>` in specs, plans and reviews; at most 15 lines |
 
-Each folder holds a `TEMPLATE.md`; the skills copy it and fill it in. Commit
-the artefacts with the code they describe, so the reasoning survives the pull
-request. A task's own record — weight, plan, questions, verify runs, review,
+The skills fill in the plugin's templates
+(`$AI_HOME/skills/project-init/templates/{intent,spec,plan,adr}.md`, in the
+installed plugin); to override one, copy it to `docs/sdlc/<folder>/TEMPLATE.md`
+and edit it — the skills read that one first. Commit the artefacts with the code they describe, so the
+reasoning survives the pull request. A task's own record — weight, plan, questions, verify runs, review,
 verdict — is not here but in `.ai/reports/<task-id>/task.md`, written by
 `state.py`.

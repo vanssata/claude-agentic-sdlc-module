@@ -61,16 +61,22 @@ jobs:
       run: AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
     - name: Lint
       run: |
-        pip install pylint
+        pip install pylint==4.0.8
         pylint $(git ls-files '*.py')
     - name: Pack dry run
       run: npm pack --dry-run
+    # A first attempt must not republish a version: the tag was reused or the version not
+    # bumped. A rerun (run_attempt > 1) is allowed through, because the publish job may have
+    # uploaded the package and then failed at the GitHub Release step; the publish job skips
+    # the upload when the registry already holds this version, and goes on to the Release.
     - name: This version is not on the registry yet
+      env:
+        RUN_ATTEMPT: ${{ github.run_attempt }}
       run: |
         set -euo pipefail
         V="${GITHUB_REF_NAME#v}"
         FOUND="$(npm view "riskrails@$V" version 2>/dev/null || true)"
-        if [ -n "$FOUND" ]; then
+        if [ -n "$FOUND" ] && [ "$RUN_ATTEMPT" = "1" ]; then
           echo "riskrails@$V is already on the registry; bump the version and tag again."
           exit 1
         fi
@@ -95,9 +101,31 @@ jobs:
     - name: Publish to npm with provenance
       env:
         # Trusted publishing needs no token. NPM_TOKEN is only the fallback for the time
-        # before the trusted publisher is configured; empty or unset, it is ignored.
+        # before the trusted publisher is configured. Not verified here: whether npm 11
+        # ignores an empty NODE_AUTH_TOKEN (the secret unset) next to OIDC trusted
+        # publishing, or tries it and fails; the first release without the secret shows it.
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      run: npm publish --provenance --access public
+      run: |
+        set -euo pipefail
+        V="${GITHUB_REF_NAME#v}"
+        if [ "$(npm view "riskrails@$V" version 2>/dev/null || true)" = "$V" ]; then
+          # A rerun must publish the same commit: a tag re-pointed since the upload fails here.
+          HEAD_SHA="$(npm view "riskrails@$V" gitHead 2>/dev/null || true)"
+          if [ -n "$HEAD_SHA" ] && [ "$HEAD_SHA" != "$GITHUB_SHA" ]; then
+            echo "riskrails@$V on the registry was built from $HEAD_SHA, not $GITHUB_SHA: the tag was re-pointed."
+            exit 1
+          fi
+          if [ -z "$HEAD_SHA" ]; then
+            echo "::warning::riskrails@$V has no gitHead on the registry; cannot compare it with $GITHUB_SHA."
+          fi
+          echo "riskrails@$V is already on the registry; skipping the upload, going on to the Release."
+          exit 0
+        fi
+        case "$V" in
+          # A prerelease (1.2.3-rc.1) must not become the "latest" dist-tag.
+          *-*) npm publish --provenance --access public --tag next ;;
+          *) npm publish --provenance --access public ;;
+        esac
     - name: Announce as a GitHub Release
       env:
         GH_TOKEN: ${{ github.token }}

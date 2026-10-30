@@ -11,11 +11,14 @@ filters read_payload ran.
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "hooks"))
-from guard import common, ere  # noqa: E402  pylint: disable=wrong-import-position
+from guard import common, ere, paths  # noqa: E402  pylint: disable=wrong-import-position
+
+TIMED_FACTOR = float(os.environ.get("AI_TIMED_FACTOR") or 1)
 
 U3000 = "　"
 # (subject, pattern): every construct the guards' patterns use, and the edges.
@@ -101,7 +104,7 @@ class TestEreShapes(unittest.TestCase):
                 with self.subTest(pattern=pattern, mode=mode):
                     t0 = time.perf_counter()
                     got = ere.search(pattern, subject, mode)
-                    self.assertLess(time.perf_counter() - t0, 0.5)
+                    self.assertLess(time.perf_counter() - t0, 0.5 * TIMED_FACTOR)
                     self.assertEqual(got, bash_says(subject, pattern, lc) == 0)
 
     def test_ere_escape_keeps_the_shells_backslash_quirk(self):
@@ -116,7 +119,7 @@ class TestEreShapes(unittest.TestCase):
         t0 = time.perf_counter()
         for pattern in (".*\\.(sql|sql\\.gz)([[:space:]]|$)", "[^/]*\\.json([[:space:]]|$)"):
             self.assertFalse(ere.search(pattern, line, "b"))
-        self.assertLess(time.perf_counter() - t0, 0.5)
+        self.assertLess(time.perf_counter() - t0, 0.5 * TIMED_FACTOR)
 
 
 class TestEreMatch(unittest.TestCase):
@@ -185,6 +188,21 @@ class TestPayload(unittest.TestCase):
                  "*** Delete File: .env\n*** End Patch")
         p = self.payload(common.jq_dump({"tool_name": "apply_patch", "tool_input": {"command": patch}}))
         self.assertEqual(p.target_paths(), ["src/a.php", "README.md", ".env"])
+
+
+class TestFindPrint(unittest.TestCase):
+    def test_prints_in_name_order_not_readdir_order(self):
+        # find_print sorts each directory by name; without the sort the order is the
+        # filesystem's readdir order (hash order on ext4), so this list would differ
+        # from the sorted one on most trees and the creation order below would show.
+        with tempfile.TemporaryDirectory() as root:
+            for name in ("b", "a", "c", ".d"):
+                os.mkdir(os.path.join(root, name))
+            open(os.path.join(root, "b", "z"), "w").close()
+            open(os.path.join(root, "b", "y"), "w").close()
+            got = [os.fsdecode(p) for p in paths.find_print(root, 3, ())]
+        rel = [os.path.relpath(p, root) for p in got]
+        self.assertEqual(rel, [".", ".d", "a", "b", "b/y", "b/z", "c"])
 
 
 if __name__ == "__main__":

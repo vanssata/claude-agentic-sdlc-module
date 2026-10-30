@@ -10,7 +10,6 @@ which now exec the Python ports. A subTest label carries the shell case's name
 as the shell suite wrote it, `$f` and all.
 """
 import hashlib
-import json
 import os
 import re
 import subprocess
@@ -76,7 +75,7 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         self.assertIn("created in", out, "first run creates the tree")
         actual = len(files(os.path.join(root, ".ai")))
         self.assertEqual(len(files(os.path.join(TEMPLATES, ".ai"))), actual, "every template file was copied ($ACTUAL)")
-        for f in ("AGENTS.md", "policies/risk-tiers.json", "policies/safety.md", "policies/security.md",
+        for f in ("AGENTS.md", "policies/weight.json", "policies/safety.md", "policies/security.md",
                   "project/overview.md", "state/README.md", "rules/README.md", "VERSION"):
             with self.subTest(".ai/$f exists", f=f):
                 self.assertTrue(os.path.isfile(os.path.join(root, ".ai", f)))
@@ -116,6 +115,15 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
                       "a hand-edited template is not overwritten")
         self.assertIn("custom", read(os.path.join(root, "CLAUDE.md")), "hand-edited CLAUDE.md content survives")
 
+    def test_ignore_snippet_covers_the_state_ledgers(self):
+        # register #33: the dialog's consent.jsonl was matched by no line of the snippet.
+        root = self.project("project")
+        run(SCAFFOLD, root)
+        subprocess.run(["git", "init", "-q", root], check=True, capture_output=True)
+        for rel in (".ai/state/consent.jsonl", ".ai/state/state.json", ".ai/state/handoff.md"):
+            p = subprocess.run(["git", "-C", root, "check-ignore", "-q", rel], check=False)
+            self.assertEqual(0, p.returncode, "%s is ignored by the scaffolded .gitignore" % rel)
+
     def test_comma_list(self):
         """a comma list scaffolds exactly the runtimes it names"""
         four = self.project("four")
@@ -130,20 +138,13 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         self.assertNotEqual(0, rc)
         self.assertIn("comma list", out, "an unknown runtime is refused by name")
 
-    def test_shipped_risk_tiers(self):
-        """the shipped risk-tier mirror matches its JSON"""
+    def test_scaffold_ships_no_risk_tiers(self):
+        """migration 0011 retired the tier policy: a new project gets weight.json and no risk-tiers.*"""
         root = self.project("project")
         run(SCAFFOLD, root)
-        with open(os.path.join(TEMPLATES, ".ai", "policies", "risk-tiers.json"), "rb") as fh:
-            want = hashlib.sha256(fh.read()).hexdigest()
-        self.assertIn("sha256:" + want, read(os.path.join(TEMPLATES, ".ai", "policies", "risk-tiers.md")),
-                      "risk-tiers.md carries the sha256 of the shipped risk-tiers.json")
-        tiers = json.loads(read(os.path.join(root, ".ai", "policies", "risk-tiers.json")))
-        self.assertEqual("solo", tiers["pipeline_profile"], "the scaffolded profile is solo")
-        self.assertIn("security_review", tiers["pipeline_profiles"]["solo"]["delegated_stages"]["T5"],
-                      "solo still delegates the security review at T5")
-        self.assertGreaterEqual(len(tiers["tiers"]), 7, "the shipped table has seven tiers, T0 to T6")
-        self.assertIs(False, tiers["diff_budget"]["enforce"], "the shipped diff budget is advisory (enforce: false)")
+        self.assertTrue(os.path.isfile(os.path.join(root, ".ai", "policies", "weight.json")))
+        for name in ("risk-tiers.json", "risk-tiers.md"):
+            self.assertFalse(os.path.exists(os.path.join(root, ".ai", "policies", name)), name)
 
     def test_existing_files_are_extended(self):
         """an existing CLAUDE.md is extended, not replaced; an existing .gitignore is appended to"""
@@ -179,7 +180,7 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         run(SCAFFOLD, root5, "--runtime", "codex")
         self.assertTrue(os.path.exists(os.path.join(root5, "AGENTS.md")), "AGENTS.md is created")
         self.assertFalse(os.path.exists(os.path.join(root5, "CLAUDE.md")), "no CLAUDE.md is created")
-        self.assertTrue(os.path.isfile(os.path.join(root5, ".ai", "policies", "risk-tiers.json")),
+        self.assertTrue(os.path.isfile(os.path.join(root5, ".ai", "policies", "weight.json")),
                         "the shared .ai/ tree is still created")
 
     def test_auto_detection(self):
@@ -201,12 +202,15 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         """project-scaffold.sh covers the same ground"""
         root8 = self.project("project8")
         run(SCAFFOLD2, root8, "--runtime", "both")
-        for f in ("docs/sdlc/README.md", "docs/sdlc/adr/TEMPLATE.md", ".claude/settings.json",
+        for f in ("docs/sdlc/README.md", "docs/sdlc/constitution.md", ".claude/settings.json",
                   ".claude/memory/README.md", ".codex/config.toml", ".codex/memory/README.md", "CLAUDE.md", "AGENTS.md"):
             with self.subTest("$f scaffolded", f=f):
                 self.assertTrue(os.path.exists(os.path.join(root8, f)))
         templates = [p for p in files(os.path.join(root8, "docs", "sdlc")) if os.path.basename(p) == "TEMPLATE.md"]
-        self.assertEqual(4, len(templates), "the SDLC templates are created once, not per runtime")
+        self.assertEqual([], templates, "the plugin supplies the SDLC templates; a fresh scaffold creates no TEMPLATE.md")
+        for d in ("intent", "specs", "plans", "adr"):
+            with self.subTest("no docs/sdlc/%s/TEMPLATE.md" % d, d=d):
+                self.assertFalse(os.path.exists(os.path.join(root8, "docs", "sdlc", d, "TEMPLATE.md")))
         before = tree_hash(root8)
         _, out = run(SCAFFOLD2, root8, "--runtime", "both")
         self.assertEqual(before, tree_hash(root8), "a second project scaffold changes no file")

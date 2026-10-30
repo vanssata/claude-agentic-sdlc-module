@@ -8,6 +8,6 @@ This repository runs an agentic pipeline under `.ai/`. Read `.ai/AGENTS.md` firs
 - Changes run through the pipeline (`/rr-build` in Claude Code or Codex); without it, follow `.ai/policies/safety.md`, touch only the files the current task names, and answer questions in prose or by filling the file.
 
 - Verify before reporting done: `verify_command` from `.ai/policies/testing.md` once, to the end, then `e2e_command` once; every failure fixed as one batch; show the output.
-- No agent merges or deploys; commit, push, approval only as the dialog picks, else a human outside. When a review flags the same mistake twice, the correction goes into this file.
-- Files, not chat, carry decisions: `.ai/reports/<task-id>/task.md` (answer by filling `[Answer]:`), `.ai/state/handoff.md` (read first when resuming), `docs/sdlc/constitution.md` (this project's principles).
+- No agent merges or deploys; commit, push, approval only as the dialog picks and the harness records, else a human outside. When a review flags the same mistake twice, the correction goes into this file.
+- Files, not chat, carry decisions: `.ai/reports/<task-id>/task.md` (answer by filling `[Answer]:`), `.ai/state/handoff.md` (read first when resuming), `docs/sdlc/constitution.md`.
 <!-- riskrails:end -->

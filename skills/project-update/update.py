@@ -20,12 +20,17 @@ Exit codes:
   5  refused: --confirm-delete without a human (ADOPT_REFUSED on stdout line 1)
 
 What it manages, and how:
-  .ai/** the project owns (risk-tiers, path-guard,   three-way update
+  .ai/** the project owns (weight, path-guard,       three-way update
     testing, coding, safety, security, AGENTS.md)
   .ai/** the plugin shares (the other policies,      read from the plugin's shared tree; a project
     agents, workflows, templates)                     copy is an override and is never merged — an
                                                       unedited one is offered for deletion
-  docs/sdlc/*/TEMPLATE.md                            three-way update
+  docs/sdlc/*/TEMPLATE.md                            the plugin supplies them (read in place); an
+                                                    unedited copy is offered for deletion, an
+                                                    edited one is a project override and stays
+  .ai/reports/<task>/, .ai/state/logs/<task>/        proposals only, never run on their own: the
+    of closed, abandoned or long-idle tasks           logs of a closed task, every file of an
+                                                      abandoned or STALE_DAYS-idle unclosed one
   .claude/memory/README.md, .codex/memory/README.md  three-way update, per runtime the project uses
   the managed block in CLAUDE.md and/or AGENTS.md    three-way update of the block only
   .gitignore                                         missing entries appended
@@ -41,12 +46,12 @@ Three-way update: a file whose content is a version this plugin once shipped was
 never edited, so it is replaced. An edited file is merged against the shipped
 version closest to it (git merge-file for text, per key for JSON), keeping every
 edit. A real conflict leaves the project file alone and puts the plugin's version
-in a git-ignored local directory for a human or /project-update to merge.
+in a git-ignored local directory for a human or /rr-setup --update to merge.
 """
 import argparse, contextlib, copy, difflib, hashlib, importlib.util, io, json, os, re, subprocess, sys, tempfile
 from collections import OrderedDict
 from types import SimpleNamespace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 sys.dont_write_bytecode = True  # never leave __pycache__ in an installed plugin
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -80,6 +85,7 @@ ROUTER_FILE = ".ai/AGENTS.md"
 # section, or doubles it, is a conflict for a human.
 SHARED_SECTION_RE = re.compile(rb"(?m)^## Shared files[ \t]*\r?$")
 SHARED_SCHEMA = 6  # the schema from which shared copies are overrides (0006)
+STALE_DAYS = 7  # an unclosed task whose last event is older is proposed for cleanup
 STATE_FILE = ".ai/state/state.json"
 LEGACY_STATE_FILE = ".ai/state/current.json"  # R34: the name until migration 0009 moves it
 
@@ -119,14 +125,14 @@ def renamed_markers(block):
 find_block = render_instructions.find_block
 current_markers = render_instructions.current_markers
 MISSING = object()
-HASH_RE = re.compile(rb"sha256:[0-9a-f]{64}")
 
 PROJECT_INIT_MAP = [  # template -> target, kind
     ("sdlc-README.md", "docs/sdlc/README.md", "update"),
-    ("intent.md", "docs/sdlc/intent/TEMPLATE.md", "update"),
-    ("spec.md", "docs/sdlc/specs/TEMPLATE.md", "update"),
-    ("plan.md", "docs/sdlc/plans/TEMPLATE.md", "update"),
-    ("adr.md", "docs/sdlc/adr/TEMPLATE.md", "update"),
+    # read in place by /rr-spec and /rr-plan; a project copy is an override: never created
+    ("intent.md", "docs/sdlc/intent/TEMPLATE.md", "retire"),
+    ("spec.md", "docs/sdlc/specs/TEMPLATE.md", "retire"),
+    ("plan.md", "docs/sdlc/plans/TEMPLATE.md", "retire"),
+    ("adr.md", "docs/sdlc/adr/TEMPLATE.md", "retire"),
     # the project's own principles: created once, then it is the project's file
     ("constitution.md", "docs/sdlc/constitution.md", "create"),
 ]
@@ -302,6 +308,53 @@ def git_dirty_ai(root):
     return res.returncode == 0 and bool(res.stdout.strip())
 
 
+def git_states(root, rel_dir):
+    """A function path -> how git holds a file under `rel_dir` (project-relative):
+    "tracked" (committed and unchanged), "uncommitted" (changed, staged or not yet
+    tracked, so git has no copy to restore) or "ignored"; None outside a work tree
+    or for a path git does not know."""
+    def run(*args):
+        res = subprocess.run(["git", "-C", root] + list(args), stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, timeout=30)
+        return res.stdout.decode("utf-8", "replace") if res.returncode == 0 else None
+    try:
+        prefix = run("rev-parse", "--show-prefix")
+        tracked = run("ls-files", "-z", "--", rel_dir)
+        status = run("status", "--porcelain=v1", "-z", "--ignored", "-uall", "--", rel_dir)
+    except (OSError, subprocess.SubprocessError):
+        return lambda path: None
+    if prefix is None or tracked is None or status is None:
+        return lambda path: None
+    prefix = prefix.strip()
+    tracked = set(tracked.split("\0"))
+    dirty, ignored = set(), []
+    entries = status.split("\0")
+    skip = False
+    for entry in entries:
+        if skip:  # the origin path of a rename
+            skip = False
+            continue
+        if len(entry) < 4:
+            continue
+        xy, path = entry[:2], entry[3:]
+        if prefix and path.startswith(prefix):
+            path = path[len(prefix):]
+        if "R" in xy or "C" in xy:
+            skip = True
+        if xy == "!!":
+            ignored.append(path)
+        else:
+            dirty.add(path)
+
+    def classify(path):
+        if path in dirty:
+            return "uncommitted"
+        if any(path == i or (i.endswith("/") and path.startswith(i)) for i in ignored):
+            return "ignored"
+        return "tracked" if path in tracked else None
+    return classify
+
+
 # ---------------------------------------------------------------- merging
 def closest(candidates, ours, score):
     best, best_score = None, -1.0
@@ -405,6 +458,22 @@ def detect_version(plan):
     if not re.fullmatch(r"\d+", text):
         raise SchemaError("%s is not a schema number: %r" % (VERSION_FILE, raw[:40]))
     return int(text)
+
+
+def unsafe_path(root, path):
+    """Why a project-relative path must not be deleted: a symlink on the way to it,
+    or a real path outside the project; None when it is safe. Run at plan time and
+    again right before the delete."""
+    real_root = os.path.realpath(root)
+    here = root
+    for part in path.split("/"):
+        here = os.path.join(here, part)
+        if os.path.islink(here):
+            return "%s is a symlink" % os.path.relpath(here, root).replace(os.sep, "/")
+    real = os.path.realpath(os.path.join(root, path))
+    if real != real_root and not real.startswith(real_root + os.sep):
+        return "%s resolves outside the project (%s)" % (path, real)
+    return None
 
 
 class MigrationContext:
@@ -523,16 +592,7 @@ class MigrationContext:
         """Why a file must not be deleted through this path, or None: it is a
         symlink, it is reached through one, or it resolves outside the project."""
         self._check_path(path)
-        root = os.path.realpath(self.root)
-        here = self.root
-        for part in path.split("/"):
-            here = os.path.join(here, part)
-            if os.path.islink(here):
-                return "%s is a symlink" % os.path.relpath(here, self.root).replace(os.sep, "/")
-        real = os.path.realpath(os.path.join(self.root, path))
-        if real != root and not real.startswith(root + os.sep):
-            return "%s resolves outside the project (%s)" % (path, real)
-        return None
+        return unsafe_path(self.root, path)
 
     def override_note(self, path):
         """What an edited copy of a shared file now means."""
@@ -710,11 +770,14 @@ class Plan:
         self.schema = None  # (from, to, [migration modules]) when migrations are pending
         self.confirm_delete = None  # the human who confirmed this run's deletions
         self.confirm_via = None  # why that gate passed: "terminal" or "unattended"
+        self.confirm_cleanup = None  # the human who confirmed this run's [cleanup] deletions
+        self.cleanup_via = None
         self.held = None  # the schema version kept until a migration item is settled
         self.final = {}   # target -> bytes after this run (for cross-file fixes)
         self.removed = set()  # targets this run takes away
         self.seen = {}    # target -> sha of what was on disk when it was first read,
         #                   or None when nothing was there: apply's precondition
+        self.git_kept = set()  # [cleanup] targets git holds or should hold: a hint and an original/ copy
         self.report_dir = ".ai/reports/project-update-%s" % datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # The project as this run leaves it: planned content first, then the disk.
@@ -765,17 +828,60 @@ class Plan:
         return base
 
 
+WEIGHT_JSON, WEIGHT_MD = ".ai/policies/weight.json", ".ai/policies/weight.md"
+_WEIGHT = None
+
+
+def weight_module():
+    """skills/ai-task/weight.py, the renderer behind `state.py weight --mirror`."""
+    global _WEIGHT  # pylint: disable=global-statement  # loaded once per run
+    if _WEIGHT is None:
+        spec = importlib.util.spec_from_file_location("riskrails_weight", os.path.join(SKILLS, "ai-task", "weight.py"))
+        _WEIGHT = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_WEIGHT)
+    return _WEIGHT
+
+
+def render_weight(data):
+    """weight.md for the weight.json bytes `data`; the renderer reads a path."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "weight.json")
+        with open(path, "wb") as fh:
+            fh.write(data)
+        return weight_module().mirror(path).encode("utf-8")
+
+
+def weight_mirror(plan, history, theirs):
+    """weight.md is generated from weight.json. A mirror that is exactly the render of
+    the project's JSON on disk is rendered again from the JSON this run leaves behind:
+    merged as text with the template's, whose sha256 line names the template's JSON, it
+    was a conflict on every update. A mirror edited by hand, or stale, merges as before."""
+    ours = plan.read(WEIGHT_MD)
+    path = os.path.join(plan.root, WEIGHT_JSON)
+    disk = read(path) if os.path.isfile(path) and not os.path.islink(path) else None
+    after = plan.read(WEIGHT_JSON)
+    fresh = None
+    if ours is not None and disk is not None and after is not None:
+        try:
+            if ours == render_weight(disk):
+                fresh = render_weight(after)
+        except (ValueError, TypeError, AttributeError, KeyError):
+            fresh = None  # not a table the renderer reads: the text merge decides
+    if fresh is None:
+        three_way(plan, history, "ai-init/" + WEIGHT_MD, WEIGHT_MD, theirs)
+    elif fresh != ours:
+        plan.add("update", WEIGHT_MD, "rendered from weight.json", content=fresh)
+
+
 def three_way(plan, history, key, target, theirs):
     ours = plan.read(target)
     if ours is None:
         plan.add("create", target, content=theirs)
         return
-    is_mirror = target.endswith(".ai/policies/risk-tiers.md")
-    norm = (lambda b: HASH_RE.sub(b"sha256:" + b"0" * 64, b)) if is_mirror else (lambda b: b)
-    if norm(ours) == norm(theirs):
+    if ours == theirs:
         return
-    versions = [v for v in history.versions(key) if norm(v) != norm(theirs)]
-    if any(norm(v) == norm(ours) for v in versions):
+    versions = [v for v in history.versions(key) if v != theirs]
+    if any(v == ours for v in versions):
         policy = None
         if target.endswith(".json") and "/policies/" in "/" + target:
             try:
@@ -784,7 +890,7 @@ def three_way(plan, history, key, target, theirs):
             except ValueError:
                 policy = None
         plan.add("update", target, "unchanged since it was installed",
-                 content=fix_mirror(plan, target, theirs, ours), policy=policy)
+                 content=theirs, policy=policy)
         return
 
     if target.endswith(".json"):
@@ -805,28 +911,21 @@ def three_way(plan, history, key, target, theirs):
             plan.add("merge", target, "your edits kept", content=dump_json(merged), policy=policy)
         if conflicts:
             plan.add("conflict", target, "kept your value for: " + ", ".join(conflicts), conflict_copy=theirs)
-            model_keys = [c for c in conflicts if c.split(".")[0] == "model_tiers" or ".review_model" in "." + c]
-            if target.endswith("policies/risk-tiers.json") and model_keys:
-                hint = ("%s: %s — the plugin now names tiers (FAST/BALANCED/STRONG/EXPERT), not models; "
-                        "the model of a tier comes from the installed plan: state.py profile --tier <TIER>"
-                        % (target, ", ".join(model_keys)))
-                if hint not in plan.hints:
-                    plan.hints.append(hint)
         return
 
     if target == ROUTER_FILE and len(SHARED_SECTION_RE.findall(ours)) == 1:
         router_merge(plan, ours, versions, theirs)
         return
-    base = closest(versions, norm(ours), lambda b, o: text_ratio(norm(b), o)) if versions else None
-    merged = merge_text(norm(ours), norm(base), norm(theirs)) if base is not None else None
+    base = closest(versions, ours, text_ratio) if versions else None
+    merged = merge_text(ours, base, theirs) if base is not None else None
     if merged is not None and target == ROUTER_FILE and len(SHARED_SECTION_RE.findall(merged)) != 1:
         plan.add("conflict", target, "the merge would not name the shared files exactly once "
                  "(## Shared files)", conflict_copy=theirs)
         return
     if merged is None:
         plan.add("conflict", target, "edited here and changed in the plugin", conflict_copy=theirs)
-    elif merged != norm(ours):
-        plan.add("merge", target, "your edits kept", content=fix_mirror(plan, target, merged, ours))
+    elif merged != ours:
+        plan.add("merge", target, "your edits kept", content=merged)
 
 
 def split_shared_section(text):
@@ -838,8 +937,9 @@ def split_shared_section(text):
         return None
     start = found[0].start()
     nxt = re.compile(rb"(?m)^## ").search(text, found[0].end())
-    if nxt is None:
-        return text[:start], text[start:], b""
+    if nxt is None:  # at the end: the blank line before it belongs to the section
+        head = text[:start]
+        return (head[:-1] if head.endswith(b"\n\n") else head), text[start:], b""
     end = nxt.start()
     eol = text.find(b"\n", end)
     follow = text[end:eol + 1] if eol >= 0 else text[end:]
@@ -863,7 +963,9 @@ def router_merge(plan, ours, versions, theirs):
     if o_rest == t_rest or (base is not None and base == t_rest):
         return
     merged = merge_text(o_rest, base, t_rest) if base is not None else None
-    if merged is not None:
+    if merged is not None and not follow:  # the project had it at the end: it stays there
+        merged = merged + (b"" if merged.endswith(b"\n") else b"\n") + b"\n" + o_sec
+    elif merged is not None:
         merged = put_section(merged, o_sec, [follow, t_split[2] if t_split else b""])
     if merged is None or len(SHARED_SECTION_RE.findall(merged)) != 1:
         plan.add("conflict", ROUTER_FILE, "edited here and changed in the plugin", conflict_copy=theirs)
@@ -884,27 +986,6 @@ def put_section(text, section, follows):
         if m:
             return text[:m.start()] + section + text[m.start():]
     return text + (b"" if text.endswith(b"\n") else b"\n") + section
-
-
-def fix_mirror(plan, target, content, ours):
-    """risk-tiers.md carries the sha256 of risk-tiers.json. Carry the project's sync
-    state forward: a mirror that matched its JSON before this run points at the JSON
-    this run leaves behind; a mirror that was already stale, or a JSON left with a
-    conflict, keeps its old hash so /ai-status keeps warning."""
-    if not target.endswith(".ai/policies/risk-tiers.md"):
-        return content
-    old = HASH_RE.search(ours)
-    # The disk, not the plan: the question is whether the mirror matched the JSON
-    # the project had before this run.
-    json_target = target[:-3] + ".json"
-    json_path = os.path.join(plan.root, json_target)
-    before = read(json_path) if os.path.exists(json_path) else None
-    in_sync = old is not None and before is not None and old.group(0) == b"sha256:" + sha(before).encode()
-    conflicted = any(i["action"] == "conflict" and i["target"] == json_target for i in plan.items)
-    after = plan.final.get(json_target, None if json_target in plan.removed else before)
-    if in_sync and not conflicted and after is not None:
-        return HASH_RE.sub(b"sha256:" + sha(after).encode(), content, count=1)
-    return HASH_RE.sub(old.group(0), content, count=1) if old else content
 
 
 def block_update(plan, history, runtime):
@@ -985,7 +1066,7 @@ def shared_update(plan, history, version):
             edited.append(path)
         elif not named:
             ctx.hint("%s: unedited, but %s does not name the shared files (## Shared files), so the "
-                     "copy stays — restore that section, then run /project-update again"
+                     "copy stays — restore that section, then run /rr-setup --update again"
                      % (path, ROUTER_FILE))
         else:
             candidates.append(path)
@@ -1008,9 +1089,145 @@ def shared_update(plan, history, version):
                  "adds nothing" % (len(edited), ", ".join(edited), SHARED))
 
 
+def retire_templates(plan, history, retired):
+    """[(history key, target)] the plugin now supplies from its own tree. A
+    missing copy stays missing; an unedited one is offered for deletion, same
+    gate as a shared override; an edited one is a project override, named once."""
+    edited = []
+    for key, target in retired:
+        data = plan.read(target)
+        if data is None:
+            continue
+        known = history.hashes(key)
+        if sha(data) not in known and sha(data.replace(b"\r\n", b"\n")) not in known:
+            edited.append(target)
+            continue
+        why = "[sdlc] the plugin supplies it: skills/project-init/templates/" + key.split("/", 1)[1]
+        if plan.confirm_delete:
+            plan.add("delete", target, why, reason=why)
+            plan.remove(target)
+        else:
+            plan.add("delete?", target, why, reason=why)
+    if edited:
+        plan.hints.append("%d file(s) override the plugin's SDLC template and no longer receive its "
+                          "changes: %s" % (len(edited), ", ".join(edited)))
+
+
+def task_journal(root, task_id):
+    """(finished, abandoned, last event as a datetime) from the task's journal,
+    or None when it holds no readable event. A task is finished when its journal
+    has task_closed or gate_approved, or when logs/<id>/state.json records a
+    result (so a torn task_closed line does not make a closed task look unclosed)."""
+    closed = abandoned = False
+    last = None
+    try:
+        with open(os.path.join(root, ".ai", "reports", task_id, "events.jsonl"), encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    for line in lines:
+        try:
+            ev = json.loads(line)
+            when = datetime.strptime(ev["ts"][:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+        except (ValueError, KeyError, TypeError):
+            continue
+        if last is None or when > last:
+            last = when
+        if ev.get("event") == "task_closed":
+            closed = True
+            data = ev.get("data")
+            abandoned = (isinstance(data, dict) and data.get("abandoned") is True) or ev.get("detail") == "abandoned"
+        elif ev.get("event") == "gate_approved":
+            closed = True
+    try:
+        with open(os.path.join(root, ".ai", "state", "logs", task_id, "state.json"), encoding="utf-8") as fh:
+            result = json.load(fh).get("result")
+    except (OSError, ValueError, AttributeError, UnicodeDecodeError):
+        result = None
+    if isinstance(result, str) and result:
+        closed = True
+        abandoned = abandoned or result == "abandoned"
+    return None if last is None else (closed, abandoned, last)
+
+
+def cleanup_update(plan, now=None):
+    """Old run logs and stale unclosed tasks, proposed for deletion and never
+    deleted unasked (only with --confirm-cleanup). A closed task's `*.log` files
+    go (its state.json stays); an abandoned task loses every file under
+    .ai/reports/<id>/ and .ai/state/logs/<id>/ except that state.json; an unclosed
+    one idle for STALE_DAYS loses every file in both. The task in flight is
+    never touched. `now` is a datetime; RISKRAILS_NOW (ISO, Z) overrides it."""
+    if now is None:
+        try:
+            now = datetime.strptime(env("NOW") or utc_now(), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        except ValueError:
+            print("project-update: RISKRAILS_NOW %r is not a UTC time like 2026-01-31T12:00:00Z" % env("NOW"),
+                  file=sys.stderr)
+            raise SystemExit(2)
+    flight = None
+    for name in (STATE_FILE, LEGACY_STATE_FILE):
+        raw = plan.read(name)
+        if raw is not None:
+            try:
+                flight = json.loads(raw).get("task_id")
+            except (ValueError, AttributeError):
+                return  # unreadable: a task may be in flight, so no task is proposed as stale
+            break
+    reports =os.path.join(plan.root, ".ai", "reports")
+    logs = os.path.join(plan.root, ".ai", "state", "logs")
+
+    def files(base, rel, only_logs=False, keep=()):
+        out = []
+        for here, _dirs, names in os.walk(os.path.join(base, rel)):
+            for n in names:
+                full = os.path.join(here, n)
+                if os.path.isfile(full) and not os.path.islink(full) and (not only_logs or n.endswith(".log")) \
+                        and n not in keep:
+                    out.append(os.path.relpath(full, plan.root).replace(os.sep, "/"))
+        return out
+
+    for task_id in sorted(os.listdir(reports)) if os.path.isdir(reports) else []:
+        journal = task_journal(plan.root, task_id)
+        if journal is None or task_id == flight:
+            continue
+        closed, abandoned, last = journal
+        if abandoned:
+            why, targets = "[cleanup] abandoned task %s" % task_id, \
+                files(reports, task_id) + files(logs, task_id, keep=("state.json",))
+        elif not closed and now - last > timedelta(days=STALE_DAYS):
+            why = "[cleanup] unclosed task %s, last event %s" % (task_id, last.strftime("%Y-%m-%d"))
+            targets = files(reports, task_id) + files(logs, task_id)
+        elif closed:
+            why, targets = "[cleanup] log of closed task %s" % task_id, files(logs, task_id, only_logs=True)
+        else:
+            continue
+        # .ai/reports/ is usually git-tracked; only .ai/state/ is git-ignored run state
+        held = git_states(plan.root, ".ai/reports/" + task_id)
+        for target in sorted(targets):
+            note = why
+            state = held(target) if target.startswith(".ai/reports/") else None
+            if state == "tracked":
+                note += "; tracked: git can restore a committed copy"
+            elif state == "uncommitted":
+                note += "; uncommitted: git holds no copy of it"
+            elif state == "ignored":
+                note += "; git-ignored: not recoverable through git"
+            if state in ("tracked", "uncommitted"):
+                plan.git_kept.add(target)
+            if plan.confirm_cleanup:
+                plan.add("delete", target, note, reason=why)
+                plan.remove(target)
+            else:
+                plan.add("delete?", target, note, reason=why)
+
+
 def deletion_hint(plan):
-    """M4: git is the rollback of a deletion; it must hold .ai/ first."""
-    if any(i["action"] in ("delete?", "delete") and i["target"].startswith(".ai/") for i in plan.items) \
+    """M4: git is the rollback of a migration's deletion; it must hold .ai/ first.
+    A [cleanup] deletion of git-ignored run state is not counted: git does not roll it back;
+    one under .ai/reports/ that git tracks, or should, is."""
+    if any(i["action"] in ("delete?", "delete") and i["target"].startswith(".ai/")
+           and (not (i.get("reason") or "").startswith("[cleanup]") or i["target"] in plan.git_kept)
+           for i in plan.items) \
             and git_dirty_ai(plan.root):
         plan.hints.append("commit .ai/ first: git is this migration's rollback "
                           "(`git status -- .ai` lists what it does not hold yet)")
@@ -1198,8 +1415,10 @@ def constitution_hint(plan):
         plan.hints.append(line.replace(path, rel))
 
 
-def build_plan(root, confirm_delete=None, confirm_via=None):
+def build_plan(root, confirm_delete=None, confirm_via=None, confirm_cleanup=None, cleanup_via=None):
     plan = Plan(root)
+    plan.confirm_cleanup = confirm_cleanup
+    plan.cleanup_via = cleanup_via
     plan.confirm_delete = confirm_delete
     plan.confirm_via = confirm_via
     has_ai = os.path.isdir(os.path.join(root, ".ai"))
@@ -1231,7 +1450,7 @@ def build_plan(root, confirm_delete=None, confirm_via=None):
             if stuck:
                 plan.held = version
                 plan.hints.append("the schema stays at %d until %s — resolve a conflict by hand, confirm a "
-                                  "deletion with --apply --confirm-delete NAME, then run /project-update again"
+                                  "deletion with --apply --confirm-delete NAME, then run /rr-setup --update again"
                                   % (version, ", ".join("%s (%s)" % (i["target"], i["action"]) for i in stuck)))
             else:
                 # Last of the migration items: an apply that stops short leaves the
@@ -1243,18 +1462,22 @@ def build_plan(root, confirm_delete=None, confirm_via=None):
     if has_sdlc:
         tpl = TEMPLATES["project-init"]
         entries = list(PROJECT_INIT_MAP)
+        retired = []
         for rt in runtimes:
             entries += RUNTIME_MAP[rt]
         for src, target, kind in entries:
             content = read(os.path.join(tpl, src))
             if target in plan.removed:  # a migration moved it away in this run
                 continue
-            if kind == "create":
+            if kind == "retire":
+                retired.append(("project-init/" + src, target))
+            elif kind == "create":
                 if not plan.exists(target):
                     plan.add("create", target, content=content.replace(
                         b"{{PROJECT}}", os.path.basename(root).encode()))
             else:
                 three_way(plan, history, "project-init/" + src, target, content)
+        retire_templates(plan, history, retired)
         gitignore_update(plan, os.path.join(tpl, "gitignore.snippet"))
 
     if has_ai:
@@ -1263,7 +1486,7 @@ def build_plan(root, confirm_delete=None, confirm_via=None):
         for dirpath, _, names in os.walk(os.path.join(tpl, ".ai")):
             for n in names:
                 files.append(os.path.relpath(os.path.join(dirpath, n), tpl))
-        # JSON before markdown, so the risk-tier mirror can point at the merged JSON.
+        # JSON before markdown, so the weight mirror is rendered from the merged JSON.
         for rel in sorted(files, key=lambda r: (not r.endswith(".json"), r)):
             if rel == VERSION_FILE:  # owned by the migration step, never merged
                 continue
@@ -1276,8 +1499,12 @@ def build_plan(root, confirm_delete=None, confirm_via=None):
                 if not plan.exists(rel):
                     plan.add("create", rel, content=content)
                 continue
+            if rel == WEIGHT_MD:
+                weight_mirror(plan, history, content)
+                continue
             three_way(plan, history, "ai-init/" + rel, rel, content)
         shared_update(plan, history, version)
+        cleanup_update(plan)
         deletion_hint(plan)
         for rt in runtimes:
             block_update(plan, history, rt)
@@ -1290,8 +1517,8 @@ def build_plan(root, confirm_delete=None, confirm_via=None):
                 ("verify_command", "the feedback loop needs it"),
                 ("step_test_command", "a step runs only its own tests"),
                 ("e2e_command", "e2e runs once at the end of a task; write 'none' if there is no suite"),
-                ("lint_command", "a sensor reads it; run `sensors.py detect`, and write 'none' if there is none"),
-                ("typecheck_command", "a sensor reads it; run `sensors.py detect`, and write 'none' if there is none"),
+                ("lint_command", "a sensor reads it; read the project's config files for it, and write 'none' if there is none"),
+                ("typecheck_command", "a sensor reads it; read the project's config files for it, and write 'none' if there is none"),
             ):
                 if re.search(rb"(?m)^" + field.encode() + rb":[ \t]*(#.*)?$", testing):
                     plan.hints.append(".ai/policies/testing.md: %s is empty — %s" % (field, why))
@@ -1432,16 +1659,25 @@ def apply(plan):
 
 def apply_item(plan, item, written, recorded):
     target, action = item["target"], item["action"]
+    cleanup = (item.get("reason") or "").startswith("[cleanup]")
     if action == "delete?":  # listed only, until a human confirms it
         return
     mode = None
     if action in ("move", "delete"):
         source = item["src"] if action == "move" else target
+        # the plan-time symlink check is repeated: a path swapped since is refused
+        why = unsafe_path(plan.root, source)
+        if why:
+            raise Abort(item, why)
         check(plan, item, source, item["src_expect"] if action == "move" else item["expect"], written)
         if action == "move":
             check(plan, item, target, item["expect"], written)
             mode = os.stat(os.path.join(plan.root, source)).st_mode & 0o7777
-        if not source.startswith(".ai/state/"):  # git-ignored task state: a move is byte-identical
+        # git-ignored task state: a move is byte-identical; a [cleanup] deletion of it is NOT
+        # recoverable through git (the logs are git-ignored), and copying what it removes
+        # would defeat the cleanup, so no original/ copy is kept. A report file git tracks,
+        # or should, is kept like any other deletion.
+        if not source.startswith(".ai/state/") and (not cleanup or source in plan.git_kept):
             keep_original(plan, source)
         recorded.append(target)
         # Recorded before the file is gone: an abort later must not lose the note
@@ -1449,7 +1685,8 @@ def apply_item(plan, item, written, recorded):
         record_migration(plan,
                          [dict(action=action, migration=item["migration"],
                                **(dict(src=item["src"], dst=target) if action == "move" else dict(path=target)))],
-                         [dict(path=target, confirmed_by=plan.confirm_delete, via=plan.confirm_via, at=utc_now())]
+                         [dict(path=target, confirmed_by=plan.confirm_cleanup if cleanup else plan.confirm_delete,
+                               via=plan.cleanup_via if cleanup else plan.confirm_via, at=utc_now())]
                          if action == "delete" else [])
     elif item["content"] is not None:
         check(plan, item, target, item["expect"], written)
@@ -1469,8 +1706,23 @@ def apply_item(plan, item, written, recorded):
     elif action == "delete":
         os.remove(os.path.join(plan.root, target))
         written[target] = None
+        if (item["reason"] or "").startswith("[cleanup]"):
+            prune_empty(plan.root, target)
     if item["conflict_copy"] is not None:
         write_file(plan.root, os.path.join(plan.local_dir, target), item["conflict_copy"])
+
+
+def prune_empty(root, target):
+    """The directories a cleanup deletion left empty, up to (not including)
+    .ai/reports and .ai/state/logs; a directory with anything in it stays."""
+    top = ".ai/state/logs" if target.startswith(".ai/state/logs/") else ".ai/reports"
+    here = os.path.dirname(target)
+    while here.startswith(top + "/"):
+        try:
+            os.rmdir(os.path.join(root, here))
+        except OSError:
+            return
+        here = os.path.dirname(here)
 
 
 def plain_pending(root, ignore=()):
@@ -1523,20 +1775,42 @@ def report(plan, applied):
         print("  up to date with the installed plugin")
     def shown(i):
         return "%s -> %s" % (i["src"], i["target"]) if i["src"] else i["target"]
-    width = max([len(shown(i)) for i in plan.items] + [10])
+    # a cleanup is one line per directory, however many files it holds
+    rows, groups = [], {}
+    for i in plan.items:
+        if (i["reason"] or "").startswith("[cleanup]"):
+            parts = i["target"].split("/")
+            where = "/".join(parts[:4] if i["target"].startswith(".ai/state/logs/") else parts[:3])
+            key = (where, i["action"], i["note"])
+            if key in groups:
+                groups[key]["count"] += 1
+                continue
+            row = dict(i, migration=None, src=None, count=1)
+            groups[key] = row
+            row["target"] = where
+            i = row
+        rows.append(i)
+    for (where, _action, _note), row in groups.items():
+        row["target"] = "%s/ (%d file%s)" % (where, row["count"], "" if row["count"] == 1 else "s")
+    width = max([len(shown(i)) for i in rows] + [10])
     if plan.schema:
         frm, to, mods = plan.schema
         print("  %-9s %-*s  (%d migration%s: %s)" % (
             "schema", width, "%d -> %d" % (frm, to), len(mods), "" if len(mods) == 1 else "s",
             ", ".join("%04d %s" % (m.VERSION, m.TITLE) for m in mods)))
-    for i in plan.items:
+    for i in rows:
         note = i["note"]
         if i["migration"] is not None:
             note = "[%04d]%s" % (i["migration"], " " + note if note else "")
         if i.get("tool") and not note.startswith("[%s]" % i["tool"]):
             note = "[%s] %s" % (i["tool"], note)
         if i["action"] == "delete?":
-            note += "; needs --apply --confirm-delete NAME"
+            if (i["reason"] or "").startswith("[cleanup]"):
+                note += "; needs --apply --confirm-cleanup NAME"
+                if i["target"].startswith(".ai/state/"):
+                    note += " (git-ignored: not recoverable through git)"
+            else:
+                note += "; needs --apply --confirm-delete NAME"
         if i["action"] == "conflict" and i["conflict_copy"] is not None:
             note += "; plugin version %s %s/%s" % ("at" if applied else "will be at", plan.local_dir, i["target"])
         print("  %-9s %-*s  %s" % (i["action"], width, shown(i), note))
@@ -1576,30 +1850,42 @@ def main():
     ap.add_argument("--confirm-delete", metavar="NAME",
                     help="a human confirms this run's proposed deletions, and is recorded in "
                          "the migration report; only with --apply")
+    ap.add_argument("--confirm-cleanup", metavar="NAME",
+                    help="a human confirms this run's [cleanup] deletions (run logs and stale task files, "
+                         "git-ignored and not recoverable through git); only with --apply. "
+                         "--confirm-delete does not settle them")
     args = ap.parse_args()
-    confirm_via = None
-    if args.confirm_delete is not None:
+    confirm_via = cleanup_via = None
+    for flag, name in (("--confirm-delete", args.confirm_delete), ("--confirm-cleanup", args.confirm_cleanup)):
+        if name is None:
+            continue
         if not args.apply:
-            ap.error("--confirm-delete only makes sense with --apply")
-        if not args.confirm_delete.strip():
-            ap.error("--confirm-delete needs the name of the human who confirmed the deletion")
-        if adopt.placeholder_name(args.confirm_delete):
-            ap.error("--confirm-delete got the placeholder %r; type your own name, it is the audit trail"
-                     % args.confirm_delete.strip())
-        passed, confirm_via, why = adopt.human_gate()
+            ap.error("%s only makes sense with --apply" % flag)
+        if not name.strip():
+            ap.error("%s needs the name of the human who confirmed the deletion" % flag)
+        if adopt.placeholder_name(name):
+            ap.error("%s got the placeholder %r; type your own name, it is the audit trail"
+                     % (flag, name.strip()))
+        passed, via, why = adopt.human_gate()
         if not passed:
             # Under an agent-session marker the AI_UNATTENDED route is the launcher's
             # to declare, not the agent's to type: the hint names it only otherwise.
             hint = "run the same command yourself in a terminal outside Claude Code or Codex"
             if "agent session" not in why:
                 hint += ", or set AI_UNATTENDED=1 if a launcher runs it unattended on your behalf"
-            return adopt.refuse("--confirm-delete is typed by a human, and %s" % why, hint)
+            return adopt.refuse("%s is typed by a human, and %s" % (flag, why), hint)
+        if flag == "--confirm-delete":
+            confirm_via = via
+        else:
+            cleanup_via = via
     if args.budget and not args.check:
         ap.error("--budget only makes sense with --check")
     if not args.adopt and (args.tool or args.mode != "migrate" or args.split_request or args.split or args.diff
                            or args.cleanup):
         ap.error("--mode, --tool, --split, --split-request, --diff and --cleanup only make sense with --adopt")
     root = os.path.abspath(args.root)
+    if args.adopt and args.confirm_cleanup is not None:
+        ap.error("--confirm-cleanup does not apply to --adopt")
     if args.adopt:
         if args.confirm_delete is not None and not args.cleanup:
             ap.error("--adopt --confirm-delete belongs to --cleanup")
@@ -1632,13 +1918,14 @@ def main():
             print("project-update: %s templates not found at %s (run riskrails/install.sh)" % (name, tpl), file=sys.stderr)
             return 2
     try:
-        plan = build_plan(root, confirm_delete=getattr(args, "confirm_delete", None), confirm_via=confirm_via)
+        plan = build_plan(root, confirm_delete=getattr(args, "confirm_delete", None), confirm_via=confirm_via,
+                          confirm_cleanup=args.confirm_cleanup, cleanup_via=cleanup_via)
     except SchemaError as exc:
         # --check is read by /ai-status, which reads stdout: it must see the reason.
         print("project-update: %s" % exc, file=sys.stdout if args.check else sys.stderr)
         return 2
     if plan is None:
-        print("project-update: %s has neither .ai/ nor docs/sdlc/ — run /ai-init or /project-init first" % root,
+        print("project-update: %s has neither .ai/ nor docs/sdlc/ — run /rr-setup first" % root,
               file=sys.stderr)
         return 2
     if not args.check:
@@ -1665,7 +1952,7 @@ def main():
                 bits.append("%d deletion(s) a human must confirm" % deletions)
             if plan.held is not None:
                 bits.append("the schema stays at %d until they are settled" % plan.held)
-            print("project is behind the installed plugin: %s — run /project-update" % ", ".join(bits))
+            print("project is behind the installed plugin: %s — run /rr-setup --update" % ", ".join(bits))
             return 1
         print("project matches the installed plugin" + (" (%d file(s) differ by hand-merge choice)" % conflicts if conflicts else ""))
         return 0

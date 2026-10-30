@@ -135,8 +135,10 @@ def snapshot_tree(root):
 def numstat(root, from_tree, to_tree):
     """[{path, added, deleted, binary}] between two trees, NUL-separated so a
     path with a space, a quote or a newline survives. Renames are off: a rename
-    is an add plus a delete, as diff_files reports it."""
-    code, out = git(root, ["diff", "--numstat", "--no-renames", "-z",
+    is an add plus a delete, as diff_files reports it. --relative (git runs in
+    root): paths are relative to the project root, as task files and policy globs
+    are, and a change outside root, below the git top level, is left out."""
+    code, out = git(root, ["diff", "--relative", "--numstat", "--no-renames", "-z",
                            from_tree, to_tree])
     if code != 0:
         return None
@@ -170,7 +172,8 @@ def diff_files(root, from_tree, to_tree):
     None when either tree is missing: an unmeasured diff is not an empty one."""
     if not from_tree or not to_tree:
         return None
-    code, out = git(root, ["diff", "--name-status", "--no-renames", "-z", from_tree, to_tree])
+    code, out = git(root, ["diff", "--relative", "--name-status", "--no-renames", "-z",
+                           from_tree, to_tree])
     if code != 0:
         return None
     fields = [f for f in out.split("\0") if f != ""]
@@ -202,7 +205,8 @@ def scope_any(path, patterns):
 # ------------------------------------------------------------------- running
 
 TESTING_FIELDS = ("verify_command", "step_test_command", "e2e_command",
-                  "lint_command", "typecheck_command", "single_test", "doc_tests")
+                  "lint_command", "typecheck_command", "single_test", "doc_tests",
+                  "bite_codes")
 
 SCOPE_FIELD = {"suite": "verify_command", "step": "step_test_command",
                "e2e": "e2e_command", "single": "single_test"}
@@ -232,8 +236,24 @@ def read_commands(root):
         value = match.group(1).strip()
         if value.startswith("#"):
             value = ""
+        # A trailing `  # comment` is not part of `none` or of the code list; a
+        # command value is left exactly as written (a `#` can be part of it).
+        bare = re.sub(r"\s+#.*$", "", value)
+        if field == "bite_codes" or bare.lower() == "none":
+            value = bare
         commands[field] = value
     return commands
+
+
+def bite_codes(root):
+    """The exit codes that count as "the test fails" under --expect fail: the
+    testing.md `bite_codes` list of integers, 1 when absent or not a clean list."""
+    raw = read_commands(root).get("bite_codes", "")
+    try:
+        codes = tuple(int(part) for part in raw.split(","))
+    except ValueError:
+        return (1,)
+    return codes or (1,)
 
 
 def command_for(root, scope):

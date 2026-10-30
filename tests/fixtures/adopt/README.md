@@ -2,7 +2,7 @@
 
 One directory per foreign structure. Each has a `README.md` (the format assumption, its source and
 the date it was checked) and a `fixture.json` that tells `run_fixture` in
-`tests/test-project-adopt.sh` how to build the project:
+`tests/test_project_adopt.py` how to build the project:
 
 ```json
 {"runtime": "claude", "instruction_append": {"CLAUDE.md": "fixture-CLAUDE.md"}}

@@ -194,7 +194,7 @@ class TestGuardDifferential(unittest.TestCase):
             for lc in ("C", "C.UTF-8"):
                 t0 = time.perf_counter()
                 tc.run_guard(tc.port_argv(tc.PATH), runs[0][1], tree.env(lc), tc.TESTS)
-                self.assertLess(time.perf_counter() - t0, 2.0)
+                self.assertLess(time.perf_counter() - t0, 2.0 * float(os.environ.get("AI_TIMED_FACTOR") or 1))
                 self.assert_same(run_pair(tree, runs, lc), lc)
         finally:
             tree.close()

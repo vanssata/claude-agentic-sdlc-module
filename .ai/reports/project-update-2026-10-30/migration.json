@@ -1,0 +1,5267 @@
+{
+  "from": null,
+  "to": 11,
+  "applied_at": "2026-10-30T13:32:15Z",
+  "ops": [
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-02-001/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-02-001/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-02-001/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-02-002/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-02-002/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-02-002/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-02-002/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-02-003/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-02-003/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-02-003/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-13-001/discovery-A.md"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-13-001/discovery-B.md"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-13-001/discovery-C.md"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-13-001/events.jsonl"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-13-001/impact-report.md"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-13-001/questions.md"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-13-001/state.json"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-13-001/task-context.md"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/tests-e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/tests-suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-003/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-003/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/m3-byte-sweep.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/tests-e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/tests-suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-14-001/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-14-001/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-14-001/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-14-001/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-14-002/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-14-002/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-14-002/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-14-003/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-14-003/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-14-003/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-001/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-001/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-001/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-002/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-002/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-002/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-002/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-002/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-003/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-003/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-003/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-003/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-003/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-003/legacy/tests-suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-004/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-004/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-004/legacy/tests-e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-004/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-004/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-15-004/legacy/tests-suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-001/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-001/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-001/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-002/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-002/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-002/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-002/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-002/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-e2e-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-suite-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-e2e-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-suite-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-22-001/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-22-001/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-22-001/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-22-001/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-22-001/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-22-001/legacy/tests-suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-22-002/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-22-002/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-22-002/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-22-002/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-22-002/legacy/tests-suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-001/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-001/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-001/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-001/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-001/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-002/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-002/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-002/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-002/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-002/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-003/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-003/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-003/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-003/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-003/legacy/tests-suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-004/legacy/bite-must_fail.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-004/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-004/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-004/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-004/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-004/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-005/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-005/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-006/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-006/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-006/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-006/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-007/legacy/lint.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-007/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-007/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-007/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-007/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-008/legacy/tests-e2e-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-008/legacy/tests-e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-008/legacy/tests-suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-008/legacy/tests-suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-25-008/legacy/tests-suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/e2e-15.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/e2e-21.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-10.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-11.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-13.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-16.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-17.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-18.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-19.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/step-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/suite-12.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/suite-14.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/suite-17.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-001/suite-20.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-26-002/events.jsonl"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-26-002/task.md"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-002/state.json"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-003/e2e-10.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-003/e2e-12.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-003/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-003/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-003/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-003/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-003/step-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-003/step-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-003/step-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-003/step-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-003/suite-11.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-003/suite-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-004/e2e-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-004/e2e-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-004/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-004/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-004/suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-004/suite-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-005/e2e-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-005/e2e-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-005/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-005/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-005/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-005/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-005/suite-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-005/suite-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-005/suite-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-006/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-006/e2e-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-006/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-006/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-006/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-006/step-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-006/suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-006/suite-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-007/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-007/e2e-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-007/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-007/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-007/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-007/suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-26-007/suite-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-001/e2e-10.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-001/e2e-12.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-001/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-001/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-001/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-001/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-001/step-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-001/step-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-001/step-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-001/step-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-001/suite-11.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-001/suite-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-002/e2e-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-002/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-002/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-002/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-002/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-002/suite-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/e2e-12.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/e2e-14.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/step-10.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/step-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/step-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/step-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/step-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/step-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/suite-11.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-003/suite-13.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-004/e2e-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-004/e2e-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-004/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-004/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-004/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-004/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-004/step-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-004/suite-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-004/suite-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-005/e2e-10.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-005/e2e-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-005/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-005/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-005/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-005/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-005/suite-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-005/suite-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-005/suite-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-005/suite-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/e2e-13.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/e2e-16.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/step-10.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/step-11.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/step-14.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/step-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/step-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/step-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/step-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/step-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/suite-12.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-006/suite-15.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/e2e-13.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/e2e-19.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/e2e-23.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/e2e-24.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/e2e-25.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-10.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-11.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-14.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-15.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-16.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-17.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-20.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-21.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/step-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/suite-12.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/suite-18.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/suite-22.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/suite-24.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-27-007/suite-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-001/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-001/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-002/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-002/e2e-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-002/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-002/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-002/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-002/step-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-002/suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-002/suite-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-003/e2e-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-003/e2e-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-003/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-003/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-003/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-003/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-003/step-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-003/suite-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-003/suite-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-004/e2e-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-004/e2e-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-004/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-004/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-004/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-004/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-004/step-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-004/suite-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-004/suite-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-28-005/events.jsonl"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-28-005/task.md"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-005/state.json"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-006/e2e-10.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-006/e2e-13.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-006/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-006/step-11.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-006/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-006/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-006/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-006/step-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-006/step-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-006/step-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-006/suite-12.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-006/suite-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-006/suite-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-007/e2e-11.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-007/e2e-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-007/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-007/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-007/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-007/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-007/step-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-007/step-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-007/step-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-007/suite-10.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-007/suite-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-28-008/events.jsonl"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/reports/T-2026-10-28-008/task.md"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-008/state.json"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-009/e2e-12.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-009/e2e-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-009/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-009/step-10.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-009/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-009/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-009/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-009/step-8.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-009/suite-11.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-009/suite-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-009/suite-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-009/suite-9.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-011/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-011/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-011/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-011/suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-011/suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-2221-refresh-direct-mode-diet/e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-2221-refresh-direct-mode-diet/e2e-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-2221-refresh-direct-mode-diet/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-28-2221-refresh-direct-mode-diet/suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-0755-plan-drift-7e/e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-0755-plan-drift-7e/e2e-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-0755-plan-drift-7e/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-0755-plan-drift-7e/suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-0852-r36-rest/e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-0852-r36-rest/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-0852-r36-rest/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-0852-r36-rest/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-0852-r36-rest/suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1035-redesign-3-6/e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1035-redesign-3-6/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1035-redesign-3-6/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1035-redesign-3-6/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1035-redesign-3-6/suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1145-redesign-plan-record-the/e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1145-redesign-plan-record-the/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1145-redesign-plan-record-the/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1145-redesign-plan-record-the/suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1145-redesign-plan-record-the/suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1636-shorten-c5-and-c6-in-the/e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1636-shorten-c5-and-c6-in-the/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1636-shorten-c5-and-c6-in-the/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1636-shorten-c5-and-c6-in-the/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1636-shorten-c5-and-c6-in-the/suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1655-record-three-out-of-task/e2e-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1655-record-three-out-of-task/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1655-record-three-out-of-task/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1655-record-three-out-of-task/suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1724-t-1-safety-md-blocker/e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1724-t-1-safety-md-blocker/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1724-t-1-safety-md-blocker/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1724-t-1-safety-md-blocker/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1724-t-1-safety-md-blocker/suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1746-info-i1-i2-of-t-2026-10/e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1746-info-i1-i2-of-t-2026-10/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1756-low-l1-of-t-2026-10-29/e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1756-low-l1-of-t-2026-10-29/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/e2e-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/suite-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/suite-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1913-flaky-test-memory-sync/e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1913-flaky-test-memory-sync/e2e-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1913-flaky-test-memory-sync/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1913-flaky-test-memory-sync/suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1940-speed-up-tests-test-ai/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1940-speed-up-tests-test-ai/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-1940-speed-up-tests-test-ai/suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2006-faster-task-cycle/e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2006-faster-task-cycle/e2e-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2006-faster-task-cycle/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2006-faster-task-cycle/suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2125-faster-task-cycle-m/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2125-faster-task-cycle-m/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2125-faster-task-cycle-m/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2125-faster-task-cycle-m/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2125-faster-task-cycle-m/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2125-faster-task-cycle-m/suite-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2221-r16-of-faster-task-cycle/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2234-rewrite-readme-and-docs/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2234-rewrite-readme-and-docs/step-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2234-rewrite-readme-and-docs/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2234-rewrite-readme-and-docs/suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2308-docs-pin-riskrails-3-0-1/e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2308-docs-pin-riskrails-3-0-1/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2308-docs-pin-riskrails-3-0-1/suite-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2350-ci-in-two-tiers-smoke/e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2350-ci-in-two-tiers-smoke/e2e-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2350-ci-in-two-tiers-smoke/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2350-ci-in-two-tiers-smoke/step-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2350-ci-in-two-tiers-smoke/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-29-2350-ci-in-two-tiers-smoke/suite-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0007-ci-determinism-find/e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0007-ci-determinism-find/step-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0007-ci-determinism-find/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": 11,
+      "path": ".ai/policies/risk-tiers.json"
+    },
+    {
+      "action": "delete",
+      "migration": 11,
+      "path": ".ai/policies/risk-tiers.md"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/e2e-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/e2e-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/step-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/suite-4.log"
+    }
+  ],
+  "deletions": [
+    {
+      "path": ".ai/state/logs/T-2026-10-02-001/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-02-001/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-02-001/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-02-002/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-02-002/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-02-002/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-02-002/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-02-003/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-02-003/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-02-003/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-13-001/discovery-A.md",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-13-001/discovery-B.md",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-13-001/discovery-C.md",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-13-001/events.jsonl",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-13-001/impact-report.md",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-13-001/questions.md",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-13-001/state.json",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-13-001/task-context.md",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/tests-e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-002/legacy/tests-suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-003/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-003/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/m3-byte-sweep.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/tests-e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-13-004/legacy/tests-suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-14-001/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-14-001/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-14-001/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-14-001/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-14-002/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-14-002/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-14-002/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-14-003/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-14-003/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-14-003/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-001/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-001/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-001/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-002/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-002/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-002/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-002/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-002/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-003/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-003/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-003/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-003/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-003/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-003/legacy/tests-suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-004/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-004/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-004/legacy/tests-e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-004/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-004/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-15-004/legacy/tests-suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-001/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-001/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-001/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-002/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-002/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-002/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-002/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-002/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-e2e-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-20-003/legacy/tests-suite-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-e2e-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-21-001/legacy/tests-suite-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-22-001/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-22-001/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-22-001/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-22-001/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-22-001/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-22-001/legacy/tests-suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-22-002/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-22-002/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-22-002/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-22-002/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-22-002/legacy/tests-suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-001/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-001/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-001/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-001/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-001/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-002/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-002/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-002/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-002/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-002/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-003/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-003/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-003/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-003/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-003/legacy/tests-suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-004/legacy/bite-must_fail.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-004/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-004/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-004/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-004/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-004/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-005/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-005/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-006/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-006/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-006/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-006/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-007/legacy/lint.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-007/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-007/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-007/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-007/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-008/legacy/tests-e2e-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-008/legacy/tests-e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-008/legacy/tests-suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-008/legacy/tests-suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-25-008/legacy/tests-suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/e2e-15.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/e2e-21.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-10.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-11.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-13.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-16.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-17.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-18.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-19.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/step-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/suite-12.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/suite-14.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/suite-17.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-001/suite-20.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-26-002/events.jsonl",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-26-002/task.md",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-002/state.json",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-003/e2e-10.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-003/e2e-12.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-003/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-003/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-003/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-003/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-003/step-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-003/step-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-003/step-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-003/step-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-003/suite-11.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-003/suite-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-004/e2e-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-004/e2e-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-004/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-004/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-004/suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-004/suite-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-005/e2e-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-005/e2e-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-005/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-005/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-005/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-005/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-005/suite-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-005/suite-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-005/suite-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-006/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-006/e2e-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-006/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-006/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-006/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-006/step-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-006/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-006/suite-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-007/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-007/e2e-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-007/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-007/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-007/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-007/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-26-007/suite-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-001/e2e-10.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-001/e2e-12.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-001/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-001/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-001/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-001/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-001/step-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-001/step-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-001/step-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-001/step-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-001/suite-11.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-001/suite-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-002/e2e-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-002/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-002/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-002/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-002/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-002/suite-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/e2e-12.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/e2e-14.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/step-10.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/step-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/step-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/step-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/step-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/step-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/suite-11.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-003/suite-13.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-004/e2e-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-004/e2e-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-004/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-004/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-004/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-004/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-004/step-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-004/suite-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-004/suite-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-005/e2e-10.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-005/e2e-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-005/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-005/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-005/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-005/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-005/suite-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-005/suite-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-005/suite-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-005/suite-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/e2e-13.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/e2e-16.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/step-10.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/step-11.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/step-14.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/step-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/step-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/step-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/step-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/step-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/suite-12.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-006/suite-15.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/e2e-13.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/e2e-19.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/e2e-23.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/e2e-24.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/e2e-25.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-10.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-11.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-14.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-15.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-16.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-17.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-20.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-21.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/step-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/suite-12.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/suite-18.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/suite-22.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/suite-24.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-27-007/suite-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-001/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-001/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-002/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-002/e2e-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-002/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-002/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-002/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-002/step-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-002/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-002/suite-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-003/e2e-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-003/e2e-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-003/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-003/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-003/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-003/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-003/step-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-003/suite-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-003/suite-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-004/e2e-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-004/e2e-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-004/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-004/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-004/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-004/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-004/step-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-004/suite-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-004/suite-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-28-005/events.jsonl",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-28-005/task.md",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-005/state.json",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-006/e2e-10.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-006/e2e-13.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-006/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-006/step-11.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-006/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-006/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-006/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-006/step-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-006/step-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-006/step-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-006/suite-12.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-006/suite-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-006/suite-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-007/e2e-11.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-007/e2e-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-007/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-007/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-007/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-007/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-007/step-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-007/step-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-007/step-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-007/suite-10.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-007/suite-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-28-008/events.jsonl",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/reports/T-2026-10-28-008/task.md",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-008/state.json",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-009/e2e-12.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-009/e2e-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-009/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-009/step-10.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-009/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-009/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-009/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-009/step-8.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-009/suite-11.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-009/suite-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-009/suite-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-009/suite-9.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-011/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-011/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-011/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-011/suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-011/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-2221-refresh-direct-mode-diet/e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-2221-refresh-direct-mode-diet/e2e-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-2221-refresh-direct-mode-diet/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-28-2221-refresh-direct-mode-diet/suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-0755-plan-drift-7e/e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-0755-plan-drift-7e/e2e-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-0755-plan-drift-7e/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-0755-plan-drift-7e/suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-0852-r36-rest/e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-0852-r36-rest/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-0852-r36-rest/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-0852-r36-rest/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-0852-r36-rest/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1035-redesign-3-6/e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1035-redesign-3-6/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1035-redesign-3-6/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1035-redesign-3-6/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1035-redesign-3-6/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1145-redesign-plan-record-the/e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1145-redesign-plan-record-the/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1145-redesign-plan-record-the/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1145-redesign-plan-record-the/suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1145-redesign-plan-record-the/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1636-shorten-c5-and-c6-in-the/e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1636-shorten-c5-and-c6-in-the/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1636-shorten-c5-and-c6-in-the/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1636-shorten-c5-and-c6-in-the/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1636-shorten-c5-and-c6-in-the/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1655-record-three-out-of-task/e2e-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1655-record-three-out-of-task/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1655-record-three-out-of-task/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1655-record-three-out-of-task/suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1724-t-1-safety-md-blocker/e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1724-t-1-safety-md-blocker/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1724-t-1-safety-md-blocker/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1724-t-1-safety-md-blocker/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1724-t-1-safety-md-blocker/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1746-info-i1-i2-of-t-2026-10/e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1746-info-i1-i2-of-t-2026-10/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1756-low-l1-of-t-2026-10-29/e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1756-low-l1-of-t-2026-10-29/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/e2e-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/suite-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1806-open-findings-of-t-2026/suite-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1913-flaky-test-memory-sync/e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1913-flaky-test-memory-sync/e2e-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1913-flaky-test-memory-sync/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1913-flaky-test-memory-sync/suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1940-speed-up-tests-test-ai/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1940-speed-up-tests-test-ai/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-1940-speed-up-tests-test-ai/suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2006-faster-task-cycle/e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2006-faster-task-cycle/e2e-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2006-faster-task-cycle/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2006-faster-task-cycle/suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2125-faster-task-cycle-m/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2125-faster-task-cycle-m/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2125-faster-task-cycle-m/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2125-faster-task-cycle-m/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2125-faster-task-cycle-m/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2125-faster-task-cycle-m/suite-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2221-r16-of-faster-task-cycle/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2234-rewrite-readme-and-docs/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2234-rewrite-readme-and-docs/step-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2234-rewrite-readme-and-docs/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2234-rewrite-readme-and-docs/suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2308-docs-pin-riskrails-3-0-1/e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2308-docs-pin-riskrails-3-0-1/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2308-docs-pin-riskrails-3-0-1/suite-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2350-ci-in-two-tiers-smoke/e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2350-ci-in-two-tiers-smoke/e2e-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2350-ci-in-two-tiers-smoke/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2350-ci-in-two-tiers-smoke/step-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2350-ci-in-two-tiers-smoke/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-29-2350-ci-in-two-tiers-smoke/suite-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0007-ci-determinism-find/e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0007-ci-determinism-find/step-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0007-ci-determinism-find/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/policies/risk-tiers.json",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:09Z"
+    },
+    {
+      "path": ".ai/policies/risk-tiers.md",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:09Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/e2e-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/e2e-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/step-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    }
+  ]
+}

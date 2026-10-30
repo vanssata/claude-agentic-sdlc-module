@@ -298,7 +298,7 @@ class TestMigration0006(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertTrue(rc == 1 and has(
             "^project is behind the installed plugin: schema 5 -> %s, " % cur +
             r"(.*, )?29 deletion\(s\) a human must confirm, the schema stays at 5 until they are settled"
-            r" — run /project-update$", out), "--check names the deletions and the held schema\n" + out)
+            r" — run /rr-setup --update$", out), "--check names the deletions and the held schema\n" + out)
         self.upd(r1, "--apply")
         self.assertEqual((version(r1), sections(r1), present(r1)), ("5", 1, 29),
                          "a plain --apply writes the router, deletes nothing and keeps VERSION 5")
@@ -446,17 +446,14 @@ class TestMigration0006(unittest.TestCase):  # pylint: disable=too-many-public-m
         s, e = t.index("\n## Shared files"), t.index("\n## Doing X → read Y")
         write(self.router(r7), t[:s] + t[e:] + t[s:e])
         commit(r7, "section moved")
+        moved = read(self.router(r7))
         _, out = self.upd(r7, "--apply")
         self.assertFalse(has(r"^  (update|conflict)  *\.ai/AGENTS\.md", out),
                          "r7: the moved section is neither doubled nor a conflict\n" + out)
-        # Since the 2.3 router no shipped base equals the template's rest, so a section
-        # moved to the end is merged back before the routing table (put_section's
-        # fallback; .ai/project/known-risks.md). What must hold: one section, and every
-        # other line of the router as the plugin ships it.
-        strip = lambda t: re.sub(r"(?ms)^## Shared files$.*?(?=^## |\Z)", "", t).rstrip("\n")  # noqa: E731
+        # The section stays where the human put it, at the end: the router is byte-identical.
         ours = read(self.router(r7))
-        self.assertEqual(ours.count("\n## Shared files\n"), 1, "r7: one section, the rest of the router as shipped")
-        self.assertEqual(strip(ours), strip(read(TEMPLATE_ROUTER)), "r7: one section, the rest of the router as shipped")
+        self.assertEqual(ours.count("\n## Shared files\n"), 1, "r7: one section\n" + ours)
+        self.assertEqual(ours, moved, "r7: the human's router is kept, with one section")
 
     def test_r8_own_non_negotiable_or_edited_last_line(self):
         """R8: a router with its own non-negotiable, or an edited last line, stays quiet after 0006"""

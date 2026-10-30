@@ -182,7 +182,11 @@ def comment_purpose(lines):
 
 
 def purpose_of(root, rel):
-    text = read_text(os.path.join(root, rel))
+    full = os.path.join(root, rel)
+    real, base = os.path.realpath(full), os.path.realpath(root)
+    if os.path.commonpath([real, base]) != base:
+        return None  # a link out of the project: listed UNKNOWN, never read into toolbox.md
+    text = read_text(full)
     if text is None:
         return None
     lines = text.splitlines()
@@ -224,6 +228,8 @@ def inventory(root, table):
         pattern = glob_re(row["glob"])
         for rel in paths:
             if rel in seen or not pattern.match(rel):
+                continue
+            if "/hooks/" in rel and os.path.basename(rel).startswith("."):
                 continue
             seen.add(rel)
             if row["kind"] == "make":

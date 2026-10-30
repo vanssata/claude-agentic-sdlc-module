@@ -19,7 +19,9 @@ STATE="python3 $AI_HOME/skills/ai-task/state.py"
 
 ## 1. Prerequisites
 
-`docs/sdlc/specs/TEMPLATE.md` exists, else run `/rr-setup` first. Derive
+`docs/sdlc/constitution.md` exists, else run `/rr-setup` first. The template is
+`docs/sdlc/specs/TEMPLATE.md` when the project overrides it, else
+`$AI_HOME/skills/project-init/templates/spec.md`. Derive
 `<slug>` from the topic (kebab-case, at most five words). If
 `docs/sdlc/specs/<slug>.md` exists, offer to refine it instead of starting over.
 When `$ARGUMENTS` is a path to an intent file, read it fully — it is small by
@@ -75,7 +77,7 @@ decision — moves this to the top tier.
 
 ## 5. Write
 
-Copy `docs/sdlc/specs/TEMPLATE.md` to `docs/sdlc/specs/<slug>.md`, replace
+Copy the template (§1) to `docs/sdlc/specs/<slug>.md`, creating the folder, replace
 `{{TITLE}}` and `{{SLUG}}`. Replace the template's `Intent:` line with:
 
 ```markdown
