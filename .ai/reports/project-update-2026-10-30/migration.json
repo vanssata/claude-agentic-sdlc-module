@@ -1,9 +1,7 @@
 {
   "from": null,
-  "to": 10,
-  "target": 11,
-  "held_at": 10,
-  "applied_at": "2026-10-30T09:50:37Z",
+  "to": 11,
+  "applied_at": "2026-10-30T13:32:15Z",
   "ops": [
     {
       "action": "delete",
@@ -2304,6 +2302,96 @@
       "action": "delete",
       "migration": null,
       "path": ".ai/state/logs/T-2026-10-30-0007-ci-determinism-find/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": 11,
+      "path": ".ai/policies/risk-tiers.json"
+    },
+    {
+      "action": "delete",
+      "migration": 11,
+      "path": ".ai/policies/risk-tiers.md"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/e2e-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/e2e-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/step-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/suite-4.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/e2e-3.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/e2e-5.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/e2e-6.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/step-7.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/suite-1.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/suite-2.log"
+    },
+    {
+      "action": "delete",
+      "migration": null,
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/suite-4.log"
     }
   ],
   "deletions": [
@@ -5066,6 +5154,114 @@
       "confirmed_by": "Ivan Kakurov",
       "via": "terminal",
       "at": "2026-10-30T01:00:15Z"
+    },
+    {
+      "path": ".ai/policies/risk-tiers.json",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:09Z"
+    },
+    {
+      "path": ".ai/policies/risk-tiers.md",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:09Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/e2e-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/e2e-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/step-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0054-sdlc-templates-cleanup/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0758-register-g1-4/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/e2e-3.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/e2e-5.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/e2e-6.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/step-7.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/suite-1.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/suite-2.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
+    },
+    {
+      "path": ".ai/state/logs/T-2026-10-30-0854-register-batch-2/suite-4.log",
+      "confirmed_by": "Ivan Kakurov",
+      "via": "terminal",
+      "at": "2026-10-30T13:32:15Z"
     }
   ]
 }
