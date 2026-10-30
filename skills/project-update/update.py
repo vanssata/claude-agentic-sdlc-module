@@ -828,6 +828,51 @@ class Plan:
         return base
 
 
+WEIGHT_JSON, WEIGHT_MD = ".ai/policies/weight.json", ".ai/policies/weight.md"
+_WEIGHT = None
+
+
+def weight_module():
+    """skills/ai-task/weight.py, the renderer behind `state.py weight --mirror`."""
+    global _WEIGHT  # pylint: disable=global-statement  # loaded once per run
+    if _WEIGHT is None:
+        spec = importlib.util.spec_from_file_location("riskrails_weight", os.path.join(SKILLS, "ai-task", "weight.py"))
+        _WEIGHT = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_WEIGHT)
+    return _WEIGHT
+
+
+def render_weight(data):
+    """weight.md for the weight.json bytes `data`; the renderer reads a path."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "weight.json")
+        with open(path, "wb") as fh:
+            fh.write(data)
+        return weight_module().mirror(path).encode("utf-8")
+
+
+def weight_mirror(plan, history, theirs):
+    """weight.md is generated from weight.json. A mirror that is exactly the render of
+    the project's JSON on disk is rendered again from the JSON this run leaves behind:
+    merged as text with the template's, whose sha256 line names the template's JSON, it
+    was a conflict on every update. A mirror edited by hand, or stale, merges as before."""
+    ours = plan.read(WEIGHT_MD)
+    path = os.path.join(plan.root, WEIGHT_JSON)
+    disk = read(path) if os.path.isfile(path) and not os.path.islink(path) else None
+    after = plan.read(WEIGHT_JSON)
+    fresh = None
+    if ours is not None and disk is not None and after is not None:
+        try:
+            if ours == render_weight(disk):
+                fresh = render_weight(after)
+        except (ValueError, TypeError, AttributeError, KeyError):
+            fresh = None  # not a table the renderer reads: the text merge decides
+    if fresh is None:
+        three_way(plan, history, "ai-init/" + WEIGHT_MD, WEIGHT_MD, theirs)
+    elif fresh != ours:
+        plan.add("update", WEIGHT_MD, "rendered from weight.json", content=fresh)
+
+
 def three_way(plan, history, key, target, theirs):
     ours = plan.read(target)
     if ours is None:
@@ -1441,7 +1486,7 @@ def build_plan(root, confirm_delete=None, confirm_via=None, confirm_cleanup=None
         for dirpath, _, names in os.walk(os.path.join(tpl, ".ai")):
             for n in names:
                 files.append(os.path.relpath(os.path.join(dirpath, n), tpl))
-        # JSON before markdown, so the risk-tier mirror can point at the merged JSON.
+        # JSON before markdown, so the weight mirror is rendered from the merged JSON.
         for rel in sorted(files, key=lambda r: (not r.endswith(".json"), r)):
             if rel == VERSION_FILE:  # owned by the migration step, never merged
                 continue
@@ -1453,6 +1498,9 @@ def build_plan(root, confirm_delete=None, confirm_via=None, confirm_cleanup=None
             if rel.startswith(".ai/project/") or rel.startswith(".ai/reports/"):
                 if not plan.exists(rel):
                     plan.add("create", rel, content=content)
+                continue
+            if rel == WEIGHT_MD:
+                weight_mirror(plan, history, content)
                 continue
             three_way(plan, history, "ai-init/" + rel, rel, content)
         shared_update(plan, history, version)

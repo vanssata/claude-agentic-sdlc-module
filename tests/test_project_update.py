@@ -1573,6 +1573,62 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertTrue(has("AGENTS.md: the managed block is .* trimming it is yours", out),
                         "an edited legacy block over budget is the project's\n" + out)
 
+    # -- the weight table's mirror ------------------------------------------
+
+    def mirrored_project(self, name):
+        """A project whose weight.json has an example of its own and whose weight.md is
+        `state.py weight --mirror` of it, as /rr-setup leaves it."""
+        d = self.current_project(name)
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        doc = read_json(wj)
+        doc["examples"]["light"].append("a README typo")
+        put_json(wj, doc)
+        rc, out = self.run_([sys.executable, "-I", STATE, "--root", d, "weight", "--mirror"], merge=True)
+        self.assertEqual(0, rc, out)
+        return d
+
+    def test_a_generated_weight_mirror_is_not_a_conflict(self):
+        """weight.md: a mirror of the project's own weight.json is not merged with the template's"""
+        # R-weight-md-conflict-recurs-on-every-rr-se-1d6e: the mirror's sha256 line names the
+        # project's JSON and the template's names the template's, so a text merge reported a
+        # conflict on every update.
+        d = self.mirrored_project("weight-mirror")
+        _, out = self.upd(d, merge=True)
+        self.assertNotIn("weight.md", out, "a faithful mirror of the project's JSON needs nothing\n" + out)
+
+    def test_a_hand_edited_weight_mirror_is_not_rendered_over(self):
+        """weight.md: a mirror edited by hand is merged as text, never rendered over"""
+        d = self.mirrored_project("weight-mirror-edited")
+        wm = os.path.join(d, ".ai", "policies", "weight.md")
+        edited = text_of(wm) + "\nA note of the project's own.\n"
+        put(wm, edited)
+        rc, out = self.upd(d, "--apply", merge=True)
+        self.assertEqual(0, rc, out)
+        self.assertNotIn("rendered from weight.json", out, out)
+        self.assertIn("A note of the project's own.", text_of(wm), "the hand edit is kept")
+
+    def test_a_weight_mirror_follows_the_merged_json(self):
+        """weight.md: when the update merges weight.json, the mirror is rendered from the merged JSON"""
+        pt = os.path.join(self.t, "weight-tpl")
+        shutil.copytree(TEMPLATES, pt, symlinks=True)
+        wj = os.path.join(pt, ".ai", "policies", "weight.json")
+        doc = read_json(wj)
+        doc["examples"]["full"].append("a change the plugin added")
+        put_json(wj, doc)
+        d = self.mirrored_project("weight-mirror-merge")
+        rc, out = self.upd(d, "--apply", merge=True, CLAUDE_AGENTIC_TEMPLATES=pt)
+        self.assertEqual(0, rc, out)
+        self.assertNotIn("  conflict  ", out, out)
+        merged = read_json(os.path.join(d, ".ai", "policies", "weight.json"))
+        self.assertIn("a README typo", merged["examples"]["light"], "the project's edit is kept")
+        self.assertIn("a change the plugin added", merged["examples"]["full"], "the plugin's change is merged")
+        rc, mirror = self.run_([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, sys.argv[1]); import weight; "
+                                "sys.stdout.write(weight.mirror(sys.argv[2]))", os.path.join(ROOT, "skills", "ai-task"),
+                                os.path.join(d, ".ai", "policies", "weight.json")])
+        self.assertEqual(0, rc)
+        self.assertEqual(mirror, text_of(os.path.join(d, ".ai", "policies", "weight.md")),
+                         "weight.md is the mirror of the merged weight.json")
+
     # -- SDLC templates the plugin supplies, and the cleanup proposals ------
 
     SDLC_TEMPLATES = (("intent.md", "intent"), ("spec.md", "specs"), ("plan.md", "plans"), ("adr.md", "adr"))
