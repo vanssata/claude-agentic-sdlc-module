@@ -44,7 +44,7 @@ jobs:
         for tool in bash jq git python3 patch diff; do
           command -v "$tool" || { echo "missing $tool"; exit 1; }
         done
-    - name: The tag matches the five version files
+    - name: The tag matches the five version keys
       run: python3 tools/sync-version.py --check --tag "$GITHUB_REF_NAME"
     # node before the tests: tests/test_dual_runtime_install.py runs the installer through it.
     - uses: actions/setup-node@v4

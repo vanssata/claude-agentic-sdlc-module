@@ -1425,65 +1425,176 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertIn("must stay inside the project: a/../b", out,
                       "dirs: [a/../b] is still refused before it is normalised")
 
-    def test_tracked_but_ignored_state_file_is_reported(self):
-        """a .ai/state file git holds although .gitignore ignores it is a hint with the untrack command,
-        not a pending update; untracked, or outside a git work tree, nothing is said"""
-        def git(d, *args):
-            subprocess.run(GIT + ["-C", d] + list(args), env=self.env, check=True, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL)
+    GIT_LEAK = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")    # a stray one would point these tests' git at another tree
 
+    def tracked_git(self, d, *args, out=False):
+        """git in d with the stray GIT_* variables dropped; out=True returns the NUL-split stdout."""
+        env = {k: v for k, v in self.env.items() if k not in self.GIT_LEAK}
+        done = subprocess.run(GIT + ["-C", d] + list(args), env=env, check=True, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL)
+        return [x for x in done.stdout.split(b"\0") if x] if out else None
+
+    def index_of(self, d):
+        """The paths git tracks in d, as bytes."""
+        return set(self.tracked_git(d, "ls-files", "-z", out=True))
+
+    def run_printed(self, d, line):
+        """Run, through a shell with cwd = d, the command a hint line prints between backticks."""
+        command = next(c for c in re.findall(r"`(git [^`]*)`", line) if "rm --cached" in c)    # not `git commit -a`
+        env = {k: v for k, v in self.env.items() if k not in self.GIT_LEAK}
+        subprocess.run(["bash", "-c", command], cwd=d, env=env, check=True, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+        return command
+
+    def run_hint_command(self, d, out, name):
+        """Run the command of the hint for `name` (the shown, escaped name); returns that command."""
+        line = next(x for x in out.splitlines() if x.lstrip().startswith("hint") and (" %s: tracked" % name) in x)
+        return self.run_printed(d, line)
+
+    def test_tracked_but_ignored_state_file_is_reported(self):
+        """a .ai/state file git holds although an ignore rule ignores it is a hint with the untrack command,
+        not a pending update; untracked, or outside a git work tree, nothing is said; --apply writes nothing for it"""
         rel = ".ai/state/consent.jsonl"
         d = self.current_project("tracked-ignored")
         self.assertIn(".ai/state/*.jsonl", text_of(os.path.join(d, ".gitignore")),
                       "the scaffolded .gitignore ignores the state ledgers")
-        git(d, "init", "-q")
-        git(d, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init")
+        self.tracked_git(d, "init", "-q")
+        self.tracked_git(d, "commit", "-q", "--allow-empty", "-m", "init")
         put(os.path.join(d, rel), '{"v":1}\n')
-        git(d, "add", "-f", rel)
-        git(d, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "track the ledger")
+        self.tracked_git(d, "add", "-f", rel)
+        self.tracked_git(d, "commit", "-q", "-m", "track the ledger")
 
-        _, out = self.upd(d, merge=True)
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
         self.assertTrue(has(r"^  hint +\.ai/state/consent\.jsonl: tracked by git but ignored", out),
                         "a hint names the tracked, ignored state file\n" + out)
-        self.assertIn("git rm --cached -- .ai/state/consent.jsonl", out, "and the command that untracks it\n" + out)
-        rc, out = self.upd(d, "--check", merge=True)
+        self.assertNotIn("by .gitignore", out, "the rule may come from .git/info/exclude or core.excludesFile\n" + out)
+        self.assertIn("git --literal-pathspecs rm --cached -- .ai/state/consent.jsonl", out,
+                      "and the command that untracks it, by literal path\n" + out)
+        rc, out = self.upd(d, "--check", merge=True, unset=self.GIT_LEAK)
         self.assertEqual(rc, 0, "--check exits 0: a hint is not a pending update\n" + out)
 
-        git(d, "rm", "--cached", "-q", "--", rel)
-        git(d, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "untrack the ledger")
-        _, out = self.upd(d, merge=True)
+        before = (self.index_of(d), self.tracked_git(d, "status", "--porcelain", out=True))
+        rc, out = self.upd(d, "--apply", merge=True, unset=self.GIT_LEAK)
+        self.assertEqual(rc, 0, "--apply exits 0\n" + out)
+        self.assertEqual(before, (self.index_of(d), self.tracked_git(d, "status", "--porcelain", out=True)),
+                         "--apply neither untracks the file nor touches the tree for the hint")
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.assertTrue(has("^0 automatic, 0 conflict", out), "the run after --apply is up to date\n" + out)
+        self.assertIn("tracked by git but ignored", out, "and the hint is still there: --apply does not act on it")
+
+        self.run_hint_command(d, out, rel)
+        self.assertNotIn(rel.encode(), self.index_of(d), "the printed command untracks the file")
+        self.assertTrue(os.path.isfile(os.path.join(d, rel)), "and leaves it on disk")
+        self.tracked_git(d, "commit", "-q", "-m", "untrack the ledger")
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
         self.assertFalse(has("tracked by git but ignored", out), "an untracked file draws no hint\n" + out)
 
         n = self.current_project("tracked-ignored-no-git")
         put(os.path.join(n, rel), '{"v":1}\n')
-        rc, out = self.upd(n, merge=True)
+        rc, out = self.upd(n, merge=True, unset=self.GIT_LEAK + ("GIT_CEILING_DIRECTORIES",),
+                           GIT_CEILING_DIRECTORIES=os.path.dirname(n))
         self.assertFalse(has("tracked by git but ignored", out), "outside a git work tree there is no hint\n" + out)
         self.assertNotIn("Traceback", out, "and no crash")
 
     def test_tracked_ignored_hint_quotes_the_path(self):
         """M1: the untrack command quotes a name with a space; a name with a control character is shown
-        escaped and gets the NUL-safe command instead, so it neither forges a line nor prints a raw name"""
-        def git(d, *args):
-            subprocess.run(GIT + ["-C", d] + list(args), env=self.env, check=True, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL)
-
+        escaped and gets the NUL-safe command instead, so it neither forges a line nor prints a raw name;
+        both printed commands, run, untrack what they say (L5: the NUL-safe one, every such file)"""
         d = self.current_project("tracked-ignored-odd-names")
-        git(d, "init", "-q")
-        spaced, forged = ".ai/state/a b.jsonl", ".ai/state/n\nl; touch pwn #.jsonl"
-        for rel in (spaced, forged):
+        self.tracked_git(d, "init", "-q")
+        spaced, forged, keep = ".ai/state/a b.jsonl", ".ai/state/n\nl; touch pwn #.jsonl", ".ai/state/keep.jsonl"
+        every = {x.encode() for x in (spaced, forged, keep)}
+        for rel in (spaced, forged, keep):
             put(os.path.join(d, rel), '{"v":1}\n')
-            git(d, "add", "-f", "--", rel)
-        git(d, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "track odd names")
+            self.tracked_git(d, "add", "-f", "--", rel)
+        self.tracked_git(d, "commit", "-q", "-m", "track odd names")
 
-        _, out = self.upd(d, merge=True)
-        self.assertIn("git rm --cached -- '.ai/state/a b.jsonl'", out, "a space is quoted\n" + out)
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.assertIn("git --literal-pathspecs rm --cached -- '.ai/state/a b.jsonl'", out, "a space is quoted\n" + out)
         self.assertFalse(any(line.lstrip().startswith("l; touch pwn") for line in out.splitlines()),
                          "a newline in a name forges no line\n" + out)
         self.assertIn(".ai/state/n\\nl; touch pwn #.jsonl: tracked by git", out, "the name is shown escaped\n" + out)
-        self.assertNotIn("git rm --cached -- .ai/state/n", out, "no command with the raw name\n" + out)
-        self.assertNotIn("git rm --cached -- '.ai/state/n", out, "nor a quoted one that spans lines\n" + out)
-        self.assertIn("git ls-files -z -ci --exclude-standard -- .ai/state | xargs -0 git rm --cached --", out,
-                      "the NUL-safe command instead\n" + out)
+        self.assertNotIn("rm --cached -- .ai/state/n", out, "no command with the raw name\n" + out)
+        self.assertNotIn("rm --cached -- '.ai/state/n", out, "nor a quoted one that spans lines\n" + out)
+        nul_safe = "git ls-files -z -ci --exclude-standard -- .ai/state | xargs -0 git --literal-pathspecs rm --cached --"
+        self.assertIn(nul_safe, out, "the NUL-safe command instead\n" + out)
+        self.assertIn("EVERY tracked, ignored file under .ai/state", out, "which says it untracks them all\n" + out)
+
+        self.run_hint_command(d, out, ".ai/state/a b.jsonl")
+        self.assertEqual(self.index_of(d) & every, every - {spaced.encode()},
+                         "the quoted command untracks the spaced name only")
+        self.run_hint_command(d, out, ".ai/state/n\\nl; touch pwn #.jsonl")
+        self.assertEqual(self.index_of(d) & every, set(),
+                         "the NUL-safe command untracks every tracked, ignored file under .ai/state")
+        self.assertFalse(os.path.exists(os.path.join(d, "pwn")), "and runs nothing from the name")
+
+    def test_tracked_ignored_hint_takes_a_name_literally(self):
+        """L4: * ? [ ] in a name is that name, not a pathspec: untracking a[bc].jsonl leaves ab.jsonl tracked"""
+        d = self.current_project("tracked-ignored-glob")
+        self.tracked_git(d, "init", "-q")
+        globbed, plain = ".ai/state/a[bc].jsonl", ".ai/state/ab.jsonl"
+        for rel in (globbed, plain):
+            put(os.path.join(d, rel), '{"v":1}\n')
+            self.tracked_git(d, "add", "-f", "--", rel)
+        self.tracked_git(d, "commit", "-q", "-m", "track both")
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.run_hint_command(d, out, globbed)
+        self.assertEqual(self.index_of(d) & {globbed.encode(), plain.encode()}, {plain.encode()},
+                         "only a[bc].jsonl left the index; ab.jsonl is still tracked")
+
+    def test_tracked_ignored_hint_is_capped_and_survives_a_non_utf8_name(self):
+        """L3: ten per-file hints, then one that counts the rest and carries the command for all;
+        a name that is not UTF-8 is shown escaped (never raises) and gets the NUL-safe command"""
+        d = self.current_project("tracked-ignored-many")
+        self.tracked_git(d, "init", "-q")
+        names = [".ai/state/f%02d.jsonl" % i for i in range(12)]
+        for rel in names:
+            put(os.path.join(d, rel), '{"v":1}\n')
+            self.tracked_git(d, "add", "-f", "--", rel)
+        self.tracked_git(d, "commit", "-q", "-m", "track twelve")
+        rc, out = self.upd(d, "--check", merge=True, unset=self.GIT_LEAK)
+        self.assertEqual(rc, 0, out)
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.assertEqual(grep(r"^  hint +\.ai/state/f\d\d\.jsonl: tracked by git but ignored", out), 10,
+                         "ten per-file hints\n" + out)
+        self.assertEqual(grep(r"^  hint +\.ai/state: 2 more file\(s\) tracked by git but ignored", out), 1,
+                         "and one that counts the other two\n" + out)
+        self.assertIn("xargs -0 git --literal-pathspecs rm --cached --", out, "with the command for all\n" + out)
+        self.run_printed(d, next(x for x in out.splitlines() if ": 2 more file(s)" in x))
+        self.assertEqual(self.index_of(d) & {x.encode() for x in names}, set(), "which untracks all twelve")
+
+        bad = os.fsencode(os.path.join(d, ".ai", "state")) + b"/bad\xff.jsonl"
+        try:
+            with open(bad, "w", encoding="utf-8") as fh:
+                fh.write('{"v":1}\n')
+        except OSError:
+            self.skipTest("this filesystem refuses a non-UTF-8 file name")
+        self.tracked_git(d, "add", "-f", "--", bad)
+        self.tracked_git(d, "commit", "-q", "-m", "track a non-UTF-8 name")
+        rc, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.assertNotIn("Traceback", out, "a non-UTF-8 name does not crash the report\n" + out)
+        self.assertIn(".ai/state/bad\\udcff.jsonl: tracked by git but ignored", out,
+                      "it is shown escaped\n" + out)
+        self.assertIn("xargs -0 git --literal-pathspecs rm --cached --", out, "and gets the NUL-safe command\n" + out)
+        self.run_hint_command(d, out, ".ai/state/bad\\udcff.jsonl")
+        self.assertNotIn(b".ai/state/bad\xff.jsonl", self.index_of(d), "which untracks it")
+
+    def test_tracked_ignored_hint_in_a_project_below_a_git_root(self):
+        """L1: a project that is a subdirectory of a git work tree: names stay relative to the project,
+        and the printed command, run from the project root, untracks the file"""
+        outer = self.dir("tracked-ignored-outer")
+        d = self.current_project(os.path.join("tracked-ignored-outer", "proj"))
+        self.tracked_git(outer, "init", "-q")
+        rel = ".ai/state/consent.jsonl"
+        put(os.path.join(d, rel), '{"v":1}\n')
+        self.tracked_git(d, "add", "-f", "--", rel)
+        self.tracked_git(outer, "commit", "-q", "-m", "track the ledger")
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.assertTrue(has(r"^  hint +\.ai/state/consent\.jsonl: tracked by git but ignored", out),
+                        "the name is relative to the project, not to the git root\n" + out)
+        self.assertNotIn("proj/.ai/state", out, out)
+        self.run_hint_command(d, out, rel)
+        self.assertNotIn(b"proj/" + rel.encode(), self.index_of(outer), "the file left the index")
 
     def test_every_history_key_is_accounted_for(self):
         """every key in the template history is accounted for"""
@@ -1666,6 +1777,30 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertEqual(0, rc, out)
         self.assertNotIn("rendered from weight.json", out, out)
         self.assertIn("A note of the project's own.", text_of(wm), "the hand edit is kept")
+
+    def test_a_renderer_that_fails_with_an_oserror_falls_back_to_the_text_merge(self):
+        """weight.md: a renderer that cannot run (no temp dir: OSError) is a text merge, not a crash"""
+        d = self.mirrored_project("weight-mirror-no-tmp")
+        _, out = self.upd(d, merge=True, TMPDIR=os.path.join(self.t, "no-such-temp-dir"))
+        self.assertNotIn("Traceback", out, out)
+        self.assertNotIn("rendered from weight.json", out, "the mirror went through the text merge\n" + out)
+
+    def test_a_weight_mirror_of_an_older_json_draws_a_hint(self):
+        """weight.md: a mirror rendered from another weight.json than the one on disk names state.py weight --mirror"""
+        d = self.mirrored_project("weight-mirror-stale")
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        doc = read_json(wj)
+        doc["examples"]["light"].append("an edit the interrupted apply wrote first")
+        put_json(wj, doc)
+        rc, out = self.upd(d, merge=True)
+        self.assertNotEqual(2, rc, out)
+        self.assertIn("state.py weight --mirror", out, "the stale mirror is named\n" + out)
+
+    def test_a_current_weight_mirror_draws_no_regenerate_hint(self):
+        """weight.md: a faithful, current mirror draws no hint"""
+        d = self.mirrored_project("weight-mirror-current")
+        _, out = self.upd(d, merge=True)
+        self.assertNotIn("state.py weight --mirror", out, out)
 
     def test_a_weight_mirror_follows_the_merged_json(self):
         """weight.md: when the update merges weight.json, the mirror is rendered from the merged JSON"""

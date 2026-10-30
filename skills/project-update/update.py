@@ -865,12 +865,31 @@ def weight_mirror(plan, history, theirs):
         try:
             if ours == render_weight(disk):
                 fresh = render_weight(after)
-        except (ValueError, TypeError, AttributeError, KeyError):
-            fresh = None  # not a table the renderer reads: the text merge decides
+        except Exception:  # pylint: disable=broad-except
+            # not a table the renderer reads (or too deep, or no temp dir, or no renderer):
+            # the text merge decides, and it is always safe
+            fresh = None
     if fresh is None:
         three_way(plan, history, "ai-init/" + WEIGHT_MD, WEIGHT_MD, theirs)
+        stale = stale_mirror_hint(ours, disk)
+        if stale:
+            plan.hints.append(stale)
     elif fresh != ours:
         plan.add("update", WEIGHT_MD, "rendered from weight.json", content=fresh)
+
+
+def stale_mirror_hint(ours, disk):
+    """L3: the sha256 in weight.md's header names a weight.json other than the one on disk
+    (an --apply interrupted between the two writes, or a JSON edited without regenerating)."""
+    if ours is None or disk is None:
+        return None
+    head = ours[:2000]
+    found = re.search(r"^<!--.*\bsha256:\s*([0-9a-fA-F]{64})\b.*-->", head if isinstance(head, str) else head.decode("utf-8", "replace"), re.M)
+    if not found or found.group(1).lower() == hashlib.sha256(disk if isinstance(disk, bytes) else disk.encode("utf-8")).hexdigest():
+        return None
+    return ("%s: rendered from a different weight.json than the one on disk (stale: an interrupted "
+            "--apply, or the JSON edited without regenerating) — `state.py weight --mirror` "
+            "regenerates it from the JSON" % WEIGHT_MD)
 
 
 def three_way(plan, history, key, target, theirs):
@@ -1233,9 +1252,13 @@ def deletion_hint(plan):
                           "(`git status -- .ai` lists what it does not hold yet)")
 
 
+TRACKED_IGNORED_SHOWN = 10  # per-file hints before tracked_ignored_hint counts the rest
+
+
 def tracked_ignored_hint(plan):
-    """A file under .ai/state that git tracks although .gitignore lists it: the rule
-    has no effect on it. Read-only: the human untracks it; nothing is planned."""
+    """A file under .ai/state that git tracks although an ignore rule lists it: the rule
+    has no effect on it. Read-only: the human untracks it; nothing is planned.
+    At most TRACKED_IGNORED_SHOWN files get their own hint; one more line counts the rest."""
     try:
         res = subprocess.run(["git", "-C", plan.root, "ls-files", "-z", "-ci", "--exclude-standard",
                               "--", ".ai/state"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -1244,19 +1267,32 @@ def tracked_ignored_hint(plan):
         return
     if res.returncode != 0:
         return
-    for raw in res.stdout.split(b"\0"):
-        path = raw.decode("utf-8", "replace")
-        if path:
-            # A control character in the name would forge a report line or break the
-            # copy-paste command: show it escaped, and untrack by the NUL-safe listing.
-            shown = "".join(c if c.isprintable() else repr(c)[1:-1] for c in path)
-            command = ("git rm --cached -- %s" % shlex.quote(path) if shown == path else
-                       "git ls-files -z -ci --exclude-standard -- .ai/state | xargs -0 git rm --cached --")
-            plan.hints.append("%s: tracked by git but ignored by .gitignore — the rule has no "
+    # --literal-pathspecs: a * ? [ ] in a name is that name, not a pattern that matches its neighbours.
+    all_cmd = "git ls-files -z -ci --exclude-standard -- .ai/state | xargs -0 git --literal-pathspecs rm --cached --"
+    names = [os.fsdecode(raw) for raw in res.stdout.split(b"\0") if raw]
+    for path in names[:TRACKED_IGNORED_SHOWN]:
+        # A control character (or a byte that is not UTF-8, which fsdecode keeps as a lone
+        # surrogate) in the name would forge a report line or break the copy-paste command:
+        # show it escaped, and untrack by the NUL-safe listing.
+        shown = "".join(c if c.isprintable() else repr(c)[1:-1] for c in path)
+        if shown == path:
+            plan.hints.append("%s: tracked by git but ignored by an ignore rule — the rule has no "
                               "effect on a tracked file, so every run leaves the tree dirty and "
                               "`git commit -a` sweeps it in; untrack it yourself: "
-                              "`%s` and commit (the file stays on disk)"
-                              % (shown, command))
+                              "`git --literal-pathspecs rm --cached -- %s` and commit (the file stays on disk)"
+                              % (shown, shlex.quote(path)))
+        else:
+            plan.hints.append("%s: tracked by git but ignored by an ignore rule — the rule has no "
+                              "effect on a tracked file, so every run leaves the tree dirty and "
+                              "`git commit -a` sweeps it in; this name cannot be typed safely, so "
+                              "untrack it with `%s`, which untracks EVERY tracked, ignored file "
+                              "under .ai/state, not only this one, and commit (the files stay on disk)"
+                              % (shown, all_cmd))
+    if len(names) > TRACKED_IGNORED_SHOWN:
+        plan.hints.append(".ai/state: %d more file(s) tracked by git but ignored by an ignore rule, "
+                          "not listed; untrack ALL tracked, ignored files under .ai/state "
+                          "(the ones listed above too) with `%s` and commit (the files stay on disk)"
+                          % (len(names) - TRACKED_IGNORED_SHOWN, all_cmd))
 
 
 def rendered_rules(plan):
