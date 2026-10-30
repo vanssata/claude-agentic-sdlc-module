@@ -552,7 +552,7 @@ def task_frame(root, reason):
         tail.append(f"## Pending questions ({count}) — answer with `state.py answer …` "
                     "or fill the file")
         tail.append(prose or ids)
-    tail.append("Resume with: /ai-task --resume")
+    tail.append("Resume with: /rr-build --resume")
     if len("\n".join([head] + tail)) > HANDOFF_INJECT_MAX_CHARS and len(tail) > 1:
         tail[1] = ids                     # the questions collapse to their ids
     return head[:HANDOFF_INJECT_MAX_CHARS], "\n".join(tail)

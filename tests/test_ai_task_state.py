@@ -19,6 +19,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(ROOT, "skills", "ai-task", "state.py")
@@ -583,6 +584,46 @@ class TestSurface(Base):
                                     "--expect", "fail").returncode, 1)
         self.assertEqual(self.p.run("verify", "--scope", "suite", "--expect", "fail").returncode, 1)
         self.assertEqual(self.p.state()["verify"]["suite_runs"], 0)       # a step run is not a suite run
+
+    def test_expect_fail_a_runner_usage_error_is_not_a_bite(self):
+        # Register E3: exit 2 is the runner's own usage error, not a failing test.
+        self.p.write(".ai/policies/testing.md", "verify_command: true\nstep_test_command: sh -c 'exit 2' {files}\n"
+                                                "e2e_command: true\n")
+        self.p.start()
+        done = self.p.run("verify", "--scope", "step", "--files", "tests/test_widget.py", "--expect", "fail")
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn("does not bite", done.stdout)
+        self.assertFalse(self.p.state()["verify"]["runs"][-1]["bites"])
+
+    def test_event_note_is_the_agents_and_a_hook_event_stays_the_hooks(self):
+        # Register E5: only the hooks write model_fallback; a note comes from the agent.
+        self.p.start()
+        self.p.ok("event", "note", "--data", '{"kind":"decision","text":"x"}')
+        self.p.ok("event", "model_fallback", "--data", "{}")
+        actors = {e["event"]: e["actor"] for e in self.p.events(self.task_id())}
+        self.assertEqual((actors["note"], actors["model_fallback"]), ("agent", "hook"))
+
+    def test_archive_writes_the_archived_state_atomically(self):
+        # Register E7: temp file, then os.replace onto .ai/state/logs/<task>/state.json.
+        self.p.start()
+        state = self.p.state()
+        target = os.path.join(self.p.root, ".ai", "state", "logs", state["task_id"], "state.json")
+        with mock.patch.object(state_mod.os, "replace", wraps=os.replace) as replaced:
+            state_mod.archive_v7(self.p.root, state, state_mod.current_tree(self.p.root), "abandoned")
+        self.assertIn(target, [call.args[1] for call in replaced.call_args_list])
+        self.assertEqual(self.p.archived(state["task_id"])["task_id"], state["task_id"])
+
+    def test_status_rereads_a_filled_answer(self):
+        # Register E10: a hand-filled [Answer]: is not pending, with no `questions --sync` between.
+        self.p.start()
+        self.p.ok("ask", "Which rule?", "--option", "A: a", "--option", "B: b", "--by", "planner")
+        self.assertIn("questions: 1 pending", self.p.ok("status").stdout)
+        path = os.path.join(self.p.root, ".ai", "reports", self.task_id(), "task.md")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(re.sub(r"(?m)^\[Answer\]:.*$", "[Answer]: B", text, count=1))
+        self.assertIn("questions: 0 pending", self.p.ok("status").stdout)
 
     def test_drop_table_rescores_to_full_irreversible(self):
         # R26: the diff adds DROP TABLE to a migration; verify raises the mode.
@@ -2956,6 +2997,27 @@ class TestDocumentsOnly(unittest.TestCase):
                          ["README.md", "docs/a/b.md", "docs/x.json", ".ai/state/x.json"])
         self.assertFalse(state_mod.is_document("README.md", {}), "no `documents` key: nothing is a document")
         self.assertEqual(state_mod.NEVER_DOCUMENTS, (".ai/policies/**", ".ai/rules/**"))
+
+    def test_a_red_full_run_after_g_with_no_tree_is_off(self):
+        # Register E2: a red whole-suite run whose tree moved (tree None) after G still stops the rule.
+        self.project()
+        self.green_then(("README.md", "# edited\n"))
+        self.p.ok(*self.DOC_RUN)
+        state = self.p.state()
+        state["verify"]["runs"].append({"n": 3, "scope": "suite", "exit": 1, "tree": None})
+        with open(self.p.state_file(), "w", encoding="utf-8") as fh:
+            json.dump(state, fh)
+        self.close_refused(self.OLD)
+
+    def test_a_glob_beside_documents_does_not_start_light(self):
+        # Register E4: README.md,src/** — the glob can hold code, so P fails and the task is not light.
+        self.project()
+        start = ("start", "--goal", "fix a typo", "--workflow", "feature", "--tests", "tests/test_docs.py")
+        self.p.ok(*start, "--files", "README.md")
+        self.assertEqual(self.p.state()["mode"], "light")
+        self.p.ok("close", "--abandon")
+        self.p.ok(*start, "--files", "README.md,src/**")
+        self.assertNotEqual(self.p.state()["mode"], "light")
 
     # D5
 

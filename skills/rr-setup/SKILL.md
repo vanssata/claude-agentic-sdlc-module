@@ -133,7 +133,7 @@ it cannot.
    each in one plain sentence and ask, unless `$ARGUMENTS` holds `--apply`.
 4. `$UPDATE --apply`. Exit 3 stopped on a changed, non-regular or unwritable
    file and names it; nothing after it was written — run the dry run again.
-   **A `delete?` is the human's.** Never pass `--confirm-delete`, not even with
+   **A `delete?` is the human's.** Never pass `--confirm-delete` or `--confirm-cleanup`, not even with
    `--apply`. Give them, with `$AI_HOME` and `$PWD` substituted, for their own
    terminal (the `!` prefix is refused):
    `python3 "<home>/skills/project-update/update.py" "<project>" --apply --confirm-delete "<your name>"`.
@@ -142,8 +142,12 @@ it cannot.
    migrations: `[sdlc]` — an unedited `docs/sdlc/*/TEMPLATE.md`, which the plugin
    now supplies (an edited one stays as the project's override); `[cleanup]` —
    the `*.log` files of closed tasks, and the report and log files of an
-   abandoned task or of one unclosed for more than seven days (never the task in
-   flight). Show them grouped as printed; the same command deletes them. For 0006 (shared files) the order is:
+   abandoned task (its `state.json` stays) or of one unclosed for more than seven
+   days (never the task in flight). `--confirm-delete` does not settle `[cleanup]`
+   rows: they are git-ignored, git cannot restore them, and they have their own
+   command, the human's too, never passed by the agent:
+   `python3 "<home>/skills/project-update/update.py" "<project>" --apply --confirm-cleanup "<your name>"`.
+   Show both groups as printed. For 0006 (shared files) the order is:
    `install.sh` for every runtime used, commit `.ai/`, read the `delete?` list,
    then the command with no task in flight. Rollback is git:
    `git restore --source=<commit before> --staged --worktree -- .ai`, before

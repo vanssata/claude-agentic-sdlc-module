@@ -29,7 +29,7 @@ It exists so that the human approving the change can see, in one page, what
 changed, what deliberately did not, what was tested, what was reviewed, what
 could go wrong, and how to undo it.
 
-A report that says "no known risks" for a T4 change is a report that was not
+A report that says "no known risks" for a guarded or full change is a report that was not
 written carefully.
 
 ## What blocks a release
@@ -38,7 +38,7 @@ written carefully.
   `focus: security` pass;
 - a new regression in the last `state.py verify` run;
 - a destructive database operation without its own named approval;
-- a T3+ change with no rollback section;
+- a guarded or full change with no rollback section;
 - an unanswered blocking question in the plan.
 
 ## Project specifics

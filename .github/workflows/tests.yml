@@ -32,7 +32,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Check required tools
       run: |
-        for tool in bash jq git python3 patch diff; do
+        for tool in bash jq git python3 patch diff node; do
           command -v "$tool" || { echo "missing $tool"; exit 1; }
         done
     - name: Run the smoke tests

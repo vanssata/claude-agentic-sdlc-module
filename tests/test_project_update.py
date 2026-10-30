@@ -1612,6 +1612,11 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertFalse(os.path.exists(os.path.join(d, "docs", "sdlc", "plans", "TEMPLATE.md")),
                          "a missing copy is not created again")
         self.assertEqual(self.upd(d, "--check")[0], 0, "a deletion a human must confirm is not a pending update")
+        crlf = self.sdlc_project("retire-crlf")
+        shipped = raw(os.path.join(ROOT, "skills", "project-init", "templates", "plan.md"))
+        put(os.path.join(crlf, "docs", "sdlc", "plans", "TEMPLATE.md"), shipped.replace(b"\n", b"\r\n"), "wb")
+        self.assertTrue(has(r"delete\?   docs/sdlc/plans/TEMPLATE.md .*\[sdlc\]", self.upd(crlf)[1]),
+                        "a CRLF copy of the shipped template is still unedited")
         bare = self.sdlc_project("retire-bare")
         rc, out = self.upd(bare, "--check")
         self.assertEqual(rc, 0, "a project without the four files is complete\n" + out)
@@ -1624,7 +1629,8 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
     def task_dir(self, d, task_id, events, logs=()):
         """A task's journal (events: [(days ago, event, data)]), one report file and its run logs."""
         lines = [json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - ago * 86400)),
-                             "task": task_id, "event": ev, "detail": "", "data": data}) for ago, ev, data in events]
+                             "task": task_id, "event": ev, "detail": (more[0] if more else ""), "data": data})
+                 for ago, ev, data, *more in events]
         put(os.path.join(d, ".ai", "reports", task_id, "events.jsonl"), "\n".join(lines) + "\n")
         put(os.path.join(d, ".ai", "reports", task_id, "task.md"), "x\n")
         for name in logs:
@@ -1640,6 +1646,20 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.task_dir(d, "T-2026-01-04-001", [(3, "task_started", {}), (2, "step_started", {})], logs=("b.log",))
         self.task_dir(d, "T-2026-01-05-001", [(40, "task_started", {})], logs=("c.log",))
         put_json(os.path.join(d, ".ai", "state", "state.json"), {"task_id": "T-2026-01-05-001"})
+        # finished by other evidence than a whole task_closed line (M1)
+        self.task_dir(d, "T-2026-01-06-001", [(40, "task_started", {}), (39, "gate_approved", {})], logs=("g.log",))
+        self.task_dir(d, "T-2026-01-07-001", [(40, "task_started", {})], logs=("h.log",))
+        put_json(os.path.join(d, ".ai", "state", "logs", "T-2026-01-07-001", "state.json"), {"result": "done"})
+        # a torn task_closed line and no state.json: still unclosed
+        self.task_dir(d, "T-2026-01-08-001", [(40, "task_started", {})], logs=("i.log",))
+        put(os.path.join(d, ".ai", "reports", "T-2026-01-08-001", "events.jsonl"),
+            '{"ts": "2000-01-01T00:00:00Z", "event": "task_closed", "da', "a")
+        # abandoned by the detail alone
+        self.task_dir(d, "T-2026-01-09-001", [(30, "task_started", {}), (29, "task_closed", {}, "abandoned")],
+                      logs=("j.log", "state.json"))
+        # a symlink in a closed task's logs is never followed or listed
+        os.symlink(os.path.join(d, ".ai", "state", "logs", "T-2026-01-01-001", "verify.log"),
+                   os.path.join(d, ".ai", "state", "logs", "T-2026-01-01-001", "link.log"))
         return d
 
     def test_cleanup_proposals(self):
@@ -1652,8 +1672,17 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
                             r"log of closed task T-2026-01-01-001", out), "one line per task, *.log only\n" + out)
         self.assertTrue(has(r"delete\?   \.ai/reports/T-2026-01-02-001/ \(2 files\) +\[cleanup\] abandoned task "
                             r"T-2026-01-02-001", out), out)
-        self.assertTrue(has(r"delete\?   \.ai/state/logs/T-2026-01-02-001/ \(2 files\) +\[cleanup\] abandoned task",
-                            out), "an abandoned task loses its state.json too\n" + out)
+        self.assertTrue(has(r"delete\?   \.ai/state/logs/T-2026-01-02-001/ \(1 file\) +\[cleanup\] abandoned task"
+                            r".*--confirm-cleanup NAME.*not recoverable through git", out),
+                        "an abandoned task keeps its state.json; the row says git cannot restore the logs\n" + out)
+        self.assertTrue(has(r"delete\?   \.ai/reports/T-2026-01-09-001/ .*abandoned task", out),
+                        "abandonment by the event detail alone\n" + out)
+        self.assertEqual(grep(r"unclosed task T-2026-01-0[67]-001", out), 0,
+                         "gate_approved, or a state.json result, finishes a task\n" + out)
+        self.assertTrue(has(r"unclosed task T-2026-01-08-001", out), "a torn task_closed alone is unclosed\n" + out)
+        self.assertEqual(grep(r"link\.log", out), 0, "a symlink is skipped\n" + out)
+        self.assertEqual(grep(r"commit \.ai/ first", out), 0,
+                         "cleanup rows alone do not raise the commit-first hint\n" + out)
         self.assertTrue(has(r"delete\?   \.ai/reports/T-2026-01-03-001/ \(2 files\) +\[cleanup\] unclosed task "
                             r"T-2026-01-03-001, last event \d{4}-\d\d-\d\d", out), out)
         self.assertEqual(grep(r"T-2026-01-04-001", out), 0, "an open task idle for 2 days is left alone\n" + out)
@@ -1661,15 +1690,56 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertEqual(self.upd(d, "--check")[0], 0)
         self.assertEqual(tree_sum(d), before, "a dry run writes nothing")
 
+    def test_cleanup_malformed_now_and_flight(self):
+        """a malformed RISKRAILS_NOW is a usage error, not a traceback; the task named by the legacy
+        current.json is in flight"""
+        d = self.cleanup_project("cleanup-now")
+        rc, out = self.upd(d, merge=True, RISKRAILS_NOW="yesterday")
+        self.assertEqual(rc, 2, out)
+        self.assertTrue("RISKRAILS_NOW" in out and "Traceback" not in out, out)
+        self.assertEqual(len(out.strip().splitlines()), 1, "one line\n" + out)
+        os.remove(os.path.join(d, ".ai", "state", "state.json"))
+        put_json(os.path.join(d, ".ai", "state", "current.json"), {"task_id": "T-2026-01-03-001"})
+        _, out = self.upd(d)
+        self.assertEqual(grep(r"T-2026-01-03-001", out), 0, "current.json names the task in flight\n" + out)
+
     def test_cleanup_confirmed_deletes_and_prunes(self):
-        """--apply --confirm-delete removes the proposed files and the directories they leave empty"""
+        """--apply --confirm-cleanup removes the proposed files and the directories they leave empty;
+        --confirm-delete alone does not settle them"""
         d = self.cleanup_project("cleanup-apply")
+        before = tree_sum(d)
         rc, out = self.upd(d, "--apply", "--confirm-delete", "tester", AI_UNATTENDED="1", merge=True)
         self.assertEqual(rc, 0, out)
+        self.assertEqual(tree_sum(d), before, "--confirm-delete leaves every [cleanup] row\n" + out)
+        self.assertEqual(self.upd(d, "--confirm-cleanup", "tester")[0], 2, "--confirm-cleanup needs --apply")
+        self.assertEqual(self.upd(d, "--apply", "--confirm-cleanup", "")[0], 2, "an empty name is refused")
+        rc, out = self.upd(d, "--apply", "--confirm-cleanup", "tester")
+        self.assertEqual(rc, 5, "--confirm-cleanup without a human present is refused\n" + out)
+        self.assertEqual(out.split("\n")[0].split(":")[0], "ADOPT_REFUSED")
+        self.assertEqual(tree_sum(d), before)
+        if self.has_pty():
+            tty = self.cleanup_project("cleanup-tty")
+            rc, out = self.pty(["env", "CLAUDECODE=1", sys.executable, "-I", UPDATE, tty, "--apply",
+                                "--confirm-cleanup", "tester"], unset=NOMARK)
+            self.assertTrue(rc == 5 and "CLAUDECODE" in out, "an agent marker with a terminal is refused\n" + out)
+            rc, out = self.pty([sys.executable, "-I", UPDATE, tty, "--apply", "--confirm-cleanup", "tester"],
+                               unset=NOMARK)
+            self.assertEqual(rc, 0, out)
+            self.assertEqual(read_json(only(os.path.join(tty, ".ai", "reports", "project-update-*",
+                                                         "migration.json")))["deletions"][0]["via"], "terminal")
+        rc, out = self.upd(d, "--apply", "--confirm-cleanup", "tester", AI_UNATTENDED="1", merge=True)
+        self.assertEqual(rc, 0, out)
+        report = glob.glob(os.path.join(d, ".ai", "reports", "project-update-*"))
+        rec = read_json(os.path.join(report[0], "migration.json"))
+        self.assertEqual((rec["deletions"][0]["confirmed_by"], rec["deletions"][0]["via"]),
+                         ("tester", "unattended"))
+        self.assertFalse(os.path.exists(os.path.join(report[0], "original")), "no original/ copy of a [cleanup]")
         logs = os.path.join(d, ".ai", "state", "logs")
-        self.assertEqual(sorted(os.listdir(os.path.join(logs, "T-2026-01-01-001"))), ["state.json"],
-                         "the closed task's logs go, its state.json stays")
-        self.assertFalse(os.path.exists(os.path.join(logs, "T-2026-01-02-001")), "the empty log directory is removed")
+        self.assertEqual(sorted(os.listdir(os.path.join(logs, "T-2026-01-01-001"))), ["link.log", "state.json"],
+                         "the closed task's logs go, its state.json stays (and a symlink is never followed)")
+        self.assertEqual(os.listdir(os.path.join(logs, "T-2026-01-02-001")), ["state.json"],
+                         "an abandoned task's state.json stays")
+        self.assertTrue(os.path.islink(os.path.join(logs, "T-2026-01-01-001", "link.log")), "the symlink stays")
         self.assertFalse(os.path.exists(os.path.join(d, ".ai", "reports", "T-2026-01-02-001")))
         self.assertFalse(os.path.exists(os.path.join(d, ".ai", "reports", "T-2026-01-03-001")))
         self.assertFalse(os.path.exists(os.path.join(logs, "T-2026-01-03-001")))

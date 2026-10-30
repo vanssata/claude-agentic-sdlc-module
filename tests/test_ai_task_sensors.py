@@ -196,5 +196,46 @@ class TestSensors(unittest.TestCase):
                 self.assertEqual(self.n("diff", "--from", base, "--to", after, f, "x")[0], 2)
 
 
+class TestProjectBelowGitTop(unittest.TestCase):
+    """E14: with .ai/ in a subdirectory, diff paths are relative to the project
+    root (as task files and globs are) and a change outside it is left out."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with  # tearDown ends it
+        self.top = os.path.join(self.tmp.name, "with space", "top")
+        self.sub = os.path.join(self.top, "sub")
+        os.makedirs(os.path.join(self.sub, ".ai", "state"))
+        for args in (["init", "-q"], ["config", "user.email", "t@example.com"],
+                     ["config", "user.name", "Test"]):
+            subprocess.run(["git", "-C", self.top] + args, check=True, capture_output=True)
+        self.put("sub/a.py", "base\n")
+        self.put("outer.py", "base\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "base")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def put(self, rel, text):
+        with open(os.path.join(self.top, rel), "w", encoding="utf-8") as fh:
+            fh.write(text)
+
+    def git(self, *args):
+        return subprocess.run(["git", "-C", self.top] + list(args), capture_output=True, text=True,
+                              check=True).stdout
+
+    def test_subdirectory_project_gets_root_relative_paths(self):
+        for root, expect in ((self.sub, ["a.py"]), (self.top, ["outer.py", "sub/a.py"])):
+            with self.subTest(root=os.path.relpath(root, self.top)):
+                before = sensors.snapshot_tree(root)
+                self.put("sub/a.py", "changed %s\n" % expect[0])
+                self.put("outer.py", "changed %s\n" % expect[0])
+                after = sensors.snapshot_tree(root)
+                names = sorted(f["path"] for f in sensors.diff_files(root, before, after))
+                stats = sorted(f["path"] for f in sensors.numstat(root, before, after))
+                self.assertEqual(names, expect)
+                self.assertEqual(stats, expect)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -7,8 +7,8 @@ is reached by a real customer until you have evidence it is not.
 
 1. Find the callers. `grep`/`rg` for the method, the service id, the route, the
    event name, the template.
-2. Find the tests that pin the current behaviour. If none exist and the tier is
-   T3 or above, write a characterization test **first** — one that passes against
+2. Find the tests that pin the current behaviour. If none exist and the mode is
+   guarded or full, write a characterization test **first** — one that passes against
    the code as it is today.
 3. Check the history for why it looks like this: `git log -L`, `git log -S`,
    `git blame`. A workaround with a ticket number in the message is a constraint,
@@ -37,6 +37,6 @@ named in the release report. "It worked locally" is not observability.
 
 ## Rollback
 
-Every T3+ change states how to undo it. If undoing it is impossible — a data
+Every guarded or full change states how to undo it. If undoing it is impossible — a data
 migration, an external system call, a fiscal record — say so plainly in the
 release report, because that changes who has to approve it.

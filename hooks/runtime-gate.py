@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Runtime gate: one hook for both runtimes, replacing fable-gate.py and
-codex-model-gate.py (which remain as shims that exec this file).
+"""Runtime gate: one hook for both runtimes (Claude Code and Codex). The older
+fable-gate.py and codex-model-gate.py remain only as shims that exec this file.
 
 The most capable model of a plan can stop serving an account — a rate limit, a
 used-up usage limit, a model the account cannot reach — and the runtime's own
@@ -415,10 +415,10 @@ def claude_pre_tool_use(payload):
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "allow",
-            "permissionDecisionReason": f"fable-gate: {why}; {name} runs on {FALLBACK}",
+            "permissionDecisionReason": f"runtime-gate: {why}; {name} runs on {FALLBACK}",
             "updatedInput": {**tool_input, "model": FALLBACK},
             "additionalContext": (
-                f"fable-gate routed this {name} agent to {FALLBACK}: {why}. "
+                f"runtime-gate routed this {name} agent to {FALLBACK}: {why}. "
                 f"Its answer is {FALLBACK}'s, not Fable's. "
                 "`~/.claude/hooks/runtime-gate.py clear` re-enables Fable early."
             ),
@@ -801,10 +801,10 @@ def codex_pre_tool_use(payload):
         journal_fallback(payload, label, model, to, rec)
         out["hookSpecificOutput"]["permissionDecision"] = "allow"
         out["hookSpecificOutput"]["updatedInput"] = updated
-        context = (f"codex-model-gate: {why}. {label} runs on {to}{via} instead, so its answer is "
+        context = (f"runtime-gate: {why}. {label} runs on {to}{via} instead, so its answer is "
                    f"{to}'s, not {EXPERT}'s. Say so when you report it. ")
     else:
-        context = (f"codex-model-gate: {why}. {label} is not rerouted ({not_why}): it runs on {EXPERT} "
+        context = (f"runtime-gate: {why}. {label} is not rerouted ({not_why}): it runs on {EXPERT} "
                    "and may fail the same way. Say so when you report it. ")
     out["hookSpecificOutput"]["additionalContext"] = context + "`runtime-gate.py clear` re-enables the expert model early."
     respond(out)

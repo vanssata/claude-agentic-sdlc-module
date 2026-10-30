@@ -140,12 +140,39 @@ class TestReleaseWorkflow(unittest.TestCase):
         self.assertIn("gh release view", self.publish)
         self.assertIn("--verify-tag", self.publish)
 
+    def test_a_prerelease_publishes_under_the_next_tag(self):
+        self.assertIn("--provenance --access public --tag next", self.publish)
+        self.assertIn("*-*)", self.publish)
+        self.assertEqual(self.publish.count("npm publish"), 2)
+
+    def test_a_rerun_skips_the_upload_and_reaches_the_release(self):
+        view = self.publish.index('npm view "riskrails@$V" version')
+        self.assertLess(view, self.publish.index("npm publish"))
+        self.assertLess(self.publish.index("exit 0"), self.publish.index("npm publish"))
+        self.assertLess(view, self.publish.index("Announce as a GitHub Release"))
+        self.assertIn('[ "$RUN_ATTEMPT" = "1" ]', self.verify)
+        self.assertIn("github.run_attempt", self.verify)
+
+    def test_the_empty_token_comment_states_the_unknown(self):
+        self.assertIn("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}", self.publish)
+        self.assertIn("Not verified here", self.publish)
+        self.assertNotIn("it is ignored", self.publish)
+
+    def test_pylint_is_pinned_to_one_version_in_both_workflows(self):
+        pins = {}
+        for name in ("npm-publish.yml", "pylint.yml"):
+            text = read(ROOT, ".github/workflows/" + name)
+            self.assertNotRegex(text, r"pip install pylint\s*$", name)
+            found = re.findall(r"pip install pylint==(\d+\.\d+\.\d+)\s", text)
+            self.assertEqual(len(found), 1, name)
+            pins[name] = found[0]
+        self.assertEqual(len(set(pins.values())), 1, pins)
+
     def test_release_notes_carry_the_update_command(self):
         self.assertEqual(self.publish.count("echo '    " + COMMAND + "'"), 1)
         self.assertIn("echo '    ! " + COMMAND + "'", self.publish)
         notice = os.path.join(ROOT, "hooks", "update_notice.py")
-        if not os.path.exists(notice):
-            self.skipTest("hooks/update_notice.py not written yet")
+        self.assertTrue(os.path.exists(notice), "hooks/update_notice.py is missing")
         self.assertIn(COMMAND, read(ROOT, "hooks/update_notice.py"))
 
 
@@ -180,7 +207,7 @@ class TestSmokeWorkflow(unittest.TestCase):
 
     def test_matrix_and_tools_check_stay(self):
         self.assertIn('python-version: ["3.11", "3.12", "3.13"]', self.text)
-        self.assertIn("for tool in bash jq git python3 patch diff", self.text)
+        self.assertIn("for tool in bash jq git python3 patch diff node;", self.text)
 
 
 class TestInstallHarnessNode(unittest.TestCase):
@@ -194,9 +221,11 @@ class TestInstallHarnessNode(unittest.TestCase):
             import install_harness  # pylint: disable=import-outside-toplevel
         finally:
             sys.path.pop(0)
+        found = shutil.which("node")
+        self.assertIsNotNone(found, "node is not on PATH; the runner must install it")
         node = install_harness.INSTALLER[0]
         self.assertTrue(os.path.isabs(node), "INSTALLER runs %r, resolved on the caller's PATH" % node)
-        self.assertEqual(os.path.realpath(node), os.path.realpath(shutil.which("node")))
+        self.assertEqual(os.path.realpath(node), os.path.realpath(found))
 
 
 if __name__ == "__main__":

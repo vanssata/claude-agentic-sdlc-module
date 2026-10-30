@@ -59,21 +59,18 @@ WHY_APPROVE = T(
     "and tells the session to run state.py questions --sync. An unattended run\n"
     "exports AI_UNATTENDED=1 in the launcher's environment, and the journal then\n"
     "records the approval as unattended for ever. See .ai/policies/safety.md.")
-WHY_SET_BY = T(
-    "\n\nA task gets review_rounds_max review verdicts; after that the human decides,\n"
-    "in their own terminal:\n"
-    "  python3 <plugin>/skills/ai-task/state.py --root . set review_status <value> --by \"<name>\"\n"
-    "Show them the findings in .ai/reports/<task-id>/task.md §Review. An unattended\n"
-    "run exports AI_UNATTENDED=1 in the launcher's environment. See .ai/policies/safety.md.")
 WHY_WORK_CAP = T(
     "This command names more paths than the guard can check within its timeout; split it into "
     "smaller commands, or pass the list through a file and xargs.")
 
 TOKEN_END = "([[:space:]\"';&|)<>]|$)"
 
-# The --confirm-delete rule.
+# The --confirm-delete rule, and --confirm-cleanup (the same human gate; any argparse prefix).
 SEP = "(([^|;&]|[<>]&|&>)*[[:space:]])?" + Q
-CONFIRM = "--co(n(f(i(r(m(-(d(e(l(e(t(e)?)?)?)?)?)?)?)?)?)?)?)?(=|[[:space:]]|['\"]|$)"
+CONFIRM_DEL = "d(e(l(e(t(e)?)?)?)?)?"
+CONFIRM_CLEAN = "c(l(e(a(n(u(p)?)?)?)?)?)?"
+CONFIRM = ("--co(n(f(i(r(m(-(" + CONFIRM_DEL + "|" + CONFIRM_CLEAN + ")?)?)?)?)?)?)?"
+           "(=|[[:space:]]|['\"]|$)")
 APPLY = "--ap(p(l(y)?)?)?" + END
 HEAD = "(^|[[:space:]'\"/|;&(`])(update\\.py|-[A-Za-z]*m[[:space:]]*" + Q + "update|" + VAR + ")" + Q + "[[:space:]]"
 CONFIRM_RE = HEAD + SEP + CONFIRM + SEP + APPLY + "|" + HEAD + SEP + APPLY + SEP + CONFIRM
@@ -84,22 +81,36 @@ VERB = "([[:space:]]+--)?[[:space:]]+" + Q + "approve" + END
 BOUND = "(^|[|;&([:space:]`])"
 APPROVE_RE = (BOUND + "(python3?[[:space:]]+)?" + Q + "[^[:space:]'\"]*state\\.py" + Q + ARGS + VERB + "|"
               + BOUND + "(python3?[[:space:]]+)?" + Q + VAR + Q + ARGS + VERB)
-SETBY_VERB = ("([[:space:]]+--)?[[:space:]]+" + Q + "set" + END + "([^|;&`]*[[:space:]])?" + Q + "--by?"
-              + Q + "(=|[[:space:]]|$)")
-SETBY_RE = (BOUND + "(python3?[[:space:]]+)?" + Q + "[^[:space:]'\"]*state\\.py" + Q + ARGS + SETBY_VERB + "|"
-            + BOUND + "(python3?[[:space:]]+)?" + Q + VAR + Q + ARGS + SETBY_VERB)
-# R36.11, with the dialog on only: the other human-only state.py commands —
-# `profile set` and the --by forms of verify, review and reject — run from an
-# agent session only as the next live pick, like approve. `start --mode --by`
-# reaches state.py: raising a mode needs no human, and a lowering opens its own
-# decision there before human_route() refuses it (review H1, T-2026-10-28-010).
+# R36.11: the other human-only state.py commands — `profile set` (dialog on only)
+# and the --by forms of verify, review and reject (dialog on or off) — run from an
+# agent session only as the next live pick, like approve. `start --mode light --by`
+# is denied with the dialog off only: `light` is the one --mode value that can
+# never raise a mode; with the dialog on it reaches state.py, which opens the
+# lowering decision (review H1, T-2026-10-28-010); any other `start --mode X --by`
+# reaches state.py too (T-2026-10-30-0758 Q1, Q2).
 PROFILE_SET_VERB = "([[:space:]]+--)?[[:space:]]+" + Q + "profile" + Q + "[[:space:]]+" + Q + "set" + END
 PROFILE_SET_RE = (BOUND + "(python3?[[:space:]]+)?" + Q + "[^[:space:]'\"]*state\\.py" + Q + ARGS + PROFILE_SET_VERB
                   + "|" + BOUND + "(python3?[[:space:]]+)?" + Q + VAR + Q + ARGS + PROFILE_SET_VERB)
-HUMAN_BY_VERB = ("([[:space:]]+--)?[[:space:]]+" + Q + "(verify|review|reject)" + END + "([^|;&`]*[[:space:]])?"
-                 + Q + "--by?" + Q + "(=|[[:space:]]|$)")
-HUMAN_BY_RE = (BOUND + "(python3?[[:space:]]+)?" + Q + "[^[:space:]'\"]*state\\.py" + Q + ARGS + HUMAN_BY_VERB + "|"
-               + BOUND + "(python3?[[:space:]]+)?" + Q + VAR + Q + ARGS + HUMAN_BY_VERB)
+BY_TOK = Q + "--by?" + Q + "(=|[[:space:]]|$)"
+MODE_LIGHT = Q + "--mode" + Q + "(=|[[:space:]]+)" + Q + "light" + END
+SKIP = "([^|;&`]*[[:space:]])?"
+HUMAN_BY_VERB = ("([[:space:]]+--)?[[:space:]]+" + Q + "(verify|review|reject)" + END + SKIP + BY_TOK)
+START_LIGHT_VERB = ("([[:space:]]+--)?[[:space:]]+" + Q + "start" + END + SKIP + "("
+                    + MODE_LIGHT + SKIP + BY_TOK + "|" + BY_TOK + SKIP + MODE_LIGHT + ")")
+
+
+def state_verb_re(verb):
+    """The state.py command whose verb part is `verb`, as an ERE: by path or by a variable."""
+    return (BOUND + "(python3?[[:space:]]+)?" + Q + "[^[:space:]'\"]*state\\.py" + Q + ARGS
+            + "(" + verb + ")|" + BOUND + "(python3?[[:space:]]+)?" + Q + VAR + Q + ARGS + "(" + verb + ")")
+
+
+HUMAN_BY_RE = state_verb_re(HUMAN_BY_VERB)
+START_LIGHT_RE = state_verb_re(START_LIGHT_VERB)
+WHY_HUMAN = T(
+    "\n\nThis command is the human's, whether or not the dialog is on. A human runs it in their\n"
+    "own terminal, outside the agent session; an unattended run exports AI_UNATTENDED=1 in the\n"
+    "launcher's environment. See .ai/policies/safety.md.")
 WHY_PICK = T(
     "\n\nWith the dialog on, this command runs from an agent session only as the human's pick.\n"
     "The command that needs it opened a decision: 'state.py decision show' prints the dialog;\n"
@@ -137,7 +148,7 @@ LN_SRC_RE = ".*(^|[|;&[:space:]])ln([[:space:]]+-[^[:space:]]+)*[[:space:]]+([^[
 LONG_CMD = 4096
 # Whole words only, so --cov, --config and approve_invoice do not trip it.
 LONG_TRIGGER_RE = ("(^|[^A-Za-z0-9_])approve([^A-Za-z0-9_]|$)|--by(=|[[:space:]]|$)|"
-                   "--con?f?i?r?m?-?d?e?l?e?t?e?(=|[[:space:]]|$)|state\\.py|update\\.py")
+                   "--con?f?i?r?m?-?(d?e?l?e?t?e?|c?l?e?a?n?u?p?)(=|[[:space:]]|$)|state\\.py|update\\.py")
 # Tools that write a file named on their command line without a redirect; the
 # movers do not parse them, so any protected path they name is refused (H1).
 FETCHERS = "(^|[|;&[:space:]])(scp|tar|zip|unzip|curl|wget)([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+"
@@ -1255,14 +1266,14 @@ class PathGuard:                            # pylint: disable=too-many-instance-
         on, picked = self.dialog_consent(cmd)
         if m.ere_match(APPROVE_RE, cmd_joined) and not unattended and self.task_in_flight() and not picked:
             raise Deny("Refusing 'state.py approve' from an agent session." + WHY_APPROVE)
-        if on and not picked and not unattended:
-            if m.ere_match(PROFILE_SET_RE, cmd_joined):
-                raise Deny("Refusing 'state.py profile set' from an agent session." + WHY_PICK)
-            if m.ere_match(HUMAN_BY_RE, cmd_joined):
-                raise Deny(T("Refusing a 'state.py … --by' verdict from an agent session.") + WHY_PICK)
-        if m.ere_match(SETBY_RE, cmd_joined) and not unattended and self.task_in_flight():
-            raise Deny(T("Refusing 'state.py set \u2026 --by' from an agent session: a verdict with --by is the "
-                         "human's, given when the review budget is spent.") + WHY_SET_BY)
+        if on and not picked and not unattended and m.ere_match(PROFILE_SET_RE, cmd_joined):
+            raise Deny("Refusing 'state.py profile set' from an agent session." + WHY_PICK)
+        if not picked and not unattended and m.ere_match(HUMAN_BY_RE, cmd_joined):
+            raise Deny(T("Refusing a verdict with 'state.py … --by' from an agent session.")
+                       + (WHY_PICK if on else WHY_HUMAN))
+        if not on and not picked and not unattended and m.ere_match(START_LIGHT_RE, cmd_joined):
+            raise Deny(T("Refusing 'state.py start --mode light … --by' from an agent session: lowering the "
+                         "mode is the human's.") + WHY_HUMAN)
         self.interpreter_text(cmd)
 
         # Top-level splitting only: the string a sh -c or an eval runs is not
