@@ -239,9 +239,9 @@ class TestMigration0007(unittest.TestCase):
             self.assertIn(" 0 conflict(s)", out)
         self.assertEqual((dry.returncode, applied.returncode), (0, 0), dry.stdout + applied.stdout)
 
-    def test_a_weight_json_with_tests_a_string_passes_where_convert_never_writes_tests(self):
-        """R-l2: the shape check looks only where convert writes; convert never writes a top-level `tests`
-        key of weight.json, so `"tests": "x"` is no conflict"""
+    def test_a_weight_json_with_tests_a_string_passes_where_convert_carries_no_tests_scalar(self):
+        """R-l2: the shape check looks only where convert writes; the project edited `tests`, so base differs
+        from the weight template at tests.max_suite_runs and convert carries no tests scalar: `"tests": "x"` is no conflict"""
         dry, applied, _ = self.deep_project("weight.json", self.edited_weight(
             lambda doc: doc.__setitem__("tests", "x")))
         self.assert_no_conflict(dry, applied)
@@ -344,11 +344,18 @@ class TestMigration0007(unittest.TestCase):
         self.assertIn("billing-xyz/**", doc["axes"]["domain"]["modules"])
 
     def test_a_risk_tiers_json_with_string_or_number_examples_or_paths_is_a_conflict(self):
-        """R-a6a8: a string iterates letter by letter and a number crashes convert: still a conflict on the table"""
+        """R-a6a8: a string iterates letter by letter and a number crashes convert: still a conflict on the table;
+        R-0007: a boolean examples and a string paths are conflicts that name their type"""
         self.malformed_project("risk-tiers.json", '{"tiers": {"T1": {"examples": "x"}}}', r"risk-tiers\.json")
         self.malformed_project("risk-tiers.json", '{"tiers": {"T1": {"examples": 5}}}', r"risk-tiers\.json")
         self.malformed_project("risk-tiers.json", '{"path_scopes": [{"scope": "payments", "paths": 5}]}',
                                r"risk-tiers\.json")
+        boolean = '{"tiers": {"T1": {"examples": true}}}'
+        self.malformed_project("risk-tiers.json", boolean, r"risk-tiers\.json")
+        self.assertIn("is a boolean, not a list", self.conflict_line("risk-tiers.json", boolean))
+        string = '{"path_scopes": [{"scope": "payments", "paths": "abc"}]}'
+        self.malformed_project("risk-tiers.json", string, r"risk-tiers\.json")
+        self.assertIn("is a string, not a list", self.conflict_line("risk-tiers.json", string))
 
     def test_a_risk_tiers_json_that_is_not_an_object_names_the_type_with_its_article(self):
         """R-4207: the reason reads "is a number, not an object", with the article of the JSON word"""
@@ -2219,8 +2226,9 @@ sys.exit(update.main())
                              ("conflict", "ctx._add(\"conflict\", \".ai/policies/risk-tiers.json\", 5)")):
             d = self.v0_project("add-non-str-note-" + action)
             synth = self.synth_0003("synth-non-str-note-" + action, "def plan(ctx):\n    " + call + "\n")
-            _, out = self.upd(d, merge=True, **synth)
+            rc, out = self.upd(d, merge=True, **synth)
             with self.subTest(action):
+                self.assertEqual(2, rc, out)
                 self.assertIn("note must be str, not int", out, out)
                 self.assertIn("0003:", out, out)
                 self.assertNotIn("Traceback", out, out)
