@@ -1516,7 +1516,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertIn(".ai/state/n\\nl; touch pwn #.jsonl: tracked by git", out, "the name is shown escaped\n" + out)
         self.assertNotIn("rm --cached -- .ai/state/n", out, "no command with the raw name\n" + out)
         self.assertNotIn("rm --cached -- '.ai/state/n", out, "nor a quoted one that spans lines\n" + out)
-        nul_safe = "git ls-files -z -ci --exclude-standard -- .ai/state | xargs -0 git --literal-pathspecs rm --cached --"
+        nul_safe = "git ls-files -z -ci --exclude-standard -- .ai/state | xargs -0 -r git --literal-pathspecs rm --cached --"
         self.assertIn(nul_safe, out, "the NUL-safe command instead\n" + out)
         self.assertIn("EVERY tracked, ignored file under .ai/state", out, "which says it untracks them all\n" + out)
 
@@ -1559,7 +1559,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
                          "ten per-file hints\n" + out)
         self.assertEqual(grep(r"^  hint +\.ai/state: 2 more file\(s\) tracked by git but ignored", out), 1,
                          "and one that counts the other two\n" + out)
-        self.assertIn("xargs -0 git --literal-pathspecs rm --cached --", out, "with the command for all\n" + out)
+        self.assertIn("xargs -0 -r git --literal-pathspecs rm --cached --", out, "with the command for all\n" + out)
         self.run_printed(d, next(x for x in out.splitlines() if ": 2 more file(s)" in x))
         self.assertEqual(self.index_of(d) & {x.encode() for x in names}, set(), "which untracks all twelve")
 
@@ -1575,7 +1575,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertNotIn("Traceback", out, "a non-UTF-8 name does not crash the report\n" + out)
         self.assertIn(".ai/state/bad\\udcff.jsonl: tracked by git but ignored", out,
                       "it is shown escaped\n" + out)
-        self.assertIn("xargs -0 git --literal-pathspecs rm --cached --", out, "and gets the NUL-safe command\n" + out)
+        self.assertIn("xargs -0 -r git --literal-pathspecs rm --cached --", out, "and gets the NUL-safe command\n" + out)
         self.run_hint_command(d, out, ".ai/state/bad\\udcff.jsonl")
         self.assertNotIn(b".ai/state/bad\xff.jsonl", self.index_of(d), "which untracks it")
 
@@ -1795,6 +1795,61 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         rc, out = self.upd(d, merge=True)
         self.assertNotEqual(2, rc, out)
         self.assertIn("state.py weight --mirror", out, "the stale mirror is named\n" + out)
+
+    def test_a_stale_hand_edited_weight_mirror_hint_says_regenerating_replaces_the_edits(self):
+        """M1: a weight.md that is hand-edited AND stale draws the hint, which says the regeneration
+        replaces hand edits; the update itself never overwrites it"""
+        d = self.mirrored_project("weight-mirror-stale-edited")
+        wm = os.path.join(d, ".ai", "policies", "weight.md")
+        edited = text_of(wm) + "\nA note of the project's own.\n"
+        put(wm, edited)
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        doc = read_json(wj)
+        doc["examples"]["light"].append("an edit the interrupted apply wrote first")
+        put_json(wj, doc)
+        rc, out = self.upd(d, "--apply", merge=True)
+        self.assertEqual(0, rc, out)
+        self.assertTrue(has(r"weight\.md: rendered from a different weight\.json.*REPLACES any hand edits", out),
+                        "the hint warns that regenerating replaces hand edits\n" + out)
+        self.assertIn("A note of the project's own.", text_of(wm), "the update kept the hand edit")
+
+    def test_a_renderer_that_raises_names_its_exception_class_in_a_hint(self):
+        """L3: the text-merge fallback of weight_mirror says which exception made it, on one line"""
+        d = self.mirrored_project("weight-mirror-render-raises")
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        put(wj, '{"axes": [1]}')  # the renderer cannot read it: AttributeError
+        rc, out = self.upd(d, merge=True)
+        self.assertNotIn("Traceback", out, out)
+        self.assertTrue(has(r"^  hint +\.ai/policies/weight\.md: not rendered from weight\.json \(AttributeError\); merged as text$", out),
+                        "the hint names the exception class\n" + out)
+
+    def test_a_weight_json_nested_past_the_recursion_limit_is_a_conflict_not_a_crash(self):
+        """a project weight.json nested 3000 levels (flatten recurses) is reported, not a RecursionError"""
+        d = self.current_project("weight-json-deep")
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        put(wj, '{"a":' * 3000 + "1" + "}" * 3000)
+        rc, out = self.upd(d, merge=True)
+        self.assertNotIn("Traceback", out, out)
+        self.assertNotIn("RecursionError", out, out)
+        self.assertTrue(has("conflict .*weight.json.*nested too deeply", out), out)
+        rc, out = self.upd(d, "--apply", merge=True)
+        self.assertNotIn("Traceback", out, out)
+
+    def test_the_nul_safe_untrack_command_does_nothing_when_nothing_is_tracked(self):
+        """I2: xargs -r: with no tracked, ignored .ai/state file the printed command exits 0 and leaves the index"""
+        d = self.current_project("tracked-ignored-empty-input")
+        self.tracked_git(d, "init", "-q")
+        rel = ".ai/state/a\nb.jsonl"
+        put(os.path.join(d, rel), '{"v":1}\n')
+        self.tracked_git(d, "add", "-f", "--", rel)
+        self.tracked_git(d, "commit", "-q", "-m", "track")
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        line = next(x for x in out.splitlines() if "tracked by git but ignored" in x and "xargs" in x)
+        self.run_printed(d, line)
+        self.tracked_git(d, "commit", "-q", "-m", "untrack")
+        before = self.index_of(d)
+        self.run_printed(d, line)  # check=True: a non-zero exit raises
+        self.assertEqual(before, self.index_of(d), "nothing tracked, nothing changed")
 
     def test_a_current_weight_mirror_draws_no_regenerate_hint(self):
         """weight.md: a faithful, current mirror draws no hint"""

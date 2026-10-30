@@ -865,10 +865,13 @@ def weight_mirror(plan, history, theirs):
         try:
             if ours == render_weight(disk):
                 fresh = render_weight(after)
-        except Exception:  # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             # not a table the renderer reads (or too deep, or no temp dir, or no renderer):
             # the text merge decides, and it is always safe
             fresh = None
+            # L3: say so, so a renderer bug is not read as a hand-edited mirror
+            plan.hints.append("%s: not rendered from weight.json (%s); merged as text"
+                              % (WEIGHT_MD, type(exc).__name__))
     if fresh is None:
         three_way(plan, history, "ai-init/" + WEIGHT_MD, WEIGHT_MD, theirs)
         stale = stale_mirror_hint(ours, disk)
@@ -889,7 +892,8 @@ def stale_mirror_hint(ours, disk):
         return None
     return ("%s: rendered from a different weight.json than the one on disk (stale: an interrupted "
             "--apply, or the JSON edited without regenerating) — `state.py weight --mirror` "
-            "regenerates it from the JSON" % WEIGHT_MD)
+            "regenerates it from the JSON and REPLACES any hand edits in it, so keep or move "
+            "them first" % WEIGHT_MD)
 
 
 def three_way(plan, history, key, target, theirs):
@@ -906,7 +910,7 @@ def three_way(plan, history, key, target, theirs):
             try:
                 policy = leaf_changes(json.loads(ours, object_pairs_hook=OrderedDict),
                                       json.loads(theirs, object_pairs_hook=OrderedDict))
-            except ValueError:
+            except (ValueError, RecursionError):  # nested past the recursion limit: no policy lines
                 policy = None
         plan.add("update", target, "unchanged since it was installed",
                  content=theirs, policy=policy)
@@ -920,10 +924,17 @@ def three_way(plan, history, key, target, theirs):
         except ValueError:
             plan.add("conflict", target, "not valid JSON; not merged", conflict_copy=theirs)
             return
-        base = closest(bases, o, json_score) if bases else MISSING
-        conflicts = []
-        merged = merge_json(base, o, t, [], conflicts)
-        policy = leaf_changes(o, merged) if "/policies/" in "/" + target else None
+        except RecursionError:  # parsing, flatten or merge_json past the recursion limit
+            plan.add("conflict", target, "nested too deeply; not merged", conflict_copy=theirs)
+            return
+        try:
+            base = closest(bases, o, json_score) if bases else MISSING
+            conflicts = []
+            merged = merge_json(base, o, t, [], conflicts)
+            policy = leaf_changes(o, merged) if "/policies/" in "/" + target else None
+        except RecursionError:
+            plan.add("conflict", target, "nested too deeply; not merged", conflict_copy=theirs)
+            return
         if merged == o and not conflicts:
             return
         if merged != o:
@@ -1268,7 +1279,7 @@ def tracked_ignored_hint(plan):
     if res.returncode != 0:
         return
     # --literal-pathspecs: a * ? [ ] in a name is that name, not a pattern that matches its neighbours.
-    all_cmd = "git ls-files -z -ci --exclude-standard -- .ai/state | xargs -0 git --literal-pathspecs rm --cached --"
+    all_cmd = "git ls-files -z -ci --exclude-standard -- .ai/state | xargs -0 -r git --literal-pathspecs rm --cached --"
     names = [os.fsdecode(raw) for raw in res.stdout.split(b"\0") if raw]
     for path in names[:TRACKED_IGNORED_SHOWN]:
         # A control character (or a byte that is not UTF-8, which fsdecode keeps as a lone

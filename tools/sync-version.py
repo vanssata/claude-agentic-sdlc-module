@@ -6,7 +6,7 @@
   tools/sync-version.py 3.0.2                    rewrite the version in all five keys (four files)
   tools/sync-version.py ... --root DIR           act on the tree at DIR (default: this repository)
 
-The places: package.json, .claude-plugin/plugin.json, .claude-plugin/marketplace.json
+The four files: package.json, .claude-plugin/plugin.json, .claude-plugin/marketplace.json
 (two "version" keys), .codex-plugin/plugin.json. Setting replaces only the value of
 each "version" key, so every other byte survives. A version is X.Y.Z, optionally
 -prerelease. Exit 0 ok, 1 a mismatch, 2 a refused version or a usage error.
