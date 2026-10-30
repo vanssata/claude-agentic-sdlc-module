@@ -5,35 +5,35 @@ version: `npx riskrails` alone runs whatever was published last, and the hooks
 it installs see every command an agent runs.
 
 ```bash
-npx riskrails@3.0.1                       # detects Claude Code, Codex, or both, and updates each
-npx riskrails@3.0.1 --target codex        # auto | claude | codex | both
-npx riskrails@3.0.1 --dry-run             # print what would be written, write nothing
-npx riskrails@3.0.1 --home ~/alt-claude   # another Claude home (--codex-home for Codex)
+npx riskrails@3.1.0                       # detects Claude Code, Codex, or both, and updates each
+npx riskrails@3.1.0 --target codex        # auto | claude | codex | both
+npx riskrails@3.1.0 --dry-run             # print what would be written, write nothing
+npx riskrails@3.1.0 --home ~/alt-claude   # another Claude home (--codex-home for Codex)
 # The installer does not read CLAUDE_CONFIG_DIR or CODEX_HOME: with a home other than
 # ~/.claude or ~/.codex, pass it with --home / --codex-home (or CLAUDE_DIR / CODEX_DIR).
 
 # Claude-side options. The plan is detected from ~/.claude.json (organizationRateLimitTier
 # tells Max 5x from 20x; a Team account by its seat) and, on a terminal, proposed for you
 # to confirm with Enter; --yes takes the detection, or the plan recorded last time, without asking:
-npx riskrails@3.0.1 --plan pro            # Pro: opusplan session, opus pinned for STRONG and EXPERT
-npx riskrails@3.0.1 --plan team-pro       # Team, Standard seat: the pro profile with the Team label
-npx riskrails@3.0.1 --plan team-max       # Team, Premium seat: the max profile, Fable on architect
-npx riskrails@3.0.1 --plan max            # Max 5x: Opus 5.5 [1m] session, Fable only on architect
-npx riskrails@3.0.1 --plan max20          # Max 20x: max's settings, EXPERT twice per task without asking
-npx riskrails@3.0.1 --plan max --fable no # no Fable anywhere; architect inherits the Opus session
-npx riskrails@3.0.1 --plan balanced-max   # BalancedMax: only the session is strong (Opus 5.5, 200k); readers on Haiku,
+npx riskrails@3.1.0 --plan pro            # Pro: opusplan session, opus pinned for STRONG and EXPERT
+npx riskrails@3.1.0 --plan team-pro       # Team, Standard seat: the pro profile with the Team label
+npx riskrails@3.1.0 --plan team-max       # Team, Premium seat: the max profile, Fable on architect
+npx riskrails@3.1.0 --plan max            # Max 5x: Opus 5.5 [1m] session, Fable only on architect
+npx riskrails@3.1.0 --plan max20          # Max 20x: max's settings, EXPERT twice per task without asking
+npx riskrails@3.1.0 --plan max --fable no # no Fable anywhere; architect inherits the Opus session
+npx riskrails@3.1.0 --plan balanced-max   # BalancedMax: only the session is strong (Opus 5.5, 200k); readers on Haiku,
                                           # judgement on Sonnet, reviews on Opus, EXPERT at high, no Fable, no xhigh;
                                           # also picks the Codex balanced-max profile (Sol session, readers on Luna)
 
 # Codex-side options (the ChatGPT plan is read from ~/.codex/auth.json; unknown means pro, and says so):
-npx riskrails@3.0.1 --codex-plan plus     # Plus: Sol at medium, three agent threads, Astra at high, no xhigh
-npx riskrails@3.0.1 --codex-plan pro      # Pro: Sol at high, six agent threads, Astra at xhigh
-npx riskrails@3.0.1 --codex-plan balanced-max  # Pro's budgets, Sol session, FAST readers on Luna, Astra at high
+npx riskrails@3.1.0 --codex-plan plus     # Plus: Sol at medium, three agent threads, Astra at high, no xhigh
+npx riskrails@3.1.0 --codex-plan pro      # Pro: Sol at high, six agent threads, Astra at xhigh
+npx riskrails@3.1.0 --codex-plan balanced-max  # Pro's budgets, Sol session, FAST readers on Luna, Astra at high
 
 # Context (both runtimes):
-npx riskrails@3.0.1 --context economy     # the plan's compaction window (800 000 Max, 300 000 Pro); the guard also blocks
-npx riskrails@3.0.1 --context default     # the default: each runtime's own window and compaction; the guard only warns
-npx riskrails@3.0.1 --statusline-context no  # no model and context line in the statusline (default yes)
+npx riskrails@3.1.0 --context economy     # the plan's compaction window (800 000 Max, 300 000 Pro); the guard also blocks
+npx riskrails@3.1.0 --context default     # the default: each runtime's own window and compaction; the guard only warns
+npx riskrails@3.1.0 --statusline-context no  # no model and context line in the statusline (default yes)
 ```
 
 Node 18 or newer and `python3` (Python 3.11 or newer) on `PATH` are required;
@@ -199,4 +199,4 @@ deliberate.
 
 Every other hook, agent and settings key you have is kept, including ones no
 plugin owns. The project side is a migration: [README.md](../README.md),
-"Upgrade to 3.0".
+"Upgrade to 3.0" and "Upgrade to 3.1".

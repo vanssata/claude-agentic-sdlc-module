@@ -25,7 +25,7 @@ except the last section.
 ├── docs/sdlc/                          constitution.md; intent/, specs/, plans/, adr/
 └── .ai/
     ├── AGENTS.md                       the router: one row per job → the policy that answers it
-    ├── VERSION                         the schema (10)
+    ├── VERSION                         the schema (11)
     ├── project/                        the surveyed knowledge base, every claim labelled
     ├── policies/                       weight.json + weight.md, dialog.json, path-guard.json, testing.md, coding.md, safety.md, security.md
     ├── rules/                          rules scoped to directories, rendered into their instruction files

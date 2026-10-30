@@ -1,6 +1,6 @@
 # RiskRails
 
-[![Version](https://img.shields.io/badge/version-3.0.1-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v3.0.1)
+[![Version](https://img.shields.io/badge/version-3.1.0-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v3.1.0)
 [![Runtimes](https://img.shields.io/badge/runtimes-Claude%20Code%20%7C%20Codex-d2f878?labelColor=101210)](docs/routing.md)
 [![Known risks](https://img.shields.io/badge/known%20risks-documented-d2f878?labelColor=101210)](docs/known-risks.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-d2f878?labelColor=101210)](LICENSE)
@@ -18,7 +18,7 @@ approval. Risky actions are stopped by a hook, not by a polite request in a
 prompt.
 
 ```bash
-npx riskrails@3.0.1   # detects Claude Code, Codex or both (Node 18+, Python 3.11+)
+npx riskrails@3.1.0   # detects Claude Code, Codex or both (Node 18+, Python 3.11+)
 ```
 
 Then, in any project: `/rr-setup` once, and `/rr-build <what you want>` for
@@ -50,8 +50,20 @@ Tuned for **one developer who knows the codebase**, on a Claude Pro, Max or
 Team plan, or a ChatGPT Plus or Pro plan, following the
 [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook).
 
-**Version 3.0.1.** The guards have limits: read [Known risks](docs/known-risks.md)
+**Version 3.1.0.** The guards have limits: read [Known risks](docs/known-risks.md)
 before relying on them. What is decided but not built is in [ROADMAP.md](ROADMAP.md).
+
+## Upgrade to 3.1
+
+From 3.0.x: update the home (`npx riskrails@3.1.0`, restart the runtime), then
+in each project `/rr-setup --update` (dry run first, then `--apply`). Schema 10
+becomes **11**: migration `0011` proposes deleting `.ai/policies/risk-tiers.json`
+and `risk-tiers.md`, which `weight.json` and `weight.md` replaced; confirm with
+`--apply --confirm-delete <name>` in a terminal of your own. The update now
+renders `weight.md` from `weight.json` instead of merging it, reads the
+`docs/sdlc/*/TEMPLATE.md` files from the plugin (an unedited project copy is
+offered for deletion), and proposes cleanup of old run logs and stale tasks.
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## Upgrade to 3.0
 
@@ -70,7 +82,7 @@ version. Step by step, in this order:
 3. **Update the home** on every machine, for every runtime:
 
    ```bash
-   npx riskrails@3.0.1              # or: npx -y riskrails@latest --yes
+   npx riskrails@3.1.0              # or: npx -y riskrails@latest --yes
    ```
 
    It moves `<home>/claude-agentic/` to `<home>/riskrails/` and leaves a
@@ -85,13 +97,13 @@ version. Step by step, in this order:
    /rr-setup --update               # dry run first; read it; then --apply
    ```
 
-   Four migrations run inside the dry run, in order, before the merge:
+   Migrations `0007` to `0010` (and `0011`, see Upgrade to 3.1) run inside the dry run, in order, before the merge:
    `0007` creates `.ai/policies/weight.json`, carrying over the project's
    edits to its risk-tier table; `0008` renames the managed-block markers and
    the router's routes; `0009` moves `current.json` to `state.json`; `0010`
    creates `.ai/policies/dialog.json` with the dialog on. Edited markdown is
    three-way merged, JSON policies key by key with a confirmation per key;
-   `delete?` proposals are left for you to confirm. The schema becomes 10.
+   `delete?` proposals are left for you to confirm. The schema becomes 10 with a 3.0 plugin, 11 with 3.1.
 5. **Decide two things the migrations cannot.** Keep the dialog (then amend
    constitution C5 as `0010` hints) or set `"enabled": false`; and tune the
    weight table — `domain.modules`, `customer_visible`, `hot_paths`,
@@ -108,12 +120,12 @@ home-side details in [docs/installation.md](docs/installation.md).
 ## Install
 
 ```bash
-npx riskrails@3.0.1                       # detects Claude Code, Codex, or both; proposes the detected plan
-npx riskrails@3.0.1 --target codex        # auto | claude | codex | both
-npx riskrails@3.0.1 --plan max --fable no # pro | team-pro | team-max | max | max20 | balanced-max
-npx riskrails@3.0.1 --codex-plan plus     # plus | pro | balanced-max
-npx riskrails@3.0.1 --context economy     # the plan's compaction window; the context guard also blocks
-npx riskrails@3.0.1 --dry-run             # print what would be written, write nothing
+npx riskrails@3.1.0                       # detects Claude Code, Codex, or both; proposes the detected plan
+npx riskrails@3.1.0 --target codex        # auto | claude | codex | both
+npx riskrails@3.1.0 --plan max --fable no # pro | team-pro | team-max | max | max20 | balanced-max
+npx riskrails@3.1.0 --codex-plan plus     # plus | pro | balanced-max
+npx riskrails@3.1.0 --context economy     # the plan's compaction window; the context guard also blocks
+npx riskrails@3.1.0 --dry-run             # print what would be written, write nothing
 npx -y riskrails@latest --yes             # update in place, keeping the recorded plan
 ```
 
@@ -293,6 +305,7 @@ the developer's real `~/.claude` or `~/.codex`.
 | [docs/local-memory.md](docs/local-memory.md) | the compact record: task ids, packages, recall, the pre-push check, migration |
 | [docs/known-risks.md](docs/known-risks.md) | what the guards do not protect against, and what to do about it |
 | [docs/faq.md](docs/faq.md) | why something was blocked, and how to change it |
+| [CHANGELOG.md](CHANGELOG.md) | what changed in each release, and the upgrade notes |
 | [docs/sdlc/README.md](docs/sdlc/README.md) | the spec → plan → build artefacts in a project |
 | [ROADMAP.md](ROADMAP.md) | what is decided but not built; the open rows |
 
