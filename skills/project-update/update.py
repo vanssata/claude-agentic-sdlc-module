@@ -647,6 +647,9 @@ class MigrationContext:
         if not isinstance(kw.get("content", b""), bytes):
             raise SchemaError("%04d: %s content must be bytes, not %s"
                               % (self.module.VERSION, target, type(kw["content"]).__name__))
+        if not isinstance(note, str):
+            raise SchemaError("%04d: %s note must be str, not %s"
+                              % (self.module.VERSION, target, type(note).__name__))
         deep = action == "conflict" and isinstance(note, str) and note.startswith("nested too deeply")
         if action == "conflict" and any(i["action"] == "conflict" and i["target"] == target
                                         and i["migration"] == self.module.VERSION

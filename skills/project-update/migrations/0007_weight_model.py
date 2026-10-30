@@ -183,18 +183,26 @@ def _mode(state):
 
 
 def _kind(value):
-    return type(value).__name__ if value is not None else "null"
+    """the JSON name of a value's type"""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):  # before int: True is an int
+        return "boolean"
+    for types, name in (((int, float), "number"), (str, "string"), (list, "list"), (dict, "object")):
+        if isinstance(value, types):
+            return name
+    return type(value).__name__
 
 
 def _an(word):
-    return ("an " if word[0] in "aeiou" else "a ") + word
+    return word if word == "null" else ("an " if word[0] in "aeiou" else "a ") + word
 
 
 def _bad(doc, key, want, what):
     """A reason when `doc[key]`, present and not null, is not a `want`; else None."""
     value = doc.get(key)
     if value is not None and not isinstance(value, want):
-        return "%s is %s, not %s" % (what, _an(_kind(value)), _an("list" if want is list else "object"))
+        return "%s is %s, not %s" % (what, _an(_kind(value)), _an("object" if want is dict else "list"))
     return None
 
 
@@ -205,7 +213,7 @@ def _old_problem(old):
     why = _bad(old, "tiers", dict, "tiers") if old.get("tiers") else None  # falsy: convert reads no tiers
     for tier, entry in (old.get("tiers") or {}).items() if why is None else ():
         if tier in EXAMPLE_MODE and isinstance(entry, dict) and entry.get("examples"):  # convert reads only these
-            why = why or _bad(entry, "examples", list, "tiers.%s.examples" % tier)
+            why = why or _bad(entry, "examples", (list, dict), "tiers.%s.examples" % tier)  # an object iterates by key
     scopes = old.get("path_scopes")
     if scopes and not isinstance(scopes, (list, dict, str)):  # an object or a string iterates, its members skipped
         why = why or "path_scopes is %s, not a list" % _an(_kind(scopes))
@@ -213,7 +221,7 @@ def _old_problem(old):
         if isinstance(scope, dict):
             name = scope.get("scope")
             if scope.get("paths"):
-                why = _bad(scope, "paths", list, "a path scope's paths")
+                why = _bad(scope, "paths", (list, dict), "a path scope's paths")  # an object iterates by key
             # the name is hashed only against a str path
             if not why and isinstance(name, (list, dict)) and any(isinstance(p, str) for p in scope.get("paths") or []):
                 why = "a path scope's name is %s, not a string" % _an(_kind(name))
