@@ -25,7 +25,12 @@ What it manages, and how:
   .ai/** the plugin shares (the other policies,      read from the plugin's shared tree; a project
     agents, workflows, templates)                     copy is an override and is never merged — an
                                                       unedited one is offered for deletion
-  docs/sdlc/*/TEMPLATE.md                            three-way update
+  docs/sdlc/*/TEMPLATE.md                            the plugin supplies them (read in place); an
+                                                    unedited copy is offered for deletion, an
+                                                    edited one is a project override and stays
+  .ai/reports/<task>/, .ai/state/logs/<task>/        proposals only, never run on their own: the
+    of closed, abandoned or long-idle tasks           logs of a closed task, every file of an
+                                                      abandoned or STALE_DAYS-idle unclosed one
   .claude/memory/README.md, .codex/memory/README.md  three-way update, per runtime the project uses
   the managed block in CLAUDE.md and/or AGENTS.md    three-way update of the block only
   .gitignore                                         missing entries appended
@@ -46,7 +51,7 @@ in a git-ignored local directory for a human or /project-update to merge.
 import argparse, contextlib, copy, difflib, hashlib, importlib.util, io, json, os, re, subprocess, sys, tempfile
 from collections import OrderedDict
 from types import SimpleNamespace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 sys.dont_write_bytecode = True  # never leave __pycache__ in an installed plugin
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -80,6 +85,7 @@ ROUTER_FILE = ".ai/AGENTS.md"
 # section, or doubles it, is a conflict for a human.
 SHARED_SECTION_RE = re.compile(rb"(?m)^## Shared files[ \t]*\r?$")
 SHARED_SCHEMA = 6  # the schema from which shared copies are overrides (0006)
+STALE_DAYS = 7  # an unclosed task whose last event is older is proposed for cleanup
 STATE_FILE = ".ai/state/state.json"
 LEGACY_STATE_FILE = ".ai/state/current.json"  # R34: the name until migration 0009 moves it
 
@@ -123,10 +129,11 @@ HASH_RE = re.compile(rb"sha256:[0-9a-f]{64}")
 
 PROJECT_INIT_MAP = [  # template -> target, kind
     ("sdlc-README.md", "docs/sdlc/README.md", "update"),
-    ("intent.md", "docs/sdlc/intent/TEMPLATE.md", "update"),
-    ("spec.md", "docs/sdlc/specs/TEMPLATE.md", "update"),
-    ("plan.md", "docs/sdlc/plans/TEMPLATE.md", "update"),
-    ("adr.md", "docs/sdlc/adr/TEMPLATE.md", "update"),
+    # read in place by /rr-spec and /rr-plan; a project copy is an override: never created
+    ("intent.md", "docs/sdlc/intent/TEMPLATE.md", "retire"),
+    ("spec.md", "docs/sdlc/specs/TEMPLATE.md", "retire"),
+    ("plan.md", "docs/sdlc/plans/TEMPLATE.md", "retire"),
+    ("adr.md", "docs/sdlc/adr/TEMPLATE.md", "retire"),
     # the project's own principles: created once, then it is the project's file
     ("constitution.md", "docs/sdlc/constitution.md", "create"),
 ]
@@ -1008,6 +1015,106 @@ def shared_update(plan, history, version):
                  "adds nothing" % (len(edited), ", ".join(edited), SHARED))
 
 
+def retire_templates(plan, history, retired):
+    """[(history key, target)] the plugin now supplies from its own tree. A
+    missing copy stays missing; an unedited one is offered for deletion, same
+    gate as a shared override; an edited one is a project override, named once."""
+    edited = []
+    for key, target in retired:
+        data = plan.read(target)
+        if data is None:
+            continue
+        known = history.hashes(key)
+        if sha(data) not in known and sha(data.replace(b"\r\n", b"\n")) not in known:
+            edited.append(target)
+            continue
+        why = "[sdlc] the plugin supplies it: skills/project-init/templates/" + key.split("/", 1)[1]
+        if plan.confirm_delete:
+            plan.add("delete", target, why, reason=why)
+            plan.remove(target)
+        else:
+            plan.add("delete?", target, why, reason=why)
+    if edited:
+        plan.hints.append("%d file(s) override the plugin's SDLC template and no longer receive its "
+                          "changes: %s" % (len(edited), ", ".join(edited)))
+
+
+def task_journal(root, task_id):
+    """(closed, abandoned, last event as a datetime) from the task's journal,
+    or None when it holds no readable event."""
+    closed = abandoned = False
+    last = None
+    try:
+        with open(os.path.join(root, ".ai", "reports", task_id, "events.jsonl"), encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    for line in lines:
+        try:
+            ev = json.loads(line)
+            when = datetime.strptime(ev["ts"][:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+        except (ValueError, KeyError, TypeError):
+            continue
+        if last is None or when > last:
+            last = when
+        if ev.get("event") == "task_closed":
+            closed = True
+            data = ev.get("data")
+            abandoned = (isinstance(data, dict) and data.get("abandoned") is True) or ev.get("detail") == "abandoned"
+    return None if last is None else (closed, abandoned, last)
+
+
+def cleanup_update(plan, now=None):
+    """Old run logs and stale unclosed tasks, proposed for deletion and never
+    deleted unasked. A closed task's `*.log` files go (its state.json stays);
+    an abandoned task, or an unclosed one idle for STALE_DAYS, loses every file
+    under .ai/reports/<id>/ and .ai/state/logs/<id>/. The task in flight is
+    never touched. `now` is a datetime; RISKRAILS_NOW (ISO, Z) overrides it."""
+    if now is None:
+        now = datetime.strptime(env("NOW") or utc_now(), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    flight = None
+    for name in (STATE_FILE, LEGACY_STATE_FILE):
+        raw = plan.read(name)
+        if raw is not None:
+            try:
+                flight = json.loads(raw).get("task_id")
+            except (ValueError, AttributeError):
+                pass
+            break
+    reports = os.path.join(plan.root, ".ai", "reports")
+    logs = os.path.join(plan.root, ".ai", "state", "logs")
+
+    def files(base, rel, only_logs=False):
+        out = []
+        for here, _dirs, names in os.walk(os.path.join(base, rel)):
+            for n in names:
+                full = os.path.join(here, n)
+                if os.path.isfile(full) and not os.path.islink(full) and (not only_logs or n.endswith(".log")):
+                    out.append(os.path.relpath(full, plan.root).replace(os.sep, "/"))
+        return out
+
+    for task_id in sorted(os.listdir(reports)) if os.path.isdir(reports) else []:
+        journal = task_journal(plan.root, task_id)
+        if journal is None or task_id == flight:
+            continue
+        closed, abandoned, last = journal
+        if abandoned:
+            why, targets = "[cleanup] abandoned task %s" % task_id, files(reports, task_id) + files(logs, task_id)
+        elif not closed and now - last > timedelta(days=STALE_DAYS):
+            why = "[cleanup] unclosed task %s, last event %s" % (task_id, last.strftime("%Y-%m-%d"))
+            targets = files(reports, task_id) + files(logs, task_id)
+        elif closed:
+            why, targets = "[cleanup] log of closed task %s" % task_id, files(logs, task_id, only_logs=True)
+        else:
+            continue
+        for target in sorted(targets):
+            if plan.confirm_delete:
+                plan.add("delete", target, why, reason=why)
+                plan.remove(target)
+            else:
+                plan.add("delete?", target, why, reason=why)
+
+
 def deletion_hint(plan):
     """M4: git is the rollback of a deletion; it must hold .ai/ first."""
     if any(i["action"] in ("delete?", "delete") and i["target"].startswith(".ai/") for i in plan.items) \
@@ -1243,18 +1350,22 @@ def build_plan(root, confirm_delete=None, confirm_via=None):
     if has_sdlc:
         tpl = TEMPLATES["project-init"]
         entries = list(PROJECT_INIT_MAP)
+        retired = []
         for rt in runtimes:
             entries += RUNTIME_MAP[rt]
         for src, target, kind in entries:
             content = read(os.path.join(tpl, src))
             if target in plan.removed:  # a migration moved it away in this run
                 continue
-            if kind == "create":
+            if kind == "retire":
+                retired.append(("project-init/" + src, target))
+            elif kind == "create":
                 if not plan.exists(target):
                     plan.add("create", target, content=content.replace(
                         b"{{PROJECT}}", os.path.basename(root).encode()))
             else:
                 three_way(plan, history, "project-init/" + src, target, content)
+        retire_templates(plan, history, retired)
         gitignore_update(plan, os.path.join(tpl, "gitignore.snippet"))
 
     if has_ai:
@@ -1278,6 +1389,7 @@ def build_plan(root, confirm_delete=None, confirm_via=None):
                 continue
             three_way(plan, history, "ai-init/" + rel, rel, content)
         shared_update(plan, history, version)
+        cleanup_update(plan)
         deletion_hint(plan)
         for rt in runtimes:
             block_update(plan, history, rt)
@@ -1441,7 +1553,9 @@ def apply_item(plan, item, written, recorded):
         if action == "move":
             check(plan, item, target, item["expect"], written)
             mode = os.stat(os.path.join(plan.root, source)).st_mode & 0o7777
-        if not source.startswith(".ai/state/"):  # git-ignored task state: a move is byte-identical
+        # git-ignored task state: a move is byte-identical; a [cleanup] deletion is
+        # rolled back from git (deletion_hint), or the cleanup would copy what it removes
+        if not source.startswith(".ai/state/") and not (item.get("reason") or "").startswith("[cleanup]"):
             keep_original(plan, source)
         recorded.append(target)
         # Recorded before the file is gone: an abort later must not lose the note
@@ -1469,8 +1583,23 @@ def apply_item(plan, item, written, recorded):
     elif action == "delete":
         os.remove(os.path.join(plan.root, target))
         written[target] = None
+        if (item["reason"] or "").startswith("[cleanup]"):
+            prune_empty(plan.root, target)
     if item["conflict_copy"] is not None:
         write_file(plan.root, os.path.join(plan.local_dir, target), item["conflict_copy"])
+
+
+def prune_empty(root, target):
+    """The directories a cleanup deletion left empty, up to (not including)
+    .ai/reports and .ai/state/logs; a directory with anything in it stays."""
+    top = ".ai/state/logs" if target.startswith(".ai/state/logs/") else ".ai/reports"
+    here = os.path.dirname(target)
+    while here.startswith(top + "/"):
+        try:
+            os.rmdir(os.path.join(root, here))
+        except OSError:
+            return
+        here = os.path.dirname(here)
 
 
 def plain_pending(root, ignore=()):
@@ -1523,13 +1652,30 @@ def report(plan, applied):
         print("  up to date with the installed plugin")
     def shown(i):
         return "%s -> %s" % (i["src"], i["target"]) if i["src"] else i["target"]
-    width = max([len(shown(i)) for i in plan.items] + [10])
+    # a cleanup is one line per directory, however many files it holds
+    rows, groups = [], {}
+    for i in plan.items:
+        if (i["reason"] or "").startswith("[cleanup]"):
+            parts = i["target"].split("/")
+            where = "/".join(parts[:4] if i["target"].startswith(".ai/state/logs/") else parts[:3])
+            key = (where, i["action"], i["note"])
+            if key in groups:
+                groups[key]["count"] += 1
+                continue
+            row = dict(i, migration=None, src=None, count=1)
+            groups[key] = row
+            row["target"] = where
+            i = row
+        rows.append(i)
+    for (where, _action, _note), row in groups.items():
+        row["target"] = "%s/ (%d file%s)" % (where, row["count"], "" if row["count"] == 1 else "s")
+    width = max([len(shown(i)) for i in rows] + [10])
     if plan.schema:
         frm, to, mods = plan.schema
         print("  %-9s %-*s  (%d migration%s: %s)" % (
             "schema", width, "%d -> %d" % (frm, to), len(mods), "" if len(mods) == 1 else "s",
             ", ".join("%04d %s" % (m.VERSION, m.TITLE) for m in mods)))
-    for i in plan.items:
+    for i in rows:
         note = i["note"]
         if i["migration"] is not None:
             note = "[%04d]%s" % (i["migration"], " " + note if note else "")

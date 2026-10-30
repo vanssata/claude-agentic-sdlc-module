@@ -236,12 +236,8 @@ def main(argv):
     on = runtimes(runtime, root)
     s = Scaffold(tpl, root)
 
-    # shared SDLC
+    # shared SDLC (the intent/spec/plan/adr templates ship with the plugin; a project TEMPLATE.md is only an override)
     s.put("sdlc-README.md", "docs/sdlc/README.md")
-    s.put("intent.md", "docs/sdlc/intent/TEMPLATE.md")
-    s.put("spec.md", "docs/sdlc/specs/TEMPLATE.md")
-    s.put("plan.md", "docs/sdlc/plans/TEMPLATE.md")
-    s.put("adr.md", "docs/sdlc/adr/TEMPLATE.md")
     s.put("constitution.md", "docs/sdlc/constitution.md", render=True)
 
     # per runtime

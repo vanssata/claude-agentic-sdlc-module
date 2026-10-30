@@ -201,12 +201,15 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         """project-scaffold.sh covers the same ground"""
         root8 = self.project("project8")
         run(SCAFFOLD2, root8, "--runtime", "both")
-        for f in ("docs/sdlc/README.md", "docs/sdlc/adr/TEMPLATE.md", ".claude/settings.json",
+        for f in ("docs/sdlc/README.md", "docs/sdlc/constitution.md", ".claude/settings.json",
                   ".claude/memory/README.md", ".codex/config.toml", ".codex/memory/README.md", "CLAUDE.md", "AGENTS.md"):
             with self.subTest("$f scaffolded", f=f):
                 self.assertTrue(os.path.exists(os.path.join(root8, f)))
         templates = [p for p in files(os.path.join(root8, "docs", "sdlc")) if os.path.basename(p) == "TEMPLATE.md"]
-        self.assertEqual(4, len(templates), "the SDLC templates are created once, not per runtime")
+        self.assertEqual([], templates, "the plugin supplies the SDLC templates; a fresh scaffold creates no TEMPLATE.md")
+        for d in ("intent", "specs", "plans", "adr"):
+            with self.subTest("no docs/sdlc/%s/TEMPLATE.md" % d, d=d):
+                self.assertFalse(os.path.exists(os.path.join(root8, "docs", "sdlc", d, "TEMPLATE.md")))
         before = tree_hash(root8)
         _, out = run(SCAFFOLD2, root8, "--runtime", "both")
         self.assertEqual(before, tree_hash(root8), "a second project scaffold changes no file")

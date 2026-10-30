@@ -80,11 +80,8 @@ keep() {  # keep <dir>  -> dir/.gitkeep
 }
 
 # ---------------------------------------------------------------- shared SDLC
+# (intent/spec/plan/adr templates ship with the plugin; a project TEMPLATE.md is only an override)
 put sdlc-README.md         docs/sdlc/README.md
-put intent.md              docs/sdlc/intent/TEMPLATE.md
-put spec.md                docs/sdlc/specs/TEMPLATE.md
-put plan.md                docs/sdlc/plans/TEMPLATE.md
-put adr.md                 docs/sdlc/adr/TEMPLATE.md
 put constitution.md        docs/sdlc/constitution.md "s/{{PROJECT}}/$PROJECT_ESC/g"
 
 # ---------------------------------------------------------------- per runtime

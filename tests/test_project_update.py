@@ -1582,6 +1582,101 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertTrue(has("AGENTS.md: the managed block is .* trimming it is yours", out),
                         "an edited legacy block over budget is the project's\n" + out)
 
+    # -- SDLC templates the plugin supplies, and the cleanup proposals ------
+
+    SDLC_TEMPLATES = (("intent.md", "intent"), ("spec.md", "specs"), ("plan.md", "plans"), ("adr.md", "adr"))
+
+    def sdlc_project(self, name, keep=()):
+        """A current project with the SDLC TEMPLATE.md of `keep` as the plugin ships them
+        (an older scaffold left all four) and the others absent."""
+        d = self.current_project(name)
+        for src, sub in self.SDLC_TEMPLATES:
+            target = os.path.join(d, "docs", "sdlc", sub, "TEMPLATE.md")
+            if sub in keep:
+                put(target, text_of(os.path.join(ROOT, "skills", "project-init", "templates", src)))
+            elif os.path.exists(target):
+                os.remove(target)
+        return d
+
+    def test_sdlc_templates_are_retired(self):
+        """an unedited TEMPLATE.md is offered for deletion, an edited one stays with one hint,
+        a missing one is never created, and --check stays 0"""
+        d = self.sdlc_project("retire", keep=("intent", "specs", "adr"))
+        put(os.path.join(d, "docs", "sdlc", "adr", "TEMPLATE.md"), "\n# our own wording\n", "a")
+        _, out = self.upd(d)
+        for sub in ("intent", "specs"):
+            self.assertTrue(has(r"^  delete\?   docs/sdlc/%s/TEMPLATE.md .*\[sdlc\] the plugin supplies it: "
+                                r"skills/project-init/templates/" % sub, out), out)
+        self.assertFalse(has(r"delete\?   docs/sdlc/adr/TEMPLATE.md", out), "an edited copy is kept\n" + out)
+        self.assertTrue(has(r"^  hint      1 file\(s\) override the plugin's SDLC template.*adr/TEMPLATE.md", out), out)
+        self.assertFalse(os.path.exists(os.path.join(d, "docs", "sdlc", "plans", "TEMPLATE.md")),
+                         "a missing copy is not created again")
+        self.assertEqual(self.upd(d, "--check")[0], 0, "a deletion a human must confirm is not a pending update")
+        bare = self.sdlc_project("retire-bare")
+        rc, out = self.upd(bare, "--check")
+        self.assertEqual(rc, 0, "a project without the four files is complete\n" + out)
+        self.assertNotIn("TEMPLATE.md", self.upd(bare)[1])
+        rc, out = self.upd(d, "--apply", "--confirm-delete", "tester", AI_UNATTENDED="1", merge=True)
+        self.assertEqual(rc, 0, out)
+        self.assertFalse(os.path.exists(os.path.join(d, "docs", "sdlc", "intent", "TEMPLATE.md")))
+        self.assertTrue(os.path.exists(os.path.join(d, "docs", "sdlc", "adr", "TEMPLATE.md")))
+
+    def task_dir(self, d, task_id, events, logs=()):
+        """A task's journal (events: [(days ago, event, data)]), one report file and its run logs."""
+        lines = [json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - ago * 86400)),
+                             "task": task_id, "event": ev, "detail": "", "data": data}) for ago, ev, data in events]
+        put(os.path.join(d, ".ai", "reports", task_id, "events.jsonl"), "\n".join(lines) + "\n")
+        put(os.path.join(d, ".ai", "reports", task_id, "task.md"), "x\n")
+        for name in logs:
+            put(os.path.join(d, ".ai", "state", "logs", task_id, name), "log\n")
+
+    def cleanup_project(self, name):
+        d = self.current_project(name)
+        self.task_dir(d, "T-2026-01-01-001", [(30, "task_started", {}), (29, "task_closed", {"abandoned": False})],
+                      logs=("verify.log", "review.log", "state.json"))
+        self.task_dir(d, "T-2026-01-02-001", [(30, "task_started", {}), (29, "task_closed", {"abandoned": True})],
+                      logs=("verify.log", "state.json"))
+        self.task_dir(d, "T-2026-01-03-001", [(9, "task_started", {}), (8, "step_started", {})], logs=("a.log",))
+        self.task_dir(d, "T-2026-01-04-001", [(3, "task_started", {}), (2, "step_started", {})], logs=("b.log",))
+        self.task_dir(d, "T-2026-01-05-001", [(40, "task_started", {})], logs=("c.log",))
+        put_json(os.path.join(d, ".ai", "state", "state.json"), {"task_id": "T-2026-01-05-001"})
+        return d
+
+    def test_cleanup_proposals(self):
+        """the logs of a closed task, an abandoned and a long-idle unclosed task are proposed; a recent
+        and the in-flight task are not; --check is unaffected"""
+        d = self.cleanup_project("cleanup")
+        before = tree_sum(d)
+        _, out = self.upd(d)
+        self.assertTrue(has(r"^  delete\?   \.ai/state/logs/T-2026-01-01-001/ \(2 files\) +\[cleanup\] "
+                            r"log of closed task T-2026-01-01-001", out), "one line per task, *.log only\n" + out)
+        self.assertTrue(has(r"delete\?   \.ai/reports/T-2026-01-02-001/ \(2 files\) +\[cleanup\] abandoned task "
+                            r"T-2026-01-02-001", out), out)
+        self.assertTrue(has(r"delete\?   \.ai/state/logs/T-2026-01-02-001/ \(2 files\) +\[cleanup\] abandoned task",
+                            out), "an abandoned task loses its state.json too\n" + out)
+        self.assertTrue(has(r"delete\?   \.ai/reports/T-2026-01-03-001/ \(2 files\) +\[cleanup\] unclosed task "
+                            r"T-2026-01-03-001, last event \d{4}-\d\d-\d\d", out), out)
+        self.assertEqual(grep(r"T-2026-01-04-001", out), 0, "an open task idle for 2 days is left alone\n" + out)
+        self.assertEqual(grep(r"T-2026-01-05-001", out), 0, "the task in flight is never proposed\n" + out)
+        self.assertEqual(self.upd(d, "--check")[0], 0)
+        self.assertEqual(tree_sum(d), before, "a dry run writes nothing")
+
+    def test_cleanup_confirmed_deletes_and_prunes(self):
+        """--apply --confirm-delete removes the proposed files and the directories they leave empty"""
+        d = self.cleanup_project("cleanup-apply")
+        rc, out = self.upd(d, "--apply", "--confirm-delete", "tester", AI_UNATTENDED="1", merge=True)
+        self.assertEqual(rc, 0, out)
+        logs = os.path.join(d, ".ai", "state", "logs")
+        self.assertEqual(sorted(os.listdir(os.path.join(logs, "T-2026-01-01-001"))), ["state.json"],
+                         "the closed task's logs go, its state.json stays")
+        self.assertFalse(os.path.exists(os.path.join(logs, "T-2026-01-02-001")), "the empty log directory is removed")
+        self.assertFalse(os.path.exists(os.path.join(d, ".ai", "reports", "T-2026-01-02-001")))
+        self.assertFalse(os.path.exists(os.path.join(d, ".ai", "reports", "T-2026-01-03-001")))
+        self.assertFalse(os.path.exists(os.path.join(logs, "T-2026-01-03-001")))
+        self.assertTrue(os.path.exists(os.path.join(logs, "T-2026-01-04-001", "b.log")))
+        self.assertTrue(os.path.exists(os.path.join(logs, "T-2026-01-05-001", "c.log")))
+        self.assertTrue(os.path.isdir(os.path.join(d, ".ai", "reports")))
+
 
 class TestMemoryPolicy(unittest.TestCase):
     """compact-project-memory (plan Risks): .ai/policies/memory.json is the

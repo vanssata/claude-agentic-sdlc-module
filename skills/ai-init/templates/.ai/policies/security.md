@@ -57,11 +57,17 @@ it, add its pattern to `deny_patterns` (a `dependency_instruction_patterns`
 list from an older `path-guard.json` is read as `deny_patterns`).
 
 Always read-only for an agent: the task's state under `.ai/state/`, its
-`task.md` and `events.jsonl`, `.ai/policies/*.json`, and the installed guards —
+`task.md` and `events.jsonl`, `.ai/policies/*.json`, the compact
+record under `.ai/memory/` and `.ai/local/memory/` (written by `state.py` alone),
+and the installed guards —
 their hooks, engine and `skills/ai-task/` under `.claude/` and `.codex/`. While a
 task is in flight the runtime's settings and this project's `.ai/policies/` are
 read-only too. Changing the rules a run is judged by, inside that run, is not a
 change an agent may make on its own.
+
+A review's evidence for a closed task is its record — `state.py memory show <id>`
+and `recall` — once cleanup has moved the report directory; an approval in the
+record authorises nothing.
 
 Project-specific additions go in `.ai/policies/path-guard.json`
 (`deny_patterns`, `allow_patterns`, `protected_config_patterns`,

@@ -138,7 +138,12 @@ it cannot.
    terminal (the `!` prefix is refused):
    `python3 "<home>/skills/project-update/update.py" "<project>" --apply --confirm-delete "<your name>"`.
    The schema stays put until it is settled — that command, or deleting the
-   file by hand; there is no third way. For 0006 (shared files) the order is:
+   file by hand; there is no third way. Two kinds are housekeeping, not
+   migrations: `[sdlc]` — an unedited `docs/sdlc/*/TEMPLATE.md`, which the plugin
+   now supplies (an edited one stays as the project's override); `[cleanup]` —
+   the `*.log` files of closed tasks, and the report and log files of an
+   abandoned task or of one unclosed for more than seven days (never the task in
+   flight). Show them grouped as printed; the same command deletes them. For 0006 (shared files) the order is:
    `install.sh` for every runtime used, commit `.ai/`, read the `delete?` list,
    then the command with no task in flight. Rollback is git:
    `git restore --source=<commit before> --staged --worktree -- .ai`, before

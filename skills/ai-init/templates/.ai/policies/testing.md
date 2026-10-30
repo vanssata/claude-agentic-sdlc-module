@@ -47,6 +47,7 @@ else runs in between.
   which, in one line; silence is not a verdict.
 - A failure in a step's own tests is fixed in that step, before `step-done`;
   the batch rule below is for the two end-of-task runs.
+- After a green suite, a documents-only edit runs `doc_tests` (step scope), not the suite.
 
 ## Reading a failure
 
@@ -65,6 +66,9 @@ Classify before fixing. The four answers are:
 - **TEST ENVIRONMENT FAILURE** — database, fixtures, network, container. Say what
   is missing.
 - **UNKNOWN** — you could not tell. Say what you tried.
+
+A review's MEDIUM and LOW findings are recorded with `state.py memory risk add`, not
+fixed in the task; only a BLOCKER, a HIGH or a regression buys an `--after-fix` run.
 
 **Never edit a test to make it pass when production behaviour changed
 unexpectedly.** A test that suddenly disagrees with the code is evidence, and
@@ -88,6 +92,7 @@ verify_command:      # the full fast suite, e2e excluded — e.g. make test   | 
 step_test_command:   # the same runner, scoped to a path or filter — e.g. vendor/bin/phpunit {files} | pytest {files}
 e2e_command:         # the end-to-end suite, run once at the end of a task — e.g. make e2e | vendor/bin/behat | npx playwright test
 lint_command:        # e.g. vendor/bin/php-cs-fixer fix --dry-run | ruff check . | npm run lint — write `none` if the project has none
+doc_tests:           # the suites a documents-only edit runs after a green suite — e.g. tests/test_docs.py; `none` if the project has none
 typecheck_command:   # e.g. vendor/bin/phpstan analyse --no-progress | mypy . | npx tsc --noEmit — `none` if the project has none
 healthy_output:      # two or three lines of what a green run ends with
 runtime:             # roughly, for each command, so a hang is recognisable

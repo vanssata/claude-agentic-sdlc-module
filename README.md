@@ -263,7 +263,7 @@ python3 -I -m unittest discover -s tests -p 'test_*.py'      # CI's serial oracl
 AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
 ```
 
-Fifty-six suites, 979 tests, about 75 seconds in parallel. The guards against JSON fixtures for both runtimes and a
+Fifty-six suites, 1009 tests, about 75 seconds in parallel. The guards against JSON fixtures for both runtimes and a
 golden of 1 341 recorded decisions, byte for byte, with timed cases that hold
 the hot path under its budget; the state machine, the weight, the batch loop,
 the dialog contract and the documents rule; the compact record and its
