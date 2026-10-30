@@ -1233,6 +1233,27 @@ def deletion_hint(plan):
                           "(`git status -- .ai` lists what it does not hold yet)")
 
 
+def tracked_ignored_hint(plan):
+    """A file under .ai/state that git tracks although .gitignore lists it: the rule
+    has no effect on it. Read-only: the human untracks it; nothing is planned."""
+    try:
+        res = subprocess.run(["git", "-C", plan.root, "ls-files", "-z", "-ci", "--exclude-standard",
+                              "--", ".ai/state"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                             timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return
+    if res.returncode != 0:
+        return
+    for raw in res.stdout.split(b"\0"):
+        path = raw.decode("utf-8", "replace")
+        if path:
+            plan.hints.append("%s: tracked by git but ignored by .gitignore — the rule has no "
+                              "effect on a tracked file, so every run leaves the tree dirty and "
+                              "`git commit -a` sweeps it in; untrack it yourself: "
+                              "`git rm --cached -- %s` and commit (the file stays on disk)"
+                              % (path, path))
+
+
 def rendered_rules(plan):
     """Every (file, slug) in the project that carries a rule block today, plus
     every path-scoped copy under .claude/rules/. Walked rather than remembered:
@@ -1510,6 +1531,7 @@ def build_plan(root, confirm_delete=None, confirm_via=None, confirm_cleanup=None
             block_update(plan, history, rt)
         rules_update(plan, runtimes)
         gitignore_update(plan, os.path.join(tpl, "gitignore.snippet"))
+        tracked_ignored_hint(plan)
 
         testing = plan.read(".ai/policies/testing.md")
         if testing is not None:

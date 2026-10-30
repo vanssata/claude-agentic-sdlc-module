@@ -170,7 +170,10 @@ it cannot.
    `that rule is not rendered`: name the `.ai/rules/` file and what it lacks
    (`paths:` and a body). `overrides the plugin's shared copy`: offer to diff
    each and delete those that add nothing. `foreign structure detected`: offer
-   **--adopt**.
+   **--adopt**. `tracked by git but ignored`: show the line as printed and give
+   the human `git rm --cached -- <path>` plus a commit for their own terminal (a
+   second machine runs the same before its next pull, else a modify/delete
+   conflict); never run it yourself.
 7. `$UPDATE --check` and `git diff --stat`; say what changed, what you merged
    and what is the human's. Suggest `git add -A .ai docs/sdlc .gitignore` plus
    the runtime directories and instruction files.

@@ -1425,6 +1425,41 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertIn("must stay inside the project: a/../b", out,
                       "dirs: [a/../b] is still refused before it is normalised")
 
+    def test_tracked_but_ignored_state_file_is_reported(self):
+        """a .ai/state file git holds although .gitignore ignores it is a hint with the untrack command,
+        not a pending update; untracked, or outside a git work tree, nothing is said"""
+        def git(d, *args):
+            subprocess.run(GIT + ["-C", d] + list(args), env=self.env, check=True, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+
+        rel = ".ai/state/consent.jsonl"
+        d = self.current_project("tracked-ignored")
+        self.assertIn(".ai/state/*.jsonl", text_of(os.path.join(d, ".gitignore")),
+                      "the scaffolded .gitignore ignores the state ledgers")
+        git(d, "init", "-q")
+        git(d, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init")
+        put(os.path.join(d, rel), '{"v":1}\n')
+        git(d, "add", "-f", rel)
+        git(d, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "track the ledger")
+
+        _, out = self.upd(d, merge=True)
+        self.assertTrue(has(r"^  hint +\.ai/state/consent\.jsonl: tracked by git but ignored", out),
+                        "a hint names the tracked, ignored state file\n" + out)
+        self.assertIn("git rm --cached -- .ai/state/consent.jsonl", out, "and the command that untracks it\n" + out)
+        rc, out = self.upd(d, "--check", merge=True)
+        self.assertEqual(rc, 0, "--check exits 0: a hint is not a pending update\n" + out)
+
+        git(d, "rm", "--cached", "-q", "--", rel)
+        git(d, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "untrack the ledger")
+        _, out = self.upd(d, merge=True)
+        self.assertFalse(has("tracked by git but ignored", out), "an untracked file draws no hint\n" + out)
+
+        n = self.current_project("tracked-ignored-no-git")
+        put(os.path.join(n, rel), '{"v":1}\n')
+        rc, out = self.upd(n, merge=True)
+        self.assertFalse(has("tracked by git but ignored", out), "outside a git work tree there is no hint\n" + out)
+        self.assertNotIn("Traceback", out, "and no crash")
+
     def test_every_history_key_is_accounted_for(self):
         """every key in the template history is accounted for"""
         rc, out = self.run_([sys.executable, "-I", "-c", HISTORY_KEYS, ROOT], merge=True)
