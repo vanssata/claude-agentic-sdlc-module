@@ -15,7 +15,7 @@
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="index.html"><span class="lamp" aria-hidden="true"></span>RiskRails <small>3.0.1</small></a>
+    <a class="brand" href="index.html"><span class="lamp" aria-hidden="true"></span>RiskRails <small>3.1.0</small></a>
     <button class="navbtn" aria-expanded="false" aria-controls="nav">Menu</button>
     <ul class="nav" id="nav">
       <li><a href="index.html" aria-current="page">How it works</a></li>
@@ -37,7 +37,7 @@
       <h1 style="margin-top:16px">Every change runs on a <em>set route.</em></h1>
       <p class="lead">RiskRails lets an AI agent work on legacy production code. Each change is weighed on six axes before the agent edits a file, then runs light, guarded or full. A hook refuses an edit outside the task, a read of a production secret, a force push or a deploy.</p>
       <div class="cta">
-        <span class="cmd"><code>npx riskrails@3.0.1</code><button class="copy" type="button" data-copy="npx riskrails@3.0.1">Copy</button></span>
+        <span class="cmd"><code>npx riskrails@3.1.0</code><button class="copy" type="button" data-copy="npx riskrails@3.1.0">Copy</button></span>
         <a class="btn" href="demo.html">Watch two tasks</a>
       </div>
     </div>
@@ -221,6 +221,24 @@
   </div>
 </section>
 
+<!-- ============ whats new ============ -->
+<section class="panel band" id="new">
+  <div class="wrap">
+    <div class="rv">
+      <span class="eyebrow">What's new in 3.1</span>
+      <h2 class="h2">Project schema 11. <em>A quieter update.</em></h2>
+    </div>
+    <div class="cards">
+      <div class="card rv"><h3>risk-tiers retired</h3><p>Migration <code>0011</code> takes the project from schema 10 to 11 and retires <code>.ai/policies/risk-tiers.*</code>; <code>weight.json</code> and <code>weight.md</code> replace them.</p></div>
+      <div class="card rv"><h3>A cleaner <code>--update</code></h3><p><code>/rr-setup --update</code> renders <code>weight.md</code> from <code>weight.json</code> instead of merging it, and proposes the cleanup of files the plugin no longer ships.</p></div>
+      <div class="card rv"><h3>Templates from the plugin</h3><p>The plugin supplies the SDLC templates, so a project no longer carries its own copies.</p></div>
+      <div class="card rv"><h3>CI in two tiers</h3><p>A fast smoke suite on every pull request; the full suite nightly, on demand and on release tags.</p></div>
+      <div class="card rv"><h3>Guard and state fixes</h3><p>Fixes in the path guard and in <code>state.py</code>. Upgrade the plugin on every machine before a project is committed at schema 11.</p></div>
+    </div>
+    <p class="note rv">Full list in the <a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/CHANGELOG.md">CHANGELOG</a>.</p>
+  </div>
+</section>
+
 <!-- ============ install ============ -->
 <section class="panel band" id="install">
   <div class="wrap two">
@@ -229,7 +247,7 @@
       <h2 class="h2">Pin the version. <em>Restart.</em></h2>
       <p class="lead">Node 18+ and <code>python3</code>. The installer detects Claude Code, Codex or both and proposes the plan it found. The hooks it installs see every command an agent runs, so pin the version. In Codex, open <code>/hooks</code> and trust the entries; until you do, nothing is enforced.</p>
       <div class="cta">
-        <span class="cmd"><code>npx riskrails@3.0.1</code><button class="copy" type="button" data-copy="npx riskrails@3.0.1">Copy</button></span>
+        <span class="cmd"><code>npx riskrails@3.1.0</code><button class="copy" type="button" data-copy="npx riskrails@3.1.0">Copy</button></span>
       </div>
     </div>
     <div class="rv">
@@ -238,9 +256,9 @@
 /rr-build &lt;what you want&gt;      <span class="k"># every change</span>
 
 <span class="k"># options</span>
-npx riskrails@3.0.1 --target codex      <span class="k"># auto | claude | codex | both</span>
-npx riskrails@3.0.1 --plan max          <span class="k"># pro | team-pro | team-max | max | max20</span>
-npx riskrails@3.0.1 --dry-run           <span class="k"># print, write nothing</span>
+npx riskrails@3.1.0 --target codex      <span class="k"># auto | claude | codex | both</span>
+npx riskrails@3.1.0 --plan max          <span class="k"># pro | team-pro | team-max | max | max20</span>
+npx riskrails@3.1.0 --dry-run           <span class="k"># print, write nothing</span>
 
 <span class="k"># coming from claude-agentic 2.x</span>
 /rr-setup --update             <span class="k"># dry run first; then --apply</span></pre>
@@ -253,7 +271,7 @@ npx riskrails@3.0.1 --dry-run           <span class="k"># print, write nothing</
 <footer class="foot">
   <div class="wrap">
     <div class="grid">
-      <div><h4>RiskRails</h4><ul><li>Version 3.0.1 · MIT</li><li>Claude Code and Codex</li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li></ul></div>
+      <div><h4>RiskRails</h4><ul><li>Version 3.1.0 · MIT</li><li>Claude Code and Codex</li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li></ul></div>
       <div><h4>Site</h4><ul><li><a href="index.html">How it works</a></li><li><a href="demo.html">Demo</a></li><li><a href="compare.html">Compare</a></li><li><a href="storage.html">Storage</a></li></ul></div>
       <div><h4>Docs</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/getting-started.md">Getting started</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/weight.md">The weight</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/hooks.md">The guards</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/known-risks.md">Known risks</a></li></ul></div>
       <div><h4>Project</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/ROADMAP.md">Roadmap</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/SECURITY.md">Security</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/CONTRIBUTING.md">Contributing</a></li></ul></div>
