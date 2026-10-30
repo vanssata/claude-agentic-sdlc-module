@@ -54,7 +54,7 @@ TEST_KEYS = ("timeout_seconds", "env_retries", "log_max_bytes")
 def _loads(raw):
     try:
         doc = json.loads(raw, object_pairs_hook=OrderedDict)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):  # nested past the parser's limit: edit_json holds the schema
         return None
     return doc if isinstance(doc, dict) else None
 

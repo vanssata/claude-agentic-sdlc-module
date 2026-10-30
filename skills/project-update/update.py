@@ -630,9 +630,9 @@ class MigrationContext:
         except ValueError:
             return None
         except RecursionError:
-            # Not "absent": a file nested past the parser's limit is there. None would let a
-            # migration create or overwrite what it cannot read; the conflict holds the schema
-            # version (the next run tries again), and the migration goes on as if it were absent.
+            # Not "absent": a file nested past the parser's limit is there. The migration goes on
+            # as if it were absent (0007 then creates a default weight.json beside it, overwriting
+            # nothing); the conflict holds the schema version, so the next run tries again.
             self._add("conflict", path, "nested too deeply, so this migration could not read it")
             return None
 
@@ -643,6 +643,9 @@ class MigrationContext:
         if not isinstance(kw.get("content", b""), bytes):
             raise SchemaError("%04d: %s content must be bytes, not %s"
                               % (self.module.VERSION, target, type(kw["content"]).__name__))
+        if action == "conflict" and any(i["action"] == "conflict" and i["target"] == target and i["note"] == note
+                                        and i["migration"] == self.module.VERSION for i in self.plan.items):
+            return  # the same file read twice: one row, one held schema
         self.plan.add(action, target, note, migration=self.module.VERSION, **kw)
 
     def create(self, path, content):
@@ -694,12 +697,18 @@ class MigrationContext:
             self._add("conflict", path, "nested too deeply, so this migration could not run")
             return
         try:
-            after = fn(copy.deepcopy(before))
+            copied = copy.deepcopy(before)
+        except RecursionError:
+            self._add("conflict", path, "nested too deeply, so this migration could not run")
+            return
+        # Outside the guard: a RecursionError in the migration's own edit is its bug, not the file's.
+        after = fn(copied)
+        try:
             if after == before:
                 return
             policy = leaf_changes(before, after) if "/policies/" in "/" + path else None
             content = dump_json(after)
-        except RecursionError:  # copying, the migration's edit, comparing, or writing past the limit
+        except RecursionError:  # comparing or writing past the limit
             self._add("conflict", path, "nested too deeply, so this migration could not run")
             return
         self._add("update", path, "migrated", content=content, policy=policy)

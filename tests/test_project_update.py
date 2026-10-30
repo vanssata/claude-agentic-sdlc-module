@@ -228,6 +228,14 @@ class TestMigration0007(unittest.TestCase):
             self.assertRegex(out, r"conflict .*weight\.json.*nested too deeply")
         self.assertEqual("6", version, "a conflict holds the schema version, so the next run tries again")
 
+    def test_a_weight_json_nested_past_the_parser_limit_holds_the_schema_in_0007s_own_loads(self):
+        """R-dee7: 0007's _loads meets a RecursionError (200000 levels, a valid risk-tiers.json): a conflict, no crash"""
+        dry, applied, version = self.deep_project("weight.json", "[" * 200000 + "]" * 200000)
+        for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+            self.assertNotIn("Traceback", out, out)
+            self.assertRegex(out, r"conflict .*weight\.json.*nested too deeply")
+        self.assertEqual("6", version, "a conflict holds the schema version, so the next run tries again")
+
     def test_full_apply(self):
         p = Project(edited=True)
         try:
@@ -1887,8 +1895,8 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertNotIn("state.py weight --mirror", out, out)
 
     def test_a_policy_nested_past_the_parser_limit_makes_a_migrations_edit_json_a_conflict(self):
-        """L2: edit_json's json.loads meets a RecursionError (200000 levels; 0007's own loads cannot get this far,
-        so the synthetic 0003 edits the table): a conflict on the path, the schema stays unwritten, no crash"""
+        """L2: edit_json's json.loads meets a RecursionError (200000 levels; the synthetic 0003 edits the
+        table): a conflict on the path, the schema stays unwritten, no crash"""
         d = self.v0_project("edit-json-deep")
         put(os.path.join(d, ".ai", "policies", "risk-tiers.json"), "[" * 200000 + "]" * 200000)
         synth = {"CLAUDE_AGENTIC_MIGRATIONS": SYNTH, "CLAUDE_AGENTIC_TEMPLATES": self.next_templates()}
@@ -1898,6 +1906,81 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
             self.assertTrue(has(r"conflict .*risk-tiers\.json.*nested too deeply", out), out)
         self.assertFalse(os.path.exists(os.path.join(d, ".ai", "VERSION")),
                          "a conflict holds the schema version, so the next run tries again")
+
+    def synth_0003(self, name, body):
+        """The synthetic migrations with 0003's plan() replaced by `body`: a migration of a test's own"""
+        dst = os.path.join(self.t, name)
+        shutil.copytree(SYNTH, dst)
+        put(os.path.join(dst, "0003_edits.py"), 'VERSION = 3\nTITLE = "a test\'s own 0003"\nMOVES = []\n\n\n' + body)
+        return {"CLAUDE_AGENTIC_MIGRATIONS": dst, "CLAUDE_AGENTIC_TEMPLATES": self.next_templates()}
+
+    def test_a_migrations_own_recursion_error_is_not_reported_as_a_file_nested_too_deeply(self):
+        """R-b22b: edit_json guards the copy and the write, not the migration's fn: a fn that recurses without
+        end on a shallow table is the migration's bug, so the run fails loudly and blames no file"""
+        d = self.v0_project("edit-json-fn-recurses")
+        synth = self.synth_0003("synth-fn-recurses", "def plan(ctx):\n    ctx.edit_json(\".ai/policies/risk-tiers.json\", loop)\n\n\n"
+                                                     "def loop(doc):\n    return loop(doc)\n")
+        rc, out = self.upd(d, merge=True, **synth)
+        self.assertNotEqual(0, rc, out)
+        self.assertIn("RecursionError", out, out)
+        self.assertNotIn("nested too deeply", out, out)
+
+    # R-d8e7: dump_json does not fail on input json.loads accepts (Python 3.14: the parser stops near
+    # 20000 levels, the encoder writes 19000), so its two guards are pinned by an injected fault:
+    # update.py runs with a dump_json that raises for a document carrying "dump_probe".
+    DUMP_FAULT = """
+import os, sys
+sys.path.insert(0, os.path.dirname(sys.argv[1]))
+import update
+real = update.dump_json
+def dump_json(value):
+    if isinstance(value, dict) and "dump_probe" in value:
+        raise RecursionError("injected")
+    return real(value)
+update.dump_json = dump_json
+sys.argv = sys.argv[1:]
+sys.exit(update.main())
+"""
+
+    def upd_dump_fault(self, d, **extra):
+        return self.run_([sys.executable, "-I", "-c", self.DUMP_FAULT, UPDATE, d], merge=True, **extra)
+
+    def test_edit_jsons_write_past_the_limit_is_a_conflict(self):
+        """R-d8e7: dump_json raising RecursionError in edit_json (an injected fault) is a conflict, not a crash"""
+        d = self.v0_project("edit-json-dump-fault")
+        synth = self.synth_0003("synth-dump-probe", "def plan(ctx):\n    ctx.edit_json(\".ai/policies/risk-tiers.json\", "
+                                                    "lambda o: {**o, \"dump_probe\": 1})\n")
+        _, out = self.upd_dump_fault(d, **synth)
+        self.assertNotIn("Traceback", out, out)
+        self.assertTrue(has(r"conflict .*risk-tiers\.json.*nested too deeply", out), out)
+
+    def test_three_ways_write_of_a_merged_policy_past_the_limit_is_a_conflict(self):
+        """R-d8e7: dump_json raising RecursionError on three_way's merged JSON (an injected fault) is a conflict"""
+        d = self.current_project("three-way-dump-fault")
+        pg = os.path.join(d, ".ai", "policies", "path-guard.json")
+        doc = read_json(pg)
+        doc["project_own"] = 1
+        put_json(pg, doc)
+        tpl = os.path.join(self.t, "dump-probe-templates")
+        shutil.copytree(TEMPLATES, tpl, symlinks=True)
+        theirs = os.path.join(tpl, ".ai", "policies", "path-guard.json")
+        doc = read_json(theirs)
+        doc["dump_probe"] = 1
+        put_json(theirs, doc)
+        _, out = self.upd_dump_fault(d, CLAUDE_AGENTIC_TEMPLATES=tpl)
+        self.assertNotIn("Traceback", out, out)
+        self.assertTrue(has(r"conflict .*path-guard\.json.*nested too deeply; not merged", out), out)
+
+    def test_two_reads_of_one_file_nested_too_deeply_report_one_conflict(self):
+        """R-dafb: a migration that reads one deep file twice records one conflict row, not two"""
+        d = self.v0_project("read-json-twice")
+        put(os.path.join(d, ".ai", "policies", "risk-tiers.json"), "[" * 200000 + "]" * 200000)
+        synth = self.synth_0003("synth-read-twice", "def plan(ctx):\n    for _ in range(2):\n"
+                                                    "        ctx.read_json(\".ai/policies/risk-tiers.json\")\n")
+        _, out = self.upd(d, merge=True, **synth)
+        self.assertNotIn("Traceback", out, out)
+        rows = [x for x in out.splitlines() if x.lstrip().startswith("conflict") and "risk-tiers.json" in x]
+        self.assertEqual(1, len(rows), out)
 
     def test_the_nul_safe_untrack_command_does_nothing_when_nothing_is_tracked(self):
         """I2: xargs -r: with no tracked, ignored .ai/state file the printed command exits 0 and leaves the index"""
