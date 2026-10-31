@@ -1,9 +1,12 @@
 # Plan: Small OOP modules — WP1, the task state machine
 
 Intent: `docs/sdlc/intent/small-oop-modules.questions.md` (brainstorm, Hybrid) · Spec:
-`docs/sdlc/specs/small-oop-modules.md` · Written 2026-10-31, **not started**: the developer
-asked for the plan on file and no implementation yet; `state.py start` runs only after the
-risk burndown in flight closes and the human accepts this plan (guarded mode: plan mode).
+`docs/sdlc/specs/small-oop-modules.md` · Written 2026-10-31, re-derived 2026-10-31 17:50 from
+the spec at commit 92fbacd (Q9–Q19: three classes by rule, hook isolation R15, core/shell
+R16, the 600-line measure advisory, WP6 conditional, Q5 narrowed to `state.py` work),
+**not started**: `state.py start` runs only after T-2026-10-31-1650-dialog-background and
+every other task editing `state.py` or `hooks/guard/dialog.py` has closed (Q14), and the
+human accepts this plan (guarded mode: plan mode).
 
 <!-- Stage 3. Concrete, ordered steps the main session executes one at a time. -->
 
@@ -31,15 +34,22 @@ C6 (weighed by effect, not by being a process).
 | FC3 the entry as a façade | accepted for WP1; OQ3 is a later tests-only task |
 | FC4 `/rr-build-all` gains nothing | **decided: `/rr-build`, row by row, one session.** Every step edits `state.py`; a batch would serialise anyway and move the diff out of the session |
 | FC5 WP6 shape | WP6's own plan, with a Codex trust probe on record |
-| FC6 the roadmap is blocked | accepted by the developer on 2026-10-31; a production hotfix needs an explicit word |
+| FC6 the roadmap is blocked | narrowed by the developer on 2026-10-31 (Q15, FC17): only work that edits `state.py` internals or the extracted interfaces waits; the Optimisation tasks of the spec and urgent fixes run as separate tasks, never inside a WP step |
 | FC7 Hybrid self-answers | stand until overturned with `state.py answer --topic small-oop-modules Qn=…` |
 | FC8 normalisation hides diffs | s1 commits `NORMALISE` as a named list; the review reads it first |
 | FC9 behaviour 0, large diff | W 4 measured above; the mode is the developer's to raise |
 | FC10 who designed it | folded in; this plan follows the corrected spec |
-| FC11 ROADMAP not updated | the §0 draft is applied by a human, or by the agent once no task is in flight |
+| FC11 ROADMAP not updated | the §0 draft is applied by a human, or by the agent once no task is in flight; it must now also show Q15 |
+| FC12 the plan was stale | this re-derivation; every row below reads the three-class spec |
+| FC13 no second architect check of the revision | accepted: the revision removed structure; the first check's B1–L4 still shape s0–s8 |
+| FC14 the product-name comment | out of scope; `rr_state` stays the package name |
+| FC15 timing against T-1650 | precondition of `start` (above); s1's golden is re-recorded if `state.py` changes between recording and s2 |
+| FC16 the questions file against T-1650's fact (b) | cleared by commit 92fbacd |
+| FC17 the blockade narrowed | as FC6 above |
+| FC18 the second opinion is a model | its `file:line` evidence was spot-checked only where it changed Q16, Q17, Q19; this plan relies on the spec, not on the opinion |
 
-Committing this plan is the human's acceptance of the dispositions above; FC1/OQ2 and FC6
-deserve an explicit word.
+Committing this plan is the human's acceptance of the dispositions above; FC1/OQ2 still
+deserves an explicit word (FC6 got one with Q15).
 
 ## Files that change
 
@@ -47,7 +57,7 @@ One task (WP1), nine steps; the rows are the steps. `rr_state/` is `skills/ai-ta
 
 | Step | Files |
 |---|---|
-| s0 | new `tools/state-partition.py` (reads `state.py` with `ast`: every top-level `def`, who calls whom; reads the partition; prints the module import graph, every cycle and every upward edge; exit 1 on a cycle, an unassigned or a doubly-assigned def), new `tests/fixtures/state/partition.json` (def → module, layer per module), new `tests/test_state_layout.py` (first version: partition complete and acyclic against the golden tree's defs) |
+| s0 | new `tools/state-partition.py` (reads `state.py` with `ast`: every top-level `def`, who calls whom; reads the partition; prints the module import graph, every cycle and every upward edge; exit 1 on a cycle, an unassigned or a doubly-assigned def), new `tests/fixtures/state/partition.json` (def → module, layer per module, core or shell per def — R16), new `tests/test_state_layout.py` (first version: partition complete and acyclic against the golden tree's defs) |
 | s1 | new `tests/test_state_characterization.py` (`NORMALISE`, the four scripted runs, the `--help` enumeration), new `tests/fixtures/state/goldens/{help,light,guarded,full,dialog}.txt` |
 | s2 | edit `skills/ai-task/state.py` only: `ENTRY = os.path.abspath(__file__)` once, the 17 `__file__` uses replaced (`:82` keeps its own for `sys.path`) |
 | s3 | new `rr_state/__init__.py`, `rr_state/fs.py`, `rr_state/locks.py`, `rr_state/runtime.py`, `rr_state/policy.py`; edit `skills/ai-task/state.py` (the moved defs deleted, re-exports added) |
@@ -55,7 +65,7 @@ One task (WP1), nine steps; the rows are the steps. `rr_state/` is `skills/ai-ta
 | s5 | new `rr_state/questions.py`, `rr_state/ledger.py`, `rr_state/gate.py`; edit `state.py` |
 | s6 | new `rr_state/dialog.py`, `rr_state/authority.py`, `rr_state/report.py`, `rr_state/handoff.py`, `rr_state/profile.py`; edit `state.py` |
 | s7 | new `rr_state/questions_cmd.py`, `rr_state/gate_cmd.py`, `rr_state/dialog_cmd.py`, `rr_state/report_cmd.py`, `rr_state/memory_cmd.py`, `rr_state/steps.py`, `rr_state/start.py`, `rr_state/verify.py`, `rr_state/review.py`, `rr_state/close.py`; edit `state.py` |
-| s8 | new `rr_state/cli.py`; edit `skills/ai-task/state.py` (the shim of spec §Interfaces, under 200 lines), `tests/test_state_layout.py` (module sizes ≤ 600, no `global`, no `__file__` under `rr_state/`, re-export list vs `grep` of the suites, import graph from the real `import` lines), `.pylintrc` (`never-returning-functions` + `rr_state.fs.die`), `tests/test_install_dry_run.py` (`rr_state/__init__.py`, `rr_state/cli.py` in the installed list), `docs/architecture.md` (`:16`, `:82-95`), `CONTRIBUTING.md` (where the code lives, running one module's suite), `.ai/project/known-risks.md` (two mentions, relabel if they name internals) |
+| s8 | new `rr_state/cli.py`; edit `skills/ai-task/state.py` (the shim of spec §Interfaces, under 200 lines), `tests/test_state_layout.py` (module sizes printed, 600 advisory — Q16; no `global`; no `__file__` under `rr_state/`; re-export list vs `grep` of the suites; import graph from the real `import` lines; the forbidden constructs of R4 — a class base other than a dataclass or `Exception`, `ABC`, `abstractmethod`, `Protocol`, `staticmethod`; no import crossing between `hooks/` and `rr_state/` — R15; no `os`, `subprocess`, `time`, `fcntl` import in a module whose defs are all core — R16), `.pylintrc` (`never-returning-functions` + `rr_state.fs.die`), `tests/test_install_dry_run.py` (`rr_state/__init__.py`, `rr_state/cli.py` in the installed list), `docs/architecture.md` (`:16`, `:82-95`), `CONTRIBUTING.md` (where the code lives, running one module's suite), `.ai/project/known-risks.md` (two mentions, relabel if they name internals) |
 
 Not touched, by C3 and C4: `sensors.py`, `weight.py`, `memory_*.py`, every hook, every
 skill text, `bin/riskrails.js`, `.ai/VERSION`, any policy or template. A need to touch one
@@ -76,15 +86,15 @@ row depends on (what `/rr-build-all` would read; here it is the order of `/rr-bu
 
 | Step | What | Tests (step scope) | Consumes |
 |---|---|---|---|
-| s0 | Partition on paper: `tools/state-partition.py` + `partition.json`; iterate the map until the import graph is acyclic and complete; the spec's layer table is the starting point, the graph is the authority (OQ5 decided here) | `tests/test_state_layout.py` | — |
+| s0 | Partition on paper: `tools/state-partition.py` + `partition.json`; iterate the map until the import graph is acyclic and complete; the spec's layer table is the starting point, the graph is the authority (OQ5 decided here); every def labelled core or shell (R16), and a module of one responsibility group merges with its neighbour when the graph allows (Q13) | `tests/test_state_layout.py` | — |
 | s1 | The golden: harness from `tests/test_ai_task_state.py` (`Project`), environment pinned (`AI_RUNTIME`, agent markers, `USER`, `git -c user.name/email`, fixed commit date), four runs incl. the dialog-on run, `--help` enumerated from `cli`'s parser via `import state`; `NORMALISE` listed in the docstring; `<STATE_PY>` as an exact token. Commit of its own | `tests/test_state_characterization.py` | — |
 | **s2** | `ENTRY` replaces the 17 `__file__` uses in the single file (R6a) — **riskiest step**: the label comparisons (`validate_label`, `dialog_pick`), the refusal texts, `load_resolver`'s three `dirname`s, the migrations lookup, the Codex check. Early by design so the golden sees it as a no-op before anything moves | characterization, `test_ai_task_state`, `test_dialog_contract`, `test_dialog_gate` | s1 |
-| s3 | Layers 0–1: `fs` (with `ENTRY`, `current_tree`, `run_text`), `locks` (one counter), `runtime` (detection only, `Runtime`), `policy`; entry re-exports; no `global` left in moved code | the same four | s0, s2 |
-| s4 | Layers 2–3: `journal` (`emit` exactly as today; `journal_line(..., runtime="unknown")`), `task` (`claim_runtime` inside `load`, keyword `mutating=False`) | the same four + `tests/test_project_update.py` (`:871-890` imports `state`, deletes `sys.path[:2]`) | s3 |
-| s5 | Layer 4: `questions` (parse/render/write), `ledger` (+`LOCK_STALE` via `locks`), `gate` (gate state only) | the same four | s4 |
-| s6 | Layers 5–7: `dialog` (+ the pick memo), `authority`, `report` (`write_task_md` stays called by the commands), `handoff`, `profile` (`load_resolver` via `ENTRY`) | the same four + `tests/test_skills_surface.py` (runs `--help` on `decision`, `consent`, `steps`, `batch`, `start`) | s5 |
+| s3 | Layers 0–1: `fs` (with `ENTRY`, `current_tree`, `run_text`, `now`, `now_ms` — the seams, module-level), `locks` (one counter), `runtime` (detection only; `Runtime` a frozen dataclass whose docstring names its invariant — R4), `policy` (core, no I/O); entry re-exports; no `global` left in moved code | the same four | s0, s2 |
+| s4 | Layers 2–3: `journal` (functions over `root`, `task_id`; `emit` exactly as today; `journal_line(..., runtime="unknown")`), `task` (`load` returns the dict, `save` writes it — no record class; `claim_runtime` inside `load`, keyword `mutating=False`) | the same four + `tests/test_project_update.py` (`:871-890` imports `state`, deletes `sys.path[:2]`) | s3 |
+| s5 | Layer 4: `questions` (parse and render core, `write_questions` shell; functions, no file class), `ledger` (`Ledger(root)`, the one resource holder — `consent.lock` by `O_EXCL`; `LOCK_STALE` via `locks`), `gate` (gate state only) | the same four | s4 |
+| s6 | Layers 5–7: `dialog` (+ the pick memo), `authority`, `report` (`write_task_md` stays called by the commands), `handoff`, `profile` (`Profile` a frozen dataclass; `load_resolver` via `ENTRY`) | the same four + `tests/test_skills_surface.py` (runs `--help` on `decision`, `consent`, `steps`, `batch`, `start`) | s5 |
 | s7 | Layer 8, one module per sub-step in the order `questions_cmd`, `gate_cmd`, `dialog_cmd`, `report_cmd`, `memory_cmd`, `steps`, `start`, `verify`, `review`, `close`; the entry shrinks as each leaves | the same five + `tests/test_memory_*.py`, `tests/test_weight.py` | s6 |
-| s8 | `cli.py` (the three runtime resolutions as today), the shim, the full layout test, `.pylintrc`, the dry-run list, docs; R8 timing (20 runs each of `--help` and `status`, medians in `task.md`); then `verify --scope all`, e2e, `pylint $(git ls-files '*.py')` | `tests/test_state_layout.py`, then the suite | s7 |
+| s8 | `cli.py` (the three runtime resolutions as today), the shim, the full layout test (sizes advisory, `global`, `__file__`, re-exports, graph, forbidden constructs, hook crossing, core imports), `.pylintrc`, the dry-run list, docs; R8 timing (20 runs each of `--help` and `status`, medians in `task.md`); then `verify --scope all`, e2e, `pylint $(git ls-files '*.py')` | `tests/test_state_layout.py`, then the suite | s7 |
 
 After s8: `/rr-review` (BALANCED in guarded), `/rr-ship`; `/clear`. Then WP2's own plan.
 
@@ -96,10 +106,13 @@ After s8: `/rr-review` (BALANCED in guarded), `/rr-ship`; `/clear`. Then WP2's o
 | WP3 | `skills/project-update/update.py` (2 114) | `…-wp3.md` | WP2 |
 | WP4 | `skills/ai-task/memory_sync.py` (1 571) | `…-wp4.md` | WP3 |
 | WP5 | `hooks/guard/paths.py` (1 452) — guard golden byte-identical, `SH_WORD`/`SH_RE` invariant | `…-wp5.md` | WP4 |
-| WP6 | `hooks/runtime-gate.py` (1 214) — OQ1 with a Codex trust probe | `…-wp6.md` | WP5 |
+| WP6 | `hooks/runtime-gate.py` (1 214) — **conditional (Q19)**: planned only once the measurement task of the spec's Optimisation section shows Codex in use, or a Codex-side bug forces a change; OQ1 with a Codex trust probe | `…-wp6.md` | WP5 + the condition |
 
 Each repeats s0–s2 for its own file (partition, golden, `__file__` audit) before the first
-move. The roadmap block (spec Q5) lifts when WP6 closes.
+move. What waits (Q5 as narrowed by Q15): only work that edits `state.py` internals or the
+extracted interfaces, until the WP that owns that code closes; the spec's Optimisation
+tasks (classification, activity scope, review strength, spec budget, measurement, state
+ownership audit) and urgent fixes are separate tasks and may run between the WPs.
 
 ## Risks
 
@@ -136,6 +149,18 @@ What could break, how it would show, which step carries it.
   not a behaviour one.
 - **Scope creep under the guard** (all). A doc or template outside the files list is
   `SCOPE_CHANGE_REQUIRED`; the burndown tasks showed how often "one more file" appears.
+- **A class slips in as a namespace** (s3–s7). The rule of R4 is a sentence in the
+  docstring naming the resource or the invariant; the layout test counts classes under
+  `rr_state/` and the review reads each docstring. Three today; a fourth needs its sentence.
+- **A core function reaches I/O** (s0, s5–s7). A `render_*` that reads the clock or a
+  `parse_*` that opens a file makes the golden depend on the environment; s0's label and
+  the import check of the layout test catch it, the review reads any def whose label moved.
+- **A hook imports the package** (s3–s8). `hooks/guard/*` runs under `-I -S` with its own
+  `sys.path`; an import of `rr_state` there would work in the suite and fail in a user
+  project. The layout test reads both trees' `import` lines (R15).
+- **The tree moves under the golden** (s1→s2). T-2026-10-31-1650 edits `state.py`; a
+  golden recorded before it closes pins the wrong tree. Precondition of `start`; s1 is
+  re-run if `git log -1 -- skills/ai-task/state.py` changed since the recording (Q14).
 - **Found bugs** (all). R12: into the register, never fixed in a step; the review checks
   that no golden line changed "because it was wrong".
 
@@ -145,8 +170,8 @@ What could break, how it would show, which step carries it.
 |---|---|---|
 | R1 | `tests/test_state_characterization.py` (help + four runs byte-identical); `tests/test_skills_surface.py` (`--help` of five subcommands); `tests/test_install_routes.py:355` and `tests/test_project_update.py:871` (`-I`, the entry's own `sys.path` insert) | s1, s8 |
 | R2 | `tests/test_state_layout.py`: entry under 200 lines; a run with `rr_state/` renamed away exits with the one-line message | s8 |
-| R3 | `test_state_layout.py`: partition complete (every def of the golden tree's file once), every module ≤ 600 lines | s0, s8 |
-| R4 | `test_state_layout.py`: zero `global` statements under `rr_state/`; the six class names exist; `test_ai_task_state.py:1324` (`journal_line` with six args) and `test_project_update.py:890` (`load(root, claim=False)`) pass unchanged | s3–s8 |
+| R3 | `test_state_layout.py`: partition complete (every def of the golden tree's file once); module sizes printed, over 600 noted in `task.md` with the reason (advisory, Q16) | s0, s8 |
+| R4 | `test_state_layout.py`: zero `global` statements under `rr_state/`; the classes are `Runtime`, `Profile`, `Ledger`, each docstring naming its resource or invariant; no class base other than a dataclass or `Exception`, no `ABC`, `abstractmethod`, `Protocol`, `staticmethod`; `test_ai_task_state.py:1324` (`journal_line` with six args) and `test_project_update.py:890` (`load(root, claim=False)`) pass unchanged | s3–s8 |
 | R5 | the golden commit (s1) is green on the untouched tree and red when any recorded field changes (one deliberate edit, reverted, shown in the task report) | s1 |
 | R6 | `test_state_layout.py`: the re-export list equals `grep -oh 'state_mod\.[A-Za-z_]*' tests/*.py`; no `from json import` / `from os import` in `rr_state/`; `git diff --stat` of the task shows no other test file changed | s8 |
 | R6a | `test_state_layout.py`: no `__file__` under `rr_state/`; the dialog-on golden (label accepted, pick matched) | s2, s8 |
@@ -157,6 +182,8 @@ What could break, how it would show, which step carries it.
 | R11 | `grep -n 'ai-task/state.py' docs/architecture.md CONTRIBUTING.md` shows the package; `tests/test_instruction_budget.py`, `tests/test_skills_surface.py` green | s8 |
 | R12 | `state.py memory risks` lists what s2–s8 found; no golden line edited except by `NORMALISE` | all |
 | R13 | out of WP1's scope; each later WP's plan carries its own row | — |
+| R15 | `test_state_layout.py`: no `import` line under `hooks/` names `rr_state` or `state`, none under `rr_state/` names `hooks`; `tests/test_guard_characterization.py` green | s3–s8 |
+| R16 | `partition.json` labels every def; `test_state_layout.py`: a module whose defs are all core imports none of `os`, `subprocess`, `time`, `fcntl`; the golden's timestamps come only through `fs.now` / `fs.now_ms` | s0, s8 |
 | R14 | `git revert` of the task's commits restores the single file; `verify --scope all` green on the reverted tree (checked once at `/rr-ship`, noted in `task.md`) | s8 |
 
 Verification, per `.ai/policies/testing.md`: step tests as named; after s8
@@ -187,4 +214,5 @@ $STATE start --goal "WP1: split skills/ai-task/state.py into rr_state/ behind an
 
 `small-oop-modules.steps.json` is written at start from the Order of work (`s0`–`s8`, each
 with its `files`, `tests`, `after`). Preconditions: no task in flight (`state.py status`),
-the human has read this plan, FC1/OQ2 and FC6 have an explicit word.
+T-2026-10-31-1650 and every task touching `state.py` or `hooks/guard/dialog.py` closed
+(Q14), the human has read this plan, FC1/OQ2 has an explicit word (FC6 has Q15).
