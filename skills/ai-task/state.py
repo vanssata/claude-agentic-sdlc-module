@@ -585,8 +585,11 @@ def cmd_profile(args, _root):
     if args.action == "set":
         cmd_profile_set(args)
         return
+    if args.action == "ack":
+        cmd_profile_ack(args)
+        return
     if args.plan:
-        die("unrecognized argument %r: profile takes detect or set" % args.plan, 2)
+        die("unrecognized argument %r: profile takes detect, set or ack" % args.plan, 2)
     if args.open or args.detect_runtime:
         die("--open and --runtime after profile belong to profile detect")
     runtime = other_runtime() if args.other else own_runtime()
@@ -774,7 +777,7 @@ def profile_detect(runtime):
     prof = read_profile(runtime)
     installed = {k: prof.get(k) for k in ("plan", "profile", "plugin_version")} if prof else None
     have = (installed or {}).get("plan")
-    render = command = None
+    render = command = ack = None
     if api:
         status = "unsupported"
     elif not live["plan"]:
@@ -795,8 +798,9 @@ def profile_detect(runtime):
             render = "installer"
             command = installer_command(runtime, live["plan"], installed.get("plugin_version"),
                                         context_mode(prof))
+        ack = "python3 %s profile ack --runtime %s" % (shlex.quote(os.path.abspath(__file__)), runtime)
     return {"runtime": runtime, "status": status, "installed": installed, "live": live,
-            "render": render, "command": command, "decision": None}
+            "render": render, "command": command, "ack": ack, "decision": None}
 
 
 def acknowledged(runtime, fingerprint, installed_plan):
@@ -891,6 +895,8 @@ def cmd_profile_detect(args, root):
         have, live["plan"] or "unknown", " (%s)" % live["from"] if live["from"] else "", found["status"]))
     if found["command"]:
         print("fix: %s" % found["command"])
+    if found["ack"]:
+        print("keep: %s" % found["ack"])
     if found["decision"]:
         print("decision: %s" % found["decision"])
 
@@ -916,6 +922,33 @@ def load_resolver(runtime):
             spec.loader.exec_module(module)
             return module, base
     return None, None
+
+
+def cmd_profile_ack(args):
+    """32ee: the terminal route to "Keep" — with the dialog off no plan_drift decision
+    opens, so this is the only way to silence a drift the human chose to stay on. The
+    same drift-ack.json the decision's Keep writes; any plan_drift decision still open
+    is settled as stale by the next `detect --open`."""
+    if args.open or args.field or args.tier or args.other or args.json or args.plan:
+        die("profile ack takes --runtime only")
+    runtime = args.detect_runtime or own_runtime()
+    via, why = human_route(None)
+    if not via:
+        die("profile ack is the human's: %s" % why, 5)
+    found = profile_detect(runtime)
+    status = found["status"]
+    if status == "same":
+        print("no drift: nothing to acknowledge")
+        return
+    if status == "acknowledged":
+        print("already acknowledged; nothing written")
+        return
+    if status != "drift":
+        die("nothing to acknowledge: plan %s" % status)
+    kept = found["installed"]["plan"]
+    write_drift_ack(runtime, found["live"]["fingerprint"], kept, via)
+    print("drift-ack.json: keep %s for this %s account (%s); delete %s to be asked again"
+          % (kept, runtime, found["live"]["plan"], drift_ack_path(runtime)))
 
 
 def cmd_profile_set(args):
@@ -5174,7 +5207,7 @@ def main():
     p.add_argument("--why", default="")
     p.set_defaults(func=cmd_handoff)
 
-    p = sub.add_parser("profile"); p.add_argument("action", nargs="?", choices=["detect", "set"])
+    p = sub.add_parser("profile"); p.add_argument("action", nargs="?", choices=["detect", "set", "ack"])
     p.add_argument("plan", nargs="?")
     p.add_argument("--field")
     p.add_argument("--runtime", dest="detect_runtime", choices=RUNTIMES)

@@ -514,9 +514,12 @@ def drift_notice(root, found, session):
                     f"DIALOG_PENDING {decision} — call {tool} with exactly this JSON, then run the picked "
                     f"command verbatim or 'state.py decision settle --id {decision}': {payload}")
     command = found.get("command") or ""
+    ack = found.get("ack")
+    keep = f" — or, to keep {installed} and not be told again for this account: {ack}" if ack else ""
     return (f"RiskRails: this account is {account}; RiskRails is installed for {installed}.",
             f"RiskRails: the account's plan is {account} but RiskRails is installed for {installed}, so its "
-            f"budgets do not match. Tell the user; in their own terminal, outside the agent, they run: {command}")
+            f"budgets do not match. Tell the user; in their own terminal, outside the agent, they run: {command}"
+            f"{keep}")
 
 
 def handoff_block(root, reason):

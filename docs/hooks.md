@@ -223,7 +223,8 @@ in.
   pending questions. Codex has the same three events, so the handoff crosses.
 - **`Notification:auth_success`** (Claude): after a login, checks whether the
   account's plan drifted from the installed profile and opens the
-  `profile set` decision; `drift-ack.json` silences a known drift.
+  `profile set` decision; `drift-ack.json` silences a known drift: the
+  dialog's Keep, or `state.py profile ack` in a terminal.
 
 Before a compaction it runs `git branch --show-current` and `git status
 --short` in the working directory — see [known-risks.md](known-risks.md).

@@ -339,17 +339,18 @@ consent audit [--json]                       read-only; ok | unverifiable | mism
 profile                                      unchanged reader (--field --tier --json)
 profile detect [--runtime R] [--json] [--open]   0 always
 profile set <plan> [--runtime R]             human route (terminal|unattended|dialog)              0 | 5 | 6 PROFILE_NEEDS_INSTALLER
+profile ack [--runtime R]                    human route (terminal|unattended); keeps a drift      0 | 1 | 5
 ```
 `profile detect --json`:
-`{"runtime":"claude","status":"drift","installed":{"plan":"max","profile":"max","plugin_version":"3.1.0"},"live":{"plan":"max20","from":"organizationRateLimitTier default_claude_max_20x","fingerprint":"sha256:9c…"},"render":"profile|installer","command":"python3 /home/vanssa/.claude/skills/ai-task/state.py profile set max20 --runtime claude","decision":"D9|null"}`
+`{"runtime":"claude","status":"drift","installed":{"plan":"max","profile":"max","plugin_version":"3.1.0"},"live":{"plan":"max20","from":"organizationRateLimitTier default_claude_max_20x","fingerprint":"sha256:9c…"},"render":"profile|installer","command":"python3 /home/vanssa/.claude/skills/ai-task/state.py profile set max20 --runtime claude","ack":"python3 /home/vanssa/.claude/skills/ai-task/state.py profile ack --runtime claude|null","decision":"D9|null"}`
 Plain text: `plan: installed max · account max20 (organizationRateLimitTier default_claude_max_20x) → drift` /
-`fix: <command>`; `profile set`: `profile.json: max → max20 (claude); settings, agents and the managed block
+`fix: <command>` / `keep: <ack>`; `profile set`: `profile.json: max → max20 (claude); settings, agents and the managed block
 unchanged`; across tiers: `PROFILE_NEEDS_INSTALLER — max → pro also changes settings.json and the agents: npx
 riskrails@3.1.0 --target claude --plan pro --yes`.
 
 **Additions to `profile.json`:** `"dialog":{"tool":"AskUserQuestion"|"request_user_input"|null}`,
 `"set_by":{"via":"installer|terminal|dialog","at":"…"}`.
-**`<home>/riskrails/drift-ack.json`:** `{"version":1,"claude":{"fingerprint":"sha256:…","kept":"max","at":"…","via":"dialog"},"codex":null}`.
+**`<home>/riskrails/drift-ack.json`:** `{"version":1,"claude":{"fingerprint":"sha256:…","kept":"max","at":"…","via":"dialog|terminal|unattended"},"codex":null}`.
 
 **Amended C5 (one line):** "C5. No agent merges or deploys; an agent commits, pushes or approves only by running,
 verbatim and once, a command a human picked in the runtime's dialog as recorded by the harness — otherwise a human

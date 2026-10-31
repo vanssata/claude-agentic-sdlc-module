@@ -772,9 +772,20 @@ class TestPlanDrift(unittest.TestCase):  # pylint: disable=too-many-public-metho
         self.ai()                                       # no dialog.json: the switch is off
         doc = json.loads(self.start())
         self.assertIn("profile set max20 --runtime claude", doc["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("to keep Max and not be told again for this account: python3 ",
+                      doc["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("profile ack --runtime claude", doc["hookSpecificOutput"]["additionalContext"])
         self.assertNotIn("DIALOG_PENDING", doc["hookSpecificOutput"]["additionalContext"])
         self.assertIn("systemMessage", doc)
         self.assertEqual(self.decisions(), [])
+
+    def test_drift_session_start_on_names_no_ack(self):
+        self.ai()
+        self.dialog_on()
+        doc = json.loads(self.start())
+        self.assertRegex(doc["hookSpecificOutput"]["additionalContext"], r"DIALOG_PENDING D1 ")
+        self.assertNotIn("profile ack", doc["hookSpecificOutput"]["additionalContext"],
+                         "with the dialog on, Keep is the dialog's option")
 
     def test_drift_no_ai(self):
         doc = json.loads(self.start())                  # no .ai/ at all: a warning only
