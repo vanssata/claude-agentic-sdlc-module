@@ -710,13 +710,17 @@ class TestGateFastPath(HookCase):
                 self.assertEqual(decision_of(proc.stdout), "deny", proc.stdout + proc.stderr)
 
     def test_gate_fast_path(self):
-        """timed: the whole ai-guard.py process on a Grep payload, no decision.json."""
+        """timed: the floor of the whole ai-guard.py process on a Grep payload, no decision.json.
+        Bare-interpreter and gate runs are interleaved and the minimum of each is compared:
+        load only adds time, a real slowdown raises every run including the minimum."""
         budget = 0.015 * timed_factor()
-        overhead = min(timed(["python3", "-I", "-S", "-c", "pass"], "") for _ in range(5))
-        median = sorted(timed(["python3", "-I", "-S", os.path.join(ROOT, "hooks", "ai-guard.py")],
-                              json.dumps(self.grep()), self.s.root) for _ in range(5))[2]
-        self.assertLessEqual(median - overhead, budget, "%.1f ms over the interpreter's start" %
-                             ((median - overhead) * 1000))
+        bare, gate = [], []
+        for _ in range(7):
+            bare.append(timed(["python3", "-I", "-S", "-c", "pass"], ""))
+            gate.append(timed(["python3", "-I", "-S", os.path.join(ROOT, "hooks", "ai-guard.py")],
+                              json.dumps(self.grep()), self.s.root))
+        floor = min(gate) - min(bare)
+        self.assertLessEqual(floor, budget, "%.1f ms over the interpreter's start" % (floor * 1000))
 
 
 class TestDecisionGate(HookCase):

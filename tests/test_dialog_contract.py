@@ -90,6 +90,45 @@ class TestSwitchContract(unittest.TestCase):
     def test_tables_are_equal(self):
         self.assertEqual(state_mod.SESSION_ENV, dialog.SESSION_ENV)
         self.assertEqual(state_mod.DIALOG_TOOL, dialog.DIALOG_TOOL)
+        self.assertEqual(state_mod.JSON_DEPTH_MAX, dialog.JSON_DEPTH_MAX)
+
+    @staticmethod
+    def nested(total, key_tail):
+        """A valid object of exactly `total` nesting levels, the outer one counted."""
+        return '{"%s": %s, "s": "[[{\\"]"}' % (key_tail, "[" * (total - 1) + "0" + "]" * (total - 1)) \
+            if total > 1 else '{}'
+
+    def test_nesting_cap_is_one_rule(self):
+        """A file nested exactly JSON_DEPTH_MAX deep reads in both modules; one level
+        deeper is malformed in both, whatever the stack depth."""
+        cap = dialog.JSON_DEPTH_MAX
+        for runtime in ("claude", "codex"):
+            for total, ok in ((cap, True), (cap + 1, False)):
+                with self.subTest(runtime=runtime, total=total), tempfile.TemporaryDirectory() as tmp:
+                    root = os.path.join(tmp, "project")
+                    os.makedirs(os.path.join(root, ".ai", "policies"))
+                    with open(os.path.join(root, ".ai", "policies", "dialog.json"), "w", encoding="utf-8") as fh:
+                        fh.write(self.nested(total, "enabled").replace('"enabled": ', '"enabled": true, "x": ', 1))
+                    home = os.path.join(tmp, "home")
+                    os.makedirs(os.path.join(home, "riskrails"))
+                    tool = dialog.DIALOG_TOOL[runtime]
+                    with open(os.path.join(home, "riskrails", "profile.json"), "w", encoding="utf-8") as fh:
+                        fh.write(self.nested(total, "dialog").replace('"dialog": ', '"dialog": {"tool": "%s"}, "x": ' % tool, 1))
+                    env = {"CODEX_HOME" if runtime == "codex" else "CLAUDE_CONFIG_DIR": home}
+                    with mock.patch.dict(os.environ, env, clear=False), mock.patch.object(state_mod, "RUNTIME", runtime):
+                        self.assertEqual(dialog.dialog_policy(root) is not None, ok)
+                        self.assertEqual(state_mod.dialog_policy(root) is not None, ok)
+                        self.assertEqual(dialog.dialog_tool(runtime) == tool, ok)
+                        self.assertEqual(state_mod.dialog_tool_verified(runtime) == tool, ok)
+
+    def test_read_profile_survives_deep_nesting(self):
+        for depth in (200000, state_mod.JSON_DEPTH_MAX + 1):
+            with self.subTest(depth=depth), tempfile.TemporaryDirectory() as tmp:
+                os.makedirs(os.path.join(tmp, "riskrails"))
+                with open(os.path.join(tmp, "riskrails", "profile.json"), "w", encoding="utf-8") as fh:
+                    fh.write("[" * depth)
+                with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": tmp}, clear=False):
+                    self.assertEqual(state_mod.read_profile("claude"), {})
 
     @staticmethod
     def build(tmp, runtime, policy, tool):

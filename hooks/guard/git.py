@@ -271,7 +271,8 @@ class GitGuard:
             return
         if state == "closed":
             raise Deny(text_to_b("CONSENT_REQUIRED — this session cannot answer the dialog (a subagent, a "
-                                 "call with no session id, or a session id other than the hook's own). "
+                                 "call with no session id, a session id other than the hook's own, or an "
+                                 "unreadable call). "
                                  "The human runs this command in their own terminal.") + WHY_CONSENT_CLOSED)
         spent = getattr(self.ctx, "consent", None)
         if spent and spent.get("label") == command:

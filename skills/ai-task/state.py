@@ -525,9 +525,9 @@ def read_profile(runtime=None):
     which turns every plan budget into a no-op."""
     try:
         with open(profile_file(runtime_home(runtime or own_runtime())), encoding="utf-8") as fh:
-            data = json.load(fh)
+            data = json_loads_capped(fh.read())
         return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return {}
 
 
@@ -2350,12 +2350,38 @@ NPX_PACKAGE_RE = re.compile(r"^riskrails@[0-9A-Za-z.+-]+$")
 SETTLE_EFFECT = {"defer": "defer", "keep": "ack", "ack": "ack", "answer": "answered"}
 DIALOG_PICK = None                        # the pick human_route() consumed in this process
 
+JSON_DEPTH_MAX = 64                       # one nesting cap for both switches, not the stack's
+
+
+def json_loads_capped(text):
+    """json.loads(text), except that a text nested deeper than JSON_DEPTH_MAX is
+    malformed (ValueError). The parser's own limit moves with the stack depth, so
+    the hook and state.py could disagree; this scan does not recurse."""
+    depth, in_str, esc = 0, False, False
+    for ch in text:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+        elif ch == '"':
+            in_str = True
+        elif ch in "[{":
+            depth += 1
+            if depth > JSON_DEPTH_MAX:
+                raise ValueError("JSON nested deeper than %d" % JSON_DEPTH_MAX)
+        elif ch in "]}":
+            depth -= 1
+    return json.loads(text)
+
 
 def dialog_policy(root):
     """.ai/policies/dialog.json when it says enabled: true, else None (R36.1)."""
     try:
         with open(os.path.join(root, ".ai", "policies", "dialog.json"), encoding="utf-8") as fh:
-            data = json.load(fh)
+            data = json_loads_capped(fh.read())
     except (OSError, ValueError, RecursionError):
         return None
     if not isinstance(data, dict) or data.get("enabled") is not True:
@@ -2373,7 +2399,7 @@ def dialog_tool_verified(runtime):
     file is no tool."""
     try:
         with open(os.path.join(runtime_home(runtime), "riskrails", "profile.json"), encoding="utf-8") as fh:
-            data = json.load(fh)
+            data = json_loads_capped(fh.read())
         return (data.get("dialog") or {}).get("tool")
     except (OSError, ValueError, AttributeError, RecursionError):
         return None
@@ -2388,8 +2414,10 @@ def dialog_on(root):
     environment's, which this copy never sees: a differing payload id is "closed"
     there while this returns a dict, and the hook refuses the call, so the dict is
     not acted on. A payload id with no environment id is "on" there and None here:
-    no pick can be bound, so the commit is denied. None covers both of the hooks' "off" and "closed": no session id in
-    the environment means a pick cannot be bound, so it fails closed to the
+    no pick can be bound, so the commit is denied.
+
+    None covers both of the hooks' "off" and "closed": no session id in the
+    environment means a pick cannot be bound, so it fails closed to the
     terminal route (every approval and commit command prints for the human's
     terminal). A dict is the hooks' "on"."""
     if not root:

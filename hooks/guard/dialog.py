@@ -72,12 +72,38 @@ def canonical(obj):
 
 
 # -- the switch ---------------------------------------------------------------
+JSON_DEPTH_MAX = 64                       # one nesting cap for both switches, not the stack's
+
+
+def json_loads_capped(text):
+    """json.loads(text), except that a text nested deeper than JSON_DEPTH_MAX is
+    malformed (ValueError). The parser's own limit moves with the stack depth, so
+    the hook and state.py could disagree; this scan does not recurse."""
+    depth, in_str, esc = 0, False, False
+    for ch in text:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+        elif ch == '"':
+            in_str = True
+        elif ch in "[{":
+            depth += 1
+            if depth > JSON_DEPTH_MAX:
+                raise ValueError("JSON nested deeper than %d" % JSON_DEPTH_MAX)
+        elif ch in "]}":
+            depth -= 1
+    return json.loads(text)
+
 
 def dialog_policy(root):
     """.ai/policies/dialog.json when it says enabled: true, else None."""
     try:
         with open(os.path.join(root, ".ai", "policies", "dialog.json"), encoding="utf-8") as fh:
-            data = json.load(fh)
+            data = json_loads_capped(fh.read())
     except (OSError, ValueError, TypeError, RecursionError):
         return None
     if not isinstance(data, dict) or data.get("enabled") is not True:
@@ -103,7 +129,7 @@ def dialog_tool(runtime):
     Only an installer from 7b on writes dialog.tool, always under riskrails/."""
     try:
         with open(os.path.join(runtime_home(runtime), "riskrails", "profile.json"), encoding="utf-8") as fh:
-            tool = (json.load(fh).get("dialog") or {}).get("tool")
+            tool = (json_loads_capped(fh.read()).get("dialog") or {}).get("tool")
     except (OSError, ValueError, AttributeError, RecursionError):
         return None
     return tool if runtime in DIALOG_TOOL and tool == DIALOG_TOOL[runtime] else None

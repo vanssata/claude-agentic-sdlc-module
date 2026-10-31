@@ -249,6 +249,7 @@ class TestSessionMismatchFailsClosed(unittest.TestCase):
                 self.assertNotIn("send the dialog", reason)
                 self.assertIn("terminal", reason)
                 self.assertIn("other than the hook's own", reason)
+                self.assertIn("an unreadable call", reason)
 
     def test_too_deeply_nested_json_reads_as_malformed(self):
         deep = "[" * 200000
