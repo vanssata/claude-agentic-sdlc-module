@@ -78,7 +78,7 @@ def dialog_policy(root):
     try:
         with open(os.path.join(root, ".ai", "policies", "dialog.json"), encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError, RecursionError):
         return None
     if not isinstance(data, dict) or data.get("enabled") is not True:
         return None
@@ -104,7 +104,7 @@ def dialog_tool(runtime):
     try:
         with open(os.path.join(runtime_home(runtime), "riskrails", "profile.json"), encoding="utf-8") as fh:
             tool = (json.load(fh).get("dialog") or {}).get("tool")
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, AttributeError, RecursionError):
         return None
     return tool if runtime in DIALOG_TOOL and tool == DIALOG_TOOL[runtime] else None
 

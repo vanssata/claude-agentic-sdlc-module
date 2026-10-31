@@ -95,37 +95,77 @@ class TestSwitchContract(unittest.TestCase):
     def build(tmp, runtime, policy, tool):
         root = os.path.join(tmp, "project")
         os.makedirs(os.path.join(root, ".ai", "policies"))
+        deep = "[" * 200000                  # nested past the parser's recursion limit
         if policy is not None:
             with open(os.path.join(root, ".ai", "policies", "dialog.json"), "w", encoding="utf-8") as fh:
-                json.dump({"enabled": policy}, fh)
+                if policy == "nested":
+                    fh.write(deep)
+                else:
+                    json.dump({"enabled": policy}, fh)
         home = os.path.join(tmp, "home")
         if tool != "missing":
-            os.makedirs(os.path.join(home, "riskrails"))
-            value = dialog.DIALOG_TOOL[runtime] if tool == "verified" else "Wrong"
-            with open(os.path.join(home, "riskrails", "profile.json"), "w", encoding="utf-8") as fh:
-                json.dump({"dialog": {"tool": value}}, fh)
+            # "legacy": the verified tool, but only in the pre-3.4b <home>/claude-agentic/ file
+            # that read_profile() still falls back to; the hooks never read it.
+            folder = "claude-agentic" if tool == "legacy" else "riskrails"
+            os.makedirs(os.path.join(home, folder))
+            value = dialog.DIALOG_TOOL[runtime] if tool in ("verified", "legacy") else "Wrong"
+            with open(os.path.join(home, folder, "profile.json"), "w", encoding="utf-8") as fh:
+                if tool == "nested":
+                    fh.write(deep)
+                else:
+                    json.dump({"dialog": {"tool": value}}, fh)
         return root, home
 
     def test_dialog_on_agrees_with_switch_state(self):
+        """On the diagonal, where the environment and the payload carry the same
+        session id or both none: "on" is a dict, "off" and "closed" are None.
+        The off-diagonal cases are test_session_ids_that_differ."""
         seen = set()
         for runtime in ("claude", "codex"):
-            for policy in (True, None, False):
+            for policy in (True, None, False, "nested"):
                 for unattended in (False, True):
                     for attended0 in (False, True):
-                        for tool in ("verified", "wrong", "missing"):
-                            for has_session in (True, False):
-                                self.check(runtime, policy, unattended, attended0, tool, has_session, seen)
+                        for tool in ("verified", "wrong", "missing", "legacy", "nested"):
+                            for sid in ("sess-1234", ""):
+                                self.check(runtime, policy, unattended, attended0, tool, sid, sid, seen)
         self.assertEqual(seen, {"on", "off", "closed"})
 
-    def check(self, runtime, policy, unattended, attended0, tool, has_session, seen):
-        name = "%s policy=%s unattended=%s attended0=%s tool=%s session=%s" % (
-            runtime, policy, unattended, attended0, tool, has_session)
+    def test_session_ids_that_differ(self):
+        """The one place the switches may differ. The hooks compare the payload's
+        session id with their own environment's; dialog_on() only has the
+        environment. (a) payload id, no environment id: hooks "on" (no own id to
+        contradict), dialog_on None (no session to bind a pick to) - a pick cannot
+        be bound, so the commit is denied: fail-safe. (b) environment id, no
+        payload id: hooks "closed", dialog_on a dict (it never sees the payload),
+        so only a payload-less call, which the hooks refuse anyway, differs.
+        (c) different ids: hooks "closed", dialog_on a dict for the environment's
+        id; the hook refuses the call, so the dict is never used to act on it."""
+        for runtime in ("claude", "codex"):
+            for tool in ("verified", "wrong"):
+                seen = set()
+                with self.subTest(runtime=runtime, tool=tool):
+                    hooks, got = self.check(runtime, True, False, False, tool, "", "sess-1234", seen)
+                    self.assertEqual((hooks, got), ("on" if tool == "verified" else "off", None))
+                    hooks, got = self.check(runtime, True, False, False, tool, "sess-1234", "", seen)
+                    self.assertEqual(hooks, "closed" if tool == "verified" else "off")
+                    self.assertEqual(bool(got), tool == "verified")
+                    hooks, got = self.check(runtime, True, False, False, tool, "sess-1234", "sess-other", seen)
+                    self.assertEqual(hooks, "closed" if tool == "verified" else "off")
+                    self.assertEqual(bool(got), tool == "verified")
+                    if got:
+                        self.assertEqual(got["session"], "sess-1234")
+
+    def check(self, runtime, policy, unattended, attended0, tool, env_sid, payload_sid, seen):
+        """Runs both switches; returns (hooks' state, dialog_on's result)."""
+        name = "%s policy=%s unattended=%s attended0=%s tool=%s env_session=%r payload_session=%r" % (
+            runtime, policy, unattended, attended0, tool, env_sid, payload_sid)
+        sid = payload_sid
+        diagonal = env_sid == payload_sid
         with tempfile.TemporaryDirectory() as tmp:
             root, home = self.build(tmp, runtime, policy, tool)
             env = {"CODEX_HOME" if runtime == "codex" else "CLAUDE_CONFIG_DIR": home}
-            sid = "sess-1234" if has_session else ""
-            if has_session:
-                env[dialog.SESSION_ENV[runtime]] = sid
+            if env_sid:
+                env[dialog.SESSION_ENV[runtime]] = env_sid
             if unattended:
                 env["AI_UNATTENDED"] = "1"
             if attended0:
@@ -139,12 +179,16 @@ class TestSwitchContract(unittest.TestCase):
                 got = state_mod.dialog_on(root)
         with self.subTest(name):
             seen.add(hooks)
-            self.assertEqual(bool(got), hooks == "on")
-            if hooks == "on":
-                self.assertEqual(got["session"], payload["session_id"])
-            if not sid and policy and tool == "verified" and not unattended and not attended0:
-                self.assertEqual(hooks, "closed")
+            if diagonal:
+                self.assertEqual(bool(got), hooks == "on")
+                if hooks == "on":
+                    self.assertEqual(got["session"], payload["session_id"])
+                if not sid and policy is True and tool == "verified" and not unattended and not attended0:
+                    self.assertEqual(hooks, "closed")
+                    self.assertIsNone(got)
+            if hooks == "off":
                 self.assertIsNone(got)
+        return hooks, got
 
 
 if __name__ == "__main__":

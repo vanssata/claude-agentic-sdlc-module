@@ -237,6 +237,46 @@ class TestSessionMismatchFailsClosed(unittest.TestCase):
                 self.assertTrue(reason.startswith("CONSENT_REQUIRED \u2014 "), reason)
                 self.assertIn("terminal", reason)
 
+    def test_closed_deny_does_not_send_the_agent_to_the_dialog(self):
+        for name, guard, env in (("subagent", {"agent_id": "a1"}, {}),
+                                 ("empty session_id", {"session": ""}, {}),
+                                 ("env session differs", {}, {"CLAUDE_CODE_SESSION_ID": "other"})):
+            with self.subTest(name):
+                got, reason, _ = self.run_case(COMMIT, env=env, **guard)
+                self.assertEqual(got, "deny", reason)
+                self.assertTrue(reason.startswith("CONSENT_REQUIRED \u2014 "), reason)
+                self.assertNotIn("decision open", reason)
+                self.assertNotIn("send the dialog", reason)
+                self.assertIn("terminal", reason)
+                self.assertIn("other than the hook's own", reason)
+
+    def test_too_deeply_nested_json_reads_as_malformed(self):
+        deep = "[" * 200000
+        def nest_policy(p):
+            with open(os.path.join(p.root, ".ai", "policies", "dialog.json"), "w", encoding="utf-8") as fh:
+                fh.write(deep)
+        got, reason, _ = self.run_case(COMMIT, nest_policy)
+        self.assertEqual(got, "allow", reason)
+
+        def nest_profile(p):
+            with open(os.path.join(p.home, "riskrails", "profile.json"), "w", encoding="utf-8") as fh:
+                fh.write(deep)
+            self.assertIsNone(self.tool_in(p))
+        got, reason, _ = self.run_case(COMMIT, nest_profile)
+        self.assertEqual(got, "allow", reason)
+
+    @staticmethod
+    def tool_in(p):
+        old = os.environ.get("CLAUDE_CONFIG_DIR")
+        os.environ["CLAUDE_CONFIG_DIR"] = p.home
+        try:
+            return dialog.dialog_tool("claude")
+        finally:
+            if old is None:
+                os.environ.pop("CLAUDE_CONFIG_DIR")
+            else:
+                os.environ["CLAUDE_CONFIG_DIR"] = old
+
     def test_codex_subagent_is_refused(self):
         got, reason, _ = self.run_case(COMMIT, runtime="codex", agent_id="a1")
         self.assertEqual((got, reason[:16]), ("deny", "CONSENT_REQUIRED"))

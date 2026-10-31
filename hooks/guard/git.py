@@ -32,6 +32,10 @@ WHY_CONSENT = ("\n\nWith the dialog on, a commit or push runs only when the huma
                "send the dialog it prints, then run the picked command verbatim, once. See\n"
                ".ai/policies/safety.md.")
 
+WHY_CONSENT_CLOSED = ("\n\nWith the dialog on, a commit or push runs only when the human picked it in the\n"
+                      "dialog, and only a session that can answer the dialog can have a pick. See\n"
+                      ".ai/policies/safety.md.")
+
 SPACE = "[[:space:]]"
 CHEAP_RE = ("(^|[|;&[:space:]])(git|gh|argocd|helm|kubectl|terraform|dep|deployer|cap|flyctl|fly|"
             "vercel|netlify|npm)([[:space:]]|$)|/npm([[:space:]]|$)")
@@ -266,9 +270,9 @@ class GitGuard:
         if not dialog.needs_consent(command):
             return
         if state == "closed":
-            raise Deny(text_to_b("CONSENT_REQUIRED — this session cannot answer the dialog (a subagent, or no "
-                                 "session to bind a pick to). The human runs this command in their own "
-                                 "terminal.") + WHY_CONSENT)
+            raise Deny(text_to_b("CONSENT_REQUIRED — this session cannot answer the dialog (a subagent, a "
+                                 "call with no session id, or a session id other than the hook's own). "
+                                 "The human runs this command in their own terminal.") + WHY_CONSENT_CLOSED)
         spent = getattr(self.ctx, "consent", None)
         if spent and spent.get("label") == command:
             return

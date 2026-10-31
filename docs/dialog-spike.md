@@ -169,7 +169,7 @@ UserPromptSubmit, PreToolUse, Stop. Six Codex sessions, two Claude sessions, 42 
 | Question | Codex | Claude Code |
 |---|---|---|
 | The agent's shell carries the session id | **KNOWN FACT** `CODEX_THREAD_ID` (and `CODEX_SESSION_ID`, same value) equals the payload's `session_id` — four probes, four sessions, after `startup`, `clear` and `resume` | **KNOWN FACT** `CLAUDE_CODE_SESSION_ID` equals the payload's `session_id` — after `startup` and `clear` |
-| The hook's own environment carries it | **KNOWN FACT** no: no `CODEX_*` variable in any of 29 Codex hook runs; a hook knows the session only from its payload | **KNOWN FACT** yes: `CLAUDE_CODE_SESSION_ID` equal to the payload's in all 13 Claude hook runs |
+| The hook's own environment carries it | **KNOWN FACT** no: no `CODEX_*` variable in any of 29 Codex hook runs; a hook knows the session only from its payload | **KNOWN FACT** yes, for the four recorded events (SessionStart, UserPromptSubmit, PreToolUse, Stop): `CLAUDE_CODE_SESSION_ID` equal to the payload's in all 13 Claude hook runs; PostToolUse and Notification not recorded (Open 5) |
 | `/clear` | **KNOWN FACT** a new `session_id`; SessionStart `source: "clear"`; the shell's `CODEX_THREAD_ID` follows the new id | **KNOWN FACT** a new `session_id`; SessionStart `source: "clear"`; the shell's id follows |
 | resume | **KNOWN FACT** `codex resume --last`: the same `session_id`, SessionStart `source: "resume"`, the shell's id unchanged | **UNKNOWN** not recorded (`claude --resume` was not run) |
 | Stop: `{"decision":"block","reason":…}` on stdout, exit 0 | **KNOWN FACT** honoured: the model continued with the reason (`last_assistant_message: "CONTINUED"`); the second Stop of the same `turn_id` has `stop_hook_active: true` | **KNOWN FACT** honoured, the same `stop_hook_active: true` on the second Stop |
@@ -190,7 +190,16 @@ UserPromptSubmit, PreToolUse, Stop. Six Codex sessions, two Claude sessions, 42 
 2. Codex: the cancel (Esc) payload (`codex/request-cancel.json`); which `codex` binary the human's terminal
    resolves (rollouts say 0.165.0, the standalone install says 0.164.0); whether session 2 ran with the flag.
 3. Gate G1 (human): confirm the version list `>= 0.165.0` (evidence above) before 7b writes it.
-4. Claude: the session id after `claude --resume` (2026-10-31 spike above).
+4. Claude: the session id after `claude --resume` (2026-10-31 spike above). A resumed session whose ids differ falls
+   closed (the pick is dropped, the switch stays closed); the terminal route stays.
+5. **UNKNOWN** Claude: PostToolUse and Notification hooks were not recorded. `hooks/dialog-gate.py` records the
+   pick in PostToolUse. If its `CLAUDE_CODE_SESSION_ID` differed from the payload's, the pick would be dropped
+   (switch "closed") and the main session locked out of commit/push consent; the terminal route still works.
+   What answers it: the next spike records PostToolUse and Notification.
+6. **UNKNOWN** Codex: the hooks spot a subagent only by `agent_id`, since Codex hooks carry no session env.
+   `tests/fixtures/codex-hooks/32-34` (`subagent-stop-*`) show `agent_id` on a subagent's SubagentStop. Whether a
+   Codex subagent's PreToolUse carries `agent_id` was not recorded. If it does not, a subagent's commit would
+   bind like the main session's. What answers it: record a Codex subagent's PreToolUse in the next Codex spike.
 
 ## Observations outside this task (not fixed here)
 

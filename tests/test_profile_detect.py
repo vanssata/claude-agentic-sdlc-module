@@ -20,7 +20,7 @@ FIXTURES = os.path.join(ROOT, "tests", "fixtures", "profile")
 # Variables that change what detect sees or which runtime it believes it is.
 SCRUB = ("CLAUDECODE", "AI_RUNTIME", "AI_UNATTENDED", "CODEX_THREAD_ID", "CODEX_SESSION_ID", "CODEX_CI",
          "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_VERSION", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "ANTHROPIC_API_KEY",
-         "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "OPENAI_API_KEY")
+         "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "OPENAI_API_KEY", "CLAUDE_CODE_SESSION_ATTENDED")
 
 
 def cases(runtime):

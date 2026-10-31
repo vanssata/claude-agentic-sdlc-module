@@ -2356,7 +2356,7 @@ def dialog_policy(root):
     try:
         with open(os.path.join(root, ".ai", "policies", "dialog.json"), encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return None
     if not isinstance(data, dict) or data.get("enabled") is not True:
         return None
@@ -2365,11 +2365,30 @@ def dialog_policy(root):
     return {"window_seconds": min(600, max(30, window))}
 
 
+def dialog_tool_verified(runtime):
+    """profile.json dialog.tool read from <home>/riskrails/profile.json only, as the
+    hooks' dialog_tool() does: an installer from 7b on writes dialog.tool, always
+    there, so the pre-3.4b claude-agentic/ fallback of read_profile() is not
+    consulted. A missing, unreadable, malformed, too deeply nested or non-object
+    file is no tool."""
+    try:
+        with open(os.path.join(runtime_home(runtime), "riskrails", "profile.json"), encoding="utf-8") as fh:
+            data = json.load(fh)
+        return (data.get("dialog") or {}).get("tool")
+    except (OSError, ValueError, AttributeError, RecursionError):
+        return None
+
+
 def dialog_on(root):
     """The effective switch, state.py's copy of the hooks' switch_state() (7d1):
     the project says on, nobody declared the run unattended, the runtime's dialog
-    tool is the one the installer verified, and the session has an id to bind a
-    pick to. None covers both of the hooks' "off" and "closed": no session id in
+    tool is the one the installer verified (read from riskrails/profile.json
+    only, never the old claude-agentic/ file), and the session has an id to bind
+    a pick to. The hooks also compare the payload's session id with the
+    environment's, which this copy never sees: a differing payload id is "closed"
+    there while this returns a dict, and the hook refuses the call, so the dict is
+    not acted on. A payload id with no environment id is "on" there and None here:
+    no pick can be bound, so the commit is denied. None covers both of the hooks' "off" and "closed": no session id in
     the environment means a pick cannot be bound, so it fails closed to the
     terminal route (every approval and commit command prints for the human's
     terminal). A dict is the hooks' "on"."""
@@ -2379,7 +2398,7 @@ def dialog_on(root):
     if not policy or os.environ.get("AI_UNATTENDED") or os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
         return None
     runtime = own_runtime()
-    tool = (read_profile(runtime).get("dialog") or {}).get("tool")
+    tool = dialog_tool_verified(runtime)
     session = os.environ.get(SESSION_ENV.get(runtime, ""))
     if runtime not in DIALOG_TOOL or tool != DIALOG_TOOL[runtime] or not session:
         return None
