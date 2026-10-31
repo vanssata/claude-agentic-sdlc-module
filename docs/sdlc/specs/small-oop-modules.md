@@ -43,6 +43,7 @@ disabling is not implemented. Stdlib only.
 | Q8 | `dialog.json` | **A** — stays; the `dialog` module declares it; `settings.json` holds only confirmations and `modules.*` |
 | Q12 | Disableable new modules | **A** — none of the new modules is disableable; a separate test-only module carries the flag (supersedes Q9) |
 | Q13 | Specs | **A** — two specs: (1) the modular split — only `settings` as a new module, plus extractions from `state.py` and one more large file; (2) the dialogs, run right after (1) |
+| OQ-M1 | Next extraction after T2/T3 | **A** — the dialog and consent readers (2026-10-31): one `modules/dialog` reader replaces the two copies in `hooks/guard/dialog.py` and `state.py`; stdlib only, found by the same `sys.path` probe as every module, since hooks run under `python3 -I -S` and never import `skills/ai-task`. `setup.py` (B) follows later |
 
 ## Requirements
 
@@ -203,8 +204,9 @@ or install skew causes an incident.
 > project-settings-dialog Q5, Q13): all functionality moves out of `state.py`, `update.py` and `setup.py` into small,
 > light, object-oriented `modules/<id>/` packages — one responsibility per class, a facade as the only import, a
 > manifest, and their own functional tests; the end-to-end suite tests only the end result. One module per
-> refactoring task, never mixed with a feature (C3). Done first: `questions`, `merge`. Next: the dialog and consent
-> readers (two copies today), the verification commands (`sensors.read_commands`, `setup.py verify` and survey),
+> refactoring task, never mixed with a feature (C3). Done first: `questions`, `merge`. Next (OQ-M1 = A, 2026-10-31):
+> the dialog and consent readers (two copies today; stdlib only, reachable from hooks under `python3 -I -S` by the
+> module `sys.path` probe), then the verification commands (`sensors.read_commands`, `setup.py verify` and survey),
 > weight, the journal, memory (and `memory_compact.py`'s own questions parser).
 
 §2 row: `| Module disable | task | modules.<id>.enabled (settings.json) and can_disable (manifest) are read but do nothing: false prints "disabling not implemented yet"; no shipped module is disableable; tests/fixtures/modules/sample_optional proves the flag | intent project-settings-dialog Q7, Q12 |`
@@ -274,8 +276,9 @@ def module_enabled(root: str, module_id: str) -> bool
 
 ## Open questions
 
-- **OQ-M1** (owner: Ivan Kakurov) After T2/T3, should `setup.py` (547 lines) be the next extraction or the dialog
-  readers? ROADMAP proposes the readers.
+- none open. **OQ-M1** (owner: Ivan Kakurov) — after T2/T3, `setup.py` (547 lines) or the dialog readers? —
+  **closed 2026-10-31: A, the readers** (see Decisions taken); the readers are duplicated today and `settings` would
+  add a third copy (concern 3), while `setup.py` is duplicated nowhere. `setup.py` is the move after them.
 
 ## Flagged concerns
 
