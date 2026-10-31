@@ -144,6 +144,10 @@ class TestPayload(unittest.TestCase):
         questions = self.shown()["questions"]
         self.assertEqual(len(questions), 2)
         self.assertEqual([q["multiSelect"] for q in questions], [False, False])
+        # Claude keys answers by question text: the two parts must differ (8fec).
+        self.assertTrue(questions[0]["question"].endswith(" (1 of 2)"), questions[0]["question"])
+        self.assertTrue(questions[1]["question"].endswith(" (2 of 2)"), questions[1]["question"])
+        self.assertNotEqual(questions[0]["question"], questions[1]["question"])
         self.assertEqual([[o["label"] for o in q["options"]] for q in questions],
                          [["Not now — commit nothing", "git commit -m 'one, two' -- a.py"],
                           ["Not now — commit nothing", PUSH]])
@@ -155,6 +159,20 @@ class TestPayload(unittest.TestCase):
             self.assertTrue(question["multiSelect"])
         finally:
             plain.close()
+
+    def test_split_suffix_keeps_question_within_max(self):
+        options = [{"n": 1, "kind": "choice", "label": "Not now — commit nothing"},
+                   {"n": 2, "kind": "command", "label": "git commit -m 'a, b'"},
+                   {"n": 3, "kind": "command", "label": PUSH}]
+        long = "x" * state_mod.QUESTION_MAX
+        decision = {"id": "D3", "question": long, "header": "Commit", "multi_select": True, "options": options}
+        texts = [q["question"] for q in state_mod.dialog_payload([decision], "claude")["questions"]]
+        self.assertEqual(len(texts), 2)
+        self.assertTrue(all(len(t) <= state_mod.QUESTION_MAX for t in texts), [len(t) for t in texts])
+        self.assertEqual([t[-9:] for t in texts], [" (1 of 2)", " (2 of 2)"])
+        self.assertEqual(texts, [q["question"] for _, _, q in dialog.offered([decision], "claude")])
+        unsplit = dict(decision, multi_select=False)
+        self.assertEqual(state_mod.dialog_payload([unsplit], "claude")["questions"][0]["question"], long)
 
     def test_codex_shape(self):
         decision = {"id": "D3", "question": "q", "header": "Commit", "multi_select": True,
@@ -365,6 +383,25 @@ class TestRecorder(HookCase):
                          [("C1", 1, 2, "git commit -m x -- a.py"), ("C2", 2, 3, PUSH)])
         self.assertEqual(dialog.next_live_pick(self.s.root, payload["session_id"], NOW)["id"], "C1")
 
+    def test_split_multiselect_parts_are_recorded_per_part(self):
+        """8fec: the two single-selects of a split decision carry different
+        question texts, so Claude's answers keyed by text read as picks."""
+        first = "git commit -m 'x, y' -- a.py"
+        split = decision("D2", "Commit and push?", "Commit",
+                         [("choice", SAFE), ("command", first), ("command", PUSH)], multi=True)
+        self.s.decide(split)
+        sent = dialog.dialog_payload([split], "claude")
+        questions = sent["questions"]
+        self.assertEqual(len(questions), 2)
+        payload = json.loads(json.dumps(spike("claude/ask-single")))
+        answers = {questions[0]["question"]: first, questions[1]["question"]: PUSH}
+        payload["tool_input"] = {"questions": questions, "answers": answers}
+        payload["tool_response"] = {"questions": questions, "answers": answers}
+        lines = dialog.record(self.s.root, "claude", payload, NOW)
+        picks = [line for line in lines if line["type"] == "pick"]
+        self.assertEqual([(p["order"], p["option"], p["label"]) for p in picks], [(1, 2, first), (2, 3, PUSH)])
+        self.assertEqual([line for line in lines if line["type"] == "decline"], [])
+
     def test_choice_only_is_one_pick(self):
         self.commit_decision()
         payload = relabel(spike("claude/ask-single"), {"A": SAFE, "B": COMMIT}, "Commit a.py?", "Commit")
@@ -439,17 +476,18 @@ class TestRecorder(HookCase):
         self.assertNotIn("Some text", json.dumps(self.s.ledger()))
 
     def test_duplicate_question_text_is_ambiguous(self):
-        """7c splits a multi-select whose label holds ", " into single-selects
-        sharing the decision's question text; Claude keys answers by that
-        text, so neither answer can be told apart: a decline."""
+        """Two questions with one text (the pre-8fec split shape) cannot be
+        told apart by Claude's answers keyed by text: unanswerable, and the
+        shared-text set is no longer the offered one, so nothing is picked."""
         self.multi_decision(first="git commit -m 'a, b' -- a.py")
         sent = dialog.dialog_payload(dialog.read_decisions(self.s.root), "claude")
         self.assertEqual(len(sent["questions"]), 2)
-        payload = dict(spike("claude/ask-single"), tool_input=dict(sent),
-                       tool_response=dict(sent, answers={"Commit and push?": PUSH}))
+        same = {"questions": [dict(q, question="Commit and push?") for q in sent["questions"]]}
+        payload = dict(spike("claude/ask-single"), tool_input=dict(same),
+                       tool_response=dict(same, answers={"Commit and push?": PUSH}))
+        self.assertEqual(dialog.adapt_response("claude", payload), [[""], [""]])
         lines = dialog.record(self.s.root, "claude", payload, NOW)
-        self.assertEqual([(line["type"], line.get("why")) for line in lines],
-                         [("offer", None), ("decline", "ambiguous")])
+        self.assertEqual([line for line in lines if line["type"] == "pick"], [])
 
     def test_label_rule_checked_again(self):
         self.s.decide(decision("D1", "Run?", "Run", [("choice", SAFE), ("command", "git status")]))

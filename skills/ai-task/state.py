@@ -2654,6 +2654,15 @@ def option_description(option):
     return "the session runs exactly this, once" if option["kind"] == "command" else "nothing runs"
 
 
+def part_question(question, i, n):
+    """The question text of part i of n: a split decision's parts must differ,
+    Claude keys tool_response.answers by text; cut so the whole fits QUESTION_MAX."""
+    if n < 2:
+        return question
+    suffix = " (%d of %d)" % (i, n)
+    return (question or "")[:QUESTION_MAX - len(suffix)] + suffix
+
+
 def dialog_payload(decisions, runtime):
     """The dialog tool's input for these decisions, in file order: AskUserQuestion
     for Claude, request_user_input for Codex (keyed by a question id)."""
@@ -2661,7 +2670,7 @@ def dialog_payload(decisions, runtime):
     for decision in decisions:
         parts = dialog_questions(decision)
         for i, (options, multi) in enumerate(parts, 1):
-            item = {"question": decision["question"], "header": decision["header"],
+            item = {"question": part_question(decision["question"], i, len(parts)), "header": decision["header"],
                     "options": [{"label": o["label"], "description": option_description(o)} for o in options]}
             if runtime == "codex":
                 item = dict({"id": "%s%s" % (decision["id"].lower(), "_%d" % i if len(parts) > 1 else "")},
@@ -2705,6 +2714,17 @@ def settle_decision(root, decision_id, effect, pick=None):
     write_decisions(root, data)
 
 
+def settle_written(root, entry):
+    """True when the settle line is in the ledger; a decision leaves decision.json
+    only with its line (43ae-I4)."""
+    try:
+        with ledger_lock(root):
+            ledger_append(root, entry)
+    except OSError:
+        return False
+    return True
+
+
 def prune_decisions(root):
     """On every run: a decision with a settle line, or whose latest round's
     command picks are all used, leaves decision.json (R36.14); with the
@@ -2726,17 +2746,15 @@ def prune_decisions(root):
         if decision.get("id") in settled:
             keep.remove(decision)
         elif off:
-            with contextlib.suppress(OSError), ledger_lock(root):
-                ledger_append(root, {"type": "settle", "decision": decision["id"], "pick": None,
-                                     "effect": "fallback"})
-            keep.remove(decision)
+            if settle_written(root, {"type": "settle", "decision": decision["id"], "pick": None,
+                                     "effect": "fallback"}):
+                keep.remove(decision)
         elif picks and all(p.get("id") in used for p in picks):
             parsed = label_argv(picks[-1].get("label") or "")
             effect = "declined" if parsed and subcommand(parsed[1])[:1] == ["reject"] else "approved"
-            with contextlib.suppress(OSError), ledger_lock(root):
-                ledger_append(root, {"type": "settle", "decision": decision["id"], "pick": picks[-1].get("id"),
-                                     "effect": effect})
-            keep.remove(decision)
+            if settle_written(root, {"type": "settle", "decision": decision["id"], "pick": picks[-1].get("id"),
+                                     "effect": effect}):
+                keep.remove(decision)
     if len(keep) != len(data["open"]):
         data["open"] = keep
         write_decisions(root, data)

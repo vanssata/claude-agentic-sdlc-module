@@ -198,6 +198,18 @@ def decision_parts(decision):
     return [(options, bool(decision.get("multi_select")))]
 
 
+QUESTION_MAX = 1200  # state.py's
+
+
+def part_question(question, i, n):
+    """state.py's part_question: part i of n of a split decision is
+    "<question> (i of n)", the question cut so the whole fits QUESTION_MAX."""
+    if n < 2:
+        return question
+    suffix = " (%d of %d)" % (i, n)
+    return (question or "")[:QUESTION_MAX - len(suffix)] + suffix
+
+
 def offered(decisions, runtime):
     """What a dialog call for these decisions carries, question by question:
     (decision, options, the question as sent) — state.py's dialog_payload."""
@@ -205,7 +217,8 @@ def offered(decisions, runtime):
     for decision in decisions:
         parts = decision_parts(decision)
         for i, (options, multi) in enumerate(parts, 1):
-            item = {"question": decision.get("question"), "header": decision.get("header"),
+            item = {"question": part_question(decision.get("question"), i, len(parts)),
+                    "header": decision.get("header"),
                     "options": [{"label": o.get("label"), "description": o.get("description") or (
                         "the session runs exactly this, once" if o.get("kind") == "command" else "nothing runs")}
                                 for o in options]}
@@ -248,7 +261,7 @@ def adapt_response(runtime, payload):
 
     Claude: answers keyed by question text, a multi-select's labels joined
     with ", "; two questions with one text cannot be told apart, so both read
-    as unanswerable. Codex: tool_response is a JSON string,
+    as unanswerable (a split decision's parts are numbered "(i of n)" to differ). Codex: tool_response is a JSON string,
     answers[<id>].answers is a list; "None of the above" and "user_note: …"
     are items like any other, and match no label."""
     questions = response_questions(runtime, payload)

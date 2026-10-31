@@ -2135,6 +2135,29 @@ class TestDialogDecisions(DialogBase):
         self.assertEqual(self.p.decisions(), [])
         self.assertEqual([(e["type"], e.get("effect")) for e in self.p.ledger()], [("settle", "fallback")])
 
+    def read_only_ledger(self):
+        path = os.path.join(self.p.root, ".ai", "state", "consent.jsonl")
+        os.chmod(path, 0o444)
+
+    def test_switch_off_keeps_the_decision_when_the_settle_cannot_be_written(self):
+        """43ae-I4: a decision leaves decision.json only with its settle line."""
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        self.p.append(type="use", id="C0", by="git-guard")
+        self.read_only_ledger()
+        os.remove(os.path.join(self.p.root, ".ai", "policies", "dialog.json"))
+        self.p.run("decision", "show")
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+        self.assertNotIn("settle", [e["type"] for e in self.p.ledger()])
+
+    def test_used_picks_keep_the_decision_when_the_settle_cannot_be_written(self):
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        cid = self.p.pick("D1", 2)
+        self.p.append(type="use", id=cid, by="git-guard")
+        self.read_only_ledger()
+        self.p.run("decision", "show")
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+        self.assertNotIn("settle", [e["type"] for e in self.p.ledger()])
+
     def test_decision_open_commit_validates_labels(self):
         for bad in ("git commit -m x; rm -rf ~", "git commit -m \"$(id)\"", "git commit -m a | tee x",
                     "git commit -m 'two\nlines'", "git commit -m a && git push origin main",
