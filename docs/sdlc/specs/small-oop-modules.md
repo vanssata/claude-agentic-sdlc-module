@@ -1,11 +1,22 @@
 # Spec: Small modules — splitting the plugin's large scripts (functional core, three classes)
 
 Status: proposed · 2026-10-31 · brainstorm `docs/sdlc/intent/small-oop-modules.questions.md`
-(Hybrid mode, `agentic-sdlc-modes` Q1 = B; Q9–Q14 added 2026-10-31 after an external review
-the developer pasted — §External review; Q16–Q19 added 17:41 after the session's assessment and a
-Codex second opinion on `gpt-6-astra` — §Optimisation; Q15, the blockade, is pending for the
-developer, answered 17:46: only `state.py` work is blocked) · the plan on file predates Q9–Q19 (FC12) · next:
-`/rr-plan docs/sdlc/specs/small-oop-modules.md` again
+(Hybrid mode, `agentic-sdlc-modes` Q1 = B; Q9–Q14 added 17:15 after an external review the
+developer pasted; Q16–Q19 added 17:41 after the session's assessment and a Codex second opinion
+on `gpt-6-astra` — §Optimisation; Q15 answered by the developer at 17:46: only `state.py` work
+is blocked; Q20–Q24 added in the evening refine pass — spec budget, open concerns, parallel
+implementers, one cut-over, the `RUNTIME` patch) · plan `docs/sdlc/plans/small-oop-modules.md`,
+re-derived at `95b28ba` from this spec at `92fbacd` and amended in the same evening pass for
+Q22–Q24 · next: the human commits spec, plan and questions file, then
+`/rr-build-all docs/sdlc/plans/small-oop-modules.md` while no task touching `state.py` is in
+flight (Q14)
+
+Reviews — the external review of 17:15 and the architect's independent check — are in
+`docs/sdlc/specs/small-oop-modules.reviews.md` (Optimisation 4: evidence in linked material).
+Spec budget, as defaults (Optimisation 4): 17 requirements against the default of 12, kept
+with the exception stated — each is one observable pin of a behaviour-0 refactoring, and
+merging them would make the compound requirements the proposal warns against (Q20); six open
+concerns (Q21), the rest listed as resolved with what closed each.
 
 The slug `small-oop-modules` stays — the plan, the roadmap and the questions file name it.
 The title no longer says OOP because the design is not one: modules split by responsibility,
@@ -14,12 +25,14 @@ a class only where a resource or a value needs one (Q3, Q9, Q11), nothing inheri
 ## Intent
 
 **Problem.** Six scripts carry the plugin's decisions in files too large to read whole:
-`skills/ai-task/state.py` 5 367 lines, 244 top-level functions, 0 classes, 70 module
-globals, four of them mutated at run time through three `global` statements (`RUNTIME`,
+`skills/ai-task/state.py` 5 367 lines, 244 top-level functions, 0 classes, 76 module
+globals (names assigned at module level, counted by `ast`), four of them mutated at run time
+through three `global` statements (`RUNTIME`,
 `MUTATING` at `:5342`, `LOCK_DEPTH` `:1349`, `DIALOG_PICK` `:2911`);
 `skills/project-update/adopt.py` 2 219; `skills/project-update/update.py` 2 146;
 `skills/ai-task/memory_sync.py` 1 571; `hooks/guard/paths.py` 1 545; `hooks/runtime-gate.py`
-1 214 (re-measured 2026-10-31 17:15, `wc -l`, while T-2026-10-31-1650 is in flight). Every one is over the
+1 214 (re-measured 2026-10-31 20:30 with `wc -l`, after T-2026-10-31-1650 closed in `4e8dddc`;
+unchanged since 17:15, when that task sat at its gate with its edits already in the tree). Every one is over the
 ~4 000-line read cap or close to it, so an agent that changes one reads it through
 `grep -n` and bounded windows, never as a whole — the T-2026-10-20-003 reviews found an
 untested BLOCKER twice in exactly that mode. The sections `state.py` already draws
@@ -57,7 +70,7 @@ entry path is a contract — 109 files name it (Q2). `bin/riskrails.js` is out (
 Not a goal: fewer subcommands, a new state schema, a plugin API for other tools, or
 performance work beyond "not slower".
 
-**Open questions.** See the last section; none blocks the plan of WP1.
+**Open questions.** See §Open questions; none blocks the plan of WP1.
 
 ### Decisions taken
 
@@ -81,11 +94,16 @@ performance work beyond "not slower".
 - **WP6 (hooks/runtime-gate.py): keep it in the order, or make it conditional?** — conditional: planned only after the measurement task shows Codex in use, or when a Codex-side bug forces a change to the file; WP1–WP5 unaffected *(Q19, by claude · self-answer after the session's assessment and the Codex Astra second opinion of 2026-10-31, over 70 % confident, via prose at 2026-10-31T17:41:29Z)*
 - **Does the split still block every other roadmap row (Q5)?** — no: the split blocks only work that edits `state.py` internals or the extracted interfaces; the policy tasks of the Optimisation section and urgent fixes run as separate tasks, never mixed with a WP — this narrows Q5 *(Q15, by Ivan Kakurov, reply "Only state.py work" in the app, recorded by claude via picker at 2026-10-31T17:46:24Z)*
 - **The next extraction after the first moves: `setup.py` or the dialog and consent readers? (OQ-M1, from the earlier ADR 0001 version of this spec, `9aa0299`)** — the dialog and consent readers (A), with `setup.py` (B) later; A meant one shared stdlib reader replacing the copies in `hooks/guard/dialog.py` and `state.py`. **Superseded by Q10**: hooks and `rr_state` share no code, each keeps its own dialog reader, so the shared-reader part does not apply; the dialog code moves inside WP1 as `rr_state/dialog.py` (layer 5) *(OQ-M1, by Ivan Kakurov, 2026-10-31; marked superseded by Q10 by Ivan Kakurov's pick in the app, recorded by claude on 2026-10-31 when the ADR 0001 version was replaced in the merge `0671755`)*
+- **Spec budget (Optimisation 4, defaults): 17 requirements against the default of 12 — merge, or keep with the exception stated?** — keep all 17; the exception is stated in the spec header: each requirement is one observable pin of a behaviour-0 refactoring, and merging them would make the compound requirements the proposal warns against *(Q20, by claude · self-answer in the refine pass of 2026-10-31, over 70 % confident by the developer's rule, via prose at 2026-10-31T18:08:35Z)*
+- **Flagged concerns after the refine pass: which stay open (the default is at most 6)?** — open: FC1 (OQ2), FC5 (OQ1), FC7, FC8, FC9, FC11; resolved, one line each with what closed it: FC2, FC3, FC4, FC6, FC10, FC12–FC18 *(Q21, by claude · self-answer in the refine pass of 2026-10-31, over 70 % confident by the developer's rule, via prose at 2026-10-31T18:08:35Z)*
+- **Who implements WP1 and in what shape?** — `/rr-build-all` with parallel implementers on BALANCED (`sonnet`, Sonnet 5.5) at effort `high`; a module step creates one file under `rr_state/` and nothing else, waits only for the layers it imports, the cut-over step edits `state.py` once; the suite once after the last step, then one review, fixes as parallel batches — supersedes FC4 *(Q22, by Ivan Kakurov, instruction in the `/rr-spec` call of 2026-10-31 (evening): implementers on Sonnet 5.5 high in parallel where possible, waiting where needed, the whole code first and then review/test, big steps with minimal tests; recorded by claude via prose at 2026-10-31T18:37:09Z)*
+- **Cut-over: once, or per layer band?** — once: between s2 and the cut every step is a new file checked by the layout test, pylint and an import; the four suites run at s2 and at the cut, `verify --scope all` and e2e once, then one review *(Q23, by claude · self-answer in the refine pass of 2026-10-31, over 80 % confident by the developer's rule of this pass, via prose at 2026-10-31T18:37:09Z)*
+- **`tests/test_dialog_contract.py:314` patches `state_mod.RUNTIME` by name and calls `dialog_on(root)`, which reads the global through `own_runtime()` (`state.py:503`): edit the test, keep a process-wide memo, or forward the attribute?** — edit two lines of the test: the inert patch at `:133` is dropped, `:314` passes `runtime=runtime`; `dialog_on` and `own_runtime` default to `runtime="unknown"` (R4); WP1's only test edit beside R9, listed in R6, whose generated list also greps `patch.object(state_mod, "<name>")` *(Q24, by claude · self-answer in the refine pass of 2026-10-31, over 80 % confident by the developer's rule of this pass, via prose at 2026-10-31T18:37:09Z)*
 
 ## Requirements
 
 Each is testable; the outcome it serves is in brackets. Items marked † were corrected after
-the independent check (see that section).
+the independent check (`docs/sdlc/specs/small-oop-modules.reviews.md`).
 
 - **R1 Entry contract.** `skills/ai-task/state.py` stays at its path, executable, runnable
   as `python3 -I state.py` and as `import state; state.main()`. Every subcommand, flag,
@@ -99,12 +117,12 @@ the independent check (see that section).
   assigned to exactly one module (a partition, produced by a script at plan time, not the
   indicative map below); module sizes are reported, 600 lines advisory (Q16); each module
   sits in one layer of the Design's ladder. `tests/test_state_layout.py` prints line counts,
-  checks completeness of the
-  partition (every `def` of the golden tree's file found once), and the import graph (R10).
+  checks completeness of the partition (every `def` of the golden tree's file found once —
+  phase-aware, Q23: while the entry still holds the code it checks the modules present, once
+  the entry is the shim exactly one home per def), and the import graph (R10).
   The pylint `too-many-*` checks are off in `.pylintrc` and are not the measure. [O2]
 - **R4 A class needs a resource or an invariant; three pass today; nothing inherited; two
-  process-wide memos, no `global`.** † (Q9, Q11, Q17, replacing the six classes of the first
-  draft.) The rule, not a quota: a class holds a named resource or keeps a named invariant,
+  process-wide memos, no `global`.** † (Q9, Q11, Q17.) The rule, not a quota: a class holds a named resource or keeps a named invariant,
   and its docstring says which; a fourth class needs that sentence, not a spec change. `Runtime` (runtime name and the mutating
   flag, a frozen dataclass built by `main` exactly as today's three code paths do) and
   `Profile` (the resolved plan, tiers, budgets, dialog tool — a frozen dataclass) are value
@@ -121,7 +139,8 @@ the independent check (see that section).
   (`locks.py`, one per process — nested `question_lock` calls on two paths must not
   deadlock) and the dialog-pick memo (`dialog.py`). No `global` statement anywhere; the
   layout test greps for it. Functions the suites call directly with today's signatures
-  (`journal_line`, `load`, `sync_answers`) take the runtime values as keyword parameters
+  (`journal_line`, `load`, `sync_answers`, `dialog_on`, `own_runtime` — Q24) take the runtime
+  values as keyword parameters
   whose defaults equal today's import-time values (`runtime="unknown"`,
   `mutating=False`). [O2, O3]
 - **R5 Characterization golden first.** † Before the first move, a commit of its own adds
@@ -139,15 +158,22 @@ the independent check (see that section).
   never a generic path regex (a generic one would hide a moved `__file__`). Red on any
   other difference. [O1]
 - **R6 Existing tests are the proof, not the patient.** † No test file is edited in WP1
-  except `tests/test_install_dry_run.py` (R9) and the two new files of R3 and R5. The names
-  the suites reach as `state_mod.<name>` (33 on 2026-10-31: `validate_label`,
-  `AGENT_MARKERS`, `journal_line`, `load`, `is_document`, `abandon_old`, `LEDGER_LINE_MAX`,
-  … and the modules `state_mod.json`, `state_mod.os`) are re-exported by the entry; the list
-  is generated from `grep -oh 'state_mod\.[A-Za-z_]*' tests/*.py` at plan time and checked
-  by the layout test. Moved code keeps calling `json.dump` and `os.replace` as module
-  attributes (the suites patch them there), never `from json import dump`. A test that
-  checks `state_mod.__file__` still sees the entry. Moving the suites onto package imports
-  is OQ3. [O1]
+  except `tests/test_install_dry_run.py` (R9), two lines of `tests/test_dialog_contract.py`
+  (Q24, below) and the two new files of R3 and R5. The names the suites reach as
+  `state_mod.<name>` (33 on 2026-10-31: `validate_label`, `AGENT_MARKERS`, `journal_line`,
+  `load`, `is_document`, `abandon_old`, `LEDGER_LINE_MAX`, … and the modules
+  `state_mod.json`, `state_mod.os`) are re-exported by the entry; the list is generated at
+  plan time from `grep -oh 'state_mod\.[A-Za-z_]*' tests/*.py` **and** from
+  `grep -oh 'patch\.object(state_mod, "[A-Za-z_]*"' tests/*.py` (a string-named attribute
+  the first grep misses — today only `RUNTIME`), and checked by the layout test. Moved code
+  keeps calling `json.dump` and `os.replace` as module attributes (the suites patch them
+  there), never `from json import dump`; the same for the package's own seams — `from
+  rr_state import fs` and `fs.now()`, never `from rr_state.fs import now`. A test that checks
+  `state_mod.__file__` still sees the entry. A re-export serves a read, never a patch:
+  `test_dialog_contract.py:314` patches `state_mod.RUNTIME` and calls `dialog_on(root)`, which
+  reads the global through `own_runtime()` (`state.py:503`); after R4 there is no global to
+  patch, so that line passes `runtime=runtime` and the inert patch at `:133` is dropped — the
+  two-line edit of Q24, read by the review. Moving the suites onto package imports is OQ3. [O1]
 - **R6a One entry-path constant.** † Seventeen `__file__` uses in today's file mean "the path
   of state.py": the dialog pick and `validate_label` compare it with a label's script path,
   the refusal texts and `state_label` print it, `load_resolver` and the migrations lookup
@@ -251,7 +277,7 @@ three classes of R4; every other row is functions over the dict and the paths.
 | 8 | `memory_cmd.py` | the `memory` / `recall` surface over `memory_store`, `memory_sync` (lazy imports kept) | — |
 | 9 | `cli.py` | `main`: parser, subparsers, the three runtime resolutions exactly as today (topic mode → `unknown`; `profile` → short chain; else `detect_runtime`), `set_defaults(func=…)` | — |
 
-Module sizes are checked by the layout test; `dialog.py` is the candidate for a further split
+Module sizes are reported by the layout test (advisory, Q16); `dialog.py` is the candidate for a further split
 (`labels.py`) if it measures over 600.
 
 ### Data flow
@@ -278,35 +304,44 @@ gate locks the questions file and `write_task_md` locks it again inside, and a p
 counter would deadlock on the second descriptor. `DIALOG_PICK` becomes the memo in
 `dialog.py`. Nothing else is process-wide.
 
-### Order of moves inside WP1
+### Order of moves inside WP1 (Q22, Q23)
 
-0. Partition script + import graph on paper (R3, R10); fix the map until acyclic. 1. Golden
-(R5) on the untouched tree; commit. 2. `ENTRY` constant replaces every `__file__` (R6a) —
-still in the single file; golden green (this is the one move the golden must see as a
-no-op). 3. Layers 0–1: `fs.py`, `locks.py`, `runtime.py`, `policy.py`; entry re-exports;
-golden green. 4. Layers 2–3: `journal.py`, `task.py`. 5. Layer 4: `questions.py`,
-`ledger.py`, `gate.py`. 6. Layers 5–7: `dialog.py`, `authority.py`, `report.py`,
-`handoff.py`, `profile.py`. 7. Layer 8, one module per step. 8. `cli.py`; the entry shrinks
-to the shim; layout test; docs (R11). Each move is one step with
-`tests/test_state_characterization.py tests/test_ai_task_state.py
-tests/test_dialog_contract.py tests/test_dialog_gate.py` as its step tests; the suite once
-at the end (`verify --scope all`), then e2e.
+0. Partition script + import graph on paper (R3, R10); fix the map until acyclic — `s0`, in
+parallel with 1. 1. Golden (R5) on the untouched tree; its own commit — `s1`. 2. `ENTRY`
+replaces every `__file__` (R6a), still in the single file; the four suites green — `s2`, the
+one move the golden must see as a no-op, serial. 3. **Copy phase**: one step per module of
+the map, each creating `rr_state/<mod>.py` and nothing else — the defs the partition assigns
+to it, copied from `state.py` with their calls qualified by module (`fs.now()`, R16), the
+core/shell label in the docstring; `state.py` is not edited, so the scope guard has nothing
+to serialise and the implementers run in parallel, a step waiting only for the layers it
+imports (layer 0 first, layer 8 last). Step test: the layout test on the partial tree (the
+present modules' defs match the partition, import, hold no `global` or `__file__`) and
+pylint on the new file (`undefined-variable`, `import-error` — the mechanical errors of a
+move). 4. **Cut-over**, one step: `cli.py`, the entry shrinks to the shim (the copied defs
+deleted, the re-exports of R6 added), the layout test's final form, `.pylintrc`, the dry-run
+list (R9), the two lines of Q24; the four suites green. 5. Docs (R11), a step of its own,
+parallel with 3. Then, once: `verify --scope all`, e2e, one review, fixes as batches — the
+`/rr-build-all` loop. The golden therefore runs at s2 and at the cut, not after each layer
+(Q23); what locates a mechanical error between them is static — pylint, the import, the
+partition check — and every module is its own diff.
 
 ### Work packages
 
 | WP | File | Lines | Shape | Golden | Note |
 |---|---|---|---|---|---|
-| 1 | `skills/ai-task/state.py` | 5 256 | entry + `rr_state/` | new, R5 | this spec's plan |
+| 1 | `skills/ai-task/state.py` | 5 367 | entry + `rr_state/` | new, R5 | this spec's plan |
 | 2 | `skills/project-update/adopt.py` | 2 219 | entry + `adopt/` | the adopt suite's `--dry-run` fixtures | deletion gate text byte-identical |
-| 3 | `skills/project-update/update.py` | 2 114 | entry + `update/`, migrations untouched | dry-run output over the fixture projects | `--confirm-delete` path guard spelling unchanged |
+| 3 | `skills/project-update/update.py` | 2 146 | entry + `update/`, migrations untouched | dry-run output over the fixture projects | `--confirm-delete` path guard spelling unchanged |
 | 4 | `skills/ai-task/memory_sync.py` | 1 571 | modules beside `memory_store`, `memory_compact`, `memory_format` | `tests/fixtures/memory/goldens/` exists | packages mode `verify --fresh-clone` |
-| 5 | `hooks/guard/paths.py` | 1 452 | already a package: split `paths.py` into rule groups | `test_guard_characterization` golden exists | **byte-identical guard golden**; CLAUDE.md `SH_WORD`/`SH_RE` invariant |
+| 5 | `hooks/guard/paths.py` | 1 545 | already a package: split `paths.py` into rule groups | `test_guard_characterization` golden exists | **byte-identical guard golden**; CLAUDE.md `SH_WORD`/`SH_RE` invariant |
 | 6 | `hooks/runtime-gate.py` | 1 214 | OQ1: single file (`.pylintrc`: "must run as a single file") or shim + package like `ai-guard.py` + `guard/` | new | **conditional (Q19)**: planned only after the measurement task shows Codex in use, or when a Codex-side bug forces a change; Codex re-approves a changed hook entry; the entry line must not change |
 
-Order: 1 → 2 → 3 → 4 → 5, one task each, the next starting after the previous closed
-green; 6 only on its condition (Q19). Every WP is a refactoring by C3; its weight is measured by `/rr-plan`
-(Policy conformance gives the expected mode). WP2–WP6 each repeat step 0 and the
-`__file__` audit of R6a for their own file before the first move.
+Order: 1 → 2 → 3 → 4 → 5, one task each in the shape of Q22–Q23 (`/rr-build-all`: module
+steps create files, one cut-over, parallel implementers), the next starting after the
+previous closed green; 6 only on its condition (Q19). Every WP is a refactoring by C3; its
+weight is measured by `/rr-plan` (Policy conformance gives the expected mode). WP2–WP6 each
+repeat step 0 and the `__file__` audit of R6a for their own file before the first copy.
+Sizes: `wc -l` on 2026-10-31 20:30, after T-2026-10-31-1650 closed.
 
 ### Alternatives rejected
 
@@ -318,7 +353,10 @@ green; 6 only on its condition (Q19). Every WP is a refactoring by C3; its weigh
 - **A new entry and 109 rewrites (Q2-B).** Touches every skill, the installer and the docs
   for no behaviour gain, and breaks the installed copy until `npx riskrails` runs.
 - **One big-bang commit.** The golden would catch a regression but not locate it;
-  incremental moves with the golden green after each keep every diff reviewable.
+  incremental moves keep every diff reviewable. The copy phase of Q23 is not this: every
+  module is its own step and diff, pylint and the import check each as it lands, and the
+  cut-over deletes what was already copied and checked — only the per-layer golden run is
+  given up (Q23), for the parallel implementers of Q22.
 - **Several scripts with their own CLIs** (`questions.py`, `dialog.py` …). The skills'
   `$STATE` variable and the journal's one-writer rule assume one process owns the task; two
   entry points would need a lock protocol — a behaviour change.
@@ -388,6 +426,8 @@ questions.parse_questions(path) -> list[dict]      core: no I/O beyond the read 
 questions.render_*(…) -> list[str]                 core
 questions.write_questions(path, lines)             shell
 locks.question_lock(path) / locks.ledger_lock(root)        one re-entrancy counter per process
+dialog.dialog_on(root, runtime="unknown") -> dict | None   runtime.own_runtime(runtime="unknown")
+                                                   the keyword the suite passes instead of patching (Q24)
 fs.now() / fs.now_ms() / fs.run_text(root, argv)   the seams, patched as module attributes
 ```
 
@@ -402,6 +442,11 @@ replacement of the entry's path.
 **`tests/test_install_dry_run.py` delta.** The installed-files list (`:379-395`) gains
 `skills/ai-task/rr_state/__init__.py` and `skills/ai-task/rr_state/cli.py`.
 
+**`tests/test_dialog_contract.py` delta (Q24).** `:133` loses the inert
+`mock.patch.object(state_mod, "RUNTIME", runtime)`; `:314` calls
+`state_mod.dialog_on(root, runtime=runtime)` instead of patching. Two lines; nothing else in
+the suites changes.
+
 **Config keys, schema, journal vocabulary, questions format, exit codes:** unchanged.
 
 ## Policy conformance
@@ -413,8 +458,10 @@ replacement of the entry's path.
 - **C3** — refactoring only: Q6, R12; the plan has no row that fixes, adds or removes
   behaviour. A finding that wants one becomes its own bugfix task.
 - **C4** — each WP names its files; WP1 touches `skills/ai-task/state.py`,
-  `skills/ai-task/rr_state/**`, the two new test files, the dry-run test, `.pylintrc`, the
-  three doc files. An edit outside is `SCOPE_CHANGE_REQUIRED`.
+  `skills/ai-task/rr_state/**`, `tools/state-partition.py`, the two new test files with the
+  partition and golden fixtures, the dry-run test, two lines of `tests/test_dialog_contract.py`
+  (Q24), `.pylintrc`, the three doc files. An edit outside is `SCOPE_CHANGE_REQUIRED`; a
+  module step owns one file (Q22).
 - **C5** — no commit, push or approval by the agent; WP1's commit series is the human's.
 - **C6** — weighed by effect on a user project's decisions: no guard decision moves, no
   `state.py` refusal changes, no approval or install path changes — behaviour 0, the
@@ -426,13 +473,20 @@ replacement of the entry's path.
   for the whole WP; a review BLOCKER on a specific move adds a case to it.
 - **`.ai/AGENTS.md` #6** — `.ai/project/` entries that name `state.py` internals are
   relabelled in the same task (R11).
-- **`.ai/policies/testing.md`** — step tests are the two state suites; `verify --scope
-  all` once after the last step; e2e once; failures as one batch.
-- **`~/.claude/riskrails/routing.md`** — the session implements; `/rr-build-all` would send
-  the steps to BALANCED implementers but every step shares `state.py`, so `start` serialises
-  them; row by row with `/rr-build` costs the same and keeps the diff in the session. Design
-  was written in the session (Fable, the model the triggering intent names) and checked
-  independently by `architect` on STRONG (FC10).
+- **`.ai/policies/testing.md`** — step tests: the four suites at s2 and at the cut-over, the
+  layout test and pylint on the new file for a module step (Q23); `verify --scope all` once
+  after the last step; e2e once; failures as one batch.
+- **`~/.claude/riskrails/routing.md` and `.ai/policies/model-routing.md`** — implementers
+  on BALANCED (`sonnet`, Sonnet 5.5 in the Max profile) at effort `high`, in parallel through
+  `/rr-build-all` (Q22; `batch.tier` BALANCED and `batch.parallel` 5 in `weight.json`): three
+  or more parallel agents run at BALANCED, never above; `high` is a raise over the tier's
+  `low`–`medium`, named here as routing.md asks — the developer's instruction, and a wrong
+  qualification in a copied call is a `NameError` only the cut-over would otherwise see. The
+  session records every step, run and verdict (one writer of the state), runs `verify` and
+  writes the conclusion; one reviewer per pass at the mode's tier. The module steps never
+  share a file (Q23), so `start` has nothing to serialise but the layers. Design was written
+  in the session (Fable, the model the triggering intent names) and checked independently by
+  `architect` on STRONG (FC10, the reviews file).
 - **`.ai/policies/security.md` and the hooks' `-I -S` boundary** — R15: the package and the
   hooks never import each other; the layout test measures it. The duplication the external
   review noticed is a boundary, not a debt.
@@ -442,88 +496,84 @@ replacement of the entry's path.
 
 ## Flagged concerns
 
+Six open (Q21); the rest resolved, one line each with what closed it. A human overturns any
+decision named here with `state.py answer --topic small-oop-modules Qn=<letter>` (FC7).
+
 - **FC1 The scope guard and the SDLC flow disagree.** This spec was written while
   T-2026-10-30-2251-risk-burndown-b5 was in flight. The scope guard refused the Write tool
   for every path — `docs/sdlc/**` and the session scratchpad outside the repository alike
   (`SCOPE_CHANGE_REQUIRED`, `hooks/guard/scope.py:367`). The questions file went through
   `state.py ask --topic`, the sanctioned route; the spec and the intent, both new files,
   went through the shell, which the scope guard does not cover; the edit of the existing
-  `ROADMAP.md` was refused by the runtime's own classifier and was not made (FC11). A guard
-  written per task met a workflow that runs per activity, and the gap is a hole as much as a
-  nuisance: an agent on a task can write any new document through `cat`. The human decides:
-  an allow list for `docs/sdlc/**` and the scratchpad in the scope guard (allows what was
-  denied — behaviour 2, full mode), or the rule that `/rr-spec` waits for a free tree. OQ2;
-  not fixed here.
-- **FC2 R3 looks like a size gate.** The redesign (spec R4) removed size from every gate. R3
-  limits a module's length in a layout test; it decides nothing about a task. Stated so the
-  plan does not reintroduce lines as a weight input.
-- **FC3 The entry becomes a façade.** Re-exporting 33 names keeps the suites untouched (R6)
-  but leaves two import paths for one function. Accepted for WP1; the cleanup is OQ3.
-- **FC4 `/rr-build-all` gains nothing here.** Every WP1 step edits `state.py`; `start`
-  serialises steps that share a file, so the implementers run one at a time. Use `/rr-build`
-  row by row, or accept a serial batch for its review loop alone.
+  `ROADMAP.md` was refused by the runtime's own classifier and was not made (FC11). It
+  happened again on 2026-10-31 at 17:15, with T-2026-10-31-1650 at its gate: Write and Edit
+  were refused for this spec and for the scratchpad, Q9–Q19 went through `state.py ask`, the
+  spec's edits went through the shell, and the runtime's classifier refused the sentence that
+  recorded exactly this — so the record was written in the evening pass, with no task in
+  flight. A guard written per task met a workflow that runs per activity, and the gap is a
+  hole as much as a nuisance: an agent on a task can write any new document through `cat`.
+  The human decides: an allow list for `docs/sdlc/**` and the scratchpad in the scope guard
+  (allows what was denied — behaviour 2, full mode), or the rule that `/rr-spec` waits for a
+  free tree; Optimisation 2 (activity scope) is the measured proposal. OQ2, Ivan's; not
+  fixed here.
 - **FC5 WP6 may not be splittable.** `.pylintrc` records that `runtime-gate.py` "must run as
   a single file" for two runtimes, and Codex drops trust on a changed hook entry. The
   `ai-guard.py` + `guard/` pattern shows a shim can work; whether the Codex entry survives it
-  is OQ1, decided at WP6's plan with a live probe, never assumed.
-- **FC6 Blocking the roadmap parks fixes.** Q5 blocks ROADMAP §2 (Memory M1/M9 bugfixes,
-  the shared policy texts that still describe T0–T6, the three unprotected hooks) and §1
-  until WP6 closes. The developer chose that on 2026-10-31 with one exception, the risk
-  burndown in flight. A production-breaking hotfix in a user project is not covered by the
-  exception; if one is needed, the human grants it in writing — this spec does not.
-- **FC7 Eight Hybrid self-answers.** Every decision above was proposed and accepted by the
-  agent under `agentic-sdlc-modes` Q1 = B, recorded `via prose` because a self-answer `via`
-  does not exist yet (ROADMAP §1). Q5 and Q8 quote the developer's instruction verbatim. A
-  human overturns any with `state.py answer --topic small-oop-modules Qn=<letter>` and the
-  plan re-reads the file.
+  is OQ1, decided at WP6's plan with a live probe, never assumed — and WP6 is conditional
+  (Q19).
+- **FC7 Hybrid self-answers.** Of 24 questions, 20 were proposed and accepted by the agent
+  under `agentic-sdlc-modes` Q1 = B (Q1–Q4, Q6, Q7, Q9–Q14, Q16–Q21, Q23, Q24), recorded
+  `via prose` because a self-answer `via` does not exist yet (ROADMAP §1); Q5, Q8, Q15, Q22
+  and OQ-M1 are the developer's. The threshold was 70 % until the evening pass and 80 % from
+  it. A human overturns any with `state.py answer --topic small-oop-modules Qn=<letter>` and
+  the plan re-reads the file.
 - **FC8 Golden normalisation can hide a diff.** The list grew after the independent check
   (M1); it is still the place a real change can hide. `NORMALISE` is reviewed as part of the
   golden commit (R5); a reviewer's first question is "what does `NORMALISE` erase", and the
   entry path is an exact token, never a regex.
-- **FC9 Behaviour 0 and a 5 000-line diff.** C6 and the weight table put this change low;
-  its blast radius is every skill. The mitigation is the golden plus the suites, not a
-  higher mode; the developer may still raise the mode by hand, which the journal records.
-- **FC10 Who designed this.** The skill says `architect` on STRONG; the triggering intent
-  names Fable as the architecture model, and the session is Fable. The design was written in
-  the session and sent to `architect` on `opus` for an independent check; two BLOCKERs and
-  five HIGHs came back and are folded in (next section). Neither is a human review.
+- **FC9 Behaviour 0 and a 5 000-line diff.** C6 and the weight table put this change low
+  (W 4, guarded, measured again on the widened files at 20:36); its blast radius is every
+  skill. The mitigation is the golden plus the suites, not a higher mode; the developer may
+  still raise the mode by hand, which the journal records. Q23 concentrates the proof at two
+  points, s2 and the cut-over, with static checks between — the review reads the cut-over
+  diff first.
 - **FC11 The ROADMAP was not updated.** The order of work (§0: risk burndown → this spec →
-  the multi-agent intent; everything else blocked) is drafted but the edit of `ROADMAP.md`
-  was refused while B5 is in flight (the auto-mode classifier, after the scope guard).
-  The record is this spec and the questions file until a human applies the draft.
+  the multi-agent intent; everything else blocked, narrowed by Q15 to `state.py` work) is
+  drafted, but `ROADMAP.md` was last changed at `3426735` (2026-10-29): the edit was refused
+  while B5 was in flight (the auto-mode classifier, after the scope guard). The record is
+  this spec and the questions file until a human applies the draft.
 
-- **FC12 The plan on file is stale.** `docs/sdlc/plans/small-oop-modules.md` (written
-  2026-10-31, not started) derives from the six-class draft: its R4 row expects "the six
-  class names exist" in the layout test and spreads them over s3–s8. After Q9–Q14 the plan
-  is re-derived with `/rr-plan`; nothing in it has run, so nothing is undone.
-- **FC13 No second independent check.** The skill sends the design to `architect` on
-  STRONG; this revision was not sent. The delta removes structure (three classes instead of
-  six, functions over the dict) and adds two measurable rules (R15, R16); the first check's
-  findings B1–L4 stand unchanged — H3 (lock re-entrancy) and H4 (fixed signatures) are
-  untouched by dropping the wrappers. The source of the revision is model output the
-  developer pasted (§External review), not a human review. The human may still ask for a
-  STRONG pass before `/rr-plan`.
-- **FC14 The naming comment is out of this spec's scope.** The same paste assessed the
-  product name (RiskRails, about 8/10; `claude-agentic` rejected as runtime-bound). This
-  spec takes from it only that the package prefix `rr_` follows the product name; domain,
-  npm and trademark checks are a separate task and are not opened here.
-- **FC15 Timing against the in-flight task.** Q14: WP1's golden is recorded only on a tree
-  where T-2026-10-31-1650 (files `hooks/guard/dialog.py`, `skills/ai-task/state.py`) and
-  every other task touching those files has closed, and the risk burndown the plan header
-  names. A golden recorded earlier would pin a tree that changes under it.
-- **FC16 This revision's questions file counts against T-1650.** `state.py status` after
-  Q9–Q14: fact (b) RED, "outside the task's files: … small-oop-modules.questions.md". That
-  task closes only once this spec and the questions file are committed on their own, as the `spec:` commit below;
-  OQ2 remains the human's.
+**Resolved** (what closed each):
 
-- **FC17 The blockade is narrowed, not lifted.** Q15 (the developer, 17:46) limits Q5 to work
-  that edits `state.py` internals or the extracted interfaces. The Optimisation tasks and
-  urgent fixes may start; a bugfix inside `state.py` still waits for the WP that owns the
-  code, and ROADMAP.md still shows the old order (FC11).
-- **FC18 The second opinion is a model, not a human.** Codex on `gpt-6-astra`, read-only, with
-  the session's measurements as input, one run, 2026-10-31 17:35; its `file:line` evidence
-  was spot-checked where it changed a decision (Q16, Q17, Q19) and not elsewhere. The
-  developer named the agent; the EXPERT-tier rule of `routing.md` was met by that naming.
+- FC2 R3 looked like a size gate — Q16: the 600-line measure is advisory; the layout test
+  fails on cycles, upward edges, `global`, forbidden constructs and hook crossings only.
+- FC3 the entry becomes a façade — accepted for WP1; the cleanup is OQ3.
+- FC4 `/rr-build-all` gained nothing while every step edited `state.py` — superseded by Q22
+  and Q23: module steps create files only, so the implementers run in parallel and one
+  cut-over step edits the entry.
+- FC6 blocking the roadmap parked fixes — Q15 (the developer): only work on `state.py`
+  internals or the extracted interfaces waits; a production-breaking hotfix in a user
+  project is a separate task, never mixed with a WP.
+- FC10 who designed this — the session (Fable) wrote it, `architect` on STRONG checked it;
+  the findings and what they changed are in `small-oop-modules.reviews.md`.
+- FC12 the plan on file was stale (the first draft) — re-derived at `95b28ba` from the spec
+  at `92fbacd`, amended in the evening pass for Q22–Q24; nothing in it had run.
+- FC13 no second architect check of the revision — accepted: the revision removed structure
+  and added two measurable rules; the first check's B1–L4 still shape the steps.
+- FC14 the naming comment — out of scope; `rr_state` stays the package name.
+- FC15 timing against T-2026-10-31-1650 — that task closed in `4e8dddc`; the precondition of
+  `start` (no task touching `state.py` or `hooks/guard/dialog.py` in flight, Q14) is checked
+  again at start.
+- FC16 the questions file counted against T-1650's fact (b) — cleared by the commit
+  `92fbacd`.
+- FC17 the blockade narrowed, not lifted — recorded as Q15; a bugfix inside `state.py` still
+  waits for the WP that owns the code.
+- FC18 the second opinion was a model — `gpt-6-astra`, read-only, one run, 17:35; its
+  `file:line` evidence was spot-checked where it changed Q16, Q17, Q19.
+- FC19 (found in the evening pass) a string-named patch a re-export cannot serve —
+  `test_dialog_contract.py:314` patches `state_mod.RUNTIME` and `dialog_on(root)` reads it
+  through `own_runtime()`; Q24: two lines of that test change, listed in R6, and R6's
+  generated list greps string-named patches too.
 
 ## Open questions
 
@@ -534,8 +584,9 @@ replacement of the entry's path.
   if allowed; not this spec's work.
 - **OQ3 (after WP1)** Move the suites from `import state` to `rr_state.*` and drop the
   re-exports. Owner: a later tests-only task.
-- **OQ4 (WP1, plan-time)** The 600-line limit: confirm or tighten once the partition script
-  measures the modules; the limit is a layout test, never a gate.
+- **OQ4 (closed by Q16)** The 600-line measure is advisory; the partition script and the
+  layout test report sizes, and the task report notes a module over it with the reason.
+  Nothing left to decide.
 - **OQ5 (WP1, plan-time)** Whether `authority.py` (layer 6) is one module or folds into
   `dialog.py`; decided by the import graph of step 0, not by taste.
 
@@ -563,51 +614,3 @@ tokens per task. Merged, ranked, each its own task outside the WPs (Q18):
 Both reviews keep, untouched: characterization of observable behaviour including refusal
 paths and exit codes (R5); human authorization bound to the session and the recorded command
 (`state.py:2088`, `:2100`, `:2161`); hook isolation with its limited duplication (R15).
-
-## External review (2026-10-31, model output pasted by the developer, 17:15)
-
-The developer pasted an assessment of "split into OOP modules, SOLID throughout" against
-this repository and asked for the spec to take it into account; where the session was over
-70 % sure of the answer it recorded it (Q9–Q14, the developer's rule of 2026-10-31). Its
-measurements (5 362 lines, ~244 functions) match the re-measurement within five lines.
-
-| Point made | Checked against | Folded into |
-|---|---|---|
-| A full OOP/SOLID rewrite adds indirection and migration risk; split by responsibility, OOP only where there is state and invariants | Q3 already said so; the six classes of the first draft went further than that | title, O3, R4, Q9 |
-| A rich `TaskState` complicates serialisation and compatibility; the JSON is a public contract | `load` returns the plain dict (`state.py:377`), `save` writes it (`:423`); hooks and both runtimes read the file | R4, Interfaces, Alternatives |
-| `hooks/guard/dialog.py` does not import `state.py` on purpose (`python3 -I -S`); merging them breaks a security boundary | `hooks/guard/dialog.py:21-27` imports only the stdlib; `hooks/ai-guard.py:27`, `hooks/dialog-gate.py:17` | O5, R15, Q10 |
-| `sensors.py` is the precedent for a reasonable extraction | `state.py:84` "measurement only; it never writes this file"; 457 lines, subprocess and git only | R16, Q12 |
-| Functional core + imperative shell; eight files (`state_store`, `journal`, `questions`, `decisions`, `lifecycle`, `profile`, `cli`, entry) | the ladder of the independent check (B2) already groups this way; `lifecycle` as one file would be ~2 000 lines | Design §Layers (eight groups), Q13, Alternatives |
-| OOP only for a resource/transaction holder, a transition with invariants, a dependency seam, a value object | `ledger_lock` holds `consent.lock` by `O_EXCL` (`:2513`); `Runtime` and `Profile` are values; the seams are module attributes the suites already patch | R4, R16, Q9, Q12 |
-| Not: inheritance, `Abstract*`, a DI container, single-implementation interfaces, a repository/service per JSON operation, a static-method namespace class | none exists today (0 classes); the layout test keeps it so | R4, Q11 |
-| Of SOLID, S matters; D and I at I/O boundaries; O on proven need; L irrelevant | — | R4, R16 |
-| Extraction first, behaviour unchanged, the entry kept as a façade, each extraction its own small refactoring with characterization tests | already R1, R5, R6, Q4, Q6 | unchanged |
-| Not mixed with the current task on `state.py` and `dialog.py` | T-2026-10-31-1650 in flight, at its gate | Q14, FC15 |
-| The product name (RiskRails) | out of scope | FC14 |
-
-## Independent check (architect, STRONG tier, 2026-10-31, read-only)
-
-Verdict: **sound with corrections** — the thin entry, the golden-first order and the goal
-hold; the first module map, the `Runtime` shape and the golden's coverage did not. Every
-finding below was spot-checked in the session against the file before it was folded in.
-
-| # | Finding | Folded into |
-|---|---|---|
-| B1 | 17 `__file__` uses mean "the path of state.py" — the dialog pick and `validate_label` compare it with a label's script path (`state.py:2407`, `:2807`), refusal texts print it, `load_resolver` and the migrations lookup walk `dirname` from it; moved as-is, every new label would be refused and the pick would fail closed | R6a, step 2 of the order, `<STATE_PY>` token in R5, entry sets `fs.ENTRY` |
-| B2 | The first map had cycles: `human_route` → `dialog_pick` → `load` → `claim_runtime` → `emit` → runtime name; `offer_approval` ↔ `valid_decisions`/`open_gate`; `sync_answers` ↔ `write_handoff`/`parse_questions`; `current_tree` used by dialog but placed in a command module | the nine-layer ladder, `authority.py`, `questions_cmd.py`, `current_tree` in `fs.py`, step 0 import graph on paper |
-| H1 | The suites patch `state_mod.json.dump` and `state_mod.os`; moved code must keep module-attribute calls | R6, entry imports `json`, `os` |
-| H2 | "emit mirrors task.md" was a behaviour change (C3) and a cycle; today `emit` writes history and one journal line, ~15 command sites call `write_task_md` themselves | `journal.py` row, data flow |
-| H3 | `LOCK_DEPTH` is per-process re-entrancy across nested `question_lock` calls (`:2149` inside `:4703`); on an instance it deadlocks | `locks.py`, R4 |
-| H4 | `journal_line`, `load`, `sync_answers` are called by the suites with fixed signatures and read the globals | keyword defaults equal to import-time values, R4 |
-| H5 | `Runtime.from_env` = detect + claim moved the claim ahead of `route_surface` / `guard_pending` / `sync_dialog` and merged `main`'s three resolutions | claim stays in `load`; `cli.py` keeps the three paths |
-| M1 | Normalisation missed `duration_s`, `diff.base_commit`, `user.name`/`USER`, session / tool-use / consent ids, the plugin path, the env | R5 |
-| M2 | No scripted run reached a dialog pick or a label, so the golden could not catch B1 or H3 | the dialog-on run, R5 |
-| M3 | Line ranges overlapped; `questions.py` was already 623 lines | map by names, partition script, R3 |
-| M4 | R9 as written was not observable (the installer prints per skill, not per directory) | R9 |
-| M5 | `LOCK_STALE` is the ledger lock's constant, not the questions file's | `locks.py` |
-| L1 | `-I` holds because the entry inserts its own directory; no `runpy`/`exec`/single-file copy anywhere; a stale `.pyc` is harmless | R1 |
-| L2 | A home with the new entry and no package would traceback | R2, the entry's one-line exit |
-| L3 | "pylint limits already in force" meant nothing (`too-many-*` off); `cyclic-import` stays on and would cost R7 | R3, R7 |
-| L4 | `test_project_update.py:882-888` deletes `sys.path[:2]` after `import state` | R1 |
-
-Not folded in: nothing. Open from the check: whether layer 6 stands alone (OQ5).

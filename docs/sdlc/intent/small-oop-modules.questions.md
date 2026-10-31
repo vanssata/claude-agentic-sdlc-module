@@ -156,3 +156,44 @@ A. WP6 stays last and becomes conditional — planned only after the measurement
 B. WP6 stays unconditional
 X. Other — answer as `X: <text>`
 [Answer]: A — by claude · self-answer after the session's assessment and the Codex Astra second opinion of 2026-10-31 (over 70 % confident, developer's rule) via prose at 2026-10-31T17:41:29Z
+
+## Q20. Spec budget (Optimisation 4, defaults): this spec has 17 requirements (R1–R16, R6a) against the default of 12 — merge, or keep with the exception stated?
+asked: 2026-10-31T18:08:30Z · stage: intent · by: claude
+context: Astra: caps breed compound requirements; each R here is a separate test pin of the refactoring (golden, layout, lint, install, speed, isolation, core/shell)
+A. keep all 17; the exception is stated in the spec header: each requirement is one observable pin of a behaviour-0 refactoring, and merging them would make compound requirements the proposal warns against (recommended)
+B. merge to 12 or fewer (e.g. R6/R6a, R7/R8, R13/R14)
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer in the refine pass of 2026-10-31 (over 70 % confident, developer's rule) via prose at 2026-10-31T18:08:35Z
+
+## Q21. Flagged concerns after the refine pass: which stay open (the default is at most 6)?
+asked: 2026-10-31T18:08:30Z · stage: intent · by: claude
+context: FC2 is settled by Q16 (advisory), FC6 by Q15 (narrowed), FC3 is accepted with its cleanup as OQ3, FC4 is guidance the plan at 95b28ba follows (/rr-build row by row), FC10 is a provenance fact like FC18; FC12–FC18 fold into the resolved list by the developer's instruction
+A. open — FC1 (OQ2), FC5 (OQ1), FC7 (self-answers a human may overturn), FC8 (NORMALISE), FC9 (behaviour 0 vs blast radius), FC11 (ROADMAP not updated); resolved — FC2, FC3, FC4, FC6, FC10, FC12–FC18, one line each with what closed it (recommended)
+B. keep FC1–FC11 open as they are and fold only FC12–FC18
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer in the refine pass of 2026-10-31 (over 70 % confident, developer's rule) via prose at 2026-10-31T18:08:35Z
+
+## Q22. Who implements WP1 and in what shape: the session row by row with /rr-build (FC4 as decided at 95b28ba), or parallel implementers through /rr-build-all — module steps that only create rr_state/<mod>.py and never edit state.py, so start does not serialise them, one cut-over step, implementers on BALANCED (sonnet = Sonnet 5.5) at effort high?
+asked: 2026-10-31T18:37:08Z · stage: intent · by: claude
+context: Ivan's instruction in the /rr-spec call of 2026-10-31 (evening): implementers on Sonnet 5.5 high in parallel wherever parallel agents are possible, waiting where they must, the whole code implemented first and the review/test flow after it, big steps with a minimal number of test runs. weight.json today: batch.parallel 5, batch.tier BALANCED, review_rounds_max 5, max_suite_runs 12.
+A. /rr-build row by row, the session implements, every step edits state.py (FC4, plan 95b28ba)
+B. /rr-build-all with parallel implementers on BALANCED (sonnet, Sonnet 5.5) at effort high; a module step creates one file under rr_state/ and nothing else, waits only for the layers it imports (after), the cut-over step edits state.py once; the suite once after the last step, then one review, fixes as parallel batches (recommended)
+X. Other — answer as `X: <text>`
+[Answer]: B — by Ivan Kakurov, instruction in the /rr-spec call of 2026-10-31 (evening): implementers on Sonnet 5.5 high in parallel where possible, waiting where needed, the whole code first and then review/test, big steps with minimal tests; recorded by claude via prose at 2026-10-31T18:37:09Z
+
+## Q23. Cut-over: do the moved defs leave state.py once, after every module exists, or per layer band (five cut steps, each serial on state.py, the four suites after each)?
+asked: 2026-10-31T18:37:09Z · stage: intent · by: claude
+context: The developer asks for all code first, then review/test, with minimal tests. The spec rejected 'one big-bang commit' because a golden alone cannot locate a regression; here every module is its own step and diff, pylint on the new file catches undefined-variable (E0602) and import-error (E0401) statically, the layout test imports each present module, and the golden runs at s2 and at the cut.
+A. once — one cut-over step (cli.py, the shim, the layout test's final form) after the last module step; between s2 and the cut every step is a new file checked by the layout test, pylint and an import; the four suites run at s2 and at the cut, verify --scope all and e2e once, then one review (/rr-build-all §4–§5) (recommended)
+B. per band — five cut steps (layers 0–1, 2–3, 4, 5–7, 8), each serial on state.py, the four suites after each; the golden locates a regression to a band
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer in the refine pass of 2026-10-31 (over 80 % confident, the developer's rule of this pass): A is what 'all code first, then the test flow, minimal tests' asks for, and the rejected big-bang was one commit without per-module diffs or static checks via prose at 2026-10-31T18:37:09Z
+
+## Q24. tests/test_dialog_contract.py:314 patches state_mod.RUNTIME by name (mock.patch.object(state_mod, "RUNTIME", runtime)) and calls dialog_on(root), which reads the global through own_runtime() (state.py:503); R4 removes the global, a re-export cannot be patched, and R6's grep 'state_mod\.<name>' misses a string-named attribute — edit the test, keep a process-wide memo, or forward the attribute?
+asked: 2026-10-31T18:37:09Z · stage: intent · by: claude
+context: Line 133 of the same test also patches RUNTIME but calls dialog_policy(root) and dialog_tool_verified(runtime), neither reads it — inert. Only RUNTIME is patched by name across tests/*.py (grep patch.object(state_mod, "...")). Today's import-time value 'unknown' makes own_runtime() fall back to the installed path (ENTRY after R6a); the same default keeps that behaviour.
+A. two lines of tests/test_dialog_contract.py change — :133's inert patch is dropped, :314 passes the runtime as a keyword (dialog_on(root, runtime=runtime)); dialog_on and own_runtime take runtime="unknown" by default as R4 says; this is WP1's only test edit beside R9 and is listed in R6, whose generated list also greps patch.object(state_mod, "<name>") (recommended)
+B. a third process-wide memo runtime.CURRENT set by cli.main (R4 widened from two memos to three); the test still has to change its patch target, so it is A plus a memo
+C. a module-class property on the entry (sys.modules[__name__].__class__) forwarding RUNTIME to the package; no test edit, one clever construct in the entry every reader meets first
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer in the refine pass of 2026-10-31 (over 80 % confident, the developer's rule of this pass): the two-line test edit is mechanical and reviewable; B adds process-wide state for the same edit, C adds a construct the layout test would otherwise forbid via prose at 2026-10-31T18:37:09Z
