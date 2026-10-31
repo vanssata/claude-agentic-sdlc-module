@@ -66,3 +66,93 @@ A. an intent file only — docs/sdlc/intent/risk-aware-multi-agent-adlc.md with 
 B. its spec now, alongside this one
 X. Other — answer as `X: <text>`
 [Answer]: A — by Ivan Kakurov via prose instruction of 2026-10-31, recorded by claude via prose at 2026-10-30T23:06:51Z
+
+## Q9. Classes: which of the spec's six survive the external review of 2026-10-31?
+asked: 2026-10-31T17:17:31Z · stage: intent · by: claude
+context: review: a rich TaskState may complicate serialisation and compatibility; OOP only for a resource or transaction holder, a transition with invariants, a dependency seam, a value object. load returns the plain dict (state.py:377, :423); ledger_lock holds consent.lock by O_EXCL (state.py:2513)
+A. three — Runtime and Profile as frozen dataclasses (value objects), Ledger as the one resource-holding class (lock, append, read, mirror); the task record stays the dict load/save return today, the JSON being the contract hooks, tests and both runtimes read; journal and questions file stay functions over a path (recommended)
+B. the six of the 2026-10-31 spec — TaskState, Journal, Runtime, Profile, Ledger, QuestionsFile
+C. none — functions and dicts only
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer after the external review of 2026-10-31 (over 70 % confident, developer's rule of 2026-10-31) via prose at 2026-10-31T17:17:46Z
+
+## Q10. Hook isolation: may rr_state and hooks/guard share code?
+asked: 2026-10-31T17:17:32Z · stage: intent · by: claude
+context: hooks run as python3 -I -S, stdlib only (hooks/ai-guard.py:27, hooks/dialog-gate.py:17); hooks/guard/dialog.py:21-27 imports only the stdlib; review: merging them into one architecture can break the security boundary
+A. no — nothing under hooks/ imports skills/ai-task/rr_state and nothing under rr_state imports hooks/guard; the duplication between hooks/guard/dialog.py and rr_state/dialog.py is intentional and stays; the layout test fails on either import; WP5 and WP6 split inside hooks/ only (recommended)
+B. one shared package under skills/ that the hooks import too
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer after the external review of 2026-10-31 (over 70 % confident, developer's rule of 2026-10-31) via prose at 2026-10-31T17:17:46Z
+
+## Q11. Forbidden constructs: what does the layout test refuse under rr_state/?
+asked: 2026-10-31T17:17:32Z · stage: intent · by: claude
+context: review: S is the useful SOLID letter here; D and I only at I/O boundaries; O on proven need; L irrelevant without inheritance
+A. no inheritance and no Abstract/ABC base, no dependency-injection container, no interface or Protocol with one implementation, no repository or service class per JSON operation, no class that is only a namespace of static methods — the layout test greps for ABC, abstractmethod, Protocol, staticmethod and any class base other than a dataclass or Exception, and fails (recommended)
+B. allow them where a reviewer argues for one
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer after the external review of 2026-10-31 (over 70 % confident, developer's rule of 2026-10-31) via prose at 2026-10-31T17:17:46Z
+
+## Q12. Core and shell: where do pure functions, I/O and the seams live?
+asked: 2026-10-31T17:17:42Z · stage: intent · by: claude
+context: sensors.py is the precedent (state.py:84 'measurement only; it never writes this file'); the suites patch state_mod.json.dump and state_mod.os as module attributes
+A. functional core, imperative shell — parse, render and decide functions take data and return data (policy, questions parsing and rendering, weight, step ordering, the two facts); I/O sits in fs, locks, journal, task load/save, ledger and the command modules; the clock and command-runner seams stay module-level functions (fs.now, fs.now_ms, fs.run_text, sensors.git) a test patches as module attributes — no Clock or Runner object, no injected parameter (recommended)
+B. inject a clock and a runner object through every command
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer after the external review of 2026-10-31 (over 70 % confident, developer's rule of 2026-10-31) via prose at 2026-10-31T17:17:46Z
+
+## Q13. Granularity: the spec's nine-layer ladder or the review's eight files?
+asked: 2026-10-31T17:17:42Z · stage: intent · by: claude
+context: review: 'only moving functions into many files gives navigation, not design'; the ladder came from the import graph (independent check B2); the review's lifecycle.py alone would hold start, steps, verify, review and close, about 2 000 lines
+A. the ladder stays the partition, read as eight responsibility groups — store (fs, locks, task), journal, questions, decisions (ledger, gate, dialog, authority), lifecycle (start, steps, verify, review, close), profile and runtime, reporting (report, handoff), cli; a module exists for one cohesive responsibility, never to satisfy the 600-line layout test, and two modules of one group merge when the import graph allows (recommended)
+B. the review's eight files — state_store, journal, questions, decisions, lifecycle, profile, cli, entry
+C. one module per section comment of today's file, no layers
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer after the external review of 2026-10-31 (over 70 % confident, developer's rule of 2026-10-31) via prose at 2026-10-31T17:17:46Z
+
+## Q14. Timing: when does WP1 start against T-2026-10-31-1650-dialog-background?
+asked: 2026-10-31T17:17:42Z · stage: intent · by: claude
+context: review: must not be mixed with the current task on state.py and dialog.py; C3; handoff 2026-10-31T17:13 shows that task at its approval gate, files hooks/guard/dialog.py and skills/ai-task/state.py
+A. the golden is recorded and the WP1 task started only after that task and every other task editing state.py or hooks/guard/dialog.py has closed; the golden is re-recorded if any such task lands between the recording and the first move (recommended)
+B. start WP1 now on a branch and rebase later
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer after the external review of 2026-10-31 (over 70 % confident, developer's rule of 2026-10-31) via prose at 2026-10-31T17:17:46Z
+
+## Q15. Does the split still block every other roadmap row (Q5), after the two reviews of 2026-10-31?
+asked: 2026-10-31T17:41:16Z · stage: intent · by: claude
+context: session and Codex Astra (gpt-6-astra) both: the split lowers context for later changes but not approvals, artefacts or tokens per task; policy simplifications and urgent fixes need no new package. Q5 was the developer's instruction and only the developer changes it
+A. the split blocks only work that edits state.py internals or the extracted interfaces; the policy tasks of the Optimisation section (classification, activity scope, review rule, spec budget, measurement) and urgent fixes run as separate tasks, never mixed with a WP (recommended)
+B. Q5 stands — everything waits for WP6
+X. Other — answer as `X: <text>`
+[Answer]: A — by Ivan Kakurov, reply 'Only state.py work' in the app, recorded by claude via picker at 2026-10-31T17:46:24Z
+
+## Q16. The 600-line limit of R3: a failing check or an advisory measure?
+asked: 2026-10-31T17:41:16Z · stage: intent · by: claude
+context: Astra: 'remove arbitrary architecture quotas; make 600 lines advisory, let actual invariants justify classes'; session: a module exists for a responsibility, never to satisfy the limit (Q13)
+A. advisory — the layout test prints module sizes and fails only on an import cycle, an upward edge, a global statement, a forbidden construct or a hooks/rr_state crossing; a module over 600 lines is noted in the task report with the reason (recommended)
+B. a failing check at 600 lines
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer after the session's assessment and the Codex Astra second opinion of 2026-10-31 (over 70 % confident, developer's rule) via prose at 2026-10-31T17:41:29Z
+
+## Q17. Classes: a quota of three, or a rule?
+asked: 2026-10-31T17:41:16Z · stage: intent · by: claude
+context: Q9 named three; Astra reads a fixed count as a quota
+A. a rule — a class needs a named resource it holds or an invariant it keeps, written in its docstring; Runtime, Profile and Ledger are the three that pass it today, and a fourth needs the same sentence, not a spec change (recommended)
+B. exactly three, by name
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer after the session's assessment and the Codex Astra second opinion of 2026-10-31 (over 70 % confident, developer's rule) via prose at 2026-10-31T17:41:29Z
+
+## Q18. The optimisation proposals outside the split: where are they recorded and in what order?
+asked: 2026-10-31T17:41:28Z · stage: intent · by: claude
+context: merged from the session's six and Codex Astra's seven (2026-10-31); Astra: classification first, then activity scope, then review strength; the Codex freeze after those; the spec budget as defaults with justified exceptions; the state-file merge only after an ownership audit
+A. in this spec's Optimisation section as separate tasks, none inside a WP, in the order: task classification (no keyword hints, light trial at W<=3), activity scope for documents (named paths per activity, no blanket docs/sdlc/** allow), review strength by named risk (reason mandatory; STRONG for domain, irreversibility or an approval-boundary change), spec budget as defaults, runtime and cost measurement per task, state ownership audit before any merge (recommended)
+B. a separate spec for the optimisations
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer after the session's assessment and the Codex Astra second opinion of 2026-10-31 (over 70 % confident, developer's rule) via prose at 2026-10-31T17:41:29Z
+
+## Q19. WP6 (hooks/runtime-gate.py, Codex trust on a changed hook entry): keep it in the order, or make it conditional?
+asked: 2026-10-31T17:41:29Z · stage: intent · by: claude
+context: both reviews: freeze new Codex-facing capability until usage is measured; transcripts show no Codex sessions, which is not proof of none (Astra); FC5 already doubts WP6 is splittable
+A. WP6 stays last and becomes conditional — planned only after the measurement task shows Codex in use, or when a Codex-side bug forces a change to the file; WP1–WP5 are unaffected (recommended)
+B. WP6 stays unconditional
+X. Other — answer as `X: <text>`
+[Answer]: A — by claude · self-answer after the session's assessment and the Codex Astra second opinion of 2026-10-31 (over 70 % confident, developer's rule) via prose at 2026-10-31T17:41:29Z

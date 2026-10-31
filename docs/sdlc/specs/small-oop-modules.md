@@ -1,16 +1,25 @@
-# Spec: Small OOP modules — splitting the plugin's large scripts
+# Spec: Small modules — splitting the plugin's large scripts (functional core, three classes)
 
 Status: proposed · 2026-10-31 · brainstorm `docs/sdlc/intent/small-oop-modules.questions.md`
-(Hybrid mode, `agentic-sdlc-modes` Q1 = B) · next: `/rr-plan docs/sdlc/specs/small-oop-modules.md`
+(Hybrid mode, `agentic-sdlc-modes` Q1 = B; Q9–Q14 added 2026-10-31 after an external review
+the developer pasted — §External review; Q16–Q19 added 17:41 after the session's assessment and a
+Codex second opinion on `gpt-6-astra` — §Optimisation; Q15, the blockade, is pending for the
+developer, answered 17:46: only `state.py` work is blocked) · the plan on file predates Q9–Q19 (FC12) · next:
+`/rr-plan docs/sdlc/specs/small-oop-modules.md` again
+
+The slug `small-oop-modules` stays — the plan, the roadmap and the questions file name it.
+The title no longer says OOP because the design is not one: modules split by responsibility,
+a class only where a resource or a value needs one (Q3, Q9, Q11), nothing inherited.
 
 ## Intent
 
 **Problem.** Six scripts carry the plugin's decisions in files too large to read whole:
-`skills/ai-task/state.py` 5 256 lines, 239 top-level functions, 0 classes, 70 module
-globals, four of them mutated at run time (`RUNTIME`, `MUTATING`, `LOCK_DEPTH`,
-`DIALOG_PICK`); `skills/project-update/adopt.py` 2 219; `skills/project-update/update.py`
-2 114; `skills/ai-task/memory_sync.py` 1 571; `hooks/guard/paths.py` 1 452;
-`hooks/runtime-gate.py` 1 214 (measured 2026-10-31, `wc -l`). Every one is over the
+`skills/ai-task/state.py` 5 367 lines, 244 top-level functions, 0 classes, 70 module
+globals, four of them mutated at run time through three `global` statements (`RUNTIME`,
+`MUTATING` at `:5342`, `LOCK_DEPTH` `:1349`, `DIALOG_PICK` `:2911`);
+`skills/project-update/adopt.py` 2 219; `skills/project-update/update.py` 2 146;
+`skills/ai-task/memory_sync.py` 1 571; `hooks/guard/paths.py` 1 545; `hooks/runtime-gate.py`
+1 214 (re-measured 2026-10-31 17:15, `wc -l`, while T-2026-10-31-1650 is in flight). Every one is over the
 ~4 000-line read cap or close to it, so an agent that changes one reads it through
 `grep -n` and bounded windows, never as a whole — the T-2026-10-20-003 reviews found an
 untested BLOCKER twice in exactly that mode. The sections `state.py` already draws
@@ -22,12 +31,16 @@ just never split along them. The open register lists 158 items against `state.py
 - O1 `python3 <home>/skills/ai-task/state.py <cmd>` answers every subcommand with the same
   stdout, stderr, exit code, journal line and file on disk as before — proven by a
   characterization golden recorded on the tree before the first move, byte-identical after.
-- O2 No Python module of the split code is over 600 lines, and no function is reachable
-  only through a module global that changes at run time.
+- O2 Every module of the split code is measured by size with 600 lines as the advisory line
+  (Q16: over it is noted in the task report with the reason, never a failing check), and no
+  function is reachable only through a module global that changes at run time.
 - O3 A reader can open one module and see one job: the journal, the questions file, the
-  gate, the dialog ledger, the batch loop — each with its tests named.
+  gate, the dialog ledger, the batch loop — each with its tests named; a class exists only
+  where a resource or a value needs one (three in WP1, R4), nothing inherits from anything.
 - O4 Nothing else moves: `.ai/VERSION` stays 11, no migration, no change to `.ai/state/*`
   shapes, the installed copy is replaced by `npx riskrails` as today.
+- O5 The hooks stay a separate world: nothing under `hooks/` imports the package and
+  nothing in the package imports `hooks/guard`; the `python3 -I -S` boundary is unchanged.
 
 **Affected users and systems.** Every `/rr-*` skill (they shell out to `state.py`), the
 test suites that import `state`, `sensors`, `weight` from `skills/ai-task` on `sys.path`
@@ -56,6 +69,17 @@ performance work beyond "not slower".
 - **An open risk or a bug met while splitting: what does the refactoring do with it?** — records it in the register (state.py memory risk add) and moves on; a fix is its own bugfix task after the WP closes — a refactoring changes no behaviour (C3), and a bugfix starts with its failing test (C2) *(Q6, by claude · Hybrid self-answer (agentic-sdlc-modes Q1=B) via prose at 2026-10-30T23:06:50Z)*
 - **bin/riskrails.js (1 442 lines, JavaScript, the installer): in or out?** — out — a different language and toolchain, and a change to how user projects are installed scores behaviour 2 (C6, weight.json examples), so it would drag every WP into full mode *(Q7, by claude · Hybrid self-answer (agentic-sdlc-modes Q1=B) via prose at 2026-10-30T23:06:51Z)*
 - **The risk-aware multi-agent intent that triggered this spec: what is written now?** — an intent file only — docs/sdlc/intent/risk-aware-multi-agent-adlc.md with the capability assessment, the gap list and the reduced scope, status blocked by this spec; its spec and plan are written after the last WP closes, against the split code *(Q8, by Ivan Kakurov via prose instruction of 2026-10-31, recorded by claude via prose at 2026-10-30T23:06:51Z)*
+- **Classes: which of the spec's six survive the external review of 2026-10-31?** — three: `Runtime` and `Profile` as frozen dataclasses (value objects), `Ledger` as the one resource-holding class (lock, append, read, mirror); the task record stays the dict `load`/`save` return today, the JSON being the contract hooks, tests and both runtimes read; the journal and the questions file stay functions over a path *(Q9, by claude · self-answer after the external review of 2026-10-31, over 70 % confident by the developer's rule, via prose at 2026-10-31T17:17:46Z)*
+- **Hook isolation: may rr_state and hooks/guard share code?** — no: nothing under `hooks/` imports `skills/ai-task/rr_state` and nothing under `rr_state` imports `hooks/guard`; the duplication between `hooks/guard/dialog.py` and `rr_state/dialog.py` is intentional and stays; the layout test fails on either import; WP5 and WP6 split inside `hooks/` only *(Q10, by claude · self-answer after the external review of 2026-10-31, over 70 % confident by the developer's rule, via prose at 2026-10-31T17:17:46Z)*
+- **Forbidden constructs: what does the layout test refuse under rr_state/?** — no inheritance and no Abstract/ABC base, no dependency-injection container, no interface or Protocol with one implementation, no repository or service class per JSON operation, no class that is only a namespace of static methods; the layout test greps for `ABC`, `abstractmethod`, `Protocol`, `staticmethod` and any class base other than a dataclass or `Exception` *(Q11, by claude · self-answer after the external review of 2026-10-31, over 70 % confident by the developer's rule, via prose at 2026-10-31T17:17:46Z)*
+- **Core and shell: where do pure functions, I/O and the seams live?** — functional core, imperative shell: parse, render and decide functions take data and return data; I/O sits in `fs`, `locks`, `journal`, `task` load/save, `ledger` and the command modules; the clock and command-runner seams stay module-level functions (`fs.now`, `fs.now_ms`, `fs.run_text`, `sensors.git`) a test patches as module attributes — no Clock or Runner object, no injected parameter *(Q12, by claude · self-answer after the external review of 2026-10-31, over 70 % confident by the developer's rule, via prose at 2026-10-31T17:17:46Z)*
+- **Granularity: the spec's nine-layer ladder or the review's eight files?** — the ladder stays the partition, read as eight responsibility groups (store, journal, questions, decisions, lifecycle, profile and runtime, reporting, cli); a module exists for one cohesive responsibility, never to satisfy the 600-line layout test, and two modules of one group merge when the import graph allows *(Q13, by claude · self-answer after the external review of 2026-10-31, over 70 % confident by the developer's rule, via prose at 2026-10-31T17:17:46Z)*
+- **Timing: when does WP1 start against T-2026-10-31-1650-dialog-background?** — the golden is recorded and the WP1 task started only after that task and every other task editing `state.py` or `hooks/guard/dialog.py` has closed; the golden is re-recorded if any such task lands between the recording and the first move *(Q14, by claude · self-answer after the external review of 2026-10-31, over 70 % confident by the developer's rule, via prose at 2026-10-31T17:17:46Z)*
+- **The 600-line limit of R3: a failing check or an advisory measure?** — advisory: the layout test prints module sizes and fails only on an import cycle, an upward edge, a `global` statement, a forbidden construct or a hooks/rr_state crossing; a module over 600 lines is noted in the task report with the reason *(Q16, by claude · self-answer after the session's assessment and the Codex Astra second opinion of 2026-10-31, over 70 % confident, via prose at 2026-10-31T17:41:29Z)*
+- **Classes: a quota of three, or a rule?** — a rule: a class needs a named resource it holds or an invariant it keeps, written in its docstring; `Runtime`, `Profile` and `Ledger` pass it today, a fourth needs the same sentence, not a spec change *(Q17, by claude · self-answer after the session's assessment and the Codex Astra second opinion of 2026-10-31, over 70 % confident, via prose at 2026-10-31T17:41:29Z)*
+- **The optimisation proposals outside the split: where are they recorded and in what order?** — in this spec's Optimisation section as separate tasks, none inside a WP, in the order: task classification, activity scope for documents, review strength by named risk, spec budget as defaults, runtime and cost measurement per task, state ownership audit before any merge *(Q18, by claude · self-answer after the session's assessment and the Codex Astra second opinion of 2026-10-31, over 70 % confident, via prose at 2026-10-31T17:41:29Z)*
+- **WP6 (hooks/runtime-gate.py): keep it in the order, or make it conditional?** — conditional: planned only after the measurement task shows Codex in use, or when a Codex-side bug forces a change to the file; WP1–WP5 unaffected *(Q19, by claude · self-answer after the session's assessment and the Codex Astra second opinion of 2026-10-31, over 70 % confident, via prose at 2026-10-31T17:41:29Z)*
+- **Does the split still block every other roadmap row (Q5)?** — no: the split blocks only work that edits `state.py` internals or the extracted interfaces; the policy tasks of the Optimisation section and urgent fixes run as separate tasks, never mixed with a WP — this narrows Q5 *(Q15, by Ivan Kakurov, reply "Only state.py work" in the app, recorded by claude via picker at 2026-10-31T17:46:24Z)*
 
 ## Requirements
 
@@ -72,15 +96,27 @@ the independent check (see that section).
   package prints one line naming `npx riskrails` instead of a traceback. [O3, O4]
 - **R3 One module, one seam, one layer.** † Every top-level function of today's file is
   assigned to exactly one module (a partition, produced by a script at plan time, not the
-  indicative map below); no module over 600 lines; each module sits in one layer of the
-  Design's ladder. `tests/test_state_layout.py` measures line counts, completeness of the
+  indicative map below); module sizes are reported, 600 lines advisory (Q16); each module
+  sits in one layer of the Design's ladder. `tests/test_state_layout.py` prints line counts,
+  checks completeness of the
   partition (every `def` of the golden tree's file found once), and the import graph (R10).
   The pylint `too-many-*` checks are off in `.pylintrc` and are not the measure. [O2]
-- **R4 Classes only where state is threaded; two process-wide memos, no `global`.** †
-  Classes: `TaskState` (`state.json`), `Journal` (`events.jsonl`), `Runtime` (runtime name
-  and the mutating flag, resolved by `main` exactly as today's three code paths do),
-  `Profile`, `Ledger` (`consent.jsonl` + `decision.json`), `QuestionsFile` (parse, render,
-  write). Process-wide state is limited to two single objects: the lock re-entrancy counter
+- **R4 A class needs a resource or an invariant; three pass today; nothing inherited; two
+  process-wide memos, no `global`.** † (Q9, Q11, Q17, replacing the six classes of the first
+  draft.) The rule, not a quota: a class holds a named resource or keeps a named invariant,
+  and its docstring says which; a fourth class needs that sentence, not a spec change. `Runtime` (runtime name and the mutating
+  flag, a frozen dataclass built by `main` exactly as today's three code paths do) and
+  `Profile` (the resolved plan, tiers, budgets, dialog tool — a frozen dataclass) are value
+  objects; `Ledger` (`consent.jsonl` + `decision.json` behind `consent.lock`) is the one
+  class that holds a resource. Everything else is a function: the task record stays the
+  dict that `load` returns and `save` writes — the JSON on disk is the contract hooks, tests
+  and both runtimes read, and a wrapper object would put a second shape in front of it; the
+  journal is `append_journal` / `read_journal` / `emit` over a path; the questions file is
+  `parse_questions` / `render_*` / `write_questions`. Refused under `rr_state/`, and
+  grepped by the layout test: a class base other than a dataclass or `Exception`, `ABC`,
+  `abstractmethod`, `Protocol`, `staticmethod`, a dependency-injection container, an
+  interface with one implementation, a repository or service class per JSON operation.
+  Process-wide state is limited to two single objects: the lock re-entrancy counter
   (`locks.py`, one per process — nested `question_lock` calls on two paths must not
   deadlock) and the dialog-pick memo (`dialog.py`). No `global` statement anywhere; the
   layout test greps for it. Functions the suites call directly with today's signatures
@@ -149,6 +185,24 @@ the independent check (see that section).
 - **R14 Rollback.** Every WP is one task on one branch; `git revert` of its commits
   restores the single file. No state, schema or policy file changes, so nothing has to be
   migrated back. [O4]
+- **R15 Hook isolation.** (Q10) No module under `hooks/` imports `skills/ai-task/rr_state`
+  (or `state`), and no module under `rr_state/` imports anything under `hooks/`. The hooks
+  run as `python3 -I -S` with the standard library only (`hooks/ai-guard.py:27`,
+  `hooks/dialog-gate.py:17`); `hooks/guard/dialog.py` re-implements what it needs of the
+  dialog ledger on purpose and keeps doing so. The layout test reads the `import` lines of
+  both trees and fails on a crossing. WP5 and WP6 split inside `hooks/` only. [O5]
+- **R16 Functional core, imperative shell.** (Q12) A function that parses, renders or
+  decides takes data and returns data and touches no file, clock or subprocess: the policy
+  reads over a loaded dict, questions parsing and rendering, `weight`, step ordering, the
+  two facts' comparison, the handoff and task.md line builders. I/O lives in `fs`, `locks`,
+  `journal`, `task` (load/save), `ledger`, `profile` detection and the command modules,
+  which call the core and write. The seams a test needs are module-level functions patched
+  as attributes — `fs.now`, `fs.now_ms`, `fs.run_text`, `sensors.git`, `json.dump`,
+  `os.replace` — never a Clock or Runner object and never an injected parameter;
+  `sensors.py` is the precedent (`state.py:84`: "measurement only; it never writes this
+  file"). The partition script of R3 labels every function core or shell; the label is
+  recorded in the module docstring, and a core function that imports `os`, `subprocess`,
+  `time` or `fcntl` fails the layout test. [O3]
 
 ## Design
 
@@ -158,24 +212,32 @@ Indicative: the functions named are today's; the plan's first step produces the 
 partition (R3) and the import graph (R10) before anything moves. A module imports only
 from layers below its own. Corrected after the independent check (its B2): `human_route`,
 `claim_runtime`, `current_tree`, `open_gate`, `sync_answers` and `write_task_md` sit where
-the callers' greps put them, not where the file's comments did.
+the callers' greps put them, not where the file's comments did. Read as responsibilities
+(Q13), the ladder is eight groups — **store** (`fs`, `locks`, `task`), **journal**,
+**questions**, **decisions** (`ledger`, `gate`, `dialog`, `authority`), **lifecycle**
+(`start`, `steps`, `verify`, `review`, `close`), **profile and runtime**, **reporting**
+(`report`, `handoff`), **cli** — close to the eight files the external review proposed; the
+finer modules exist because `lifecycle` alone would be about 2 000 lines and because the
+import graph needs the layers. A module is never created to satisfy the 600-line layout
+test; two modules of one group merge when the graph allows it. The Class column marks the
+three classes of R4; every other row is functions over the dict and the paths.
 
 | Layer | Module | Holds | Class |
 |---|---|---|---|
 | 0 | `fs.py` | `ENTRY` (R6a), `find_root*`, `die`, the `*_path` helpers, `logs_dir`, `read_text`, `read_lines`, `now`, `now_ms`, `current_tree`, `run_text` | — |
 | 0 | `locks.py` | `question_lock`, the one re-entrancy counter (today `LOCK_DEPTH`), `ledger_lock`, `LOCK_STALE` | — |
-| 1 | `runtime.py` | detection only: `RUNTIMES`, `AGENT_MARKERS`, `agent_markers`, `installed_runtime`, `detect_runtime`, `runtime_home`, `own_runtime`, `other_runtime`, `installed` | `Runtime` (name, mutating) |
+| 1 | `runtime.py` | detection only: `RUNTIMES`, `AGENT_MARKERS`, `agent_markers`, `installed_runtime`, `detect_runtime`, `runtime_home`, `own_runtime`, `other_runtime`, `installed` | `Runtime` (frozen dataclass: name, mutating) |
 | 1 | `policy.py` | pure reads of `weight.json` / `dialog.json`: `weight_policy`, `mode_for`, `higher_mode`, `mode_setting`, `batch_policy`, `batch_on`, `budget`, `dialog_policy`, `dialog_on`, `is_document`, `documents_cover`, `NEVER_DOCUMENTS` | — |
-| 2 | `journal.py` | `EVENT_TYPES`, `FORGEABLE_EVENTS`, size caps, `journal_line(..., runtime="unknown")`, `append_journal`, `read_journal`, `record`, `emit` (history + one journal line — exactly today's `emit`, no task.md write) | `Journal` |
-| 3 | `task.py` | `load`/`save`/`apply_defaults*`, `claim_runtime` (stays inside `load`, exit 7 and `runtime_handoff` as today), `sealed_task_ids`, `next_task_id`, `valid_task_id`, `is_v7`, `in_flight`, `route_surface`, `old_surface_refusal`, `abandon_old` | `TaskState` |
-| 4 | `questions.py` | regexes, `parse_questions`, `parse_answer_body`, `parse_prose`, `render_*`, `question_block`, `write_questions`, `is_pending`, `set_pending` | `QuestionsFile` |
-| 4 | `ledger.py` | `ledger_path`, `ledger_append`, `read_ledger`, `latest_rounds`, `live_picks`, `read_decisions`, `write_decisions`, `next_decision_id`, `LEDGER_TYPES`, `LEDGER_LINE_MAX` | `Ledger` |
+| 2 | `journal.py` | `EVENT_TYPES`, `FORGEABLE_EVENTS`, size caps, `journal_line(..., runtime="unknown")`, `append_journal`, `read_journal`, `record`, `emit` (history + one journal line — exactly today's `emit`, no task.md write) | — (functions over `root`, `task_id`) |
+| 3 | `task.py` | `load`/`save`/`apply_defaults*`, `claim_runtime` (stays inside `load`, exit 7 and `runtime_handoff` as today), `sealed_task_ids`, `next_task_id`, `valid_task_id`, `is_v7`, `in_flight`, `route_surface`, `old_surface_refusal`, `abandon_old` | — (the dict is the record) |
+| 4 | `questions.py` | regexes, `parse_questions`, `parse_answer_body`, `parse_prose`, `render_*`, `question_block`, `write_questions`, `is_pending`, `set_pending` | — (core: parse/render; shell: write) |
+| 4 | `ledger.py` | `ledger_path`, `ledger_append`, `read_ledger`, `latest_rounds`, `live_picks`, `read_decisions`, `write_decisions`, `next_decision_id`, `LEDGER_TYPES`, `LEDGER_LINE_MAX` | `Ledger` (holds `consent.lock`) |
 | 4 | `gate.py` | gate state only: `guard_pending`, `request_gate`, `open_gate`, `close_gate`, `close_gate_from_file`, `gate_approved_for`, `confirm_names` | — |
 | 5 | `dialog.py` | `label_argv`, `subcommand*`, `validate_label`, `state_label`, `dialog_questions`, `open_decision`, `dialog_payload`, `print_dialog`, `offer_decision`, `settle_decision`, `prune_decisions`, `mirror_ledger`, `sync_dialog`, `dialog_pick` (+ its memo), `valid_decisions`, `retire_approvals`, `pick_data`, `task_facts`, `audit_pick` | — |
 | 6 | `authority.py` | who may act: `human_route`, `human_turn`, `refuse_approval`, `offer_approval`, `approve_command`, `gate_question_text` | — |
 | 7 | `report.py` | `md_cell`, `task_md_lines`, `write_task_md`, `status_lines`, `schema_line` | — |
 | 7 | `handoff.py` | `set_resume_point`, `recent_notes`, `handoff_lines`, `write_handoff`, `handoff_to` | — |
-| 7 | `profile.py` | plan detection for both runtimes, drift ack, `PLAN_PROFILES`, `SAME_TIER`, `load_resolver` (via `ENTRY`) | `Profile` |
+| 7 | `profile.py` | plan detection for both runtimes, drift ack, `PLAN_PROFILES`, `SAME_TIER`, `load_resolver` (via `ENTRY`) | `Profile` (frozen dataclass) |
 | 8 | `questions_cmd.py` | `cmd_ask`, `cmd_answer`, `cmd_questions`, `apply_answers`, `sync_answers` (calls `open_gate` and `write_handoff`, so it lives above both) | — |
 | 8 | `gate_cmd.py` | `cmd_approve`, `cmd_approve_v7`, `cmd_reject` | — |
 | 8 | `dialog_cmd.py` | `cmd_decision`, `decision_open`, `decision_settle`, `apply_choice`, `cmd_consent` | — |
@@ -199,10 +261,11 @@ state.py (entry) ── sets fs.ENTRY, parses argv ──► cli.main
                                      │  root = fs.find_root(args.root)
                                      ▼
                       command module  cmd_<x>(args, root, rt)
-                        │ TaskState.load(root, claim=…)  ──►  task.py   claim_runtime inside load, as today
-                        │ Journal.emit(…)                ──►  journal.py one history entry + one journal line
-                        │ report.write_task_md(…)          called by the ~15 command sites that call it today
-                        │ QuestionsFile / Ledger / Profile  one file each
+                        │ state = task.load(root, claim=…) ──► task.py   the dict, claim_runtime inside load, as today
+                        │ journal.emit(root, state, …)     ──► journal.py one history entry + one journal line
+                        │ report.write_task_md(…)            called by the ~15 command sites that call it today
+                        │ questions.* (functions) · Ledger(root) · Profile  one file each
+                        │ core functions in between: data in, data out, no I/O (R16)
                         ▼
                       sensors.py · weight.py · memory_*.py   unchanged sibling modules
 ```
@@ -237,10 +300,10 @@ at the end (`verify --scope all`), then e2e.
 | 3 | `skills/project-update/update.py` | 2 114 | entry + `update/`, migrations untouched | dry-run output over the fixture projects | `--confirm-delete` path guard spelling unchanged |
 | 4 | `skills/ai-task/memory_sync.py` | 1 571 | modules beside `memory_store`, `memory_compact`, `memory_format` | `tests/fixtures/memory/goldens/` exists | packages mode `verify --fresh-clone` |
 | 5 | `hooks/guard/paths.py` | 1 452 | already a package: split `paths.py` into rule groups | `test_guard_characterization` golden exists | **byte-identical guard golden**; CLAUDE.md `SH_WORD`/`SH_RE` invariant |
-| 6 | `hooks/runtime-gate.py` | 1 214 | OQ1: single file (`.pylintrc`: "must run as a single file") or shim + package like `ai-guard.py` + `guard/` | new | Codex re-approves a changed hook entry; the entry line must not change |
+| 6 | `hooks/runtime-gate.py` | 1 214 | OQ1: single file (`.pylintrc`: "must run as a single file") or shim + package like `ai-guard.py` + `guard/` | new | **conditional (Q19)**: planned only after the measurement task shows Codex in use, or when a Codex-side bug forces a change; Codex re-approves a changed hook entry; the entry line must not change |
 
-Order: 1 → 2 → 3 → 4 → 5 → 6, one task each, the next starting after the previous
-closed green. Every WP is a refactoring by C3; its weight is measured by `/rr-plan`
+Order: 1 → 2 → 3 → 4 → 5, one task each, the next starting after the previous closed
+green; 6 only on its condition (Q19). Every WP is a refactoring by C3; its weight is measured by `/rr-plan`
 (Policy conformance gives the expected mode). WP2–WP6 each repeat step 0 and the
 `__file__` audit of R6a for their own file before the first move.
 
@@ -258,6 +321,20 @@ closed green. Every WP is a refactoring by C3; its weight is measured by `/rr-pl
 - **Several scripts with their own CLIs** (`questions.py`, `dialog.py` …). The skills'
   `$STATE` variable and the journal's one-writer rule assume one process owns the task; two
   entry points would need a lock protocol — a behaviour change.
+- **Six classes (this spec's first draft: `TaskState`, `Journal`, `QuestionsFile` as well).**
+  A `TaskState` object puts a second shape in front of the JSON that hooks, tests and both
+  runtimes read, and every function that takes the dict today would change signature or
+  unwrap it; `Journal` and `QuestionsFile` would hold nothing but a path — a namespace, not
+  an object. Dropped after the external review (Q9).
+- **The review's eight flat files** (`state_store`, `journal`, `questions`, `decisions`,
+  `lifecycle`, `profile`, `cli`, entry). The same responsibilities; but `lifecycle` would be
+  ~2 000 lines and `decisions` ~1 500, and the import graph of the independent check (B2)
+  needs the layers between them. Kept as the reading of the ladder, not as the partition (Q13).
+- **Injected `Clock` and `Runner` objects.** The seam the suites use today is a module
+  attribute (`state_mod.json.dump`, `state_mod.os`); an injected object would thread a
+  parameter through ~40 command functions for a seam a patch already gives (Q12).
+- **One shared package the hooks import.** It would break the `-I -S` boundary the hooks
+  run behind; the duplication in `hooks/guard/dialog.py` is intentional (Q10).
 
 ## Interfaces
 
@@ -292,22 +369,25 @@ if __name__ == "__main__":
     main()
 ```
 
-**The classes** (shapes, not code; every method is a function that exists today):
+**The three classes and the functions beside them** (shapes, not code; every method is a
+function that exists today — R4):
 
 ```
-Runtime(name: str = "unknown", mutating: bool = False)       built by cli.main, three resolutions as today
-TaskState(root, path, data, schema)
-  .load(root, required=True, claim=None, rt=None)   claim_runtime inside, exit 7 / runtime_handoff unchanged
-  .save()  .is_v7  .in_flight  .next_task_id()
-Journal(root, task_id)
-  .append(type, **fields) -> dict   .read() -> list[dict]   .emit(...)   history + one line, nothing else
-Profile(runtime, plan, tiers, budgets, dialog_tool)
-  .detect(runtime) -> Profile   .read(home) -> Profile   .drift() -> dict | None
-Ledger(root)
+@dataclass(frozen=True) Runtime(name: str = "unknown", mutating: bool = False)
+                                                   built by cli.main, three resolutions as today
+@dataclass(frozen=True) Profile(runtime, plan, tiers, budgets, dialog_tool)
+  profile.detect(runtime) -> Profile   profile.read(home) -> Profile   profile.drift(p) -> dict | None
+Ledger(root)                                       the one resource holder: consent.lock by O_EXCL
   .append(line) .read() .latest_rounds() .live_picks() .mirror(decisions)
-QuestionsFile(path, section=None)
-  .parse() -> list[Question]  .write(questions)  .pending() -> list
+task.load(root, required=True, claim=None, rt=None) -> dict      the record is the dict, as today;
+task.save(root, state)                                           claim_runtime inside load, exit 7 unchanged
+journal.append_journal(root, task_id, text) / read_journal(root, task_id) -> list[dict]
+journal.emit(root, state, event, …)                history + one journal line, nothing else
+questions.parse_questions(path) -> list[dict]      core: no I/O beyond the read it is handed
+questions.render_*(…) -> list[str]                 core
+questions.write_questions(path, lines)             shell
 locks.question_lock(path) / locks.ledger_lock(root)        one re-entrancy counter per process
+fs.now() / fs.now_ms() / fs.run_text(root, argv)   the seams, patched as module attributes
 ```
 
 **Tests and fixtures added.** `tests/test_state_characterization.py` (R5),
@@ -352,6 +432,9 @@ replacement of the entry's path.
   them; row by row with `/rr-build` costs the same and keeps the diff in the session. Design
   was written in the session (Fable, the model the triggering intent names) and checked
   independently by `architect` on STRONG (FC10).
+- **`.ai/policies/security.md` and the hooks' `-I -S` boundary** — R15: the package and the
+  hooks never import each other; the layout test measures it. The duplication the external
+  review noticed is a boundary, not a debt.
 - **ADRs** — `docs/sdlc/adr/` does not exist; no accepted decision binds this spec.
 - **Redesign spec R4 "size never gates"** — R3's 600-line limit is a code-layout test, not a
   weight input; it never changes a mode or a refusal (FC2).
@@ -408,6 +491,39 @@ replacement of the entry's path.
   was refused while B5 is in flight (the auto-mode classifier, after the scope guard).
   The record is this spec and the questions file until a human applies the draft.
 
+- **FC12 The plan on file is stale.** `docs/sdlc/plans/small-oop-modules.md` (written
+  2026-10-31, not started) derives from the six-class draft: its R4 row expects "the six
+  class names exist" in the layout test and spreads them over s3–s8. After Q9–Q14 the plan
+  is re-derived with `/rr-plan`; nothing in it has run, so nothing is undone.
+- **FC13 No second independent check.** The skill sends the design to `architect` on
+  STRONG; this revision was not sent. The delta removes structure (three classes instead of
+  six, functions over the dict) and adds two measurable rules (R15, R16); the first check's
+  findings B1–L4 stand unchanged — H3 (lock re-entrancy) and H4 (fixed signatures) are
+  untouched by dropping the wrappers. The source of the revision is model output the
+  developer pasted (§External review), not a human review. The human may still ask for a
+  STRONG pass before `/rr-plan`.
+- **FC14 The naming comment is out of this spec's scope.** The same paste assessed the
+  product name (RiskRails, about 8/10; `claude-agentic` rejected as runtime-bound). This
+  spec takes from it only that the package prefix `rr_` follows the product name; domain,
+  npm and trademark checks are a separate task and are not opened here.
+- **FC15 Timing against the in-flight task.** Q14: WP1's golden is recorded only on a tree
+  where T-2026-10-31-1650 (files `hooks/guard/dialog.py`, `skills/ai-task/state.py`) and
+  every other task touching those files has closed, and the risk burndown the plan header
+  names. A golden recorded earlier would pin a tree that changes under it.
+- **FC16 This revision's questions file counts against T-1650.** `state.py status` after
+  Q9–Q14: fact (b) RED, "outside the task's files: … small-oop-modules.questions.md". That
+  task closes only once this spec and the questions file are committed on their own, as the `spec:` commit below;
+  OQ2 remains the human's.
+
+- **FC17 The blockade is narrowed, not lifted.** Q15 (the developer, 17:46) limits Q5 to work
+  that edits `state.py` internals or the extracted interfaces. The Optimisation tasks and
+  urgent fixes may start; a bugfix inside `state.py` still waits for the WP that owns the
+  code, and ROADMAP.md still shows the old order (FC11).
+- **FC18 The second opinion is a model, not a human.** Codex on `gpt-6-astra`, read-only, with
+  the session's measurements as input, one run, 2026-10-31 17:35; its `file:line` evidence
+  was spot-checked where it changed a decision (Q16, Q17, Q19) and not elsewhere. The
+  developer named the agent; the EXPERT-tier rule of `routing.md` was met by that naming.
+
 ## Open questions
 
 - **OQ1 (WP6, plan-time)** Shape of `runtime-gate.py`: single file, or shim + package. Owner:
@@ -421,6 +537,52 @@ replacement of the entry's path.
   measures the modules; the limit is a layout test, never a gate.
 - **OQ5 (WP1, plan-time)** Whether `authority.py` (layer 6) is one module or folds into
   `dialog.py`; decided by the import graph of step 0, not by taste.
+
+## Optimisation proposals (2026-10-31, the session's assessment merged with a Codex second opinion)
+
+The developer asked how far the project is over-engineered. The session measured (source
+25 074 lines, tests 28 108, docs 16 631; `state.py` 38 subcommands, 63 event types, six state
+files per task; 54 tasks: light 5, guarded 33, full 16, nine raised to full by hand; a
+four-minute guarded task 1,33M tokens; $1 707 API-equivalent since 2 October) and proposed
+six changes; Codex on `gpt-6-astra` (read-only, the same question and measurements) returned
+seven with `file:line` evidence. Verdict of both: the excess is in process and policy, not in
+the code; the split lowers the context of later changes but not approvals, artefacts or
+tokens per task. Merged, ranked, each its own task outside the WPs (Q18):
+
+| # | Task | Evidence | Where the two differed, and what stands |
+|---|---|---|---|
+| 1 | **Task classification.** Drop behaviour scoring from generic keywords; trial light at W ≤ 3 while domain and reversibility still escalate; replay past tasks and inspect false negatives around approval, install and deletion | `skills/ai-task/weight.py:163`, `.ai/policies/weight.md:18` | session: light as the default; Astra: a calibration experiment first. Stands: the experiment, with the replay |
+| 2 | **Activity scope for documents.** Spec and plan work names its document paths; a task owns its report and scratch paths; close-time scope equals write-time scope | `hooks/guard/scope.py:359`, `state.py:4269`, FC1 | session: a blanket `docs/sdlc/**` allow; Astra: no, that tree holds governance files. Stands: named paths per activity; the runtime's own classifier is outside either |
+| 3 | **Review strength by named risk.** A manual raise to full needs a reason; STRONG for domain, irreversibility or an approval-boundary change, BALANCED otherwise | `state.py:3608`, `:3626`, `.ai/policies/weight.md:20` | session: BALANCED unless domain 2; Astra: irreversibility and approval boundaries matter too. Stands: the three named risks |
+| 4 | **Spec budget as defaults.** Intent ≤ 60 lines, ≤ 12 requirements, ≤ 6 flagged concerns, evidence in linked material; `architect` on STRONG for a named architectural risk, not for behaviour 2 alone | `skills/rr-spec/SKILL.md:69`, this spec | session: caps; Astra: defaults with a justified exception, caps breed compound requirements. Stands: defaults |
+| 5 | **Measure runtimes and cost per task.** Record runtime, mode, review rounds, refusals and cache-read volume per task; pause new Codex-facing capability until the numbers exist; keep Codex contracts and fixes | `docs/dialog-spike.md:105`, `state.py:2333` | session: freeze Codex; Astra: Claude-only transcripts are not proof of zero use. Stands: measure first, freeze only new capability (Q19 makes WP6 conditional on it) |
+| 6 | **State ownership audit before any merge.** Writers, readers, lifetime, locking and recovery per file; merge only what is demonstrably redundant | `state.py:2328`, `:2162` | session: merge `decision.json` into `consent.jsonl`, `session.json` into `state.json`; Astra: different lifetimes may justify separate files. Stands: the audit, no merger committed |
+| 7 | **Does the split block everything?** | this spec Q5, FC6 | both: only work touching `state.py` internals or the extracted interfaces. Decided so by the developer, Q15 |
+
+Both reviews keep, untouched: characterization of observable behaviour including refusal
+paths and exit codes (R5); human authorization bound to the session and the recorded command
+(`state.py:2088`, `:2100`, `:2161`); hook isolation with its limited duplication (R15).
+
+## External review (2026-10-31, model output pasted by the developer, 17:15)
+
+The developer pasted an assessment of "split into OOP modules, SOLID throughout" against
+this repository and asked for the spec to take it into account; where the session was over
+70 % sure of the answer it recorded it (Q9–Q14, the developer's rule of 2026-10-31). Its
+measurements (5 362 lines, ~244 functions) match the re-measurement within five lines.
+
+| Point made | Checked against | Folded into |
+|---|---|---|
+| A full OOP/SOLID rewrite adds indirection and migration risk; split by responsibility, OOP only where there is state and invariants | Q3 already said so; the six classes of the first draft went further than that | title, O3, R4, Q9 |
+| A rich `TaskState` complicates serialisation and compatibility; the JSON is a public contract | `load` returns the plain dict (`state.py:377`), `save` writes it (`:423`); hooks and both runtimes read the file | R4, Interfaces, Alternatives |
+| `hooks/guard/dialog.py` does not import `state.py` on purpose (`python3 -I -S`); merging them breaks a security boundary | `hooks/guard/dialog.py:21-27` imports only the stdlib; `hooks/ai-guard.py:27`, `hooks/dialog-gate.py:17` | O5, R15, Q10 |
+| `sensors.py` is the precedent for a reasonable extraction | `state.py:84` "measurement only; it never writes this file"; 457 lines, subprocess and git only | R16, Q12 |
+| Functional core + imperative shell; eight files (`state_store`, `journal`, `questions`, `decisions`, `lifecycle`, `profile`, `cli`, entry) | the ladder of the independent check (B2) already groups this way; `lifecycle` as one file would be ~2 000 lines | Design §Layers (eight groups), Q13, Alternatives |
+| OOP only for a resource/transaction holder, a transition with invariants, a dependency seam, a value object | `ledger_lock` holds `consent.lock` by `O_EXCL` (`:2513`); `Runtime` and `Profile` are values; the seams are module attributes the suites already patch | R4, R16, Q9, Q12 |
+| Not: inheritance, `Abstract*`, a DI container, single-implementation interfaces, a repository/service per JSON operation, a static-method namespace class | none exists today (0 classes); the layout test keeps it so | R4, Q11 |
+| Of SOLID, S matters; D and I at I/O boundaries; O on proven need; L irrelevant | — | R4, R16 |
+| Extraction first, behaviour unchanged, the entry kept as a façade, each extraction its own small refactoring with characterization tests | already R1, R5, R6, Q4, Q6 | unchanged |
+| Not mixed with the current task on `state.py` and `dialog.py` | T-2026-10-31-1650 in flight, at its gate | Q14, FC15 |
+| The product name (RiskRails) | out of scope | FC14 |
 
 ## Independent check (architect, STRONG tier, 2026-10-31, read-only)
 
