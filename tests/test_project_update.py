@@ -2440,6 +2440,9 @@ sys.exit(update.main())
         self.assertEqual(grep(r"link\.log", out), 0, "a symlink is skipped\n" + out)
         self.assertEqual(grep(r"commit \.ai/ first", out), 0,
                          "cleanup rows alone do not raise the commit-first hint\n" + out)
+        self.assertTrue(has(r"^\d+ automatic, \d+ conflict\(s\), \d+ cleanup file\(s\) awaiting --confirm-cleanup$", out),
+                        "the summary names the flag the cleanup rows need\n" + out)
+        self.assertNotIn("--confirm-delete", out, "cleanup rows alone never point at --confirm-delete\n" + out)
         self.assertTrue(has(r"delete\?   \.ai/reports/T-2026-01-03-001/ \(2 files\) +\[cleanup\] unclosed task "
                             r"T-2026-01-03-001, last event \d{4}-\d\d-\d\d", out), out)
         self.assertEqual(grep(r"T-2026-01-04-001", out), 0, "an open task idle for 2 days is left alone\n" + out)

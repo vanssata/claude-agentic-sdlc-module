@@ -1991,8 +1991,12 @@ def report(plan, applied):
     tail = ""
     if any(i["policy"] for i in auto):
         tail += ", %d policy change(s) to confirm" % sum(len(i["policy"] or []) for i in auto)
-    if deletions:
-        tail += ", %d deletion(s) awaiting --confirm-delete" % len(deletions)
+    # the summary names the flag each row names: [cleanup] rows settle with --confirm-cleanup only
+    cleanups = [i for i in deletions if (i["reason"] or "").startswith("[cleanup]")]
+    if len(deletions) > len(cleanups):
+        tail += ", %d deletion(s) awaiting --confirm-delete" % (len(deletions) - len(cleanups))
+    if cleanups:
+        tail += ", %d cleanup file(s) awaiting --confirm-cleanup" % len(cleanups)
     print("%d automatic, %d conflict(s)%s" % (len(auto), len(conflicts), tail))
 
 
