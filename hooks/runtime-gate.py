@@ -985,11 +985,18 @@ def codex_missed_reroute(payload):
         "or an unavailable model, stop and say so instead of retrying.")}})
 
 
+def ai_unattended():
+    """AI_UNATTENDED is set when it is non-empty and not 0, false or no (case
+    and blanks ignored): one rule in every reader (risk 0587)."""
+    return os.environ.get("AI_UNATTENDED", "").strip().lower() not in ("", "0", "false", "no")
+
+
 def unattended():
-    """Nobody can answer an ask: AI_UNATTENDED=1, or Claude Code's own
-    CLAUDE_CODE_SESSION_ATTENDED=0 (set by `claude -p` and the SDK). Unset —
-    an older Claude Code — still asks."""
-    return os.environ.get("AI_UNATTENDED") == "1" or os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0"
+    """Nobody can answer an ask: AI_UNATTENDED set (ai_unattended), or Claude
+    Code's own CLAUDE_CODE_SESSION_ATTENDED=0 (set by `claude -p` and the SDK).
+    Unset — an older Claude Code — still asks. dialog.json background_sessions
+    is the dialog's opt-in only: this gate still treats ATTENDED=0 as unattended."""
+    return ai_unattended() or os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0"
 
 
 def will_ask():

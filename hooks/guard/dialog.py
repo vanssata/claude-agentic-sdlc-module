@@ -118,15 +118,25 @@ def dialog_policy(root):
             "background_sessions": data.get("background_sessions") is True}
 
 
+def ai_unattended():
+    """AI_UNATTENDED is set when it is non-empty and not 0, false or no (case
+    and blanks ignored): one rule in every reader (risk 0587)."""
+    return os.environ.get("AI_UNATTENDED", "").strip().lower() not in ("", "0", "false", "no")
+
+
 def unattended(policy):
     """True when the run is declared unattended: AI_UNATTENDED always; the
     runtime's own marker (CLAUDE_CODE_SESSION_ATTENDED=0: a background job,
     `claude -p`, the SDK) unless the project opts in with background_sessions:
-    true, for background jobs a human is still chatting in. state.py's
-    dialog_on() keeps the same rule."""
-    if os.environ.get("AI_UNATTENDED"):
+    true, for background jobs of the CLI a human is still chatting in. The
+    opt-in never covers an SDK entrypoint (CLAUDE_CODE_ENTRYPOINT sdk-*:
+    `claude -p`, an SDK host — nobody there answers the dialog; risk ffae).
+    state.py's dialog_on() keeps the same rule."""
+    if ai_unattended():
         return True
-    return os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0" and not policy.get("background_sessions")
+    background = policy.get("background_sessions") and \
+        not os.environ.get("CLAUDE_CODE_ENTRYPOINT", "").startswith("sdk-")
+    return os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0" and not background
 
 
 def runtime_home(runtime):

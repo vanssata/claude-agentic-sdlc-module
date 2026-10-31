@@ -167,6 +167,10 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         self.decide("with a task in flight the same call is denied", "deny", approve)
         with self.subTest("AI_UNATTENDED in the hook's own environment lets a launcher through"):
             self.assertEqual(self.out(approve, dict(os.environ, AI_UNATTENDED="1")), "")
+            self.assertEqual(self.out(approve, dict(os.environ, AI_UNATTENDED="yes")), "")
+        for value in ("0", "false", "No"):
+            with self.subTest("risk 0587: AI_UNATTENDED=%r is not set" % value):
+                self.assertNotEqual(self.out(approve, dict(os.environ, AI_UNATTENDED=value)), "")
         self.says("and the deny text teaches the human what to do", "Approval happens outside the agent", approve)
         self.says("including the unattended route and what it costs", "AI_UNATTENDED=1 in the launcher", approve)
 

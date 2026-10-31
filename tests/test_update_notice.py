@@ -102,6 +102,34 @@ class TestUpdateNotice(unittest.TestCase):
             with self.subTest(source=source):
                 self.assertNotIn("is available", self.start(source=source))
 
+    def test_too_deep_json_is_read_as_malformed_json(self):
+        """Risk 0cad: profile.json, the cache and the registry body nested past
+        the parser's stack take the malformed path, no RecursionError."""
+        deep = "[" * 200000
+        manifest = installed("claude")
+        plugin = os.path.dirname(os.path.dirname(update_notice.__file__))
+        for name, bad in (("malformed", '{"plugin_version": '), ("deep", deep)):
+            with self.subTest(reader="installed_version", text=name):
+                with open(self.config + "/riskrails/profile.json", "w", encoding="utf-8") as fh:
+                    fh.write(bad)
+                self.assertEqual(update_notice.installed_version("claude", plugin, self.config), manifest)
+            with self.subTest(reader="read_cache", text=name):
+                path = self.tmp + "/cache-" + name + ".json"
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write(bad)
+                self.assertEqual(update_notice.read_cache(path), {})
+            with self.subTest(reader="refresh", text=name):
+                path = self.tmp + "/refresh-" + name + ".json"
+                with open(path, "w", encoding="utf-8") as fh:
+                    json.dump({"checked_at": 0, "latest": "9.9.9"}, fh)
+                with open(self.registry, "w", encoding="utf-8") as fh:
+                    fh.write(bad)
+                with mock.patch.dict(os.environ, {"RISKRAILS_REGISTRY_URL": "file://" + self.registry}), \
+                        mock.patch.object(update_notice, "MAX_BODY", 4 * len(deep)):
+                    update_notice.refresh(path)
+                self.assertEqual(update_notice.read_cache(path).get("latest"), "9.9.9",
+                                 "a failed fetch keeps the previous latest")
+
     def test_switches_turn_it_off(self):
         self.cache("claude", bump(installed("claude")), age=10 * 86400)
         for name in ("RISKRAILS_NO_UPDATE_CHECK", "CI"):

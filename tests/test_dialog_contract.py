@@ -72,6 +72,14 @@ class TestLedgerContract(unittest.TestCase):
             with self.subTest(reader=name):
                 self.assertEqual([e["ids"] for e in entries], [["C1"], ["C2"]])
 
+    def test_too_deep_codex_tool_response_reads_as_malformed(self):
+        """Risk 0cad: the recorder's Codex answers reader takes a too-deep
+        tool_response as a malformed one — no answers, no RecursionError."""
+        tool_input = {"questions": [{"id": "q1", "question": "Commit?"}]}
+        seen = [dialog.adapt_response("codex", {"tool_input": tool_input, "tool_response": text})
+                for text in ('{"answers": ', "[" * 200000)]
+        self.assertEqual(seen, [[[]], [[]]])
+
     def test_both_label_rules_agree(self):
         """Review L1: the hooks' validate_label and state.py's, over labels that
         name this repository's state.py (state.py also checks the path)."""
@@ -100,7 +108,7 @@ class TestSwitchContract(unittest.TestCase):
     switch_state() agree on every combination of their inputs."""
 
     CLEAR = ("CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID", "AI_UNATTENDED", "CLAUDE_CODE_SESSION_ATTENDED",
-             "CLAUDE_CONFIG_DIR", "CODEX_HOME")
+             "CLAUDE_CONFIG_DIR", "CODEX_HOME", "CLAUDE_CODE_ENTRYPOINT")
 
     def test_tables_are_equal(self):
         self.assertEqual(state_mod.SESSION_ENV, dialog.SESSION_ENV)
@@ -231,7 +239,9 @@ class TestSwitchContract(unittest.TestCase):
                     for attended0 in (False, True):
                         for tool in ("verified", "wrong", "missing", "legacy", "nested"):
                             for sid in ("sess-1234", ""):
-                                self.check(runtime, policy, unattended, attended0, tool, sid, sid, seen)
+                                for entrypoint in (None, "sdk-cli"):
+                                    self.check(runtime, policy, unattended, attended0, tool, sid, sid, seen,
+                                               entrypoint=entrypoint)
         self.assertEqual(seen, {"on", "off", "closed"})
 
     def test_background_sessions_opt_in(self):
@@ -253,9 +263,18 @@ class TestSwitchContract(unittest.TestCase):
                     (("background", True, False, "verified", "sess-1234"), "off"),
                     (("background", False, True, "wrong", "sess-1234"), "off"),
                     (("background", False, True, "verified", ""), "closed"),
+                    # risk ffae: the opt-in is for a background job of the CLI, never
+                    # `claude -p` or an SDK host (CLAUDE_CODE_ENTRYPOINT sdk-*)
+                    (("background", False, True, "verified", "sess-1234", "cli"), "on"),
+                    (("background", False, True, "verified", "sess-1234", "sdk-cli"), "off"),
+                    (("background", False, True, "verified", "sess-1234", "sdk-py"), "off"),
+                    (("background", False, True, "verified", "sess-1234", "sdk-ts"), "off"),
+                    (("background", False, False, "verified", "sess-1234", "sdk-cli"), "on"),
                 )
                 for args, want in cases:
-                    hooks, got = self.check(runtime, args[0], args[1], args[2], args[3], args[4], args[4], seen)
+                    entrypoint = args[5] if len(args) > 5 else None
+                    hooks, got = self.check(runtime, args[0], args[1], args[2], args[3], args[4], args[4], seen,
+                                            entrypoint=entrypoint)
                     self.assertEqual(hooks, want, args)
                     self.assertEqual(bool(got), want == "on", args)
                 with tempfile.TemporaryDirectory() as tmp:
@@ -295,10 +314,26 @@ class TestSwitchContract(unittest.TestCase):
                     if got:
                         self.assertEqual(got["session"], "sess-1234")
 
-    def check(self, runtime, policy, unattended, attended0, tool, env_sid, payload_sid, seen):
-        """Runs both switches; returns (hooks' state, dialog_on's result)."""
-        name = "%s policy=%s unattended=%s attended0=%s tool=%s env_session=%r payload_session=%r" % (
-            runtime, policy, unattended, attended0, tool, env_sid, payload_sid)
+    def test_ai_unattended_is_one_rule(self):
+        """Risk 0587: AI_UNATTENDED is set when it is non-empty and not 0, false
+        or no (case and blanks ignored) — in both switches."""
+        for runtime in ("claude", "codex"):
+            seen = set()
+            for value, want in (("1", "off"), ("yes", "off"), ("true", "off"), ("TRUE", "off"),
+                                ("anything", "off"), ("0", "on"), ("false", "on"), ("No", "on"),
+                                (" 0 ", "on"), ("", "on")):
+                with self.subTest(runtime=runtime, value=value):
+                    hooks, got = self.check(runtime, True, value, False, "verified", "sess-1234", "sess-1234",
+                                            seen)
+                    self.assertEqual(hooks, want)
+                    self.assertEqual(bool(got), want == "on")
+
+    def check(self, runtime, policy, unattended, attended0, tool, env_sid, payload_sid, seen,
+              entrypoint=None):
+        """Runs both switches; returns (hooks' state, dialog_on's result).
+        unattended: True sets AI_UNATTENDED=1, a string sets that very value."""
+        name = "%s policy=%s unattended=%r attended0=%s tool=%s env_session=%r payload_session=%r entrypoint=%s" % (
+            runtime, policy, unattended, attended0, tool, env_sid, payload_sid, entrypoint)
         sid = payload_sid
         diagonal = env_sid == payload_sid
         with tempfile.TemporaryDirectory() as tmp:
@@ -306,10 +341,14 @@ class TestSwitchContract(unittest.TestCase):
             env = {"CODEX_HOME" if runtime == "codex" else "CLAUDE_CONFIG_DIR": home}
             if env_sid:
                 env[dialog.SESSION_ENV[runtime]] = env_sid
-            if unattended:
+            if isinstance(unattended, str):
+                env["AI_UNATTENDED"] = unattended
+            elif unattended:
                 env["AI_UNATTENDED"] = "1"
             if attended0:
                 env["CLAUDE_CODE_SESSION_ATTENDED"] = "0"
+            if entrypoint:
+                env["CLAUDE_CODE_ENTRYPOINT"] = entrypoint
             payload = {"session_id": sid, "hook_event_name": "PreToolUse"}
             with mock.patch.dict(os.environ, env, clear=False), mock.patch.object(state_mod, "RUNTIME", runtime):
                 for var in self.CLEAR:

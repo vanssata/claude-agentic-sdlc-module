@@ -32,6 +32,12 @@ def test_mode():
     return os.environ.get("RISKRAILS_TEST", os.environ.get("CLAUDE_AGENTIC_TEST")) == "1"
 
 
+def ai_unattended():
+    """AI_UNATTENDED is set when it is non-empty and not 0, false or no (case
+    and blanks ignored): one rule in every reader (risk 0587)."""
+    return os.environ.get("AI_UNATTENDED", "").strip().lower() not in ("", "0", "false", "no")
+
+
 def human_gate():
     """(passed, via, why) for --confirm-delete. A terminal outside any agent
     session is a human: via "terminal". Otherwise a launcher that declared the
@@ -44,7 +50,7 @@ def human_gate():
     markers = [name for name in AGENT_MARKERS if name in os.environ]
     if os.isatty(0) and not markers:
         return True, "terminal", ""
-    if os.environ.get("AI_UNATTENDED"):
+    if ai_unattended():
         return True, "unattended", ""
     if markers:
         return False, None, ("this run is inside an agent session (%s %s set); run it in a terminal "

@@ -1264,6 +1264,9 @@ class TestProjectAdopt(unittest.TestCase):  # pylint: disable=too-many-public-me
         rc, out = self.upd(cl, "--adopt", "--cleanup", "--apply", "--confirm-delete", "tester")
         self.assertTrue(rc == 5 and first(out).startswith("ADOPT_REFUSED") and tree_sha(cl) == before,
                         "--confirm-delete with no terminal and no AI_UNATTENDED: exit 5, nothing removed\n" + out)
+        rc, out = self.upd(cl, "--adopt", "--cleanup", "--apply", "--confirm-delete", "tester", AI_UNATTENDED="0")
+        self.assertTrue(rc == 5 and tree_sha(cl) == before,
+                        "risk 0587: AI_UNATTENDED=0 is not the unattended route: exit 5, nothing removed\n" + out)
         rc, out = self.confirm(cl, CLAUDECODE="1")
         rec = one(os.path.join(cl, ".ai", "reports", "adopt-*"))
         gone = sum(not os.path.lexists(os.path.join(cl, f)) for f in want)

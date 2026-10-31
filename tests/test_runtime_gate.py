@@ -364,6 +364,9 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
         out = self.launch(g, "architect", AI_UNATTENDED="1")
         self.assertTrue(decision(out) == "none" and "unattended" in hso(out).get("additionalContext", ""),
                         "AI_UNATTENDED=1: allowed and explained, never asked" + ": %s" % out)
+        for value, asks in (("yes", False), ("true", False), ("0", True), ("false", True), ("no", True)):
+            out = self.launch(g, "architect", AI_UNATTENDED=value)          # risk 0587: one rule
+            self.assertEqual(decision(out) == "ask", asks, "AI_UNATTENDED=%r: %s" % (value, out))
         self.resolve("max20", "yes", cl + "/riskrails/profile.json")
         self.rmrf(cl + "/state")
         o1, o2, o3 = (self.launch(g, "architect") for _ in range(3))
@@ -692,9 +695,15 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
                 self.assertEqual(mod.last_transcript_model(path), "opus")
                 ok_event = json.dumps({"payload": {"rate_limits": {"primary": {
                     "used_percent": 5, "window_minutes": 10080, "resets_at": 1}}}, "type": "token_count"})
-                bad_event = '"token_count" "rate_limits" ' + ("[" * 60000 if name == "deep" else "{x")  # the tail is 64 KB
+                # review M1 of T-2026-10-31-1529: the bad line is a JSON object up to the
+                # nesting, so json.loads reaches the [ run; the tail is widened to hold it
+                bad_event = '{"type": "token_count", "rate_limits": ' + (deep if name == "deep" else "{x")
                 rollout = put("r-" + name + ".jsonl", ok_event + "\n" + bad_event + "\n")
-                self.assertIsNotNone(mod.rollout_limits(rollout), "the older valid event is still read")
+                saved_tail, mod.ROLLOUT_TAIL = mod.ROLLOUT_TAIL, 4 * len(deep)
+                try:
+                    self.assertIsNotNone(mod.rollout_limits(rollout), "the older valid event is still read")
+                finally:
+                    mod.ROLLOUT_TAIL = saved_tail
             with self.subTest("project_task: " + name):
                 proj = os.path.join(d, "proj-" + name)
                 os.makedirs(os.path.join(proj, ".ai", "state"), exist_ok=True)

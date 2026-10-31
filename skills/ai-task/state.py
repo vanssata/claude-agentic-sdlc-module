@@ -238,6 +238,12 @@ def session_path(root):
     return os.path.join(root, ".ai", "state", "session.json")
 
 
+def ai_unattended():
+    """AI_UNATTENDED is set when it is non-empty and not 0, false or no (case
+    and blanks ignored): one rule in every reader (risk 0587)."""
+    return os.environ.get("AI_UNATTENDED", "").strip().lower() not in ("", "0", "false", "no")
+
+
 def read_session(root):
     """The hook's sidecar (I5). Absent, half-written or unreadable is normal."""
     try:
@@ -382,11 +388,12 @@ def load(root, required=True, claim=None):
         return None
     try:
         with open(path, encoding="utf-8") as fh:
-            state = apply_defaults(json.load(fh))
+            data = json.load(fh)
     except (OSError, ValueError, RecursionError) as exc:
         # Loud on purpose: a corrupt state file must never be silently replaced,
         # because ai-scope-guard's boundaries are derived from it.
         die("%s is unreadable (%s). Inspect it by hand; do not delete it blindly." % (path, exc))
+    state = apply_defaults(data)
     # Ownership is taken before the command's own events, so the journal and
     # history both show the handoff ahead of the work it covers.
     if MUTATING if claim is None else claim:
@@ -1022,7 +1029,7 @@ def cmd_weight(args, root):
         die("weight.py is missing beside state.py: reinstall the plugin")
     try:
         policy, path = weight.load_policy(root)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         die("cannot read the weight table: %s" % exc)
     if args.mirror:
         own = os.path.join(root, ".ai", "policies", "weight.json")
@@ -1115,7 +1122,7 @@ def human_route(root=None, allow_dialog=False):
     markers = agent_markers()
     if os.isatty(0) and not markers:
         return "terminal", ""
-    if os.environ.get("AI_UNATTENDED"):
+    if ai_unattended():
         return "unattended", ""
     if allow_dialog and root and dialog_pick(root):
         return "dialog", ""
@@ -1662,7 +1669,7 @@ def cmd_ask(args, root):
                              "description": "%s%s" % (one_line(text, 300),
                                                       " (recommended)" if key == item.get("recommend") else "")}
                             for key, text in item["options"]], "ask", question_id=item["id"])
-    if os.environ.get("AI_UNATTENDED"):
+    if ai_unattended():
         # The literal line an unattended launcher greps for (R5).
         print("WAITING_FOR_ANSWERS %s %s" % (relative, " ".join(new_ids)))
 
@@ -1871,7 +1878,7 @@ def handoff_lines(root, state, reason):
     if batch_on(state):
         try:
             policy = weight.load_policy(root)[0] if weight else {}
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
             policy = {}                       # best effort: the handoff never fails a command
         out.append("Batch: on · ready %s · review %d/%d · suite %d/%d" % (
             ", ".join(one_line(s["id"], 40) for s in ready_steps(state)) or "none",
@@ -2178,7 +2185,7 @@ def close_gate_from_file(root, state, question, by):
     seconds: deciding before the lock and applying after it would overwrite them.
     """
     gate_id = question["id"]
-    unattended = bool(os.environ.get("AI_UNATTENDED"))
+    unattended = ai_unattended()
     with question_lock(questions_path(root, state, None)):
         fresh = load(root, claim=False)
         if open_gate(fresh) != gate_id:
@@ -2301,6 +2308,8 @@ def cmd_reject(args, root):
     # A rejection needs no route, but a picked reject spends its pick, so the
     # approval decision settles.
     pick = dialog_pick(root)
+    if os.path.exists(decision_path(root)):
+        read_decisions(root)              # an unreadable file refuses before anything is recorded (5580)
     claim_runtime(root, state)
     state["human_approval"].update({
         "required": True, "granted": False, "granted_by": None, "granted_at": None,
@@ -2424,11 +2433,14 @@ def dialog_on(root):
     if not root:
         return None
     policy = dialog_policy(root)
-    if not policy or os.environ.get("AI_UNATTENDED"):
+    if not policy or ai_unattended():
         return None
     # the runtime's unattended marker (a background job, `claude -p`, the SDK)
-    # turns the dialog off unless the project opts in, as the hooks' unattended()
-    if os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0" and not policy["background_sessions"]:
+    # turns the dialog off unless the project opts in, as the hooks' unattended();
+    # the opt-in never covers an SDK entrypoint (sdk-*: `claude -p`, an SDK host — risk ffae)
+    background = policy["background_sessions"] and \
+        not os.environ.get("CLAUDE_CODE_ENTRYPOINT", "").startswith("sdk-")
+    if os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0" and not background:
         return None
     runtime = own_runtime()
     tool = dialog_tool_verified(runtime)
@@ -3036,6 +3048,14 @@ def decision_open(args, root):
         head, run_text(root, ["git", "rev-parse", "--abbrev-ref", "HEAD"]) or "?",
         run_text(root, ["git", "diff", "--shortstat", "HEAD"]) or "no uncommitted change",
         "\n".join("  %s" % c for c in args.commands))
+    # Two open decisions with one question text can never be answered in the
+    # dialog: the recorder reads both as ambiguous (risk afd2).
+    shown = question.strip()[:QUESTION_MAX]
+    twin = next((d.get("id") for d in read_decisions(root)["open"] if d.get("question") == shown), None)
+    if twin:
+        die("DECISION_DUPLICATE — %s is open with this very question; send it ('state.py decision show') "
+            "and run the pick, or 'state.py decision fallback --id %s --why …', before opening it again"
+            % (twin, twin), 6)
     options = [{"kind": "choice", "effect": "defer", "label": "Not now — commit nothing"}] + \
         [{"kind": "command", "label": c} for c in args.commands]
     decision, why = open_decision(root, state, "commit", "Commit", question, options, "decision open",
@@ -3213,7 +3233,7 @@ def weight_policy(root):
         die("weight.py is missing beside state.py: reinstall the plugin")
     try:
         return weight.load_policy(root)[0]
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         die("cannot read the weight table: %s" % exc)
     return None                           # unreachable: die() exits
 
