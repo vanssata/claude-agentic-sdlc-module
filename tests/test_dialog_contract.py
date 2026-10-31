@@ -57,6 +57,21 @@ class TestLedgerContract(unittest.TestCase):
                     for line in fh:
                         self.assertLessEqual(len(line), state_mod.LEDGER_LINE_MAX, name)
 
+    def test_both_readers_skip_only_a_too_deep_line(self):
+        """A line nested past the parser's stack is torn like any other: both
+        readers skip it and nothing else (written to a temp file: a fixture
+        line may not pass LEDGER_LINE_MAX)."""
+        good = json.dumps({"v": 1, "type": "void", "ids": ["C1"]})
+        other = json.dumps({"v": 1, "type": "void", "ids": ["C2"]})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "consent.jsonl")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("%s\n%s\n%s\n" % (good, "[" * 200000, other))
+            seen = {"state.py": state_mod.read_ledger(None, path), "hooks/guard/dialog.py": dialog.read_ledger(None, path)}
+        for name, entries in seen.items():
+            with self.subTest(reader=name):
+                self.assertEqual([e["ids"] for e in entries], [["C1"], ["C2"]])
+
     def test_both_label_rules_agree(self):
         """Review L1: the hooks' validate_label and state.py's, over labels that
         name this repository's state.py (state.py also checks the path)."""
@@ -185,6 +200,10 @@ class TestSwitchContract(unittest.TestCase):
             with open(os.path.join(root, ".ai", "policies", "dialog.json"), "w", encoding="utf-8") as fh:
                 if policy == "nested":
                     fh.write(deep)
+                elif policy in ("background", "background-text"):
+                    # background_sessions: only the boolean true counts, a string is no opt-in
+                    json.dump({"enabled": True,
+                               "background_sessions": True if policy == "background" else "true"}, fh)
                 else:
                     json.dump({"enabled": policy}, fh)
         home = os.path.join(tmp, "home")
@@ -207,13 +226,49 @@ class TestSwitchContract(unittest.TestCase):
         The off-diagonal cases are test_session_ids_that_differ."""
         seen = set()
         for runtime in ("claude", "codex"):
-            for policy in (True, None, False, "nested"):
+            for policy in (True, None, False, "nested", "background", "background-text"):
                 for unattended in (False, True):
                     for attended0 in (False, True):
                         for tool in ("verified", "wrong", "missing", "legacy", "nested"):
                             for sid in ("sess-1234", ""):
                                 self.check(runtime, policy, unattended, attended0, tool, sid, sid, seen)
         self.assertEqual(seen, {"on", "off", "closed"})
+
+    def test_background_sessions_opt_in(self):
+        """dialog.json background_sessions: true keeps the switch on when Claude
+        Code marks the session unattended (CLAUDE_CODE_SESSION_ATTENDED=0, a
+        background job a human may still be chatting in). Only that marker: an
+        explicit AI_UNATTENDED, a subagent, a missing session id, an unverified
+        tool and a string instead of true still turn it off or close it."""
+        for runtime in ("claude", "codex"):
+            seen = set()
+            with self.subTest(runtime=runtime):
+                cases = (
+                    # policy, AI_UNATTENDED, ATTENDED=0, tool, session id -> hooks' state
+                    (("background", False, True, "verified", "sess-1234"), "on"),
+                    (("background", False, False, "verified", "sess-1234"), "on"),
+                    ((True, False, True, "verified", "sess-1234"), "off"),
+                    (("background-text", False, True, "verified", "sess-1234"), "off"),
+                    (("background", True, True, "verified", "sess-1234"), "off"),
+                    (("background", True, False, "verified", "sess-1234"), "off"),
+                    (("background", False, True, "wrong", "sess-1234"), "off"),
+                    (("background", False, True, "verified", ""), "closed"),
+                )
+                for args, want in cases:
+                    hooks, got = self.check(runtime, args[0], args[1], args[2], args[3], args[4], args[4], seen)
+                    self.assertEqual(hooks, want, args)
+                    self.assertEqual(bool(got), want == "on", args)
+                with tempfile.TemporaryDirectory() as tmp:
+                    root, home = self.build(tmp, runtime, "background", "verified")
+                    env = {"CODEX_HOME" if runtime == "codex" else "CLAUDE_CONFIG_DIR": home,
+                           "CLAUDE_CODE_SESSION_ATTENDED": "0"}
+                    with mock.patch.dict(os.environ, env):
+                        for var in self.CLEAR:      # the scratch home only, never the machine's profile
+                            if var not in env:
+                                os.environ.pop(var, None)
+                        payload = {"session_id": "sess-1234", "agent_id": "a1"}
+                        self.assertEqual(dialog.switch_state(root, runtime, payload), "closed",
+                                         "a subagent stays closed under the opt-in")
 
     def test_session_ids_that_differ(self):
         """The one place the switches may differ. The hooks compare the payload's

@@ -126,7 +126,7 @@ def user_settings():
         with open(os.path.join(config_dir(), "settings.json"), encoding="utf-8") as fh:
             settings = json.load(fh)
         return settings if isinstance(settings, dict) else {}
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return {}
 
 
@@ -157,7 +157,7 @@ def profile_context():
         with open(os.path.join(home, "riskrails", "profile.json"), encoding="utf-8") as fh:
             context = json.load(fh).get("context")
         return context if isinstance(context, dict) else {}
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, RecursionError, AttributeError):
         return {}
 
 
@@ -253,7 +253,7 @@ def current_context(path):
             continue
         try:
             entry = json.loads(raw)
-        except ValueError:
+        except (ValueError, RecursionError):
             continue
         if entry.get("type") == "system" and entry.get("subtype") == "compact_boundary":
             return None             # the numbers before it describe the old context
@@ -301,7 +301,7 @@ def scan_session(path):
                 continue
             try:
                 entry = json.loads(raw)
-            except ValueError:
+            except (ValueError, RecursionError):
                 continue
             if entry.get("isSidechain"):
                 continue
@@ -395,7 +395,7 @@ def task_in_flight(root):
     try:
         with open(state, encoding="utf-8") as fh:
             return (json.load(fh) or {}).get("current_stage") != "done"
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return False
 
 
@@ -412,7 +412,7 @@ def write_session(root, updates):
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
         data = data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         data = {}
     data.update(updates)
     try:
@@ -431,7 +431,7 @@ def prompt_count(root):
     try:
         with open(os.path.join(root, ".ai", "state", "session.json"), encoding="utf-8") as fh:
             count = json.load(fh).get("prompt_count")
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, RecursionError, AttributeError):
         return 0
     return count if isinstance(count, int) and not isinstance(count, bool) else 0
 
@@ -471,7 +471,7 @@ def recorded_mtime(root):
     try:
         with open(os.path.join(root, ".ai", "state", "session.json"), encoding="utf-8") as fh:
             return json.load(fh).get("account_mtime")
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, RecursionError, AttributeError):
         return None
 
 
@@ -488,7 +488,7 @@ def detect_drift(root, cwd, session, open_it=True, mtime=None):
         raw = ""
     try:
         found = json.loads(raw)
-    except ValueError:
+    except (ValueError, RecursionError):
         return None
     if root and mtime is not None and isinstance(found, dict):
         write_session(root, {"account_mtime": mtime})
@@ -659,7 +659,7 @@ def prompt_warning(payload, session, transcript):
     try:
         with open(marker, encoding="utf-8") as fh:
             state = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         state = {}
 
     def save():

@@ -114,7 +114,19 @@ def dialog_policy(root):
         value = value if isinstance(value, int) and not isinstance(value, bool) else default
         return min(high, max(low, value))
     return {"window_seconds": bounded("window_seconds", *WINDOW),
-            "stop_blocks_max": bounded("stop_blocks_max", STOP_BLOCKS_MAX, 0, STOP_BLOCKS_MAX)}
+            "stop_blocks_max": bounded("stop_blocks_max", STOP_BLOCKS_MAX, 0, STOP_BLOCKS_MAX),
+            "background_sessions": data.get("background_sessions") is True}
+
+
+def unattended(policy):
+    """True when the run is declared unattended: AI_UNATTENDED always; the
+    runtime's own marker (CLAUDE_CODE_SESSION_ATTENDED=0: a background job,
+    `claude -p`, the SDK) unless the project opts in with background_sessions:
+    true, for background jobs a human is still chatting in. state.py's
+    dialog_on() keeps the same rule."""
+    if os.environ.get("AI_UNATTENDED"):
+        return True
+    return os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0" and not policy.get("background_sessions")
 
 
 def runtime_home(runtime):
@@ -153,9 +165,8 @@ def switch_state(root, runtime, payload):
     to a session that can answer a dialog: a payload that is not an object, a
     subagent (agent_id), no session id, or a session id other than the one the
     hook's own environment carries. On: otherwise."""
-    if not root or dialog_policy(root) is None:
-        return "off"
-    if os.environ.get("AI_UNATTENDED") or os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
+    policy = dialog_policy(root) if root else None
+    if policy is None or unattended(policy):
         return "off"
     if dialog_tool(runtime) is None:
         return "off"
@@ -314,7 +325,7 @@ def adapt_response(runtime, payload):
     if runtime == "codex":
         try:
             answers = json.loads(payload.get("tool_response") or "").get("answers")
-        except (ValueError, TypeError, AttributeError):
+        except (ValueError, TypeError, AttributeError, RecursionError):
             answers = None
         out = []
         for q in questions:
@@ -400,7 +411,7 @@ def read_ledger(root, path=None, types=LEDGER_TYPES):
             for raw in fh:
                 try:
                     entry = json.loads(raw)
-                except ValueError:
+                except (ValueError, RecursionError):
                     continue
                 if isinstance(entry, dict) and entry.get("v") == 1 and entry.get("type") in types:
                     entries.append(entry)

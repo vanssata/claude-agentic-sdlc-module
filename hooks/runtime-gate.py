@@ -138,7 +138,7 @@ def profile_tier(home, tier, field, default):
         with open(profile_file(home), encoding="utf-8") as fh:
             value = json.load(fh)["tiers"][tier][field]
         return value if isinstance(value, str) and value else default
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, RecursionError):
         return default
 
 
@@ -148,7 +148,7 @@ def profile_fable(home):
     try:
         with open(profile_file(home), encoding="utf-8") as fh:
             return bool(json.load(fh).get("fable", True))
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, AttributeError, RecursionError):
         return True
 
 
@@ -205,7 +205,7 @@ def load(path=None):
         return data if isinstance(data, dict) else {}
     except OSError:
         return import_legacy() if path in (None, STATE) else {}
-    except ValueError:
+    except (ValueError, RecursionError):
         return {}
 
 
@@ -218,7 +218,7 @@ def import_legacy():
     try:
         with open(LEGACY_STATE, encoding="utf-8") as fh:
             old = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return {}
     data = {"imported_from": os.path.basename(LEGACY_STATE)}
     if isinstance(old, dict) and isinstance(old.get("unavailable"), dict):
@@ -341,7 +341,7 @@ def claude_code_version(path):
             continue
         try:
             version = json.loads(line).get("version")
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, RecursionError):
             continue
         m = re.match(r"(\d+)\.(\d+)\.(\d+)", version) if isinstance(version, str) else None
         if m:
@@ -444,7 +444,7 @@ def last_transcript_model(path):
     for line in reversed(transcript_tail(path)):
         try:
             model = (json.loads(line).get("message") or {}).get("model")
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, RecursionError):
             continue
         if isinstance(model, str) and model and not model.startswith("<"):
             return model
@@ -564,7 +564,7 @@ def rollout_limits(path):
             continue
         try:
             event = json.loads(line)
-        except ValueError:
+        except (ValueError, RecursionError):
             continue
         limits = (event.get("payload") or {}).get("rate_limits") or {}
         weekly = five = None
@@ -864,7 +864,7 @@ def profile():
         with open(profile_file(HOME), encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return {}
 
 
@@ -919,7 +919,7 @@ def project_task(cwd):
             try:
                 with open(path, encoding="utf-8") as fh:
                     task = json.load(fh).get("task_id")
-            except (OSError, ValueError, AttributeError):
+            except (OSError, ValueError, AttributeError, RecursionError):
                 return None, None
             return (here, task) if task else (None, None)
         parent = os.path.dirname(here)

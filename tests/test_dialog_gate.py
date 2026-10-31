@@ -382,7 +382,9 @@ class TestEffectiveSwitch(HookCase):
         try:
             shutil.copy(os.path.join(ROOT, "skills", "ai-init", "templates", ".ai", "policies", "dialog.json"),
                         os.path.join(s.root, ".ai", "policies", "dialog.json"))
-            self.assertEqual(dialog.dialog_policy(s.root), {"window_seconds": 120, "stop_blocks_max": 2})
+            # the template ships the background-session opt-in off: the project decides
+            self.assertEqual(dialog.dialog_policy(s.root),
+                             {"window_seconds": 120, "stop_blocks_max": 2, "background_sessions": False})
             self.assertTrue(dialog.effective_switch(s.root, "claude", spike("claude/ask-single")))
         finally:
             s.close()
@@ -671,6 +673,43 @@ class TestGateHook(HookCase):
         prompt(self.s)
         self.assertEqual(self.stop().get("decision"), "block", "a new human turn resets the count")
         self.assertEqual([line["turn"] for line in self.s.ledger()], [1, 1, 2])
+
+    def deep_vs_malformed(self, relpath, content, active):
+        """The Stop outcome with `content` in relpath for a too-deep text and a malformed one."""
+        path = os.path.join(self.s.root, *relpath)
+        outs = []
+        for text in ("[" * 200000, "{not json"):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(content(text))
+            code, raw = run_gate(self.s, dict(spike("claude/stop"), stop_hook_active=active))
+            self.assertEqual(code, 0)
+            self.assertNotIn("Traceback", raw)
+            outs.append(hook_output(raw))
+        return outs
+
+    def test_stop_deep_session_json_is_malformed_session_json(self):
+        """R-hooks-readers-of-ai-state-files-do-not-c-7d54: prompt_count."""
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+        for active in (False, True):
+            deep, bad = self.deep_vs_malformed((".ai", "state", "session.json"), lambda t: t, active)
+            self.assertEqual(deep, bad)
+            self.assertTrue(deep, "an open decision still answers the Stop")
+
+    def test_stop_deep_ledger_line_is_malformed_ledger_line(self):
+        """The hook's read_ledger skips a too-deep line like a torn one."""
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+        sid = spike("claude/stop")["session_id"]
+        line = json.dumps({"v": 1, "type": dialog.STOP_BLOCK, "session": sid, "turn": None, "decisions": ["D1"]})
+        content = lambda t: "%s\n%s\n%s\n" % (line, t, line)
+        deep, bad = self.deep_vs_malformed((".ai", "state", "consent.jsonl"), content, False)
+        self.assertEqual(deep, bad)
+        self.assertEqual(dialog.read_ledger(self.s.root, types={dialog.STOP_BLOCK}).__len__(), 2)
+
+    def test_codex_deep_tool_response_is_malformed(self):
+        payload = {"tool_input": {"questions": [{"id": "q1"}]}}
+        deep = dialog.adapt_response("codex", dict(payload, tool_response="[" * 200000))
+        bad = dialog.adapt_response("codex", dict(payload, tool_response="{not json"))
+        self.assertEqual(deep, bad)
 
     def test_stop_without_a_turn_honours_stop_hook_active(self):
         self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
@@ -976,6 +1015,12 @@ class TestDecisionGate(HookCase):
                 with open(os.path.join(self.s.root, ".ai", "state", "decision.json"), "w", encoding="utf-8") as fh:
                     fh.write(text)
                 self.assertEqual(self.guard(tool="Grep", tool_input={"pattern": "x"}), ("allow", ""))
+
+    def test_gate_allows_on_too_deep_decision_json(self):
+        # read_decisions catches RecursionError; end to end the hook allows (R-deep-decision-json-gate-allow-not-pinned-47ef)
+        with open(os.path.join(self.s.root, ".ai", "state", "decision.json"), "w", encoding="utf-8") as fh:
+            fh.write("[" * 200000)
+        self.assertEqual(self.guard(tool="Grep", tool_input={"pattern": "x"}), ("allow", ""))
 
     def test_off_is_today(self):
         self.open(COMMIT)

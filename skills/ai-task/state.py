@@ -243,7 +243,7 @@ def read_session(root):
     try:
         with open(session_path(root), encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -332,7 +332,7 @@ def read_journal(root, task_id):
                     continue
                 try:
                     events.append(json.loads(line))
-                except ValueError:
+                except (ValueError, RecursionError):
                     skipped += 1
     except OSError:
         return [], skipped
@@ -383,7 +383,7 @@ def load(root, required=True, claim=None):
     try:
         with open(path, encoding="utf-8") as fh:
             state = apply_defaults(json.load(fh))
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         # Loud on purpose: a corrupt state file must never be silently replaced,
         # because ai-scope-guard's boundaries are derived from it.
         die("%s is unreadable (%s). Inspect it by hand; do not delete it blindly." % (path, exc))
@@ -464,7 +464,7 @@ def sealed_task_ids(root):
                 for raw in fh:
                     if b'"kind":"task"' not in raw:
                         continue
-                    with contextlib.suppress(ValueError, UnicodeDecodeError, AttributeError):
+                    with contextlib.suppress(ValueError, UnicodeDecodeError, AttributeError, RecursionError):
                         found.add(json.loads(raw.decode("utf-8")).get("task"))
         except OSError:
             continue
@@ -544,7 +544,7 @@ def read_quota(runtime):
             return None
         pct = quota.get("weekly_pct")
         return float(pct) if pct is not None else None
-    except (OSError, ValueError, AttributeError, TypeError):
+    except (OSError, ValueError, AttributeError, TypeError, RecursionError):
         return None
 
 
@@ -660,7 +660,7 @@ def read_json_object(path):
     try:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return None
     return data if isinstance(data, dict) else {}
 
@@ -715,7 +715,7 @@ def jwt_plan_type(token):
         auth = json.loads(text).get("https://api.openai.com/auth") or {}
         value = auth.get("chatgpt_plan_type")
         return value if js_truthy(value) else ""
-    except (IndexError, ValueError, AttributeError, TypeError):
+    except (IndexError, ValueError, AttributeError, TypeError, RecursionError):
         return ""
 
 
@@ -1147,7 +1147,7 @@ def cmd_event(args, root):
     if args.data:
         try:
             data = json.loads(args.data)
-        except ValueError as exc:
+        except (ValueError, RecursionError) as exc:
             die("--data must be a JSON object (%s)" % exc)
         if not isinstance(data, dict):
             die("--data must be a JSON object")
@@ -1565,7 +1565,7 @@ def cmd_ask(args, root):
         try:
             with open(args.batch, encoding="utf-8") as fh:
                 batch = json.load(fh)
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, RecursionError) as exc:
             die("cannot read batch file %s (%s)" % (args.batch, exc))
         if not isinstance(batch, list) or not batch:
             die("the batch file must contain a non-empty JSON array")
@@ -2388,7 +2388,8 @@ def dialog_policy(root):
         return None
     window = data.get("window_seconds", 120)
     window = window if isinstance(window, int) and not isinstance(window, bool) else 120
-    return {"window_seconds": min(600, max(30, window))}
+    return {"window_seconds": min(600, max(30, window)),
+            "background_sessions": data.get("background_sessions") is True}
 
 
 def dialog_tool_verified(runtime):
@@ -2423,7 +2424,11 @@ def dialog_on(root):
     if not root:
         return None
     policy = dialog_policy(root)
-    if not policy or os.environ.get("AI_UNATTENDED") or os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
+    if not policy or os.environ.get("AI_UNATTENDED"):
+        return None
+    # the runtime's unattended marker (a background job, `claude -p`, the SDK)
+    # turns the dialog off unless the project opts in, as the hooks' unattended()
+    if os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0" and not policy["background_sessions"]:
         return None
     runtime = own_runtime()
     tool = dialog_tool_verified(runtime)
@@ -2556,7 +2561,7 @@ def read_ledger(root, path=None):
             for raw in fh:
                 try:
                     entry = json.loads(raw)
-                except ValueError:
+                except (ValueError, RecursionError):
                     continue
                 if isinstance(entry, dict) and entry.get("v") == 1 and entry.get("type") in LEDGER_TYPES:
                     entries.append(entry)
@@ -2629,7 +2634,7 @@ def read_decisions(root):
             data = json.load(fh)
     except FileNotFoundError:
         return {"version": 1, "open": []}
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         die("%s is unreadable (%s); only state.py writes it. Remove it to drop every open decision."
             % (decision_path(root), exc))
     if not isinstance(data, dict) or not isinstance(data.get("open"), list):
@@ -2818,7 +2823,7 @@ def prune_decisions(root):
         with open(decision_path(root), encoding="utf-8") as fh:
             data = json.load(fh)
         keep = list(data["open"])
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, RecursionError):
         return                            # loud in the decision commands, not in every command
     ledger = read_ledger(root)
     settled = {e.get("decision") for e in ledger if e["type"] == "settle"}
@@ -2870,7 +2875,7 @@ def mirror_ledger(root):
     for raw in chunk[:end].decode("utf-8", "replace").splitlines():
         try:
             entry = json.loads(raw)
-        except ValueError:
+        except (ValueError, RecursionError):
             continue
         if not isinstance(entry, dict) or entry.get("type") not in LEDGER_TYPES or entry["type"] == "offer":
             continue
@@ -2932,7 +2937,7 @@ def valid_decisions(root):
     try:
         with open(decision_path(root), encoding="utf-8") as fh:
             decisions = [d for d in json.load(fh)["open"] if isinstance(d, dict)]
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, RecursionError):
         return set()
     state = load(root, required=False, claim=False) if any(d.get("kind") == "approval" for d in decisions) else None
     tree = current_tree(root) if state else None
@@ -3437,7 +3442,7 @@ def parse_steps(text, plan_file):
         try:
             with open(plan_file, encoding="utf-8") as fh:
                 raw = json.load(fh)
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, RecursionError) as exc:
             die("--plan-file %s: %s" % (plan_file, exc))
         if not isinstance(raw, list) or not all(isinstance(s, dict) for s in raw):
             die("--plan-file holds a JSON list of {\"id\", \"files\", \"tests\", \"after\"}")

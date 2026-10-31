@@ -305,6 +305,55 @@ class ProfileDetect(unittest.TestCase):
         out = json.loads(self.detect_open(home, "--json").stdout)
         self.assertEqual((out["status"], out["decision"]), ("drift", None))
 
+    def test_too_deep_json_reads_as_malformed_json(self):
+        """~/.claude.json, auth.json, a JWT body and drift-ack.json nested past the
+        parser's stack are read as the malformed ones are: same detect, no traceback."""
+        deep = "[" * 200000
+        installed = {"plan": "max", "profile": "max"}
+
+        def jwt_of(text):
+            return ".".join([b64({"alg": "none"}), base64.urlsafe_b64encode(text.encode()).decode().rstrip("="), "sig"])
+
+        def detect(runtime, relative, text):
+            home = Home(runtime, {"installed": installed, "account": self.MAX20})   # a drift, so drift-ack.json is read
+            self.addCleanup(home.close)
+            if relative == "drift-ack":
+                relative = os.path.join(".claude" if runtime == "claude" else ".codex", "riskrails", "drift-ack.json")
+            path = os.path.join(home.home, relative)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            done = home.run("profile", "detect", "--runtime", runtime, "--json")
+            self.assertNotIn("Traceback", done.stderr)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return json.loads(done.stdout)
+
+        def auth(token):
+            return json.dumps({"tokens": {"id_token": token}})
+
+        for runtime, relative, malformed, too_deep in (
+                ("claude", ".claude.json", "{not json", deep),
+                ("claude", "drift-ack", "{not json", deep),
+                ("codex", os.path.join(".codex", "auth.json"), "{not json", deep),
+                ("codex", os.path.join(".codex", "auth.json"), auth(jwt_of("{not json")), auth(jwt_of(deep)))):
+            with self.subTest(runtime=runtime, file=relative, jwt=malformed.startswith('{"tokens"')):
+                one, two = detect(runtime, relative, malformed), detect(runtime, relative, too_deep)
+                self.assertEqual(two, one)
+
+    def test_open_with_too_deep_decision_file_exits_zero_without_traceback(self):
+        # R36.16: a RecursionError in read_decisions is a die(), caught by the SystemExit handler
+        home = self.opening(self.MAX20)
+        path = os.path.join(home.project, ".ai", "state", "decision.json")
+        deep = "[" * 200000
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(deep)
+        done = self.detect_open(home, "--json")
+        self.assertNotIn("Traceback", done.stderr)
+        out = json.loads(done.stdout)
+        self.assertEqual((out["status"], out["decision"]), ("drift", None))
+        with open(path, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), deep)
+
     def test_detect_without_open_writes_nothing(self):
         home = self.opening(self.MAX20)
         done = home.run("--root", home.project, "profile", "detect", "--runtime", "claude", "--json")
