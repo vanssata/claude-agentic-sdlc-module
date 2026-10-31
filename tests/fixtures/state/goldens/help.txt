@@ -1,0 +1,593 @@
+$ state.py --help
+exit 0
+--- stdout
+usage: state.py [-h] [--root ROOT] [--runtime {claude,codex}]
+                {step-done,ask,answer,questions,handoff,profile,weight,event,approve,reject,close,start,steps,batch,verify,review,status,decision,consent,recall,memory} ...
+
+Task state for /ai-task — the small, machine-readable record of one task.
+
+positional arguments:
+  {step-done,ask,answer,questions,handoff,profile,weight,event,approve,reject,close,start,steps,batch,verify,review,status,decision,consent,recall,memory}
+    recall              what the record holds about these files, within a
+                        token budget
+    memory              the compact project record (docs/local-memory.md)
+
+options:
+  -h, --help            show this help message and exit
+  --root ROOT           project directory (default: search upwards for .ai/)
+  --runtime {claude,codex}
+                        overrides AI_RUNTIME and detection for this call
+--- stderr
+
+$ state.py step-done --help
+exit 0
+--- stdout
+usage: state.py step-done [-h] [--force] step_id
+
+positional arguments:
+  step_id
+
+options:
+  -h, --help  show this help message and exit
+  --force     accepted for older callers; it forces nothing
+--- stderr
+
+$ state.py ask --help
+exit 0
+--- stdout
+usage: state.py ask [-h] [--option OPTION] [--recommend RECOMMEND]
+                    [--context CONTEXT] [--gate GATE] [--batch BATCH]
+                    [--topic TOPIC] [--by BY]
+                    [question]
+
+positional arguments:
+  question
+
+options:
+  -h, --help            show this help message and exit
+  --option OPTION
+  --recommend RECOMMEND
+  --context CONTEXT
+  --gate GATE
+  --batch BATCH
+  --topic TOPIC
+  --by BY
+--- stderr
+
+$ state.py answer --help
+exit 0
+--- stdout
+usage: state.py answer [-h] [--prose PROSE] [--by BY] [--via {picker,prose}]
+                       [--topic TOPIC]
+                       [assignment ...]
+
+positional arguments:
+  assignment
+
+options:
+  -h, --help            show this help message and exit
+  --prose PROSE
+  --by BY
+  --via {picker,prose}
+  --topic TOPIC
+--- stderr
+
+$ state.py questions --help
+exit 0
+--- stdout
+usage: state.py questions [-h] [--pending] [--sync] [--topic TOPIC] [--by BY]
+                          [--format {md,prose,json}]
+
+options:
+  -h, --help            show this help message and exit
+  --pending
+  --sync
+  --topic TOPIC
+  --by BY
+  --format {md,prose,json}
+--- stderr
+
+$ state.py handoff --help
+exit 0
+--- stdout
+usage: state.py handoff [-h] [--print]
+                        [--reason {stage,precompact,manual,session-start}]
+                        [--to {claude,codex}] [--for {continue,review}]
+                        [--why WHY]
+
+options:
+  -h, --help            show this help message and exit
+  --print
+  --reason {stage,precompact,manual,session-start}
+  --to {claude,codex}
+  --for {continue,review}
+  --why WHY
+--- stderr
+
+$ state.py profile --help
+exit 0
+--- stdout
+usage: state.py profile [-h] [--field FIELD] [--runtime {claude,codex}]
+                        [--open] [--tier {FAST,BALANCED,STRONG,EXPERT}]
+                        [--other] [--json]
+                        [{detect,set,ack}] [plan]
+
+positional arguments:
+  {detect,set,ack}
+  plan
+
+options:
+  -h, --help            show this help message and exit
+  --field FIELD
+  --runtime {claude,codex}
+  --open
+  --tier {FAST,BALANCED,STRONG,EXPERT}
+  --other
+  --json
+--- stderr
+
+$ state.py weight --help
+exit 0
+--- stdout
+usage: state.py weight [-h] [--files FILES] [--goal GOAL] [--declare DECLARE]
+                       [--json | --long | --mirror]
+
+options:
+  -h, --help         show this help message and exit
+  --files FILES
+  --goal GOAL
+  --declare DECLARE
+  --json
+  --long
+  --mirror
+--- stderr
+
+$ state.py event --help
+exit 0
+--- stdout
+usage: state.py event [-h] [--detail DETAIL] [--data DATA] type
+
+positional arguments:
+  type
+
+options:
+  -h, --help       show this help message and exit
+  --detail DETAIL
+  --data DATA
+--- stderr
+
+$ state.py approve --help
+exit 0
+--- stdout
+usage: state.py approve [-h] --by BY [--note NOTE] [--confirm CONFIRM]
+
+options:
+  -h, --help         show this help message and exit
+  --by BY
+  --note NOTE
+  --confirm CONFIRM  the operation a full_irreversible task performs
+--- stderr
+
+$ state.py reject --help
+exit 0
+--- stdout
+usage: state.py reject [-h] --by BY --why WHY
+
+options:
+  -h, --help  show this help message and exit
+  --by BY
+  --why WHY
+--- stderr
+
+$ state.py close --help
+exit 0
+--- stdout
+usage: state.py close [-h] [--abandon]
+
+options:
+  -h, --help  show this help message and exit
+  --abandon   archive without the checks
+--- stderr
+
+$ state.py start --help
+exit 0
+--- stdout
+usage: state.py start [-h] [--goal GOAL] [--workflow WORKFLOW] [--files FILES]
+                      [--tests TESTS] [--declare DECLARE] [--mode MODE]
+                      [--by BY] [--why WHY] [--steps STEPS]
+                      [--plan-file PLAN_FILE] [--task-id TASK_ID]
+                      [--slug SLUG] [--amend] [--batch] [--no-batch]
+
+options:
+  -h, --help            show this help message and exit
+  --goal GOAL
+  --workflow WORKFLOW
+  --files FILES
+  --tests TESTS
+  --declare DECLARE
+  --mode MODE
+  --by BY
+  --why WHY
+  --steps STEPS
+  --plan-file PLAN_FILE
+  --task-id TASK_ID     an id of your own; a legacy T-YYYY-MM-DD-NNN id is
+                        still accepted
+  --slug SLUG           3-24 characters of [a-z0-9] words joined by '-': the
+                        id becomes T-YYYY-MM-DD-HHMM-<slug> (UTC). Default:
+                        derived from --goal
+  --amend
+  --batch               the batch loop of /rr-build-all (needs --by)
+  --no-batch            opt out of weight.json batch.default
+--- stderr
+
+$ state.py steps --help
+exit 0
+--- stdout
+usage: state.py steps [-h] [--ready] [--json]
+
+options:
+  -h, --help  show this help message and exit
+  --ready
+  --json
+--- stderr
+
+$ state.py batch --help
+exit 0
+--- stdout
+usage: state.py batch [-h] [--by BY] [--why WHY] {on,off}
+
+positional arguments:
+  {on,off}
+
+options:
+  -h, --help  show this help message and exit
+  --by BY
+  --why WHY
+--- stderr
+
+$ state.py verify --help
+exit 0
+--- stdout
+usage: state.py verify [-h] --scope {step,suite,e2e,all} [--files FILES]
+                       [--expect {fail}] [--e2e not-applicable WHY]
+                       [--after-fix AFTER_FIX] [--by BY]
+
+options:
+  -h, --help            show this help message and exit
+  --scope {step,suite,e2e,all}
+  --files FILES
+  --expect {fail}
+  --e2e not-applicable WHY
+  --after-fix AFTER_FIX
+  --by BY
+--- stderr
+
+$ state.py review --help
+exit 0
+--- stdout
+usage: state.py review [-h]
+                       [--verdict {blockers_open,pass,pass_with_findings}]
+                       [--tier {BALANCED,STRONG}] [--focus {security}]
+                       [--report REPORT] [--closes CLOSES] [--by BY]
+
+options:
+  -h, --help            show this help message and exit
+  --verdict {blockers_open,pass,pass_with_findings}
+  --tier {BALANCED,STRONG}
+  --focus {security}
+  --report REPORT
+  --closes CLOSES
+  --by BY
+--- stderr
+
+$ state.py status --help
+exit 0
+--- stdout
+usage: state.py status [-h] [--json]
+
+options:
+  -h, --help  show this help message and exit
+  --json
+--- stderr
+
+$ state.py decision --help
+exit 0
+--- stdout
+usage: state.py decision [-h] [--id ID] [--kind KIND] [--command COMMANDS]
+                         [--pick PICK] [--why WHY] [--json]
+                         {show,open,settle,fallback}
+
+positional arguments:
+  {show,open,settle,fallback}
+
+options:
+  -h, --help            show this help message and exit
+  --id ID
+  --kind KIND
+  --command COMMANDS
+  --pick PICK
+  --why WHY
+  --json
+--- stderr
+
+$ state.py consent --help
+exit 0
+--- stdout
+usage: state.py consent [-h] [--json] [{audit}]
+
+positional arguments:
+  {audit}
+
+options:
+  -h, --help  show this help message and exit
+  --json
+--- stderr
+
+$ state.py recall --help
+exit 0
+--- stdout
+usage: state.py recall [-h] [--files FILES] [--budget BUDGET] [--kinds KINDS]
+                       [--all-risks] [--offset OFFSET] [--json]
+
+options:
+  -h, --help       show this help message and exit
+  --files FILES
+  --budget BUDGET
+  --kinds KINDS
+  --all-risks
+  --offset OFFSET
+  --json
+--- stderr
+
+$ state.py memory --help
+exit 0
+--- stdout
+usage: state.py memory [-h]
+                       {status,enable,disable,export,verify,show,search,risk,risks,migrate,rebuild,cleanup,restore,pack,redact} ...
+
+positional arguments:
+  {status,enable,disable,export,verify,show,search,risk,risks,migrate,rebuild,cleanup,restore,pack,redact}
+
+options:
+  -h, --help            show this help message and exit
+--- stderr
+
+$ state.py memory status --help
+exit 0
+--- stdout
+usage: state.py memory status [-h] [--json]
+
+options:
+  -h, --help  show this help message and exit
+  --json
+--- stderr
+
+$ state.py memory enable --help
+exit 0
+--- stdout
+usage: state.py memory enable [-h] [--author AUTHOR]
+                              [--period {month,quarter,year}]
+                              [--index {none,sqlite}]
+
+options:
+  -h, --help            show this help message and exit
+  --author AUTHOR
+  --period {month,quarter,year}
+  --index {none,sqlite}
+--- stderr
+
+$ state.py memory disable --help
+exit 0
+--- stdout
+usage: state.py memory disable [-h]
+
+options:
+  -h, --help  show this help message and exit
+--- stderr
+
+$ state.py memory export --help
+exit 0
+--- stdout
+usage: state.py memory export [-h] [--pending] [ids ...]
+
+positional arguments:
+  ids
+
+options:
+  -h, --help  show this help message and exit
+  --pending
+--- stderr
+
+$ state.py memory verify --help
+exit 0
+--- stdout
+usage: state.py memory verify [-h] [--all] [--range RANGE] [--fresh-clone]
+                              [--json]
+                              [ids ...]
+
+positional arguments:
+  ids
+
+options:
+  -h, --help     show this help message and exit
+  --all
+  --range RANGE
+  --fresh-clone
+  --json
+--- stderr
+
+$ state.py memory show --help
+exit 0
+--- stdout
+usage: state.py memory show [-h] [--md] [--json] [--entry ENTRY] id
+
+positional arguments:
+  id
+
+options:
+  -h, --help     show this help message and exit
+  --md
+  --json
+  --entry ENTRY
+--- stderr
+
+$ state.py memory search --help
+exit 0
+--- stdout
+usage: state.py memory search [-h] [--kind KIND] [--by BY] [--file FILE]
+                              [--task TASK] [--since SINCE] [--until UNTIL]
+                              [--limit LIMIT] [--offset OFFSET] [--json]
+                              [query]
+
+positional arguments:
+  query
+
+options:
+  -h, --help       show this help message and exit
+  --kind KIND
+  --by BY
+  --file FILE
+  --task TASK
+  --since SINCE
+  --until UNTIL
+  --limit LIMIT
+  --offset OFFSET
+  --json
+--- stderr
+
+$ state.py memory risk --help
+exit 0
+--- stdout
+usage: state.py memory risk [-h] {add,close} ...
+
+positional arguments:
+  {add,close}
+
+options:
+  -h, --help   show this help message and exit
+--- stderr
+
+$ state.py memory risk add --help
+exit 0
+--- stdout
+usage: state.py memory risk add [-h] --title TITLE [--where WHERE]
+                                --label LABEL --what WHAT [--likely LIKELY]
+                                [--fix FIX] [--status STATUS]
+
+options:
+  -h, --help       show this help message and exit
+  --title TITLE
+  --where WHERE
+  --label LABEL
+  --what WHAT
+  --likely LIKELY
+  --fix FIX
+  --status STATUS
+--- stderr
+
+$ state.py memory risk close --help
+exit 0
+--- stdout
+usage: state.py memory risk close [-h] --status STATUS --why WHY rkey
+
+positional arguments:
+  rkey
+
+options:
+  -h, --help       show this help message and exit
+  --status STATUS
+  --why WHY
+--- stderr
+
+$ state.py memory risks --help
+exit 0
+--- stdout
+usage: state.py memory risks [-h]
+                             [--status {open,ticketed,accepted,fixed,all}]
+                             [--md] [--json]
+
+options:
+  -h, --help            show this help message and exit
+  --status {open,ticketed,accepted,fixed,all}
+  --md
+  --json
+--- stderr
+
+$ state.py memory migrate --help
+exit 0
+--- stdout
+usage: state.py memory migrate [-h] (--report | --apply | --move-logs)
+                               [--risks] [--confirm-delete CONFIRM_DELETE]
+
+options:
+  -h, --help            show this help message and exit
+  --report
+  --apply
+  --move-logs
+  --risks
+  --confirm-delete CONFIRM_DELETE
+--- stderr
+
+$ state.py memory rebuild --help
+exit 0
+--- stdout
+usage: state.py memory rebuild [-h]
+
+options:
+  -h, --help  show this help message and exit
+--- stderr
+
+$ state.py memory cleanup --help
+exit 0
+--- stdout
+usage: state.py memory cleanup [-h] [--all] [--confirm-delete CONFIRM_DELETE]
+                               [ids ...]
+
+positional arguments:
+  ids
+
+options:
+  -h, --help            show this help message and exit
+  --all
+  --confirm-delete CONFIRM_DELETE
+--- stderr
+
+$ state.py memory restore --help
+exit 0
+--- stdout
+usage: state.py memory restore [-h] [--all] [ids ...]
+
+positional arguments:
+  ids
+
+options:
+  -h, --help  show this help message and exit
+  --all
+--- stderr
+
+$ state.py memory pack --help
+exit 0
+--- stdout
+usage: state.py memory pack [-h] --period PERIOD
+                            [--confirm-delete CONFIRM_DELETE]
+
+options:
+  -h, --help            show this help message and exit
+  --period PERIOD
+  --confirm-delete CONFIRM_DELETE
+--- stderr
+
+$ state.py memory redact --help
+exit 0
+--- stdout
+usage: state.py memory redact [-h] --field FIELD --why WHY rid
+
+positional arguments:
+  rid
+
+options:
+  -h, --help     show this help message and exit
+  --field FIELD
+  --why WHY
+--- stderr
+

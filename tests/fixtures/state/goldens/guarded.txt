@@ -1,0 +1,592 @@
+$ state.py --root <ROOT> start --goal 'tweak the widget' --workflow feature --files src/widget.py --tests tests/test_widget.py --declare behaviour=0:synthetic --declare domain=0:synthetic --declare novelty=0:synthetic --mode guarded --by test
+exit 0
+--- stdout
+scope          0  src/widget.py referenced from 0 files
+behaviour      0  synthetic (declared)
+reversibility  0  git revert returns everything
+domain         0  synthetic (declared)
+novelty        0  synthetic (declared)
+coverage       0  1 of 1 code files have a test
+W 0 → light   hints none · unknown none · light ≤2 · guarded 3–7 · full ≥8 or reversibility/domain=2
+mode: guarded (override of light by test)
+<ID1> started: guarded · 2 files in scope · .ai/reports/<ID1>/task.md
+next: edit, 'state.py verify --scope all', one review ('state.py review'), then 'state.py close'
+--- stderr
+
+# write src/widget.py
+$ state.py --root <ROOT> close
+exit 2
+--- stdout
+--- stderr
+state.py: review required (guarded mode) — one review verdict (guarded mode: BALANCED) · e2e green, or 'verify --scope all --e2e not-applicable "<why>"' (e2e is not_run). To drop the task instead: 'state.py close --abandon'.
+
+$ state.py --root <ROOT> verify --scope all
+exit 0
+--- stdout
+suite run 1: exit 0 <DURATION>
+command: sh -c 'test ! -e "$GOLDEN_FLAGS/red"' {files}
+log: .ai/state/logs/<ID1>/suite-1.log
+e2e run 2: exit 0 <DURATION>
+command: sh -c 'test ! -e "$GOLDEN_FLAGS/e2ered"'
+log: .ai/state/logs/<ID1>/e2e-2.log
+suite runs used: 1 of 2
+--- stderr
+
+$ state.py --root <ROOT> close
+exit 2
+--- stdout
+--- stderr
+state.py: review required (guarded mode) — one review verdict (guarded mode: BALANCED). To drop the task instead: 'state.py close --abandon'.
+
+$ state.py --root <ROOT> review --verdict blockers_open --tier BALANCED --report - <<<stdin
+exit 0
+--- stdout
+review: blockers_open (BALANCED, pass 1 of 2)
+--- stderr
+
+$ state.py --root <ROOT> close
+exit 2
+--- stdout
+--- stderr
+state.py: review required (guarded mode) — the blockers fixed, 'verify --scope all --after-fix "…"', one scoped re-review. To drop the task instead: 'state.py close --abandon'.
+
+$ state.py --root <ROOT> review --verdict pass_with_findings --tier BALANCED --report - <<<stdin
+exit 0
+--- stdout
+review: passed_with_findings (BALANCED, pass 2 of 2) — open: H1
+--- stderr
+
+$ state.py --root <ROOT> status
+exit 0
+--- stdout
+root: <ROOT>
+task: <ID1> — tweak the widget
+mode: guarded · W 0 · workflow feature · override light → guarded by test
+axes: scope 0 behaviour 0 reversibility 0 domain 0 novelty 0 coverage 0
+stage: review · next: 'state.py close'
+steps: one scope
+files: 2 in scope — src/widget.py, tests/test_widget.py
+verify: suite passing · runs 1/2 · e2e passing
+facts: (a) green — suite green on <TREE9> (run 1)
+       (b) green — 1 changed files, all in the task's files
+review: passed_with_findings (2 of 2) · tier BALANCED · open H1
+gate: none in guarded mode
+findings: 0 recorded in task.md
+questions: 0 pending
+schema: project 0 · plugin 11 — behind: run /rr-setup --update
+last event: <TS> handoff_written review
+--- stderr
+
+# write src/other.py
+$ state.py --root <ROOT> close
+exit 2
+--- stdout
+--- stderr
+state.py: review required (guarded mode) — a fresh 'verify --scope all' or a review of this tree, because the tree changed after the last verify (run 1 on <TREE9>, now <TREE9>); outside the task's files: src/other.py · e2e on this tree: 'verify --scope e2e' (it was passing on <TREE9>). To drop the task instead: 'state.py close --abandon'.
+
+$ state.py --root <ROOT> start --amend --files +src/other.py --why 'a second file'
+exit 0
+--- stdout
+scope amended: +src/other.py (3 files in scope)
+--- stderr
+
+$ state.py --root <ROOT> verify --scope all
+exit 0
+--- stdout
+suite run 3: exit 0 <DURATION>
+command: sh -c 'test ! -e "$GOLDEN_FLAGS/red"' {files}
+log: .ai/state/logs/<ID1>/suite-3.log
+e2e run 4: exit 0 <DURATION>
+command: sh -c 'test ! -e "$GOLDEN_FLAGS/e2ered"'
+log: .ai/state/logs/<ID1>/e2e-4.log
+suite runs used: 2 of 2
+--- stderr
+
+$ state.py --root <ROOT> close
+exit 0
+--- stdout
+<ID1> closed (guarded): .ai/reports/<ID1>/task.md
+state: .ai/state/logs/<ID1>/state.json
+--- stderr
+
+$ state.py --root <ROOT> status
+exit 0
+--- stdout
+root: <ROOT>
+task: none — no task in flight
+schema: project 0 · plugin 11 — behind: run /rr-setup --update
+--- stderr
+
+$ state.py --root <ROOT> recall --files src/widget.py
+exit 0
+--- stdout
+# Recall — 1 files · 4 of 4 items · ~122/1 500 tokens · packages 0 + legacy 1 · index none
+- [finding HIGH residual] - — the cache key ignores the locale (<ID1> H1, BALANCED, 2026-10-31)
+- [finding LOW residual] - — naming (<ID1> L1, BALANCED, 2026-10-31)
+- [override agent] <ID1> — mode light → guarded by test
+- [task] <ID1> · 2026-10-31 · guarded · closed — tweak the widget (2 files)
+--- stderr
+
+$ state.py --root <ROOT> memory status
+exit 0
+--- stdout
+mode: files (no .ai/policies/memory.json)
+period: quarter · author: golden-user · index: none
+open batch: none (branch master)
+packages: 0 · 0 bytes
+closed, not exported: none
+legacy, not migrated: 0
+pre-push: absent
+cleanup: off
+--- stderr
+
+$ state.py --root <ROOT> handoff --print --for review
+exit 1
+--- stdout
+--- stderr
+state.py: no task in flight (<ROOT>/.ai/state/state.json does not exist). Start one with state.py start.
+
+
+##### files under .ai/ at the end
+=== .ai/policies/testing.md
+verify_command: sh -c 'test ! -e "$GOLDEN_FLAGS/red"' {files}
+step_test_command: sh -c 'test ! -e "$GOLDEN_FLAGS/stepred"' {files}
+e2e_command: sh -c 'test ! -e "$GOLDEN_FLAGS/e2ered"'
+=== .ai/reports/<ID1>/events.jsonl
+{"ts": "<TS>", "task": "<ID1>", "event": "task_started", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "tweak the widget", "data": {"goal": "tweak the widget", "workflow": "feature", "mode": "guarded", "schema": 7}}
+{"ts": "<TS>", "task": "<ID1>", "event": "weight_set", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "W 0 → light", "data": {"w": 0, "mode": "light", "axes": {"scope": 0, "behaviour": 0, "reversibility": 0, "domain": 0, "novelty": 0, "coverage": 0}, "hints": [], "unknown": []}}
+{"ts": "<TS>", "task": "<ID1>", "event": "mode_set", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "light -> guarded by test", "data": {"from": "light", "to": "guarded", "by": "test", "why": ""}}
+{"ts": "<TS>", "task": "<ID1>", "event": "tier_set", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "T4 (mode guarded, compat)", "data": {"tier": "T4", "mode": "guarded", "w": 0}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "start", "data": {"reason": "start", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "close", "data": {"reason": "close", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "verify_run", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "suite run 1: exit 0", "data": {"n": 1, "scope": "suite", "exit": 0, "tree": "<TREE40>", "log": ".ai/state/logs/<ID1>/suite-1.log", "expected_fail": false}}
+{"ts": "<TS>", "task": "<ID1>", "event": "verify_run", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "e2e run 2: exit 0", "data": {"n": 2, "scope": "e2e", "exit": 0, "tree": "<TREE40>", "log": ".ai/state/logs/<ID1>/e2e-2.log", "expected_fail": false}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "verify", "data": {"reason": "verify", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "close", "data": {"reason": "close", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "review_verdict", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "blockers_open on BALANCED (pass 1)", "data": {"verdict": "blockers_open", "tier": "BALANCED", "pass_n": 1, "labels": [], "focus": null}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "review", "data": {"reason": "review", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "close", "data": {"reason": "close", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "review_verdict", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "pass_with_findings on BALANCED (pass 2)", "data": {"verdict": "pass_with_findings", "tier": "BALANCED", "pass_n": 2, "labels": ["H1", "L1"], "focus": null}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "review", "data": {"reason": "review", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "close", "data": {"reason": "close", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "scope_change", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "+src/other.py — a second file", "data": {"added": ["src/other.py"], "why": "a second file"}}
+{"ts": "<TS>", "task": "<ID1>", "event": "verify_run", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "suite run 3: exit 0", "data": {"n": 3, "scope": "suite", "exit": 0, "tree": "<TREE40>", "log": ".ai/state/logs/<ID1>/suite-3.log", "expected_fail": false}}
+{"ts": "<TS>", "task": "<ID1>", "event": "verify_run", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "e2e run 4: exit 0", "data": {"n": 4, "scope": "e2e", "exit": 0, "tree": "<TREE40>", "log": ".ai/state/logs/<ID1>/e2e-4.log", "expected_fail": false}}
+{"ts": "<TS>", "task": "<ID1>", "event": "task_closed", "actor": "agent", "runtime": "claude", "stage": "done", "detail": "", "data": {"abandoned": false, "mode": "guarded", "w": 0}}
+=== .ai/reports/<ID1>/task.md
+# <ID1> — tweak the widget
+
+feature · guarded · started <TS> · claude
+
+## Weight
+
+```
+scope          0  src/widget.py referenced from 0 files
+behaviour      0  synthetic (declared)
+reversibility  0  git revert returns everything
+domain         0  synthetic (declared)
+novelty        0  synthetic (declared)
+coverage       0  1 of 1 code files have a test
+W 0 → light   hints none · unknown none · light ≤2 · guarded 3–7 · full ≥8 or reversibility/domain=2
+```
+override: light → guarded by test at <TS>
+
+## Plan
+
+files: src/widget.py, src/other.py
+tests: tests/test_widget.py
+amended <TS>: +src/other.py — a second file
+
+## Questions
+
+none
+
+## Verify
+
+| n | scope | exit | tree | log | expected_fail |
+|---|---|---|---|---|---|
+| 1 | suite | 0 | <TREE9> | .ai/state/logs/<ID1>/suite-1.log | no |
+| 2 | e2e | 0 | <TREE9> | .ai/state/logs/<ID1>/e2e-2.log | no |
+| 3 | suite | 0 | <TREE9> | .ai/state/logs/<ID1>/suite-3.log | no |
+| 4 | e2e | 0 | <TREE9> | .ai/state/logs/<ID1>/e2e-4.log | no |
+
+suite passing · e2e passing · suite runs 2
+
+## Review
+
+### Pass 1 — BALANCED, blockers_open
+
+```
+FINDINGS
+none
+```
+
+### Pass 2 — BALANCED, pass_with_findings
+
+```
+FINDINGS
+[HIGH] H1 the cache key ignores the locale
+in_scope: yes
+[LOW] L1 naming
+VERDICT pass_with_findings
+```
+
+## Changes
+
+| File | Change | New/Edit/Delete |
+|---|---|---|
+| src/other.py | +1 −0 | New |
+| src/widget.py | +1 −1 | Edit |
+
++2 −1 lines, 2 files
+
+## Verdict
+
+close: closed
+facts: (a) green — suite green on <TREE9> (run 3) · (b) green — 2 changed files, all in the task's files
+gate: none
+confirm: none
+handoffs: 8 · suite runs: 2 · review passes: 2
+=== .ai/state/logs/.gitignore
+*
+=== .ai/state/logs/<ID1>/e2e-2.log
+=== .ai/state/logs/<ID1>/e2e-4.log
+=== .ai/state/logs/<ID1>/state.json
+{
+  "schema": 7,
+  "task_id": "<ID1>",
+  "goal": "tweak the widget",
+  "workflow": "feature",
+  "mode": "guarded",
+  "weight": {
+    "w": 0,
+    "mode": "light",
+    "axes": {
+      "scope": 0,
+      "behaviour": 0,
+      "reversibility": 0,
+      "domain": 0,
+      "novelty": 0,
+      "coverage": 0
+    },
+    "evidence": {
+      "scope": "src/widget.py referenced from 0 files",
+      "behaviour": "synthetic (declared)",
+      "reversibility": "git revert returns everything",
+      "domain": "synthetic (declared)",
+      "novelty": "synthetic (declared)",
+      "coverage": "1 of 1 code files have a test"
+    },
+    "hints": [],
+    "unknown": [],
+    "notes": [
+      "scope: src/widget.py referenced from 0 files"
+    ],
+    "lines": [
+      "scope          0  src/widget.py referenced from 0 files",
+      "behaviour      0  synthetic (declared)",
+      "reversibility  0  git revert returns everything",
+      "domain         0  synthetic (declared)",
+      "novelty        0  synthetic (declared)",
+      "coverage       0  1 of 1 code files have a test",
+      "W 0 → light   hints none · unknown none · light ≤2 · guarded 3–7 · full ≥8 or reversibility/domain=2"
+    ],
+    "tree": "<TREE40>",
+    "computed_at": "<TS>",
+    "rescores": [],
+    "operations": []
+  },
+  "mode_override": {
+    "from": "light",
+    "to": "guarded",
+    "by": "test",
+    "why": "",
+    "ts": "<TS>"
+  },
+  "stage": "done",
+  "files": [
+    "src/widget.py",
+    "src/other.py"
+  ],
+  "tests": [
+    "tests/test_widget.py"
+  ],
+  "steps": [],
+  "amendments": [
+    {
+      "ts": "<TS>",
+      "added": [
+        "src/other.py"
+      ],
+      "why": "a second file"
+    }
+  ],
+  "findings": [],
+  "batch": {
+    "on": false,
+    "by": null,
+    "why": null,
+    "since": null
+  },
+  "diff": {
+    "base_tree": "<TREE40>",
+    "base_commit": "f0398017acc3b45a2dfd20a1a41e033ab400df19"
+  },
+  "gate": null,
+  "owner_runtime": "claude",
+  "created": "<TS>",
+  "created_at": "<TS>",
+  "history": [
+    {
+      "at": "<TS>",
+      "event": "task_started",
+      "detail": "tweak the widget"
+    },
+    {
+      "at": "<TS>",
+      "event": "weight_set",
+      "detail": "W 0 → light"
+    },
+    {
+      "at": "<TS>",
+      "event": "mode_set",
+      "detail": "light -> guarded by test"
+    },
+    {
+      "at": "<TS>",
+      "event": "tier_set",
+      "detail": "T4 (mode guarded, compat)"
+    },
+    {
+      "at": "<TS>",
+      "event": "verify_run",
+      "detail": "suite run 1: exit 0"
+    },
+    {
+      "at": "<TS>",
+      "event": "verify_run",
+      "detail": "e2e run 2: exit 0"
+    },
+    {
+      "at": "<TS>",
+      "event": "review_verdict",
+      "detail": "blockers_open on BALANCED (pass 1)"
+    },
+    {
+      "at": "<TS>",
+      "event": "review_verdict",
+      "detail": "pass_with_findings on BALANCED (pass 2)"
+    },
+    {
+      "at": "<TS>",
+      "event": "scope_change",
+      "detail": "+src/other.py — a second file"
+    },
+    {
+      "at": "<TS>",
+      "event": "verify_run",
+      "detail": "suite run 3: exit 0"
+    },
+    {
+      "at": "<TS>",
+      "event": "verify_run",
+      "detail": "e2e run 4: exit 0"
+    },
+    {
+      "at": "<TS>",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "resume_point": {
+    "stage": "implementation",
+    "step_id": "task",
+    "next_action": "a fresh 'verify --scope all' or a review of this tree, because the tree changed after the last verify (run 1 on <TREE9>, now <TREE9>); outside the task's files: src/other.py",
+    "at": "<TS>",
+    "runtime": "claude"
+  },
+  "cross_vendor_review": null,
+  "questions": {
+    "file": ".ai/reports/<ID1>/task.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "<TS>",
+    "reason": "close",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "human_approval": {
+    "required": false,
+    "granted": false,
+    "granted_by": null,
+    "granted_at": null,
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": null,
+    "unattended": false
+  },
+  "verify": {
+    "status": "passing",
+    "e2e": "passing",
+    "suite_runs": 2,
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "exit": 0,
+        "tree": "<TREE40>",
+        "tree_moved": false,
+        "log": ".ai/state/logs/<ID1>/suite-1.log",
+        "ts": "<TS>",
+        "expected_fail": false,
+        "runtime": "claude",
+        "command": "sh -c 'test ! -e \"$GOLDEN_FLAGS/red\"' {files}",
+        "duration_s": 0,
+        "after_fix": null,
+        "files": []
+      },
+      {
+        "n": 2,
+        "scope": "e2e",
+        "exit": 0,
+        "tree": "<TREE40>",
+        "tree_moved": false,
+        "log": ".ai/state/logs/<ID1>/e2e-2.log",
+        "ts": "<TS>",
+        "expected_fail": false,
+        "runtime": "claude",
+        "command": "sh -c 'test ! -e \"$GOLDEN_FLAGS/e2ered\"'",
+        "duration_s": 0,
+        "after_fix": null,
+        "files": []
+      },
+      {
+        "n": 3,
+        "scope": "suite",
+        "exit": 0,
+        "tree": "<TREE40>",
+        "tree_moved": false,
+        "log": ".ai/state/logs/<ID1>/suite-3.log",
+        "ts": "<TS>",
+        "expected_fail": false,
+        "runtime": "claude",
+        "command": "sh -c 'test ! -e \"$GOLDEN_FLAGS/red\"' {files}",
+        "duration_s": 0,
+        "after_fix": null,
+        "files": []
+      },
+      {
+        "n": 4,
+        "scope": "e2e",
+        "exit": 0,
+        "tree": "<TREE40>",
+        "tree_moved": false,
+        "log": ".ai/state/logs/<ID1>/e2e-4.log",
+        "ts": "<TS>",
+        "expected_fail": false,
+        "runtime": "claude",
+        "command": "sh -c 'test ! -e \"$GOLDEN_FLAGS/e2ered\"'",
+        "duration_s": 0,
+        "after_fix": null,
+        "files": []
+      }
+    ],
+    "e2e_tree": "<TREE40>"
+  },
+  "review": {
+    "status": "passed_with_findings",
+    "passes": 2,
+    "tier": "BALANCED",
+    "findings": [
+      "H1"
+    ],
+    "tree": "<TREE40>",
+    "log": [
+      {
+        "n": 1,
+        "tier": "BALANCED",
+        "verdict": "blockers_open",
+        "focus": null,
+        "text": "FINDINGS\nnone\n",
+        "tree": "<TREE40>",
+        "ts": "<TS>",
+        "runtime": "claude",
+        "by": null
+      },
+      {
+        "n": 2,
+        "tier": "BALANCED",
+        "verdict": "pass_with_findings",
+        "focus": null,
+        "text": "FINDINGS\n[HIGH] H1 the cache key ignores the locale\nin_scope: yes\n[LOW] L1 naming\nVERDICT pass_with_findings\n",
+        "tree": "<TREE40>",
+        "ts": "<TS>",
+        "runtime": "claude",
+        "by": null
+      }
+    ],
+    "closed": [],
+    "ts": "<TS>",
+    "runs_at": 2
+  },
+  "current_stage": "done",
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": "task",
+    "steps": [
+      {
+        "step_id": "task",
+        "description": "tweak the widget",
+        "allowed_files": [
+          "src/widget.py",
+          "src/other.py",
+          "tests/test_widget.py"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [
+          "tests/test_widget.py"
+        ],
+        "status": "in_progress"
+      }
+    ]
+  },
+  "next_action": "none — task closed",
+  "updated_at": "<TS>",
+  "facts": {
+    "a": [
+      true,
+      "suite green on <TREE9> (run 3)"
+    ],
+    "b": [
+      true,
+      "2 changed files, all in the task's files"
+    ],
+    "tree": "<TREE40>",
+    "at": "<TS>"
+  },
+  "changes": [
+    {
+      "path": "src/other.py",
+      "status": "A",
+      "added": 1,
+      "deleted": 0,
+      "binary": false
+    },
+    {
+      "path": "src/widget.py",
+      "status": "M",
+      "added": 1,
+      "deleted": 1,
+      "binary": false
+    }
+  ],
+  "result": "closed",
+  "closed_at": "<TS>"
+}
+=== .ai/state/logs/<ID1>/suite-1.log
+=== .ai/state/logs/<ID1>/suite-3.log
