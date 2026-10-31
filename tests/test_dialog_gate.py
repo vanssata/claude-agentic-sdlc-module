@@ -144,6 +144,10 @@ class TestPayload(unittest.TestCase):
         questions = self.shown()["questions"]
         self.assertEqual(len(questions), 2)
         self.assertEqual([q["multiSelect"] for q in questions], [False, False])
+        # Claude keys answers by question text: the two parts must differ (8fec).
+        self.assertTrue(questions[0]["question"].endswith(" (1 of 2)"), questions[0]["question"])
+        self.assertTrue(questions[1]["question"].endswith(" (2 of 2)"), questions[1]["question"])
+        self.assertNotEqual(questions[0]["question"], questions[1]["question"])
         self.assertEqual([[o["label"] for o in q["options"]] for q in questions],
                          [["Not now — commit nothing", "git commit -m 'one, two' -- a.py"],
                           ["Not now — commit nothing", PUSH]])
@@ -155,6 +159,39 @@ class TestPayload(unittest.TestCase):
             self.assertTrue(question["multiSelect"])
         finally:
             plain.close()
+
+    def test_split_suffix_keeps_question_within_max(self):
+        options = [{"n": 1, "kind": "choice", "label": "Not now — commit nothing"},
+                   {"n": 2, "kind": "command", "label": "git commit -m 'a, b'"},
+                   {"n": 3, "kind": "command", "label": PUSH}]
+        long = "x" * state_mod.QUESTION_MAX
+        decision = {"id": "D3", "question": long, "header": "Commit", "multi_select": True, "options": options}
+        texts = [q["question"] for q in state_mod.dialog_payload([decision], "claude")["questions"]]
+        self.assertEqual(len(texts), 2)
+        self.assertTrue(all(len(t) <= state_mod.QUESTION_MAX for t in texts), [len(t) for t in texts])
+        self.assertEqual([t[-9:] for t in texts], [" (1 of 2)", " (2 of 2)"])
+        self.assertEqual(texts, [q["question"] for _, _, q in dialog.offered([decision], "claude")])
+        unsplit = dict(decision, multi_select=False)
+        self.assertEqual(state_mod.dialog_payload([unsplit], "claude")["questions"][0]["question"], long)
+
+    def test_part_question_copies_agree(self):
+        """R-two-part-question-copies: state.py's part_question and the hook's
+        copy send the same text for every length, split or not, on both runtimes."""
+        options = [{"n": 1, "kind": "choice", "label": SAFE},
+                   {"n": 2, "kind": "command", "label": "git commit -m 'a, b'"},
+                   {"n": 3, "kind": "command", "label": PUSH}]
+        suffix = len(" (1 of 2)")
+        lengths = (0, 1, 80, state_mod.QUESTION_MAX - suffix - 1, state_mod.QUESTION_MAX - suffix,
+                   state_mod.QUESTION_MAX - suffix + 1, state_mod.QUESTION_MAX - 1,
+                   state_mod.QUESTION_MAX, state_mod.QUESTION_MAX + 1)
+        for runtime, multi, length in itertools.product(("claude", "codex"), (True, False), lengths):
+            text = "".join("abcdefghij"[i % 10] for i in range(length))
+            dec = {"id": "D3", "question": text, "header": "Commit", "multi_select": multi, "options": options}
+            with self.subTest(runtime=runtime, multi=multi, length=length):
+                theirs = [q["question"] for q in state_mod.dialog_payload([dec], runtime)["questions"]]
+                ours = [q["question"] for _, _, q in dialog.offered([dec], runtime)]
+                self.assertEqual(theirs, ours)
+                self.assertEqual(len(theirs), 2 if multi else 1)
 
     def test_codex_shape(self):
         decision = {"id": "D3", "question": "q", "header": "Commit", "multi_select": True,
@@ -193,6 +230,8 @@ class Scratch:
                      "AI_UNATTENDED": "", "CLAUDE_CODE_SESSION_ATTENDED": "1"}
         self.env = mock.patch.dict(os.environ, self.vars)
         self.env.start()
+        for name in ("CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID"):     # deterministic: a test sets them itself
+            os.environ.pop(name, None)
 
     def close(self):
         self.env.stop()
@@ -303,6 +342,39 @@ class TestEffectiveSwitch(HookCase):
                     s.close()
                 self.assertEqual(got, enabled and tool and not unattended and not subagent and not no_session)
 
+    def test_switch_state_matrix(self):
+        """off / closed / on, the env-mismatch case included; closed is no dialog."""
+        main, sub = spike("claude/ask-single"), spike("claude/subagent-pretooluse")
+        own = main["session_id"]
+        rows = (("on", {}, main), ("closed", {}, sub), ("closed", {}, dict(main, session_id="")),
+                ("closed", {}, {k: v for k, v in main.items() if k != "session_id"}),
+                ("closed", {}, [main]), ("on", {"CLAUDE_CODE_SESSION_ID": own}, main),
+                ("closed", {"CLAUDE_CODE_SESSION_ID": own + "-other"}, main),
+                ("on", {"CLAUDE_CODE_SESSION_ID": ""}, main),
+                ("off", {"AI_UNATTENDED": "1"}, sub), ("off", {"CLAUDE_CODE_SESSION_ATTENDED": "0"}, sub))
+        for want, env, payload in rows:
+            with self.subTest(want=want, env=env):
+                with mock.patch.dict(os.environ, env):
+                    self.assertEqual(dialog.switch_state(self.s.root, "claude", payload), want)
+                    self.assertEqual(dialog.effective_switch(self.s.root, "claude", payload), want == "on")
+        self.assertEqual(dialog.switch_state(None, "claude", main), "off")
+        self.assertEqual(dialog.SESSION_ENV, {"claude": "CLAUDE_CODE_SESSION_ID", "codex": "CODEX_THREAD_ID"})
+        off = Scratch(on=False)
+        try:
+            self.assertEqual(dialog.switch_state(off.root, "claude", sub), "off")
+        finally:
+            off.close()
+        notool = Scratch(tool=False)
+        try:
+            self.assertEqual(dialog.switch_state(notool.root, "claude", sub), "off")
+        finally:
+            notool.close()
+
+    def test_codex_hook_env_has_no_session_variable_to_compare(self):
+        payload = spike("codex/request-single")
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "unrelated"}):
+            self.assertEqual(dialog.switch_state(self.s.root, "codex", payload), "on")
+
     def test_scaffolded_project_is_on(self):
         """the matrix row "scaffolded project is on": the template the scaffold and
         migration 0010 write is read by effective_switch as the switch on."""
@@ -310,7 +382,9 @@ class TestEffectiveSwitch(HookCase):
         try:
             shutil.copy(os.path.join(ROOT, "skills", "ai-init", "templates", ".ai", "policies", "dialog.json"),
                         os.path.join(s.root, ".ai", "policies", "dialog.json"))
-            self.assertEqual(dialog.dialog_policy(s.root), {"window_seconds": 120, "stop_blocks_max": 2})
+            # the template ships the background-session opt-in off: the project decides
+            self.assertEqual(dialog.dialog_policy(s.root),
+                             {"window_seconds": 120, "stop_blocks_max": 2, "background_sessions": False})
             self.assertTrue(dialog.effective_switch(s.root, "claude", spike("claude/ask-single")))
         finally:
             s.close()
@@ -364,6 +438,25 @@ class TestRecorder(HookCase):
         self.assertEqual([(p["id"], p["order"], p["option"], p["label"]) for p in picks],
                          [("C1", 1, 2, "git commit -m x -- a.py"), ("C2", 2, 3, PUSH)])
         self.assertEqual(dialog.next_live_pick(self.s.root, payload["session_id"], NOW)["id"], "C1")
+
+    def test_split_multiselect_parts_are_recorded_per_part(self):
+        """8fec: the two single-selects of a split decision carry different
+        question texts, so Claude's answers keyed by text read as picks."""
+        first = "git commit -m 'x, y' -- a.py"
+        split = decision("D2", "Commit and push?", "Commit",
+                         [("choice", SAFE), ("command", first), ("command", PUSH)], multi=True)
+        self.s.decide(split)
+        sent = dialog.dialog_payload([split], "claude")
+        questions = sent["questions"]
+        self.assertEqual(len(questions), 2)
+        payload = json.loads(json.dumps(spike("claude/ask-single")))
+        answers = {questions[0]["question"]: first, questions[1]["question"]: PUSH}
+        payload["tool_input"] = {"questions": questions, "answers": answers}
+        payload["tool_response"] = {"questions": questions, "answers": answers}
+        lines = dialog.record(self.s.root, "claude", payload, NOW)
+        picks = [line for line in lines if line["type"] == "pick"]
+        self.assertEqual([(p["order"], p["option"], p["label"]) for p in picks], [(1, 2, first), (2, 3, PUSH)])
+        self.assertEqual([line for line in lines if line["type"] == "decline"], [])
 
     def test_choice_only_is_one_pick(self):
         self.commit_decision()
@@ -439,17 +532,47 @@ class TestRecorder(HookCase):
         self.assertNotIn("Some text", json.dumps(self.s.ledger()))
 
     def test_duplicate_question_text_is_ambiguous(self):
-        """7c splits a multi-select whose label holds ", " into single-selects
-        sharing the decision's question text; Claude keys answers by that
-        text, so neither answer can be told apart: a decline."""
+        """Two questions with one text (the pre-8fec split shape) cannot be
+        told apart by Claude's answers keyed by text: unanswerable, and the
+        shared-text set is no longer the offered one, so nothing is picked."""
         self.multi_decision(first="git commit -m 'a, b' -- a.py")
         sent = dialog.dialog_payload(dialog.read_decisions(self.s.root), "claude")
         self.assertEqual(len(sent["questions"]), 2)
-        payload = dict(spike("claude/ask-single"), tool_input=dict(sent),
-                       tool_response=dict(sent, answers={"Commit and push?": PUSH}))
+        same = {"questions": [dict(q, question="Commit and push?") for q in sent["questions"]]}
+        payload = dict(spike("claude/ask-single"), tool_input=dict(same),
+                       tool_response=dict(same, answers={"Commit and push?": PUSH}))
+        self.assertEqual(dialog.adapt_response("claude", payload), [[""], [""]])
         lines = dialog.record(self.s.root, "claude", payload, NOW)
-        self.assertEqual([(line["type"], line.get("why")) for line in lines],
-                         [("offer", None), ("decline", "ambiguous")])
+        self.assertEqual([line for line in lines if line["type"] == "pick"], [])
+
+    def test_two_decisions_sharing_question_text_decline_ambiguous(self):
+        """Two open decisions with one question text but different options are
+        both offered; Claude's answers are keyed by text, so neither can be
+        told from the other: each is a decline "ambiguous", nothing is picked."""
+        other = "git commit -m two -- b.py"
+        self.s.decide(decision("D1", "Commit?", "Commit", [("choice", SAFE), ("command", COMMIT)]),
+                      decision("D2", "Commit?", "Commit", [("choice", SAFE), ("command", other)]))
+        sent = dialog.dialog_payload(dialog.read_decisions(self.s.root), "claude")
+        self.assertEqual([q["question"] for q in sent["questions"]], ["Commit?", "Commit?"])
+        payload = dict(spike("claude/ask-single"), tool_input=dict(sent),
+                       tool_response=dict(sent, answers={"Commit?": COMMIT}))
+        self.assertEqual(dialog.adapt_response("claude", payload), [[""], [""]])
+        lines = dialog.record(self.s.root, "claude", payload, NOW)
+        self.assertEqual([(line["type"], line.get("decision"), line.get("why")) for line in lines],
+                         [("offer", None, None), ("decline", "D1", "ambiguous"), ("decline", "D2", "ambiguous")])
+        self.assertEqual(lines[0]["decisions"], ["D1", "D2"])
+        self.assertEqual([line for line in self.s.ledger() if line["type"] == "pick"], [])
+
+    def test_read_decisions_survives_deep_nesting(self):
+        """R-read-decisions-does-not-catch-recursione: a deeply nested
+        decision.json is unreadable like a malformed one, not a crash."""
+        path = os.path.join(self.s.root, ".ai", "state", "decision.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("[" * 200000)
+        self.assertEqual(dialog.read_decisions(self.s.root), [])
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("{not json")
+        self.assertEqual(dialog.read_decisions(self.s.root), [])
 
     def test_label_rule_checked_again(self):
         self.s.decide(decision("D1", "Run?", "Run", [("choice", SAFE), ("command", "git status")]))
@@ -551,6 +674,43 @@ class TestGateHook(HookCase):
         self.assertEqual(self.stop().get("decision"), "block", "a new human turn resets the count")
         self.assertEqual([line["turn"] for line in self.s.ledger()], [1, 1, 2])
 
+    def deep_vs_malformed(self, relpath, content, active):
+        """The Stop outcome with `content` in relpath for a too-deep text and a malformed one."""
+        path = os.path.join(self.s.root, *relpath)
+        outs = []
+        for text in ("[" * 200000, "{not json"):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(content(text))
+            code, raw = run_gate(self.s, dict(spike("claude/stop"), stop_hook_active=active))
+            self.assertEqual(code, 0)
+            self.assertNotIn("Traceback", raw)
+            outs.append(hook_output(raw))
+        return outs
+
+    def test_stop_deep_session_json_is_malformed_session_json(self):
+        """R-hooks-readers-of-ai-state-files-do-not-c-7d54: prompt_count."""
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+        for active in (False, True):
+            deep, bad = self.deep_vs_malformed((".ai", "state", "session.json"), lambda t: t, active)
+            self.assertEqual(deep, bad)
+            self.assertTrue(deep, "an open decision still answers the Stop")
+
+    def test_stop_deep_ledger_line_is_malformed_ledger_line(self):
+        """The hook's read_ledger skips a too-deep line like a torn one."""
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+        sid = spike("claude/stop")["session_id"]
+        line = json.dumps({"v": 1, "type": dialog.STOP_BLOCK, "session": sid, "turn": None, "decisions": ["D1"]})
+        content = lambda t: "%s\n%s\n%s\n" % (line, t, line)
+        deep, bad = self.deep_vs_malformed((".ai", "state", "consent.jsonl"), content, False)
+        self.assertEqual(deep, bad)
+        self.assertEqual(dialog.read_ledger(self.s.root, types={dialog.STOP_BLOCK}).__len__(), 2)
+
+    def test_codex_deep_tool_response_is_malformed(self):
+        payload = {"tool_input": {"questions": [{"id": "q1"}]}}
+        deep = dialog.adapt_response("codex", dict(payload, tool_response="[" * 200000))
+        bad = dialog.adapt_response("codex", dict(payload, tool_response="{not json"))
+        self.assertEqual(deep, bad)
+
     def test_stop_without_a_turn_honours_stop_hook_active(self):
         self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
         self.assertEqual(self.stop().get("decision"), "block")
@@ -572,6 +732,18 @@ class TestGateHook(HookCase):
         subagent = dict(commit_payload(), agent_id="a1", tool_use_id="toolu_sub")
         self.assertEqual(run_gate(self.s, subagent), (0, ""))
         self.assertEqual(len(self.s.ledger()), 2, "a subagent's dialog consents to nothing")
+
+    def test_closed_writes_nothing_and_returns_empty(self):
+        """a call the hook cannot bind to a session is closed: no ledger line, no output."""
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+        mismatch = {"CLAUDE_CODE_SESSION_ID": "another-session"}
+        self.assertEqual(run_gate(self.s, commit_payload(), mismatch), (0, ""))
+        self.assertEqual(run_gate(self.s, dict(commit_payload(), session_id="")), (0, ""))
+        code, out = run_gate(self.s, dict(spike("claude/stop"), agent_id="a1"), mismatch)
+        self.assertEqual((code, hook_output(out)), (0, {}))
+        code, out = run_gate(self.s, spike("claude/stop"), mismatch)
+        self.assertEqual((code, hook_output(out)), (0, {}))
+        self.assertEqual(self.s.ledger(), [])
 
     def test_off_writes_nothing(self):
         self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
@@ -625,13 +797,17 @@ class TestGateFastPath(HookCase):
                 self.assertEqual(decision_of(proc.stdout), "deny", proc.stdout + proc.stderr)
 
     def test_gate_fast_path(self):
-        """timed: the whole ai-guard.py process on a Grep payload, no decision.json."""
+        """timed: the floor of the whole ai-guard.py process on a Grep payload, no decision.json.
+        Bare-interpreter and gate runs are interleaved and the minimum of each is compared:
+        load only adds time, a real slowdown raises every run including the minimum."""
         budget = 0.015 * timed_factor()
-        overhead = min(timed(["python3", "-I", "-S", "-c", "pass"], "") for _ in range(5))
-        median = sorted(timed(["python3", "-I", "-S", os.path.join(ROOT, "hooks", "ai-guard.py")],
-                              json.dumps(self.grep()), self.s.root) for _ in range(5))[2]
-        self.assertLessEqual(median - overhead, budget, "%.1f ms over the interpreter's start" %
-                             ((median - overhead) * 1000))
+        bare, gate = [], []
+        for _ in range(7):
+            bare.append(timed(["python3", "-I", "-S", "-c", "pass"], ""))
+            gate.append(timed(["python3", "-I", "-S", os.path.join(ROOT, "hooks", "ai-guard.py")],
+                              json.dumps(self.grep()), self.s.root))
+        floor = min(gate) - min(bare)
+        self.assertLessEqual(floor, budget, "%.1f ms over the interpreter's start" % (floor * 1000))
 
 
 class TestDecisionGate(HookCase):
@@ -839,6 +1015,12 @@ class TestDecisionGate(HookCase):
                 with open(os.path.join(self.s.root, ".ai", "state", "decision.json"), "w", encoding="utf-8") as fh:
                     fh.write(text)
                 self.assertEqual(self.guard(tool="Grep", tool_input={"pattern": "x"}), ("allow", ""))
+
+    def test_gate_allows_on_too_deep_decision_json(self):
+        # read_decisions catches RecursionError; end to end the hook allows (R-deep-decision-json-gate-allow-not-pinned-47ef)
+        with open(os.path.join(self.s.root, ".ai", "state", "decision.json"), "w", encoding="utf-8") as fh:
+            fh.write("[" * 200000)
+        self.assertEqual(self.guard(tool="Grep", tool_input={"pattern": "x"}), ("allow", ""))
 
     def test_off_is_today(self):
         self.open(COMMIT)

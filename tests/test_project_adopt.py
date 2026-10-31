@@ -116,6 +116,15 @@ print(" ".join(n for n in sys.argv[1:] if adopt.placeholder_name(n)))
 """
 
 
+def adopt_review_line():
+    sys.path.insert(0, PU)
+    try:
+        import adopt
+        return adopt.REVIEW_LINE
+    finally:
+        sys.path.remove(PU)
+
+
 def body(path):
     """A file's text, or "" when there is none — what a grep on a missing file finds."""
     if not os.path.isfile(path):
@@ -204,7 +213,8 @@ class TestProjectAdopt(unittest.TestCase):  # pylint: disable=too-many-public-me
         cls.env = {k: v for k, v in os.environ.items()
                    if k not in ("CODEX_HOME", "AI_UNATTENDED", "CLAUDE_AGENTIC_MIGRATIONS", "CLAUDE_CONFIG_DIR",
                                 "CLAUDE_AGENTIC_TEMPLATES", "CLAUDE_ROUTING_TEMPLATES", "CLAUDE_AGENTIC_TEST",
-                                "ADOPT_STOP_AFTER", "ADOPT_TODAY")}
+                                "ADOPT_STOP_AFTER", "ADOPT_TODAY")
+                   and not k.startswith("RISKRAILS_")}
         cls.env.update(HOME=os.path.join(cls.t, "home"), CLAUDE_AGENTIC_SHARED=os.path.join(ROOT, "ai"))
 
     @classmethod
@@ -954,6 +964,25 @@ class TestProjectAdopt(unittest.TestCase):  # pylint: disable=too-many-public-me
         self.assertTrue(rc == 4 and has("^ADOPT_INCOMPLETE: .*CLAUDE.md: a split needs a proposal", first(out)),
                         "a split candidate with no proposal exits 4 and writes nothing (R8)\n" + out)
 
+    def test_apply_reports_a_migration_schema_error_as_exit_2_not_a_traceback(self):
+        """R-adopt-turns-a-migration-schemaerror: a migration's SchemaError reaches plain_pending through the
+        gates; --adopt --apply says why on stderr and exits 2 (not 5, not a traceback), as update.py does"""
+        d = self.fixture("cursor", "schema-error")
+        mig = self.path("migrations-schema-error")
+        shutil.copytree(os.path.join(PU, "migrations"), mig, ignore=shutil.ignore_patterns("__pycache__"))
+        nxt = 1 + max(int(n[:4]) for n in os.listdir(mig) if re.match(r"^\d{4}_.*\.py$", n))
+        put(os.path.join(mig, "%04d_bad_note.py" % nxt), 'VERSION = %d\nTITLE = "a note that is not a str"\nMOVES = []\n\n\n'
+            'def plan(ctx):\n    ctx.conflict(".ai/policies/risk-tiers.json", 5)\n' % nxt)
+        before = tree_sha(d)
+        rc, out = self.upd(d, "--adopt", "--apply", merge=True, CLAUDE_AGENTIC_MIGRATIONS=mig)
+        self.assertEqual(2, rc, out)
+        self.assertIn("note must be str, not int", out, out)
+        self.assertNotIn("Traceback", out, out)
+        self.assertEqual(before, tree_sha(d), "a refused apply writes nothing")
+        rc, out = self.upd(d, "--adopt", "--apply", CLAUDE_AGENTIC_MIGRATIONS=mig)
+        self.assertEqual(2, rc, out)
+        self.assertNotIn("note must be str", out, "the reason goes to stderr, stdout stays clean")
+
     def test_r6_r15_apply_once_keep_originals(self):  # pylint: disable=too-many-statements
         """R6, R15: apply once, keep the originals, and a second run changes nothing"""
         a = self.fixture("speckit", "applied")
@@ -1008,7 +1037,7 @@ class TestProjectAdopt(unittest.TestCase):  # pylint: disable=too-many-public-me
                         "F9: the conflicted destination's lines count, so only the new line is named lost\n" + out)
         rc, out = self.upd(a, "--adopt", "--cleanup")
         self.assertTrue(rc == 5 and "restore the adopted version from git" in out
-                        and "run /project-update --adopt --apply again" not in out,
+                        and "an adopted destination is never rewritten" in out,
                         "F9: cleanup on a changed source gives a way out, not another --apply\n" + out)
         self.assertTrue(has("^  hint      foreign structure detected: cursor", self.upd(self.plain("cursor"))[1]),
                         "an un-adopted foreign structure is a hint in the plain dry run (D5)")
@@ -1355,9 +1384,30 @@ class TestProjectAdopt(unittest.TestCase):  # pylint: disable=too-many-public-me
                         and os.path.isdir(os.path.join(sk, ".claude", "skills")),
                         "the emptied .claude/skills/speckit-plan/ goes with its files, scripts/ included; "
                         ".claude/skills/ stays")
-        self.assertFalse(any("Run `/project-update --adopt --cleanup` to review" in body(p)
-                             for p in glob.glob(os.path.join(sk, ".ai", "reports", "adopt-*", "report.md"))),
+        paths = glob.glob(os.path.join(sk, ".ai", "reports", "adopt-*", "report.md"))
+        self.assertTrue(paths, "the adopt report exists")
+        self.assertFalse(any("Run `/rr-setup --adopt --cleanup` to review" in body(p) for p in paths),
                          "after the cleanup report.md no longer invites a review")
+        self.assertTrue(all("The deletion is recorded under Cleanup below." in body(p) for p in paths),
+                        "and says where the deletion is recorded")
+
+    def test_cleanup_replaces_the_legacy_review_line(self):
+        """a report written by v2.0.2-v3.1.0 holds the old review line; cleanup replaces it too"""
+        legacy = "Run `/project-update --adopt --cleanup` to review; a human confirms the deletion."
+        d = self.cleaned("legacy-review-line")
+        paths = glob.glob(os.path.join(d, ".ai", "reports", "adopt-*", "report.md"))
+        self.assertTrue(paths, "the adopt report exists")
+        for p in paths:
+            text = body(p)
+            self.assertIn(adopt_review_line(), text, "the report invites a review before the cleanup")
+            put(p, text.replace(adopt_review_line(), legacy))
+        self.commit(d, "legacy report")
+        rc, out = self.confirm(d)
+        self.assertEqual(rc, 0, out)
+        for p in paths:
+            text = body(p)
+            self.assertNotIn(legacy, text, "the legacy review line is gone after the cleanup")
+            self.assertIn("The deletion is recorded under Cleanup below.", text)
 
     def test_confirmer_name_and_stale_task_dir(self):
         """the confirmer's name is a name, and a stale task directory is explained"""

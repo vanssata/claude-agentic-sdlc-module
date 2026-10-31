@@ -117,6 +117,25 @@ function onPath(cmd) {
   return false;
 }
 if (!onPath('python3')) die('python3 is required', 1);
+{
+  const pv = spawnSync('python3', ['-c', "import sys; print('%d.%d' % sys.version_info[:2])"],
+    { env, encoding: 'utf8', timeout: 10000, stdio: ['ignore', 'pipe', 'pipe'] });
+  const lines = (pv.stdout || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const found = (lines.length ? lines[lines.length - 1] : '').match(/^(\d+)\.(\d+)$/) || [];
+  if (!found.length || Number(found[1]) < 3 || (Number(found[1]) === 3 && Number(found[2]) < 11)) {
+    let why = '';
+    if (!found.length) {
+      const errLine = ((pv.stderr || '').split('\n').map((l) => l.trim()).find(Boolean)) || '';
+      const parts = [];
+      if (pv.error) parts.push(`error ${pv.error.code || pv.error.message}`);
+      if (pv.status !== null && pv.status !== undefined && pv.status !== 0) parts.push(`exit status ${pv.status}`);
+      if (pv.signal) parts.push(`signal ${pv.signal}`);
+      if (errLine) parts.push(`stderr: ${errLine}`);
+      why = parts.length ? ` - ${parts.join(', ')}` : ' - no version on stdout';
+    }
+    die(`python3 3.11 or newer is required (found ${found.length ? found[0] : 'unknown'}${why})`, 1);
+  }
+}
 
 // ------------------------------------------------------------------ helpers
 const exists = (p) => fs.existsSync(p);                       // follows symlinks, as [ -e ]

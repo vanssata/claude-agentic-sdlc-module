@@ -636,6 +636,77 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
         self.assertEqual(self.out(g, "statusline", "--context", *user, stdin=usage, AI_RUNTIME_GATE="off"),
                          "Opus 5.5 [1m] · 123k/1000k (12%)\nUSER\n", "the line does not depend on the gate being on")
 
+    def test_17_too_deep_json_is_read_as_malformed_json(self):
+        """CPython raises RecursionError, not ValueError, on deeply nested JSON: every
+        reader that skips or defaults on malformed JSON must do the same for it."""
+        # pylint: disable=import-outside-toplevel,protected-access
+        import importlib.util
+        deep = "[" * 200000
+        old_home = os.environ.get("HOME")
+        os.environ["HOME"] = self.env["HOME"]
+        try:
+            spec = importlib.util.spec_from_file_location("runtime_gate_deep", self.g)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        finally:
+            if old_home is None:
+                os.environ.pop("HOME", None)
+            else:
+                os.environ["HOME"] = old_home
+        d = os.path.join(self.tmp, "deep")
+        os.makedirs(d, exist_ok=True)
+
+        def put(name, text):
+            path = os.path.join(d, name)
+            write(path, text)
+            return path
+
+        for name, bad in (("malformed", '{"tiers": '), ("deep", deep)):
+            with self.subTest("profile_tier / profile_fable / profile: " + name):
+                home = os.path.join(d, "home-" + name)
+                os.makedirs(os.path.join(home, "riskrails"), exist_ok=True)
+                write(os.path.join(home, "riskrails", "profile.json"), bad)
+                self.assertEqual(mod.profile_tier(home, "EXPERT", "model", "dflt"), "dflt")
+                self.assertTrue(mod.profile_fable(home))
+                saved_home, mod.HOME = mod.HOME, home
+                try:
+                    self.assertEqual(mod.profile(), {})
+                finally:
+                    mod.HOME = saved_home
+            with self.subTest("load: " + name):
+                self.assertEqual(mod.load(put("state-" + name, bad)), {})
+            with self.subTest("import_legacy: " + name):
+                saved = (mod.HOME, mod.STATE, mod.LEGACY_STATE)
+                mod.HOME = os.path.join(d, "legacy-" + name)
+                mod.STATE = os.path.join(mod.HOME, "state", "runtime-gate.json")
+                mod.LEGACY_STATE = put("legacy-" + name + ".json", bad)
+                try:
+                    self.assertEqual(mod.import_legacy(), {})
+                finally:
+                    mod.HOME, mod.STATE, mod.LEGACY_STATE = saved
+            with self.subTest("transcript and rollout lines: " + name):
+                ok_version = '{"version": "2.1.5", "message": {"model": "opus"}}'
+                line = '{"version": %s}' % deep if name == "deep" else '{"version": x}'
+                path = put("t-" + name + ".jsonl", ok_version + "\n" + line + "\n")
+                self.assertEqual(mod.claude_code_version(path), (2, 1, 5))
+                self.assertEqual(mod.last_transcript_model(path), "opus")
+                ok_event = json.dumps({"payload": {"rate_limits": {"primary": {
+                    "used_percent": 5, "window_minutes": 10080, "resets_at": 1}}}, "type": "token_count"})
+                bad_event = '"token_count" "rate_limits" ' + ("[" * 60000 if name == "deep" else "{x")  # the tail is 64 KB
+                rollout = put("r-" + name + ".jsonl", ok_event + "\n" + bad_event + "\n")
+                self.assertIsNotNone(mod.rollout_limits(rollout), "the older valid event is still read")
+            with self.subTest("project_task: " + name):
+                proj = os.path.join(d, "proj-" + name)
+                os.makedirs(os.path.join(proj, ".ai", "state"), exist_ok=True)
+                write(os.path.join(proj, ".ai", "state", "state.json"), bad)
+                self.assertEqual(mod.project_task(proj), (None, None))
+        with self.subTest("a deep stdin payload exits 0 silently, no Traceback"):
+            for g in (self.g, self.cxg):
+                self.assertEqual(self.gate(g, stdin=deep, stderr=True), (0, ""))
+            rc, out = self.gate(self.g, "statusline", "--context", "--then", "cat >/dev/null; echo USER",
+                                stdin=deep, stderr=True)
+            self.assertEqual((rc, out), (0, "USER\n"))
+
 
 if __name__ == "__main__":
     unittest.main()

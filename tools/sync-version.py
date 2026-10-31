@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Check or set the one version the riskrails package carries in five places.
+"""Check or set the one version the riskrails package carries as five version keys in four files.
 
-  tools/sync-version.py --check                  exit 0 when all five agree
+  tools/sync-version.py --check                  exit 0 when all five keys agree
   tools/sync-version.py --check --tag v3.0.1     also: the tag must equal package.json's version
-  tools/sync-version.py 3.0.2                    rewrite the version in all five places
+  tools/sync-version.py 3.0.2                    rewrite the version in all five keys (four files)
   tools/sync-version.py ... --root DIR           act on the tree at DIR (default: this repository)
 
-The places: package.json, .claude-plugin/plugin.json, .claude-plugin/marketplace.json
+The four files: package.json, .claude-plugin/plugin.json, .claude-plugin/marketplace.json
 (two "version" keys), .codex-plugin/plugin.json. Setting replaces only the value of
 each "version" key, so every other byte survives. A version is X.Y.Z, optionally
 -prerelease. Exit 0 ok, 1 a mismatch, 2 a refused version or a usage error.
@@ -30,7 +30,7 @@ def read(root, name):
 
 
 def versions(root):
-    """[(file, version)] for every "version" key in the five places."""
+    """[(file, version)] for every "version" key in the four files (five keys)."""
     found = []
     for name in FILES:
         for match in KEY.finditer(read(root, name)):

@@ -185,7 +185,11 @@ always.
 The switch is `.ai/policies/dialog.json` (`enabled`, `window_seconds` 120
 clamped to 30–600, `stop_blocks_max`), written on by `/rr-setup --update`
 (migration 0010) and off by setting `"enabled": false`. The gate is inert under
-`AI_UNATTENDED=1`, when `CLAUDE_CODE_SESSION_ATTENDED=0`, inside a subagent,
+`AI_UNATTENDED=1`, when `CLAUDE_CODE_SESSION_ATTENDED=0` (a background job,
+`claude -p`, the SDK) unless `dialog.json` says `"background_sessions": true`
+— the project's opt-in for background jobs a human is still chatting in; with
+nobody there the Stop hook ends the turn on the terminal route after
+`stop_blocks_max` — inside a subagent,
 without a session id, or when the installed profile's `dialog.tool` is not the
 runtime's question tool. Option labels are at most 400 characters and may not
 contain `; & | $( < >`, a backtick or a newline, so a pick can be run verbatim.
@@ -223,7 +227,8 @@ in.
   pending questions. Codex has the same three events, so the handoff crosses.
 - **`Notification:auth_success`** (Claude): after a login, checks whether the
   account's plan drifted from the installed profile and opens the
-  `profile set` decision; `drift-ack.json` silences a known drift.
+  `profile set` decision; `drift-ack.json` silences a known drift: the
+  dialog's Keep, or `state.py profile ack` in a terminal.
 
 Before a compaction it runs `git branch --show-current` and `git status
 --short` in the working directory — see [known-risks.md](known-risks.md).

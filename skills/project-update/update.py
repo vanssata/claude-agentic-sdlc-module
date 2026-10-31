@@ -48,7 +48,7 @@ version closest to it (git merge-file for text, per key for JSON), keeping every
 edit. A real conflict leaves the project file alone and puts the plugin's version
 in a git-ignored local directory for a human or /rr-setup --update to merge.
 """
-import argparse, contextlib, copy, difflib, hashlib, importlib.util, io, json, os, re, subprocess, sys, tempfile
+import argparse, contextlib, copy, difflib, hashlib, importlib.util, io, json, os, re, shlex, subprocess, sys, tempfile
 from collections import OrderedDict
 from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
@@ -108,10 +108,12 @@ RULES_DIR = ".ai/rules"
 # file is not ours (the path guard refuses it too), and .git is not text.
 # A child holding a .git entry (worktree, nested repository, submodule) is pruned
 # too, by the take-back walk (rendered_rules) and by the writer (nested_tree). The
-# two still disagree on a dirs: entry under a RULES_SKIP name or through a
-# symlinked directory (.ai/project/known-risks.md).
+# writer also skips a RULES_SKIP name or a symlinked directory (unwalked_dir), so it
+# never writes where the take-back never walks.
 RULES_SKIP = {".git", ".ai", "vendor", "node_modules", "bower_components",
               "third_party", "Pods", "site-packages", ".venv", ".pnpm", ".yarn"}
+# Compared case-insensitively: on a case-insensitive filesystem `Vendor/` is `vendor/`.
+RULES_SKIP_FOLDED = frozenset(n.casefold() for n in RULES_SKIP)
 START, END = "<!-- riskrails:start -->", "<!-- riskrails:end -->"
 OLD_START, OLD_END = b"<!-- claude-agentic:start -->", b"<!-- claude-agentic:end -->"  # R35, one version
 
@@ -302,7 +304,7 @@ def git_dirty_ai(root):
     tree, where there is nothing to say."""
     try:
         res = subprocess.run(["git", "-C", root, "status", "--porcelain", "--", ".ai"],
-                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30)
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30, check=False)
     except (OSError, subprocess.SubprocessError):
         return False
     return res.returncode == 0 and bool(res.stdout.strip())
@@ -315,7 +317,7 @@ def git_states(root, rel_dir):
     or for a path git does not know."""
     def run(*args):
         res = subprocess.run(["git", "-C", root] + list(args), stdout=subprocess.PIPE,
-                             stderr=subprocess.DEVNULL, timeout=30)
+                             stderr=subprocess.DEVNULL, timeout=30, check=False)
         return res.stdout.decode("utf-8", "replace") if res.returncode == 0 else None
     try:
         prefix = run("rev-parse", "--show-prefix")
@@ -606,6 +608,10 @@ class MigrationContext:
         if text not in self.plan.hints:
             self.plan.hints.append(text)
 
+    def conflict(self, path, note):
+        """Hold the schema version on a file this migration could not handle; `note` says why."""
+        self._add("conflict", path, note)
+
     def exists(self, path):
         return self.read(path) is not None
 
@@ -629,6 +635,12 @@ class MigrationContext:
             return json.loads(raw, object_pairs_hook=OrderedDict)
         except ValueError:
             return None
+        except RecursionError:
+            # Not "absent": a file nested past the parser's limit is there. The migration goes on
+            # as if it were absent (0007 then creates a default weight.json beside it, overwriting
+            # nothing); the conflict holds the schema version, so the next run tries again.
+            self._add("conflict", path, "nested too deeply, so this migration could not read it")
+            return None
 
     # ---- operations. Each is idempotent: a target already in its final state
     # records nothing, so a re-run after an interrupted apply is a no-op.
@@ -637,6 +649,16 @@ class MigrationContext:
         if not isinstance(kw.get("content", b""), bytes):
             raise SchemaError("%04d: %s content must be bytes, not %s"
                               % (self.module.VERSION, target, type(kw["content"]).__name__))
+        if not isinstance(note, str):
+            raise SchemaError("%04d: %s note must be str, not %s"
+                              % (self.module.VERSION, target, type(note).__name__))
+        deep = action == "conflict" and isinstance(note, str) and note.startswith("nested too deeply")
+        if action == "conflict" and any(i["action"] == "conflict" and i["target"] == target
+                                        and i["migration"] == self.module.VERSION
+                                        and (i["note"] == note or deep and isinstance(i["note"], str)
+                                             and i["note"].startswith("nested too deeply"))
+                                        for i in self.plan.items):
+            return  # one deep file read twice, or read then edited: one row, one held schema
         self.plan.add(action, target, note, migration=self.module.VERSION, **kw)
 
     def create(self, path, content):
@@ -673,7 +695,12 @@ class MigrationContext:
 
     def edit_json(self, path, fn):
         """Rewrite a JSON file the project has. A policy file's leaf changes are
-        listed for confirmation, exactly as a merged policy change is."""
+        listed for confirmation, exactly as a merged policy change is. fn gets a
+        deep copy of the document and returns the new one. It must not walk the
+        document with Python recursion (a file that just passed copy.deepcopy can
+        be 470-490 levels deep at the default limit), or it guards RecursionError
+        itself: an unguarded fn's RecursionError is reported as its own, the run
+        fails and no file is blamed."""
         raw = self.read(path)
         if raw is None:
             return
@@ -684,11 +711,25 @@ class MigrationContext:
             # the schema version, so the next run tries again.
             self._add("conflict", path, "is not valid JSON, so this migration could not run (%s)" % exc)
             return
-        after = fn(copy.deepcopy(before))
-        if after == before:
+        except RecursionError:
+            self._add("conflict", path, "nested too deeply, so this migration could not run")
             return
-        policy = leaf_changes(before, after) if "/policies/" in "/" + path else None
-        self._add("update", path, "migrated", content=dump_json(after), policy=policy)
+        try:
+            copied = copy.deepcopy(before)
+        except RecursionError:
+            self._add("conflict", path, "nested too deeply, so this migration could not run")
+            return
+        # Outside the guard: an unguarded fn's RecursionError is reported as its own, not the file's.
+        after = fn(copied)
+        try:
+            if after == before:
+                return
+            policy = leaf_changes(before, after) if "/policies/" in "/" + path else None
+            content = dump_json(after)
+        except RecursionError:  # comparing or writing past the limit
+            self._add("conflict", path, "nested too deeply, so this migration could not run")
+            return
+        self._add("update", path, "migrated", content=content, policy=policy)
 
     def patch_state(self, fn):  # noqa: D401
         """Change the task in flight. update.py writes the state file the
@@ -861,16 +902,42 @@ def weight_mirror(plan, history, theirs):
     disk = read(path) if os.path.isfile(path) and not os.path.islink(path) else None
     after = plan.read(WEIGHT_JSON)
     fresh = None
+    rendering_raised = False
     if ours is not None and disk is not None and after is not None:
         try:
             if ours == render_weight(disk):
                 fresh = render_weight(after)
-        except (ValueError, TypeError, AttributeError, KeyError):
-            fresh = None  # not a table the renderer reads: the text merge decides
+        except Exception as exc:  # pylint: disable=broad-except
+            # not a table the renderer reads (or too deep, or no temp dir, or no renderer):
+            # the text merge decides, and it is always safe
+            fresh = None
+            rendering_raised = True
+            # L3: say so, so a renderer bug is not read as a hand-edited mirror
+            plan.hints.append("%s: not rendered from weight.json (%s); merged as text"
+                              % (WEIGHT_MD, type(exc).__name__))
     if fresh is None:
         three_way(plan, history, "ai-init/" + WEIGHT_MD, WEIGHT_MD, theirs)
+        # L4: not when the renderer raised: `state.py weight --mirror` would fail the same way
+        stale = None if rendering_raised else stale_mirror_hint(ours, disk)
+        if stale:
+            plan.hints.append(stale)
     elif fresh != ours:
         plan.add("update", WEIGHT_MD, "rendered from weight.json", content=fresh)
+
+
+def stale_mirror_hint(ours, disk):
+    """L3: the sha256 in weight.md's header names a weight.json other than the one on disk
+    (an --apply interrupted between the two writes, or a JSON edited without regenerating)."""
+    if ours is None or disk is None:
+        return None
+    head = ours[:2000]
+    found = re.search(r"^<!--.*\bsha256:\s*([0-9a-fA-F]{64})\b.*-->", head if isinstance(head, str) else head.decode("utf-8", "replace"), re.M)
+    if not found or found.group(1).lower() == hashlib.sha256(disk if isinstance(disk, bytes) else disk.encode("utf-8")).hexdigest():
+        return None
+    return ("%s: rendered from a different weight.json than the one on disk (stale: an interrupted "
+            "--apply, or the JSON edited without regenerating) — `state.py weight --mirror` "
+            "regenerates it from the JSON and REPLACES any hand edits in it, so keep or move "
+            "them first" % WEIGHT_MD)
 
 
 def three_way(plan, history, key, target, theirs):
@@ -887,7 +954,7 @@ def three_way(plan, history, key, target, theirs):
             try:
                 policy = leaf_changes(json.loads(ours, object_pairs_hook=OrderedDict),
                                       json.loads(theirs, object_pairs_hook=OrderedDict))
-            except ValueError:
+            except ValueError:  # ours or the template is not JSON: no policy lines
                 policy = None
         plan.add("update", target, "unchanged since it was installed",
                  content=theirs, policy=policy)
@@ -901,14 +968,22 @@ def three_way(plan, history, key, target, theirs):
         except ValueError:
             plan.add("conflict", target, "not valid JSON; not merged", conflict_copy=theirs)
             return
-        base = closest(bases, o, json_score) if bases else MISSING
-        conflicts = []
-        merged = merge_json(base, o, t, [], conflicts)
-        policy = leaf_changes(o, merged) if "/policies/" in "/" + target else None
+        except RecursionError:  # parsing, flatten or merge_json past the recursion limit
+            plan.add("conflict", target, "nested too deeply; not merged", conflict_copy=theirs)
+            return
+        try:
+            base = closest(bases, o, json_score) if bases else MISSING
+            conflicts = []
+            merged = merge_json(base, o, t, [], conflicts)
+            policy = leaf_changes(o, merged) if "/policies/" in "/" + target else None
+            content = dump_json(merged) if merged != o else None
+        except RecursionError:
+            plan.add("conflict", target, "nested too deeply; not merged", conflict_copy=theirs)
+            return
         if merged == o and not conflicts:
             return
         if merged != o:
-            plan.add("merge", target, "your edits kept", content=dump_json(merged), policy=policy)
+            plan.add("merge", target, "your edits kept", content=content, policy=policy)
         if conflicts:
             plan.add("conflict", target, "kept your value for: " + ", ".join(conflicts), conflict_copy=theirs)
         return
@@ -1203,7 +1278,15 @@ def cleanup_update(plan, now=None):
             continue
         # .ai/reports/ is usually git-tracked; only .ai/state/ is git-ignored run state
         held = git_states(plan.root, ".ai/reports/" + task_id)
+        skipped = set()
         for target in sorted(targets):
+            unsafe = unsafe_path(plan.root, target)
+            if unsafe:     # --apply would abort on it: say so instead of proposing it
+                if unsafe not in skipped:
+                    skipped.add(unsafe)
+                    plan.hints.append("%s: not proposed for deletion, %s — remove it yourself if it should go"
+                                      % (target, unsafe))
+                continue
             note = why
             state = held(target) if target.startswith(".ai/reports/") else None
             if state == "tracked":
@@ -1231,6 +1314,49 @@ def deletion_hint(plan):
             and git_dirty_ai(plan.root):
         plan.hints.append("commit .ai/ first: git is this migration's rollback "
                           "(`git status -- .ai` lists what it does not hold yet)")
+
+
+TRACKED_IGNORED_SHOWN = 10  # per-file hints before tracked_ignored_hint counts the rest
+
+
+def tracked_ignored_hint(plan):
+    """A file under .ai/state that git tracks although an ignore rule lists it: the rule
+    has no effect on it. Read-only: the human untracks it; nothing is planned.
+    At most TRACKED_IGNORED_SHOWN files get their own hint; one more line counts the rest."""
+    try:
+        res = subprocess.run(["git", "-C", plan.root, "ls-files", "-z", "-ci", "--exclude-standard",
+                              "--", ".ai/state"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                             timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return
+    if res.returncode != 0:
+        return
+    # --literal-pathspecs: a * ? [ ] in a name is that name, not a pattern that matches its neighbours.
+    all_cmd = "git ls-files -z -ci --exclude-standard -- .ai/state | xargs -0 -r git --literal-pathspecs rm --cached --"
+    names = [os.fsdecode(raw) for raw in res.stdout.split(b"\0") if raw]
+    for path in names[:TRACKED_IGNORED_SHOWN]:
+        # A control character (or a byte that is not UTF-8, which fsdecode keeps as a lone
+        # surrogate) in the name would forge a report line or break the copy-paste command:
+        # show it escaped, and untrack by the NUL-safe listing.
+        shown = "".join(c if c.isprintable() else repr(c)[1:-1] for c in path)
+        if shown == path:
+            plan.hints.append("%s: tracked by git but ignored by an ignore rule — the rule has no "
+                              "effect on a tracked file, so every run leaves the tree dirty and "
+                              "`git commit -a` sweeps it in; untrack it yourself, from the project root: "
+                              "`git --literal-pathspecs rm --cached -- %s` and commit (the file stays on disk)"
+                              % (shown, shlex.quote(path)))
+        else:
+            plan.hints.append("%s: tracked by git but ignored by an ignore rule — the rule has no "
+                              "effect on a tracked file, so every run leaves the tree dirty and "
+                              "`git commit -a` sweeps it in; this name cannot be typed safely, so "
+                              "untrack it, from the project root, with `%s`, which untracks EVERY tracked, ignored file "
+                              "under .ai/state, not only this one, and commit (the files stay on disk)"
+                              % (shown, all_cmd))
+    if len(names) > TRACKED_IGNORED_SHOWN:
+        plan.hints.append(".ai/state: %d more file(s) tracked by git but ignored by an ignore rule, "
+                          "not listed; untrack ALL tracked, ignored files under .ai/state "
+                          "(the ones listed above too), from the project root, with `%s` and commit (the files stay on disk)"
+                          % (len(names) - TRACKED_IGNORED_SHOWN, all_cmd))
 
 
 def rendered_rules(plan):
@@ -1275,6 +1401,41 @@ def nested_tree(root, rel_dir):
     return None
 
 
+def unwalked_dir(root, rel_dir):
+    """Why the take-back walk (rendered_rules) never enters `rel_dir`, or None:
+    a RULES_SKIP name on the way, or a symlinked directory on the way."""
+    here = root
+    for part in (p for p in rel_dir.split("/") if p not in ("", ".")):
+        here = os.path.join(here, part)
+        if part.casefold() in RULES_SKIP_FOLDED:
+            return "%s is under a directory the take-back never walks (%s)" % (rel_dir, part)
+        if os.path.islink(here):
+            return "%s is a symlink, which the take-back never follows" % os.path.relpath(here, root).replace(os.sep, "/")
+    return None
+
+
+def _frozen_block(plan, target, slug):
+    """True when `target` is a readable regular file inside the project, holding a
+    block for `slug`, at a place the take-back walk (rendered_rules) never enters: a
+    RULES_SKIP name or a nested git tree on its real path. A symlink that leads inside
+    the walked part of the project is removed by the same run; one that leads outside
+    the project, a directory, a FIFO or an unreadable file is not read at all."""
+    full = os.path.join(plan.root, target)
+    try:
+        real = os.path.realpath(full)
+        base = os.path.realpath(plan.root)
+        if os.path.commonpath([real, base]) != base or not os.path.isfile(real):
+            return False
+        rel_dir = os.path.relpath(os.path.dirname(real), base).replace(os.sep, "/")
+        parts = [p for p in rel_dir.split("/") if p not in ("", ".")]
+        if not (any(p in RULES_SKIP for p in parts) or nested_tree(base, rel_dir) is not None):
+            return False
+        held = plan.read(target)
+    except (OSError, ValueError):
+        return False
+    return held is not None and slug in render_instructions.rule_slugs_in(held.decode("utf-8", "replace"))
+
+
 def rules_update(plan, runtimes, planned=None):
     """Render `.ai/rules/<slug>.md` into the instruction file of every directory
     it names, and take back what a rule no longer asks for. The text around a
@@ -1310,6 +1471,14 @@ def rules_update(plan, runtimes, planned=None):
             # block written there could never be taken back again.
             plan.hints.append("%s: %s is a nested git tree (worktree, repository or submodule)"
                               " — rule %s is not rendered there" % (target, tree, item["slug"]))
+            continue
+        skip = unwalked_dir(plan.root, os.path.dirname(target)) if item["kind"] == "block" else None
+        if skip is not None:
+            hint = "%s: %s — rule %s is not rendered there" % (target, skip, item["slug"])
+            if _frozen_block(plan, target, item["slug"]):
+                hint += ("; an earlier rendering of it is still there, the take-back never walks there:"
+                         " remove that block by hand")
+            plan.hints.append(hint)
             continue
         current = plan.read(target)
         if item["kind"] == "doc":
@@ -1510,6 +1679,7 @@ def build_plan(root, confirm_delete=None, confirm_via=None, confirm_cleanup=None
             block_update(plan, history, rt)
         rules_update(plan, runtimes)
         gitignore_update(plan, os.path.join(tpl, "gitignore.snippet"))
+        tracked_ignored_hint(plan)
 
         testing = plan.read(".ai/policies/testing.md")
         if testing is not None:
@@ -1821,8 +1991,12 @@ def report(plan, applied):
     tail = ""
     if any(i["policy"] for i in auto):
         tail += ", %d policy change(s) to confirm" % sum(len(i["policy"] or []) for i in auto)
-    if deletions:
-        tail += ", %d deletion(s) awaiting --confirm-delete" % len(deletions)
+    # the summary names the flag each row names: [cleanup] rows settle with --confirm-cleanup only
+    cleanups = [i for i in deletions if (i["reason"] or "").startswith("[cleanup]")]
+    if len(deletions) > len(cleanups):
+        tail += ", %d deletion(s) awaiting --confirm-delete" % (len(deletions) - len(cleanups))
+    if cleanups:
+        tail += ", %d cleanup file(s) awaiting --confirm-cleanup" % len(cleanups)
     print("%d automatic, %d conflict(s)%s" % (len(auto), len(conflicts), tail))
 
 

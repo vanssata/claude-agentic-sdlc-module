@@ -245,15 +245,28 @@ def read_commands(root):
     return commands
 
 
+def _escaped(text):
+    """A value from a file, made safe to print: a control character or an ESC
+    sequence is shown as its escape, never sent to the terminal."""
+    return "".join(c if c.isprintable() else repr(c)[1:-1] for c in text)
+
+
 def bite_codes(root):
     """The exit codes that count as "the test fails" under --expect fail: the
-    testing.md `bite_codes` list of integers, 1 when absent or not a clean list."""
+    testing.md `bite_codes` list of integers 1-255, 1 when absent or not a clean list
+    (an empty part, a non-integer, 0, a negative or a value over 255 all fall back)."""
     raw = read_commands(root).get("bite_codes", "")
     try:
         codes = tuple(int(part) for part in raw.split(","))
+        usable = all(1 <= code <= 255 for code in codes)
     except ValueError:
-        return (1,)
-    return codes or (1,)
+        usable = False
+    if usable:
+        return codes
+    if raw:                      # present but unusable: say so (stderr keeps stdout's contract)
+        print('sensors: bite_codes "%s" is not a list of 1-255 exit codes - using 1' % _escaped(raw),
+              file=sys.stderr)
+    return (1,)
 
 
 def command_for(root, scope):

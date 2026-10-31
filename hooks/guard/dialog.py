@@ -7,11 +7,16 @@ tests/test_dialog_contract.py feeds both the same fixtures, so they cannot
 drift. Nothing here imports state.py: hooks run under `python3 -I -S`, stdlib
 only.
 
-Off is today: with .ai/policies/dialog.json missing or not `enabled: true`,
-no AI_UNATTENDED, the runtime's verified dialog tool, the main session and a
-session id all required, effective_switch() is False and no caller writes or
-decides anything (R36.1, R36.2). Readers fail open: a missing or unreadable
-file reads as "nothing open, nothing picked".
+The switch has three states (switch_state). Off is today: with
+.ai/policies/dialog.json missing or not `enabled: true`, AI_UNATTENDED set or
+the runtime's verified dialog tool missing, no caller writes or decides
+anything (R36.1, R36.2). Closed: the project's switch is on but the call
+cannot be bound to a session that can answer a dialog (a subagent, no session
+id, a session id that is not the hook environment's own); the dialog and the
+ledger treat it like off, the git consent rule refuses (terminal route). On:
+the main session with a session id. effective_switch() is True only for on.
+Readers fail open: a missing or unreadable file reads as "nothing open,
+nothing picked".
 """
 import contextlib
 import json
@@ -28,6 +33,10 @@ LOCK_STALE_S = 2.0
 LINE_MAX = 4096                             # one write; O_APPEND keeps a line whole up to this
 
 DIALOG_TOOL = {"claude": "AskUserQuestion", "codex": "request_user_input"}
+# The runtime's own session variable; the same mapping as state.py's. A hook's
+# environment carries it for Claude only (spike 2026-10-31: no CODEX_* variable
+# reaches a Codex hook), so it is compared only when present and non-empty.
+SESSION_ENV = {"claude": "CLAUDE_CODE_SESSION_ID", "codex": "CODEX_THREAD_ID"}
 LEDGER_TYPES = {"offer", "pick", "use", "void", "decline", "settle"}
 STOP_BLOCK = "stop_block"                   # the Stop loop breaker's count; no reader of consent reads it
 LABEL_FORBIDDEN = (";", "&", "|", "\n", "\r", "`", "$(", "<", ">")
@@ -63,13 +72,39 @@ def canonical(obj):
 
 
 # -- the switch ---------------------------------------------------------------
+JSON_DEPTH_MAX = 64                       # one nesting cap for both switches, not the stack's
+
+
+def json_loads_capped(text):
+    """json.loads(text), except that a text nested deeper than JSON_DEPTH_MAX is
+    malformed (ValueError). The parser's own limit moves with the stack depth, so
+    the hook and state.py could disagree; this scan does not recurse."""
+    depth, in_str, esc = 0, False, False
+    for ch in text:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+        elif ch == '"':
+            in_str = True
+        elif ch in "[{":
+            depth += 1
+            if depth > JSON_DEPTH_MAX:
+                raise ValueError("JSON nested deeper than %d" % JSON_DEPTH_MAX)
+        elif ch in "]}":
+            depth -= 1
+    return json.loads(text)
+
 
 def dialog_policy(root):
     """.ai/policies/dialog.json when it says enabled: true, else None."""
     try:
         with open(os.path.join(root, ".ai", "policies", "dialog.json"), encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, ValueError, TypeError):
+            data = json_loads_capped(fh.read())
+    except (OSError, ValueError, TypeError, RecursionError):
         return None
     if not isinstance(data, dict) or data.get("enabled") is not True:
         return None
@@ -79,7 +114,19 @@ def dialog_policy(root):
         value = value if isinstance(value, int) and not isinstance(value, bool) else default
         return min(high, max(low, value))
     return {"window_seconds": bounded("window_seconds", *WINDOW),
-            "stop_blocks_max": bounded("stop_blocks_max", STOP_BLOCKS_MAX, 0, STOP_BLOCKS_MAX)}
+            "stop_blocks_max": bounded("stop_blocks_max", STOP_BLOCKS_MAX, 0, STOP_BLOCKS_MAX),
+            "background_sessions": data.get("background_sessions") is True}
+
+
+def unattended(policy):
+    """True when the run is declared unattended: AI_UNATTENDED always; the
+    runtime's own marker (CLAUDE_CODE_SESSION_ATTENDED=0: a background job,
+    `claude -p`, the SDK) unless the project opts in with background_sessions:
+    true, for background jobs a human is still chatting in. state.py's
+    dialog_on() keeps the same rule."""
+    if os.environ.get("AI_UNATTENDED"):
+        return True
+    return os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0" and not policy.get("background_sessions")
 
 
 def runtime_home(runtime):
@@ -94,8 +141,8 @@ def dialog_tool(runtime):
     Only an installer from 7b on writes dialog.tool, always under riskrails/."""
     try:
         with open(os.path.join(runtime_home(runtime), "riskrails", "profile.json"), encoding="utf-8") as fh:
-            tool = (json.load(fh).get("dialog") or {}).get("tool")
-    except (OSError, ValueError, AttributeError):
+            tool = (json_loads_capped(fh.read()).get("dialog") or {}).get("tool")
+    except (OSError, ValueError, AttributeError, RecursionError):
         return None
     return tool if runtime in DIALOG_TOOL and tool == DIALOG_TOOL[runtime] else None
 
@@ -111,18 +158,28 @@ def payload_runtime(payload, hook_file):
     return "codex" if "%s.codex%s" % (os.sep, os.sep) in os.path.abspath(hook_file) else "claude"
 
 
+def switch_state(root, runtime, payload):
+    """"off", "closed" or "on". Off is today's route: no root, the project's
+    switch not on, AI_UNATTENDED or the runtime's unattended marker set, or no
+    verified dialog tool. Closed: the switch is on but this call cannot be bound
+    to a session that can answer a dialog: a payload that is not an object, a
+    subagent (agent_id), no session id, or a session id other than the one the
+    hook's own environment carries. On: otherwise."""
+    policy = dialog_policy(root) if root else None
+    if policy is None or unattended(policy):
+        return "off"
+    if dialog_tool(runtime) is None:
+        return "off"
+    if not isinstance(payload, dict) or payload.get("agent_id") or not payload.get("session_id"):
+        return "closed"
+    own = os.environ.get(SESSION_ENV.get(runtime, ""))
+    return "closed" if own and own != payload.get("session_id") else "on"
+
+
 def effective_switch(root, runtime, payload):
-    """On only when the project says so, nobody declared the run unattended,
-    the runtime's dialog tool is the verified one, this is the main session
-    (no agent_id: a subagent cannot answer a dialog) and the payload has a
-    session id to bind a pick to. Every other combination is today's route."""
-    if not root or dialog_policy(root) is None:
-        return False
-    if os.environ.get("AI_UNATTENDED") or os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
-        return False
-    if dialog_tool(runtime) is None or not isinstance(payload, dict):
-        return False
-    return not payload.get("agent_id") and bool(payload.get("session_id"))
+    """True only when switch_state() is "on"; "off" and "closed" are both no
+    dialog, no decision and no ledger write for every caller."""
+    return switch_state(root, runtime, payload) == "on"
 
 
 # -- labels -------------------------------------------------------------------
@@ -180,7 +237,7 @@ def read_decisions(root):
     try:
         with open(os.path.join(root, ".ai", "state", "decision.json"), encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError, RecursionError):
         return []
     opened = data.get("open") if isinstance(data, dict) else None
     return [d for d in opened if isinstance(d, dict) and d.get("id")] if isinstance(opened, list) else []
@@ -198,6 +255,18 @@ def decision_parts(decision):
     return [(options, bool(decision.get("multi_select")))]
 
 
+QUESTION_MAX = 1200  # state.py's
+
+
+def part_question(question, i, n):
+    """state.py's part_question: part i of n of a split decision is
+    "<question> (i of n)", the question cut so the whole fits QUESTION_MAX."""
+    if n < 2:
+        return question
+    suffix = " (%d of %d)" % (i, n)
+    return (question or "")[:QUESTION_MAX - len(suffix)] + suffix
+
+
 def offered(decisions, runtime):
     """What a dialog call for these decisions carries, question by question:
     (decision, options, the question as sent) — state.py's dialog_payload."""
@@ -205,7 +274,8 @@ def offered(decisions, runtime):
     for decision in decisions:
         parts = decision_parts(decision)
         for i, (options, multi) in enumerate(parts, 1):
-            item = {"question": decision.get("question"), "header": decision.get("header"),
+            item = {"question": part_question(decision.get("question"), i, len(parts)),
+                    "header": decision.get("header"),
                     "options": [{"label": o.get("label"), "description": o.get("description") or (
                         "the session runs exactly this, once" if o.get("kind") == "command" else "nothing runs")}
                                 for o in options]}
@@ -248,14 +318,14 @@ def adapt_response(runtime, payload):
 
     Claude: answers keyed by question text, a multi-select's labels joined
     with ", "; two questions with one text cannot be told apart, so both read
-    as unanswerable. Codex: tool_response is a JSON string,
+    as unanswerable (a split decision's parts are numbered "(i of n)" to differ). Codex: tool_response is a JSON string,
     answers[<id>].answers is a list; "None of the above" and "user_note: …"
     are items like any other, and match no label."""
     questions = response_questions(runtime, payload)
     if runtime == "codex":
         try:
             answers = json.loads(payload.get("tool_response") or "").get("answers")
-        except (ValueError, TypeError, AttributeError):
+        except (ValueError, TypeError, AttributeError, RecursionError):
             answers = None
         out = []
         for q in questions:
@@ -341,7 +411,7 @@ def read_ledger(root, path=None, types=LEDGER_TYPES):
             for raw in fh:
                 try:
                     entry = json.loads(raw)
-                except ValueError:
+                except (ValueError, RecursionError):
                     continue
                 if isinstance(entry, dict) and entry.get("v") == 1 and entry.get("type") in types:
                     entries.append(entry)

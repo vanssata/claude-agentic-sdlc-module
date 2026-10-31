@@ -11,3 +11,4 @@ __pycache__/
 .ai/local/
 files
 .ai/state/*.jsonl
+.ai/reports/project-update-2026-10-31/

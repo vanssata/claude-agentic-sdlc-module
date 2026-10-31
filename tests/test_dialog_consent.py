@@ -135,6 +135,8 @@ class Project:
             self.write(".ai/state/state.json", {"task_id": "T-1", "current_stage": "implementation"})
         self.env = dict(os.environ, CLAUDE_CONFIG_DIR=self.home, CODEX_HOME=self.home + "-codex",
                         AI_UNATTENDED="", CLAUDE_CODE_SESSION_ATTENDED="1")
+        for name in ("CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID"):   # deterministic: a test sets them itself
+            self.env.pop(name, None)
         self.picks = 0
 
     def close(self):
@@ -206,6 +208,95 @@ class TestConsentCases(unittest.TestCase):
                         self.assertEqual([e["type"] for e in p.ledger()], setup["ledger_after"])
                 finally:
                     p.close()
+
+
+class TestSessionMismatchFailsClosed(unittest.TestCase):
+    """Ivan, 2026-10-31: with the switch on, a call that cannot be bound to a
+    session that can answer a dialog is refused (terminal route), not let through."""
+
+    def run_case(self, command, setup=None, dialog_on=True, env=None, **guard):
+        p = Project(dialog_on=dialog_on)
+        try:
+            p.env.update(env or {})
+            if setup:
+                setup(p)
+            out = p.guard(command, **guard)
+            return decision_of(out), p.reason(out), [e["type"] for e in p.ledger()]
+        finally:
+            p.close()
+
+    def test_unbound_calls_are_refused(self):
+        for name, command, guard, env in (
+                ("subagent commit", COMMIT, {"agent_id": "a1"}, {}),
+                ("subagent push", "git push origin feat/x", {"agent_id": "a1", "agent_type": "x"}, {}),
+                ("empty session_id commit", COMMIT, {"session": ""}, {}),
+                ("env session differs from the payload's", COMMIT, {}, {"CLAUDE_CODE_SESSION_ID": "other"})):
+            with self.subTest(name):
+                got, reason, _ = self.run_case(command, env=env, **guard)
+                self.assertEqual(got, "deny", reason)
+                self.assertTrue(reason.startswith("CONSENT_REQUIRED \u2014 "), reason)
+                self.assertIn("terminal", reason)
+
+    def test_closed_deny_does_not_send_the_agent_to_the_dialog(self):
+        for name, guard, env in (("subagent", {"agent_id": "a1"}, {}),
+                                 ("empty session_id", {"session": ""}, {}),
+                                 ("env session differs", {}, {"CLAUDE_CODE_SESSION_ID": "other"})):
+            with self.subTest(name):
+                got, reason, _ = self.run_case(COMMIT, env=env, **guard)
+                self.assertEqual(got, "deny", reason)
+                self.assertTrue(reason.startswith("CONSENT_REQUIRED \u2014 "), reason)
+                self.assertNotIn("decision open", reason)
+                self.assertNotIn("send the dialog", reason)
+                self.assertIn("terminal", reason)
+                self.assertIn("other than the hook's own", reason)
+                self.assertIn("an unreadable call", reason)
+
+    def test_too_deeply_nested_json_reads_as_malformed(self):
+        deep = "[" * 200000
+        def nest_policy(p):
+            with open(os.path.join(p.root, ".ai", "policies", "dialog.json"), "w", encoding="utf-8") as fh:
+                fh.write(deep)
+        got, reason, _ = self.run_case(COMMIT, nest_policy)
+        self.assertEqual(got, "allow", reason)
+
+        def nest_profile(p):
+            with open(os.path.join(p.home, "riskrails", "profile.json"), "w", encoding="utf-8") as fh:
+                fh.write(deep)
+            self.assertIsNone(self.tool_in(p))
+        got, reason, _ = self.run_case(COMMIT, nest_profile)
+        self.assertEqual(got, "allow", reason)
+
+    @staticmethod
+    def tool_in(p):
+        old = os.environ.get("CLAUDE_CONFIG_DIR")
+        os.environ["CLAUDE_CONFIG_DIR"] = p.home
+        try:
+            return dialog.dialog_tool("claude")
+        finally:
+            if old is None:
+                os.environ.pop("CLAUDE_CONFIG_DIR")
+            else:
+                os.environ["CLAUDE_CONFIG_DIR"] = old
+
+    def test_codex_subagent_is_refused(self):
+        got, reason, _ = self.run_case(COMMIT, runtime="codex", agent_id="a1")
+        self.assertEqual((got, reason[:16]), ("deny", "CONSENT_REQUIRED"))
+
+    def test_env_equal_to_the_payload_is_the_normal_route(self):
+        def live(p):
+            p.decide(dec("D1", "commit", COMMIT))
+            p.pick("D1", 2, 1, COMMIT)
+        got, reason, ledger = self.run_case(COMMIT, live, env={"CLAUDE_CODE_SESSION_ID": SESSION})
+        self.assertEqual((got, ledger), ("allow", ["pick", "use"]), reason)
+        got, _, _ = self.run_case(COMMIT, env={"CLAUDE_CODE_SESSION_ID": SESSION})
+        self.assertEqual(got, "deny", "equal session, no pick: the normal deny")
+
+    def test_off_is_unchanged(self):
+        self.assertEqual(self.run_case(COMMIT, dialog_on=False, agent_id="a1")[0], "allow")
+        self.assertEqual(self.run_case(COMMIT, dialog_on=False, session="")[0], "allow")
+        self.assertEqual(self.run_case(COMMIT, env={"AI_UNATTENDED": "1"}, agent_id="a1")[0], "allow")
+        self.assertEqual(self.run_case(COMMIT, env={"CLAUDE_CODE_SESSION_ATTENDED": "0"}, agent_id="a1")[0],
+                         "allow")
 
 
 class TestModelCannotForgeConsent(unittest.TestCase):

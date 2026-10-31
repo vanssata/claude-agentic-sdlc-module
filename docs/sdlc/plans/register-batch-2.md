@@ -56,3 +56,4 @@ Accepted: #7, #36 (this plan), #26, #48. Human: #12, #13, #25, #31, #60. Records
 ## Rollback
 `git revert` of the commit. A project that already ran 0011 with `--confirm-delete` keeps the files
 under `original/` as every migration deletion does.
+A `git revert` of the plugin does not lower a project's schema: a project that already ran 0011 keeps `.ai/VERSION` at 11, and until it is set back to 10 by hand the reverted plugin's `update` refuses it with exit 2 ("says schema 11, this plugin ships schema 10 — update the plugin").

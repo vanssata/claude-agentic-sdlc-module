@@ -243,7 +243,7 @@ def read_session(root):
     try:
         with open(session_path(root), encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -332,7 +332,7 @@ def read_journal(root, task_id):
                     continue
                 try:
                     events.append(json.loads(line))
-                except ValueError:
+                except (ValueError, RecursionError):
                     skipped += 1
     except OSError:
         return [], skipped
@@ -383,7 +383,7 @@ def load(root, required=True, claim=None):
     try:
         with open(path, encoding="utf-8") as fh:
             state = apply_defaults(json.load(fh))
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         # Loud on purpose: a corrupt state file must never be silently replaced,
         # because ai-scope-guard's boundaries are derived from it.
         die("%s is unreadable (%s). Inspect it by hand; do not delete it blindly." % (path, exc))
@@ -464,7 +464,7 @@ def sealed_task_ids(root):
                 for raw in fh:
                     if b'"kind":"task"' not in raw:
                         continue
-                    with contextlib.suppress(ValueError, UnicodeDecodeError, AttributeError):
+                    with contextlib.suppress(ValueError, UnicodeDecodeError, AttributeError, RecursionError):
                         found.add(json.loads(raw.decode("utf-8")).get("task"))
         except OSError:
             continue
@@ -525,9 +525,9 @@ def read_profile(runtime=None):
     which turns every plan budget into a no-op."""
     try:
         with open(profile_file(runtime_home(runtime or own_runtime())), encoding="utf-8") as fh:
-            data = json.load(fh)
+            data = json_loads_capped(fh.read())
         return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return {}
 
 
@@ -544,7 +544,7 @@ def read_quota(runtime):
             return None
         pct = quota.get("weekly_pct")
         return float(pct) if pct is not None else None
-    except (OSError, ValueError, AttributeError, TypeError):
+    except (OSError, ValueError, AttributeError, TypeError, RecursionError):
         return None
 
 
@@ -585,8 +585,11 @@ def cmd_profile(args, _root):
     if args.action == "set":
         cmd_profile_set(args)
         return
+    if args.action == "ack":
+        cmd_profile_ack(args)
+        return
     if args.plan:
-        die("unrecognized argument %r: profile takes detect or set" % args.plan, 2)
+        die("unrecognized argument %r: profile takes detect, set or ack" % args.plan, 2)
     if args.open or args.detect_runtime:
         die("--open and --runtime after profile belong to profile detect")
     runtime = other_runtime() if args.other else own_runtime()
@@ -657,7 +660,7 @@ def read_json_object(path):
     try:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return None
     return data if isinstance(data, dict) else {}
 
@@ -712,7 +715,7 @@ def jwt_plan_type(token):
         auth = json.loads(text).get("https://api.openai.com/auth") or {}
         value = auth.get("chatgpt_plan_type")
         return value if js_truthy(value) else ""
-    except (IndexError, ValueError, AttributeError, TypeError):
+    except (IndexError, ValueError, AttributeError, TypeError, RecursionError):
         return ""
 
 
@@ -774,7 +777,7 @@ def profile_detect(runtime):
     prof = read_profile(runtime)
     installed = {k: prof.get(k) for k in ("plan", "profile", "plugin_version")} if prof else None
     have = (installed or {}).get("plan")
-    render = command = None
+    render = command = ack = None
     if api:
         status = "unsupported"
     elif not live["plan"]:
@@ -795,8 +798,9 @@ def profile_detect(runtime):
             render = "installer"
             command = installer_command(runtime, live["plan"], installed.get("plugin_version"),
                                         context_mode(prof))
+        ack = "python3 %s profile ack --runtime %s" % (shlex.quote(os.path.abspath(__file__)), runtime)
     return {"runtime": runtime, "status": status, "installed": installed, "live": live,
-            "render": render, "command": command, "decision": None}
+            "render": render, "command": command, "ack": ack, "decision": None}
 
 
 def acknowledged(runtime, fingerprint, installed_plan):
@@ -891,6 +895,8 @@ def cmd_profile_detect(args, root):
         have, live["plan"] or "unknown", " (%s)" % live["from"] if live["from"] else "", found["status"]))
     if found["command"]:
         print("fix: %s" % found["command"])
+    if found["ack"]:
+        print("keep: %s" % found["ack"])
     if found["decision"]:
         print("decision: %s" % found["decision"])
 
@@ -916,6 +922,33 @@ def load_resolver(runtime):
             spec.loader.exec_module(module)
             return module, base
     return None, None
+
+
+def cmd_profile_ack(args):
+    """32ee: the terminal route to "Keep" — with the dialog off no plan_drift decision
+    opens, so this is the only way to silence a drift the human chose to stay on. The
+    same drift-ack.json the decision's Keep writes; any plan_drift decision still open
+    is settled as stale by the next `detect --open`."""
+    if args.open or args.field or args.tier or args.other or args.json or args.plan:
+        die("profile ack takes --runtime only")
+    runtime = args.detect_runtime or own_runtime()
+    via, why = human_route(None)
+    if not via:
+        die("profile ack is the human's: %s" % why, 5)
+    found = profile_detect(runtime)
+    status = found["status"]
+    if status == "same":
+        print("no drift: nothing to acknowledge")
+        return
+    if status == "acknowledged":
+        print("already acknowledged; nothing written")
+        return
+    if status != "drift":
+        die("nothing to acknowledge: plan %s" % status)
+    kept = found["installed"]["plan"]
+    write_drift_ack(runtime, found["live"]["fingerprint"], kept, via)
+    print("drift-ack.json: keep %s for this %s account (%s); delete %s to be asked again"
+          % (kept, runtime, found["live"]["plan"], drift_ack_path(runtime)))
 
 
 def cmd_profile_set(args):
@@ -1114,7 +1147,7 @@ def cmd_event(args, root):
     if args.data:
         try:
             data = json.loads(args.data)
-        except ValueError as exc:
+        except (ValueError, RecursionError) as exc:
             die("--data must be a JSON object (%s)" % exc)
         if not isinstance(data, dict):
             die("--data must be a JSON object")
@@ -1532,7 +1565,7 @@ def cmd_ask(args, root):
         try:
             with open(args.batch, encoding="utf-8") as fh:
                 batch = json.load(fh)
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, RecursionError) as exc:
             die("cannot read batch file %s (%s)" % (args.batch, exc))
         if not isinstance(batch, list) or not batch:
             die("the batch file must contain a non-empty JSON array")
@@ -1919,7 +1952,7 @@ def write_handoff(root, state, reason):
     return lines
 
 
-RESUME_COMMAND = {"claude": "claude -p '/ai-task'", "codex": "codex exec '/ai-task'"}
+RESUME_COMMAND = {"claude": "claude -p '/rr-build'", "codex": "codex exec '/rr-build'"}
 
 
 def handoff_to(args, root):
@@ -2299,9 +2332,11 @@ def cmd_reject(args, root):
 # of this runs and every command prints and refuses as before (R36.2).
 
 DIALOG_TOOL = {"claude": "AskUserQuestion", "codex": "request_user_input"}
-# The runtime's session id as the Bash tool's environment carries it. Spike 7.0:
-# CLAUDE_CODE_SESSION_ID equals the payload's session_id. CODEX_THREAD_ID is
-# unverified; Codex stays off until the spike's version list is not empty.
+# The runtime's session id as the Bash tool's environment carries it. Both
+# mappings are verified by the 2026-10-31 spike (docs/dialog-spike.md, "Session
+# ids and the Stop block"): the variable equals the hook payload's session_id.
+# It must equal hooks/guard/dialog.py SESSION_ENV; tests/test_dialog_contract.py
+# checks that and feeds both sides the same switch fixtures.
 SESSION_ENV = {"claude": "CLAUDE_CODE_SESSION_ID", "codex": "CODEX_THREAD_ID"}
 DECISIONS_MAX = 4                         # questions one dialog call carries (R36.3)
 QUESTION_MAX, HEADER_MAX, LABEL_MAX = 1200, 12, 400
@@ -2315,33 +2350,88 @@ NPX_PACKAGE_RE = re.compile(r"^riskrails@[0-9A-Za-z.+-]+$")
 SETTLE_EFFECT = {"defer": "defer", "keep": "ack", "ack": "ack", "answer": "answered"}
 DIALOG_PICK = None                        # the pick human_route() consumed in this process
 
+JSON_DEPTH_MAX = 64                       # one nesting cap for both switches, not the stack's
+
+
+def json_loads_capped(text):
+    """json.loads(text), except that a text nested deeper than JSON_DEPTH_MAX is
+    malformed (ValueError). The parser's own limit moves with the stack depth, so
+    the hook and state.py could disagree; this scan does not recurse."""
+    depth, in_str, esc = 0, False, False
+    for ch in text:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+        elif ch == '"':
+            in_str = True
+        elif ch in "[{":
+            depth += 1
+            if depth > JSON_DEPTH_MAX:
+                raise ValueError("JSON nested deeper than %d" % JSON_DEPTH_MAX)
+        elif ch in "]}":
+            depth -= 1
+    return json.loads(text)
+
 
 def dialog_policy(root):
     """.ai/policies/dialog.json when it says enabled: true, else None (R36.1)."""
     try:
         with open(os.path.join(root, ".ai", "policies", "dialog.json"), encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, ValueError):
+            data = json_loads_capped(fh.read())
+    except (OSError, ValueError, RecursionError):
         return None
     if not isinstance(data, dict) or data.get("enabled") is not True:
         return None
     window = data.get("window_seconds", 120)
     window = window if isinstance(window, int) and not isinstance(window, bool) else 120
-    return {"window_seconds": min(600, max(30, window))}
+    return {"window_seconds": min(600, max(30, window)),
+            "background_sessions": data.get("background_sessions") is True}
+
+
+def dialog_tool_verified(runtime):
+    """profile.json dialog.tool read from <home>/riskrails/profile.json only, as the
+    hooks' dialog_tool() does: an installer from 7b on writes dialog.tool, always
+    there, so the pre-3.4b claude-agentic/ fallback of read_profile() is not
+    consulted. A missing, unreadable, malformed, too deeply nested or non-object
+    file is no tool."""
+    try:
+        with open(os.path.join(runtime_home(runtime), "riskrails", "profile.json"), encoding="utf-8") as fh:
+            data = json_loads_capped(fh.read())
+        return (data.get("dialog") or {}).get("tool")
+    except (OSError, ValueError, AttributeError, RecursionError):
+        return None
 
 
 def dialog_on(root):
-    """The effective switch, state.py's copy of the hooks' rule (7d1): the
-    project says on, nobody declared the run unattended, the runtime's dialog
-    tool is the one the installer verified, and the session has an id to bind a
-    pick to. Anything missing is off — today's route."""
+    """The effective switch, state.py's copy of the hooks' switch_state() (7d1):
+    the project says on, nobody declared the run unattended, the runtime's dialog
+    tool is the one the installer verified (read from riskrails/profile.json
+    only, never the old claude-agentic/ file), and the session has an id to bind
+    a pick to. The hooks also compare the payload's session id with the
+    environment's, which this copy never sees: a differing payload id is "closed"
+    there while this returns a dict, and the hook refuses the call, so the dict is
+    not acted on. A payload id with no environment id is "on" there and None here:
+    no pick can be bound, so the commit is denied.
+
+    None covers both of the hooks' "off" and "closed": no session id in the
+    environment means a pick cannot be bound, so it fails closed to the
+    terminal route (every approval and commit command prints for the human's
+    terminal). A dict is the hooks' "on"."""
     if not root:
         return None
     policy = dialog_policy(root)
-    if not policy or os.environ.get("AI_UNATTENDED") or os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
+    if not policy or os.environ.get("AI_UNATTENDED"):
+        return None
+    # the runtime's unattended marker (a background job, `claude -p`, the SDK)
+    # turns the dialog off unless the project opts in, as the hooks' unattended()
+    if os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0" and not policy["background_sessions"]:
         return None
     runtime = own_runtime()
-    tool = (read_profile(runtime).get("dialog") or {}).get("tool")
+    tool = dialog_tool_verified(runtime)
     session = os.environ.get(SESSION_ENV.get(runtime, ""))
     if runtime not in DIALOG_TOOL or tool != DIALOG_TOOL[runtime] or not session:
         return None
@@ -2471,7 +2561,7 @@ def read_ledger(root, path=None):
             for raw in fh:
                 try:
                     entry = json.loads(raw)
-                except ValueError:
+                except (ValueError, RecursionError):
                     continue
                 if isinstance(entry, dict) and entry.get("v") == 1 and entry.get("type") in LEDGER_TYPES:
                     entries.append(entry)
@@ -2544,7 +2634,7 @@ def read_decisions(root):
             data = json.load(fh)
     except FileNotFoundError:
         return {"version": 1, "open": []}
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         die("%s is unreadable (%s); only state.py writes it. Remove it to drop every open decision."
             % (decision_path(root), exc))
     if not isinstance(data, dict) or not isinstance(data.get("open"), list):
@@ -2654,6 +2744,15 @@ def option_description(option):
     return "the session runs exactly this, once" if option["kind"] == "command" else "nothing runs"
 
 
+def part_question(question, i, n):
+    """The question text of part i of n: a split decision's parts must differ,
+    Claude keys tool_response.answers by text; cut so the whole fits QUESTION_MAX."""
+    if n < 2:
+        return question
+    suffix = " (%d of %d)" % (i, n)
+    return (question or "")[:QUESTION_MAX - len(suffix)] + suffix
+
+
 def dialog_payload(decisions, runtime):
     """The dialog tool's input for these decisions, in file order: AskUserQuestion
     for Claude, request_user_input for Codex (keyed by a question id)."""
@@ -2661,7 +2760,7 @@ def dialog_payload(decisions, runtime):
     for decision in decisions:
         parts = dialog_questions(decision)
         for i, (options, multi) in enumerate(parts, 1):
-            item = {"question": decision["question"], "header": decision["header"],
+            item = {"question": part_question(decision["question"], i, len(parts)), "header": decision["header"],
                     "options": [{"label": o["label"], "description": option_description(o)} for o in options]}
             if runtime == "codex":
                 item = dict({"id": "%s%s" % (decision["id"].lower(), "_%d" % i if len(parts) > 1 else "")},
@@ -2705,6 +2804,17 @@ def settle_decision(root, decision_id, effect, pick=None):
     write_decisions(root, data)
 
 
+def settle_written(root, entry):
+    """True when the settle line is in the ledger; a decision leaves decision.json
+    only with its line (43ae-I4)."""
+    try:
+        with ledger_lock(root):
+            ledger_append(root, entry)
+    except OSError:
+        return False
+    return True
+
+
 def prune_decisions(root):
     """On every run: a decision with a settle line, or whose latest round's
     command picks are all used, leaves decision.json (R36.14); with the
@@ -2713,7 +2823,7 @@ def prune_decisions(root):
         with open(decision_path(root), encoding="utf-8") as fh:
             data = json.load(fh)
         keep = list(data["open"])
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, RecursionError):
         return                            # loud in the decision commands, not in every command
     ledger = read_ledger(root)
     settled = {e.get("decision") for e in ledger if e["type"] == "settle"}
@@ -2726,17 +2836,15 @@ def prune_decisions(root):
         if decision.get("id") in settled:
             keep.remove(decision)
         elif off:
-            with contextlib.suppress(OSError), ledger_lock(root):
-                ledger_append(root, {"type": "settle", "decision": decision["id"], "pick": None,
-                                     "effect": "fallback"})
-            keep.remove(decision)
+            if settle_written(root, {"type": "settle", "decision": decision["id"], "pick": None,
+                                     "effect": "fallback"}):
+                keep.remove(decision)
         elif picks and all(p.get("id") in used for p in picks):
             parsed = label_argv(picks[-1].get("label") or "")
             effect = "declined" if parsed and subcommand(parsed[1])[:1] == ["reject"] else "approved"
-            with contextlib.suppress(OSError), ledger_lock(root):
-                ledger_append(root, {"type": "settle", "decision": decision["id"], "pick": picks[-1].get("id"),
-                                     "effect": effect})
-            keep.remove(decision)
+            if settle_written(root, {"type": "settle", "decision": decision["id"], "pick": picks[-1].get("id"),
+                                     "effect": effect}):
+                keep.remove(decision)
     if len(keep) != len(data["open"]):
         data["open"] = keep
         write_decisions(root, data)
@@ -2767,7 +2875,7 @@ def mirror_ledger(root):
     for raw in chunk[:end].decode("utf-8", "replace").splitlines():
         try:
             entry = json.loads(raw)
-        except ValueError:
+        except (ValueError, RecursionError):
             continue
         if not isinstance(entry, dict) or entry.get("type") not in LEDGER_TYPES or entry["type"] == "offer":
             continue
@@ -2829,7 +2937,7 @@ def valid_decisions(root):
     try:
         with open(decision_path(root), encoding="utf-8") as fh:
             decisions = [d for d in json.load(fh)["open"] if isinstance(d, dict)]
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, RecursionError):
         return set()
     state = load(root, required=False, claim=False) if any(d.get("kind") == "approval" for d in decisions) else None
     tree = current_tree(root) if state else None
@@ -3334,7 +3442,7 @@ def parse_steps(text, plan_file):
         try:
             with open(plan_file, encoding="utf-8") as fh:
                 raw = json.load(fh)
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, RecursionError) as exc:
             die("--plan-file %s: %s" % (plan_file, exc))
         if not isinstance(raw, list) or not all(isinstance(s, dict) for s in raw):
             die("--plan-file holds a JSON list of {\"id\", \"files\", \"tests\", \"after\"}")
@@ -3748,6 +3856,33 @@ def documents_cover(root, state, policy, tree):
             {"since_run": g["n"], "since_tree": g["tree"], "run": s["n"], "paths": paths[:20], "tests": tests})
 
 
+def moved_detail(root, before, after, limit=5):
+    """Lines naming what changed between the two snapshots of a run that moved the tree,
+    and saying so when the new paths are untracked (a suite that writes a cache or a
+    coverage file moves the tree on every run). [] when the paths cannot be measured."""
+    diff = safe_sensor(sensors.diff_files, root, before, after)
+    if not diff:
+        return []
+    paths = [d["path"] for d in diff]
+    tracked = set()
+    code, out = safe_sensor(sensors.git, root, ["ls-files", "-z", "--"] + paths) or (1, "")
+    if code == 0:
+        tracked = set(f for f in out.split("\0") if f)
+    new = [d["path"] for d in diff if d["status"] == "A" and d["path"] not in tracked]
+    def esc(path):
+        # A name from `git diff -z` is data: a newline or ESC in it would forge a verify line.
+        return "".join(c if c.isprintable() else repr(c)[1:-1] for c in path)
+    shown = ", ".join("%s (%s)" % (esc(d["path"]), "untracked" if d["path"] in new else
+                                   {"A": "added", "D": "deleted", "T": "type changed"}.get(d["status"], "changed"))
+                      for d in diff[:limit])
+    more = " and %d more" % (len(diff) - limit) if len(diff) > limit else ""
+    lines = ["changed during the run: %s%s" % (shown, more)]
+    if new:
+        lines.append("untracked files written by the suite move the tree on every run: add them to "
+                     ".gitignore or stop the suite writing them")
+    return lines
+
+
 def run_v7(root, state, scope, args, tcfg):
     """One scope's command, to the end, logged under .ai/state/logs/; returns the run."""
     command = safe_sensor(sensors.command_for, root, scope) or ""
@@ -3783,6 +3918,8 @@ def run_v7(root, state, scope, args, tcfg):
         state["verify"]["e2e_tree"] = run["tree"]
     if run["tree_moved"]:
         print("tree moved during the run: run %d stands for no tree — run it again on a still tree" % n)
+        for line in moved_detail(root, before, after):
+            print(line)
     emit(root, state, "verify_run", "%s run %d: exit %s" % (scope, n, run["exit"]),
          {k: run[k] for k in ("n", "scope", "exit", "tree", "log", "expected_fail")})
     if full_suite(run) and run["exit"] is not None and run["tree"]:
@@ -4556,7 +4693,7 @@ def schema_line(root):
     numbers = [int(n[:4]) for n in names if re.match(r"\d{4}_", n)]
     plugin = str(max(numbers)) if numbers else "?"
     behind = project.isdigit() and plugin.isdigit() and int(project) < int(plugin)
-    return "schema: project %s · plugin %s%s" % (project, plugin, " — behind: run /project-update" if behind else "")
+    return "schema: project %s · plugin %s%s" % (project, plugin, " — behind: run /rr-setup --update" if behind else "")
 
 
 def cmd_status(args, root):
@@ -5127,7 +5264,7 @@ def main():
     p.add_argument("--why", default="")
     p.set_defaults(func=cmd_handoff)
 
-    p = sub.add_parser("profile"); p.add_argument("action", nargs="?", choices=["detect", "set"])
+    p = sub.add_parser("profile"); p.add_argument("action", nargs="?", choices=["detect", "set", "ack"])
     p.add_argument("plan", nargs="?")
     p.add_argument("--field")
     p.add_argument("--runtime", dest="detect_runtime", choices=RUNTIMES)

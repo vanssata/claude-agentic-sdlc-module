@@ -184,9 +184,9 @@
   "review_rounds_max": 2,
   "remediation_rounds": 2,
   "tests": {
-    "max_suite_runs": 2,
-    "timeout_seconds": 1800,
-    "env_retries": 1,
+    "max_suite_runs": 5,
+    "timeout_seconds": 3600,
+    "env_retries": 2,
     "log_max_bytes": 2097152
   },
   "examples": {
@@ -212,9 +212,9 @@
   },
   "batch": {
     "default": false,
-    "review_rounds_max": 3,
-    "max_suite_runs": 8,
-    "parallel": 3,
+    "review_rounds_max": 5,
+    "max_suite_runs": 12,
+    "parallel": 5,
     "tier": "BALANCED"
   },
   "documents": {

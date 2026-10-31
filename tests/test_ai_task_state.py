@@ -7,6 +7,7 @@ Every project here is a scratch git repository in a temp directory. The suite's
 red/green switch is a flag file outside the repository, so flipping it never
 changes the tree the two facts are measured on.
 """
+import base64
 import contextlib
 import io
 import json
@@ -53,7 +54,10 @@ class Project:
         os.makedirs(os.path.join(self.root, ".ai", "policies"))
         red, e2e = os.path.join(self.flags, "red"), os.path.join(self.flags, "e2ered")
         # flags/touch makes the suite edit a tracked file while it runs.
-        touch = "test -e %s && echo touched >> src/moved.txt; " % os.path.join(self.flags, "touch")
+        touch = ("test -e %s && echo touched >> src/moved.txt; test -e %s && echo x > cov.dat; "
+                 "test -e %s && echo x > \"$(printf \"w\\nFAKE ok\\033[0mz.dat\")\"; "
+                 % (os.path.join(self.flags, "touch"), os.path.join(self.flags, "untracked"),
+                    os.path.join(self.flags, "weird")))
         self.write(".ai/policies/testing.md",
                    "verify_command: sh -c '%stest ! -e %s' {files}\nstep_test_command: sh -c 'test ! -e %s' {files}\n"
                    "e2e_command: test ! -e %s\n" % (touch, red, os.path.join(self.flags, "stepred"), e2e))
@@ -858,6 +862,25 @@ class TestReviewPass1(Base):
         self.assertIn("tree moved during the run", out)
         self.assertIsNone(self.p.state()["verify"]["runs"][0]["tree"])
         self.assertEqual(self.p.run("close").returncode, 2)
+
+    def test_a_moved_tree_names_the_untracked_file_the_suite_wrote(self):
+        self.p.start()
+        self.p.flag("untracked")
+        out = self.p.ok("verify", "--scope", "all").stdout
+        self.assertIn("tree moved during the run", out)
+        self.assertIn("cov.dat (untracked)", out)
+        self.assertIn(".gitignore", out)
+        self.assertIsNone(self.p.state()["verify"]["runs"][0]["tree"])
+
+    def test_a_moved_tree_escapes_a_path_name_with_a_newline_or_an_escape(self):
+        # A name from `git diff -z` is data: a newline or ESC in it must not forge a verify line.
+        self.p.start()
+        self.p.flag("weird")
+        out = self.p.ok("verify", "--scope", "all").stdout
+        self.assertIn("tree moved during the run", out)
+        self.assertIn("w\\nFAKE ok\\x1b[0mz.dat (untracked)", out)
+        self.assertNotIn("\x1b", out)
+        self.assertNotIn("\nFAKE ok", out)
 
     def test_a_red_under_claude_is_never_waived(self):
         # Review M4: only a Codex-only red is a finding.
@@ -1900,7 +1923,7 @@ class TestWP5(Ported):
         done = self.s("claude", "handoff", "--to", "codex", "--why", "claude quota")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertRegex(done.stdout, r"Handed .* to codex \(manual\)")
-        self.assertRegex(done.stdout, r"headless \(not run\): cd .* && codex exec '/ai-task'")
+        self.assertRegex(done.stdout, r"headless \(not run\): cd .* && codex exec '/rr-build'")
         s = self.p.state()
         self.assertEqual((s["owner_runtime"], s["resume_point"]["runtime"], s["handoff"]["pending_to"]),
                          ("codex", "codex", "codex"))
@@ -2113,6 +2136,31 @@ class TestDialogDecisions(DialogBase):
         self.assertEqual(self.p.decisions(), [])
         self.assertEqual([(e["type"], e.get("effect")) for e in self.p.ledger()], [("settle", "fallback")])
 
+    def read_only_ledger(self):
+        path = os.path.join(self.p.root, ".ai", "state", "consent.jsonl")
+        os.chmod(path, 0o444)
+        if os.access(path, os.W_OK):
+            self.skipTest("the ledger stays writable as root")
+
+    def test_switch_off_keeps_the_decision_when_the_settle_cannot_be_written(self):
+        """43ae-I4: a decision leaves decision.json only with its settle line."""
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        self.p.append(type="use", id="C0", by="git-guard")
+        self.read_only_ledger()
+        os.remove(os.path.join(self.p.root, ".ai", "policies", "dialog.json"))
+        self.p.run("decision", "show")
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+        self.assertNotIn("settle", [e["type"] for e in self.p.ledger()])
+
+    def test_used_picks_keep_the_decision_when_the_settle_cannot_be_written(self):
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        cid = self.p.pick("D1", 2)
+        self.p.append(type="use", id=cid, by="git-guard")
+        self.read_only_ledger()
+        self.p.run("decision", "show")
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+        self.assertNotIn("settle", [e["type"] for e in self.p.ledger()])
+
     def test_decision_open_commit_validates_labels(self):
         for bad in ("git commit -m x; rm -rf ~", "git commit -m \"$(id)\"", "git commit -m a | tee x",
                     "git commit -m 'two\nlines'", "git commit -m a && git push origin main",
@@ -2192,6 +2240,20 @@ class TestDialogDecisions(DialogBase):
         self.assertEqual((settle["type"], settle["decision"], settle["pick"], settle["effect"]),
                          ("settle", "D1", cid, "defer"))
         self.assertFalse(os.path.exists(os.path.join(self.p.root, ".ai", "state", "decision.json")))
+
+    def test_decision_show_survives_deep_decision_json(self):
+        """A too-deep decision.json reads as a malformed one: die(), no traceback."""
+        path = os.path.join(self.p.root, ".ai", "state", "decision.json")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        results = []
+        for text in ("{not json", "[" * 200000):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            results.append(self.p.run("decision", "show"))
+        malformed, deep = results
+        self.assertNotIn("Traceback", deep.stderr)
+        self.assertEqual(deep.returncode, malformed.returncode)
+        self.assertIn("is unreadable", deep.stderr)
 
     def test_a_decline_settles_as_declined(self):
         self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
@@ -2393,6 +2455,60 @@ class TestDialogRoute(DialogBase):
         self.assertEqual([e["type"] for e in self.p.ledger()], ["pick"], "a refusal spends no pick")
         self.assertFalse(self.p.state()["human_approval"]["granted"])
 
+    def test_a_deep_decision_json_counts_no_pick(self):
+        """A live pick over a too-deep decision.json is no pick: valid_decisions
+        reads it as a malformed one, the refusal, not a traceback."""
+        self.full_gate()
+        self.p.pick("D1", 2)
+        self.p.pick("D1", 3)
+        argvs = [self.argv(self.label("D1", n)) for n in (2, 3)]
+        with open(os.path.join(self.p.root, ".ai", "state", "decision.json"), "w", encoding="utf-8") as fh:
+            fh.write("[" * 200000)
+        approve, reject = (self.p.run(*argv) for argv in argvs)
+        self.assertNotIn("Traceback", approve.stderr)
+        self.assertEqual(approve.returncode, 5, approve.stdout + approve.stderr)
+        self.assertFalse(self.p.state()["human_approval"]["granted"])
+        # a rejection needs no pick: it fails on the unreadable file as a malformed one does
+        self.assertNotIn("Traceback", reject.stderr)
+        self.assertIn("is unreadable", reject.stderr)
+
+    def test_deep_state_files_read_as_malformed_ones(self):
+        """A too-deep state.json, session.json or consent.jsonl line takes the
+        path of a malformed one: no traceback."""
+        self.full_gate()
+        state_dir = os.path.join(self.p.root, ".ai", "state")
+        for name, command in (("state.json", ("status",)), ("session.json", ("decision", "show"))):
+            path = os.path.join(state_dir, name)
+            original = None
+            if os.path.exists(path):
+                with open(path, encoding="utf-8") as fh:
+                    original = fh.read()
+            try:
+                results, left = [], []
+                for text in ("{not json", "[" * 200000):
+                    with open(path, "w", encoding="utf-8") as fh:
+                        fh.write(text)
+                    results.append(self.p.run(*command))
+                    with open(path, encoding="utf-8") as fh:
+                        left.append(fh.read() == text)
+            finally:
+                if original is None:
+                    os.remove(path)
+                else:
+                    with open(path, "w", encoding="utf-8") as fh:
+                        fh.write(original)
+            with self.subTest(file=name):
+                malformed, deep = results
+                self.assertNotIn("Traceback", deep.stderr)
+                self.assertEqual(deep.returncode, malformed.returncode)
+                self.assertEqual(left, [True, True], "a corrupt %s is never replaced, deep or not" % name)
+        with open(os.path.join(state_dir, "consent.jsonl"), "a", encoding="utf-8") as fh:
+            fh.write("[" * 200000 + "\n")
+        self.p.pick("D1", 2)
+        for command in (("decision", "show"), ("decision", "settle", "--id", "D1")):
+            with self.subTest(command=command):
+                self.assertNotIn("Traceback", self.p.run(*command).stderr)
+
     def test_an_expired_pick_is_no_pick(self):
         self.full_gate()
         self.p.pick("D1", 2, ago=200)
@@ -2558,6 +2674,118 @@ class TestDialogRoute(DialogBase):
         self.p.ok(*args)
         self.assertEqual(self.p.state()["mode"], "light")
         self.assertEqual(self.journal("mode_set")[-1]["data"]["via"], "dialog")
+
+
+class TestDeepJsonOutsideState(DialogBase):
+    """A JSON file or argument nested past the parser's stack takes the path of
+    a malformed one (RecursionError, not ValueError): same outcome, no traceback."""
+
+    DEEP = "[" * 200000
+
+    def same_outcome(self, malformed, deep):
+        self.assertNotIn("Traceback", deep.stderr)
+        self.assertEqual(deep.returncode, malformed.returncode)
+        self.assertEqual(deep.stdout, malformed.stdout)
+        reason = r"( \(|: )(Expecting|Stack overflow|maximum recursion).*"   # only the parser's words differ
+        self.assertEqual(re.sub(reason, "", deep.stderr, flags=re.S), re.sub(reason, "", malformed.stderr, flags=re.S))
+
+    def write_at(self, path, text):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+
+    def test_journal_line(self):
+        self.p.start()
+        task_id = self.p.state()["task_id"]
+        path = os.path.join(self.p.root, ".ai", "reports", task_id, "events.jsonl")
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write("{not json\n" + self.DEEP + "\n")
+        events, skipped = state_mod.read_journal(self.p.root, task_id)
+        self.assertEqual(skipped, 2, "the malformed and the deep line are both skipped")
+        self.assertTrue(events)
+
+    def test_sealed_task_line(self):
+        base = os.path.join(self.p.root, ".ai", "memory")
+        good = json.dumps({"kind": "task", "task": "T-sealed"}, separators=(",", ":"))
+        self.write_at(os.path.join(base, "a.jsonl"),
+                      '{"kind":"task", not json\n{"kind":"task","x":' + self.DEEP + "\n" + good + "\n")
+        self.assertEqual(state_mod.sealed_task_ids(self.p.root), {"T-sealed"})
+
+    def test_quota_file(self):
+        gate = os.path.join(self.p.home, "state", "runtime-gate.json")
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": self.p.home}):
+            self.write_at(gate, "{not json")
+            malformed = state_mod.read_quota("claude")
+            self.write_at(gate, self.DEEP)
+            self.assertEqual(state_mod.read_quota("claude"), malformed)
+        self.assertIsNone(malformed)
+
+    def test_json_object_file(self):
+        path = os.path.join(self.p.tmp.name, "obj.json")
+        self.write_at(path, "{not json")
+        malformed = state_mod.read_json_object(path)
+        self.write_at(path, self.DEEP)
+        self.assertEqual(state_mod.read_json_object(path), malformed)
+        self.assertIsNone(malformed)
+
+    def test_jwt_payload(self):
+        def token(text):
+            return "h.%s.s" % base64.urlsafe_b64encode(text.encode()).decode().rstrip("=")
+        self.assertEqual(state_mod.jwt_plan_type(token(self.DEEP)), state_mod.jwt_plan_type(token("{not json")))
+        self.assertEqual(state_mod.jwt_plan_type(token(self.DEEP)), "")
+
+    def test_event_data_argument(self):
+        self.p.start()
+        deep = "[" * 100000                # one argument is capped at 128 KiB; the parser fails from ~70000
+        malformed = self.p.run("event", "note", "--data", "{not json")
+        self.assertNotEqual(malformed.returncode, 0)
+        self.same_outcome(malformed, self.p.run("event", "note", "--data", deep))
+
+    def test_ask_batch_file(self):
+        self.p.start()
+        path = os.path.join(self.p.tmp.name, "batch.json")
+        self.write_at(path, "{not json")
+        malformed = self.p.run("ask", "--batch", path)
+        self.assertNotEqual(malformed.returncode, 0)
+        self.write_at(path, self.DEEP)
+        self.same_outcome(malformed, self.p.run("ask", "--batch", path))
+
+    def test_plan_file(self):
+        path = os.path.join(self.p.tmp.name, "plan.json")
+        outcomes = []
+        for text in ("{not json", self.DEEP):
+            self.write_at(path, text)
+            outcomes.append(self.p.run("start", "--goal", "g", "--workflow", "feature", "--files", "src/widget.py",
+                                       "--plan-file", path, *ZERO))
+        self.assertNotEqual(outcomes[0].returncode, 0)
+        self.same_outcome(*outcomes)
+
+    def test_ledger_valid_deep_valid(self):
+        """The deep line is skipped by both ledger readers and the valid lines around
+        it count: read_ledger returns two entries, mirror_ledger journals two events
+        and moves the cursor past all three lines, the settle sees the decline."""
+        self.p.start()
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        self.p.pick("D1", 1)
+        ledger = os.path.join(self.p.root, ".ai", "state", "consent.jsonl")
+        with open(ledger, "a", encoding="utf-8") as fh:
+            fh.write(self.DEEP + "\n")
+        self.p.append(type="decline", decision="D1", why="other_text")
+        with open(ledger, "rb") as fh:
+            size = len(fh.read())
+        self.assertEqual([e["type"] for e in state_mod.read_ledger(self.p.root)], ["pick", "decline"])
+        task_id = self.p.state()["task_id"]
+
+        def mirrored():
+            return [e["event"] for e in self.p.events(task_id) if e["event"] in ("consent_recorded", "decision_declined")]
+        self.assertEqual(mirrored(), [])
+        settled = self.p.run("decision", "settle", "--id", "D1")
+        self.assertEqual(settled.returncode, 0, settled.stderr)
+        self.assertNotIn("Traceback", settled.stderr)
+        self.assertIn("declined", settled.stdout)
+        self.assertEqual(mirrored(), ["consent_recorded", "decision_declined"])
+        self.assertEqual(self.p.state()["dialog"]["ledger_pos"], size)
+        self.assertEqual(self.p.decisions(), [])
 
 
 class TestBatch(Base):

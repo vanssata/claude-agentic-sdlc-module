@@ -1,8 +1,9 @@
 # Release the npm package `riskrails` when a human pushes a tag v<version>.
 #
 # How a human releases:
-#   python3 tools/sync-version.py X.Y.Z     # the five version files
-#   git commit -am "release X.Y.Z"
+#   python3 tools/sync-version.py X.Y.Z     # the four files, five version keys
+#   git commit -m "release X.Y.Z" -- package.json .claude-plugin/plugin.json \
+#     .claude-plugin/marketplace.json .codex-plugin/plugin.json
 #   git tag vX.Y.Z
 #   git push origin vX.Y.Z                  # this workflow does the rest
 #
@@ -43,7 +44,7 @@ jobs:
         for tool in bash jq git python3 patch diff; do
           command -v "$tool" || { echo "missing $tool"; exit 1; }
         done
-    - name: The tag matches the five version files
+    - name: The tag matches the five version keys
       run: python3 tools/sync-version.py --check --tag "$GITHUB_REF_NAME"
     # node before the tests: tests/test_dual_runtime_install.py runs the installer through it.
     - uses: actions/setup-node@v4

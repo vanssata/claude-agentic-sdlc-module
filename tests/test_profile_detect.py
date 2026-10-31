@@ -20,7 +20,7 @@ FIXTURES = os.path.join(ROOT, "tests", "fixtures", "profile")
 # Variables that change what detect sees or which runtime it believes it is.
 SCRUB = ("CLAUDECODE", "AI_RUNTIME", "AI_UNATTENDED", "CODEX_THREAD_ID", "CODEX_SESSION_ID", "CODEX_CI",
          "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_VERSION", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "ANTHROPIC_API_KEY",
-         "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "OPENAI_API_KEY")
+         "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "OPENAI_API_KEY", "CLAUDE_CODE_SESSION_ATTENDED")
 
 
 def cases(runtime):
@@ -105,6 +105,9 @@ class ProfileDetect(unittest.TestCase):
                     self.assertIn(want["command_has"], out["command"] or "")
                 if want["status"] != "drift":
                     self.assertIsNone(out["command"], "only drift proposes a command")
+                    self.assertIsNone(out["ack"], "only drift proposes profile ack")
+                else:
+                    self.assertTrue(out["ack"].endswith("profile ack --runtime %s" % runtime), out["ack"])
                 self.assertIsNone(out["decision"], "detect without --open opens no decision")
                 self.assertTrue(out["live"]["fingerprint"].startswith("sha256:"))
                 installed = case.get("installed")
@@ -180,6 +183,8 @@ class ProfileDetect(unittest.TestCase):
         self.assertIn("plan: installed max · account max20 (organizationRateLimitTier default_claude_max_20x) → drift",
                       out)
         self.assertIn("fix: ", out)
+        self.assertIn("keep: python3 ", out)
+        self.assertIn("profile ack --runtime claude", out)
 
     MAX20 = {"oauthAccount": {"organizationType": "claude_max",
                               "organizationRateLimitTier": "default_claude_max_20x"}}
@@ -299,6 +304,55 @@ class ProfileDetect(unittest.TestCase):
             fh.write("{not json")
         out = json.loads(self.detect_open(home, "--json").stdout)
         self.assertEqual((out["status"], out["decision"]), ("drift", None))
+
+    def test_too_deep_json_reads_as_malformed_json(self):
+        """~/.claude.json, auth.json, a JWT body and drift-ack.json nested past the
+        parser's stack are read as the malformed ones are: same detect, no traceback."""
+        deep = "[" * 200000
+        installed = {"plan": "max", "profile": "max"}
+
+        def jwt_of(text):
+            return ".".join([b64({"alg": "none"}), base64.urlsafe_b64encode(text.encode()).decode().rstrip("="), "sig"])
+
+        def detect(runtime, relative, text):
+            home = Home(runtime, {"installed": installed, "account": self.MAX20})   # a drift, so drift-ack.json is read
+            self.addCleanup(home.close)
+            if relative == "drift-ack":
+                relative = os.path.join(".claude" if runtime == "claude" else ".codex", "riskrails", "drift-ack.json")
+            path = os.path.join(home.home, relative)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            done = home.run("profile", "detect", "--runtime", runtime, "--json")
+            self.assertNotIn("Traceback", done.stderr)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return json.loads(done.stdout)
+
+        def auth(token):
+            return json.dumps({"tokens": {"id_token": token}})
+
+        for runtime, relative, malformed, too_deep in (
+                ("claude", ".claude.json", "{not json", deep),
+                ("claude", "drift-ack", "{not json", deep),
+                ("codex", os.path.join(".codex", "auth.json"), "{not json", deep),
+                ("codex", os.path.join(".codex", "auth.json"), auth(jwt_of("{not json")), auth(jwt_of(deep)))):
+            with self.subTest(runtime=runtime, file=relative, jwt=malformed.startswith('{"tokens"')):
+                one, two = detect(runtime, relative, malformed), detect(runtime, relative, too_deep)
+                self.assertEqual(two, one)
+
+    def test_open_with_too_deep_decision_file_exits_zero_without_traceback(self):
+        # R36.16: a RecursionError in read_decisions is a die(), caught by the SystemExit handler
+        home = self.opening(self.MAX20)
+        path = os.path.join(home.project, ".ai", "state", "decision.json")
+        deep = "[" * 200000
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(deep)
+        done = self.detect_open(home, "--json")
+        self.assertNotIn("Traceback", done.stderr)
+        out = json.loads(done.stdout)
+        self.assertEqual((out["status"], out["decision"]), ("drift", None))
+        with open(path, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), deep)
 
     def test_detect_without_open_writes_nothing(self):
         home = self.opening(self.MAX20)
@@ -518,6 +572,123 @@ class ProfileSet(unittest.TestCase):
         self.assertEqual(done.returncode, 6, done.stderr)
         self.assertIn("PROFILE_NEEDS_INSTALLER", done.stderr)
         self.assertEqual(self.profile(home), before)
+
+
+class ProfileAck(unittest.TestCase):
+    """`state.py profile ack` (32ee): the terminal route to Keep when the dialog is off."""
+
+    MAX20 = ProfileDetect.MAX20
+
+    def home(self, account=None, installed=None, **env):
+        home = Home("claude", {"account": self.MAX20 if account is None else account,
+                               "installed": {"plan": "max", "plugin_version": "3.1.0"} if installed is None
+                               else installed or None, "env": env})
+        self.addCleanup(home.close)
+        home.ack = os.path.join(home.claude, "riskrails", "drift-ack.json")
+        return home
+
+    def detect(self, home):
+        return json.loads(home.run("profile", "detect", "--runtime", "claude", "--json").stdout)
+
+    def test_ack_on_drift_silences_detect(self):
+        home = self.home(AI_UNATTENDED="1")
+        fingerprint = self.detect(home)["live"]["fingerprint"]
+        done = home.run("profile", "ack", "--runtime", "claude", stdin=subprocess.DEVNULL)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("drift-ack.json: keep max for this claude account (max20)", done.stdout)
+        self.assertIn("delete %s" % home.ack, done.stdout)
+        with open(home.ack, encoding="utf-8") as fh:
+            ack = json.load(fh)
+        self.assertEqual((ack["claude"]["kept"], ack["claude"]["via"], ack["claude"]["fingerprint"]),
+                         ("max", "unattended", fingerprint))
+        self.assertIsNone(ack["codex"])
+        after = self.detect(home)
+        self.assertEqual((after["status"], after["ack"]), ("acknowledged", None))
+        again = home.run("profile", "ack", "--runtime", "claude", stdin=subprocess.DEVNULL)
+        self.assertEqual(again.returncode, 0, again.stderr)
+        self.assertIn("already acknowledged; nothing written", again.stdout)
+
+    def test_ack_codex_round_trip_and_independence(self):
+        """Review R-profile-ack-has-no-codex-test-d628: each runtime keeps its own drift-ack.json under its own home."""
+        home = self.home(AI_UNATTENDED="1")
+        write(os.path.join(home.codex, "auth.json"),
+              with_jwts({"auth_mode": "chatgpt", "tokens": {"id_token": "<jwt:pro>"}}))
+        write(os.path.join(home.codex, "riskrails", "profile.json"),
+              {"plan": "plus", "plugin_version": "3.1.0", "runtime": "codex"})
+        codex_ack = os.path.join(home.codex, "riskrails", "drift-ack.json")
+
+        def detect_codex():
+            return json.loads(home.run("profile", "detect", "--runtime", "codex", "--json").stdout)
+
+        def read(path):
+            with open(path, encoding="utf-8") as fh:
+                return json.load(fh)
+
+        before = detect_codex()
+        self.assertEqual(before["status"], "drift")
+        done = home.run("profile", "ack", "--runtime", "codex", stdin=subprocess.DEVNULL)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("for this codex account", done.stdout)
+        ack = read(codex_ack)
+        self.assertEqual((ack["codex"]["kept"], ack["codex"]["via"], ack["codex"]["fingerprint"]),
+                         ("plus", "unattended", before["live"]["fingerprint"]))
+        self.assertIsNone(ack["claude"])
+        self.assertFalse(os.path.exists(home.ack), "a codex ack writes nothing under the claude home")
+        self.assertEqual(detect_codex()["status"], "acknowledged")
+        self.assertEqual(self.detect(home)["status"], "drift", "the codex ack does not silence claude")
+
+        done = home.run("profile", "ack", "--runtime", "claude", stdin=subprocess.DEVNULL)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(read(codex_ack), ack, "acking claude leaves the codex file as it was")
+        self.assertEqual(read(home.ack)["claude"]["kept"], "max")
+        self.assertIsNone(read(home.ack)["codex"])
+        self.assertEqual(detect_codex()["status"], "acknowledged")
+
+    def test_ack_on_a_terminal_stamps_terminal(self):
+        home = self.home()
+        master, slave = os.openpty()
+        self.addCleanup(os.close, master)
+        try:
+            done = home.run("profile", "ack", "--runtime", "claude", stdin=slave)
+        finally:
+            os.close(slave)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        with open(home.ack, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh)["claude"]["via"], "terminal")
+
+    def test_ack_refused_in_agent(self):
+        home = self.home(CLAUDECODE="1")
+        done = home.run("profile", "ack", "--runtime", "claude", stdin=subprocess.DEVNULL)
+        self.assertEqual(done.returncode, 5, done.stderr)
+        self.assertIn("profile ack is the human's", done.stderr)
+        self.assertIn("CLAUDECODE", done.stderr)
+        self.assertFalse(os.path.exists(home.ack))
+        self.assertEqual(self.detect(home)["status"], "drift")
+
+    def test_ack_no_drift_writes_nothing(self):
+        home = self.home(account={"oauthAccount": {"organizationType": "claude_max"}}, AI_UNATTENDED="1")
+        done = home.run("profile", "ack", "--runtime", "claude", stdin=subprocess.DEVNULL)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("no drift: nothing to acknowledge", done.stdout)
+        self.assertFalse(os.path.exists(home.ack))
+
+    def test_ack_no_profile_refused(self):
+        for name, home in (("no_profile", self.home(installed=False, AI_UNATTENDED="1")),
+                           ("unknown", self.home(account={}, AI_UNATTENDED="1"))):
+            with self.subTest(name):
+                done = home.run("profile", "ack", "--runtime", "claude", stdin=subprocess.DEVNULL)
+                self.assertEqual(done.returncode, 1, done.stderr)
+                self.assertIn("nothing to acknowledge: plan %s" % name, done.stderr)
+                self.assertFalse(os.path.exists(home.ack))
+
+    def test_ack_rejects_reader_flags(self):
+        home = self.home(AI_UNATTENDED="1")
+        for flags in (["--open"], ["--json"], ["--other"], ["--field", "plan"], ["--tier", "FAST"], ["max"]):
+            with self.subTest(flags[0]):
+                done = home.run("profile", "ack", *flags, stdin=subprocess.DEVNULL)
+                self.assertEqual(done.returncode, 1, done.stderr)
+                self.assertIn("profile ack takes --runtime only", done.stderr)
+        self.assertFalse(os.path.exists(home.ack))
 
 
 if __name__ == "__main__":
