@@ -696,6 +696,27 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
               bc("rm -rf %s/ai" % sh))
         self.state("{}\n")
 
+    def test_13b_the_statusline_record_is_protected(self):
+        # Review I6 of T-2026-10-31-1841 (d7ec): riskrails/statusline.json holds the
+        # user's replaced statusline command; an agent's tool call does not rewrite it,
+        # in a task or not. The installer writes it through node, not through a tool.
+        env = dict(os.environ, HOME=self.home_t, CLAUDE_CONFIG_DIR="", CODEX_HOME="")
+        root = self.root
+        for state in (IMPLEMENTATION, None):
+            self.state(state)
+            when = "in a task" if state else "no task"
+            for name in ("riskrails", "claude-agentic"):
+                rec = "%s/.claude/%s/statusline.json" % (self.home_t, name)
+                self.decide("%s: Write of %s/statusline.json is denied" % (when, name), "deny",
+                            tool(root, "Write", rec), env=env)
+                self.decide("%s: Edit of %s/statusline.json is denied" % (when, name), "deny",
+                            tool(root, "Edit", rec), env=env)
+                self.decide("%s: Read of %s/statusline.json is allowed" % (when, name), "allow",
+                            tool(root, "Read", rec), env=env)
+                self.decide("%s: a sibling %s/statusline.json.bak is allowed" % (when, name), "allow",
+                            tool(root, "Write", rec + ".bak"), env=env)
+        self.state("{}\n")
+
     def test_14_ai_agents_is_an_override_path(self):
         # T-2026-10-15-001 (known-risks b): a project copy under .ai/agents/ shadows the
         # shared contract, so dropping one mid-task rewrites the reviewer's own rules.

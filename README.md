@@ -125,7 +125,7 @@ npx riskrails@3.1.0 --target codex        # auto | claude | codex | both
 npx riskrails@3.1.0 --plan max --fable no # pro | team-pro | team-max | max | max20 | balanced-max
 npx riskrails@3.1.0 --codex-plan plus     # plus | pro | balanced-max
 npx riskrails@3.1.0 --context economy     # the plan's compaction window; the context guard also blocks
-npx riskrails@3.1.0 --statusline own      # keep your own statusline command (default: the plugin's two-line statusline)
+npx riskrails@3.1.0 --statusline own      # keep your own statusline command (from 3.2.0; default: the plugin's two-line statusline)
 npx riskrails@3.1.0 --dry-run             # print what would be written, write nothing
 npx -y riskrails@latest --yes             # update in place, keeping the recorded plan
 ```

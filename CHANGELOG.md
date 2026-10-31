@@ -2,6 +2,17 @@
 
 Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- The plugin's two-line statusline replaces your statusline command by default. The replaced command is printed, kept in `~/.claude/riskrails/statusline.json` and in the dated settings.json backup; `--statusline own` restores it once, on the run that switches to own.
+
+### Fixed
+- Installer: `--statusline own` restores the replaced command only on the switch to own; a `--then` you removed by hand no longer comes back on the next update.
+- Installer: a malformed `--then` tail is no longer recorded over the command already kept in `riskrails/statusline.json`.
+- Path guard: `.claude/riskrails/statusline.json` is protected config — an agent's Write or Edit is denied, in a task or not.
+- Statusline: a NaN or infinite percentage, cost or context size skips that part only; the rest of both lines is still printed.
+
 ## [3.1.0] — 2026-10-30
 
 Project schema 10 → 11: run `/rr-setup --update` after upgrading.

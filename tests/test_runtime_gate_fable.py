@@ -561,6 +561,8 @@ class TestRuntimeGateFable(unittest.TestCase):  # pylint: disable=too-many-publi
                          "\"$HOME/.claude/hooks/runtime-gate.py\" statusline --context --line",
                          "the old statusline wrapper is re-pointed to the plugin's statusline")
         self.assertIn("statusline: moved the fable-gate statusline wrapper", out, "the move is reported")
+        self.assertEqual(read_json(d + "/riskrails/statusline.json")["replaced"], "my-line.sh",
+                         "the replaced command is recorded on the moved path too (review L4)")
 
     def test_16_installer_the_quota_check_runs_through_the_statusline_on_every_plan(self):
         h = self.tmp + "/h-wrap"
@@ -614,6 +616,14 @@ class TestRuntimeGateFable(unittest.TestCase):  # pylint: disable=too-many-publi
         # review H1: the choice is remembered, so the update notice's `--yes` keeps it
         out = self.node(d, "--plan", "max", "--fable", "no", "--yes")
         self.assertEqual(command(), restored, "a later install without --statusline keeps own")
+        # review M1 of T-2026-10-31-1841 (a8d3): the restore is one-shot — once own is recorded,
+        # a command the user removed by hand does not come back on the next update
+        settings = read_json(d + "/settings.json")
+        settings["statusLine"]["command"] = PREFIX + " --context"
+        write_json(d + "/settings.json", settings)
+        self.node(d, "--plan", "max", "--fable", "no", "--yes")
+        self.assertEqual(command(), PREFIX + " --context",
+                         "a --then the user stripped by hand stays stripped: own restores only on the switch to own")
         self.node(d, "--plan", "max", "--fable", "no", "--statusline", "riskrails")
         self.assertEqual(command(), full, "--statusline riskrails, given again, replaces it")
         self.node(d, "--plan", "max", "--fable", "no")
@@ -658,6 +668,28 @@ class TestRuntimeGateFable(unittest.TestCase):  # pylint: disable=too-many-publi
         self.assertEqual(command(), full, "by default the added statusline shows both lines")
         self.node(d, "--plan", "max", "--fable", "yes", "--statusline", "own")
         self.assertEqual(command(), PREFIX + " --context", "--statusline own with no own command: the context line alone")
+
+        # review M1 (a8d3), second home: a record with no statusline; own twice writes the same line
+        h = self.tmp + "/h-own-twice"
+        d = h + "/.claude"
+        os.makedirs(d + "/riskrails")
+        write_json(d + "/riskrails/statusline.json", {"mode": "riskrails", "replaced": ORIG})
+        self.node(d, "--plan", "max", "--fable", "no", "--statusline", "own")
+        first = command()
+        self.node(d, "--plan", "max", "--fable", "no", "--statusline", "own")
+        self.assertEqual(command(), first, "--statusline own is idempotent: a second run changes nothing")
+
+        # review I5 of T-2026-10-31-1841 (d7ec): a malformed --then tail is not recorded over a good one
+        h = self.tmp + "/h-bad-then"
+        d = h + "/.claude"
+        os.makedirs(d + "/riskrails")
+        write_json(d + "/riskrails/statusline.json", {"mode": "riskrails", "replaced": ORIG})
+        write_json(d + "/settings.json", {"statusLine": {"type": "command",
+                                                         "command": PREFIX + " --context --then 'unterminated"}})
+        self.node(d, "--plan", "max", "--fable", "no")
+        self.assertEqual(command(), full, "the plugin's statusline is written")
+        self.assertEqual(read_json(d + "/riskrails/statusline.json")["replaced"], ORIG,
+                         "an unparsable --then tail does not overwrite the recorded command")
 
         for plan, fable in (("max", "no"), ("pro", "no")):
             h = "%s/h-%s-%s" % (self.tmp, plan, fable)

@@ -34,7 +34,7 @@ npx riskrails@3.1.0 --codex-plan balanced-max  # Pro's budgets, Sol session, FAS
 npx riskrails@3.1.0 --context economy     # the plan's compaction window (800 000 Max, 300 000 Pro); the guard also blocks
 npx riskrails@3.1.0 --context default     # the default: each runtime's own window and compaction; the guard only warns
 npx riskrails@3.1.0 --statusline-context no  # no model and context line in the statusline (default yes)
-npx riskrails@3.1.0 --statusline own         # Claude: keep your own statusline command (default riskrails: the plugin's)
+npx riskrails@3.1.0 --statusline own         # Claude: keep your own statusline command (from 3.2.0; default riskrails: the plugin's)
 ```
 
 Node 18 or newer and `python3` (Python 3.11 or newer) on `PATH` are required;

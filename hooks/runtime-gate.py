@@ -1139,7 +1139,9 @@ def context_line(payload):
     window = window if isinstance(window, dict) else {}
 
     def number(value):
-        return value if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 else None
+        # finite only: Infinity makes round() raise and the whole line would be lost
+        return (value if isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(value) and value >= 0 else None)
 
     size = number(window.get("context_window_size"))
     pct = number(window.get("used_percentage"))
@@ -1219,14 +1221,14 @@ def second_line(payload):
     for key, label, fmt in (("five_hour", "5h", "%H:%M"), ("seven_day", "7d", "%a %H:%M")):
         window = limits.get(key)
         pct = window.get("used_percentage") if isinstance(window, dict) else None
-        if isinstance(pct, (int, float)) and not isinstance(pct, bool):
+        if isinstance(pct, (int, float)) and not isinstance(pct, bool) and math.isfinite(pct):
             reset = reset_text(window.get("resets_at"), fmt)
             parts.append("%s:%d%%%s" % (label, round(pct), " (↻%s)" % reset if reset else ""))
     if parts:
         out += "%s\033[33m%s%s" % (SL_SEP, " ".join(parts), SL_RESET)
     cost = payload.get("cost")
     cost = cost.get("total_cost_usd") if isinstance(cost, dict) else None
-    if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+    if isinstance(cost, (int, float)) and not isinstance(cost, bool) and math.isfinite(cost):
         out += "%s\033[32m$%.2f%s" % (SL_SEP, cost, SL_RESET)
     return out
 

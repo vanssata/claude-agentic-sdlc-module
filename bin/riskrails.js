@@ -626,7 +626,8 @@ function statuslineGate(file, gate, mode) {
   const tail = () => line.command.slice(PREFIX.length).trim().replace(/^((--context|--line)(\s+|$))+/, '');
   // The user's own command inside a `--then '<command>'` tail, for the replaced message.
   const wrapped = (rest) => {
-    try { const parts = shSplit(rest); return parts.length > 1 ? parts[1] : ''; } catch (e) { return rest; }
+    // an unparsable tail is not recorded: an earlier good `replaced` stays, the dated backup holds the line
+    try { const parts = shSplit(rest); return parts.length > 1 ? parts[1] : ''; } catch (e) { return ''; }
   };
   const shown = STATUSLINE_CONTEXT === 'yes' ? ' with the model and the context use' : '';
   const plugin = STATUSLINE_CONTEXT === 'yes'
@@ -648,7 +649,8 @@ function statuslineGate(file, gate, mode) {
     if (ours) {
       const rest = tail();
       const hadLine = /(^|\s)--line(\s|$)/.test(cmd.slice(PREFIX.length));
-      const restore = OWN && !rest && kept;
+      // one-shot: only the run that switches to own restores; once own is recorded, a bare line stays bare
+      const restore = OWN && !rest && kept && record.mode !== 'own';
       saved = !OWN && rest.startsWith('--then') ? wrapped(rest) : '';
       const want = restore ? `${WANT} --then ${shQuote(kept)}` : OWN && rest ? `${WANT} ${rest}` : WANT;
       if (want === cmd) {

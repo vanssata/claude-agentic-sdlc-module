@@ -678,6 +678,27 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
             with self.subTest(bad=bad):
                 self.assertEqual(self.out(g, "statusline", "--line", "--then", "cat >/dev/null; echo USER",
                                           stdin=bad, **env), "USER\n", "a bad payload prints no second line")
+        # review I2 of T-2026-10-31-1841 (c7fa): NaN or Infinity in a number skips that
+        # part only; the rest of the line stays (json.loads reads both literals)
+        for bad in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(second_line=bad):
+                text = json.dumps({"workspace": {"current_dir": plain},
+                                   "rate_limits": {"five_hour": {"used_percentage": "@"},
+                                                   "seven_day": {"used_percentage": "@"}},
+                                   "cost": {"total_cost_usd": "@"}}).replace('"@"', bad)
+                self.assertEqual(self.out(g, "statusline", "--line", stdin=text, **env), head % (host, plain) + "\n",
+                                 "a non-finite percentage or cost is skipped; the prompt part stays")
+        text = json.dumps(dict(full, rate_limits={"five_hour": {"used_percentage": "@"},
+                                                 "seven_day": full["rate_limits"]["seven_day"]})).replace('"@"', "Infinity")
+        self.assertEqual(self.out(g, "statusline", "--line", stdin=text, **env),
+                         want.replace("5h:12% (↻00:00) ", ""), "one window infinite: the other window, branch and cost stay")
+        for window in ('{"context_window_size": Infinity, "used_percentage": 10}',
+                       '{"context_window_size": 200000, "used_percentage": Infinity}',
+                       '{"context_window_size": Infinity, "current_usage": {"input_tokens": 5000}}'):
+            with self.subTest(context_line=window):
+                text = '{"model": {"display_name": "Opus"}, "context_window": %s}' % window
+                self.assertEqual(self.out(g, "statusline", "--context", stdin=text, **env), CYAN % "Opus" + "\n",
+                                 "a non-finite context size or percentage drops the context part, not the model")
 
     def test_17_too_deep_json_is_read_as_malformed_json(self):
         """CPython raises RecursionError, not ValueError, on deeply nested JSON: every
