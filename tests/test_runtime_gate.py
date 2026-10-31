@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,8 @@ from string import Template
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from guard_harness import FIXTURES, PLUGIN  # noqa: E402  pylint: disable=wrong-import-position
+
+CYAN = "\033[36m%s\033[00m"
 
 TWIN_OF = "test-runtime-gate.sh"
 
@@ -623,13 +626,14 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
                                     "current_usage": {"input_tokens": 3000, "cache_read_input_tokens": 120000,
                                                       "cache_creation_input_tokens": 0, "output_tokens": 999}}}
         self.assertEqual(self.gate(g, "statusline", "--context", *user, stdin=usage),
-                         (0, "Opus 5.5 [1m] · 123k/1000k (12%)\nUSER\n"),
+                         (0, CYAN % "Opus 5.5 [1m] · 123k/1000k (12%)" + "\nUSER\n"),
                          "current_usage: input plus cache tokens, then the user's own line")
         pct = {"model": {"display_name": "Sonnet 5"},
                "context_window": {"context_window_size": 200000, "used_percentage": 40}}
-        self.assertEqual(self.out(g, "statusline", "--context", stdin=pct), "Sonnet 5 · 80k/200k (40%)\n",
+        self.assertEqual(self.out(g, "statusline", "--context", stdin=pct), CYAN % "Sonnet 5 · 80k/200k (40%)" + "\n",
                          "used_percentage alone gives the tokens")
-        self.assertEqual(self.out(g, "statusline", "--context", stdin={"model": {"display_name": "Haiku"}}), "Haiku\n",
+        self.assertEqual(self.out(g, "statusline", "--context", stdin={"model": {"display_name": "Haiku"}}),
+                         CYAN % "Haiku" + "\n",
                          "no context_window: the model alone")
         for bad in ("garbage", "[1,2]", '{"model": "x", "context_window": {"context_window_size": "lots"}}', ""):
             with self.subTest(bad=bad):
@@ -637,7 +641,43 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
                                  "a bad payload prints no line and the user's line is intact")
         self.assertEqual(self.out(g, "statusline", *user, stdin=usage), "USER\n", "without --context there is no line")
         self.assertEqual(self.out(g, "statusline", "--context", *user, stdin=usage, AI_RUNTIME_GATE="off"),
-                         "Opus 5.5 [1m] · 123k/1000k (12%)\nUSER\n", "the line does not depend on the gate being on")
+                         CYAN % "Opus 5.5 [1m] · 123k/1000k (12%)" + "\nUSER\n",
+                         "the line does not depend on the gate being on")
+        effort = dict(usage, effort={"level": "high"})
+        self.assertEqual(self.out(g, "statusline", "--context", stdin=effort),
+                         CYAN % "Opus 5.5 [1m] high · 123k/1000k (12%)" + "\n", "the effort sits right after the model")
+
+    def test_16b_statusline_second_line(self):
+        """--line: user@host:cwd | branch | 5h/7d limits with their resets | cost,
+        each part skipped when its data is missing; it follows the context line and
+        comes before a --then command's output."""
+        g = self.g
+        repo = os.path.join(self.tmp, "sl-repo")
+        os.makedirs(repo, exist_ok=True)
+        subprocess.run(["git", "init", "-q", "-b", "feat/sl", repo], check=True)
+        plain = os.path.join(self.tmp, "sl-plain")
+        os.makedirs(plain, exist_ok=True)
+        host = socket.gethostname().split(".")[0]
+        env = {"USER": "tester", "LOGNAME": "tester", "TZ": "UTC"}
+        head = "\033[01;32mtester@%s\033[00m:\033[01;34m%s\033[00m"
+        sep = " \033[02m|\033[00m "
+        full = {"workspace": {"current_dir": repo},
+                "rate_limits": {"five_hour": {"used_percentage": 12.4, "resets_at": 1767225600},
+                                "seven_day": {"used_percentage": 40.6, "resets_at": "2026-01-02T03:04:05Z"}},
+                "cost": {"total_cost_usd": 1.234}}
+        want = (head % (host, repo) + sep + "\033[35mfeat/sl\033[00m" + sep
+                + "\033[33m5h:12% (↻00:00) 7d:41% (↻Fri 03:04)\033[00m" + sep + "\033[32m$1.23\033[00m\n")
+        self.assertEqual(self.out(g, "statusline", "--line", stdin=full, **env), want)
+        self.assertEqual(self.out(g, "statusline", "--line", stdin={"workspace": {"current_dir": plain}}, **env),
+                         head % (host, plain) + "\n", "no git, no limits, no cost: the prompt part alone")
+        both = dict(full, model={"display_name": "Opus"}, effort={"level": "low"})
+        rc, out = self.gate(g, "statusline", "--context", "--line", "--then", "cat >/dev/null; echo USER",
+                            stdin=both, **env)
+        self.assertEqual((rc, out), (0, CYAN % "Opus low" + "\n" + want + "USER\n"), "line 1, line 2, then --then")
+        for bad in ("garbage", "[1,2]", ""):
+            with self.subTest(bad=bad):
+                self.assertEqual(self.out(g, "statusline", "--line", "--then", "cat >/dev/null; echo USER",
+                                          stdin=bad, **env), "USER\n", "a bad payload prints no second line")
 
     def test_17_too_deep_json_is_read_as_malformed_json(self):
         """CPython raises RecursionError, not ValueError, on deeply nested JSON: every

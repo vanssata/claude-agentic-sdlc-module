@@ -244,7 +244,11 @@ Before a compaction it runs `git branch --show-current` and `git status
 ## runtime-gate — the model ladder, enforced
 
 One hook for both runtimes, registered on the agent-launch events and wrapped
-around the statusline (`runtime-gate.py statusline --then '<your command>'`).
+around the statusline: `runtime-gate.py statusline --context --line` by default
+(`--context` the model, effort and context line; `--line` the prompt line
+`user@host:cwd | branch | 5h/7d limits | cost`), or
+`runtime-gate.py statusline --context --then '<your command>'` after
+`npx riskrails --statusline own`.
 
 - **Reroute.** While the top model is rate-limited or unreachable, a launch
   that asks for it goes one tier down: Fable → Opus on Claude; on Codex an

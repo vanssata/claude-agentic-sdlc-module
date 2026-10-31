@@ -34,6 +34,7 @@ npx riskrails@3.1.0 --codex-plan balanced-max  # Pro's budgets, Sol session, FAS
 npx riskrails@3.1.0 --context economy     # the plan's compaction window (800 000 Max, 300 000 Pro); the guard also blocks
 npx riskrails@3.1.0 --context default     # the default: each runtime's own window and compaction; the guard only warns
 npx riskrails@3.1.0 --statusline-context no  # no model and context line in the statusline (default yes)
+npx riskrails@3.1.0 --statusline own         # Claude: keep your own statusline command (default riskrails: the plugin's)
 ```
 
 Node 18 or newer and `python3` (Python 3.11 or newer) on `PATH` are required;
@@ -165,7 +166,7 @@ not be the most expensive model by default.
 | `autoCompactWindow` (Claude) | not set by default: each runtime keeps its own compaction, near 167k on a 200k model and near 967k on a `[1m]` one. With `--context economy`: 800 000 on Max and Team Max, 300 000 on Pro and Team Pro, capped by Claude Code at the model's own window. A re-install without economy removes the value it wrote, only when it still equals the plan's | the model window |
 | `claude-1m [opus\|fable]` (Claude, Max and Team Max) | pins one session to `opus[1m]` or `fable[1m]` at launch. `CLAUDE_1M_COMPACT_WINDOW` exports `CLAUDE_CODE_AUTO_COMPACT_WINDOW` for that process alone, to compact earlier | `/model` only |
 | `context-guard.py` (both) | warns from 80% of the compaction point — 133k on a 200k session, 773k on a `[1m]` one — and never holds a prompt back. With `--context economy`, or a window you set yourself, it also holds a prompt back once from 120% | no guard |
-| statusline (both) | the model and the context use: in Claude Code one line before your own (`Opus 5.5 [1m] · 123k/1000k (12%)`); in Codex `model-with-reasoning` and `context-used` appended to a `[tui] status_line` you set. `--statusline-context no` adds nothing | the runtime's own |
+| statusline (both) | Claude Code, `--statusline riskrails` (the default): the plugin's two lines, rewritten on every install and update — the model, effort and context use in cyan (`Opus 5.5 [1m] high · 123k/1000k (12%)`), then `user@host:cwd \| branch \| 5h:12% (↻14:00) 7d:41% (↻Fri 03:04) \| $1.23`, each part after the prompt skipped when the payload lacks it. A statusline command of your own is replaced; the install prints it and `riskrails/statusline.json` keeps it. `--statusline own` keeps your command and prints only the context line before it, and brings a replaced command back. The choice is recorded in `riskrails/statusline.json`, so an update without `--statusline` (the notice's `npx -y riskrails@latest --yes`) keeps it. `--statusline-context no` leaves out the first line and is not recorded. In Codex `model-with-reasoning` and `context-used` appended to a `[tui] status_line` you set; there `--statusline-context no` adds nothing | the runtime's own |
 | `model` (Claude) | `opusplan` on Pro and Team Pro; `claude-opus-5-5[1m]` on Max, Max 20x and Team Max; `claude-opus-5-5` (200k) on BalancedMax | Sonnet on Pro |
 | `effortLevel` (Claude) | `medium`; agents raise it per task | — |
 | `model` (Codex) | `gpt-5.6-sol` at `high` on Pro, `medium` on Plus; FAST agents `gpt-5.6-terra` (Luna on BalancedMax) | — |
@@ -186,7 +187,9 @@ deliberate.
 - the hook entries that named `ai-git-guard.sh`, `ai-path-guard.sh`,
   `ai-scope-guard.sh`, `fable-gate.py` or `codex-model-gate.py` are replaced
   by `ai-guard.py` and `runtime-gate.py`; the old files are retired to
-  `backups/<date>/`; the statusline wrapper is rewritten; stale `*.bak` files
+  `backups/<date>/`; the statusline becomes the plugin's (a command of your own
+  is replaced and kept in `riskrails/statusline.json`, `--statusline own` brings it
+  back); stale `*.bak` files
   are swept into the same backup folder;
 - the agents of the old roster (`ai-context`, `ai-expert`, `ai-implementer`,
   `ai-indexer`, `ai-planner`, `ai-release`, `ai-risk`, `ai-security`,
