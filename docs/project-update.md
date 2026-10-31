@@ -26,7 +26,7 @@ project owns:
 | Project-owned | What it is |
 |---|---|
 | `.ai/project/*.md` | the knowledge base `/rr-setup` surveyed |
-| `.ai/policies/weight.json`, `weight.md` | the weight table and its generated mirror |
+| `.ai/policies/weight.json`, `weight.md` | the weight table and its generated mirror (`risk-tiers.*` are retired, schema 11) |
 | `.ai/policies/dialog.json` | the dialog switch |
 | `.ai/policies/path-guard.json` | the project's additions to the path guard |
 | `.ai/policies/testing.md`, `coding.md`, `safety.md`, `security.md` | the project's own rules and the Verification commands |
@@ -46,6 +46,8 @@ there). That is how the update tells files apart.
 |---|---|
 | missing | created |
 | a version the plugin once shipped | replaced — nobody edited it |
+| `weight.md`, an unedited mirror of `weight.json` | rendered again from the `weight.json` this run leaves; an edited or stale mirror is merged as below |
+| `docs/sdlc/*/TEMPLATE.md` | the plugin supplies them: an unedited project copy is `delete?`, an edited one stays as an override, with a hint |
 | edited, markdown | three-way merged against the closest shipped version; every edit kept |
 | edited, JSON policy | merged key by key; the project's value wins wherever both changed; the changes are listed per key and need a confirmation |
 | edited where the plugin changed the same lines | left alone; the plugin's version goes to `.ai/local/plugin-update/` for a merge by hand |
@@ -55,6 +57,8 @@ there). That is how the update tells files apart.
 | a shared file the plugin once shipped, unedited | `delete?` — the project reads the shared tree instead, once a human confirms |
 | a shared file the project edited | kept as an override, with a hint: it no longer receives the plugin's changes, and nothing tells you when it falls behind |
 
+Old run logs of closed tasks, and the files of abandoned or long-idle (7 days) unclosed tasks, are proposed as `[cleanup]` deletions; they never run on their own.
+
 A changed or non-regular file where the update expected one stops the run with
 exit 3. The dry run shows every decision; `--apply` writes them. A weight
 mirror that was in sync stays in sync (`state.py weight --mirror` regenerates
@@ -63,7 +67,7 @@ it); one that was already stale stays flagged.
 ## Schema version and migrations
 
 `.ai/VERSION` carries the project's schema; a project initialised before the
-file existed is schema 0, and the current schema is **10**. Migrations under
+file existed is schema 0, and the current schema is **11**. Migrations under
 `skills/project-update/migrations/` run in order before anything is merged —
 they move, add, edit and propose deletions, all inside the same dry run — and
 the version is written last, only once they have finished. A conflict *from a
@@ -83,6 +87,7 @@ ordinary merge conflict does not. Every migration is idempotent.
 | 8 | `0008_renames` | `claude-agentic` → `riskrails` in the managed-block markers and the router's routes | — |
 | 9 | `0009_state_file` | moves `.ai/state/current.json` to `.ai/state/state.json`; a `current.json` beside an existing `state.json` is a conflict | resolve that conflict if it appears |
 | 10 | `0010_dialog_switch` | creates `.ai/policies/dialog.json` with the dialog on; never overwrites it | decide on the dialog (`"enabled": false` turns it off) and amend constitution C5 if you keep it |
+| 11 | `0011_retire_risk_tiers` | proposes deleting `.ai/policies/risk-tiers.json` and `risk-tiers.md` (replaced by `weight.json`); an edited copy is marked as edited, the original kept under `.ai/reports/project-update-<date>/original/`; the plugin stops shipping both | confirm the deletion (never confirming keeps the schema at 10); copy what you still need into `weight.json` first |
 
 Every machine of a team upgrades the plugin before a project at a newer schema
 is committed; an older plugin refuses such a project with exit 2.

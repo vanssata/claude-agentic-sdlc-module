@@ -13,7 +13,7 @@ so a blob is written only when a key outside the shared set references it.
 /project-update uses it to tell a file the user never touched (its content is a
 version we shipped) from one they edited, and to find the base for a three-way
 merge. Run it after changing anything under skills/*/templates and commit the
-result; tests/test-project-update.sh fails while it is stale.
+result; tests/test_project_update.py (test_history_covers_every_template) fails while it is stale.
 """
 import hashlib, json, os, subprocess, sys
 

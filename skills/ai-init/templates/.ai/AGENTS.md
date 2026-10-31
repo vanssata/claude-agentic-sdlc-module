@@ -31,7 +31,7 @@ Everything else loads on demand; nothing here is worth reading twice.
 ## Shared files
 
 This `.ai/` holds `project/`, `rules/`, `state/`, `reports/`, `VERSION` and, in
-`policies/`, `risk-tiers.json`, `risk-tiers.md`, `path-guard.json`, `testing.md`,
+`policies/`, `weight.json`, `weight.md`, `path-guard.json`, `testing.md`,
 `coding.md`, `safety.md` and `security.md`. Every other path below ships with the
 plugin at `<home>/riskrails/ai/<path>`; `<home>` is `~/.claude`, or
 `$CODEX_HOME` (default `~/.codex`). A file at the same path here overrides it and

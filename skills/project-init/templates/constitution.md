@@ -7,7 +7,7 @@ C1. Production behaviour is the source of truth; what looks wrong may be load-be
 C2. A bugfix starts with the failing test; legacy behaviour gets a characterization test before it changes.
 C3. A refactoring changes no behaviour and is never mixed with a feature.
 C4. Every step names its files; scope grows only by amending the plan.
-C5. No agent merges or deploys; an agent commits, pushes or approves only by running, verbatim and once, a command a human picked in the dialog; otherwise a human runs it outside the agent.
+C5. No agent merges or deploys; an agent commits, pushes or approves only by running, verbatim and once, a command a human picked in the dialog, as the harness recorded; else a human runs it outside.
 C6. <!-- project principle — filled by /ai-init from the survey, confirmed by you -->
 C7. <!-- project principle -->
 C8. <!-- project principle -->

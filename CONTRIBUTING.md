@@ -37,7 +37,9 @@ runs the verification. `CLAUDE.md` holds the lessons earlier reviews taught.
 Locally, run the parallel runner: one process per test file, the same test ids
 as `unittest discover`, the same `Ran N tests` / `OK` tail, exit 1 on anything
 red, the two timed classes serial. CI runs the serial `unittest discover` as
-the oracle, plus the end-to-end suite, on every pull request:
+the oracle, plus the end-to-end suite, on release tags (`npm-publish.yml`); a
+pull request runs a smoke subset (`tests.yml`), the full suite runs nightly and
+on demand:
 
 ```bash
 python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath

@@ -165,6 +165,8 @@ _WS = " \t\n\r"
 def parse_stream(text):
     """(values, ok): every JSON value of a jq input stream, and False when a
     parse error ended it (the values before the error are kept)."""
+    if text.startswith("\ufeff"):                  # jq skips one leading UTF-8 BOM
+        text = text[1:]
     values, i, n = [], 0, len(text)
     while True:
         while i < n and text[i] in _WS:

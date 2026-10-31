@@ -180,6 +180,19 @@ class TestUsageReport(unittest.TestCase):
             self.assertEqual(rc, 1, out)
             self.assertIn("no journal for T-none", out)
 
+    def test_an_unclosed_task_ends_at_its_last_event_not_at_now(self):
+        """#41: no task_closed -> the window ends at the last event and the header says so"""
+        _, p, tr, dirs = self.task_fixture()
+        t = SHELL_TASK
+        write(os.path.join(p, ".ai", "reports", t, "events.jsonl"),
+              EVENT % ("2026-09-01T10:00:00.000Z", t, "task_started", "{}")
+              + EVENT % ("2026-09-01T10:05:00.000Z", t, "tier_set", '{"tier":"T3"}')
+              + EVENT % ("2026-09-01T11:00:00.000Z", t, "gate_checked", "{}"))
+        out = self.out("--task", t, "--project", p, **dirs)
+        self.assertRegex(out, r"(?m)^task %s tier T3 window 2026-09-01T10:00:00\+00:00\.\.2026-09-01T11:00:00"
+                              r"\+00:00 \(unclosed: window ends at the last event\)" % t, out)
+        self.assertRegex(out, WINDOW_TOKENS, "the 'after' call (11:30) must not be counted")
+
     def test_identifiers_that_are_not_strings(self):
         """identifiers that are not strings do not take the report down with them"""
         # A transcript that writes message.id, requestId, response_id or a turn id as a

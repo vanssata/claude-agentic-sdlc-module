@@ -1713,18 +1713,22 @@ rc=0
 rc=0
 ### ai-path-guard | main bash: python3 /p/skills/ai-task/state.py --root . reject --by ivan --why no
 rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a verdict with 'state.py … --by' from an agent session.\n\nThis command is the human's, whether or not the dialog is on. A human runs it in their\nown terminal, outside the agent session; an unattended run exports AI_UNATTENDED=1 in the\nlauncher's environment. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: python3 /p/skills/ai-task/state.py --root . verify --scope all --by ivan
 rc=0
 ### ai-path-guard | main bash: python3 /p/skills/ai-task/state.py --root . verify --scope all --by ivan
 rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a verdict with 'state.py … --by' from an agent session.\n\nThis command is the human's, whether or not the dialog is on. A human runs it in their\nown terminal, outside the agent session; an unattended run exports AI_UNATTENDED=1 in the\nlauncher's environment. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: python3 /p/skills/ai-task/state.py --root . review --by ivan --verdict pass
 rc=0
 ### ai-path-guard | main bash: python3 /p/skills/ai-task/state.py --root . review --by ivan --verdict pass
 rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing a verdict with 'state.py … --by' from an agent session.\n\nThis command is the human's, whether or not the dialog is on. A human runs it in their\nown terminal, outside the agent session; an unattended run exports AI_UNATTENDED=1 in the\nlauncher's environment. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: python3 /p/skills/ai-task/state.py --root . start --mode light --by ivan
 rc=0
 ### ai-path-guard | main bash: python3 /p/skills/ai-task/state.py --root . start --mode light --by ivan
 rc=0
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Refusing 'state.py start --mode light … --by' from an agent session: lowering the mode is the human's.\n\nThis command is the human's, whether or not the dialog is on. A human runs it in their\nown terminal, outside the agent session; an unattended run exports AI_UNATTENDED=1 in the\nlauncher's environment. See .ai/policies/safety.md."}}
 ### ai-git-guard | main bash: python3 /p/skills/ai-task/state.py profile set --runtime claude --plan max
 rc=0
 ### ai-path-guard | main bash: python3 /p/skills/ai-task/state.py profile set --runtime claude --plan max

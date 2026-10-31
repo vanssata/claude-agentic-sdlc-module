@@ -194,7 +194,7 @@ def find_root(start):
             return d
         parent = os.path.dirname(d)
         if parent == d:
-            die("no .ai/ directory found above %s — run /ai-init first" % start)
+            die("no .ai/ directory found above %s — run /rr-setup first" % start)
         d = parent
 
 
@@ -405,7 +405,7 @@ def claim_runtime(root, state):
                     "state.py --runtime %s handoff --to %s (this shell is neither runtime; "
                     "name the one taking it)" % ((other_runtime(pending),) * 2))
             die("RUNTIME_HANDOFF_PENDING: task %s was handed to %s at %s. Resume it there "
-                "(/ai-task), or take it back here with: %s"
+                "(/rr-build), or take it back here with: %s"
                 % (state.get("task_id"), pending, state["handoff"].get("pending_since"), back), 7)
         # The receiving runtime's first change: the handoff is complete. The
         # move itself was journaled when it was made, so there is no second event.
@@ -1120,7 +1120,8 @@ def cmd_event(args, root):
             die("--data must be a JSON object")
     state = load(root)
     append_journal(root, state["task_id"], journal_line(
-        state["task_id"], args.type, "hook", state.get("current_stage"), args.detail, data))
+        state["task_id"], args.type, "agent" if args.type == "note" else "hook",
+        state.get("current_stage"), args.detail, data))
     print("%s recorded" % args.type)
 
 
@@ -1134,7 +1135,7 @@ def find_docs_root(start):
             return d
         parent = os.path.dirname(d)
         if parent == d:
-            die("no docs/sdlc/ directory found above %s — run /sdlc-intent first" % start)
+            die("no docs/sdlc/ directory found above %s — run /rr-spec first" % start)
         d = parent
 
 
@@ -1863,7 +1864,7 @@ def handoff_lines(root, state, reason):
     pending_to = (state.get("handoff") or {}).get("pending_to")
     if pending_to:
         review = state.get("cross_vendor_review") or {}
-        out.append("Handed to %s at %s%s — resume there with /ai-task" % (
+        out.append("Handed to %s at %s%s — resume there with /rr-build" % (
             pending_to, (state.get("handoff") or {}).get("pending_since"),
             " for the cross-vendor review" if review.get("status") == "requested" else ""))
     advice = advisory_line(state)
@@ -1967,7 +1968,7 @@ def handoff_to(args, root):
     emit(root, state, "runtime_handoff", "%s -> %s (%s)" % (source, args.to, via), data)
     write_handoff(root, state, "manual")
     save(root, state)
-    print("Handed %s to %s (%s). In %s, run /ai-task: it resumes from the state file in .ai/state/."
+    print("Handed %s to %s (%s). In %s, run /rr-build: it resumes from the state file in .ai/state/."
           % (state.get("task_id"), args.to, via, args.to))
     print("headless (not run): cd %s && %s" % (shlex.quote(root), RESUME_COMMAND[args.to]))
 
@@ -3251,7 +3252,10 @@ def rescore_weight(root, base_tree, files, current, policy):
                 if line is not None:
                     # The operation's keyword (DROP, ALTER …), not the pattern's
                     # source: it is what a human names in approve --confirm.
-                    operations.append(rx.search(line).group(0).split()[0].upper())
+                    # The first word of the match; a match of only blanks or punctuation
+                    # is named IRREVERSIBLE, never an IndexError.
+                    word = re.search(r"[A-Za-z]+", rx.search(line).group(0))
+                    operations.append(word.group(0).upper() if word else "IRREVERSIBLE")
                     if found.get("reversibility", (0,))[0] < 2:
                         found["reversibility"] = (2, "%s adds %r (irreversible_content %r)"
                                                   % (rel, line.strip()[:60], pattern))
@@ -3483,7 +3487,8 @@ def cmd_start(args, root):
     check_steps(steps, implied)
     concrete = [f for f in files if not any(c in f for c in "*?[")]
     try:
-        result = weigh(root, concrete, parse_declares(args.declare), args.goal, policy)
+        result = weigh(root, concrete, parse_declares(args.declare), args.goal, policy,
+                       [f for f in files if f not in concrete])
     except ValueError as exc:
         die(str(exc))
     except (TypeError, AttributeError) as exc:
@@ -3674,18 +3679,21 @@ def is_document(path, policy):
 DOCUMENTS_ZEROED = ("behaviour", "domain", "novelty")
 
 
-def weigh(root, files, declared, goal, policy):
+def weigh(root, files, declared, goal, policy, globs=()):
     """weight.compute, plus the documents rule (faster-task-cycle (c), in state.py because
     weight.py is at its line cap). Predicate P: at least one concrete file, every file a
     document (is_document) or a test, at least one a document. When P holds, file text no
     longer scores behaviour (the goal's keyword still does, exactly as in compute), and
     behaviour, domain and novelty still UNKNOWN become 0 with the evidence "documents only"; hints and
     declarations were applied inside compute. `documents_only` is {"zeroed": {axis: what it
-    would have scored}}, None when P does not hold or the policy has no `documents` key."""
+    would have scored}}, None when P does not hold or the policy has no `documents` key.
+    `globs` are the task's glob entries, which score nothing themselves: P fails when one is
+    not itself a document or test glob."""
     concrete = [posixpath.normpath(f.strip().replace(os.sep, "/")) for f in files if f.strip()]
     tests = ((policy.get("axes") or {}).get("coverage") or {}).get("test_globs")
     inside = all(not f.startswith(("/", "../")) and f != ".." for f in concrete)
-    if not (inside and any(is_document(f, policy) for f in concrete)
+    if not (inside and all(is_document(g, policy) or weight.match(g, tests) for g in globs)
+            and any(is_document(f, policy) for f in concrete)
             and all(is_document(f, policy) or weight.match(f, tests) for f in concrete)):
         result = weight.compute(root, files, declared, goal, policy=policy)
         result.documents_only = None
@@ -3722,6 +3730,9 @@ def documents_cover(root, state, policy, tree):
     g = runs[-1] if runs else None
     if not g or g["exit"] != 0 or any(r["tree"] == g["tree"] and r["exit"] != 0 for r in runs):
         return off                                                              # D2
+    # A full-suite run after G that is not green stops the rule, whatever its tree (it may be None).
+    if any(full_suite(r) and r["n"] > g["n"] and r.get("exit") != 0 for r in state["verify"]["runs"]):
+        return off
     diff = safe_sensor(sensors.diff_files, root, g["tree"], tree)
     if not diff or not all(is_document(d["path"], policy) for d in diff):
         return off                                                              # D3, D4
@@ -3891,7 +3902,9 @@ def cmd_verify(args, root):
         run = run_v7(root, state, "suite" if scope == "all" else scope, args, tcfg)
         code = run["exit"]
         if args.expect == "fail":
-            run["bites"] = code not in (0, None)
+            # exit 1 is a failing test; the runner's own usage error (2) is not, unless
+            # testing.md's bite_codes names it (pytest 1,2 — 2 is a collection error)
+            run["bites"] = code in (safe_sensor(sensors.bite_codes, root) or (1,))
             print("expected fail: %s" % ("the test fails without the fix — it bites" if run["bites"]
                                          else "the test passes without the fix — it does not bite yet"))
             code = 0 if run["bites"] else 1
@@ -4299,9 +4312,11 @@ def archive_v7(root, state, tree, result, facts=None):
     ensure_logs(root, state["task_id"])
     target = os.path.join(logs_dir(root, state["task_id"]), "state.json")
     state["updated_at"] = now()
-    with open(target, "w", encoding="utf-8") as fh:
+    tmp = "%s.%d.tmp" % (target, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(state, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
+    os.replace(tmp, target)
     with contextlib.suppress(OSError):
         os.remove(handoff_path(root))
     remove_state(root)
@@ -4461,6 +4476,12 @@ def status_lines(root, state):
     events, _ = read_journal(root, state["task_id"])
     last = events[-1] if events else {}
     pending = (state.get("questions") or {}).get("pending") or []
+    if is_v7(state):
+        # The cache lags a hand-filled [Answer]:; the file is the truth, as guard_pending reads it.
+        with contextlib.suppress(OSError, ValueError, KeyError):
+            _, asked = parse_questions(questions_path(root, state, None))
+            gate_id = open_gate(state)
+            pending = [q["id"] for q in asked if (q["kind"] != "G" and is_pending(q)) or q["id"] == gate_id]
     lines.append("task: %s — %s" % (state["task_id"], one_line(state.get("goal"), 140)))
     if not is_v7(state):
         lines += ["tier: %s · workflow %s · stage %s" % (state.get("risk_tier") or "?", state.get("workflow"),
@@ -4684,9 +4705,11 @@ def abandon_old(_args, root):
     ensure_logs(root, state["task_id"])
     target = os.path.join(logs_dir(root, state["task_id"]), "state.json")
     state["updated_at"] = now()
-    with open(target, "w", encoding="utf-8") as fh:
+    tmp = "%s.%d.tmp" % (target, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(state, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
+    os.replace(tmp, target)
     with contextlib.suppress(OSError):
         os.remove(handoff_path(root))
     remove_state(root)

@@ -5,7 +5,7 @@ in place, never copied.
 
 The project is tests/fixtures/setup/new-shop-like, stored encoded
 (`dot-claude` → `.claude`, `fixture-CLAUDE.md` → `CLAUDE.md`) and scaffolded with
-the plugin's own scripts, the way tests/test-project-adopt.sh builds its fixtures.
+the plugin's own scripts, the way tests/test_project_adopt.py builds its fixtures.
 """
 import hashlib
 import json
@@ -294,6 +294,18 @@ class TestReviewFindings(Project):
         os.symlink(os.path.join("..", "..", "shared", "skills", "linked"), self.path(".claude/skills/linked"))
         out = self.run_setup("survey").stdout
         self.assertIn("skill    .claude/skills/linked/SKILL.md:2 — A skill shared between shops", out)
+
+    def test_link_out_of_the_project_is_not_read(self):  # register #52
+        outside = os.path.join(self.tmp, "secret.sh")
+        with open(outside, "w", encoding="utf-8") as fh:
+            fh.write("# SECRET-MARKER-52\necho hi\n")
+        os.symlink(outside, self.path(".claude/hooks/linked-out.sh"))
+        self.write(".claude/hooks/.hidden.sh", "# HIDDEN-MARKER-52\n")
+        survey = self.run_setup("survey").stdout
+        self.run_setup("adopt", "--apply")
+        for text in (survey, self.read(".ai/policies/toolbox.md")):
+            self.assertNotIn("SECRET-MARKER-52", text)
+            self.assertNotIn("HIDDEN-MARKER-52", text)
 
     def test_prose_mention_does_not_suppress_a_row(self):  # L1
         self.write(".ai/AGENTS.md", self.read(".ai/AGENTS.md") +

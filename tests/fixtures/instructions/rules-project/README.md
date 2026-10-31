@@ -1,6 +1,6 @@
 # rules-project
 
-The `.ai/rules/` overlay `test-instruction-budget.sh` and `test-project-update.sh`
+The `.ai/rules/` overlay `tests/test_instruction_budget.py` and `tests/test_project_update.py`
 render: two rules, one of them path-scoped, and one directory shared by both so
 a file that carries two blocks is exercised.
 

@@ -111,6 +111,10 @@
   "unparsable state: Edit .claude/agents": "(b) in-task instruction file",
   "main bash: echo x >> .ai/memory/2026-Q4.dev.abcd.jsonl": "compact-project-memory R19: the record's directories join protected_config_patterns",
   "Edit file_path=__TMP__/project/.ai/memory/2026-Q4.dev.abcd.jsonl": "compact-project-memory R19: the record's directories join protected_config_patterns",
-  "Write file_path=__TMP__/project/.ai/local/memory/config.json": "compact-project-memory R19: the record's directories join protected_config_patterns"
+  "Write file_path=__TMP__/project/.ai/local/memory/config.json": "compact-project-memory R19: the record's directories join protected_config_patterns",
+  "main bash: python3 /p/skills/ai-task/state.py --root . reject --by ivan --why no": "T-2026-10-30-0758 E8/E11/E13: the human-only --by routes are denied from an agent session with the dialog off as well as on",
+  "main bash: python3 /p/skills/ai-task/state.py --root . verify --scope all --by ivan": "T-2026-10-30-0758 E8/E11/E13: the human-only --by routes are denied from an agent session with the dialog off as well as on",
+  "main bash: python3 /p/skills/ai-task/state.py --root . review --by ivan --verdict pass": "T-2026-10-30-0758 E8/E11/E13: the human-only --by routes are denied from an agent session with the dialog off as well as on",
+  "main bash: python3 /p/skills/ai-task/state.py --root . start --mode light --by ivan": "T-2026-10-30-0758 E8/E11/E13: `start --mode light --by` (a lowering, never a raise) is denied from an agent session with the dialog off (Q2); with it on it reaches state.py's lowering decision"
  }
 }

@@ -19,16 +19,16 @@ not settle — never for fact collection.
 
 Which model a tier is depends on the plan and the runtime: the installed profile
 decides it, `state.py profile --tier <TIER>` prints it for the runtime you are in,
-and `/ai-status` shows all four. This file names tiers only, so it is true on
+and `/rr-status` shows the plan's budget. This file names tiers only, so it is true on
 every plan.
 
 The main session runs the model the installed profile sets and does the
 implementation itself. Planning, the weight, the test run and the release are
 its work too, not an agent's: `/rr-plan`, `state.py weight`, `state.py verify`,
 `/rr-ship`. Which stages spawn an agent at all
-is decided by `pipeline_profile` in `risk-tiers.json`: in `solo`, T0–T4 run in
-direct mode — nothing on STRONG below T4, a BALANCED review at T2/T3 only when
-a sensor is red, one STRONG review at T4 — and tests run once
+is decided by the mode `state.py weight` gives: light runs direct — no review
+unless `close` reports a red fact — guarded has one BALANCED review, full one
+STRONG review, and nothing runs on STRONG below full — and tests run once
 after the last step, to the end, with every failure fixed as one batch.
 
 **Reading by difficulty.** A lookup — where X is, one route, service id, config
@@ -65,12 +65,12 @@ depends on a local model; if one becomes available it slots in at the FAST tier.
 
 ## EXPERT triggers
 
-1. The task is T6: migration, infrastructure, production architecture.
+1. The task is full and irreversible: migration, infrastructure, production architecture.
 2. STRONG could not settle it: `confidence: uncertain`, or two STRONG results
    contradict each other.
 3. An irreversible design with several viable options — core data model, public
    API or event contract, service split.
-4. The final check of a T6 plan or of a production-incident root cause before a
+4. The final check of a full-and-irreversible plan or of a production-incident root cause before a
    human acts on it.
 
 ## Escalation
@@ -104,7 +104,7 @@ the model `state.py profile --tier STRONG` printed — because a tier alone does
 cost or how much weight to give it. Report the model that **ran**, not the one
 that was requested: a gate may have sent an EXPERT agent down one tier during a
 rate limit, and a Codex agent file may have overridden the spawn-time model. Both
-runtimes expose the current state through `/ai-status`.
+runtimes expose the current state through `/rr-status`.
 
 ## What never gets delegated
 

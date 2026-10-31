@@ -39,7 +39,7 @@ class TestMigration0010(unittest.TestCase):
 
     def test_writes_enabled_and_prints(self):
         done = self.p.update("--apply")
-        self.assertEqual((done.returncode, self.p.version()), (0, "10"), done.stdout + done.stderr)
+        self.assertEqual((done.returncode, self.p.version()), (0, "11"), done.stdout + done.stderr)
         with open(self.file, encoding="utf-8") as fh:
             self.assertEqual(fh.read(), SWITCH)
         hints = [line for line in done.stdout.splitlines() if "dialog.json" in line and "enabled" in line]
@@ -59,7 +59,7 @@ class TestMigration0010(unittest.TestCase):
             fh.write(mine)
         self.commit("a human turned it off")
         done = self.p.update("--apply")
-        self.assertEqual((done.returncode, self.p.version()), (0, "10"), done.stdout + done.stderr)
+        self.assertEqual((done.returncode, self.p.version()), (0, "11"), done.stdout + done.stderr)
         with open(self.file, encoding="utf-8") as fh:
             kept = json.load(fh)
         self.assertIs(kept["enabled"], False, "the human's switch is not turned back on")
@@ -114,7 +114,7 @@ class TestMigration0010(unittest.TestCase):
             before = fh.read()
         self.commit("task started")
         done = self.p.update("--apply")
-        self.assertEqual((done.returncode, self.p.version()), (0, "10"), done.stdout + done.stderr)
+        self.assertEqual((done.returncode, self.p.version()), (0, "11"), done.stdout + done.stderr)
         with open(state, "rb") as fh:
             self.assertEqual(fh.read(), before, "the task's bytes are unchanged")
         status = subprocess.run([sys.executable, "-I", STATE, "--root", self.p.root, "status"],

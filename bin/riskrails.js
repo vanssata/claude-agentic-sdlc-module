@@ -1205,9 +1205,9 @@ function claudeSummary() {
     'Restart Claude Code, then:',
     '  /config        model and effort match the profile',
     `  /hooks         lists cap-large-read, ai-guard, project-scaffold and context-guard, plus runtime-gate on PreToolUse, PostToolUse, SubagentStart, SubagentStop${C.GATE === 'on' ? ' and StopFailure' : ''}`,
-    '  /skills        lists ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*, usage-report',
-    '  /ai-init       in a project, to survey it and build .ai/',
-    '  /project-update in a project that already has .ai/ or docs/sdlc/, to pull in these rules',
+    '  /skills        lists rr-setup, rr-spec, rr-plan, rr-build, rr-build-all, rr-review, rr-ship, rr-status',
+    '  /rr-setup      in a project, to survey it and build .ai/',
+    '  /rr-setup --update in a project that already has .ai/ or docs/sdlc/, to pull in these rules',
   ];
   out(lines.join('\n'));
 }
@@ -1411,8 +1411,8 @@ function codexSummary() {
     '',
     'Restart Codex, then:',
     '  /hooks         review and trust the guard, gate and context hooks — until you do, Codex skips them',
-    '  /skills        lists ai-init, ai-audit, ai-task, ai-status, project-init, sdlc-*, usage-report',
-    '  /ai-init       in a project, to survey it and build .ai/',
+    '  /skills        lists rr-setup, rr-spec, rr-plan, rr-build, rr-build-all, rr-review, rr-ship, rr-status',
+    '  /rr-setup      in a project, to survey it and build .ai/',
     '',
     `Your previous default model was replaced. backups/${BACKUP_DATE}/config.toml holds the old one.`,
   ].join('\n'));

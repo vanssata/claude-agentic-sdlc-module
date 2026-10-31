@@ -60,7 +60,10 @@ guarded, about 80 in full, then FINDINGS and VERDICT.
 
 Before you delegate, probe the change yourself for a minute: the few inputs its
 own threat model makes interesting, through the real code, and hand the
-reviewer what you saw — it starts where you stopped.
+reviewer what you saw — it starts where you stopped. When the change touches a
+guard regex's running time, run the timed probe yourself (`/usr/bin/grep -E`,
+or Python `timeit` on inputs of at most 4096 chars) and hand over the
+measurement: the bounded reviewer may not run timing loops.
 
 ## 3. Record the verdict
 
@@ -81,16 +84,18 @@ task's record (`task.md`), so there is no separate report to write.
 
 ## 4. After the verdict
 
-- **pass:** `/rr-ship`; the record and the close are one call,
-  `$STATE review --verdict pass … <<'EOF' && $STATE close`. `review` exits 0 for every
-  verdict, so the chain is for `pass` only.
+Continue from the verdict §3 recorded; do not record it again. Whatever the
+verdict, each MEDIUM and LOW is one `$STATE memory risk add`
+(`.ai/project/known-risks.md` amended into the task if missing), not a fix.
+
+- **pass:** `/rr-ship`, i.e. `$STATE close` directly: the verdict is already
+  recorded. (To record and close in one call, §3's `review --verdict pass … <<'EOF' && $STATE close`;
+  `review` exits 0 for every verdict, so that chain is for `pass` only.)
 - **pass_with_findings:** fix every in-scope HIGH in one batch, then
   `$STATE verify --scope all --after-fix "H1,H2: <one line>"` and
   `$STATE review --closes "H1,H2"`. The findings close on that green run, on a
-  tree the fix changed — no second review. Each MEDIUM and LOW is one
-  `$STATE memory risk add` (`.ai/project/known-risks.md` amended into the task
-  if missing), not a fix; only a BLOCKER, a HIGH or a regression buys an
-  `--after-fix` run.
+  tree the fix changed — no second review. MEDIUM and LOW: `memory risk add`
+  as above; only a BLOCKER, a HIGH or a regression buys an `--after-fix` run.
 - **blockers_open:** fix every BLOCKER and HIGH together, `verify --scope all
   --after-fix "…"`, then **one scoped re-review** (`/rr-review B1,H1`): brief a fresh `ai-reviewer`
   with the named findings and the fix's diff only — do they close, and what did

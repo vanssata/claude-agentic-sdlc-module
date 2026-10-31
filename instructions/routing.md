@@ -46,7 +46,7 @@ Facts are collected cheaply; thinking is paid for. Session model {{SESSION_MODEL
 # Guards
 
 <!-- stub: runtime=claude -->
-- `ai-git-guard` runs in every repository: no force push, history rewrite, push or merge to a protected branch, `--no-verify`, staged secret or production deploy. `ai-path-guard` and `ai-scope-guard` arm only where `.ai/` exists. No agent merges or deploys; commit, push and approval run only as the command the human picked in the dialog — verbatim, once — or the human runs them outside the agent.
+- `ai-git-guard` runs in every repository: no force push, history rewrite, push or merge to a protected branch, `--no-verify`, staged secret or production deploy. `ai-path-guard` and `ai-scope-guard` arm only where `.ai/` exists. No agent merges or deploys; commit, push and approval run only as the command the human picked in the dialog, as the harness recorded — verbatim, once — or the human runs them outside the agent.
 - `context-guard` measures the context on every prompt and holds a prompt back once at the block threshold above, when there is one; its "Session state before compaction" block and `.ai/state/handoff.md` are what a resumed session trusts over the summary.
 
 <!-- stub: runtime=codex -->

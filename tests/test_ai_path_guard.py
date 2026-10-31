@@ -5,6 +5,7 @@ ai-path-guard: fixtures plus the "no .ai/ means no guard" property.
 The sections run in the shell suite's order against one project tree, and each
 moves the task state file as the shell one did: test_NN_ names keep the order.
 """
+import json
 import os
 import shutil
 import sys
@@ -169,28 +170,63 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         self.says("and the deny text teaches the human what to do", "Approval happens outside the agent", approve)
         self.says("including the unattended route and what it costs", "AI_UNATTENDED=1 in the launcher", approve)
 
-    def test_06_the_humans_verdict_past_the_review_budget(self):
-        setby = "python3 /home/u/.claude/skills/ai-task/state.py --root . set review_status passed --by ivan"
-        self.state(None)
-        self.decide("no task in flight: set --by is none of the guard's business", "allow", self.b(setby))
+    def test_06_the_humans_by_routes_with_the_dialog_off(self):
+        # E8/E11/E13: verify|review|reject --by and `start --mode light --by` are the human's whether
+        # or not the dialog is on; the old `set … --by` rule guarded a verb state.py no longer has.
+        st = "python3 /home/u/.claude/skills/ai-task/state.py --root ."
         self.state(IMPLEMENTATION)
-        self.decide("with a task in flight, set review_status … --by is denied like approve", "deny", self.b(setby))
         for c in [
-            'python3 /h/state.py set --by ivan review_status passed',
-            'python3 /h/state.py set review_status passed --by=ivan',
-            'python3 /h/state.py set review_status passed --b ivan',
-            'S=/h/state.py; $S set review_status passed "--by" ivan',
+            st + " verify --scope all --by ivan",
+            st + " review --by ivan --verdict pass",
+            st + " reject --by ivan --why no",
+            st + " verify --by=ivan",
+            st + " start --goal g --mode light --by ivan",
+            st + " start --by ivan --mode light",
+            st + " start --goal g --mode=light --by=ivan",
+            st + " start --goal g --mode 'light' --by ivan",
+            'S=/h/state.py; $S start --mode light --by ivan',
+            st + " start --goal g --mo light --by ivan",
+            st + " start --goal g --mod=light --by ivan",
+            st + " start --m light --by ivan",
+            st + " start --by ivan --mod light",
         ]:
             self.decide("denied: " + c, "deny", self.b(c))
         for c in [
-            'python3 /home/u/.claude/skills/ai-task/state.py set review_status passed',
-            'python3 /h/state.py set review_status passed && git log --by-me',
-            'python3 /h/state.py get --field review_status --by-the-way',
+            st + " set review_status passed --by ivan",
+            st + " start --goal g --mode full --by ivan",
+            st + " start --goal g --mode guarded --by ivan",
+            st + " start --goal g --batch --by ivan --why p",
+            st + " start --amend --by ivan",
+            st + " batch off --by ivan --why w",
+            st + " start --goal g --mode light",
+            st + " start --goal g --mode lighter --by ivan",
+            st + " start --goal g --mo lighter --by ivan",
+            st + " verify --scope all",
+            "echo 'state.py start --mode light' && git log --by-me",
         ]:
             self.decide("allowed: " + c, "allow", self.b(c))
-        with self.subTest("AI_UNATTENDED lets a launcher give the verdict"):
-            self.assertEqual(self.out(self.b(setby), dict(os.environ, AI_UNATTENDED="1")), "")
-        self.says("and the deny text names the budget and the human's command", "review_rounds_max", self.b(setby))
+        with self.subTest("AI_UNATTENDED lets a launcher through"):
+            self.assertEqual(self.out(self.b(st + " verify --by ivan"), dict(os.environ, AI_UNATTENDED="1")), "")
+        self.says("the deny text names the human's terminal", "own terminal",
+                  self.b(st + " start --mode light --by ivan"))
+        # HUMAN_BY_RE on long lines (measured with /usr/bin/grep -E: 4 KB of '--mode light' without
+        # --by, 2 ms; 220 KB of '$S start --mode light' ending in --by, 32 ms; over 4096 characters a
+        # state.py line is denied by the long-command rule before this one).
+        self.timed("a 3.9 KB state.py start line of --mode light without --by is allowed", "allow",
+                   self.b("python3 /h/state.py start " + "--mode light " * 300), 1000)
+        self.timed("a 220 KB $S start --mode light … --by line is denied", "deny",
+                   self.b("S=/h/state.py\n" + "$S start --mode light " * 10000 + "--by x"), 1000)
+        self.timed("a 20 KB state.py verify line of --b padding ending in --by is denied", "deny",
+                   self.b("python3 /h/state.py verify " + "--b " * 5000 + "--by x"), 1000)
+        # START_LIGHT_VERB on the Python path (4096 characters or fewer never reach grep_q): 270
+        # repeated `$S start --by ` heads and a trailing `xlight`, the dialog off (register #3).
+        self.timed("a 3.8 KB line of repeated $S start --by heads ending in xlight is allowed", "allow",
+                   self.b("S=/h/state.py; " + "$S start --by " * 270 + "xlight"), 1000)
+        # register #42 I1: jq skips a leading UTF-8 BOM, so the payload decides as it does without one.
+        denied = json.dumps(self.b(st + " verify --by ivan"))
+        for label, raw in (("without a BOM", denied), ("with a leading BOM", "\ufeff" + denied)):
+            with self.subTest("a denied payload " + label + " is denied"):
+                self.assertEqual(decision(run(GUARD, raw)[1]), "deny", label)
         self.state("{}\n")
 
     def test_07_the_context_guard_is_the_runtimes_to_run(self):
@@ -246,6 +282,27 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
             self.decide("denied: " + c, "deny", self.b(c))
         self.decide("but && still ends the segment", "allow",
                     self.b("python3 update.py . --apply && echo --confirm-delete"))
+        # --confirm-cleanup is the same human gate (T-2026-10-30-0758 review H1); argparse takes any prefix.
+        for c in [
+            'python3 /h/skills/project-update/update.py . --apply --confirm-cleanup "Ivan"',
+            'python3 /h/skills/project-update/update.py . --apply --confirm-cleanup=Ivan',
+            'python3 /h/skills/project-update/update.py . --apply --confirm-c Ivan',
+            'python3 /h/skills/project-update/update.py . --apply --confirm-cl Ivan',
+            'python3 /h/skills/project-update/update.py . --apply --confirm-cleanu=Ivan',
+            'python3 /h/skills/project-update/update.py . --confirm-cleanup Ivan --apply',
+            'python3 /h/skills/project-update/update.py . --apply --confirm- Ivan',
+            'python3 /h/skills/project-update/update.py . --apply --confirm Ivan',
+            'AI_UNATTENDED=1 python3 /h/skills/project-update/update.py . --apply --confirm-cleanup "Ivan"',
+            'U=/h/update.py; $U . --apply --confirm-cleanup Ivan',
+            'python3 -m update . --apply --confirm-cleanup x',
+        ]:
+            self.decide("denied: " + c, "deny", self.b(c))
+        self.decide("a --confirm-cleanup without --apply is not a deletion", "allow",
+                    self.b("python3 /h/skills/project-update/update.py . --confirm-cleanup x"))
+        # Measured on the Python path with /usr/bin/grep -E: a ~4000-character line of repeated
+        # '--confirm-clean' padding before --apply takes a few ms.
+        self.timed("a 4000-character update.py line of --confirm-c… padding is denied", "deny",
+                   self.b("python3 /h/update.py " + "--confirm-clean " * 240 + "--apply --confirm-cleanup x"), 1000)
         # Reading the flag, running the dry runs, and every other --co… option stay allowed.
         for c in [
             'grep -n confirm-delete /home/u/.claude/skills/project-update/update.py',
