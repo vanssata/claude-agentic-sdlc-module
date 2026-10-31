@@ -10,6 +10,7 @@ The sections share one home and one project, in the shell suite's order:
 test_NN_ names keep it.
 """
 import json
+import math
 import os
 import re
 import shutil
@@ -776,6 +777,29 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
             rc, out = self.gate(self.g, "statusline", "--context", "--then", "cat >/dev/null; echo USER",
                                 stdin=deep, stderr=True)
             self.assertEqual((rc, out), (0, "USER\n"))
+
+
+    def test_18_quota_record_keeps_no_non_finite_percentage(self):
+        """fec7: number() took float('nan') and float('inf') as numbers, so record_quota
+        wrote NaN/Infinity into the quota record, which later comparisons read as never
+        at the limit. A non-finite percentage is no reading: the field stays None."""
+        cl, g = self.cl, self.g
+        path = cl + "/state/runtime-gate.json"
+        for weekly, five in (('NaN', '7'), ('"inf"', '7'), ('"NaN"', 'Infinity'), ('-Infinity', '"-inf"')):
+            with self.subTest(weekly=weekly, five_hour=five):
+                self.rmrf(cl + "/state", cl + "/riskrails")
+                text = ('{"rate_limits": {"seven_day": {"used_percentage": %s}, '
+                        '"five_hour": {"used_percentage": %s}}}' % (weekly, five))
+                rc, _ = self.gate(g, "statusline", "--then", "cat >/dev/null; echo LINE", stdin=text, stderr=True)
+                quota = (read_json(path).get("quota") if os.path.exists(path) else None) or {}
+                for key in ("weekly_pct", "five_hour_pct"):
+                    value = quota.get(key)
+                    self.assertTrue(value is None or math.isfinite(value),
+                                    "%s is stored as %r, not dropped" % (key, value))
+                if five == '7':
+                    self.assertEqual(quota.get("five_hour_pct"), 7, "the finite field is still recorded")
+                else:
+                    self.assertEqual(quota, {}, "no finite number: the record is not written")
 
 
 if __name__ == "__main__":

@@ -216,7 +216,7 @@ class History:
         try:
             with open(os.path.join(root, "index.json"), encoding="utf-8") as fh:
                 self.index = json.load(fh)
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
             self.index = {}
         self.root = root
         # {new key: [old keys]} from the migrations' MOVES: a template that moved
@@ -787,6 +787,8 @@ def run_migrations(plan, version, history):
             state = json.loads(raw, object_pairs_hook=OrderedDict)
         except ValueError as exc:
             raise SchemaError("%s is not valid JSON (%s) — inspect it by hand" % (path, exc)) from exc
+        except RecursionError as exc:
+            raise SchemaError("%s is nested too deeply to parse — inspect it by hand" % path) from exc
         if not isinstance(state, dict):
             raise SchemaError("%s is not a task state object" % path)
     for mod in mods:
@@ -1204,7 +1206,7 @@ def task_journal(root, task_id):
         try:
             ev = json.loads(line)
             when = datetime.strptime(ev["ts"][:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-        except (ValueError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError, RecursionError):
             continue
         if last is None or when > last:
             last = when
@@ -1217,7 +1219,7 @@ def task_journal(root, task_id):
     try:
         with open(os.path.join(root, ".ai", "state", "logs", task_id, "state.json"), encoding="utf-8") as fh:
             result = json.load(fh).get("result")
-    except (OSError, ValueError, AttributeError, UnicodeDecodeError):
+    except (OSError, ValueError, AttributeError, UnicodeDecodeError, RecursionError):
         result = None
     if isinstance(result, str) and result:
         closed = True
@@ -1245,7 +1247,7 @@ def cleanup_update(plan, now=None):
         if raw is not None:
             try:
                 flight = json.loads(raw).get("task_id")
-            except (ValueError, AttributeError):
+            except (ValueError, AttributeError, RecursionError):
                 return  # unreadable: a task may be in flight, so no task is proposed as stale
             break
     reports =os.path.join(plan.root, ".ai", "reports")

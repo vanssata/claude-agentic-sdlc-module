@@ -12,6 +12,9 @@ Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelo
 - Installer: a malformed `--then` tail is no longer recorded over the command already kept in `riskrails/statusline.json`.
 - Path guard: `.claude/riskrails/statusline.json` is protected config — an agent's Write or Edit is denied, in a task or not.
 - Statusline: a NaN or infinite percentage, cost or context size skips that part only; the rest of both lines is still printed.
+- Quota record: a NaN or infinite weekly or 5-hour percentage is no reading; it is no longer stored in `runtime-gate.json`.
+- Dialog: a second open decision with the same question text is refused in every opener, not only `decision open` — a repeated `state.py ask` stays on the `[Answer]:` file route instead of opening a twin the dialog cannot answer. A twin another session opened names `decision fallback --id` instead of saying to send it.
+- `/rr-setup --update` and `--adopt`: a JSON file nested too deeply to parse takes the same path as malformed JSON (skipped, a conflict, or a refusal that names the file) instead of a traceback.
 
 ## [3.1.0] — 2026-10-30
 

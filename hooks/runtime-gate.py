@@ -504,9 +504,10 @@ ROLLOUT_TAIL = 64 * 1024
 
 def number(value):
     try:
-        return None if value is None else float(value)
+        x = None if value is None else float(value)
     except (TypeError, ValueError):
         return None
+    return x if x is None or math.isfinite(x) else None   # NaN/Infinity is no reading
 
 
 def record_quota(weekly, five_hour, resets_at, source, seen_at=None):

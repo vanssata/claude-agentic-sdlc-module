@@ -2225,6 +2225,33 @@ class TestDialogDecisions(DialogBase):
         self.assertIn("D1", done.stderr)
         self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
 
+    def test_a_twin_ask_takes_the_file_route(self):
+        """Risk 712d: a second ask with the same text opened a second decision
+        the dialog could never answer; it now stays on the [Answer]: file route."""
+        self.p.start()
+        self.p.ok("ask", "Which cache?", "--option", "A: per locale", "--option", "B: global")
+        done = self.p.run("ask", "Which cache?", "--option", "A: per locale", "--option", "B: global")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("Q2 asked", done.stdout)
+        self.assertNotIn("DIALOG_PENDING", done.stdout)
+        self.assertIn("no dialog — DECISION_DUPLICATE", done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+
+    def test_a_twin_from_another_session_names_the_fallback(self):
+        """Risk e3ae: decision show lists only this session's decisions, so a
+        twin another session opened cannot be sent from here: the refusal names
+        decision fallback --id and does not say to send it."""
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m one")
+        done = self.commit("git commit -m one", env={"CLAUDE_CODE_SESSION_ID": "another"})
+        self.assertEqual(done.returncode, 6, done.stdout + done.stderr)
+        self.assertIn("DECISION_DUPLICATE", done.stderr)
+        self.assertIn("decision fallback --id D1", done.stderr)
+        self.assertNotIn("send it", done.stderr)
+        same = self.commit("git commit -m one")
+        self.assertIn("send it", same.stderr, "the own session's twin can still be sent")
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+
     def test_four_open_max(self):
         self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m a",
                   "--command", "git push origin main")

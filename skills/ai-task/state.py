@@ -2732,9 +2732,24 @@ def open_decision(root, state, kind, header, question, options, opened_by, multi
             return None, "CONSENT_LABEL_INVALID — %s: %s" % (why, option["label"][:120])
     if len({o["label"] for o in options}) != len(options):
         return None, "CONSENT_LABEL_INVALID — two options carry the same label"
+    # Two open decisions with one question text can never be answered in the
+    # dialog: the recorder reads both as ambiguous (risks afd2, 712d).
+    shown = (question or "").strip()[:QUESTION_MAX]
+    session = (dialog_on(root) or {}).get("session")
+    twin = next((d for d in data["open"] if d.get("question") == shown), None)
+    if twin:
+        tid = twin.get("id")
+        if twin.get("session") != session:
+            # decision show lists only this session's decisions (risk e3ae).
+            return None, ("DECISION_DUPLICATE — %s is open with this very question from another session; "
+                          "it cannot be sent from here: 'state.py decision fallback --id %s --why …' "
+                          "before opening it again" % (tid, tid))
+        return None, ("DECISION_DUPLICATE — %s is open with this very question; send it ('state.py decision show') "
+                      "and run the pick, or 'state.py decision fallback --id %s --why …', before opening it again"
+                      % (tid, tid))
     decision = dict({
         "id": next_decision_id(data, read_ledger(root)), "kind": kind, "task": (state or {}).get("task_id"),
-        "runtime": own_runtime(), "session": (dialog_on(root) or {}).get("session"),
+        "runtime": own_runtime(), "session": session,
         "tree": current_tree(root), "opened_at": now(), "opened_by": opened_by,
         "header": one_line(header, HEADER_MAX), "multi_select": bool(multi),
         "question": (question or "").strip()[:QUESTION_MAX],
@@ -3048,14 +3063,6 @@ def decision_open(args, root):
         head, run_text(root, ["git", "rev-parse", "--abbrev-ref", "HEAD"]) or "?",
         run_text(root, ["git", "diff", "--shortstat", "HEAD"]) or "no uncommitted change",
         "\n".join("  %s" % c for c in args.commands))
-    # Two open decisions with one question text can never be answered in the
-    # dialog: the recorder reads both as ambiguous (risk afd2).
-    shown = question.strip()[:QUESTION_MAX]
-    twin = next((d.get("id") for d in read_decisions(root)["open"] if d.get("question") == shown), None)
-    if twin:
-        die("DECISION_DUPLICATE — %s is open with this very question; send it ('state.py decision show') "
-            "and run the pick, or 'state.py decision fallback --id %s --why …', before opening it again"
-            % (twin, twin), 6)
     options = [{"kind": "choice", "effect": "defer", "label": "Not now — commit nothing"}] + \
         [{"kind": "command", "label": c} for c in args.commands]
     decision, why = open_decision(root, state, "commit", "Commit", question, options, "decision open",

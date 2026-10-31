@@ -1529,5 +1529,64 @@ class TestProjectAdopt(unittest.TestCase):  # pylint: disable=too-many-public-me
         self.assertEqual(dirt, [], "and changes no file outside its own record")
 
 
+DEEP_READERS = r"""
+import json, os, sys, traceback, types
+sys.path.insert(0, sys.argv[1])
+import adopt
+root, deep = sys.argv[2], "[" * 100000
+
+
+def put(rel, text):
+    path = os.path.join(root, rel)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    return path
+
+
+def probe(name, fn):
+    try:
+        out[name] = repr(fn())
+    except adopt.TableError:
+        out[name] = "TableError"
+    except Exception:  # pylint: disable=broad-except
+        out[name] = "Traceback: " + traceback.format_exc().splitlines()[-1]
+
+
+out = {}
+where = ".ai/reports/adopt-2026-01-01"
+probe("load_table", lambda: adopt.load_table(put("map.json", deep)))
+put(where + "/decisions.json", deep)
+probe("load_decisions", lambda: adopt.load_decisions(root))
+put(where + "/adopt.json", deep)
+probe("read_record", lambda: adopt.read_record(root, where))
+probe("_state_line", lambda: adopt._state_line(root, None, 0, adopt.load_table(), [], []))
+put(".ai/state/state.json", deep)
+probe("task_in_flight", lambda: adopt.task_in_flight(root))
+put(where + "/split-proposal-claude-md.json", deep)
+probe("find_proposal", lambda: adopt.find_proposal(root, types.SimpleNamespace(path="CLAUDE.md", sha="x")))
+print(json.dumps(out))
+"""
+
+
+class TestDeepJsonReaders(unittest.TestCase):
+    """Risk d4d1: CPython raises RecursionError, not ValueError, on JSON nested
+    past its parser's limit (100000 levels, measured); every adopt reader takes
+    it the way it takes malformed JSON, with no Traceback."""
+
+    def test_every_reader_takes_a_too_deep_file_as_malformed(self):
+        with tempfile.TemporaryDirectory() as root:
+            done = subprocess.run([sys.executable, "-I", "-c", DEEP_READERS, PU, root],
+                                  capture_output=True, text=True, check=False)
+        self.assertNotIn("Traceback", done.stderr, done.stderr)
+        got = json.loads(done.stdout)
+        want = {"load_table": "TableError", "load_decisions": "TableError", "read_record": "None",
+                "_state_line": "(0, 'no foreign structure detected')", "task_in_flight": "None",
+                "find_proposal": "(None, None)"}
+        for name, value in want.items():
+            with self.subTest(reader=name):
+                self.assertEqual(got[name], value)
+
+
 if __name__ == "__main__":
     unittest.main()
