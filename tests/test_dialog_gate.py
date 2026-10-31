@@ -174,6 +174,25 @@ class TestPayload(unittest.TestCase):
         unsplit = dict(decision, multi_select=False)
         self.assertEqual(state_mod.dialog_payload([unsplit], "claude")["questions"][0]["question"], long)
 
+    def test_part_question_copies_agree(self):
+        """R-two-part-question-copies: state.py's part_question and the hook's
+        copy send the same text for every length, split or not, on both runtimes."""
+        options = [{"n": 1, "kind": "choice", "label": SAFE},
+                   {"n": 2, "kind": "command", "label": "git commit -m 'a, b'"},
+                   {"n": 3, "kind": "command", "label": PUSH}]
+        suffix = len(" (1 of 2)")
+        lengths = (0, 1, 80, state_mod.QUESTION_MAX - suffix - 1, state_mod.QUESTION_MAX - suffix,
+                   state_mod.QUESTION_MAX - suffix + 1, state_mod.QUESTION_MAX - 1,
+                   state_mod.QUESTION_MAX, state_mod.QUESTION_MAX + 1)
+        for runtime, multi, length in itertools.product(("claude", "codex"), (True, False), lengths):
+            text = "".join("abcdefghij"[i % 10] for i in range(length))
+            dec = {"id": "D3", "question": text, "header": "Commit", "multi_select": multi, "options": options}
+            with self.subTest(runtime=runtime, multi=multi, length=length):
+                theirs = [q["question"] for q in state_mod.dialog_payload([dec], runtime)["questions"]]
+                ours = [q["question"] for _, _, q in dialog.offered([dec], runtime)]
+                self.assertEqual(theirs, ours)
+                self.assertEqual(len(theirs), 2 if multi else 1)
+
     def test_codex_shape(self):
         decision = {"id": "D3", "question": "q", "header": "Commit", "multi_select": True,
                     "options": [{"n": 1, "kind": "choice", "label": "Not now — commit nothing"},
@@ -523,6 +542,35 @@ class TestRecorder(HookCase):
         self.assertEqual(dialog.adapt_response("claude", payload), [[""], [""]])
         lines = dialog.record(self.s.root, "claude", payload, NOW)
         self.assertEqual([line for line in lines if line["type"] == "pick"], [])
+
+    def test_two_decisions_sharing_question_text_decline_ambiguous(self):
+        """Two open decisions with one question text but different options are
+        both offered; Claude's answers are keyed by text, so neither can be
+        told from the other: each is a decline "ambiguous", nothing is picked."""
+        other = "git commit -m two -- b.py"
+        self.s.decide(decision("D1", "Commit?", "Commit", [("choice", SAFE), ("command", COMMIT)]),
+                      decision("D2", "Commit?", "Commit", [("choice", SAFE), ("command", other)]))
+        sent = dialog.dialog_payload(dialog.read_decisions(self.s.root), "claude")
+        self.assertEqual([q["question"] for q in sent["questions"]], ["Commit?", "Commit?"])
+        payload = dict(spike("claude/ask-single"), tool_input=dict(sent),
+                       tool_response=dict(sent, answers={"Commit?": COMMIT}))
+        self.assertEqual(dialog.adapt_response("claude", payload), [[""], [""]])
+        lines = dialog.record(self.s.root, "claude", payload, NOW)
+        self.assertEqual([(line["type"], line.get("decision"), line.get("why")) for line in lines],
+                         [("offer", None, None), ("decline", "D1", "ambiguous"), ("decline", "D2", "ambiguous")])
+        self.assertEqual(lines[0]["decisions"], ["D1", "D2"])
+        self.assertEqual([line for line in self.s.ledger() if line["type"] == "pick"], [])
+
+    def test_read_decisions_survives_deep_nesting(self):
+        """R-read-decisions-does-not-catch-recursione: a deeply nested
+        decision.json is unreadable like a malformed one, not a crash."""
+        path = os.path.join(self.s.root, ".ai", "state", "decision.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("[" * 200000)
+        self.assertEqual(dialog.read_decisions(self.s.root), [])
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("{not json")
+        self.assertEqual(dialog.read_decisions(self.s.root), [])
 
     def test_label_rule_checked_again(self):
         self.s.decide(decision("D1", "Run?", "Run", [("choice", SAFE), ("command", "git status")]))

@@ -2138,6 +2138,8 @@ class TestDialogDecisions(DialogBase):
     def read_only_ledger(self):
         path = os.path.join(self.p.root, ".ai", "state", "consent.jsonl")
         os.chmod(path, 0o444)
+        if os.access(path, os.W_OK):
+            self.skipTest("the ledger stays writable as root")
 
     def test_switch_off_keeps_the_decision_when_the_settle_cannot_be_written(self):
         """43ae-I4: a decision leaves decision.json only with its settle line."""

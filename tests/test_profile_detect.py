@@ -559,6 +559,42 @@ class ProfileAck(unittest.TestCase):
         self.assertEqual(again.returncode, 0, again.stderr)
         self.assertIn("already acknowledged; nothing written", again.stdout)
 
+    def test_ack_codex_round_trip_and_independence(self):
+        """Review R-profile-ack-has-no-codex-test-d628: each runtime keeps its own drift-ack.json under its own home."""
+        home = self.home(AI_UNATTENDED="1")
+        write(os.path.join(home.codex, "auth.json"),
+              with_jwts({"auth_mode": "chatgpt", "tokens": {"id_token": "<jwt:pro>"}}))
+        write(os.path.join(home.codex, "riskrails", "profile.json"),
+              {"plan": "plus", "plugin_version": "3.1.0", "runtime": "codex"})
+        codex_ack = os.path.join(home.codex, "riskrails", "drift-ack.json")
+
+        def detect_codex():
+            return json.loads(home.run("profile", "detect", "--runtime", "codex", "--json").stdout)
+
+        def read(path):
+            with open(path, encoding="utf-8") as fh:
+                return json.load(fh)
+
+        before = detect_codex()
+        self.assertEqual(before["status"], "drift")
+        done = home.run("profile", "ack", "--runtime", "codex", stdin=subprocess.DEVNULL)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("for this codex account", done.stdout)
+        ack = read(codex_ack)
+        self.assertEqual((ack["codex"]["kept"], ack["codex"]["via"], ack["codex"]["fingerprint"]),
+                         ("plus", "unattended", before["live"]["fingerprint"]))
+        self.assertIsNone(ack["claude"])
+        self.assertFalse(os.path.exists(home.ack), "a codex ack writes nothing under the claude home")
+        self.assertEqual(detect_codex()["status"], "acknowledged")
+        self.assertEqual(self.detect(home)["status"], "drift", "the codex ack does not silence claude")
+
+        done = home.run("profile", "ack", "--runtime", "claude", stdin=subprocess.DEVNULL)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(read(codex_ack), ack, "acking claude leaves the codex file as it was")
+        self.assertEqual(read(home.ack)["claude"]["kept"], "max")
+        self.assertIsNone(read(home.ack)["codex"])
+        self.assertEqual(detect_codex()["status"], "acknowledged")
+
     def test_ack_on_a_terminal_stamps_terminal(self):
         home = self.home()
         master, slave = os.openpty()

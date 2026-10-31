@@ -122,13 +122,59 @@ class TestSwitchContract(unittest.TestCase):
                         self.assertEqual(state_mod.dialog_tool_verified(runtime) == tool, ok)
 
     def test_read_profile_survives_deep_nesting(self):
-        for depth in (200000, state_mod.JSON_DEPTH_MAX + 1):
-            with self.subTest(depth=depth), tempfile.TemporaryDirectory() as tmp:
+        """read_profile returns {} for a non-dict too, so the cap cases are objects: a dict
+        nested exactly JSON_DEPTH_MAX deep is read, one level deeper is {} only because of the cap."""
+        cap = state_mod.JSON_DEPTH_MAX
+
+        def balanced(total):
+            return '{"a":' + "[" * (total - 1) + "0" + "]" * (total - 1) + "}"
+        for name, text, want in (("unterminated 200000", "[" * 200000, {}),
+                                 ("balanced cap + 1", balanced(cap + 1), {}),
+                                 ("balanced cap", balanced(cap), json.loads(balanced(cap)))):
+            with self.subTest(case=name), tempfile.TemporaryDirectory() as tmp:
                 os.makedirs(os.path.join(tmp, "riskrails"))
                 with open(os.path.join(tmp, "riskrails", "profile.json"), "w", encoding="utf-8") as fh:
-                    fh.write("[" * depth)
+                    fh.write(text)
                 with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": tmp}, clear=False):
-                    self.assertEqual(state_mod.read_profile("claude"), {})
+                    self.assertEqual(state_mod.read_profile("claude"), want)
+
+    def test_scanner_copies_agree_on_escapes(self):
+        """The two json_loads_capped scanners are copies; a drift in one copy's string/escape
+        handling must turn this red, so the table puts brackets next to quotes and backslashes."""
+        cap = dialog.JSON_DEPTH_MAX
+
+        def deep(total, head):
+            return '{%s"a":%s0%s}' % (head, "[" * (total - 1), "]" * (total - 1))
+        texts = [
+            '{"a": "\\\\", "b": [[0]]}',                    # escaped backslash before the closing quote
+            '{"a": "\\"[[", "b": 1}',                        # escaped quote, then brackets, inside a string
+            '{"a": "[[[{{{]]]}}}", "b": [1]}',
+            '{"a": "\u005b\u00e9\u4e2d", "b": []}',
+            '{}', '[]', '',
+            deep(cap, '"s": "\\"[[[", '),
+            deep(cap + 1, '"s": "\\"[[[", '),
+            deep(cap, '"s": "\\\\", '),
+            deep(cap + 1, '"s": "\\\\", '),
+            deep(cap, '"s": "\\\\\\"[{", '),
+            deep(cap + 1, '"s": "]]]}}}", '),
+        ]
+
+        def run(module, text):
+            try:
+                return ("ok", module.json_loads_capped(text))
+            except ValueError as exc:
+                return ("err", type(exc).__name__ if not isinstance(exc, json.JSONDecodeError) else "decode")
+        for text in texts:
+            with self.subTest(text=text[:60]):
+                a, b = run(dialog, text), run(state_mod, text)
+                self.assertEqual(a[0], b[0])
+                if a[0] == "ok":
+                    self.assertEqual(a[1], b[1])
+        # the cap itself is enforced, not just agreed on, in both copies
+        for module in (dialog, state_mod):
+            self.assertEqual(module.json_loads_capped(deep(cap, '"s": "\\"[[[", '))["s"], '"[[[')
+            with self.assertRaises(ValueError):
+                module.json_loads_capped(deep(cap + 1, '"s": "\\\\", '))
 
     @staticmethod
     def build(tmp, runtime, policy, tool):

@@ -226,7 +226,7 @@ def read_decisions(root):
     try:
         with open(os.path.join(root, ".ai", "state", "decision.json"), encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError, RecursionError):
         return []
     opened = data.get("open") if isinstance(data, dict) else None
     return [d for d in opened if isinstance(d, dict) and d.get("id")] if isinstance(opened, list) else []
