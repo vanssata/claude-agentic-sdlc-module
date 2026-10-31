@@ -55,6 +55,21 @@ The first line is `verify_command` in `.ai/policies/testing.md`, which
 
 Run the suite to the end and fix every failure before you push.
 
+- **The state machine** is the package `skills/ai-task/rr_state/` (layers 0 to 9,
+  imports only downward) behind the entry `skills/ai-task/state.py`, a shim; the
+  map is in [docs/architecture.md](docs/architecture.md). A change goes in the
+  module that owns the function, not in the entry. One suite runs alone, for
+  example `python3 -I tests/run_suite.py tests/test_state_layout.py` (module
+  size, classes, import direction, hook isolation).
+  `tests/test_state_characterization.py` compares what the entry prints,
+  returns and leaves on disk with the goldens in `tests/fixtures/state/goldens/`;
+  a refactoring leaves them untouched, and only a change meant to move a
+  recorded field re-records them with `UPDATE_GOLDENS=1 python3 -I
+  tests/run_suite.py tests/test_state_characterization.py`.
+  `python3 tools/state-partition.py` checks
+  `tests/fixtures/state/partition.json` (every name in one module, no cycle, no
+  upward edge, core functions free of I/O); after you move a name, `--write`
+  recomputes its derived fields.
 - A new suite is a `tests/test_*.py` file; discovery picks it up. A suite that
   reads repository documents is added to `doc_tests` in `testing.md`.
 - No test may read or write the real `~/.claude` or `~/.codex`. Build a scratch

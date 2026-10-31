@@ -130,7 +130,7 @@ class TestSwitchContract(unittest.TestCase):
                     with open(os.path.join(home, "riskrails", "profile.json"), "w", encoding="utf-8") as fh:
                         fh.write(self.nested(total, "dialog").replace('"dialog": ', '"dialog": {"tool": "%s"}, "x": ' % tool, 1))
                     env = {"CODEX_HOME" if runtime == "codex" else "CLAUDE_CONFIG_DIR": home}
-                    with mock.patch.dict(os.environ, env, clear=False), mock.patch.object(state_mod, "RUNTIME", runtime):
+                    with mock.patch.dict(os.environ, env, clear=False):
                         self.assertEqual(dialog.dialog_policy(root) is not None, ok)
                         self.assertEqual(state_mod.dialog_policy(root) is not None, ok)
                         self.assertEqual(dialog.dialog_tool(runtime) == tool, ok)
@@ -311,12 +311,12 @@ class TestSwitchContract(unittest.TestCase):
             if attended0:
                 env["CLAUDE_CODE_SESSION_ATTENDED"] = "0"
             payload = {"session_id": sid, "hook_event_name": "PreToolUse"}
-            with mock.patch.dict(os.environ, env, clear=False), mock.patch.object(state_mod, "RUNTIME", runtime):
+            with mock.patch.dict(os.environ, env, clear=False):
                 for var in self.CLEAR:
                     if var not in env:
                         os.environ.pop(var, None)
                 hooks = dialog.switch_state(root, runtime, payload)
-                got = state_mod.dialog_on(root)
+                got = state_mod.dialog_on(root, runtime=runtime)
         with self.subTest(name):
             seen.add(hooks)
             if diagonal:

@@ -31,4 +31,4 @@ disable=
 
 [REFACTORING]
 # die() prints and calls sys.exit(1)
-never-returning-functions=sys.exit,argparse.parse_error,state.die
+never-returning-functions=sys.exit,argparse.parse_error,state.die,rr_state.fs.die

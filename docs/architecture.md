@@ -13,7 +13,10 @@ except the last section.
 ├── agents/                             Explore, log-reader, ai-discovery, ai-reviewer, architect — tier baked in
 ├── hooks/                              ai-guard.py + guard/, cap-large-read, context-guard, runtime-gate, dialog-gate, …
 ├── skills/                             rr-setup, rr-spec, rr-plan, rr-build, rr-build-all, rr-review, rr-ship, rr-status (+ aliases)
-│   └── ai-task/state.py                the state machine every skill drives
+│   └── ai-task/                        the state machine every skill drives
+│       ├── state.py                    the entry: a shim that sets fs.ENTRY and calls rr_state.cli.main
+│       ├── rr_state/                   the package behind it, layers 0 to 9 (below)
+│       └── sensors.py, weight.py, memory_*.py   sibling modules, unchanged
 └── riskrails/
     ├── ai/                             the shared tree: policies, agent contracts, workflows, templates, using-riskrails.md
     ├── ai-path                         prints which copy of a shared file applies to a project
@@ -83,6 +86,40 @@ enough to brief completely.
 is deterministic — a measurement, never a judgement. No model writes or reads
 these files on the pipeline's behalf; the skills call the commands and read
 their one-line answers.
+
+`state.py` is only the entry: it sets `fs.ENTRY`, re-exports the names the tests
+use and calls `rr_state.cli.main`. The code lives in the package
+`skills/ai-task/rr_state/`, one module per job, in layers 0 to 9 (the exact map
+is `tests/fixtures/state/partition.json`, checked by `python3
+tools/state-partition.py`):
+
+| Layer | Modules | Job |
+|---|---|---|
+| 0 | `fs`, `locks` | paths, clock, `die`, text and subprocess reads; the file locks |
+| 1 | `runtime`, `questions`, `ledger` | which runtime drives; parse and render `## Questions`; the consent ledger |
+| 2 | `journal` | the append-only `events.jsonl` |
+| 3 | `policy`, `task` | pure reads of `weight.json` / `dialog.json`, modes; load and save the task dict |
+| 4 | `gate`, `dialog`, `report` | the approval gate; the dialog, its picks and the authority checks; the two facts and the `task.md` lines |
+| 5 | `profile`, `memory_cmd` | the resolved plan and its advice; `recall` and `memory` |
+| 6 | `handoff` | `handoff.md` and the resume point |
+| 7 | `questions_cmd`, `gate_cmd`, `report_cmd`, `steps`, `start`, `verify`, `review`, `close` | one module per command group |
+| 8 | `dialog_cmd` | `decision` and `consent` |
+| 9 | `cli` | the parser and `main` |
+
+- **Imports only go downward** (R10): a module imports from lower layers and
+  nothing imports `cli` or the entry; `tests/test_state_layout.py` builds the
+  graph and fails on a cycle or an upward edge.
+- **Three classes, no more** (R4): `Runtime` and `Profile` are frozen value
+  objects, `Ledger` holds `consent.lock`; everything else is a function, and the
+  task stays the dict that `load` returns. `main` builds the `Runtime` and
+  passes it down; no module global names it.
+- **Functional core, imperative shell** (R16): functions that parse, render or
+  decide take data and return data, with no file, clock or subprocess; I/O sits
+  in `fs`, `locks`, `journal`, `task`, `ledger`, `profile` and the command
+  modules. The seams tests patch are module attributes such as `fs.now`.
+- **The hooks never import the package** (R15): they run as `python3 -I -S` on
+  the standard library, `hooks/guard/dialog.py` re-implements what it needs of
+  the ledger, and nothing under `rr_state/` imports `hooks/`.
 
 | File | Written by | Holds |
 |---|---|---|

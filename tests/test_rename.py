@@ -30,7 +30,8 @@ ALLOWED = {
     "skills/project-update/update.py": "legacy markers, old env names and the old shared tree",
     "skills/project-update/adopt.py": "CLAUDE_AGENTIC_TEST read when RISKRAILS_TEST is unset",
     "skills/rr-setup/scaffold_ai.py": "a legacy block is the managed block; old env name",
-    "skills/ai-task/state.py": "profile.json under the old home, for a skills tree not reinstalled",
+    "skills/ai-task/rr_state/profile.py": "profile.json under the old home, for a skills tree not reinstalled",
+    "skills/ai-task/rr_state/dialog.py": "names the old-home profile.json fallback that read_profile() keeps",
     "hooks/runtime-gate.py": "profile.json under the old home, for a skills tree not reinstalled",
     "skills/usage-report/usage-report.py": "profile.json under the old home, for a skills tree not reinstalled",
     # a project's .gitignore matches these lines verbatim; a new header would be appended beside the old

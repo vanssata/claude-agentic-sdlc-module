@@ -401,6 +401,7 @@ class InstallDryRun(ScratchCase):
                   "agents/log-reader.md", "hooks/lib/ai-hook-common.sh",
                   "hooks/cap-large-read.py", "hooks/project-scaffold.sh", "hooks/ai-git-guard.json",
                   "skills/ai-init/SKILL.md", "skills/ai-init/scaffold-ai.sh", "skills/ai-task/state.py",
+                  "skills/ai-task/rr_state/__init__.py", "skills/ai-task/rr_state/cli.py",
                   "skills/ai-audit/SKILL.md", "skills/ai-status/SKILL.md", "skills/project-init/SKILL.md",
                   "skills/rr-status/SKILL.md", "skills/rr-status/status.py",
                   "skills/sdlc-intent/SKILL.md", "skills/sdlc-spec/SKILL.md", "skills/sdlc-plan/SKILL.md",
