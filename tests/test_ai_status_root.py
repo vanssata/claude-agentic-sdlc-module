@@ -13,6 +13,7 @@ length: at most twenty lines (redesign R31), with a task in flight and without
 one.
 """
 import importlib.util
+import json
 import os
 import re
 import shutil
@@ -106,6 +107,8 @@ class TestStatusRoot(unittest.TestCase):
         rc, out = status(cwd=os.path.join(self.tmp, "bare", "src"))
         self.assertEqual(rc, 1, out)
         self.assertRegex(out, r"(?m)^root: none", "no .ai/ above: root: none, exit 1")
+        self.assertIn("run /rr-setup first", out, "and says what to do, as state.py does")
+        self.assertNotIn("/ai-init", out)
 
     def test_no_task_in_flight(self):
         rc, out = status("--root", os.path.join(self.tmp, "outer"))
@@ -172,6 +175,57 @@ class TestPopulatedTask(unittest.TestCase):
 
     def test_a_long_file_list_is_shortened(self):
         self.assertIn("(+26 more)", self.out, "a long file list is shortened, not wrapped")
+
+
+class TestLegacyBudgets(unittest.TestCase):
+    """status.py's own read (a task that is not schema 7) shows the budgets
+    state.py enforces: weight.json's, the batch section's while the batch loop is on."""
+
+    def run_status(self, batch_on):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        os.makedirs(os.path.join(tmp, ".ai", "policies"))
+        os.makedirs(os.path.join(tmp, ".ai", "state"))
+        with open(os.path.join(tmp, ".ai", "policies", "weight.json"), "w", encoding="utf-8") as fh:
+            json.dump({"axes": {}, "modes": {}, "review_rounds_max": 7, "tests": {"max_suite_runs": 9},
+                       "batch": {"review_rounds_max": 4, "max_suite_runs": 6}}, fh)
+        task = {"schema": 6, "task_id": "T-1", "goal": "g", "tests": {"suite_runs": 1}, "reviews": 1}
+        if batch_on:
+            task["batch"] = {"on": True}
+        with open(os.path.join(tmp, ".ai", "state", "state.json"), "w", encoding="utf-8") as fh:
+            json.dump(task, fh)
+        return status("--root", tmp)[1]
+
+    def test_standard_budgets_come_from_weight_json(self):
+        out = self.run_status(False)
+        self.assertIn("suite runs 1/9", out)
+        self.assertIn("(1 of 7)", out)
+
+    def test_batch_budgets_while_the_batch_loop_is_on(self):
+        out = self.run_status(True)
+        self.assertIn("suite runs 1/6", out)
+        self.assertIn("(1 of 4)", out)
+
+
+class TestFallbackReadsSchema7Counters(unittest.TestCase):
+    """report() is the fallback when `state.py status` fails; on a schema-7 state it
+    reads verify.suite_runs and review.passes, not the legacy counters."""
+
+    def test_schema_7_counters_are_shown(self):
+        spec = importlib.util.spec_from_file_location("status_mod", STATUS)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        os.makedirs(os.path.join(tmp, ".ai", "policies"))
+        os.makedirs(os.path.join(tmp, ".ai", "state"))
+        task = {"schema": 7, "task_id": "T-1", "goal": "g", "verify": {"suite_runs": 2},
+                "review": {"passes": 1}}
+        with open(os.path.join(tmp, ".ai", "state", "state.json"), "w", encoding="utf-8") as fh:
+            json.dump(task, fh)
+        out = "\n".join(mod.report(tmp)[0])
+        self.assertIn("suite runs 2/", out)
+        self.assertIn("(1 of ", out)
 
 
 class TestAlias(unittest.TestCase):

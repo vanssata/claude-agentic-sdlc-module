@@ -925,7 +925,7 @@ def state_line(root, shipped_block, skeleton_cap, table=None, instruction_files=
     try:
         return _state_line(root, shipped_block, skeleton_cap, table, instruction_files, shipped_files)
     except (TableError, OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
-        return 1, "adopt state unreadable (%s) — run /project-update --adopt" % exc
+        return 1, "adopt state unreadable (%s) — run /rr-setup --adopt" % exc
 
 
 def _state_line(root, shipped_block, skeleton_cap, table, instruction_files, shipped_files):
@@ -943,7 +943,7 @@ def _state_line(root, shipped_block, skeleton_cap, table, instruction_files, shi
             return 0, "no foreign structure detected"
         bits = ["%s (%d file(s))" % (t, sum(g.values())) for t, g in adoption.detected.items()]
         bits += ["%s (split?)" % c.path for c, _ in adoption.candidates]
-        return 1, "foreign structure detected: %s — run /project-update --adopt" % ", ".join(bits)
+        return 1, "foreign structure detected: %s — run /rr-setup --adopt" % ", ".join(bits)
     try:
         with open(os.path.join(root, where, "adopt.json"), encoding="utf-8") as fh:
             record_data = json.load(fh)
@@ -968,13 +968,13 @@ def _state_line(root, shipped_block, skeleton_cap, table, instruction_files, shi
         if current != src.get("sha"):
             regenerated.append(src["path"])
     if regenerated:
-        return 1, ("foreign files regenerated since the adopt of %s: %s — run /project-update --adopt"
+        return 1, ("foreign files regenerated since the adopt of %s: %s — run /rr-setup --adopt"
                    % (date, ", ".join(sorted(regenerated))))
     checks = record_data.get("checks", {})
     failed = [name for name, c in checks.items() if c.get("status") not in ("pass", "not_applicable")]
     if failed or record_data.get("status") == "partial":
         what = failed[0].replace("_", "-") + " FAIL" if failed else "the apply was interrupted"
-        return 1, "adoption of %s incomplete: %s — run /project-update --adopt" % (date, what)
+        return 1, "adoption of %s incomplete: %s — run /rr-setup --adopt" % (date, what)
     tools = ", ".join(sorted(record_data.get("tools", {})))
     pending = sum(1 for s in record_data.get("sources", []) if s.get("cleanup") and safe_rel(s.get("path"))
                   and os.path.isfile(os.path.join(root, s["path"])))
@@ -1340,13 +1340,13 @@ def task_in_flight(root):
 def gates(root, u, planned_writes):
     """R5, in the order a human fixes them. Returns a refusal (reason, how) or None."""
     if not os.path.isdir(os.path.join(root, ".ai")):
-        return "the project has no .ai/", "run /ai-init first, then /project-update --adopt"
+        return "the project has no .ai/", "run /rr-setup first, then /rr-setup --adopt"
     dirty = clean_tree(root)
     if dirty is None:
         return "the project is not a git work tree", "run `git init` and commit, so the adopt can be undone"
     running = task_in_flight(root)
     if running:
-        return "a task is in flight (%s)" % running, "finish or abandon it with /ai-task first"
+        return "a task is in flight (%s)" % running, "finish or abandon it with /rr-build first"
     outside = [p for p in dirty if not p.startswith(ALLOWED_DIRT) and p not in planned_writes]
     if outside:
         more = " and %d more" % (len(outside) - 3) if len(outside) > 3 else ""
@@ -1356,7 +1356,7 @@ def gates(root, u, planned_writes):
                     "commit it or remove it")
         return ("the tree has uncommitted changes: %s%s" % (", ".join(outside[:3]), more), how)
     if u.plain_pending(root, ignore=planned_writes):
-        return "the project is behind the installed plugin", "run /project-update --apply first, then adopt"
+        return "the project is behind the installed plugin", "run /rr-setup --update --apply first, then adopt"
     return None
 
 
@@ -1403,7 +1403,8 @@ def write_json(u, root, rel, data):
 
 def apply_run(plan, args, u, skeleton_cap, instruction_files=frozenset(), shipped_files=None):
     """`update.py --adopt --apply`: gates, originals, phased writes, the checks
-    on disk, the record. Exit 0, 3 (aborted), 4 (incomplete) or 5 (refused)."""
+    on disk, the record. Exit 0, 2 (the routing table or a migration could not be
+    read), 3 (aborted), 4 (incomplete) or 5 (refused)."""
     root = plan.root
     try:
         table = load_table()
@@ -1581,7 +1582,9 @@ def report_md(plan, adoption, record):
 # ---------------------------------------------------------------------------
 
 CLEANUP_HEADING = "## Cleanup"
-REVIEW_LINE = "Run `/project-update --adopt --cleanup` to review; a human confirms the deletion."
+REVIEW_LINE = "Run `/rr-setup --adopt --cleanup` to review; a human confirms the deletion."
+# Reports written by v2.0.2-v3.1.0 carry this text; cleanup still replaces it.
+LEGACY_REVIEW_LINE = "Run `/project-update --adopt --cleanup` to review; a human confirms the deletion."
 
 
 def plan_cleanup(plan, args, u, table, skeleton_cap, instruction_files, shipped_files):
@@ -1593,21 +1596,21 @@ def plan_cleanup(plan, args, u, table, skeleton_cap, instruction_files, shipped_
     def no(reason, how, adoption=None):
         return (reason, how), None, None, None, adoption
     if not os.path.isdir(os.path.join(root, ".ai")):
-        return no("the project has no .ai/", "run /ai-init first")
+        return no("the project has no .ai/", "run /rr-setup first")
     where = latest_with(root, "adopt.json")
     record = read_record(root, where) if where else None
     if record is None:
-        return no("no adopt record to clean up", "run /project-update --adopt --apply first")
+        return no("no adopt record to clean up", "run /rr-setup --adopt --apply first")
     if args.mode == "coexist" or record.get("mode") == "coexist":
         return no("coexist keeps the foreign files",
-                  "to move them, run /project-update --adopt --apply (mode migrate), then --cleanup")
+                  "to move them, run /rr-setup --adopt --apply (mode migrate), then --cleanup")
     checks = record.get("checks", {})
     if record.get("status") != "applied" or any(c.get("status") != "pass" for c in checks.values()):
         return no("the adopt of %s is not complete (R12)" % where.rsplit("adopt-", 1)[-1],
-                  "run /project-update --adopt --apply until both checks pass")
+                  "run /rr-setup --adopt --apply until both checks pass")
     running = task_in_flight(root)
     if running:
-        return no("a task is in flight (%s)" % running, "finish or abandon it with /ai-task first")
+        return no("a task is in flight (%s)" % running, "finish or abandon it with /rr-build first")
     dirty = clean_tree(root)
     if dirty is None:
         return no("the project is not a git work tree", "cleanup deletes only what git can restore")
@@ -1646,7 +1649,7 @@ def plan_cleanup(plan, args, u, table, skeleton_cap, instruction_files, shipped_
         what.append("%d unmapped, %d split(s) waiting" % (len(adoption.unmapped), len(adoption.split)))
     if what:
         return no("the adopt no longer holds on the current tree: %s" % "; ".join(what),
-                  "run /project-update --adopt to see why, settle it, then --cleanup", adoption)
+                  "run /rr-setup --adopt to see why, settle it, then --cleanup", adoption)
     # Only what the adopt finds again as a cleanup source, and only what git
     # can restore: an ignored file skipped from original/ would be gone for good.
     found = {path for path, _t, _tr, _n, cleanup in adoption.sources if cleanup}
@@ -1777,7 +1780,8 @@ def cleanup_report_md(u, root, where, record):
     except OSError:
         text = ""
     text = text.split("\n" + CLEANUP_HEADING + "\n", 1)[0].rstrip("\n") + "\n"
-    text = text.replace(REVIEW_LINE, "The deletion is recorded under Cleanup below.")
+    for line in (REVIEW_LINE, LEGACY_REVIEW_LINE):
+        text = text.replace(line, "The deletion is recorded under Cleanup below.")
     c = record["cleanup"]
     runs = list(c.get("history") or []) + [c]
 

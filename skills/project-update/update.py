@@ -108,10 +108,12 @@ RULES_DIR = ".ai/rules"
 # file is not ours (the path guard refuses it too), and .git is not text.
 # A child holding a .git entry (worktree, nested repository, submodule) is pruned
 # too, by the take-back walk (rendered_rules) and by the writer (nested_tree). The
-# two still disagree on a dirs: entry under a RULES_SKIP name or through a
-# symlinked directory (.ai/project/known-risks.md).
+# writer also skips a RULES_SKIP name or a symlinked directory (unwalked_dir), so it
+# never writes where the take-back never walks.
 RULES_SKIP = {".git", ".ai", "vendor", "node_modules", "bower_components",
               "third_party", "Pods", "site-packages", ".venv", ".pnpm", ".yarn"}
+# Compared case-insensitively: on a case-insensitive filesystem `Vendor/` is `vendor/`.
+RULES_SKIP_FOLDED = frozenset(n.casefold() for n in RULES_SKIP)
 START, END = "<!-- riskrails:start -->", "<!-- riskrails:end -->"
 OLD_START, OLD_END = b"<!-- claude-agentic:start -->", b"<!-- claude-agentic:end -->"  # R35, one version
 
@@ -302,7 +304,7 @@ def git_dirty_ai(root):
     tree, where there is nothing to say."""
     try:
         res = subprocess.run(["git", "-C", root, "status", "--porcelain", "--", ".ai"],
-                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30)
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30, check=False)
     except (OSError, subprocess.SubprocessError):
         return False
     return res.returncode == 0 and bool(res.stdout.strip())
@@ -315,7 +317,7 @@ def git_states(root, rel_dir):
     or for a path git does not know."""
     def run(*args):
         res = subprocess.run(["git", "-C", root] + list(args), stdout=subprocess.PIPE,
-                             stderr=subprocess.DEVNULL, timeout=30)
+                             stderr=subprocess.DEVNULL, timeout=30, check=False)
         return res.stdout.decode("utf-8", "replace") if res.returncode == 0 else None
     try:
         prefix = run("rev-parse", "--show-prefix")
@@ -1276,7 +1278,15 @@ def cleanup_update(plan, now=None):
             continue
         # .ai/reports/ is usually git-tracked; only .ai/state/ is git-ignored run state
         held = git_states(plan.root, ".ai/reports/" + task_id)
+        skipped = set()
         for target in sorted(targets):
+            unsafe = unsafe_path(plan.root, target)
+            if unsafe:     # --apply would abort on it: say so instead of proposing it
+                if unsafe not in skipped:
+                    skipped.add(unsafe)
+                    plan.hints.append("%s: not proposed for deletion, %s — remove it yourself if it should go"
+                                      % (target, unsafe))
+                continue
             note = why
             state = held(target) if target.startswith(".ai/reports/") else None
             if state == "tracked":
@@ -1332,20 +1342,20 @@ def tracked_ignored_hint(plan):
         if shown == path:
             plan.hints.append("%s: tracked by git but ignored by an ignore rule — the rule has no "
                               "effect on a tracked file, so every run leaves the tree dirty and "
-                              "`git commit -a` sweeps it in; untrack it yourself: "
+                              "`git commit -a` sweeps it in; untrack it yourself, from the project root: "
                               "`git --literal-pathspecs rm --cached -- %s` and commit (the file stays on disk)"
                               % (shown, shlex.quote(path)))
         else:
             plan.hints.append("%s: tracked by git but ignored by an ignore rule — the rule has no "
                               "effect on a tracked file, so every run leaves the tree dirty and "
                               "`git commit -a` sweeps it in; this name cannot be typed safely, so "
-                              "untrack it with `%s`, which untracks EVERY tracked, ignored file "
+                              "untrack it, from the project root, with `%s`, which untracks EVERY tracked, ignored file "
                               "under .ai/state, not only this one, and commit (the files stay on disk)"
                               % (shown, all_cmd))
     if len(names) > TRACKED_IGNORED_SHOWN:
         plan.hints.append(".ai/state: %d more file(s) tracked by git but ignored by an ignore rule, "
                           "not listed; untrack ALL tracked, ignored files under .ai/state "
-                          "(the ones listed above too) with `%s` and commit (the files stay on disk)"
+                          "(the ones listed above too), from the project root, with `%s` and commit (the files stay on disk)"
                           % (len(names) - TRACKED_IGNORED_SHOWN, all_cmd))
 
 
@@ -1391,6 +1401,41 @@ def nested_tree(root, rel_dir):
     return None
 
 
+def unwalked_dir(root, rel_dir):
+    """Why the take-back walk (rendered_rules) never enters `rel_dir`, or None:
+    a RULES_SKIP name on the way, or a symlinked directory on the way."""
+    here = root
+    for part in (p for p in rel_dir.split("/") if p not in ("", ".")):
+        here = os.path.join(here, part)
+        if part.casefold() in RULES_SKIP_FOLDED:
+            return "%s is under a directory the take-back never walks (%s)" % (rel_dir, part)
+        if os.path.islink(here):
+            return "%s is a symlink, which the take-back never follows" % os.path.relpath(here, root).replace(os.sep, "/")
+    return None
+
+
+def _frozen_block(plan, target, slug):
+    """True when `target` is a readable regular file inside the project, holding a
+    block for `slug`, at a place the take-back walk (rendered_rules) never enters: a
+    RULES_SKIP name or a nested git tree on its real path. A symlink that leads inside
+    the walked part of the project is removed by the same run; one that leads outside
+    the project, a directory, a FIFO or an unreadable file is not read at all."""
+    full = os.path.join(plan.root, target)
+    try:
+        real = os.path.realpath(full)
+        base = os.path.realpath(plan.root)
+        if os.path.commonpath([real, base]) != base or not os.path.isfile(real):
+            return False
+        rel_dir = os.path.relpath(os.path.dirname(real), base).replace(os.sep, "/")
+        parts = [p for p in rel_dir.split("/") if p not in ("", ".")]
+        if not (any(p in RULES_SKIP for p in parts) or nested_tree(base, rel_dir) is not None):
+            return False
+        held = plan.read(target)
+    except (OSError, ValueError):
+        return False
+    return held is not None and slug in render_instructions.rule_slugs_in(held.decode("utf-8", "replace"))
+
+
 def rules_update(plan, runtimes, planned=None):
     """Render `.ai/rules/<slug>.md` into the instruction file of every directory
     it names, and take back what a rule no longer asks for. The text around a
@@ -1426,6 +1471,14 @@ def rules_update(plan, runtimes, planned=None):
             # block written there could never be taken back again.
             plan.hints.append("%s: %s is a nested git tree (worktree, repository or submodule)"
                               " — rule %s is not rendered there" % (target, tree, item["slug"]))
+            continue
+        skip = unwalked_dir(plan.root, os.path.dirname(target)) if item["kind"] == "block" else None
+        if skip is not None:
+            hint = "%s: %s — rule %s is not rendered there" % (target, skip, item["slug"])
+            if _frozen_block(plan, target, item["slug"]):
+                hint += ("; an earlier rendering of it is still there, the take-back never walks there:"
+                         " remove that block by hand")
+            plan.hints.append(hint)
             continue
         current = plan.read(target)
         if item["kind"] == "doc":

@@ -53,7 +53,10 @@ class Project:
         os.makedirs(os.path.join(self.root, ".ai", "policies"))
         red, e2e = os.path.join(self.flags, "red"), os.path.join(self.flags, "e2ered")
         # flags/touch makes the suite edit a tracked file while it runs.
-        touch = "test -e %s && echo touched >> src/moved.txt; " % os.path.join(self.flags, "touch")
+        touch = ("test -e %s && echo touched >> src/moved.txt; test -e %s && echo x > cov.dat; "
+                 "test -e %s && echo x > \"$(printf \"w\\nFAKE ok\\033[0mz.dat\")\"; "
+                 % (os.path.join(self.flags, "touch"), os.path.join(self.flags, "untracked"),
+                    os.path.join(self.flags, "weird")))
         self.write(".ai/policies/testing.md",
                    "verify_command: sh -c '%stest ! -e %s' {files}\nstep_test_command: sh -c 'test ! -e %s' {files}\n"
                    "e2e_command: test ! -e %s\n" % (touch, red, os.path.join(self.flags, "stepred"), e2e))
@@ -858,6 +861,25 @@ class TestReviewPass1(Base):
         self.assertIn("tree moved during the run", out)
         self.assertIsNone(self.p.state()["verify"]["runs"][0]["tree"])
         self.assertEqual(self.p.run("close").returncode, 2)
+
+    def test_a_moved_tree_names_the_untracked_file_the_suite_wrote(self):
+        self.p.start()
+        self.p.flag("untracked")
+        out = self.p.ok("verify", "--scope", "all").stdout
+        self.assertIn("tree moved during the run", out)
+        self.assertIn("cov.dat (untracked)", out)
+        self.assertIn(".gitignore", out)
+        self.assertIsNone(self.p.state()["verify"]["runs"][0]["tree"])
+
+    def test_a_moved_tree_escapes_a_path_name_with_a_newline_or_an_escape(self):
+        # A name from `git diff -z` is data: a newline or ESC in it must not forge a verify line.
+        self.p.start()
+        self.p.flag("weird")
+        out = self.p.ok("verify", "--scope", "all").stdout
+        self.assertIn("tree moved during the run", out)
+        self.assertIn("w\\nFAKE ok\\x1b[0mz.dat (untracked)", out)
+        self.assertNotIn("\x1b", out)
+        self.assertNotIn("\nFAKE ok", out)
 
     def test_a_red_under_claude_is_never_waived(self):
         # Review M4: only a Codex-only red is a finding.
@@ -1900,7 +1922,7 @@ class TestWP5(Ported):
         done = self.s("claude", "handoff", "--to", "codex", "--why", "claude quota")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertRegex(done.stdout, r"Handed .* to codex \(manual\)")
-        self.assertRegex(done.stdout, r"headless \(not run\): cd .* && codex exec '/ai-task'")
+        self.assertRegex(done.stdout, r"headless \(not run\): cd .* && codex exec '/rr-build'")
         s = self.p.state()
         self.assertEqual((s["owner_runtime"], s["resume_point"]["runtime"], s["handoff"]["pending_to"]),
                          ("codex", "codex", "codex"))

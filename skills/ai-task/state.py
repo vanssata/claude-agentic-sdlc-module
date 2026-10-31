@@ -1919,7 +1919,7 @@ def write_handoff(root, state, reason):
     return lines
 
 
-RESUME_COMMAND = {"claude": "claude -p '/ai-task'", "codex": "codex exec '/ai-task'"}
+RESUME_COMMAND = {"claude": "claude -p '/rr-build'", "codex": "codex exec '/rr-build'"}
 
 
 def handoff_to(args, root):
@@ -3748,6 +3748,33 @@ def documents_cover(root, state, policy, tree):
             {"since_run": g["n"], "since_tree": g["tree"], "run": s["n"], "paths": paths[:20], "tests": tests})
 
 
+def moved_detail(root, before, after, limit=5):
+    """Lines naming what changed between the two snapshots of a run that moved the tree,
+    and saying so when the new paths are untracked (a suite that writes a cache or a
+    coverage file moves the tree on every run). [] when the paths cannot be measured."""
+    diff = safe_sensor(sensors.diff_files, root, before, after)
+    if not diff:
+        return []
+    paths = [d["path"] for d in diff]
+    tracked = set()
+    code, out = safe_sensor(sensors.git, root, ["ls-files", "-z", "--"] + paths) or (1, "")
+    if code == 0:
+        tracked = set(f for f in out.split("\0") if f)
+    new = [d["path"] for d in diff if d["status"] == "A" and d["path"] not in tracked]
+    def esc(path):
+        # A name from `git diff -z` is data: a newline or ESC in it would forge a verify line.
+        return "".join(c if c.isprintable() else repr(c)[1:-1] for c in path)
+    shown = ", ".join("%s (%s)" % (esc(d["path"]), "untracked" if d["path"] in new else
+                                   {"A": "added", "D": "deleted", "T": "type changed"}.get(d["status"], "changed"))
+                      for d in diff[:limit])
+    more = " and %d more" % (len(diff) - limit) if len(diff) > limit else ""
+    lines = ["changed during the run: %s%s" % (shown, more)]
+    if new:
+        lines.append("untracked files written by the suite move the tree on every run: add them to "
+                     ".gitignore or stop the suite writing them")
+    return lines
+
+
 def run_v7(root, state, scope, args, tcfg):
     """One scope's command, to the end, logged under .ai/state/logs/; returns the run."""
     command = safe_sensor(sensors.command_for, root, scope) or ""
@@ -3783,6 +3810,8 @@ def run_v7(root, state, scope, args, tcfg):
         state["verify"]["e2e_tree"] = run["tree"]
     if run["tree_moved"]:
         print("tree moved during the run: run %d stands for no tree — run it again on a still tree" % n)
+        for line in moved_detail(root, before, after):
+            print(line)
     emit(root, state, "verify_run", "%s run %d: exit %s" % (scope, n, run["exit"]),
          {k: run[k] for k in ("n", "scope", "exit", "tree", "log", "expected_fail")})
     if full_suite(run) and run["exit"] is not None and run["tree"]:
@@ -4556,7 +4585,7 @@ def schema_line(root):
     numbers = [int(n[:4]) for n in names if re.match(r"\d{4}_", n)]
     plugin = str(max(numbers)) if numbers else "?"
     behind = project.isdigit() and plugin.isdigit() and int(project) < int(plugin)
-    return "schema: project %s · plugin %s%s" % (project, plugin, " — behind: run /project-update" if behind else "")
+    return "schema: project %s · plugin %s%s" % (project, plugin, " — behind: run /rr-setup --update" if behind else "")
 
 
 def cmd_status(args, root):

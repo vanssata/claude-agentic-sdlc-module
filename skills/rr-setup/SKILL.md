@@ -195,7 +195,9 @@ overwrite. A foreign tool's structure, below, can be present as well.
 
 Every command is `$UPDATE --adopt …`, with `--mode coexist` on each when the team
 still uses the other tool (router rows only, nothing moves). Exit 5
-`ADOPT_REFUSED`: show the first line and stop. Exit 4 `ADOPT_INCOMPLETE`:
+`ADOPT_REFUSED`: show the first line and stop. Exit 2: the routing table or a
+migration could not be read (reason on stderr, prefixed `project-update:`),
+nothing written. Exit 4 `ADOPT_INCOMPLETE`:
 `unmapped` files and a `split?` are yours to settle, then dry-run again; a
 `conflict` or a check `FAIL` left after that is the human's — never edit a
 destination or a source to make it pass.

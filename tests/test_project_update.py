@@ -1746,6 +1746,26 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertFalse(has("tracked by git but ignored", out), "outside a git work tree there is no hint\n" + out)
         self.assertNotIn("Traceback", out, "and no crash")
 
+    def test_tracked_ignored_hints_say_to_run_the_command_from_the_project_root(self):
+        """R-tracked-ignored-untrack-commands-are-cwd: the paths in the printed commands are project-relative,
+        so every hint form (one file, the NUL-safe one, the count of the rest) says where to run them"""
+        d = self.current_project("tracked-ignored-cwd")
+        self.tracked_git(d, "init", "-q")
+        names = [".ai/state/f%02d.jsonl" % i for i in range(11)] + [".ai/state/n\nl.jsonl"]
+        for rel in names:
+            put(os.path.join(d, rel), '{"v":1}\n')
+            self.tracked_git(d, "add", "-f", "--", rel)
+        self.tracked_git(d, "commit", "-q", "-m", "track")
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        lines = [x for x in out.splitlines() if "tracked by git but ignored" in x]
+        self.assertEqual(len(lines), 11, "ten per-file hints and the count line\n" + out)
+        self.assertTrue(any("more file(s)" in x for x in lines), out)
+        for line in lines:
+            with self.subTest(line=line[:60]):
+                self.assertIn("from the project root", line)
+                self.assertLess(line.index("from the project root"), re.search(r"`git (--literal|ls-files)", line).start(),
+                                "before the command")
+
     def test_tracked_ignored_hint_quotes_the_path(self):
         """M1: the untrack command quotes a name with a space; a name with a control character is shown
         escaped and gets the NUL-safe command instead, so it neither forges a line nor prints a raw name;
@@ -2107,6 +2127,47 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertNotIn("rendered from a different weight.json", out, out)
         self.assertNotIn("state.py weight --mirror", out, out)
 
+    def test_a_missing_weight_mirror_is_created_from_the_template_not_rendered(self):
+        """weight.md: absent while weight.json is the project's own, --apply creates it as the template ships it (text path)"""
+        d = self.mirrored_project("weight-mirror-missing")
+        wm = os.path.join(d, ".ai", "policies", "weight.md")
+        os.remove(wm)
+        rc, out = self.upd(d, "--apply", merge=True)
+        self.assertEqual(0, rc, out)
+        self.assertNotIn("Traceback", out, out)
+        self.assertNotIn("rendered from weight.json", out, out)
+        self.assertEqual(text_of(os.path.join(TEMPLATES, ".ai", "policies", "weight.md")), text_of(wm),
+                         "the missing mirror is the template's, not the render of the project's JSON")
+
+    def test_a_symlinked_weight_json_leaves_the_mirror_to_the_text_merge(self):
+        """weight.md: a weight.json that is a symlink is not read for the mirror (disk is None): text merge, no stale hint"""
+        d = self.mirrored_project("weight-mirror-symlink")
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        real = os.path.join(d, "weight-real.json")
+        shutil.move(wj, real)
+        os.symlink(real, wj)
+        rc, out = self.upd(d, merge=True)
+        self.assertEqual(0, rc, out)
+        # the text merge's outcome: the mirror names the project's JSON, the template's names its own
+        self.assertTrue(has(r"conflict +\.ai/policies/weight\.md ", out), "text merge: a conflict, not a render\n" + out)
+        self.assertNotIn("Traceback", out, out)
+        self.assertNotIn("rendered from weight.json", out, out)
+        self.assertNotIn("state.py weight --mirror", out, "no stale hint without a readable JSON\n" + out)
+        self.assertNotIn("not rendered from weight.json", out, "the renderer was never tried\n" + out)
+
+    def test_an_absent_weight_json_leaves_the_mirror_to_the_text_merge(self):
+        """weight.md: no weight.json on disk (disk is None): the mirror is not rendered and draws no stale hint"""
+        d = self.mirrored_project("weight-mirror-no-json")
+        os.remove(os.path.join(d, ".ai", "policies", "weight.json"))
+        rc, out = self.upd(d, merge=True)
+        self.assertEqual(0, rc, out)
+        self.assertTrue(has(r"create +\.ai/policies/weight\.json", out), "the JSON comes back from the template\n" + out)
+        self.assertTrue(has(r"conflict +\.ai/policies/weight\.md ", out), "text merge: a conflict, not a render\n" + out)
+        self.assertNotIn("Traceback", out, out)
+        self.assertNotIn("rendered from weight.json", out, out)
+        self.assertNotIn("state.py weight --mirror", out, out)
+        self.assertNotIn("not rendered from weight.json", out, out)
+
     def test_a_policy_nested_past_the_parser_limit_makes_a_migrations_edit_json_a_conflict(self):
         """L2: edit_json's json.loads meets a RecursionError (200000 levels; the synthetic 0003 edits the
         table): a conflict on the path, the schema stays unwritten, no crash"""
@@ -2386,6 +2447,129 @@ sys.exit(update.main())
         self.assertEqual(self.upd(d, "--check")[0], 0)
         self.assertEqual(tree_sum(d), before, "a dry run writes nothing")
 
+    def test_cleanup_skips_a_symlinked_report_dir_with_a_hint_and_apply_does_not_abort(self):
+        """R-cleanup-proposes-a-symlinked-ai-reports: a .ai/reports/<id> that is a symlink is a hint, not a
+        deletion proposal, so --apply --confirm-cleanup neither aborts nor deletes through it"""
+        d = self.current_project("cleanup-symlinked-report")
+        self.task_dir(d, "T-2026-01-02-001", [(30, "task_started", {}), (29, "task_closed", {"abandoned": True})])
+        self.task_dir(d, "T-2026-01-03-001", [(30, "task_started", {}), (29, "task_closed", {"abandoned": True})])
+        real = os.path.join(d, "elsewhere")
+        os.rename(os.path.join(d, ".ai", "reports", "T-2026-01-02-001"), real)
+        os.symlink(real, os.path.join(d, ".ai", "reports", "T-2026-01-02-001"))
+        _, out = self.upd(d)
+        self.assertFalse(has(r"delete\?? +\.ai/reports/T-2026-01-02-001", out), "no proposal for it\n" + out)
+        self.assertTrue(has(r"^  hint +.*T-2026-01-02-001.*is a symlink", out), "a hint says why\n" + out)
+        self.assertTrue(has(r"delete\?   \.ai/reports/T-2026-01-03-001/", out), "the safe task is still proposed\n" + out)
+        rc, out = self.upd(d, "--apply", "--confirm-cleanup", "tester", AI_UNATTENDED="1", merge=True)
+        self.assertEqual(rc, 0, "--apply does not abort\n" + out)
+        self.assertTrue(os.path.isfile(os.path.join(real, "task.md")), "nothing deleted through the symlink")
+        self.assertFalse(os.path.exists(os.path.join(d, ".ai", "reports", "T-2026-01-03-001")), "the safe one is")
+
+    def test_the_rule_writer_skips_what_the_take_back_never_walks(self):
+        """R-the-rule-writer-still-reaches-directories: a dirs: entry under a RULES_SKIP name or through a
+        symlinked directory is not written (a block there could never be taken back), and is a hint"""
+        d = self.current_project("rules-writer-skip", "--runtime", "claude")
+        os.makedirs(os.path.join(d, "node_modules", "pkg"))
+        os.makedirs(os.path.join(d, "real", "sub"))
+        os.makedirs(os.path.join(d, "ok"))
+        os.symlink(os.path.join(d, "real"), os.path.join(d, "linked"))
+        put(os.path.join(d, ".ai", "rules", "skip.md"),
+            "---\ndirs: [node_modules/pkg, linked, linked/sub, ok]\n---\n# Skip rules\n- text\n")
+        _, out = self.upd(d, merge=True)
+        self.assertFalse(has(r"^  (create|update) +(node_modules|linked)/", out), "no write there\n" + out)
+        self.assertTrue(has(r"^  hint +node_modules/pkg/CLAUDE.md: .*not rendered there", out), out)
+        self.assertTrue(has(r"^  hint +linked/CLAUDE.md: .*not rendered there", out), out)
+        self.assertTrue(has(r"^  hint +linked/sub/CLAUDE.md: .*not rendered there", out), out)
+        self.assertTrue(has(r"^  create +ok/CLAUDE.md ", out), "the control target renders\n" + out)
+        self.assertEqual(self.upd(d, "--apply")[0], 0)
+        for rel in ("node_modules/pkg", "real", "real/sub"):
+            self.assertFalse(os.path.lexists(os.path.join(d, rel, "CLAUDE.md")), rel)
+        self.assertTrue(os.path.isfile(os.path.join(d, "ok", "CLAUDE.md")))
+
+    def test_a_block_an_older_plugin_wrote_in_a_skipped_dir_is_named_in_the_hint(self):
+        """R-rule-blocks-written-before-under-a-now-s-b44b: a rendered block already in an unwalked
+        directory stays frozen (the take-back never walks there); the hint says to remove it by hand"""
+        d = self.current_project("rules-writer-skip-old", "--runtime", "claude")
+        os.makedirs(os.path.join(d, "ok"))
+        os.makedirs(os.path.join(d, "node_modules", "pkg"))
+        os.makedirs(os.path.join(d, "node_modules", "bare"))
+        rule = os.path.join(d, ".ai", "rules", "skip.md")
+        put(rule, "---\ndirs: [ok]\n---\n# Skip rules\n- text\n")
+        self.assertEqual(self.upd(d, "--apply", merge=True)[0], 0)
+        shutil.copy(os.path.join(d, "ok", "CLAUDE.md"), os.path.join(d, "node_modules", "pkg", "CLAUDE.md"))
+        frozen = tree_sum(os.path.join(d, "node_modules"))
+        put(rule, "---\ndirs: [node_modules/pkg, node_modules/bare]\n---\n# Skip rules\n- text\n")
+        rc, out = self.upd(d, "--apply", merge=True)
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(has(r"^  hint +node_modules/pkg/CLAUDE.md: .*not rendered there.*earlier rendering.*by hand", out), out)
+        self.assertFalse(has(r"^  hint +node_modules/bare/CLAUDE.md: .*earlier rendering", out),
+                         "no block there, no claim of one\n" + out)
+        self.assertTrue(has(r"^  hint +node_modules/bare/CLAUDE.md: .*not rendered there", out), out)
+        self.assertEqual(tree_sum(os.path.join(d, "node_modules")), frozen, "nothing is deleted or rewritten there")
+
+    def test_the_rules_skip_comparison_ignores_case(self):
+        """R-rules-skip-comparison-is-case-sensitive-a50b: dirs: [Vendor/x] with vendor/ on disk (a
+        case-insensitive filesystem) is skipped by the writer as the take-back walk prunes it"""
+        d = self.current_project("rules-writer-skip-case", "--runtime", "claude")
+        os.makedirs(os.path.join(d, "vendor", "x"))
+        os.makedirs(os.path.join(d, "ok"))
+        put(os.path.join(d, ".ai", "rules", "skip.md"),
+            "---\ndirs: [Vendor/x, PODS/y, ok]\n---\n# Skip rules\n- text\n")
+        rc, out = self.upd(d, "--apply", merge=True)
+        self.assertEqual(rc, 0, out)
+        self.assertFalse(has(r"^  (create|update) +(Vendor|PODS)/", out), "no write there\n" + out)
+        self.assertTrue(has(r"^  hint +Vendor/x/CLAUDE.md: .*not rendered there", out), out)
+        self.assertTrue(has(r"^  hint +PODS/y/CLAUDE.md: .*not rendered there", out), out)
+        self.assertTrue(has(r"^  create +ok/CLAUDE.md ", out), "the control target renders\n" + out)
+        for rel in ("vendor/x", "Vendor/x", "PODS/y"):
+            self.assertFalse(os.path.lexists(os.path.join(d, rel, "CLAUDE.md")), rel)
+
+    def test_the_take_back_walk_prunes_by_exact_name(self):
+        """a block an older plugin wrote under Vendor/x (a RULES_SKIP name only by case) is walked
+        and taken back as before: the casefold belongs to the writer, not to the walk"""
+        d = self.current_project("rules-walk-case", "--runtime", "claude")
+        os.makedirs(os.path.join(d, "ok"))
+        put(os.path.join(d, ".ai", "rules", "skip.md"), "---\ndirs: [ok]\n---\n# Skip rules\n- text\n")
+        self.assertEqual(self.upd(d, "--apply", merge=True)[0], 0)
+        os.makedirs(os.path.join(d, "Vendor", "x"))
+        shutil.copy(os.path.join(d, "ok", "CLAUDE.md"), os.path.join(d, "Vendor", "x", "CLAUDE.md"))
+        rc, out = self.upd(d, merge=True)
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(has(r"^  update +Vendor/x/CLAUDE.md .*rule block skip removed", out), out)
+
+    def test_the_hint_probe_survives_a_target_that_is_not_a_file(self):
+        """a skipped target whose CLAUDE.md is a directory or a FIFO gives the plain hint, no traceback"""
+        d = self.current_project("rules-skip-notfile", "--runtime", "claude")
+        os.makedirs(os.path.join(d, "node_modules", "dirp", "CLAUDE.md"))
+        os.makedirs(os.path.join(d, "node_modules", "fifo"))
+        os.mkfifo(os.path.join(d, "node_modules", "fifo", "CLAUDE.md"))
+        put(os.path.join(d, ".ai", "rules", "skip.md"),
+            "---\ndirs: [node_modules/dirp, node_modules/fifo]\n---\n# Skip rules\n- text\n")
+        rc, out = self.upd(d, merge=True)
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("Traceback", out)
+        self.assertTrue(has(r"^  hint +node_modules/dirp/CLAUDE.md: .*not rendered there", out), out)
+        self.assertTrue(has(r"^  hint +node_modules/fifo/CLAUDE.md: .*not rendered there", out), out)
+        self.assertFalse(has(r"earlier rendering", out), out)
+
+    def test_a_symlink_into_the_walked_project_adds_no_by_hand_clause(self):
+        """linked -> real/ inside the project: the take-back walks real/ and removes the old block in
+        the same run, so the hint does not ask for a removal by hand"""
+        d = self.current_project("rules-skip-link-in", "--runtime", "claude")
+        os.makedirs(os.path.join(d, "ok"))
+        os.makedirs(os.path.join(d, "real"))
+        rule = os.path.join(d, ".ai", "rules", "skip.md")
+        put(rule, "---\ndirs: [ok]\n---\n# Skip rules\n- text\n")
+        self.assertEqual(self.upd(d, "--apply", merge=True)[0], 0)
+        shutil.copy(os.path.join(d, "ok", "CLAUDE.md"), os.path.join(d, "real", "CLAUDE.md"))
+        os.symlink(os.path.join(d, "real"), os.path.join(d, "linked"))
+        put(rule, "---\ndirs: [linked]\n---\n# Skip rules\n- text\n")
+        rc, out = self.upd(d, merge=True)
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(has(r"^  hint +linked/CLAUDE.md: .*not rendered there", out), out)
+        self.assertFalse(has(r"by hand", out), out)
+        self.assertTrue(has(r"^  update +real/CLAUDE.md .*rule block skip removed", out), out)
+
     def test_cleanup_malformed_now_and_flight(self):
         """a malformed RISKRAILS_NOW is a usage error, not a traceback; the task named by the legacy
         current.json is in flight"""
@@ -2506,7 +2690,7 @@ print("DELETED")
         """#70 (n): unsafe_target's check is repeated right before the delete"""
         d = self.cleanup_project("cleanup-swap")
         done = subprocess.run([sys.executable, "-I", "-c", self.SWAP, ROOT, d], env=self.env,
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, check=False)
         self.assertTrue(done.stdout.startswith("ABORT") and "is a symlink" in done.stdout,
                         done.stdout + done.stderr)
         self.assertTrue(os.path.isfile(os.path.join(d, ".ai", "reports", "moved", "task.md")), "nothing deleted")

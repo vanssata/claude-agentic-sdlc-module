@@ -1086,6 +1086,178 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         del tmp
         self.state("{}\n")
 
+    def test_18c_tripwire_residuals_after_m2(self):
+        # R-interpreter-tripwire-residuals-after-m2-2bd5: four sub-items of the
+        # control-file tripwire (INTERP_RE, WRITE_CALL_RE, INPLACE_RE).
+        dh = self.decide_home
+        # 1. php -r is php's -c/-e; for perl and ruby -r is a require, not code.
+        for c in [
+            'php -r "fopen(\'.ai/state/current.json\', \'w\');"',
+            'php -n -r "unlink(\'.ai/state/current.json\');"',
+        ]:
+            dh("a php -r write is denied: " + c, "deny", c)
+        for c in [
+            'ruby -r json x.rb "fopen(\'.ai/state/current.json\', \'w\');"',
+            'perl -r x.pl "fopen(\'.ai/state/current.json\', \'w\');"',
+            'php -r "echo file_get_contents(\'.ai/state/current.json\');"',
+        ]:
+            dh("not a php -r write: " + c, "allow", c)
+        # 2. node writeSync/writevSync and php fprintf, a handle written with no mode in sight.
+        for c in [
+            'node -e "const fs=require(\'fs\'); fs.writeSync(Number(process.argv[1]), \'x\')" 3 .ai/state/current.json',
+            'node -e "const fs=require(\'fs\'); fs.writevSync(Number(process.argv[1]), [Buffer.from(\'x\')])" 3 .ai/state/current.json',
+            'php -r "$f=fopen($argv[1],$argv[2]); fprintf($f, \'x\');" .ai/state/current.json w',
+            'php -r "$f=fopen($argv[1],$argv[2]); vfprintf($f, \'%s\', [\'x\']);" .ai/state/current.json w',
+            'node -e "const fs=require(\'fs\'); fs.writeSync(fs.openSync(process.argv[1], process.argv[2]), \'x\')" .ai/state/current.json w',
+        ]:
+            dh("a handle write is denied: " + c, "deny", c)
+        for c in [
+            'node -e "const fs=require(\'fs\'); fs.writeSync(1, fs.readFileSync(\'.ai/state/current.json\'))"',
+            'node -e "const fs=require(\'fs\'); fs.writeSync(2, fs.readFileSync(\'.ai/state/current.json\'))"',
+            'node -e "const fs=require(\'fs\'); fs.writeSync(process.stdout.fd, fs.readFileSync(\'.ai/state/current.json\'))"',
+            'node -e "const fs=require(\'fs\'); fs.writevSync(process.stderr.fd, [fs.readFileSync(\'.ai/state/current.json\')])"',
+            'php -r \'fprintf(STDOUT, "%s", file_get_contents(".ai/state/current.json"));\'',
+            'php -r \'vfprintf(STDERR, "%s", [file_get_contents(".ai/state/current.json")]);\'',
+        ]:
+            dh("a write to stdout or stderr is a read: " + c, "allow", c)
+        # 3. perl and ruby are the INPLACE_RE head only as a command word.
+        for c in [
+            "grep perl -i .ai/reports/T-1/notes.md",
+            "echo perl -i .ai/reports/T-1/notes.md",
+            "git log --grep ruby -i .ai/reports/T-1/notes.md",
+        ]:
+            dh("perl or ruby as an argument is not an in-place edit: " + c, "allow", c)
+        for c in [
+            "ls; perl -i -pe 's/a/b/' .ai/reports/T-1/notes.md",
+            "cd x && ruby -i -pe 'sub(/a/, \"b\")' .ai/reports/T-1/notes.md",
+            "FOO=1 perl -i -pe 's/a/b/' .ai/reports/T-1/notes.md",
+            "env FOO=1 perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md",
+            "sudo -u x perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md",
+            "find .ai/reports/ -name '*.md' -exec perl -pi -e 's/a/b/' {} +",
+            "ls .ai/reports/ | xargs -n1 perl -pi -e 's/a/b/'",
+            "if true; then perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md; fi",
+            "sh -c 'perl -pi -e s/a/b/ .ai/reports/T-1/notes.md'",
+            "(perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md)",
+            "echo $(perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md)",
+            "ls\nperl -pi -e 's/a/b/' .ai/reports/T-1/notes.md",
+        ]:
+            dh("a command-word perl or ruby -i is denied: " + c, "deny", c)
+        # 4. -i after the quoted code of -e.
+        for c in [
+            "perl -e 's/a/b/ for @ARGV' -i .ai/reports/T-1/notes.md",
+            "perl -ne 'print' -i.bak .ai/reports/T-1/notes.md",
+            "perl -e 'print 1' -pi .ai/reports/T-1/notes.md",
+            "ruby -e 'sub(/a/, \"b\")' -i .ai/reports/T-1/notes.md",
+            "perl -E \"say 1\" -i .ai/reports/T-1/notes.md",
+        ]:
+            dh("-i after the quoted code is denied: " + c, "deny", c)
+        for c in [
+            "perl -e 'print \"-i\"' .ai/reports/T-1/notes.md",
+            "perl -e 'print 1' -w .ai/reports/T-1/notes.md",
+        ]:
+            dh("a quoted -i or no -i is a read: " + c, "allow", c)
+
+    def test_18e_inplace_text_tools_and_wrappers(self):
+        dh = self.decide_home
+        for c in [
+            'grep -rn "perl -i" .ai/reports/',
+            "grep -rn 'perl -pi' .ai/reports/",
+            'rg "ruby -i" .ai/reports/T-1/notes.md',
+            'git log -S "perl -i" -- .ai/reports/',
+            'echo "perl -pi -e s/x/y/ was refused"; cat .ai/reports/T-1/notes.md',
+            'printf "%s" "ruby -pi" ; ls .ai/reports/',
+            'git commit -m "perl -pi note" -- .ai/reports/T-1/notes.md',
+            "find .ai/reports/ -name '*.md' | xargs grep -l \"perl -i\"",
+            'find .ai/reports/ -name "*.md" -exec grep -l "perl -i" {} +',
+            'git -C . grep -n "perl -i" -- .ai/reports/',
+            "git -c a=b log 'perl -i' -- .ai/reports/",
+            '/usr/bin/grep -rn "perl -i" .ai/reports/',
+        ]:
+            dh("a text tool naming perl or ruby is allowed: " + c, "allow", c)
+        n = " .ai/reports/T-1/notes.md"
+        for c in [
+            "bash <<EOF\nperl -pi -e s/a/b/" + n + "\nEOF",
+            "sh -s <<EOF\nperl -pi -e s/a/b/" + n + "\nEOF",
+            "ssh localhost <<EOF\nperl -pi -e s/a/b/" + n + "\nEOF",
+            "cat <<'EOF' | sh\nperl -pi -e s/a/b/" + n + "\nEOF",
+            "echo perl -pi -e s/a/b/" + n + " | sh",
+            "echo perl -pi -e s/a/b/" + n + " | bash",
+            "printf '%s\\n' perl -pi -e s/a/b/" + n + " | bash",
+            "echo perl -pi -e s/a/b/" + n + " | xargs -I{} sh -c {}",
+            "./grep perl -pi -e s/a/b/" + n,
+            "GIT_PAGER='perl -pi -e s/a/b/" + n + "' git log",
+            "git grep -O'perl -pi -e s/a/b/' x -- .ai/reports/",
+            "git --config-env=core.pager=X log 'perl -i'" + n,
+            "find . -exec grep x {} ';' -exec perl -pi -e s/a/b/ {} +" + n,
+        ]:
+            dh("a text tool whose output runs, or a fake tool, is denied: " + c, "deny", c)
+        for c in [
+            "parallel perl -pi -e 's/a/b/' ::: .ai/reports/T-1/notes.md",
+            "ionice perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md",
+            "doas perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md",
+            "chrt 5 perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md",
+            "unbuffer perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md",
+            "watch perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md",
+            "flock /tmp/l perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md",
+            "strace -o /dev/null perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md",
+            "case x in x) perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md;; esac",
+            "echo ok; sh -c 'perl -pi -e s/a/b/ .ai/reports/T-1/notes.md'",
+            "bash -c \"ruby -pi -e 1 .ai/reports/T-1/notes.md\"",
+            "eval \"perl -pi -e s/a/b/ .ai/reports/T-1/notes.md\"",
+            "echo $(perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md)",
+            "echo `perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md`",
+            "echo \"$(perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md)\"",
+            "grep x y; perl -pi -e 's/a/b/' .ai/reports/T-1/notes.md",
+        ]:
+            dh("a wrapped or quoted-run perl or ruby -i is denied: " + c, "deny", c)
+        notes = " .ai/reports/T-1/notes.md"
+        self.timed("4 KB of 'perl ' after a quote is allowed", "allow",
+                   self.b("echo '" + "perl " * 780 + "-i'" + notes), 500)
+        self.timed("4 KB of wrapper words then perl -pi is denied", "deny",
+                   self.b("ionice " + "a " * 1500 + "perl -pi -e x" + notes), 500)
+        self.timed("4 KB of quotes and blanks before perl -i is denied", "deny",
+                   self.b("sh -c " + "' " * 1000 + "perl -pi -e x" + notes), 500)
+        self.timed("200 text-tool segments then a perl -i is denied", "deny",
+                   self.b("grep 'perl -i' x; " * 200 + "perl -pi -e x" + notes), 1500)
+
+    def test_18f_inplace_h1_m3_timed(self):
+        n = " .ai/reports/T-1/notes.md"
+        self.timed("300 heredocs then perl -pi is denied", "deny",
+                   self.b("cat <<E\nx\nE\n" * 300 + "grep 'perl -i' x; perl -pi -e x" + n), 1500)
+        self.timed("290 pipes into sh then echo perl -pi is denied", "deny",
+                   self.b("echo a | " * 290 + "echo perl -pi -e x" + n + " | sh"), 1500)
+        self.timed("100 find -exec grep segments, all text tools, are allowed", "allow",
+                   self.b("find . -exec grep 'perl -i' {} +; " * 100 + "ls" + n), 1500)
+        self.timed("4 KB of -exec words then perl is denied", "deny",
+                   self.b("find . " + "-exec grep x {} ';' " * 150 + "-exec perl -pi {} +" + n), 1500)
+
+    def test_18d_tripwire_residuals_timed(self):
+        # Each changed regex, on adversarial input at 4 KB (ere_match runs in-process
+        # up to 4096 characters); every case also pins the decision the fix changes.
+        notes = " .ai/reports/T-1/notes.md"
+        self.timed("php -r behind 1300 options is denied", "deny",
+                   self.b("php" + " -n" * 1300 + ' -r "unlink(\'.ai/state/current.json\');"'), 500)
+        self.timed("ruby -r behind 1300 options is allowed", "allow",
+                   self.b("ruby" + " -n" * 1300 + ' -r "unlink(\'.ai/state/current.json\');"'), 500)
+        self.timed("4 KB of 'fprintf ' words and a state path is allowed", "allow",
+                   self.b("node -e 'x' " + "fprintf " * 480 + " .ai/state/current.json"), 500)
+        self.timed("4 KB of 'writeSync ' words then writeSync( is denied", "deny",
+                   self.b("node -e 'x' " + "writeSync " * 400 + "fs.writeSync(fd, 2) .ai/state/current.json"), 500)
+        self.timed("4 KB of 'perl ' words before -i is allowed", "allow",
+                   self.b("grep " + "perl " * 780 + "-i" + notes), 500)
+        self.timed("4 KB of 'env a' wrapper words and no perl is allowed", "allow",
+                   self.b("env " + "a " * 1500 + "x -i" + notes), 500)
+        self.timed("300 ';env a a a a' segments are allowed", "allow",
+                   self.b("env a a a a; " * 300 + "grep perl -i" + notes), 500)
+        self.timed("4 KB of -e 'x' pairs ending in -i is denied", "deny",
+                   self.b("perl" + " -e 'x'" * 580 + " -i" + notes), 500)
+        self.timed("4 KB of -e 'x' pairs ending in a read is allowed", "allow",
+                   self.b("perl" + " -e 'x'" * 580 + " -w" + notes), 500)
+        self.timed("4 KB of -e ' unterminated quotes is allowed", "allow",
+                   self.b("perl" + " -e '" * 780 + notes), 500)
+        self.timed("4 KB of wrapper words and a perl -i after them is denied", "deny",
+                   self.b("env " + "a " * 1500 + "perl -pi -e x" + notes), 500)
+
     def test_19_project_without_ai_every_guard_is_inert(self):
         bare = self.tmp + "/bare"
         os.makedirs(bare)

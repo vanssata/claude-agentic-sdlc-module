@@ -345,6 +345,41 @@ class InstallDryRun(ScratchCase):
         rc, out = run("--plan", "max", "--fable", "maybe", "--dry-run", CLAUDE_DIR=probe)
         self.ok("an unknown --fable value is rejected", rc != 0, out)
 
+    def test_10b_python_older_than_3_11_is_refused(self):
+        fake = self.path("fakebin")
+        os.makedirs(fake, exist_ok=True)
+        script = os.path.join(fake, "python3")
+        write(script, "#!/bin/sh\necho 3.10\n")
+        os.chmod(script, 0o755)
+        probe = self.path("probe-py")
+        os.makedirs(probe, exist_ok=True)
+        rc, out = run("--plan", "max", "--dry-run", CLAUDE_DIR=probe,
+                      PATH=fake + os.pathsep + os.environ.get("PATH", ""))
+        self.ok("python3 older than 3.11 exits 1", rc == 1, out)
+        self.ok("the message names 3.11 and the version found",
+                "python3 3.11 or newer is required (found 3.10)" in out, out)
+
+    def _fake_python(self, name, body):
+        fake = self.path(name)
+        os.makedirs(fake, exist_ok=True)
+        script = os.path.join(fake, "python3")
+        write(script, "#!/bin/sh\n" + body)
+        os.chmod(script, 0o755)
+        probe = self.path("probe-" + name)
+        os.makedirs(probe, exist_ok=True)
+        return run("--plan", "max", "--dry-run", CLAUDE_DIR=probe,
+                   PATH=fake + os.pathsep + os.environ.get("PATH", ""))
+
+    def test_10c_python_with_an_extra_stdout_line_passes_the_check(self):
+        rc, out = self._fake_python("fakebin-extra", "echo sitecustomize noise\necho 3.12\n")
+        self.ok("the version check is not what stops the run",
+                "python3 3.11 or newer is required" not in out, out)
+
+    def test_10d_python_that_fails_says_why(self):
+        rc, out = self._fake_python("fakebin-fail", "echo 'boom: no libpython' >&2\nexit 3\n")
+        self.ok("a failing python3 exits 1", rc == 1, out)
+        self.ok("the message carries the first stderr line", "boom: no libpython" in out, out)
+
     # == real install into a scratch CLAUDE_DIR
     def test_11_real_install(self):
         d = self.path("claude")
