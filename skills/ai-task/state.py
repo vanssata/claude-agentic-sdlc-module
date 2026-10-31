@@ -2332,9 +2332,11 @@ def cmd_reject(args, root):
 # of this runs and every command prints and refuses as before (R36.2).
 
 DIALOG_TOOL = {"claude": "AskUserQuestion", "codex": "request_user_input"}
-# The runtime's session id as the Bash tool's environment carries it. Spike 7.0:
-# CLAUDE_CODE_SESSION_ID equals the payload's session_id. CODEX_THREAD_ID is
-# unverified; Codex stays off until the spike's version list is not empty.
+# The runtime's session id as the Bash tool's environment carries it. Both
+# mappings are verified by the 2026-10-31 spike (docs/dialog-spike.md, "Session
+# ids and the Stop block"): the variable equals the hook payload's session_id.
+# It must equal hooks/guard/dialog.py SESSION_ENV; tests/test_dialog_contract.py
+# checks that and feeds both sides the same switch fixtures.
 SESSION_ENV = {"claude": "CLAUDE_CODE_SESSION_ID", "codex": "CODEX_THREAD_ID"}
 DECISIONS_MAX = 4                         # questions one dialog call carries (R36.3)
 QUESTION_MAX, HEADER_MAX, LABEL_MAX = 1200, 12, 400
@@ -2364,10 +2366,13 @@ def dialog_policy(root):
 
 
 def dialog_on(root):
-    """The effective switch, state.py's copy of the hooks' rule (7d1): the
-    project says on, nobody declared the run unattended, the runtime's dialog
+    """The effective switch, state.py's copy of the hooks' switch_state() (7d1):
+    the project says on, nobody declared the run unattended, the runtime's dialog
     tool is the one the installer verified, and the session has an id to bind a
-    pick to. Anything missing is off — today's route."""
+    pick to. None covers both of the hooks' "off" and "closed": no session id in
+    the environment means a pick cannot be bound, so it fails closed to the
+    terminal route (every approval and commit command prints for the human's
+    terminal). A dict is the hooks' "on"."""
     if not root:
         return None
     policy = dialog_policy(root)

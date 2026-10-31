@@ -211,6 +211,8 @@ class Scratch:
                      "AI_UNATTENDED": "", "CLAUDE_CODE_SESSION_ATTENDED": "1"}
         self.env = mock.patch.dict(os.environ, self.vars)
         self.env.start()
+        for name in ("CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID"):     # deterministic: a test sets them itself
+            os.environ.pop(name, None)
 
     def close(self):
         self.env.stop()
@@ -320,6 +322,39 @@ class TestEffectiveSwitch(HookCase):
                 finally:
                     s.close()
                 self.assertEqual(got, enabled and tool and not unattended and not subagent and not no_session)
+
+    def test_switch_state_matrix(self):
+        """off / closed / on, the env-mismatch case included; closed is no dialog."""
+        main, sub = spike("claude/ask-single"), spike("claude/subagent-pretooluse")
+        own = main["session_id"]
+        rows = (("on", {}, main), ("closed", {}, sub), ("closed", {}, dict(main, session_id="")),
+                ("closed", {}, {k: v for k, v in main.items() if k != "session_id"}),
+                ("closed", {}, [main]), ("on", {"CLAUDE_CODE_SESSION_ID": own}, main),
+                ("closed", {"CLAUDE_CODE_SESSION_ID": own + "-other"}, main),
+                ("on", {"CLAUDE_CODE_SESSION_ID": ""}, main),
+                ("off", {"AI_UNATTENDED": "1"}, sub), ("off", {"CLAUDE_CODE_SESSION_ATTENDED": "0"}, sub))
+        for want, env, payload in rows:
+            with self.subTest(want=want, env=env):
+                with mock.patch.dict(os.environ, env):
+                    self.assertEqual(dialog.switch_state(self.s.root, "claude", payload), want)
+                    self.assertEqual(dialog.effective_switch(self.s.root, "claude", payload), want == "on")
+        self.assertEqual(dialog.switch_state(None, "claude", main), "off")
+        self.assertEqual(dialog.SESSION_ENV, {"claude": "CLAUDE_CODE_SESSION_ID", "codex": "CODEX_THREAD_ID"})
+        off = Scratch(on=False)
+        try:
+            self.assertEqual(dialog.switch_state(off.root, "claude", sub), "off")
+        finally:
+            off.close()
+        notool = Scratch(tool=False)
+        try:
+            self.assertEqual(dialog.switch_state(notool.root, "claude", sub), "off")
+        finally:
+            notool.close()
+
+    def test_codex_hook_env_has_no_session_variable_to_compare(self):
+        payload = spike("codex/request-single")
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "unrelated"}):
+            self.assertEqual(dialog.switch_state(self.s.root, "codex", payload), "on")
 
     def test_scaffolded_project_is_on(self):
         """the matrix row "scaffolded project is on": the template the scaffold and
@@ -610,6 +645,18 @@ class TestGateHook(HookCase):
         subagent = dict(commit_payload(), agent_id="a1", tool_use_id="toolu_sub")
         self.assertEqual(run_gate(self.s, subagent), (0, ""))
         self.assertEqual(len(self.s.ledger()), 2, "a subagent's dialog consents to nothing")
+
+    def test_closed_writes_nothing_and_returns_empty(self):
+        """a call the hook cannot bind to a session is closed: no ledger line, no output."""
+        self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
+        mismatch = {"CLAUDE_CODE_SESSION_ID": "another-session"}
+        self.assertEqual(run_gate(self.s, commit_payload(), mismatch), (0, ""))
+        self.assertEqual(run_gate(self.s, dict(commit_payload(), session_id="")), (0, ""))
+        code, out = run_gate(self.s, dict(spike("claude/stop"), agent_id="a1"), mismatch)
+        self.assertEqual((code, hook_output(out)), (0, {}))
+        code, out = run_gate(self.s, spike("claude/stop"), mismatch)
+        self.assertEqual((code, hook_output(out)), (0, {}))
+        self.assertEqual(self.s.ledger(), [])
 
     def test_off_writes_nothing(self):
         self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))

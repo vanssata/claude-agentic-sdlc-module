@@ -157,12 +157,40 @@ carry `CLAUDE_CODE_MESSAGING_TOKEN`.
 | 7b installer | the Codex version list (`>= 0.165.0`, G1) | Codex section, `codex/*.json` |
 | 7d1 Codex adapter | string `tool_response` → `answers[<id>].answers[]`; `None of the above`/`user_note:` = decline | `codex/request-*.json` |
 
+## Session ids and the Stop block — recorded 2026-10-31 (1096 + 43ae-I3)
+
+Task T-2026-10-31-1105-dialog-switch-i3. The human ran a throw-away recorder (outside the repo, not committed:
+it dumped each hook's stdin and the hook's `CODEX_*`/`CLAUDE_CODE_SESSION_ID` environment; a `probe.sh` run as
+the model's Bash tool printed what the agent's shell — where `state.py` runs — sees). Codex TUI `codex-cli
+0.165.0` on PATH, the agent's shell reports `CODEX_VERSION=0.166.0`; model `gpt-5.6-sol`, permission mode
+`default`. Claude Code TUI with `claude --settings <hooks>`. Hooks: SessionStart (`startup|resume|clear|compact`),
+UserPromptSubmit, PreToolUse, Stop. Six Codex sessions, two Claude sessions, 42 hook events.
+
+| Question | Codex | Claude Code |
+|---|---|---|
+| The agent's shell carries the session id | **KNOWN FACT** `CODEX_THREAD_ID` (and `CODEX_SESSION_ID`, same value) equals the payload's `session_id` — four probes, four sessions, after `startup`, `clear` and `resume` | **KNOWN FACT** `CLAUDE_CODE_SESSION_ID` equals the payload's `session_id` — after `startup` and `clear` |
+| The hook's own environment carries it | **KNOWN FACT** no: no `CODEX_*` variable in any of 29 Codex hook runs; a hook knows the session only from its payload | **KNOWN FACT** yes: `CLAUDE_CODE_SESSION_ID` equal to the payload's in all 13 Claude hook runs |
+| `/clear` | **KNOWN FACT** a new `session_id`; SessionStart `source: "clear"`; the shell's `CODEX_THREAD_ID` follows the new id | **KNOWN FACT** a new `session_id`; SessionStart `source: "clear"`; the shell's id follows |
+| resume | **KNOWN FACT** `codex resume --last`: the same `session_id`, SessionStart `source: "resume"`, the shell's id unchanged | **UNKNOWN** not recorded (`claude --resume` was not run) |
+| Stop: `{"decision":"block","reason":…}` on stdout, exit 0 | **KNOWN FACT** honoured: the model continued with the reason (`last_assistant_message: "CONTINUED"`); the second Stop of the same `turn_id` has `stop_hook_active: true` | **KNOWN FACT** honoured, the same `stop_hook_active: true` on the second Stop |
+| Stop: reason on stderr, exit 2 | **KNOWN FACT** honoured the same way (one session) | not recorded |
+
+- **INFERENCE** In every recorded case the id `state.py` binds a decision to (`SESSION_ENV`) is the id the hooks
+  see in the payload, so a decision opened in a session is held to that session. A decision opened before
+  `/clear` belongs to the old id: the new session's gate and Stop reminder do not see it (`dialog.bound`), and
+  its picks do not bind here — the decision stays open until it is settled or falls back.
+- **RISK** (43ae-I3, fixed by this task) with the dialog on, a commit or push from a call the hooks cannot bind to
+  a session — a subagent (`agent_id`), an empty `session_id`, or a Claude hook whose `CLAUDE_CODE_SESSION_ID`
+  differs from the payload — passed the consent rule, because `effective_switch` read those cases as off. They now
+  fail closed: `CONSENT_REQUIRED`, the human runs the command in their own terminal.
+
 ## Open
 
 1. Claude: Notification `auth_success` payload (`claude/auth-success.json`), a single-select Other.
 2. Codex: the cancel (Esc) payload (`codex/request-cancel.json`); which `codex` binary the human's terminal
    resolves (rollouts say 0.165.0, the standalone install says 0.164.0); whether session 2 ran with the flag.
 3. Gate G1 (human): confirm the version list `>= 0.165.0` (evidence above) before 7b writes it.
+4. Claude: the session id after `claude --resume` (2026-10-31 spike above).
 
 ## Observations outside this task (not fixed here)
 

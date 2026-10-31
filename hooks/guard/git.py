@@ -257,14 +257,18 @@ class GitGuard:
         raw = values[0] if len(values) == 1 and isinstance(values[0], dict) else None
         hook_file = os.path.join(os.fsdecode(b_bytes(self.ctx.hook_dir)), "ai-guard.py")
         try:
-            on = raw is not None and dialog.effective_switch(root, dialog.payload_runtime(raw, hook_file), raw)
+            state = dialog.switch_state(root, dialog.payload_runtime(raw, hook_file), raw)
         except Exception:                   # pylint: disable=broad-exception-caught
-            on = False
-        if not on:
+            state = "closed"
+        if state == "off":
             return
         command = b_bytes(cmd).decode("utf-8", "replace").strip()
         if not dialog.needs_consent(command):
             return
+        if state == "closed":
+            raise Deny(text_to_b("CONSENT_REQUIRED — this session cannot answer the dialog (a subagent, or no "
+                                 "session to bind a pick to). The human runs this command in their own "
+                                 "terminal.") + WHY_CONSENT)
         spent = getattr(self.ctx, "consent", None)
         if spent and spent.get("label") == command:
             return

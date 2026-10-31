@@ -7,11 +7,16 @@ tests/test_dialog_contract.py feeds both the same fixtures, so they cannot
 drift. Nothing here imports state.py: hooks run under `python3 -I -S`, stdlib
 only.
 
-Off is today: with .ai/policies/dialog.json missing or not `enabled: true`,
-no AI_UNATTENDED, the runtime's verified dialog tool, the main session and a
-session id all required, effective_switch() is False and no caller writes or
-decides anything (R36.1, R36.2). Readers fail open: a missing or unreadable
-file reads as "nothing open, nothing picked".
+The switch has three states (switch_state). Off is today: with
+.ai/policies/dialog.json missing or not `enabled: true`, AI_UNATTENDED set or
+the runtime's verified dialog tool missing, no caller writes or decides
+anything (R36.1, R36.2). Closed: the project's switch is on but the call
+cannot be bound to a session that can answer a dialog (a subagent, no session
+id, a session id that is not the hook environment's own); the dialog and the
+ledger treat it like off, the git consent rule refuses (terminal route). On:
+the main session with a session id. effective_switch() is True only for on.
+Readers fail open: a missing or unreadable file reads as "nothing open,
+nothing picked".
 """
 import contextlib
 import json
@@ -28,6 +33,10 @@ LOCK_STALE_S = 2.0
 LINE_MAX = 4096                             # one write; O_APPEND keeps a line whole up to this
 
 DIALOG_TOOL = {"claude": "AskUserQuestion", "codex": "request_user_input"}
+# The runtime's own session variable; the same mapping as state.py's. A hook's
+# environment carries it for Claude only (spike 2026-10-31: no CODEX_* variable
+# reaches a Codex hook), so it is compared only when present and non-empty.
+SESSION_ENV = {"claude": "CLAUDE_CODE_SESSION_ID", "codex": "CODEX_THREAD_ID"}
 LEDGER_TYPES = {"offer", "pick", "use", "void", "decline", "settle"}
 STOP_BLOCK = "stop_block"                   # the Stop loop breaker's count; no reader of consent reads it
 LABEL_FORBIDDEN = (";", "&", "|", "\n", "\r", "`", "$(", "<", ">")
@@ -111,18 +120,29 @@ def payload_runtime(payload, hook_file):
     return "codex" if "%s.codex%s" % (os.sep, os.sep) in os.path.abspath(hook_file) else "claude"
 
 
-def effective_switch(root, runtime, payload):
-    """On only when the project says so, nobody declared the run unattended,
-    the runtime's dialog tool is the verified one, this is the main session
-    (no agent_id: a subagent cannot answer a dialog) and the payload has a
-    session id to bind a pick to. Every other combination is today's route."""
+def switch_state(root, runtime, payload):
+    """"off", "closed" or "on". Off is today's route: no root, the project's
+    switch not on, AI_UNATTENDED or the runtime's unattended marker set, or no
+    verified dialog tool. Closed: the switch is on but this call cannot be bound
+    to a session that can answer a dialog: a payload that is not an object, a
+    subagent (agent_id), no session id, or a session id other than the one the
+    hook's own environment carries. On: otherwise."""
     if not root or dialog_policy(root) is None:
-        return False
+        return "off"
     if os.environ.get("AI_UNATTENDED") or os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
-        return False
-    if dialog_tool(runtime) is None or not isinstance(payload, dict):
-        return False
-    return not payload.get("agent_id") and bool(payload.get("session_id"))
+        return "off"
+    if dialog_tool(runtime) is None:
+        return "off"
+    if not isinstance(payload, dict) or payload.get("agent_id") or not payload.get("session_id"):
+        return "closed"
+    own = os.environ.get(SESSION_ENV.get(runtime, ""))
+    return "closed" if own and own != payload.get("session_id") else "on"
+
+
+def effective_switch(root, runtime, payload):
+    """True only when switch_state() is "on"; "off" and "closed" are both no
+    dialog, no decision and no ledger write for every caller."""
+    return switch_state(root, runtime, payload) == "on"
 
 
 # -- labels -------------------------------------------------------------------
