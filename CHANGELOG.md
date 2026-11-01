@@ -4,6 +4,11 @@ Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelo
 
 ## [Unreleased]
 
+## [3.2.2] — 2026-11-02
+
+### Changed
+- CI and release workflows use `actions/checkout@v7`, `actions/setup-node@v7` and `actions/setup-python@v7`, which run on Node.js 24 (GitHub deprecated Node.js 20 for actions). Nothing shipped in the package changed.
+
 ## [3.2.1] — 2026-11-02
 
 3.2.0 was tagged but never published: its release job failed before the publish step. 3.2.1 is the first published version with the changes listed under 3.2.0.
@@ -64,6 +69,7 @@ Project schema 10 → 11: run `/rr-setup --update` after upgrading.
 - Risk tiers replaced by the weight and three modes (light, guarded, full); `/ai-*` and `/sdlc-*` become `/rr-*` (old names kept as aliases).
 - Guards in one Python process; task state in `.ai/state/state.json`. See "Upgrade to 3.0" in the README.
 
+[3.2.2]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.2.1...v3.2.2
 [3.2.1]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.0.1...v3.1.0

@@ -31,12 +31,12 @@ jobs:
     permissions:
       contents: read
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         # The migration test runs `git archive` on an old commit.
         fetch-depth: 0
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: "3.12"
     - name: Check required tools
@@ -47,7 +47,7 @@ jobs:
     - name: The tag matches the five version keys
       run: python3 tools/sync-version.py --check --tag "$GITHUB_REF_NAME"
     # node before the tests: tests/test_dual_runtime_install.py runs the installer through it.
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@v7
       with:
         node-version: 22
     - name: Run the test suite
@@ -92,8 +92,8 @@ jobs:
       contents: write
       id-token: write
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
+    - uses: actions/checkout@v7
+    - uses: actions/setup-node@v7
       with:
         node-version: 22
         registry-url: https://registry.npmjs.org

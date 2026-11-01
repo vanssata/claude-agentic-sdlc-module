@@ -33,9 +33,9 @@ jobs:
         tests/test_shared_tree.py tests/test_skills_surface.py tests/test_context_guard.py
         tests/test_state_layout.py tests/test_state_characterization.py
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: ${{ matrix.python-version }}
     - name: Check required tools
@@ -56,15 +56,15 @@ jobs:
     env:
       AI_TIMED_FACTOR: "3"
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         # The migration test runs `git archive` on an old commit.
         fetch-depth: 0
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: "3.12"
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@v7
       with:
         node-version: 22
     - name: Check required tools

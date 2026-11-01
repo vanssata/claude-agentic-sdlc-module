@@ -125,8 +125,8 @@ class TestReleaseWorkflow(unittest.TestCase):
     def test_verify_job_prepares_the_full_suite(self):
         suite = self.verify.index("tests/run_suite.py")
         self.assertNotIn("unittest discover -s tests -p 'test_*.py'", self.verify)
-        self.assertEqual(self.verify.count("actions/setup-node@v4"), 1)
-        self.assertLess(self.verify.index("actions/setup-node@v4"), suite)
+        self.assertEqual(self.verify.count("actions/setup-node@v7"), 1)
+        self.assertLess(self.verify.index("actions/setup-node@v7"), suite)
         self.assertIn("fetch-depth: 0", self.verify[:self.verify.index("Set up Python")])
         self.assertIn('AI_TIMED_FACTOR: "3"', self.verify)
         self.assertLess(self.verify.index('AI_TIMED_FACTOR: "3"'), suite)
