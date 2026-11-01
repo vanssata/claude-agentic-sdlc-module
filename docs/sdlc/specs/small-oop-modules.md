@@ -99,6 +99,8 @@ performance work beyond "not slower".
 - **Who implements WP1 and in what shape?** — `/rr-build-all` with parallel implementers on BALANCED (`sonnet`, Sonnet 5.5) at effort `high`; a module step creates one file under `rr_state/` and nothing else, waits only for the layers it imports, the cut-over step edits `state.py` once; the suite once after the last step, then one review, fixes as parallel batches — supersedes FC4 *(Q22, by Ivan Kakurov, instruction in the `/rr-spec` call of 2026-10-31 (evening): implementers on Sonnet 5.5 high in parallel where possible, waiting where needed, the whole code first and then review/test, big steps with minimal tests; recorded by claude via prose at 2026-10-31T18:37:09Z)*
 - **Cut-over: once, or per layer band?** — once: between s2 and the cut every step is a new file checked by the layout test, pylint and an import; the four suites run at s2 and at the cut, `verify --scope all` and e2e once, then one review *(Q23, by claude · self-answer in the refine pass of 2026-10-31, over 80 % confident by the developer's rule of this pass, via prose at 2026-10-31T18:37:09Z)*
 - **`tests/test_dialog_contract.py:314` patches `state_mod.RUNTIME` by name and calls `dialog_on(root)`, which reads the global through `own_runtime()` (`state.py:503`): edit the test, keep a process-wide memo, or forward the attribute?** — edit two lines of the test: the inert patch at `:133` is dropped, `:314` passes `runtime=runtime`; `dialog_on` and `own_runtime` default to `runtime="unknown"` (R4); WP1's only test edit beside R9, listed in R6, whose generated list also greps `patch.object(state_mod, "<name>")` *(Q24, by claude · self-answer in the refine pass of 2026-10-31, over 80 % confident by the developer's rule of this pass, via prose at 2026-10-31T18:37:09Z)*
+- **After the split, does anything keep the old shape alive — a shim, re-exports, an alias?** — no backward compatibility: no shim, no re-export, no alias; every importer, code and tests, imports from the module that owns the name; a module only imported (`adopt.py`) is deleted; an executable invoked by path (`state.py`, `update.py`) keeps its path as the current CLI with argparse and dispatch only; test edits are import lines and patch targets, assertions untouched. An install replaces every file of the old version. Closes OQ3 (WP1b). Behavioural fallbacks for old versions are a task of their own (WP-L, C3) *(Q25, by Ivan Kakurov via prose at 2026-10-31T22:55:00Z)*
+- **Does riskrails keep adapting what came before it — `--adopt`, the migrations — or regenerate its own files?** — neither adapts: `--adopt` is deleted whole and `--update` deletes riskrails' own files and generates the current ones, keeping `.ai/project/`, the project settings, history and memory; a feature task of its own (`docs/sdlc/intent/riskrails-regenerate-not-migrate.md`), so WP2 is dropped and WP-L folds into it *(Q26, by Ivan Kakurov via picker at 2026-10-31T23:15:00Z)*
 
 ## Requirements
 
@@ -111,7 +113,8 @@ the independent check (`docs/sdlc/specs/small-oop-modules.reviews.md`).
   `sys.path.insert(0, <its dir>)` (a suite deletes `sys.path[:2]` after importing it). [O1]
 - **R2 Package beside the entry.** The code moves to `skills/ai-task/rr_state/` (a Python
   package; the directory `ai-task` itself is never imported — it is on `sys.path`). The entry
-  becomes the parser and dispatch plus the re-exports of R6, under 200 lines. A missing
+  becomes the parser and dispatch, under 200 lines, and re-exports nothing (Q25; WP1 left
+  re-exports, WP1b removes them). A missing
   package prints one line naming `npx riskrails` instead of a traceback. [O3, O4]
 - **R3 One module, one seam, one layer.** † Every top-level function of today's file is
   assigned to exactly one module (a partition, produced by a script at plan time, not the
@@ -157,23 +160,22 @@ the independent check (`docs/sdlc/specs/small-oop-modules.reviews.md`).
   consent ids, the scratch path — and the entry's path as the exact token `<STATE_PY>`,
   never a generic path regex (a generic one would hide a moved `__file__`). Red on any
   other difference. [O1]
-- **R6 Existing tests are the proof, not the patient.** † No test file is edited in WP1
-  except `tests/test_install_dry_run.py` (R9), two lines of `tests/test_dialog_contract.py`
-  (Q24, below) and the two new files of R3 and R5. The names the suites reach as
-  `state_mod.<name>` (33 on 2026-10-31: `validate_label`, `AGENT_MARKERS`, `journal_line`,
-  `load`, `is_document`, `abandon_old`, `LEDGER_LINE_MAX`, … and the modules
-  `state_mod.json`, `state_mod.os`) are re-exported by the entry; the list is generated at
-  plan time from `grep -oh 'state_mod\.[A-Za-z_]*' tests/*.py` **and** from
-  `grep -oh 'patch\.object(state_mod, "[A-Za-z_]*"' tests/*.py` (a string-named attribute
-  the first grep misses — today only `RUNTIME`), and checked by the layout test. Moved code
-  keeps calling `json.dump` and `os.replace` as module attributes (the suites patch them
-  there), never `from json import dump`; the same for the package's own seams — `from
-  rr_state import fs` and `fs.now()`, never `from rr_state.fs import now`. A test that checks
-  `state_mod.__file__` still sees the entry. A re-export serves a read, never a patch:
-  `test_dialog_contract.py:314` patches `state_mod.RUNTIME` and calls `dialog_on(root)`, which
-  reads the global through `own_runtime()` (`state.py:503`); after R4 there is no global to
-  patch, so that line passes `runtime=runtime` and the inert patch at `:133` is dropped — the
-  two-line edit of Q24, read by the review. Moving the suites onto package imports is OQ3. [O1]
+- **R6 Existing tests are the proof; they import the owner, never a shim.** (Q25, superseding
+  the re-export rule WP1 shipped with.) No entry and no deleted module re-exports a name for
+  its importers. Every importer — the plugin's code and the suites — imports a name from the
+  module that owns it (`from rr_state import task` / `task.load`, `import rr_adopt.split as
+  split`), and a patch targets the attribute where the code looks it up (`split.section_of`),
+  so a patch reaches the caller. A test edit is allowed only for that: import lines,
+  qualified names and patch targets; an assertion, an expected text or a fixture is never
+  edited, and the review reads every test hunk first. The importer list is generated at plan
+  time from a grep of `import <entry>` and `<alias>.<name>` over `tests/` and `skills/`, and
+  the layout test fails on any `import state` / `import adopt` left behind (the CLI stays
+  reachable by path, `[sys.executable, STATE_PY, ...]`). Moved code keeps calling `json.dump`
+  and `os.replace` as module attributes (the suites patch them there), never `from json
+  import dump`; the same for the package's own seams — `from rr_state import fs` and
+  `fs.now()`, never `from rr_state.fs import now`. WP1 shipped with R6's earlier form
+  (re-exports of 33 names; two lines of `tests/test_dialog_contract.py`, Q24); WP1b moves the
+  suites (`memory_compact.py` only names it in a comment) onto `rr_state.*` and deletes the re-exports. [O1]
 - **R6a One entry-path constant.** † Seventeen `__file__` uses in today's file mean "the path
   of state.py": the dialog pick and `validate_label` compare it with a label's script path,
   the refusal texts and `state_label` print it, `load_resolver` and the migrations lookup
@@ -207,7 +209,8 @@ the independent check (`docs/sdlc/specs/small-oop-modules.reviews.md`).
   with `state.py memory risk add` and left in place; the golden pins the current behaviour
   including the bug. [C3; Q6]
 - **R13 Later work packages, same pattern.** WP2–WP6 (Design §Work packages) each start
-  with their own golden, keep their entry path and executable bit, and close green before
+  with their own golden, keep the path and executable bit of an entry invoked by path, delete
+  a module that is only imported (no shim, Q25), and close green before
   the next starts. WP6's shape is an open question (OQ1). [O2, O3]
 - **R14 Rollback.** Every WP is one task on one branch; `git revert` of its commits
   restores the single file. No state, schema or policy file changes, so nothing has to be
@@ -330,13 +333,14 @@ partition check — and every module is its own diff.
 | WP | File | Lines | Shape | Golden | Note |
 |---|---|---|---|---|---|
 | 1 | `skills/ai-task/state.py` | 5 367 | entry + `rr_state/` | new, R5 | this spec's plan |
-| 2 | `skills/project-update/adopt.py` | 2 219 | entry + `adopt/` | the adopt suite's `--dry-run` fixtures | deletion gate text byte-identical |
-| 3 | `skills/project-update/update.py` | 2 146 | entry + `update/`, migrations untouched | dry-run output over the fixture projects | `--confirm-delete` path guard spelling unchanged |
+| 1b | `skills/ai-task/state.py` | 92 | the re-exports deleted; the suites import `rr_state.*` (Q25, OQ3) | `tests/test_state_characterization.py` | test edits: import lines and patch targets only |
+| 2 | `skills/project-update/adopt.py` | 2 219 | **dropped (Q26)**: the module is deleted by the regenerate-not-migrate task, not split | — | — |
+| 3 | `skills/project-update/update.py` | 2 146 (before Q26) | entry (CLI only, no re-exports, Q25) + `rr_update/`, on what is left after the regenerate-not-migrate task removed `--adopt` and the migrations | dry-run output over the fixture projects | `--confirm-delete` path guard spelling unchanged |
 | 4 | `skills/ai-task/memory_sync.py` | 1 571 | modules beside `memory_store`, `memory_compact`, `memory_format` | `tests/fixtures/memory/goldens/` exists | packages mode `verify --fresh-clone` |
 | 5 | `hooks/guard/paths.py` | 1 545 | already a package: split `paths.py` into rule groups | `test_guard_characterization` golden exists | **byte-identical guard golden**; CLAUDE.md `SH_WORD`/`SH_RE` invariant |
 | 6 | `hooks/runtime-gate.py` | 1 214 | OQ1: single file (`.pylintrc`: "must run as a single file") or shim + package like `ai-guard.py` + `guard/` | new | **conditional (Q19)**: planned only after the measurement task shows Codex in use, or when a Codex-side bug forces a change; Codex re-approves a changed hook entry; the entry line must not change |
 
-Order: 1 → 2 → 3 → 4 → 5, one task each in the shape of Q22–Q23 (`/rr-build-all`: module
+Order: 1 → 1b → (the regenerate-not-migrate task, Q26) → 3 → 4 → 5, one task each in the shape of Q22–Q23 (`/rr-build-all`: module
 steps create files, one cut-over, parallel implementers), the next starting after the
 previous closed green; 6 only on its condition (Q19). Every WP is a refactoring by C3; its
 weight is measured by `/rr-plan` (Policy conformance gives the expected mode). WP2–WP6 each
@@ -377,8 +381,8 @@ Sizes: `wc -l` on 2026-10-31 20:30, after T-2026-10-31-1650 closed.
 
 ## Interfaces
 
-**The entry after WP1** (`skills/ai-task/state.py`; the re-export list is generated at plan
-time, R6 — the names below are the 2026-10-31 grep):
+**The entry after WP1** (`skills/ai-task/state.py` as WP1 shipped it; WP1b deletes every
+`from rr_state.<mod> import …` line below except `cli.main`, Q25):
 
 ```python
 #!/usr/bin/env python3
@@ -582,8 +586,9 @@ decision named here with `state.py answer --topic small-oop-modules Qn=<letter>`
 - **OQ2 (human)** Scope guard allow list for `docs/sdlc/**` and the runtime scratchpad while a
   task is in flight, or "`/rr-spec` waits for a free tree". Owner: Ivan Kakurov. Behaviour 2
   if allowed; not this spec's work.
-- **OQ3 (after WP1)** Move the suites from `import state` to `rr_state.*` and drop the
-  re-exports. Owner: a later tests-only task.
+- **OQ3 (closed by Q25)** Move the suites from `import state` to `rr_state.*` and drop the
+  re-exports: WP1b, its own plan `docs/sdlc/plans/small-oop-modules-wp1b.md`.
+- **WP-L (folded into the regenerate-not-migrate task by Q26)** The behavioural fallbacks for old plugin versions are removed there, with `--adopt` and the migrations; never in a refactoring WP.
 - **OQ4 (closed by Q16)** The 600-line measure is advisory; the partition script and the
   layout test report sizes, and the task report notes a module over it with the reason.
   Nothing left to decide.

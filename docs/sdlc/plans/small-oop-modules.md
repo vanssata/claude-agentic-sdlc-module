@@ -150,8 +150,10 @@ qualified by module, nothing reworded. It never calls `state.py`.
 
 | WP | File | Plan file | Consumes |
 |---|---|---|---|
-| WP2 | `skills/project-update/adopt.py` (2 219) | `docs/sdlc/plans/small-oop-modules-wp2.md` | WP1 closed |
-| WP3 | `skills/project-update/update.py` (2 146) | `…-wp3.md` | WP2 |
+| WP1b | `skills/ai-task/state.py` (92): the re-exports deleted, the suites import `rr_state.*` (Q25, closes OQ3) | `docs/sdlc/plans/small-oop-modules-wp1b.md` | WP1 closed |
+| ~~WP2~~ | dropped by Q26: `adopt.py` is deleted by the regenerate-not-migrate task (`docs/sdlc/intent/riskrails-regenerate-not-migrate.md`, its own spec and task, C3) | — | — |
+| WP3 | `skills/project-update/update.py` (what is left after the regenerate-not-migrate task) | `…-wp3.md` | WP1b and that task closed |
+| WP-L | folded into the regenerate-not-migrate task (Q26) | — | — |
 | WP4 | `skills/ai-task/memory_sync.py` (1 571) | `…-wp4.md` | WP3 |
 | WP5 | `hooks/guard/paths.py` (1 545) — guard golden byte-identical, `SH_WORD`/`SH_RE` invariant | `…-wp5.md` | WP4 |
 | WP6 | `hooks/runtime-gate.py` (1 214) — **conditional (Q19)**: planned only once the measurement task of the spec's Optimisation section shows Codex in use, or a Codex-side bug forces a change; OQ1 with a Codex trust probe | `…-wp6.md` | WP5 + the condition |
