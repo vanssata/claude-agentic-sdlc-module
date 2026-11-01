@@ -185,7 +185,8 @@ class TestReleaseWorkflow(unittest.TestCase):
 
 
 SMOKE = ("test_release.py", "test_update_notice.py", "test_install_routes.py",
-         "test_shared_tree.py", "test_skills_surface.py", "test_context_guard.py")
+         "test_shared_tree.py", "test_skills_surface.py", "test_context_guard.py",
+         "test_state_layout.py", "test_state_characterization.py")
 
 
 class TestSmokeWorkflow(unittest.TestCase):

@@ -260,11 +260,16 @@ class Scratch:
             return 0
 
     def files_dump(self):
-        """Every file under .ai/, in path order, byte for byte (text)."""
+        """Every file under .ai/, in path order, task dirs in creation order, byte for byte (text).
+        A task id carries the minute it started, so path order flips when a run crosses one."""
         out = []
         base = os.path.join(self.root, ".ai")
+        by_task = {os.path.join(base, "reports"), os.path.join(base, "state", "logs")}
         for here, dirs, names in os.walk(base):
-            dirs.sort()
+            if here in by_task:
+                dirs[:] = [d for d in self.task_ids() if d in dirs]
+            else:
+                dirs.sort()
             for name in sorted(names):
                 path = os.path.join(here, name)
                 rel = os.path.relpath(path, self.root)
@@ -595,6 +600,23 @@ class TestNormalise(unittest.TestCase):
         self.assertEqual(norm.apply('"ledger_pos": 0, "ledger_pos": 9, "ledger_pos": 19'),
                          '"ledger_pos": <LEDGER_LINE0>, "ledger_pos": <LEDGER_LINE1>, "ledger_pos": <LEDGER_LINE2>')
         self.assertEqual(norm.apply('"ledger_pos": 10'), '"ledger_pos": 10')
+
+    def test_dump_orders_tasks_by_creation(self):
+        """R-full-golden-flakes…-34db: the report dirs dump in the order the tasks started, so the
+        golden is one text whether or not the run crossed a minute; path order flips it."""
+        for first, second in (("T-2026-01-02-0304-zz", "T-2026-01-02-0304-aa"),   # one minute
+                              ("T-2026-01-02-0304-zz", "T-2026-01-02-0305-aa")):  # across a minute
+            p = Scratch()
+            try:
+                for task_id, ts in ((first, "2026-01-02T03:04:01.000Z"), (second, "2026-01-02T03:04:02.000Z")):
+                    p.write(".ai/reports/%s/events.jsonl" % task_id, '{"ts": "%s"}\n' % ts)
+                    p.write(".ai/state/logs/%s/suite-1.log" % task_id, "ok\n")
+                dump = p.files_dump()
+                for under in (".ai/reports", ".ai/state/logs"):  # every dir whose children are task ids
+                    self.assertLess(dump.index("=== %s/%s/" % (under, first)),
+                                    dump.index("=== %s/%s/" % (under, second)), (under, first, second))
+            finally:
+                p.close()
 
 
 if __name__ == "__main__":
