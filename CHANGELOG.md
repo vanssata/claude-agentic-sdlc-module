@@ -4,6 +4,8 @@ Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelo
 
 ## [Unreleased]
 
+## [3.2.0] — 2026-11-01
+
 ### Changed
 - The plugin's two-line statusline replaces your statusline command by default. The replaced command is printed, kept in `~/.claude/riskrails/statusline.json` and in the dated settings.json backup; `--statusline own` restores it once, on the run that switches to own.
 
@@ -52,5 +54,6 @@ Project schema 10 → 11: run `/rr-setup --update` after upgrading.
 - Risk tiers replaced by the weight and three modes (light, guarded, full); `/ai-*` and `/sdlc-*` become `/rr-*` (old names kept as aliases).
 - Guards in one Python process; task state in `.ai/state/state.json`. See "Upgrade to 3.0" in the README.
 
+[3.2.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.0.1...v3.1.0
 [3.0.1]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v2.0.2...v3.0.1
