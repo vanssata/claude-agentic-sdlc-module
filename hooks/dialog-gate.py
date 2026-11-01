@@ -37,7 +37,7 @@ def prompt_count(root):
     try:
         with open(os.path.join(root, ".ai", "state", "session.json"), encoding="utf-8") as fh:
             count = json.load(fh).get("prompt_count")
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, AttributeError, RecursionError):
         return None
     return count if isinstance(count, int) and not isinstance(count, bool) else None
 

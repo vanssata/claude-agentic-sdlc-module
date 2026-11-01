@@ -138,7 +138,7 @@ class Project:
         self.tmp.cleanup()
 
 
-class TestMigration0007(unittest.TestCase):
+class TestMigration0007(unittest.TestCase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     def test_conversion(self):
         mod = load_migration()
         base = read_json(os.path.join(POLICIES, "weight.json"))
@@ -198,6 +198,307 @@ class TestMigration0007(unittest.TestCase):
             self.assertEqual((after["tests"]["max_suite_runs"], after["remediation_rounds"]), (1, 4))
         finally:
             p.close()
+
+    def deep_project(self, name, deep, **_kw):
+        """A schema-6 project (edited risk tiers) whose `name` policy file is `deep`; the output of --apply"""
+        p = Project(edited=True)
+        try:
+            with open(p.path("policies", name), "w", encoding="utf-8") as fh:
+                fh.write(deep)
+            subprocess.run(GIT + ["-C", p.root, "commit", "-qam", "deep"], check=True)
+            dry = p.update()
+            applied = p.update("--apply")
+            return dry, applied, p.version()
+        finally:
+            p.close()
+
+    def two_file_project(self, tiers_edit, weight_text):
+        """A schema-6 project whose risk-tiers.json is the old table after `tiers_edit(doc)` and whose
+        weight.json is `weight_text`: the dry run, the --apply run and the schema version"""
+        p = Project(edited=True)
+        try:
+            doc = read_json(p.path("policies", "risk-tiers.json"))
+            tiers_edit(doc)
+            with open(p.path("policies", "risk-tiers.json"), "w", encoding="utf-8") as fh:
+                json.dump(doc, fh, indent=2)
+                fh.write("\n")
+            with open(p.path("policies", "weight.json"), "w", encoding="utf-8") as fh:
+                fh.write(weight_text)
+            subprocess.run(GIT + ["-C", p.root, "commit", "-qam", "two files"], check=True)
+            dry = p.update()
+            applied = p.update("--apply")
+            return dry, applied, p.version()
+        finally:
+            p.close()
+
+    def assert_no_conflict(self, dry, applied):
+        for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+            self.assertNotIn("Traceback", out, out)
+            self.assertNotRegex(out, r"conflict .*weight\.json", out)
+            self.assertNotRegex(out, r"conflict .*\[0007\]", out)
+            self.assertIn(" 0 conflict(s)", out)
+        self.assertEqual((dry.returncode, applied.returncode), (0, 0), dry.stdout + applied.stdout)
+
+    def test_a_weight_json_with_tests_a_string_passes_where_convert_carries_no_tests_scalar(self):
+        """R-l2: the shape check looks only where convert writes; the project edited `tests`, so base differs
+        from the weight template at tests.max_suite_runs and convert carries no tests scalar: `"tests": "x"` is no conflict"""
+        dry, applied, _ = self.deep_project("weight.json", self.edited_weight(
+            lambda doc: doc.__setitem__("tests", "x")))
+        self.assert_no_conflict(dry, applied)
+
+    def test_a_weight_json_with_hints_an_object_passes_when_convert_writes_no_hint(self):
+        """R-l2: with no auth, security, pipeline or dependencies scope in the old table convert writes no
+        hint, so `"hints": {}` is never read as a list: no conflict"""
+        def drop_hinted(doc):
+            doc["path_scopes"] = [s for s in doc["path_scopes"]
+                                  if s["scope"] not in ("auth", "security", "pipeline", "dependencies")]
+        weight = self.edited_weight(lambda doc: doc.__setitem__("hints", {}))
+        dry, applied, _ = self.two_file_project(drop_hinted, weight)
+        self.assert_no_conflict(dry, applied)
+
+    def test_a_risk_tiers_json_nested_past_the_parser_limit_holds_the_schema_not_a_crash(self):
+        """L2: read_json meets a RecursionError (200000 levels): a conflict on the table, the schema stays put"""
+        dry, applied, version = self.deep_project("risk-tiers.json", "[" * 200000 + "]" * 200000)
+        for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+            self.assertNotIn("Traceback", out, out)
+            self.assertRegex(out, r"conflict .*risk-tiers\.json.*nested too deeply")
+        self.assertEqual("6", version, "a conflict holds the schema version, so the next run tries again")
+
+    def test_a_weight_json_nested_past_the_copy_limit_holds_the_schema_in_the_migration(self):
+        """L2: edit_json's copy.deepcopy meets a RecursionError (parses at 3000 levels): a conflict, no crash"""
+        dry, applied, version = self.deep_project("weight.json", '{"a":' * 3000 + "1" + "}" * 3000)
+        for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+            self.assertNotIn("Traceback", out, out)
+            self.assertRegex(out, r"conflict .*weight\.json.*nested too deeply")
+        self.assertEqual("6", version, "a conflict holds the schema version, so the next run tries again")
+
+    def test_a_weight_json_nested_past_the_parser_limit_holds_the_schema_in_0007s_own_loads(self):
+        """R-dee7: 0007's _loads meets a RecursionError (200000 levels, a valid risk-tiers.json): a conflict, no crash"""
+        dry, applied, version = self.deep_project("weight.json", "[" * 200000 + "]" * 200000)
+        for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+            self.assertNotIn("Traceback", out, out)
+            self.assertRegex(out, r"conflict .*weight\.json.*nested too deeply")
+        self.assertEqual("6", version, "a conflict holds the schema version, so the next run tries again")
+
+    def malformed_project(self, name, text, fname):
+        """R-6ab7: a type-malformed `name` policy file is a conflict on `fname`, not a crash, whatever the run"""
+        dry, applied, version = self.deep_project(name, text)
+        for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+            self.assertNotIn("Traceback", out, out)
+            self.assertRegex(out, r"conflict .*%s.*could not run" % fname)
+        self.assertEqual("6", version, "a conflict holds the schema version, so the next run tries again")
+
+    def test_a_risk_tiers_json_with_tiers_a_list_holds_the_schema_not_a_crash(self):
+        """R-6ab7: `"tiers": ["x"]` made convert call .items() on a list: a conflict on the table"""
+        self.malformed_project("risk-tiers.json", '{"tiers": ["x"]}', r"risk-tiers\.json")
+
+    def test_a_risk_tiers_json_with_tiers_empty_converts_as_before(self):
+        """R-c34d: `"tiers": []` is falsy, so convert reads it as no tiers, as before the shape checks: no conflict"""
+        dry, applied, _ = self.deep_project("risk-tiers.json", '{"tiers": []}')
+        for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+            self.assertNotIn("Traceback", out, out)
+            self.assertNotRegex(out, r"conflict .*risk-tiers\.json", out)
+        self.assertEqual((dry.returncode, applied.returncode), (0, 0), dry.stdout + applied.stdout)
+        self.assertIn("0007 carry", dry.stdout, "the dry run lists migration 0007")
+
+    def converts_clean(self, text, fname="risk-tiers.json"):
+        """L1: a `fname` convert reads without a crash converts, in a dry run and --apply with no conflict on
+        `fname` and no `[0007]` conflict line on any file (not the schema version: 0011 holds it at 6)"""
+        dry, applied, _ = self.deep_project(fname, text)
+        for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+            self.assertNotIn("Traceback", out, out)
+            self.assertNotRegex(out, r"conflict .*%s" % fname.replace(".", r"\."), out)
+            self.assertNotRegex(out, r"conflict .*\[0007\]", out)
+        self.assertEqual((dry.returncode, applied.returncode), (0, 0), dry.stdout + applied.stdout)
+
+    def test_a_risk_tiers_json_convert_reads_without_a_crash_converts(self):
+        """L1: examples on a tier convert ignores, path_scopes as an object or a string, a scope named 0 or true
+        with string paths (R-5f4c): no conflict"""
+        self.converts_clean('{"tiers": {"T9": {"examples": "x"}}}')
+        self.converts_clean('{"path_scopes": {"a": 1}}')
+        self.converts_clean('{"path_scopes": "abc"}')
+        self.converts_clean('{"path_scopes": [{"scope": 0, "paths": ["custom/**"]}]}')
+        self.converts_clean('{"path_scopes": [{"scope": true, "paths": ["custom/**"]}]}')
+
+    def applied_weight(self, text):
+        """R-a6a8: dry run and --apply of a risk-tiers.json `text` without a conflict or a crash; the resulting weight.json"""
+        p = Project(edited=True)
+        try:
+            with open(p.path("policies", "risk-tiers.json"), "w", encoding="utf-8") as fh:
+                fh.write(text)
+            subprocess.run(GIT + ["-C", p.root, "commit", "-qam", "deep"], check=True)
+            dry, applied = p.update(), p.update("--apply")
+            for out in (dry.stdout + dry.stderr, applied.stdout + applied.stderr):
+                self.assertNotIn("Traceback", out, out)
+                self.assertNotRegex(out, r"conflict .*risk-tiers\.json", out)
+            self.assertEqual((dry.returncode, applied.returncode), (0, 0), dry.stdout + applied.stdout)
+            return json.loads(p.read("policies", "weight.json"))
+        finally:
+            p.close()
+
+    def test_a_risk_tiers_json_with_object_examples_or_paths_carries_the_keys(self):
+        """R-a6a8: examples / paths as an object iterate by key, as before the type checks: no conflict, keys carried"""
+        doc = self.applied_weight('{"tiers": {"T1": {"examples": {"the ERP cut-over": 1}}}}')
+        self.assertIn("the ERP cut-over", doc["examples"]["light"])
+        doc = self.applied_weight('{"path_scopes": [{"scope": "payments", "paths": {"billing-xyz/**": 1}}]}')
+        self.assertIn("billing-xyz/**", doc["axes"]["domain"]["modules"])
+
+    def test_a_risk_tiers_json_with_string_or_number_examples_or_paths_is_a_conflict(self):
+        """R-a6a8: a string iterates letter by letter and a number crashes convert: still a conflict on the table;
+        R-0007: a boolean examples and a string paths are conflicts that name their type"""
+        self.malformed_project("risk-tiers.json", '{"tiers": {"T1": {"examples": "x"}}}', r"risk-tiers\.json")
+        self.malformed_project("risk-tiers.json", '{"tiers": {"T1": {"examples": 5}}}', r"risk-tiers\.json")
+        self.malformed_project("risk-tiers.json", '{"path_scopes": [{"scope": "payments", "paths": 5}]}',
+                               r"risk-tiers\.json")
+        boolean = '{"tiers": {"T1": {"examples": true}}}'
+        self.malformed_project("risk-tiers.json", boolean, r"risk-tiers\.json")
+        self.assertIn("tiers.T1.examples is a boolean, not a list", self.conflict_line("risk-tiers.json", boolean))
+        string = '{"path_scopes": [{"scope": "payments", "paths": "abc"}]}'
+        self.malformed_project("risk-tiers.json", string, r"risk-tiers\.json")
+        self.assertIn("a path scope's paths is a string, not a list", self.conflict_line("risk-tiers.json", string))
+
+    def test_a_risk_tiers_json_that_is_not_an_object_names_the_type_with_its_article(self):
+        """R-4207: the reason reads "is a number, not an object", with the article of the JSON word"""
+        dry, _, _ = self.deep_project("risk-tiers.json", '{"tiers": 5}')
+        self.assertIn("tiers is a number, not an object", dry.stdout)
+        self.assertNotIn("a object", dry.stdout + dry.stderr)
+
+    def edited_weight(self, edit):
+        """the shipped weight.json as text, after `edit(doc)`"""
+        doc = read_json(os.path.join(POLICIES, "weight.json"))
+        edit(doc)
+        return json.dumps(doc)
+
+    def test_a_weight_json_with_a_null_where_convert_writes_holds_the_schema_not_a_crash(self):
+        """R-30c9: the edited table carries domain modules, and `"modules": null` made _add run on None"""
+        self.malformed_project("weight.json", self.edited_weight(
+            lambda doc: doc["axes"]["domain"].__setitem__("modules", None)), r"weight\.json")
+
+    def conflict_line(self, name, text):
+        """the dry run's conflict line for `name` (R-l1: the type reads in JSON words)"""
+        dry, _, _ = self.deep_project(name, text)
+        lines = [l for l in (dry.stdout + dry.stderr).splitlines() if "conflict" in l and name in l]
+        self.assertTrue(lines, dry.stdout + dry.stderr)
+        return lines[0]
+
+    def test_a_conflict_names_an_object_in_json_words_not_python_types(self):
+        """R-l1: a dict scope name reads "is an object, not a string", never OrderedDict, dict or str"""
+        line = self.conflict_line("risk-tiers.json",
+                                  '{"path_scopes": [{"scope": {"a": 1}, "paths": ["custom/**"]}]}')
+        self.assertIn("a path scope's name is an object, not a string", line)
+        self.assertNotRegex(line, r"OrderedDict|\bdict\b|\bstr\b")
+
+    def test_a_conflict_names_null_without_an_article(self):
+        """R-l1: a null reads "is null, not a list", not "is a null" """
+        line = self.conflict_line("weight.json", self.edited_weight(
+            lambda doc: doc["axes"]["domain"].__setitem__("modules", None)))
+        self.assertIn("axes.domain.modules is null, not a list", line)
+        self.assertNotIn("a null", line)
+
+    def test_a_weight_json_hint_with_null_paths_holds_the_schema_not_a_crash(self):
+        """R-30c9: the edited table carries a domain hint, and its `"paths": null` made _add run on None"""
+        self.malformed_project("weight.json", self.edited_weight(
+            lambda doc: doc.update(hints=[{"axis": "domain", "paths": None, "note": "x"}])), r"weight\.json")
+
+    def test_a_risk_tiers_json_with_a_list_scope_name_holds_the_schema_not_a_crash(self):
+        """R-6ab7: a path scope named by a list made shipped_scopes.get unhashable: a conflict on the table"""
+        self.malformed_project("risk-tiers.json", '{"path_scopes": [{"scope": ["x"], "paths": ["custom/**"]}]}',
+                               r"risk-tiers\.json")
+
+    def test_a_weight_json_that_is_a_list_holds_the_schema_not_a_crash(self):
+        """R-6ab7: a weight.json holding `[]` made convert call new.setdefault on a list: a conflict on it"""
+        self.malformed_project("weight.json", "[]", r"weight\.json")
+
+    # R-5e7a: the encoder does not fail on input json.loads accepts (Python 3.14: the parser stops near
+    # 20000 levels, the encoder writes 19900), so the create path's dump is pinned by an injected fault:
+    # json.dumps raises for a weight table whose tests.timeout_seconds carries "dump_probe".
+    CREATE_DUMP_FAULT = """
+import json, os, sys
+sys.path.insert(0, os.path.dirname(sys.argv[1]))
+import update
+real = json.dumps
+def dumps(obj, *a, **kw):
+    probe = obj.get("tests", {}).get("timeout_seconds") if isinstance(obj, dict) else None
+    if isinstance(probe, dict) and "dump_probe" in probe:
+        raise RecursionError("injected")
+    return real(obj, *a, **kw)
+json.dumps = dumps
+sys.argv = sys.argv[1:]
+sys.exit(update.main())
+"""
+
+    def test_a_carried_scalar_too_deep_to_dump_on_the_create_path_is_a_conflict(self):
+        """R-5e7a: with no weight.json, the create path's compare and dump met a RecursionError (an injected
+        fault): a conflict on risk-tiers.json and a default weight.json, no crash"""
+        p = Project(edited=True, weight=False)
+        try:
+            doc = read_json(p.path("policies", "risk-tiers.json"))
+            doc["sensors"]["tests"]["timeout_seconds"] = {"dump_probe": 1}
+            with open(p.path("policies", "risk-tiers.json"), "w", encoding="utf-8") as fh:
+                json.dump(doc, fh, indent=2)
+            subprocess.run(GIT + ["-C", p.root, "commit", "-qam", "probe"], check=True)
+            for args in ((), ("--apply",)):
+                run = subprocess.run([sys.executable, "-I", "-c", self.CREATE_DUMP_FAULT, UPDATE, p.root, *args],
+                                     env=p.env, capture_output=True, text=True, check=False)
+                out = run.stdout + run.stderr
+                self.assertNotIn("Traceback", out, out)
+                self.assertTrue(has(r"conflict .*risk-tiers\.json.*nested too deeply, so this migration could not run",
+                                    out), out)
+            self.assertEqual("6", p.version(), "a conflict holds the schema version, so the next run tries again")
+            self.assertTrue(os.path.exists(p.path("policies", "weight.json")), "a default weight.json beside it")
+        finally:
+            p.close()
+
+    # R-9085: record_migration and three_way's policy leaf, in-process with stub plans.
+    DEEP_RECORD = """
+import json, os, sys
+from types import SimpleNamespace
+sys.path.insert(0, os.path.dirname(sys.argv[1]))
+import update
+root = sys.argv[2]
+os.makedirs(os.path.join(root, "rep"))
+with open(os.path.join(root, "rep", "migration.json"), "w") as fh:
+    fh.write("[" * 200000 + "]" * 200000)
+update.record_migration(SimpleNamespace(root=root, report_dir="rep", schema=(5, 6), held=None), [], [])
+print(open(os.path.join(root, "rep", "migration.json")).read())
+"""
+
+    DEEP_POLICY_LEAF = """
+import json, os, sys
+from types import SimpleNamespace
+sys.path.insert(0, os.path.dirname(sys.argv[1]))
+import update
+ours = ('{"k": ' * 3000 + '{}' + '}' * 3000).encode()  # a string: json.dumps of it recurses on 3.11
+theirs = b'{"x": 1}'
+items = []
+plan = SimpleNamespace(read=lambda target: ours,
+                       add=lambda action, target, note="", **kw: items.append((action, target, kw.get("policy"))))
+history = SimpleNamespace(versions=lambda key: [ours])
+update.three_way(plan, history, "ai-init/policies/x.json", ".ai/policies/x.json", theirs)
+print(json.dumps(items))
+"""
+
+    def test_a_too_deep_migration_json_reads_as_a_malformed_one(self):
+        """R-9085: json.loads of a hand-made migration.json past the recursion limit tracebacked
+        update --apply; it is rewritten like a malformed one, with no ops carried"""
+        with tempfile.TemporaryDirectory() as d:
+            run = subprocess.run([sys.executable, "-I", "-c", self.DEEP_RECORD, UPDATE, d],
+                                 capture_output=True, text=True, check=False)
+            self.assertNotIn("Traceback", run.stderr, run.stderr[-2000:])
+            self.assertEqual(run.returncode, 0, run.stderr[-2000:])
+            record = json.loads(run.stdout)
+            self.assertIsInstance(record, dict)
+            self.assertEqual(record["ops"], [])
+            self.assertEqual(record["deletions"], [])
+
+    def test_a_too_deep_policy_unchanged_since_install_updates_with_no_policy_lines(self):
+        """R-9085: the policy-leaf branch of three_way caught only ValueError; flatten of a policy
+        nested 3000 levels raised RecursionError: one update, policy None, no Traceback"""
+        run = subprocess.run([sys.executable, "-I", "-c", self.DEEP_POLICY_LEAF, UPDATE],
+                             capture_output=True, text=True, check=False)
+        self.assertNotIn("Traceback", run.stderr, run.stderr[-2000:])
+        self.assertEqual(run.returncode, 0, run.stderr[-2000:])
+        self.assertEqual(json.loads(run.stdout), [["update", ".ai/policies/x.json", None]])
 
     def test_full_apply(self):
         p = Project(edited=True)
@@ -491,7 +792,8 @@ class TestMigration0008(unittest.TestCase):
         done = self.p.update("--apply")
         self.assertEqual((done.returncode, self.p.version()), (0, "11"), done.stdout + done.stderr)
         self.assertFalse(os.path.exists(self.p.path("state", "state.json")), "no task, no file is invented")
-        self.assertNotIn(b"claude-agentic", open(os.path.join(self.p.root, "CLAUDE.md"), "rb").read())
+        with open(os.path.join(self.p.root, "CLAUDE.md"), "rb") as fh:
+            self.assertNotIn(b"claude-agentic", fh.read())
 
     def test_rule_markers_keep_their_spacing(self):
         spec = importlib.util.spec_from_file_location("migration_0008_under_test", MIGRATION_0008)
@@ -588,8 +890,8 @@ class TestMigration0009(unittest.TestCase):
         self.assertFalse(self.has(self.LEGACY))
 
     def test_both_files_is_a_conflict_and_nothing_changes(self):
-        legacy = "{\"task_id\": \"T-old\"}\n"
-        put(os.path.join(self.p.root, self.LEGACY), legacy)
+        legacy_text = "{\"task_id\": \"T-old\"}\n"
+        put(os.path.join(self.p.root, self.LEGACY), legacy_text)
         put(os.path.join(self.p.root, self.NEW), "{\"task_id\": \"T-new\"}\n")
         self.commit()
         done = self.p.update("--apply")
@@ -598,7 +900,7 @@ class TestMigration0009(unittest.TestCase):
         self.assertIn("already exists", done.stdout)
         self.assertEqual(self.p.version(), "8", "the schema is held at 8")
         self.assertEqual(self.p.read("state", "state.json"), b"{\"task_id\": \"T-new\"}\n")
-        self.assertEqual(self.p.read("state", "current.json"), legacy.encode())
+        self.assertEqual(self.p.read("state", "current.json"), legacy_text.encode())
 
     def test_move_leaves_no_copy_of_the_task_state_in_the_report(self):
         self.start_task()
@@ -1425,6 +1727,197 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertIn("must stay inside the project: a/../b", out,
                       "dirs: [a/../b] is still refused before it is normalised")
 
+    GIT_LEAK = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")    # a stray one would point these tests' git at another tree
+
+    def tracked_git(self, d, *args, out=False):
+        """git in d with the stray GIT_* variables dropped; out=True returns the NUL-split stdout."""
+        env = {k: v for k, v in self.env.items() if k not in self.GIT_LEAK}
+        done = subprocess.run(GIT + ["-C", d] + list(args), env=env, check=True, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL)
+        return [x for x in done.stdout.split(b"\0") if x] if out else None
+
+    def index_of(self, d):
+        """The paths git tracks in d, as bytes."""
+        return set(self.tracked_git(d, "ls-files", "-z", out=True))
+
+    def run_printed(self, d, line):
+        """Run, through a shell with cwd = d, the command a hint line prints between backticks."""
+        command = next(c for c in re.findall(r"`(git [^`]*)`", line) if "rm --cached" in c)    # not `git commit -a`
+        env = {k: v for k, v in self.env.items() if k not in self.GIT_LEAK}
+        subprocess.run(["bash", "-c", command], cwd=d, env=env, check=True, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+        return command
+
+    def run_hint_command(self, d, out, name):
+        """Run the command of the hint for `name` (the shown, escaped name); returns that command."""
+        line = next(x for x in out.splitlines() if x.lstrip().startswith("hint") and (" %s: tracked" % name) in x)
+        return self.run_printed(d, line)
+
+    def test_tracked_but_ignored_state_file_is_reported(self):
+        """a .ai/state file git holds although an ignore rule ignores it is a hint with the untrack command,
+        not a pending update; untracked, or outside a git work tree, nothing is said; --apply writes nothing for it"""
+        rel = ".ai/state/consent.jsonl"
+        d = self.current_project("tracked-ignored")
+        self.assertIn(".ai/state/*.jsonl", text_of(os.path.join(d, ".gitignore")),
+                      "the scaffolded .gitignore ignores the state ledgers")
+        self.tracked_git(d, "init", "-q")
+        self.tracked_git(d, "commit", "-q", "--allow-empty", "-m", "init")
+        put(os.path.join(d, rel), '{"v":1}\n')
+        self.tracked_git(d, "add", "-f", rel)
+        self.tracked_git(d, "commit", "-q", "-m", "track the ledger")
+
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.assertTrue(has(r"^  hint +\.ai/state/consent\.jsonl: tracked by git but ignored", out),
+                        "a hint names the tracked, ignored state file\n" + out)
+        self.assertNotIn("by .gitignore", out, "the rule may come from .git/info/exclude or core.excludesFile\n" + out)
+        self.assertIn("git --literal-pathspecs rm --cached -- .ai/state/consent.jsonl", out,
+                      "and the command that untracks it, by literal path\n" + out)
+        rc, out = self.upd(d, "--check", merge=True, unset=self.GIT_LEAK)
+        self.assertEqual(rc, 0, "--check exits 0: a hint is not a pending update\n" + out)
+
+        before = (self.index_of(d), self.tracked_git(d, "status", "--porcelain", out=True))
+        rc, out = self.upd(d, "--apply", merge=True, unset=self.GIT_LEAK)
+        self.assertEqual(rc, 0, "--apply exits 0\n" + out)
+        self.assertEqual(before, (self.index_of(d), self.tracked_git(d, "status", "--porcelain", out=True)),
+                         "--apply neither untracks the file nor touches the tree for the hint")
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.assertTrue(has("^0 automatic, 0 conflict", out), "the run after --apply is up to date\n" + out)
+        self.assertIn("tracked by git but ignored", out, "and the hint is still there: --apply does not act on it")
+
+        self.run_hint_command(d, out, rel)
+        self.assertNotIn(rel.encode(), self.index_of(d), "the printed command untracks the file")
+        self.assertTrue(os.path.isfile(os.path.join(d, rel)), "and leaves it on disk")
+        self.tracked_git(d, "commit", "-q", "-m", "untrack the ledger")
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.assertFalse(has("tracked by git but ignored", out), "an untracked file draws no hint\n" + out)
+
+        n = self.current_project("tracked-ignored-no-git")
+        put(os.path.join(n, rel), '{"v":1}\n')
+        rc, out = self.upd(n, merge=True, unset=self.GIT_LEAK + ("GIT_CEILING_DIRECTORIES",),
+                           GIT_CEILING_DIRECTORIES=os.path.dirname(n))
+        self.assertFalse(has("tracked by git but ignored", out), "outside a git work tree there is no hint\n" + out)
+        self.assertNotIn("Traceback", out, "and no crash")
+
+    def test_tracked_ignored_hints_say_to_run_the_command_from_the_project_root(self):
+        """R-tracked-ignored-untrack-commands-are-cwd: the paths in the printed commands are project-relative,
+        so every hint form (one file, the NUL-safe one, the count of the rest) says where to run them"""
+        d = self.current_project("tracked-ignored-cwd")
+        self.tracked_git(d, "init", "-q")
+        names = [".ai/state/f%02d.jsonl" % i for i in range(11)] + [".ai/state/n\nl.jsonl"]
+        for rel in names:
+            put(os.path.join(d, rel), '{"v":1}\n')
+            self.tracked_git(d, "add", "-f", "--", rel)
+        self.tracked_git(d, "commit", "-q", "-m", "track")
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        lines = [x for x in out.splitlines() if "tracked by git but ignored" in x]
+        self.assertEqual(len(lines), 11, "ten per-file hints and the count line\n" + out)
+        self.assertTrue(any("more file(s)" in x for x in lines), out)
+        for line in lines:
+            with self.subTest(line=line[:60]):
+                self.assertIn("from the project root", line)
+                self.assertLess(line.index("from the project root"), re.search(r"`git (--literal|ls-files)", line).start(),
+                                "before the command")
+
+    def test_tracked_ignored_hint_quotes_the_path(self):
+        """M1: the untrack command quotes a name with a space; a name with a control character is shown
+        escaped and gets the NUL-safe command instead, so it neither forges a line nor prints a raw name;
+        both printed commands, run, untrack what they say (L5: the NUL-safe one, every such file)"""
+        d = self.current_project("tracked-ignored-odd-names")
+        self.tracked_git(d, "init", "-q")
+        spaced, forged, keep = ".ai/state/a b.jsonl", ".ai/state/n\nl; touch pwn #.jsonl", ".ai/state/keep.jsonl"
+        every = {x.encode() for x in (spaced, forged, keep)}
+        for rel in (spaced, forged, keep):
+            put(os.path.join(d, rel), '{"v":1}\n')
+            self.tracked_git(d, "add", "-f", "--", rel)
+        self.tracked_git(d, "commit", "-q", "-m", "track odd names")
+
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.assertIn("git --literal-pathspecs rm --cached -- '.ai/state/a b.jsonl'", out, "a space is quoted\n" + out)
+        self.assertFalse(any(line.lstrip().startswith("l; touch pwn") for line in out.splitlines()),
+                         "a newline in a name forges no line\n" + out)
+        self.assertIn(".ai/state/n\\nl; touch pwn #.jsonl: tracked by git", out, "the name is shown escaped\n" + out)
+        self.assertNotIn("rm --cached -- .ai/state/n", out, "no command with the raw name\n" + out)
+        self.assertNotIn("rm --cached -- '.ai/state/n", out, "nor a quoted one that spans lines\n" + out)
+        nul_safe = "git ls-files -z -ci --exclude-standard -- .ai/state | xargs -0 -r git --literal-pathspecs rm --cached --"
+        self.assertIn(nul_safe, out, "the NUL-safe command instead\n" + out)
+        self.assertIn("EVERY tracked, ignored file under .ai/state", out, "which says it untracks them all\n" + out)
+
+        self.run_hint_command(d, out, ".ai/state/a b.jsonl")
+        self.assertEqual(self.index_of(d) & every, every - {spaced.encode()},
+                         "the quoted command untracks the spaced name only")
+        self.run_hint_command(d, out, ".ai/state/n\\nl; touch pwn #.jsonl")
+        self.assertEqual(self.index_of(d) & every, set(),
+                         "the NUL-safe command untracks every tracked, ignored file under .ai/state")
+        self.assertFalse(os.path.exists(os.path.join(d, "pwn")), "and runs nothing from the name")
+
+    def test_tracked_ignored_hint_takes_a_name_literally(self):
+        """L4: * ? [ ] in a name is that name, not a pathspec: untracking a[bc].jsonl leaves ab.jsonl tracked"""
+        d = self.current_project("tracked-ignored-glob")
+        self.tracked_git(d, "init", "-q")
+        globbed, plain = ".ai/state/a[bc].jsonl", ".ai/state/ab.jsonl"
+        for rel in (globbed, plain):
+            put(os.path.join(d, rel), '{"v":1}\n')
+            self.tracked_git(d, "add", "-f", "--", rel)
+        self.tracked_git(d, "commit", "-q", "-m", "track both")
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.run_hint_command(d, out, globbed)
+        self.assertEqual(self.index_of(d) & {globbed.encode(), plain.encode()}, {plain.encode()},
+                         "only a[bc].jsonl left the index; ab.jsonl is still tracked")
+
+    def test_tracked_ignored_hint_is_capped_and_survives_a_non_utf8_name(self):
+        """L3: ten per-file hints, then one that counts the rest and carries the command for all;
+        a name that is not UTF-8 is shown escaped (never raises) and gets the NUL-safe command"""
+        d = self.current_project("tracked-ignored-many")
+        self.tracked_git(d, "init", "-q")
+        names = [".ai/state/f%02d.jsonl" % i for i in range(12)]
+        for rel in names:
+            put(os.path.join(d, rel), '{"v":1}\n')
+            self.tracked_git(d, "add", "-f", "--", rel)
+        self.tracked_git(d, "commit", "-q", "-m", "track twelve")
+        rc, out = self.upd(d, "--check", merge=True, unset=self.GIT_LEAK)
+        self.assertEqual(rc, 0, out)
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.assertEqual(grep(r"^  hint +\.ai/state/f\d\d\.jsonl: tracked by git but ignored", out), 10,
+                         "ten per-file hints\n" + out)
+        self.assertEqual(grep(r"^  hint +\.ai/state: 2 more file\(s\) tracked by git but ignored", out), 1,
+                         "and one that counts the other two\n" + out)
+        self.assertIn("xargs -0 -r git --literal-pathspecs rm --cached --", out, "with the command for all\n" + out)
+        self.run_printed(d, next(x for x in out.splitlines() if ": 2 more file(s)" in x))
+        self.assertEqual(self.index_of(d) & {x.encode() for x in names}, set(), "which untracks all twelve")
+
+        bad = os.fsencode(os.path.join(d, ".ai", "state")) + b"/bad\xff.jsonl"
+        try:
+            with open(bad, "w", encoding="utf-8") as fh:
+                fh.write('{"v":1}\n')
+        except OSError:
+            self.skipTest("this filesystem refuses a non-UTF-8 file name")
+        self.tracked_git(d, "add", "-f", "--", bad)
+        self.tracked_git(d, "commit", "-q", "-m", "track a non-UTF-8 name")
+        rc, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.assertNotIn("Traceback", out, "a non-UTF-8 name does not crash the report\n" + out)
+        self.assertIn(".ai/state/bad\\udcff.jsonl: tracked by git but ignored", out,
+                      "it is shown escaped\n" + out)
+        self.assertIn("xargs -0 -r git --literal-pathspecs rm --cached --", out, "and gets the NUL-safe command\n" + out)
+        self.run_hint_command(d, out, ".ai/state/bad\\udcff.jsonl")
+        self.assertNotIn(b".ai/state/bad\xff.jsonl", self.index_of(d), "which untracks it")
+
+    def test_tracked_ignored_hint_in_a_project_below_a_git_root(self):
+        """L1: a project that is a subdirectory of a git work tree: names stay relative to the project,
+        and the printed command, run from the project root, untracks the file"""
+        outer = self.dir("tracked-ignored-outer")
+        d = self.current_project(os.path.join("tracked-ignored-outer", "proj"))
+        self.tracked_git(outer, "init", "-q")
+        rel = ".ai/state/consent.jsonl"
+        put(os.path.join(d, rel), '{"v":1}\n')
+        self.tracked_git(d, "add", "-f", "--", rel)
+        self.tracked_git(outer, "commit", "-q", "-m", "track the ledger")
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        self.assertTrue(has(r"^  hint +\.ai/state/consent\.jsonl: tracked by git but ignored", out),
+                        "the name is relative to the project, not to the git root\n" + out)
+        self.assertNotIn("proj/.ai/state", out, out)
+        self.run_hint_command(d, out, rel)
+        self.assertNotIn(b"proj/" + rel.encode(), self.index_of(outer), "the file left the index")
+
     def test_every_history_key_is_accounted_for(self):
         """every key in the template history is accounted for"""
         rc, out = self.run_([sys.executable, "-I", "-c", HISTORY_KEYS, ROOT], merge=True)
@@ -1607,6 +2100,275 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertNotIn("rendered from weight.json", out, out)
         self.assertIn("A note of the project's own.", text_of(wm), "the hand edit is kept")
 
+    def test_a_renderer_that_fails_with_an_oserror_falls_back_to_the_text_merge(self):
+        """weight.md: a renderer that cannot run (no temp dir: OSError) is a text merge, not a crash"""
+        d = self.mirrored_project("weight-mirror-no-tmp")
+        _, out = self.upd(d, merge=True, TMPDIR=os.path.join(self.t, "no-such-temp-dir"))
+        self.assertNotIn("Traceback", out, out)
+        self.assertNotIn("rendered from weight.json", out, "the mirror went through the text merge\n" + out)
+
+    def test_a_weight_mirror_of_an_older_json_draws_a_hint(self):
+        """weight.md: a mirror rendered from another weight.json than the one on disk names state.py weight --mirror"""
+        d = self.mirrored_project("weight-mirror-stale")
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        doc = read_json(wj)
+        doc["examples"]["light"].append("an edit the interrupted apply wrote first")
+        put_json(wj, doc)
+        rc, out = self.upd(d, merge=True)
+        self.assertNotEqual(2, rc, out)
+        self.assertIn("state.py weight --mirror", out, "the stale mirror is named\n" + out)
+
+    def test_a_stale_hand_edited_weight_mirror_hint_says_regenerating_replaces_the_edits(self):
+        """M1: a weight.md that is hand-edited AND stale draws the hint, which says the regeneration
+        replaces hand edits; the update itself never overwrites it"""
+        d = self.mirrored_project("weight-mirror-stale-edited")
+        wm = os.path.join(d, ".ai", "policies", "weight.md")
+        edited = text_of(wm) + "\nA note of the project's own.\n"
+        put(wm, edited)
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        doc = read_json(wj)
+        doc["examples"]["light"].append("an edit the interrupted apply wrote first")
+        put_json(wj, doc)
+        rc, out = self.upd(d, "--apply", merge=True)
+        self.assertEqual(0, rc, out)
+        self.assertTrue(has(r"weight\.md: rendered from a different weight\.json.*REPLACES any hand edits", out),
+                        "the hint warns that regenerating replaces hand edits\n" + out)
+        self.assertIn("A note of the project's own.", text_of(wm), "the update kept the hand edit")
+
+    def test_a_renderer_that_raises_names_its_exception_class_in_a_hint(self):
+        """L3: the text-merge fallback of weight_mirror says which exception made it, on one line"""
+        d = self.mirrored_project("weight-mirror-render-raises")
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        put(wj, '{"axes": [1]}')  # the renderer cannot read it: AttributeError
+        _rc, out = self.upd(d, merge=True)
+        self.assertNotIn("Traceback", out, out)
+        self.assertTrue(has(r"^  hint +\.ai/policies/weight\.md: not rendered from weight\.json \(AttributeError\); merged as text$", out),
+                        "the hint names the exception class\n" + out)
+
+    def test_a_weight_json_nested_past_the_recursion_limit_is_a_conflict_not_a_crash(self):
+        """a project weight.json nested 3000 levels (flatten recurses) is reported, not a RecursionError"""
+        d = self.current_project("weight-json-deep")
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        put(wj, '{"a":' * 3000 + "1" + "}" * 3000)
+        _rc, out = self.upd(d, merge=True)
+        self.assertNotIn("Traceback", out, out)
+        self.assertNotIn("RecursionError", out, out)
+        self.assertTrue(has("conflict .*weight.json.*nested too deeply", out), out)
+        _rc, out = self.upd(d, "--apply", merge=True)
+        self.assertNotIn("Traceback", out, out)
+
+    def test_a_weight_json_nested_past_the_parser_limit_is_a_conflict_not_a_crash(self):
+        """M1: json.loads itself raises RecursionError (200000 levels, past the C scanner's limit): a conflict"""
+        d = self.current_project("weight-json-unparseable-deep")
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        put(wj, "[" * 200000 + "]" * 200000)
+        _rc, out = self.upd(d, merge=True)
+        self.assertNotIn("Traceback", out, out)
+        self.assertTrue(has("conflict .*weight.json.*nested too deeply", out), out)
+        _rc, out = self.upd(d, "--apply", merge=True)
+        self.assertNotIn("Traceback", out, out)
+
+    def test_a_renderer_that_raises_on_a_stale_mirror_draws_no_regenerate_hint(self):
+        """L4: when the renderer raised, the stale hint (state.py weight --mirror fails the same way) is left out"""
+        d = self.mirrored_project("weight-mirror-render-raises-stale")
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        put(wj, '{"axes": [1]}')  # the renderer cannot read it, and the mirror names another JSON
+        _rc, out = self.upd(d, merge=True)
+        self.assertNotIn("Traceback", out, out)
+        self.assertTrue(has(r"weight\.md: not rendered from weight\.json \(AttributeError\); merged as text", out), out)
+        self.assertNotIn("rendered from a different weight.json", out, out)
+        self.assertNotIn("state.py weight --mirror", out, out)
+
+    def test_a_missing_weight_mirror_is_created_from_the_template_not_rendered(self):
+        """weight.md: absent while weight.json is the project's own, --apply creates it as the template ships it (text path)"""
+        d = self.mirrored_project("weight-mirror-missing")
+        wm = os.path.join(d, ".ai", "policies", "weight.md")
+        os.remove(wm)
+        rc, out = self.upd(d, "--apply", merge=True)
+        self.assertEqual(0, rc, out)
+        self.assertNotIn("Traceback", out, out)
+        self.assertNotIn("rendered from weight.json", out, out)
+        self.assertEqual(text_of(os.path.join(TEMPLATES, ".ai", "policies", "weight.md")), text_of(wm),
+                         "the missing mirror is the template's, not the render of the project's JSON")
+
+    def test_a_symlinked_weight_json_leaves_the_mirror_to_the_text_merge(self):
+        """weight.md: a weight.json that is a symlink is not read for the mirror (disk is None): text merge, no stale hint"""
+        d = self.mirrored_project("weight-mirror-symlink")
+        wj = os.path.join(d, ".ai", "policies", "weight.json")
+        real = os.path.join(d, "weight-real.json")
+        shutil.move(wj, real)
+        os.symlink(real, wj)
+        rc, out = self.upd(d, merge=True)
+        self.assertEqual(0, rc, out)
+        # the text merge's outcome: the mirror names the project's JSON, the template's names its own
+        self.assertTrue(has(r"conflict +\.ai/policies/weight\.md ", out), "text merge: a conflict, not a render\n" + out)
+        self.assertNotIn("Traceback", out, out)
+        self.assertNotIn("rendered from weight.json", out, out)
+        self.assertNotIn("state.py weight --mirror", out, "no stale hint without a readable JSON\n" + out)
+        self.assertNotIn("not rendered from weight.json", out, "the renderer was never tried\n" + out)
+
+    def test_an_absent_weight_json_leaves_the_mirror_to_the_text_merge(self):
+        """weight.md: no weight.json on disk (disk is None): the mirror is not rendered and draws no stale hint"""
+        d = self.mirrored_project("weight-mirror-no-json")
+        os.remove(os.path.join(d, ".ai", "policies", "weight.json"))
+        rc, out = self.upd(d, merge=True)
+        self.assertEqual(0, rc, out)
+        self.assertTrue(has(r"create +\.ai/policies/weight\.json", out), "the JSON comes back from the template\n" + out)
+        self.assertTrue(has(r"conflict +\.ai/policies/weight\.md ", out), "text merge: a conflict, not a render\n" + out)
+        self.assertNotIn("Traceback", out, out)
+        self.assertNotIn("rendered from weight.json", out, out)
+        self.assertNotIn("state.py weight --mirror", out, out)
+        self.assertNotIn("not rendered from weight.json", out, out)
+
+    def test_a_policy_nested_past_the_parser_limit_makes_a_migrations_edit_json_a_conflict(self):
+        """L2: edit_json's json.loads meets a RecursionError (200000 levels; the synthetic 0003 edits the
+        table): a conflict on the path, the schema stays unwritten, no crash"""
+        d = self.v0_project("edit-json-deep")
+        put(os.path.join(d, ".ai", "policies", "risk-tiers.json"), "[" * 200000 + "]" * 200000)
+        synth = {"CLAUDE_AGENTIC_MIGRATIONS": SYNTH, "CLAUDE_AGENTIC_TEMPLATES": self.next_templates()}
+        for args in ((), ("--apply",)):
+            _, out = self.upd(d, *args, merge=True, **synth)
+            self.assertNotIn("Traceback", out, out)
+            self.assertTrue(has(r"conflict .*risk-tiers\.json.*nested too deeply", out), out)
+        self.assertFalse(os.path.exists(os.path.join(d, ".ai", "VERSION")),
+                         "a conflict holds the schema version, so the next run tries again")
+
+    def synth_0003(self, name, body):
+        """The synthetic migrations with 0003's plan() replaced by `body`: a migration of a test's own"""
+        dst = os.path.join(self.t, name)
+        shutil.copytree(SYNTH, dst)
+        put(os.path.join(dst, "0003_edits.py"), 'VERSION = 3\nTITLE = "a test\'s own 0003"\nMOVES = []\n\n\n' + body)
+        return {"CLAUDE_AGENTIC_MIGRATIONS": dst, "CLAUDE_AGENTIC_TEMPLATES": self.next_templates()}
+
+    def test_a_migrations_own_recursion_error_is_not_reported_as_a_file_nested_too_deeply(self):
+        """R-b22b: edit_json guards the copy and the write, not the migration's fn: a fn that recurses without
+        end on a shallow table is the migration's bug, so the run fails loudly and blames no file"""
+        d = self.v0_project("edit-json-fn-recurses")
+        synth = self.synth_0003("synth-fn-recurses", "def plan(ctx):\n    ctx.edit_json(\".ai/policies/risk-tiers.json\", loop)\n\n\n"
+                                                     "def loop(doc):\n    return loop(doc)\n")
+        rc, out = self.upd(d, merge=True, **synth)
+        self.assertNotEqual(0, rc, out)
+        self.assertIn("RecursionError", out, out)
+        self.assertNotIn("nested too deeply", out, out)
+
+    # R-d8e7: dump_json does not fail on input json.loads accepts (Python 3.14: the parser stops near
+    # 20000 levels, the encoder writes 19000), so its two guards are pinned by an injected fault:
+    # update.py runs with a dump_json that raises for a document carrying "dump_probe".
+    DUMP_FAULT = """
+import os, sys
+sys.path.insert(0, os.path.dirname(sys.argv[1]))
+import update
+real = update.dump_json
+def dump_json(value):
+    if isinstance(value, dict) and "dump_probe" in value:
+        raise RecursionError("injected")
+    return real(value)
+update.dump_json = dump_json
+sys.argv = sys.argv[1:]
+sys.exit(update.main())
+"""
+
+    def upd_dump_fault(self, d, **extra):
+        return self.run_([sys.executable, "-I", "-c", self.DUMP_FAULT, UPDATE, d], merge=True, **extra)
+
+    def test_edit_jsons_write_past_the_limit_is_a_conflict(self):
+        """R-d8e7: dump_json raising RecursionError in edit_json (an injected fault) is a conflict, not a crash"""
+        d = self.v0_project("edit-json-dump-fault")
+        synth = self.synth_0003("synth-dump-probe", "def plan(ctx):\n    ctx.edit_json(\".ai/policies/risk-tiers.json\", "
+                                                    "lambda o: {**o, \"dump_probe\": 1})\n")
+        _, out = self.upd_dump_fault(d, **synth)
+        self.assertNotIn("Traceback", out, out)
+        self.assertTrue(has(r"conflict .*risk-tiers\.json.*nested too deeply", out), out)
+
+    def test_three_ways_write_of_a_merged_policy_past_the_limit_is_a_conflict(self):
+        """R-d8e7: dump_json raising RecursionError on three_way's merged JSON (an injected fault) is a conflict"""
+        d = self.current_project("three-way-dump-fault")
+        pg = os.path.join(d, ".ai", "policies", "path-guard.json")
+        doc = read_json(pg)
+        doc["project_own"] = 1
+        put_json(pg, doc)
+        tpl = os.path.join(self.t, "dump-probe-templates")
+        shutil.copytree(TEMPLATES, tpl, symlinks=True)
+        theirs = os.path.join(tpl, ".ai", "policies", "path-guard.json")
+        doc = read_json(theirs)
+        doc["dump_probe"] = 1
+        put_json(theirs, doc)
+        _, out = self.upd_dump_fault(d, CLAUDE_AGENTIC_TEMPLATES=tpl)
+        self.assertNotIn("Traceback", out, out)
+        self.assertTrue(has(r"conflict .*path-guard\.json.*nested too deeply; not merged", out), out)
+
+    def test_two_reads_of_one_file_nested_too_deeply_report_one_conflict(self):
+        """R-dafb: a migration that reads one deep file twice records one conflict row, not two"""
+        d = self.v0_project("read-json-twice")
+        put(os.path.join(d, ".ai", "policies", "risk-tiers.json"), "[" * 200000 + "]" * 200000)
+        synth = self.synth_0003("synth-read-twice", "def plan(ctx):\n    for _ in range(2):\n"
+                                                    "        ctx.read_json(\".ai/policies/risk-tiers.json\")\n")
+        _, out = self.upd(d, merge=True, **synth)
+        self.assertNotIn("Traceback", out, out)
+        rows = [x for x in out.splitlines() if x.lstrip().startswith("conflict") and "risk-tiers.json" in x]
+        self.assertEqual(1, len(rows), out)
+
+    def test_reading_then_editing_one_deep_file_reports_one_conflict(self):
+        """R-7f26: read_json then edit_json on one deep file records one conflict row, not two"""
+        d = self.v0_project("read-then-edit-deep")
+        put(os.path.join(d, ".ai", "policies", "risk-tiers.json"), "[" * 200000 + "]" * 200000)
+        synth = self.synth_0003("synth-read-then-edit", "def plan(ctx):\n"
+                                "    ctx.read_json(\".ai/policies/risk-tiers.json\")\n"
+                                "    ctx.edit_json(\".ai/policies/risk-tiers.json\", lambda d: d)\n")
+        _, out = self.upd(d, merge=True, **synth)
+        self.assertNotIn("Traceback", out, out)
+        rows = [x for x in out.splitlines() if x.lstrip().startswith("conflict") and "risk-tiers.json" in x]
+        self.assertEqual(1, len(rows), out)
+
+    def test_another_reason_on_a_deep_file_stays_its_own_conflict_row(self):
+        """R-7f26: the deep-file dedup does not swallow a different reason on the same path"""
+        d = self.v0_project("deep-and-other-reason")
+        put(os.path.join(d, ".ai", "policies", "risk-tiers.json"), "[" * 200000 + "]" * 200000)
+        synth = self.synth_0003("synth-deep-other", "def plan(ctx):\n"
+                                "    ctx.read_json(\".ai/policies/risk-tiers.json\")\n"
+                                "    ctx.conflict(\".ai/policies/risk-tiers.json\", \"another reason\")\n")
+        _, out = self.upd(d, merge=True, **synth)
+        self.assertNotIn("Traceback", out, out)
+        rows = [x for x in out.splitlines() if x.lstrip().startswith("conflict") and "risk-tiers.json" in x]
+        self.assertEqual(2, len(rows), out)
+        self.assertTrue(any("another reason" in x for x in rows), out)
+
+    def test_a_non_str_note_on_any_action_is_refused_as_a_schema_error(self):
+        """R-638a: _add refuses a note that is not a str, as it does content that is not bytes, before any dedup"""
+        for action, call in (("create", "ctx._add(\"create\", \".ai/new-4207.txt\", 5, content=b\"x\")"),
+                             ("conflict", "ctx._add(\"conflict\", \".ai/policies/risk-tiers.json\", 5)")):
+            d = self.v0_project("add-non-str-note-" + action)
+            synth = self.synth_0003("synth-non-str-note-" + action, "def plan(ctx):\n    " + call + "\n")
+            rc, out = self.upd(d, merge=True, **synth)
+            with self.subTest(action):
+                self.assertEqual(2, rc, out)
+                self.assertIn("note must be str, not int", out, out)
+                self.assertIn("0003:", out, out)
+                self.assertNotIn("Traceback", out, out)
+                self.assertNotIn("AttributeError", out, out)
+
+    def test_the_nul_safe_untrack_command_does_nothing_when_nothing_is_tracked(self):
+        """I2: xargs -r: with no tracked, ignored .ai/state file the printed command exits 0 and leaves the index"""
+        d = self.current_project("tracked-ignored-empty-input")
+        self.tracked_git(d, "init", "-q")
+        rel = ".ai/state/a\nb.jsonl"
+        put(os.path.join(d, rel), '{"v":1}\n')
+        self.tracked_git(d, "add", "-f", "--", rel)
+        self.tracked_git(d, "commit", "-q", "-m", "track")
+        _, out = self.upd(d, merge=True, unset=self.GIT_LEAK)
+        line = next(x for x in out.splitlines() if "tracked by git but ignored" in x and "xargs" in x)
+        self.run_printed(d, line)
+        self.tracked_git(d, "commit", "-q", "-m", "untrack")
+        before = self.index_of(d)
+        self.run_printed(d, line)  # check=True: a non-zero exit raises
+        self.assertEqual(before, self.index_of(d), "nothing tracked, nothing changed")
+
+    def test_a_current_weight_mirror_draws_no_regenerate_hint(self):
+        """weight.md: a faithful, current mirror draws no hint"""
+        d = self.mirrored_project("weight-mirror-current")
+        _, out = self.upd(d, merge=True)
+        self.assertNotIn("state.py weight --mirror", out, out)
+
     def test_a_weight_mirror_follows_the_merged_json(self):
         """weight.md: when the update merges weight.json, the mirror is rendered from the merged JSON"""
         pt = os.path.join(self.t, "weight-tpl")
@@ -1730,12 +2492,138 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         self.assertEqual(grep(r"link\.log", out), 0, "a symlink is skipped\n" + out)
         self.assertEqual(grep(r"commit \.ai/ first", out), 0,
                          "cleanup rows alone do not raise the commit-first hint\n" + out)
+        self.assertTrue(has(r"^\d+ automatic, \d+ conflict\(s\), \d+ cleanup file\(s\) awaiting --confirm-cleanup$", out),
+                        "the summary names the flag the cleanup rows need\n" + out)
+        self.assertNotIn("--confirm-delete", out, "cleanup rows alone never point at --confirm-delete\n" + out)
         self.assertTrue(has(r"delete\?   \.ai/reports/T-2026-01-03-001/ \(2 files\) +\[cleanup\] unclosed task "
                             r"T-2026-01-03-001, last event \d{4}-\d\d-\d\d", out), out)
         self.assertEqual(grep(r"T-2026-01-04-001", out), 0, "an open task idle for 2 days is left alone\n" + out)
         self.assertEqual(grep(r"T-2026-01-05-001", out), 0, "the task in flight is never proposed\n" + out)
         self.assertEqual(self.upd(d, "--check")[0], 0)
         self.assertEqual(tree_sum(d), before, "a dry run writes nothing")
+
+    def test_cleanup_skips_a_symlinked_report_dir_with_a_hint_and_apply_does_not_abort(self):
+        """R-cleanup-proposes-a-symlinked-ai-reports: a .ai/reports/<id> that is a symlink is a hint, not a
+        deletion proposal, so --apply --confirm-cleanup neither aborts nor deletes through it"""
+        d = self.current_project("cleanup-symlinked-report")
+        self.task_dir(d, "T-2026-01-02-001", [(30, "task_started", {}), (29, "task_closed", {"abandoned": True})])
+        self.task_dir(d, "T-2026-01-03-001", [(30, "task_started", {}), (29, "task_closed", {"abandoned": True})])
+        real = os.path.join(d, "elsewhere")
+        os.rename(os.path.join(d, ".ai", "reports", "T-2026-01-02-001"), real)
+        os.symlink(real, os.path.join(d, ".ai", "reports", "T-2026-01-02-001"))
+        _, out = self.upd(d)
+        self.assertFalse(has(r"delete\?? +\.ai/reports/T-2026-01-02-001", out), "no proposal for it\n" + out)
+        self.assertTrue(has(r"^  hint +.*T-2026-01-02-001.*is a symlink", out), "a hint says why\n" + out)
+        self.assertTrue(has(r"delete\?   \.ai/reports/T-2026-01-03-001/", out), "the safe task is still proposed\n" + out)
+        rc, out = self.upd(d, "--apply", "--confirm-cleanup", "tester", AI_UNATTENDED="1", merge=True)
+        self.assertEqual(rc, 0, "--apply does not abort\n" + out)
+        self.assertTrue(os.path.isfile(os.path.join(real, "task.md")), "nothing deleted through the symlink")
+        self.assertFalse(os.path.exists(os.path.join(d, ".ai", "reports", "T-2026-01-03-001")), "the safe one is")
+
+    def test_the_rule_writer_skips_what_the_take_back_never_walks(self):
+        """R-the-rule-writer-still-reaches-directories: a dirs: entry under a RULES_SKIP name or through a
+        symlinked directory is not written (a block there could never be taken back), and is a hint"""
+        d = self.current_project("rules-writer-skip", "--runtime", "claude")
+        os.makedirs(os.path.join(d, "node_modules", "pkg"))
+        os.makedirs(os.path.join(d, "real", "sub"))
+        os.makedirs(os.path.join(d, "ok"))
+        os.symlink(os.path.join(d, "real"), os.path.join(d, "linked"))
+        put(os.path.join(d, ".ai", "rules", "skip.md"),
+            "---\ndirs: [node_modules/pkg, linked, linked/sub, ok]\n---\n# Skip rules\n- text\n")
+        _, out = self.upd(d, merge=True)
+        self.assertFalse(has(r"^  (create|update) +(node_modules|linked)/", out), "no write there\n" + out)
+        self.assertTrue(has(r"^  hint +node_modules/pkg/CLAUDE.md: .*not rendered there", out), out)
+        self.assertTrue(has(r"^  hint +linked/CLAUDE.md: .*not rendered there", out), out)
+        self.assertTrue(has(r"^  hint +linked/sub/CLAUDE.md: .*not rendered there", out), out)
+        self.assertTrue(has(r"^  create +ok/CLAUDE.md ", out), "the control target renders\n" + out)
+        self.assertEqual(self.upd(d, "--apply")[0], 0)
+        for rel in ("node_modules/pkg", "real", "real/sub"):
+            self.assertFalse(os.path.lexists(os.path.join(d, rel, "CLAUDE.md")), rel)
+        self.assertTrue(os.path.isfile(os.path.join(d, "ok", "CLAUDE.md")))
+
+    def test_a_block_an_older_plugin_wrote_in_a_skipped_dir_is_named_in_the_hint(self):
+        """R-rule-blocks-written-before-under-a-now-s-b44b: a rendered block already in an unwalked
+        directory stays frozen (the take-back never walks there); the hint says to remove it by hand"""
+        d = self.current_project("rules-writer-skip-old", "--runtime", "claude")
+        os.makedirs(os.path.join(d, "ok"))
+        os.makedirs(os.path.join(d, "node_modules", "pkg"))
+        os.makedirs(os.path.join(d, "node_modules", "bare"))
+        rule = os.path.join(d, ".ai", "rules", "skip.md")
+        put(rule, "---\ndirs: [ok]\n---\n# Skip rules\n- text\n")
+        self.assertEqual(self.upd(d, "--apply", merge=True)[0], 0)
+        shutil.copy(os.path.join(d, "ok", "CLAUDE.md"), os.path.join(d, "node_modules", "pkg", "CLAUDE.md"))
+        frozen = tree_sum(os.path.join(d, "node_modules"))
+        put(rule, "---\ndirs: [node_modules/pkg, node_modules/bare]\n---\n# Skip rules\n- text\n")
+        rc, out = self.upd(d, "--apply", merge=True)
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(has(r"^  hint +node_modules/pkg/CLAUDE.md: .*not rendered there.*earlier rendering.*by hand", out), out)
+        self.assertFalse(has(r"^  hint +node_modules/bare/CLAUDE.md: .*earlier rendering", out),
+                         "no block there, no claim of one\n" + out)
+        self.assertTrue(has(r"^  hint +node_modules/bare/CLAUDE.md: .*not rendered there", out), out)
+        self.assertEqual(tree_sum(os.path.join(d, "node_modules")), frozen, "nothing is deleted or rewritten there")
+
+    def test_the_rules_skip_comparison_ignores_case(self):
+        """R-rules-skip-comparison-is-case-sensitive-a50b: dirs: [Vendor/x] with vendor/ on disk (a
+        case-insensitive filesystem) is skipped by the writer as the take-back walk prunes it"""
+        d = self.current_project("rules-writer-skip-case", "--runtime", "claude")
+        os.makedirs(os.path.join(d, "vendor", "x"))
+        os.makedirs(os.path.join(d, "ok"))
+        put(os.path.join(d, ".ai", "rules", "skip.md"),
+            "---\ndirs: [Vendor/x, PODS/y, ok]\n---\n# Skip rules\n- text\n")
+        rc, out = self.upd(d, "--apply", merge=True)
+        self.assertEqual(rc, 0, out)
+        self.assertFalse(has(r"^  (create|update) +(Vendor|PODS)/", out), "no write there\n" + out)
+        self.assertTrue(has(r"^  hint +Vendor/x/CLAUDE.md: .*not rendered there", out), out)
+        self.assertTrue(has(r"^  hint +PODS/y/CLAUDE.md: .*not rendered there", out), out)
+        self.assertTrue(has(r"^  create +ok/CLAUDE.md ", out), "the control target renders\n" + out)
+        for rel in ("vendor/x", "Vendor/x", "PODS/y"):
+            self.assertFalse(os.path.lexists(os.path.join(d, rel, "CLAUDE.md")), rel)
+
+    def test_the_take_back_walk_prunes_by_exact_name(self):
+        """a block an older plugin wrote under Vendor/x (a RULES_SKIP name only by case) is walked
+        and taken back as before: the casefold belongs to the writer, not to the walk"""
+        d = self.current_project("rules-walk-case", "--runtime", "claude")
+        os.makedirs(os.path.join(d, "ok"))
+        put(os.path.join(d, ".ai", "rules", "skip.md"), "---\ndirs: [ok]\n---\n# Skip rules\n- text\n")
+        self.assertEqual(self.upd(d, "--apply", merge=True)[0], 0)
+        os.makedirs(os.path.join(d, "Vendor", "x"))
+        shutil.copy(os.path.join(d, "ok", "CLAUDE.md"), os.path.join(d, "Vendor", "x", "CLAUDE.md"))
+        rc, out = self.upd(d, merge=True)
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(has(r"^  update +Vendor/x/CLAUDE.md .*rule block skip removed", out), out)
+
+    def test_the_hint_probe_survives_a_target_that_is_not_a_file(self):
+        """a skipped target whose CLAUDE.md is a directory or a FIFO gives the plain hint, no traceback"""
+        d = self.current_project("rules-skip-notfile", "--runtime", "claude")
+        os.makedirs(os.path.join(d, "node_modules", "dirp", "CLAUDE.md"))
+        os.makedirs(os.path.join(d, "node_modules", "fifo"))
+        os.mkfifo(os.path.join(d, "node_modules", "fifo", "CLAUDE.md"))
+        put(os.path.join(d, ".ai", "rules", "skip.md"),
+            "---\ndirs: [node_modules/dirp, node_modules/fifo]\n---\n# Skip rules\n- text\n")
+        rc, out = self.upd(d, merge=True)
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("Traceback", out)
+        self.assertTrue(has(r"^  hint +node_modules/dirp/CLAUDE.md: .*not rendered there", out), out)
+        self.assertTrue(has(r"^  hint +node_modules/fifo/CLAUDE.md: .*not rendered there", out), out)
+        self.assertFalse(has(r"earlier rendering", out), out)
+
+    def test_a_symlink_into_the_walked_project_adds_no_by_hand_clause(self):
+        """linked -> real/ inside the project: the take-back walks real/ and removes the old block in
+        the same run, so the hint does not ask for a removal by hand"""
+        d = self.current_project("rules-skip-link-in", "--runtime", "claude")
+        os.makedirs(os.path.join(d, "ok"))
+        os.makedirs(os.path.join(d, "real"))
+        rule = os.path.join(d, ".ai", "rules", "skip.md")
+        put(rule, "---\ndirs: [ok]\n---\n# Skip rules\n- text\n")
+        self.assertEqual(self.upd(d, "--apply", merge=True)[0], 0)
+        shutil.copy(os.path.join(d, "ok", "CLAUDE.md"), os.path.join(d, "real", "CLAUDE.md"))
+        os.symlink(os.path.join(d, "real"), os.path.join(d, "linked"))
+        put(rule, "---\ndirs: [linked]\n---\n# Skip rules\n- text\n")
+        rc, out = self.upd(d, merge=True)
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(has(r"^  hint +linked/CLAUDE.md: .*not rendered there", out), out)
+        self.assertFalse(has(r"by hand", out), out)
+        self.assertTrue(has(r"^  update +real/CLAUDE.md .*rule block skip removed", out), out)
 
     def test_cleanup_malformed_now_and_flight(self):
         """a malformed RISKRAILS_NOW is a usage error, not a traceback; the task named by the legacy
@@ -1857,7 +2745,7 @@ print("DELETED")
         """#70 (n): unsafe_target's check is repeated right before the delete"""
         d = self.cleanup_project("cleanup-swap")
         done = subprocess.run([sys.executable, "-I", "-c", self.SWAP, ROOT, d], env=self.env,
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, check=False)
         self.assertTrue(done.stdout.startswith("ABORT") and "is a symlink" in done.stdout,
                         done.stdout + done.stderr)
         self.assertTrue(os.path.isfile(os.path.join(d, ".ai", "reports", "moved", "task.md")), "nothing deleted")
@@ -1888,6 +2776,69 @@ class TestMemoryPolicy(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(TEMPLATES, ".ai", "policies", "memory.json")))
         finally:
             p.close()
+
+
+DEEP_READERS = r"""
+import datetime, json, os, sys, traceback
+sys.path.insert(0, sys.argv[1])
+import migrations, update
+root, deep = sys.argv[2], "[" * 100000
+
+
+def put(rel, text):
+    path = os.path.join(root, rel)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+
+
+def probe(name, fn):
+    try:
+        out[name] = repr(fn())
+    except migrations.SchemaError as exc:
+        out[name] = "SchemaError: %s" % exc
+    except Exception:  # pylint: disable=broad-except
+        out[name] = "Traceback: " + traceback.format_exc().splitlines()[-1]
+
+
+out = {}
+hist = os.path.join(root, "history")
+put("history/index.json", deep)
+probe("History index.json", lambda: update.History(hist).index)
+put(".ai/state/state.json", deep)
+probe("run_migrations state.json", lambda: update.run_migrations(update.Plan(root), migrations.CURRENT,
+                                                                 update.History(hist)))
+probe("cleanup_update state.json", lambda: (update.cleanup_update(
+    update.Plan(root), now=datetime.datetime(2026, 1, 2, tzinfo=datetime.timezone.utc)), "ran"))
+put(".ai/reports/T-1/events.jsonl", deep + "\n" + json.dumps({"ts": "2026-01-01T00:00:00Z", "event": "x"}))
+put(".ai/state/logs/T-1/state.json", deep)
+probe("task_journal events.jsonl + logs state.json", lambda: update.task_journal(root, "T-1"))
+print(json.dumps(out))
+"""
+
+
+class TestDeepJsonReaders(unittest.TestCase):
+    """Risk d4d1: CPython raises RecursionError, not ValueError, on JSON nested
+    past its parser's limit (100000 levels, measured); every project-update
+    reader takes it the way it takes malformed JSON, with no Traceback.
+    Ctx.read_json and Ctx.edit_json already catch it and are pinned by the L2
+    and M1 tests above."""
+
+    def test_every_reader_takes_a_too_deep_file_as_malformed(self):
+        with tempfile.TemporaryDirectory() as root:
+            done = subprocess.run([sys.executable, "-I", "-c", DEEP_READERS, os.path.dirname(UPDATE), root],
+                                  capture_output=True, text=True, check=False)
+        self.assertNotIn("Traceback", done.stderr, done.stderr)
+        got = json.loads(done.stdout)
+        want = {"History index.json": "{}",
+                "cleanup_update state.json": "(None, 'ran')",
+                "task_journal events.jsonl + logs state.json":
+                    "(False, False, datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc))"}
+        for name, value in want.items():
+            with self.subTest(reader=name):
+                self.assertEqual(got[name], value)
+        with self.subTest(reader="run_migrations state.json"):
+            self.assertRegex(got["run_migrations state.json"], r"^SchemaError: .*state\.json.*inspect it by hand")
 
 
 if __name__ == "__main__":

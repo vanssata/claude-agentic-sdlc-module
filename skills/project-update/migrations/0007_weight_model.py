@@ -54,7 +54,7 @@ TEST_KEYS = ("timeout_seconds", "env_retries", "log_max_bytes")
 def _loads(raw):
     try:
         doc = json.loads(raw, object_pairs_hook=OrderedDict)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):  # nested past the parser's limit: edit_json holds the schema
         return None
     return doc if isinstance(doc, dict) else None
 
@@ -111,21 +111,17 @@ def _hint(doc, axis, paths, note):
         _add(hint.setdefault("paths", []), paths)
 
 
-def convert(old, base, shipped):
-    """The weight table `base` plus what the old table `old` added on top of the
-    `shipped` (examples, scopes, scalars, weight template) it was installed
-    with. A scalar is carried only when the old table changed it and `base`
-    still holds the shipped weight value — a project's own weight.json edit
-    wins. `base` is not changed, and converting twice adds nothing new."""
+def _writes(old, base, shipped):
+    """What converting `old` into `base` writes, in order: ("list", path, values) appends to a list,
+    ("set", path, value) sets a scalar, ("hint", axis, (paths, note)) adds to a hint."""
     shipped_examples, shipped_scopes, shipped_scalars, template = shipped
-    new = json.loads(json.dumps(base), object_pairs_hook=OrderedDict)
-    axes = new.setdefault("axes", OrderedDict())
+    out = []
     for tier, entry in (old.get("tiers") or {}).items():
         if tier in EXAMPLE_MODE and isinstance(entry, dict):
             extra = [e for e in entry.get("examples") or []
                      if isinstance(e, str) and e not in shipped_examples.get(tier, set())]
             if extra:
-                _add(new.setdefault("examples", OrderedDict()).setdefault(EXAMPLE_MODE[tier], []), extra)
+                out.append(("list", ("examples", EXAMPLE_MODE[tier]), extra))
     for scope in old.get("path_scopes") or []:
         if not isinstance(scope, dict):
             continue
@@ -136,23 +132,41 @@ def convert(old, base, shipped):
             continue
         if name in DOMAIN or (name not in HINTS and name not in INFRA | NEEDS_STEP
                               and scope.get("min_tier") in ("T5", "T6")):
-            _add(axes.setdefault("domain", OrderedDict()).setdefault("modules", []), paths)
+            out.append(("list", ("axes", "domain", "modules"), paths))
         elif name in HINTS:
-            _hint(new, HINTS[name], paths, "%s (from risk-tiers.json)" % name)
+            out.append(("hint", HINTS[name], (paths, "%s (from risk-tiers.json)" % name)))
         elif name in INFRA | NEEDS_STEP:
-            rev = axes.setdefault("reversibility", OrderedDict())
             two = [p for p in paths if name in INFRA and "prod" in p]
-            _add(rev.setdefault("irreversible", []), two)
-            _add(rev.setdefault("needs_step", []), [p for p in paths if p not in two])
+            out.append(("list", ("axes", "reversibility", "irreversible"), two))
+            out.append(("list", ("axes", "reversibility", "needs_step"), [p for p in paths if p not in two]))
     for key, value in _scalars(old).items():
         if value in shipped_scalars.get(key, []) or _get(base, key) != _get(template, key):
             continue
         if key == "tests.max_suite_runs" and isinstance(value, int):
             value = min(value, 2)
-        if key.startswith("tests."):
-            new.setdefault("tests", OrderedDict())[key[len("tests."):]] = value
+        out.append(("set", tuple(key.split(".")), value))
+    return out
+
+
+def convert(old, base, shipped):
+    """The weight table `base` plus what the old table `old` added on top of the
+    `shipped` (examples, scopes, scalars, weight template) it was installed
+    with. A scalar is carried only when the old table changed it and `base`
+    still holds the shipped weight value — a project's own weight.json edit
+    wins. `base` is not changed, and converting twice adds nothing new."""
+    new = json.loads(json.dumps(base), object_pairs_hook=OrderedDict)
+    new.setdefault("axes", OrderedDict())
+    for kind, path, value in _writes(old, base, shipped):
+        if kind == "hint":
+            _hint(new, path, *value)
+            continue
+        node = new
+        for part in path[:-1]:
+            node = node.setdefault(part, OrderedDict())
+        if kind == "list":
+            _add(node.setdefault(path[-1], []), value)
         else:
-            new[key] = value
+            node[path[-1]] = value
     return new
 
 
@@ -168,19 +182,112 @@ def _mode(state):
     return state
 
 
+def _kind(value):
+    """the JSON name of a value's type"""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):  # before int: True is an int
+        return "boolean"
+    for types, name in (((int, float), "number"), (str, "string"), (list, "list"), (dict, "object")):
+        if isinstance(value, types):
+            return name
+    return type(value).__name__
+
+
+def _an(word):
+    return word if word == "null" else ("an " if word[0] in "aeiou" else "a ") + word
+
+
+def _bad(doc, key, want, what):
+    """A reason when `doc[key]`, present and not null, is not a `want`; else None."""
+    value = doc.get(key)
+    if value is not None and not isinstance(value, want):
+        return "%s is %s, not %s" % (what, _an(_kind(value)), _an("object" if want is dict else "list"))
+    return None
+
+
+def _old_problem(old):
+    """Why the old table cannot be converted (a wrong type where convert reads), or None."""
+    if not isinstance(old, dict):
+        return "risk-tiers.json is %s, not an object" % _an(_kind(old))
+    why = _bad(old, "tiers", dict, "tiers") if old.get("tiers") else None  # falsy: convert reads no tiers
+    for tier, entry in (old.get("tiers") or {}).items() if why is None else ():
+        if tier in EXAMPLE_MODE and isinstance(entry, dict) and entry.get("examples"):  # convert reads only these
+            why = why or _bad(entry, "examples", (list, dict), "tiers.%s.examples" % tier)  # an object iterates by key
+    scopes = old.get("path_scopes")
+    if scopes and not isinstance(scopes, (list, dict, str)):  # an object or a string iterates, its members skipped
+        why = why or "path_scopes is %s, not a list" % _an(_kind(scopes))
+    for scope in scopes if isinstance(scopes, list) and not why else ():
+        if isinstance(scope, dict):
+            name = scope.get("scope")
+            if scope.get("paths"):
+                why = _bad(scope, "paths", (list, dict), "a path scope's paths")  # an object iterates by key
+            # the name is hashed only against a str path
+            if not why and isinstance(name, (list, dict)) and any(isinstance(p, str) for p in scope.get("paths") or []):
+                why = "a path scope's name is %s, not a string" % _an(_kind(name))
+            if why:
+                break
+    return why
+
+
+def _new_problem(doc, writes):
+    """Why the weight table `doc` cannot take the `writes` of convert (a wrong type where convert writes), or None."""
+    if not isinstance(doc, dict):
+        return "weight.json is %s, not an object" % _an(_kind(doc))
+    for kind, path, value in writes:
+        if kind == "hint":
+            if "hints" not in doc:
+                continue
+            if not isinstance(doc["hints"], list):
+                return "hints is %s, not a list" % _an(_kind(doc["hints"]))
+            for i, hint in enumerate(doc["hints"]):
+                if isinstance(hint, dict) and hint.get("axis") == path:
+                    if "paths" in hint and not isinstance(hint["paths"], list):
+                        return "hints[%d].paths is %s, not a list" % (i, _an(_kind(hint["paths"])))
+                    break
+            continue
+        node = doc
+        for i, part in enumerate(path):
+            if part not in node:
+                break
+            node = node[part]
+            what = ".".join(path[:i + 1])
+            if i < len(path) - 1:
+                if not isinstance(node, dict):
+                    return "%s is %s, not an object" % (what, _an(_kind(node)))
+            elif kind == "list" and value and not isinstance(node, list):
+                return "%s is %s, not a list" % (what, _an(_kind(node)))
+    return None
+
+
 def plan(ctx):
     old = ctx.read_json(OLD)
+    why = _old_problem(old) if old is not None else None
+    if why:
+        ctx.conflict(OLD, "%s, so this migration could not run" % why)
+        old = None
     shipped = _shipped(ctx)
     before = ctx.read(NEW)
     if before is None:
         template = ctx.template(NEW)
         doc = convert(old, _loads(template), shipped) if old is not None else None
-        if doc is None or doc == _loads(template):
-            ctx.create(NEW, template)
-        else:
-            ctx.create(NEW, (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode())
+        try:
+            body = None if doc is None or doc == _loads(template) else \
+                (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode()
+        except RecursionError:  # a deep value carried from the old table: the default beside it holds the schema
+            ctx.conflict(OLD, "nested too deeply, so this migration could not run")
+            body = None
+        ctx.create(NEW, template if body is None else body)
     elif old is not None:
-        ctx.edit_json(NEW, lambda new: convert(old, new, shipped))
+        try:
+            current = json.loads(before)
+        except (ValueError, RecursionError):  # invalid or too deep: edit_json holds the schema
+            current = {}
+        why = _new_problem(current, _writes(old, current, shipped))
+        if why:
+            ctx.conflict(NEW, "%s, so this migration could not run" % why)
+        else:
+            ctx.edit_json(NEW, lambda new: convert(old, new, shipped))
     after = ctx.read(NEW)
     if old is not None and _loads(after) != _loads(before or ctx.template(NEW)):
         ctx.hint("%s now carries this project's risk-tier edits: run `state.py weight --mirror` to "

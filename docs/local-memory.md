@@ -72,7 +72,7 @@ files, changes, code trees), how (mode, weight, steps, stages, verify runs,
 facts), why (questions with their options and the answer verbatim, approvals
 with their note, overrides, scope changes, agent notes, review findings) and
 when. Human wording is stored byte for byte from its source. A journal line
-over 4 KB keeps its existence and loses its payload (`state.py` caps it); the
+over 4 KB keeps its existence and loses its payload (`JOURNAL_MAX_BYTES` in `skills/ai-task/rr_state/journal.py` caps it); the
 record then takes the text from task.md (questions, answers, the gate's note
 or reason, `amended` lines, whitespace folded) or from the archived state (the
 amendments, the mode override), and a field that neither holds is listed in

@@ -153,6 +153,7 @@ class TestTimeoutAndSignals(Base):
         self.assertEqual(self.leftovers(), [])
 
     def test_sigterm_kills_children_and_exits_1(self):
+        # pylint: disable-next=consider-using-with  # the test signals it mid-run, then waits
         proc = subprocess.Popen(self.args("test_hang.py", "test_green.py"), cwd=ROOT, env=self.env(),
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         try:

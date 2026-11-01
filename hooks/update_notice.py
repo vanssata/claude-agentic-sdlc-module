@@ -51,7 +51,7 @@ def installed_version(runtime, plugin_root, home=None):
         try:
             with open(path, encoding="utf-8") as fh:
                 version = json.load(fh).get(key)
-        except (OSError, ValueError, AttributeError):
+        except (OSError, ValueError, AttributeError, RecursionError):
             continue
         if parse(version):
             return version
@@ -63,7 +63,7 @@ def read_cache(path):
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return {}
 
 
@@ -130,7 +130,7 @@ def refresh(path):
             version = json.loads(resp.read(MAX_BODY).decode("utf-8")).get("version")
         if parse(version):
             latest = version
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, AttributeError, RecursionError):
         pass
     write_cache(path, latest if latest is not None else previous)
 

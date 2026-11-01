@@ -170,6 +170,7 @@ def child_job(children, tmp, key, start, name, timeout, exclude=(), only=()):
     t0 = time.monotonic()
     timed_out = False
     with open(log_path, "wb") as log:
+        # pylint: disable-next=consider-using-with  # waited for, its group killed on timeout, below
         proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                                 start_new_session=True)
         children.add(proc.pid)

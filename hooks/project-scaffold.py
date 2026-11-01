@@ -204,7 +204,8 @@ class Scaffold:
         if os.path.exists(os.path.join(d, ".gitkeep")):
             return
         os.makedirs(d, exist_ok=True)
-        open(os.path.join(d, ".gitkeep"), "wb").close()
+        with open(os.path.join(d, ".gitkeep"), "wb"):
+            pass
         self.created.append(rel + "/.gitkeep")
 
     def append_once(self, path, marker, template, label):

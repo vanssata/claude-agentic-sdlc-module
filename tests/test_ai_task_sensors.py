@@ -41,7 +41,7 @@ print(done.returncode, open(log).read().replace("\\n", " ").strip())
 """
 
 
-class TestSensors(unittest.TestCase):
+class TestSensors(unittest.TestCase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with  # tearDown ends it
         self.root = os.path.join(self.tmp.name, "with space", "project")
@@ -190,11 +190,47 @@ class TestSensors(unittest.TestCase):
 
     def test_bite_codes_default_and_invalid(self):
         self.assertEqual(sensors.bite_codes(self.root), (1,))
-        for text in ("bite_codes: x\n", "bite_codes: 1,,2\n", "bite_codes:\n"):
+        for text in ("bite_codes: x\n", "bite_codes: 1,,2\n", "bite_codes:\n",
+                     "bite_codes: 0\n", "bite_codes: -1\n", "bite_codes: 256\n", "bite_codes: 1,0\n",
+                     "bite_codes: 1,256\n", "bite_codes: 1,-2\n", "bite_codes: 1;2\n"):
             self.write(".ai/policies/testing.md", TESTING_MD + text)
             self.assertEqual(sensors.bite_codes(self.root), (1,), text)
         self.write(".ai/policies/testing.md", TESTING_MD + "bite_codes: 101\n")
         self.assertEqual(sensors.bite_codes(self.root), (101,))
+        self.write(".ai/policies/testing.md", TESTING_MD + "bite_codes: 1, 255\n")
+        self.assertEqual(sensors.bite_codes(self.root), (1, 255))
+
+    def test_bite_codes_says_on_stderr_when_a_value_is_unusable(self):
+        import contextlib, io  # pylint: disable=import-outside-toplevel
+        for raw in ("1 2", "0", "x", "1,256"):
+            self.write(".ai/policies/testing.md", TESTING_MD + "bite_codes: %s\n" % raw)
+            err, out = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+                self.assertEqual(sensors.bite_codes(self.root), (1,), raw)
+            self.assertIn('sensors: bite_codes "%s" is not a list of 1-255 exit codes - using 1' % raw,
+                          err.getvalue(), raw)
+            self.assertEqual(out.getvalue(), "", raw)
+        for text in ("", "bite_codes:\n", "bite_codes: 1, 255\n", "bite_codes: 101  # c\n"):
+            self.write(".ai/policies/testing.md", TESTING_MD + text)
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                sensors.bite_codes(self.root)
+            self.assertEqual(err.getvalue(), "", text)
+
+    def test_bite_codes_escapes_control_characters_in_the_stderr_line(self):
+        import contextlib, io  # pylint: disable=import-outside-toplevel
+        raw = "x\rFAKE\x1b[0m"
+        # a text-mode read turns a file's \r into \n, so the value is injected as read_commands returns it
+        original = sensors.read_commands
+        sensors.read_commands = lambda root: {"bite_codes": raw}
+        self.addCleanup(setattr, sensors, "read_commands", original)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(sensors.bite_codes(self.root), (1,))
+        text = err.getvalue()
+        self.assertIn('bite_codes "x\\rFAKE\\x1b[0m" is not a list', text)
+        self.assertNotIn("\r", text)
+        self.assertNotIn("\x1b", text)
 
     def test_read_commands_reads_doc_tests(self):
         self.write(".ai/policies/testing.md", TESTING_MD + "doc_tests:          tests/test_a.py tests/test_b.py\n")

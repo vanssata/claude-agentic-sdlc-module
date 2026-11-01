@@ -60,7 +60,7 @@ def tree_hash(top):
 class ScaffoldIdempotencyTest(unittest.TestCase):
 
     def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with  # cleaned up by addCleanup below
         self.tmp = self._tmp.name
         self.addCleanup(self._tmp.cleanup)
 

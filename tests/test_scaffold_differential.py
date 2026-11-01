@@ -144,7 +144,7 @@ COLLATED = re.compile(r"fresh|both|UTF-8|existing files|without VERSION")
 def cases():
     out = []
     for script in ("project", "ai"):
-        def c(label, runs, **kw):
+        def c(label, runs, script=script, **kw):
             out.append(Case("%s: %s" % (script, label), script, runs, **kw))
         twice = lambda args, **kw: [(args, b"", kw.get("env", {}), False)] * 2
         c("fresh, then rerun", twice([R]))

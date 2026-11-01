@@ -170,7 +170,12 @@ it cannot.
    `that rule is not rendered`: name the `.ai/rules/` file and what it lacks
    (`paths:` and a body). `overrides the plugin's shared copy`: offer to diff
    each and delete those that add nothing. `foreign structure detected`: offer
-   **--adopt**.
+   **--adopt**. `tracked by git but ignored`: show the line as printed and give
+   the human the command it prints, exactly as printed, plus a commit, for their
+   own terminal (never rebuilt from the path; only the xargs form untracks every
+   such file under `.ai/state`, a printed `rm --cached -- <path>` one file; a
+   second machine runs the same before its next pull, else a modify/delete
+   conflict); never run it yourself.
 7. `$UPDATE --check` and `git diff --stat`; say what changed, what you merged
    and what is the human's. Suggest `git add -A .ai docs/sdlc .gitignore` plus
    the runtime directories and instruction files.
@@ -190,7 +195,9 @@ overwrite. A foreign tool's structure, below, can be present as well.
 
 Every command is `$UPDATE --adopt …`, with `--mode coexist` on each when the team
 still uses the other tool (router rows only, nothing moves). Exit 5
-`ADOPT_REFUSED`: show the first line and stop. Exit 4 `ADOPT_INCOMPLETE`:
+`ADOPT_REFUSED`: show the first line and stop. Exit 2: the routing table or a
+migration could not be read (reason on stderr, prefixed `project-update:`),
+nothing written. Exit 4 `ADOPT_INCOMPLETE`:
 `unmapped` files and a `split?` are yours to settle, then dry-run again; a
 `conflict` or a check `FAIL` left after that is the human's — never edit a
 destination or a source to make it pass.

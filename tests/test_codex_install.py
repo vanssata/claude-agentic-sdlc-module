@@ -145,7 +145,7 @@ def b64(data):
     return base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip("=")
 
 
-class CodexInstall(ScratchCase):
+class CodexInstall(ScratchCase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -211,7 +211,7 @@ class CodexInstall(ScratchCase):
                         b64({"https://api.openai.com/auth": {"chatgpt_plan_type": "plus"}}), "sig"])
         write(os.path.join(home_p, ".codex", "auth.json"),
               '{"auth_mode":"chatgpt","tokens":{"id_token":"%s"}}' % jwt)
-        rc, out = self.codex(os.path.join(home_p, ".codex"), "--dry-run", home=home_p)
+        _rc, out = self.codex(os.path.join(home_p, ".codex"), "--dry-run", home=home_p)
         self.check("chatgpt_plan_type=plus is detected", has("detected codex plan: plus", out), out)
         self.check("the detected plan selects the plus profile", has("plan=plus (Plus)", out), out)
 
@@ -346,7 +346,7 @@ class CodexInstall(ScratchCase):
             "PreToolUse": [{"matcher": "Agent", "hooks": [dict(entry)]}],
             "PostToolUse": [{"matcher": "Agent", "hooks": [dict(entry)]}],
             "SubagentStop": [{"hooks": [dict(entry)]}, {"hooks": [{"type": "command", "command": "my-stop.sh"}]}]}}))
-        rc, out = self.codex(up, "--codex-plan", "pro")
+        _rc, out = self.codex(up, "--codex-plan", "pro")
         data = read_json(os.path.join(up, "hooks.json"))
         self.check("an upgrade replaces every codex-model-gate command",
                    len([c for c in all_commands(data) if re.search("codex-model-gate", c)]) == 0,
@@ -420,7 +420,7 @@ class CodexInstall(ScratchCase):
         self.check("config.toml has no riskrails", not has("riskrails", read(os.path.join(self.dir, "config.toml"))),
                    "riskrails leaked into config.toml")
         probe = self.path("probe-profile")
-        rc, out = self.codex(probe, "--codex-plan", "plus", "--dry-run")
+        _rc, out = self.codex(probe, "--codex-plan", "plus", "--dry-run")
         self.check("--dry-run lists the Codex profile.json",
                    has("^== profile.json (plan tables): %s/riskrails/profile.json" % probe, out),
                    "codex dry run should list profile.json")
@@ -492,7 +492,7 @@ class CodexInstall(ScratchCase):
                    "the backup does not match the original")
         # Review M1: a second install the same day changes nothing in config.toml, so
         # it must not replace the user's original in that day's backup with ours.
-        rc, out = self.codex(dir2)
+        _rc, out = self.codex(dir2)
         self.check("a second install the same day keeps the original in the backup",
                    os.path.isfile(backup) and same(orig_copy, backup),
                    "same-day re-install overwrote the config backup: %s" % read(backup))
@@ -565,7 +565,7 @@ class CodexInstall(ScratchCase):
         legacy = re.sub(r"riskrails:(start|end)", r"Codex-agentic:\1", block)
         agents = os.path.join(lg, "AGENTS.md")
         write(agents, "# legacy\n\nkeep me above\n\n" + legacy + "\n# my notes\nkeep me below\n")
-        rc, out = self.codex(lg, "--codex-plan", "pro")
+        _rc, out = self.codex(lg, "--codex-plan", "pro")
         text = read(agents)
         self.check("exactly one managed block after the install",
                    count_lines(r"(riskrails|[Cc]odex-agentic):start", text, extended=True) == 1,
@@ -593,7 +593,7 @@ class CodexInstall(ScratchCase):
         write(os.path.join(old, "hooks.json"), json.dumps({"hooks": {"PreToolUse": shims + [mine]}}))
         for g in ("git", "path", "scope"):
             write(os.path.join(old, "hooks", "ai-%s-guard.sh" % g), "#!/bin/sh\n")
-        rc, out = self.codex(old)
+        _rc, out = self.codex(old)
         data = read_json(os.path.join(old, "hooks.json"))
         cmds = all_commands(data)
         self.check("no shell guard entry is left", not [c for c in cmds if re.search(r"ai-(git|path|scope)-guard\.sh", c)], cmds)

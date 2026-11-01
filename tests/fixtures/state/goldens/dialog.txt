@@ -1,0 +1,539 @@
+$ state.py --root <ROOT> approve --by 'Rita Human'
+exit 1
+--- stdout
+--- stderr
+state.py: no task in flight (<ROOT>/.ai/state/state.json does not exist). Start one with state.py start.
+
+$ state.py --root <ROOT> start --goal 'tweak the widget' --workflow feature --files src/widget.py --tests tests/test_widget.py --declare behaviour=0:synthetic --declare domain=0:synthetic --declare novelty=0:synthetic --mode full --by test
+exit 0
+--- stdout
+scope          0  src/widget.py referenced from 0 files
+behaviour      0  synthetic (declared)
+reversibility  0  git revert returns everything
+domain         0  synthetic (declared)
+novelty        0  synthetic (declared)
+coverage       0  1 of 1 code files have a test
+W 0 → light   hints none · unknown none · light ≤2 · guarded 3–7 · full ≥8 or reversibility/domain=2
+mode: full (override of light by test)
+<ID1> started: full · 2 files in scope · .ai/reports/<ID1>/task.md
+next: edit, 'state.py verify --scope all', one STRONG review, then 'state.py close' requests the human's approval
+--- stderr
+
+# write src/widget.py
+$ state.py --root <ROOT> verify --scope all --by 'Rita Human'
+exit 0
+--- stdout
+suite run 1: exit 0 <DURATION>
+command: sh -c 'test ! -e "$GOLDEN_FLAGS/red"' {files}
+log: .ai/state/logs/<ID1>/suite-1.log
+e2e run 2: exit 0 <DURATION>
+command: sh -c 'test ! -e "$GOLDEN_FLAGS/e2ered"'
+log: .ai/state/logs/<ID1>/e2e-2.log
+suite runs used: 1 of 2
+--- stderr
+
+$ state.py --root <ROOT> review --verdict pass --tier STRONG --report - <<<stdin
+exit 0
+--- stdout
+review: passed (STRONG, pass 1 of 2)
+--- stderr
+
+$ state.py --root <ROOT> close
+exit 0
+--- stdout
+<ID1> full ready for approval: tweak the widget
+facts: (a) suite green on <TREE9> (run 1) · (b) 1 changed files, all in the task's files
+DIALOG_PENDING D1 — call AskUserQuestion with exactly this JSON, then run the picked command verbatim or 'state.py decision settle --id D1':
+{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nfacts: (a) suite green on <TREE9> (run 1) · (b) 1 changed files, all in the task's files\nApprove this tree for <ID1>?", "header": "Approve", "options": [{"label": "Not now — leave the gate open", "description": "nothing runs"}, {"label": "python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'", "description": "the session runs exactly this, once"}, {"label": "python3 <STATE_PY> --root <ROOT> reject --by 'Rita Human' --why 'rejected in the dialog'", "description": "the session runs exactly this, once"}], "multiSelect": false}]}
+--- stderr
+
+$ state.py --root <ROOT> decision show
+exit 0
+--- stdout
+DIALOG_PENDING D1 — call AskUserQuestion with exactly this JSON, then run the picked command verbatim or 'state.py decision settle --id D1':
+{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nfacts: (a) suite green on <TREE9> (run 1) · (b) 1 changed files, all in the task's files\nApprove this tree for <ID1>?", "header": "Approve", "options": [{"label": "Not now — leave the gate open", "description": "nothing runs"}, {"label": "python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'", "description": "the session runs exactly this, once"}, {"label": "python3 <STATE_PY> --root <ROOT> reject --by 'Rita Human' --why 'rejected in the dialog'", "description": "the session runs exactly this, once"}], "multiSelect": false}]}
+--- stderr
+
+$ state.py --root <ROOT> decision show --json
+exit 0
+--- stdout
+{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nfacts: (a) suite green on <TREE9> (run 1) · (b) 1 changed files, all in the task's files\nApprove this tree for <ID1>?", "header": "Approve", "options": [{"label": "Not now — leave the gate open", "description": "nothing runs"}, {"label": "python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'", "description": "the session runs exactly this, once"}, {"label": "python3 <STATE_PY> --root <ROOT> reject --by 'Rita Human' --why 'rejected in the dialog'", "description": "the session runs exactly this, once"}], "multiSelect": false}]}
+--- stderr
+
+$ state.py --root <ROOT> decision open --kind commit --command 'git commit -m '"'"'golden'"'"' -- src/widget.py'
+exit 0
+--- stdout
+DIALOG_PENDING D2 — call AskUserQuestion with exactly this JSON, then run the picked command verbatim or 'state.py decision settle --id D2':
+{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nbranch master · 1 file changed, 1 insertion(+), 1 deletion(-)\nRun these, in this order?\n  git commit -m 'golden' -- src/widget.py", "header": "Commit", "options": [{"label": "Not now — commit nothing", "description": "nothing runs"}, {"label": "git commit -m 'golden' -- src/widget.py", "description": "the session runs exactly this, once"}], "multiSelect": false}]}
+--- stderr
+
+$ state.py --root <ROOT> decision show --id D2
+exit 0
+--- stdout
+DIALOG_PENDING D2 — call AskUserQuestion with exactly this JSON, then run the picked command verbatim or 'state.py decision settle --id D2':
+{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nbranch master · 1 file changed, 1 insertion(+), 1 deletion(-)\nRun these, in this order?\n  git commit -m 'golden' -- src/widget.py", "header": "Commit", "options": [{"label": "Not now — commit nothing", "description": "nothing runs"}, {"label": "git commit -m 'golden' -- src/widget.py", "description": "the session runs exactly this, once"}], "multiSelect": false}]}
+--- stderr
+
+$ state.py --root <ROOT> approve --by 'Rita Human'
+exit 5
+--- stdout
+--- stderr
+state.py: APPROVAL_REFUSED — approval happens outside the agent. Run in your own terminal:
+  python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'
+or set [Answer]: A on G1 in .ai/reports/<ID1>/task.md and tell the session to sync. An unattended run exports AI_UNATTENDED=1 in the launcher's environment; the journal then records the approval as unattended.
+Refused because this run is inside an agent session (CLAUDECODE is set); run it in a terminal outside Claude Code or Codex, not through the `!` prefix.
+
+# the human picks option 2 of D1: python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'
+$ state.py --root <ROOT> approve --by 'Rita Human'
+exit 0
+--- stdout
+approved by Rita Human (via dialog)
+--- stderr
+
+$ state.py --root <ROOT> approve --by 'Rita Human'
+exit 0
+--- stdout
+already approved by Rita Human at <TS> (via dialog)
+--- stderr
+
+$ state.py --root <ROOT> consent audit
+exit 0
+--- stdout
+C1 D1 unverifiable
+1 picks: 0 ok, 0 mismatch, 1 unverifiable
+--- stderr
+
+$ state.py --root <ROOT> consent audit --json
+exit 0
+--- stdout
+[{"id": "C1", "decision": "D1", "result": "unverifiable"}]
+--- stderr
+
+$ state.py --root <ROOT> close
+exit 0
+--- stdout
+<ID1> closed (full): .ai/reports/<ID1>/task.md
+state: .ai/state/logs/<ID1>/state.json
+--- stderr
+
+$ state.py --root <ROOT> decision show
+exit 0
+--- stdout
+DIALOG_PENDING D2 — call AskUserQuestion with exactly this JSON, then run the picked command verbatim or 'state.py decision settle --id D2':
+{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nbranch master · 1 file changed, 1 insertion(+), 1 deletion(-)\nRun these, in this order?\n  git commit -m 'golden' -- src/widget.py", "header": "Commit", "options": [{"label": "Not now — commit nothing", "description": "nothing runs"}, {"label": "git commit -m 'golden' -- src/widget.py", "description": "the session runs exactly this, once"}], "multiSelect": false}]}
+--- stderr
+
+$ state.py --root <ROOT> decision settle --id D2 --why 'not now'
+exit 1
+--- stdout
+--- stderr
+state.py: nothing is recorded for D2: send the dialog ('state.py decision show'), or 'state.py decision fallback --id D2 --why …'
+
+$ state.py --root <ROOT> decision fallback --id D2 --why golden
+exit 0
+--- stdout
+D2 falls back to the terminal (golden). The human runs, outside the agent:
+  git commit -m 'golden' -- src/widget.py
+--- stderr
+
+$ state.py --root <ROOT> decision show
+exit 1
+--- stdout
+--- stderr
+state.py: no open decision
+
+$ state.py --root <ROOT> status
+exit 0
+--- stdout
+root: <ROOT>
+task: none — no task in flight
+schema: project 0 · plugin 11 — behind: run /rr-setup --update
+--- stderr
+
+
+##### files under .ai/ at the end
+=== .ai/policies/dialog.json
+{"version": 1, "enabled": true, "window_seconds": 120, "stop_blocks_max": 2}
+=== .ai/policies/testing.md
+verify_command: sh -c 'test ! -e "$GOLDEN_FLAGS/red"' {files}
+step_test_command: sh -c 'test ! -e "$GOLDEN_FLAGS/stepred"' {files}
+e2e_command: sh -c 'test ! -e "$GOLDEN_FLAGS/e2ered"'
+=== .ai/reports/<ID1>/events.jsonl
+{"ts": "<TS>", "task": "<ID1>", "event": "task_started", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "tweak the widget", "data": {"goal": "tweak the widget", "workflow": "feature", "mode": "full", "schema": 7}}
+{"ts": "<TS>", "task": "<ID1>", "event": "weight_set", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "W 0 → light", "data": {"w": 0, "mode": "light", "axes": {"scope": 0, "behaviour": 0, "reversibility": 0, "domain": 0, "novelty": 0, "coverage": 0}, "hints": [], "unknown": []}}
+{"ts": "<TS>", "task": "<ID1>", "event": "mode_set", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "light -> full by test", "data": {"from": "light", "to": "full", "by": "test", "why": ""}}
+{"ts": "<TS>", "task": "<ID1>", "event": "tier_set", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "T5 (mode full, compat)", "data": {"tier": "T5", "mode": "full", "w": 0}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "start", "data": {"reason": "start", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "verify_run", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "suite run 1: exit 0", "data": {"n": 1, "scope": "suite", "exit": 0, "tree": "<TREE40>", "log": ".ai/state/logs/<ID1>/suite-1.log", "expected_fail": false}}
+{"ts": "<TS>", "task": "<ID1>", "event": "verify_run", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "e2e run 2: exit 0", "data": {"n": 2, "scope": "e2e", "exit": 0, "tree": "<TREE40>", "log": ".ai/state/logs/<ID1>/e2e-2.log", "expected_fail": false}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "verify", "data": {"reason": "verify", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "review_verdict", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "pass on STRONG (pass 1)", "data": {"verdict": "pass", "tier": "STRONG", "pass_n": 1, "labels": [], "focus": null}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "review", "data": {"reason": "review", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "gate_requested", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "G1: human_approval", "data": {"gate": "human_approval", "gate_id": "G1", "requested_at": "<TS>"}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "close", "data": {"reason": "close", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "decision_opened", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "D1 approval by close", "data": {"decision": "D1", "kind": "approval", "options": 3}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "close", "data": {"reason": "close", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "decision_opened", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "D2 commit by decision open", "data": {"decision": "D2", "kind": "commit", "options": 2}}
+{"ts": "<TS>", "task": "<ID1>", "event": "consent_recorded", "actor": "hook", "runtime": "claude", "stage": "implementation", "detail": "python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'", "data": {"id": "C1", "decision": "D1", "option": 2, "order": 1, "tool_use_id": "toolu_C1", "session": "sess-golden"}}
+{"ts": "<TS>", "task": "<ID1>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "stage", "data": {"reason": "stage", "lines": 12}}
+{"ts": "<TS>", "task": "<ID1>", "event": "gate_approved", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "granted by Rita Human via dialog", "data": {"by": "Rita Human", "gate_id": "G1", "via": "dialog", "unattended": false, "tty": false, "consent": "C1", "decision": "D1", "tool_use_id": "toolu_C1"}}
+{"ts": "<TS>", "task": "<ID1>", "event": "consent_used", "actor": "hook", "runtime": "claude", "stage": "implementation", "detail": "C1", "data": {"id": "C1", "by": "state.py approve"}}
+{"ts": "<TS>", "task": "<ID1>", "event": "decision_settled", "actor": "hook", "runtime": "claude", "stage": "implementation", "detail": "D1", "data": {"decision": "D1", "pick": "C1", "effect": "approved"}}
+{"ts": "<TS>", "task": "<ID1>", "event": "task_closed", "actor": "agent", "runtime": "claude", "stage": "done", "detail": "", "data": {"abandoned": false, "mode": "full", "w": 0}}
+=== .ai/reports/<ID1>/task.md
+# <ID1> — tweak the widget
+
+feature · full · started <TS> · claude
+
+## Weight
+
+```
+scope          0  src/widget.py referenced from 0 files
+behaviour      0  synthetic (declared)
+reversibility  0  git revert returns everything
+domain         0  synthetic (declared)
+novelty        0  synthetic (declared)
+coverage       0  1 of 1 code files have a test
+W 0 → light   hints none · unknown none · light ≤2 · guarded 3–7 · full ≥8 or reversibility/domain=2
+```
+override: light → full by test at <TS>
+
+## Plan
+
+files: src/widget.py
+tests: tests/test_widget.py
+
+## Questions
+
+<!-- Written by state.py. Answer with `state.py answer Q1=B`, or fill the [Answer]: lines here and run
+     `state.py questions --sync`; the rest of task.md is rewritten from the state, this section is kept. -->
+
+## G1. Approve <ID1> for implementation? (gate: human_approval)
+asked: <TS> · stage: human_approval
+A. Approve
+B. Reject — answer as `B: <reason>`
+X. Other — answer as `X: <text>`
+[Answer]: A — by Rita Human via dialog at <TS>
+
+## Verify
+
+| n | scope | exit | tree | log | expected_fail |
+|---|---|---|---|---|---|
+| 1 | suite | 0 | <TREE9> | .ai/state/logs/<ID1>/suite-1.log | no |
+| 2 | e2e | 0 | <TREE9> | .ai/state/logs/<ID1>/e2e-2.log | no |
+
+suite passing · e2e passing · suite runs 1
+
+## Review
+
+### Pass 1 — STRONG, pass
+
+```
+FINDINGS
+none
+```
+
+## Changes
+
+| File | Change | New/Edit/Delete |
+|---|---|---|
+| src/widget.py | +1 −1 | Edit |
+
++1 −1 lines, 1 files
+
+## Verdict
+
+close: closed
+facts: (a) green — suite green on <TREE9> (run 1) · (b) green — 1 changed files, all in the task's files
+gate: requested G1 at <TS>; approved by Rita Human at <TS> via dialog
+confirm: none
+handoffs: 6 · suite runs: 1 · review passes: 1
+=== .ai/state/consent.jsonl
+{"v": 1, "type": "pick", "id": "C1", "decision": "D1", "option": 2, "order": 1, "label": "python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'", "session": "sess-golden", "tool_use_id": "toolu_C1", "transcript": "", "runtime": "claude", "at": "<TS>", "expires_at": "<TS>"}
+{"v":1,"type":"use","id":"C1","by":"state.py approve","at":"<TS>"}
+{"v":1,"type":"settle","decision":"D1","pick":"C1","effect":"approved","at":"<TS>"}
+{"v":1,"type":"settle","decision":"D2","pick":null,"effect":"fallback","at":"<TS>"}
+=== .ai/state/logs/.gitignore
+*
+=== .ai/state/logs/<ID1>/e2e-2.log
+=== .ai/state/logs/<ID1>/state.json
+{
+  "schema": 7,
+  "task_id": "<ID1>",
+  "goal": "tweak the widget",
+  "workflow": "feature",
+  "mode": "full",
+  "weight": {
+    "w": 0,
+    "mode": "light",
+    "axes": {
+      "scope": 0,
+      "behaviour": 0,
+      "reversibility": 0,
+      "domain": 0,
+      "novelty": 0,
+      "coverage": 0
+    },
+    "evidence": {
+      "scope": "src/widget.py referenced from 0 files",
+      "behaviour": "synthetic (declared)",
+      "reversibility": "git revert returns everything",
+      "domain": "synthetic (declared)",
+      "novelty": "synthetic (declared)",
+      "coverage": "1 of 1 code files have a test"
+    },
+    "hints": [],
+    "unknown": [],
+    "notes": [
+      "scope: src/widget.py referenced from 0 files"
+    ],
+    "lines": [
+      "scope          0  src/widget.py referenced from 0 files",
+      "behaviour      0  synthetic (declared)",
+      "reversibility  0  git revert returns everything",
+      "domain         0  synthetic (declared)",
+      "novelty        0  synthetic (declared)",
+      "coverage       0  1 of 1 code files have a test",
+      "W 0 → light   hints none · unknown none · light ≤2 · guarded 3–7 · full ≥8 or reversibility/domain=2"
+    ],
+    "tree": "<TREE40>",
+    "computed_at": "<TS>",
+    "rescores": [],
+    "operations": []
+  },
+  "mode_override": {
+    "from": "light",
+    "to": "full",
+    "by": "test",
+    "why": "",
+    "ts": "<TS>"
+  },
+  "stage": "done",
+  "files": [
+    "src/widget.py"
+  ],
+  "tests": [
+    "tests/test_widget.py"
+  ],
+  "steps": [],
+  "amendments": [],
+  "findings": [],
+  "batch": {
+    "on": false,
+    "by": null,
+    "why": null,
+    "since": null
+  },
+  "diff": {
+    "base_tree": "<TREE40>",
+    "base_commit": "7a981f6d87a5def7d575641b3e15b45775eca6db"
+  },
+  "gate": {
+    "requested_at": "<TS>",
+    "gate_id": "G1",
+    "tree": "<TREE40>",
+    "approved_by": "Rita Human",
+    "approved_at": "<TS>",
+    "approved_tree": "<TREE40>",
+    "via": "dialog",
+    "confirm": null,
+    "operations": []
+  },
+  "owner_runtime": "claude",
+  "created": "<TS>",
+  "created_at": "<TS>",
+  "history": [
+    {
+      "at": "<TS>",
+      "event": "task_started",
+      "detail": "tweak the widget"
+    },
+    {
+      "at": "<TS>",
+      "event": "weight_set",
+      "detail": "W 0 → light"
+    },
+    {
+      "at": "<TS>",
+      "event": "mode_set",
+      "detail": "light -> full by test"
+    },
+    {
+      "at": "<TS>",
+      "event": "tier_set",
+      "detail": "T5 (mode full, compat)"
+    },
+    {
+      "at": "<TS>",
+      "event": "verify_run",
+      "detail": "suite run 1: exit 0"
+    },
+    {
+      "at": "<TS>",
+      "event": "verify_run",
+      "detail": "e2e run 2: exit 0"
+    },
+    {
+      "at": "<TS>",
+      "event": "review_verdict",
+      "detail": "pass on STRONG (pass 1)"
+    },
+    {
+      "at": "<TS>",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "<TS>",
+      "event": "human_approval",
+      "detail": "granted by Rita Human via dialog"
+    },
+    {
+      "at": "<TS>",
+      "event": "task_closed",
+      "detail": ""
+    }
+  ],
+  "resume_point": {
+    "stage": "implementation",
+    "step_id": "task",
+    "next_action": "the human picks in the dialog (D1), then 'state.py close' again",
+    "at": "<TS>",
+    "runtime": "claude"
+  },
+  "cross_vendor_review": null,
+  "questions": {
+    "file": ".ai/reports/<ID1>/task.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "<TS>",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "Rita Human",
+    "granted_at": "<TS>",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "dialog",
+    "unattended": false
+  },
+  "verify": {
+    "status": "passing",
+    "e2e": "passing",
+    "suite_runs": 1,
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "exit": 0,
+        "tree": "<TREE40>",
+        "tree_moved": false,
+        "log": ".ai/state/logs/<ID1>/suite-1.log",
+        "ts": "<TS>",
+        "expected_fail": false,
+        "runtime": "claude",
+        "command": "sh -c 'test ! -e \"$GOLDEN_FLAGS/red\"' {files}",
+        "duration_s": 0,
+        "after_fix": null,
+        "files": []
+      },
+      {
+        "n": 2,
+        "scope": "e2e",
+        "exit": 0,
+        "tree": "<TREE40>",
+        "tree_moved": false,
+        "log": ".ai/state/logs/<ID1>/e2e-2.log",
+        "ts": "<TS>",
+        "expected_fail": false,
+        "runtime": "claude",
+        "command": "sh -c 'test ! -e \"$GOLDEN_FLAGS/e2ered\"'",
+        "duration_s": 0,
+        "after_fix": null,
+        "files": []
+      }
+    ],
+    "e2e_tree": "<TREE40>"
+  },
+  "review": {
+    "status": "passed",
+    "passes": 1,
+    "tier": "STRONG",
+    "findings": [],
+    "tree": "<TREE40>",
+    "log": [
+      {
+        "n": 1,
+        "tier": "STRONG",
+        "verdict": "pass",
+        "focus": null,
+        "text": "FINDINGS\nnone\n",
+        "tree": "<TREE40>",
+        "ts": "<TS>",
+        "runtime": "claude",
+        "by": null
+      }
+    ],
+    "closed": [],
+    "ts": "<TS>",
+    "runs_at": 2
+  },
+  "current_stage": "done",
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": "task",
+    "steps": [
+      {
+        "step_id": "task",
+        "description": "tweak the widget",
+        "allowed_files": [
+          "src/widget.py",
+          "tests/test_widget.py"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [
+          "tests/test_widget.py"
+        ],
+        "status": "in_progress"
+      }
+    ]
+  },
+  "next_action": "none — task closed",
+  "updated_at": "<TS>",
+  "facts": {
+    "a": [
+      true,
+      "suite green on <TREE9> (run 1)"
+    ],
+    "b": [
+      true,
+      "1 changed files, all in the task's files"
+    ],
+    "tree": "<TREE40>",
+    "at": "<TS>"
+  },
+  "dialog": {
+    "ledger_pos": 602
+  },
+  "changes": [
+    {
+      "path": "src/widget.py",
+      "status": "M",
+      "added": 1,
+      "deleted": 1,
+      "binary": false
+    }
+  ],
+  "result": "closed",
+  "closed_at": "<TS>"
+}
+=== .ai/state/logs/<ID1>/suite-1.log

@@ -61,5 +61,5 @@ def plan(ctx):
                      "the managed block below it now says the same thing" % path)
         if ctx.block_status(path) == "edited":
             ctx.hint("%s: the managed block was edited here, so the plugin's stub cannot "
-                     "replace it — move your lines below the block and run /project-update "
+                     "replace it — move your lines below the block and run /rr-setup --update "
                      "again" % path)

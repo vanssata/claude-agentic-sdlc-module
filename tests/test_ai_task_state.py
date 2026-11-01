@@ -7,6 +7,7 @@ Every project here is a scratch git repository in a temp directory. The suite's
 red/green switch is a flag file outside the repository, so flipping it never
 changes the tree the two facts are measured on.
 """
+import base64
 import contextlib
 import io
 import json
@@ -53,7 +54,10 @@ class Project:
         os.makedirs(os.path.join(self.root, ".ai", "policies"))
         red, e2e = os.path.join(self.flags, "red"), os.path.join(self.flags, "e2ered")
         # flags/touch makes the suite edit a tracked file while it runs.
-        touch = "test -e %s && echo touched >> src/moved.txt; " % os.path.join(self.flags, "touch")
+        touch = ("test -e %s && echo touched >> src/moved.txt; test -e %s && echo x > cov.dat; "
+                 "test -e %s && echo x > \"$(printf \"w\\nFAKE ok\\033[0mz.dat\")\"; "
+                 % (os.path.join(self.flags, "touch"), os.path.join(self.flags, "untracked"),
+                    os.path.join(self.flags, "weird")))
         self.write(".ai/policies/testing.md",
                    "verify_command: sh -c '%stest ! -e %s' {files}\nstep_test_command: sh -c 'test ! -e %s' {files}\n"
                    "e2e_command: test ! -e %s\n" % (touch, red, os.path.join(self.flags, "stepred"), e2e))
@@ -346,6 +350,9 @@ class TestModes(Base):
         self.assertEqual(self.p.state()["stage"], "ship")
         self.assertEqual(self.p.run("close").returncode, 4)                 # the gate's question blocks
         self.assertEqual(self.p.run("approve", "--by", "ivan").returncode, 5)    # no human here
+        for value in ("0", "false", " No "):                                # risk 0587: one rule
+            self.assertEqual(self.p.run("approve", "--by", "ivan", env={"AI_UNATTENDED": value}).returncode, 5,
+                             "AI_UNATTENDED=%r is not the unattended route" % value)
         self.p.ok("approve", "--by", "ivan", human=True)
         self.p.ok("close")
         self.assertFalse(self.p.in_flight())
@@ -453,7 +460,7 @@ class TestTwoFacts(Base):
         self.assertIn("finding:", self.p.task_md(task))
 
 
-class TestSurface(Base):
+class TestSurface(Base):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     def test_size_is_reported_not_gated(self):
         # R4: a 2 000-line, 40-file change closes in light mode; size is only reported.
         self.p.start(files="src/gen/**")
@@ -858,6 +865,25 @@ class TestReviewPass1(Base):
         self.assertIn("tree moved during the run", out)
         self.assertIsNone(self.p.state()["verify"]["runs"][0]["tree"])
         self.assertEqual(self.p.run("close").returncode, 2)
+
+    def test_a_moved_tree_names_the_untracked_file_the_suite_wrote(self):
+        self.p.start()
+        self.p.flag("untracked")
+        out = self.p.ok("verify", "--scope", "all").stdout
+        self.assertIn("tree moved during the run", out)
+        self.assertIn("cov.dat (untracked)", out)
+        self.assertIn(".gitignore", out)
+        self.assertIsNone(self.p.state()["verify"]["runs"][0]["tree"])
+
+    def test_a_moved_tree_escapes_a_path_name_with_a_newline_or_an_escape(self):
+        # A name from `git diff -z` is data: a newline or ESC in it must not forge a verify line.
+        self.p.start()
+        self.p.flag("weird")
+        out = self.p.ok("verify", "--scope", "all").stdout
+        self.assertIn("tree moved during the run", out)
+        self.assertIn("w\\nFAKE ok\\x1b[0mz.dat (untracked)", out)
+        self.assertNotIn("\x1b", out)
+        self.assertNotIn("\nFAKE ok", out)
 
     def test_a_red_under_claude_is_never_waived(self):
         # Review M4: only a Codex-only red is a finding.
@@ -1900,7 +1926,7 @@ class TestWP5(Ported):
         done = self.s("claude", "handoff", "--to", "codex", "--why", "claude quota")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertRegex(done.stdout, r"Handed .* to codex \(manual\)")
-        self.assertRegex(done.stdout, r"headless \(not run\): cd .* && codex exec '/ai-task'")
+        self.assertRegex(done.stdout, r"headless \(not run\): cd .* && codex exec '/rr-build'")
         s = self.p.state()
         self.assertEqual((s["owner_runtime"], s["resume_point"]["runtime"], s["handoff"]["pending_to"]),
                          ("codex", "codex", "codex"))
@@ -2089,7 +2115,7 @@ class DialogBase(unittest.TestCase):
                               capture_output=True, text=True, check=False)
 
 
-class TestDialogDecisions(DialogBase):
+class TestDialogDecisions(DialogBase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     """R36.3, R36.4, R36.14, R36.15, R36.24: state.py alone prepares a decision;
     the ledger's lines settle it and are mirrored into the journal."""
 
@@ -2112,6 +2138,31 @@ class TestDialogDecisions(DialogBase):
         self.p.run("decision", "show")
         self.assertEqual(self.p.decisions(), [])
         self.assertEqual([(e["type"], e.get("effect")) for e in self.p.ledger()], [("settle", "fallback")])
+
+    def read_only_ledger(self):
+        path = os.path.join(self.p.root, ".ai", "state", "consent.jsonl")
+        os.chmod(path, 0o444)
+        if os.access(path, os.W_OK):
+            self.skipTest("the ledger stays writable as root")
+
+    def test_switch_off_keeps_the_decision_when_the_settle_cannot_be_written(self):
+        """43ae-I4: a decision leaves decision.json only with its settle line."""
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        self.p.append(type="use", id="C0", by="git-guard")
+        self.read_only_ledger()
+        os.remove(os.path.join(self.p.root, ".ai", "policies", "dialog.json"))
+        self.p.run("decision", "show")
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+        self.assertNotIn("settle", [e["type"] for e in self.p.ledger()])
+
+    def test_used_picks_keep_the_decision_when_the_settle_cannot_be_written(self):
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        cid = self.p.pick("D1", 2)
+        self.p.append(type="use", id=cid, by="git-guard")
+        self.read_only_ledger()
+        self.p.run("decision", "show")
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+        self.assertNotIn("settle", [e["type"] for e in self.p.ledger()])
 
     def test_decision_open_commit_validates_labels(self):
         for bad in ("git commit -m x; rm -rf ~", "git commit -m \"$(id)\"", "git commit -m a | tee x",
@@ -2164,6 +2215,43 @@ class TestDialogDecisions(DialogBase):
         only = json.loads(self.p.ok("decision", "show", "--id", "D2", "--json").stdout)
         self.assertEqual(len(only["questions"]), 1)
 
+    def test_a_second_open_with_the_same_question_is_refused(self):
+        """Risk afd2: two open decisions whose question text is one string can
+        never be answered in the dialog, so the second open is refused."""
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m one")
+        done = self.commit("git commit -m one")
+        self.assertEqual(done.returncode, 6, done.stdout + done.stderr)
+        self.assertIn("DECISION_DUPLICATE", done.stderr)
+        self.assertIn("D1", done.stderr)
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+
+    def test_a_twin_ask_takes_the_file_route(self):
+        """Risk 712d: a second ask with the same text opened a second decision
+        the dialog could never answer; it now stays on the [Answer]: file route."""
+        self.p.start()
+        self.p.ok("ask", "Which cache?", "--option", "A: per locale", "--option", "B: global")
+        done = self.p.run("ask", "Which cache?", "--option", "A: per locale", "--option", "B: global")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("Q2 asked", done.stdout)
+        self.assertNotIn("DIALOG_PENDING", done.stdout)
+        self.assertIn("no dialog — DECISION_DUPLICATE", done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+
+    def test_a_twin_from_another_session_names_the_fallback(self):
+        """Risk e3ae: decision show lists only this session's decisions, so a
+        twin another session opened cannot be sent from here: the refusal names
+        decision fallback --id and does not say to send it."""
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m one")
+        done = self.commit("git commit -m one", env={"CLAUDE_CODE_SESSION_ID": "another"})
+        self.assertEqual(done.returncode, 6, done.stdout + done.stderr)
+        self.assertIn("DECISION_DUPLICATE", done.stderr)
+        self.assertIn("decision fallback --id D1", done.stderr)
+        self.assertNotIn("send it", done.stderr)
+        same = self.commit("git commit -m one")
+        self.assertIn("send it", same.stderr, "the own session's twin can still be sent")
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+
     def test_four_open_max(self):
         self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m a",
                   "--command", "git push origin main")
@@ -2172,6 +2260,20 @@ class TestDialogDecisions(DialogBase):
         done = self.commit("git commit -m five")
         self.assertEqual(done.returncode, 6)
         self.assertIn("DECISION_LIMIT", done.stderr)
+        self.assertEqual(len(json.loads(self.p.ok("decision", "show", "--json").stdout)["questions"]), 4)
+
+    def test_a_twin_at_the_limit_says_duplicate(self):
+        """Risk 4f78: with four questions open, a twin of D2 said DECISION_LIMIT, and after
+        settling one the retry said DECISION_DUPLICATE — the twin is named first."""
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m a",
+                  "--command", "git push origin main")
+        for n in range(3):
+            self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m n%d" % n)
+        done = self.commit("git commit -m n0")
+        self.assertEqual(done.returncode, 6, done.stdout + done.stderr)
+        self.assertIn("DECISION_DUPLICATE", done.stderr)
+        self.assertIn("D2", done.stderr)
+        self.assertNotIn("DECISION_LIMIT", done.stderr)
         self.assertEqual(len(json.loads(self.p.ok("decision", "show", "--json").stdout)["questions"]), 4)
 
     def test_show_with_nothing_open(self):
@@ -2192,6 +2294,20 @@ class TestDialogDecisions(DialogBase):
         self.assertEqual((settle["type"], settle["decision"], settle["pick"], settle["effect"]),
                          ("settle", "D1", cid, "defer"))
         self.assertFalse(os.path.exists(os.path.join(self.p.root, ".ai", "state", "decision.json")))
+
+    def test_decision_show_survives_deep_decision_json(self):
+        """A too-deep decision.json reads as a malformed one: die(), no traceback."""
+        path = os.path.join(self.p.root, ".ai", "state", "decision.json")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        results = []
+        for text in ("{not json", "[" * 200000):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            results.append(self.p.run("decision", "show"))
+        malformed, deep = results  # pylint: disable=unbalanced-tuple-unpacking  # the loop above appends exactly two results
+        self.assertNotIn("Traceback", deep.stderr)
+        self.assertEqual(deep.returncode, malformed.returncode)
+        self.assertIn("is unreadable", deep.stderr)
 
     def test_a_decline_settles_as_declined(self):
         self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
@@ -2313,7 +2429,7 @@ class TestDialogDecisions(DialogBase):
                 self.assertEqual(self.p.run("event", event).returncode, 5)
 
 
-class TestDialogRoute(DialogBase):
+class TestDialogRoute(DialogBase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     """R36.10: human_route() takes the dialog when a live pick of this session is
     this very command; close and the budget refusals open the decisions (R36.3);
     the dialog off is today, byte for byte (R36.2)."""
@@ -2392,6 +2508,119 @@ class TestDialogRoute(DialogBase):
                 self.assertEqual(self.p.run(*argv, env=env).returncode, 5)
         self.assertEqual([e["type"] for e in self.p.ledger()], ["pick"], "a refusal spends no pick")
         self.assertFalse(self.p.state()["human_approval"]["granted"])
+
+    def test_a_deep_decision_json_counts_no_pick(self):
+        """A live pick over a too-deep decision.json is no pick: valid_decisions
+        reads it as a malformed one, the refusal, not a traceback."""
+        self.full_gate()
+        self.p.pick("D1", 2)
+        self.p.pick("D1", 3)
+        argvs = [self.argv(self.label("D1", n)) for n in (2, 3)]
+        with open(os.path.join(self.p.root, ".ai", "state", "decision.json"), "w", encoding="utf-8") as fh:
+            fh.write("[" * 200000)
+        approve, reject = (self.p.run(*argv) for argv in argvs)
+        self.assertNotIn("Traceback", approve.stderr)
+        self.assertEqual(approve.returncode, 5, approve.stdout + approve.stderr)
+        self.assertFalse(self.p.state()["human_approval"]["granted"])
+        # a rejection needs no pick: it fails on the unreadable file as a malformed one does
+        self.assertNotIn("Traceback", reject.stderr)
+        self.assertIn("is unreadable", reject.stderr)
+
+    def test_deep_state_files_read_as_malformed_ones(self):
+        """A too-deep state.json, session.json or consent.jsonl line takes the
+        path of a malformed one: no traceback."""
+        self.full_gate()
+        state_dir = os.path.join(self.p.root, ".ai", "state")
+        for name, command in (("state.json", ("status",)),):
+            path = os.path.join(state_dir, name)
+            original = None
+            if os.path.exists(path):
+                with open(path, encoding="utf-8") as fh:
+                    original = fh.read()
+            try:
+                results, left = [], []
+                for text in ("{not json", "[" * 200000):
+                    with open(path, "w", encoding="utf-8") as fh:
+                        fh.write(text)
+                    results.append(self.p.run(*command))
+                    with open(path, encoding="utf-8") as fh:
+                        left.append(fh.read() == text)
+            finally:
+                if original is None:
+                    os.remove(path)
+                else:
+                    with open(path, "w", encoding="utf-8") as fh:
+                        fh.write(original)
+            with self.subTest(file=name):
+                malformed, deep = results  # pylint: disable=unbalanced-tuple-unpacking  # the loop above appends exactly two results
+                self.assertNotIn("Traceback", deep.stderr)
+                self.assertEqual(deep.returncode, malformed.returncode)
+                self.assertEqual(left, [True, True], "a corrupt %s is never replaced, deep or not" % name)
+
+    def test_deep_session_json_reads_as_a_malformed_one(self):
+        """Review M2 of T-2026-10-31-1529: read_session itself, not a command
+        whose runtime marker skips it."""
+        os.makedirs(os.path.join(self.p.root, ".ai", "state"), exist_ok=True)
+        path = state_mod.session_path(self.p.root)
+        seen = []
+        for text in ("{not json", "[" * 200000):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            seen.append(state_mod.read_session(self.p.root))
+        self.assertEqual(seen, [{}, {}])
+
+    def test_deep_consent_line_reads_as_a_malformed_one(self):
+        """Review L2 of T-2026-10-31-1529: a too-deep ledger line is skipped
+        exactly as a torn one, between two good lines."""
+        good = [json.dumps({"v": 1, "type": "use", "id": "C%d" % n, "by": "git", "at": stamp()}) for n in (1, 2)]
+        path = os.path.join(self.p.tmp.name, "consent.jsonl")
+        seen = []
+        for bad in ("{not json", "[" * 200000):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("\n".join([good[0], bad, good[1]]) + "\n")
+            seen.append(state_mod.read_ledger(self.p.root, path))
+        self.assertEqual(seen[1], seen[0])
+        self.assertEqual([e["id"] for e in seen[1]], ["C1", "C2"])
+
+    def test_deep_weight_table_reads_as_a_malformed_one(self):
+        """Review M3 of T-2026-10-31-1529: weight, start and the handoff read
+        .ai/policies/weight.json; deep takes the malformed path, no traceback."""
+        commands = (("weight", "--files", "src/widget.py", "--goal", "g"),
+                    ("start", "--goal", "g", "--workflow", "feature", "--files", "src/widget.py",
+                     "--tests", "tests/test_widget.py") + tuple(ZERO))
+        results = {}
+        for text in ("{not json", "[" * 200000):
+            self.p.write(".ai/policies/weight.json", text)
+            results[text[:1]] = [self.p.run(*command) for command in commands]
+        for n, command in enumerate(commands):
+            with self.subTest(command=command[0]):
+                malformed, deep = results["{"][n], results["["][n]
+                self.assertNotIn("Traceback", deep.stderr)
+                self.assertEqual(deep.returncode, malformed.returncode)
+                self.assertIn("cannot read the weight table", malformed.stderr)
+                self.assertIn("cannot read the weight table", deep.stderr)
+
+    def test_reject_with_an_unreadable_decision_file_writes_nothing(self):
+        """Risk 5580: reject reads decision.json before it records anything, so
+        a malformed or too-deep file refuses the rejection whole."""
+        self.full_gate()
+        path = os.path.join(self.p.root, ".ai", "state", "decision.json")
+        task_md = os.path.join(self.p.root, ".ai", "reports", self.p.state()["task_id"], "task.md")
+
+        def recorded():
+            with open(task_md, encoding="utf-8") as fh:
+                return self.p.state()["human_approval"], fh.read()
+
+        for text in ("{not json", "[" * 200000):
+            with self.subTest(text=text[:2]):
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write(text)
+                before = recorded()
+                done = self.p.run("reject", "--by", "agent", "--why", "redo")
+                self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+                self.assertIn("decision.json is unreadable", done.stderr)
+                self.assertNotIn("Traceback", done.stderr)
+                self.assertEqual(recorded(), before, "nothing is recorded before the refusal")
 
     def test_an_expired_pick_is_no_pick(self):
         self.full_gate()
@@ -2558,6 +2787,118 @@ class TestDialogRoute(DialogBase):
         self.p.ok(*args)
         self.assertEqual(self.p.state()["mode"], "light")
         self.assertEqual(self.journal("mode_set")[-1]["data"]["via"], "dialog")
+
+
+class TestDeepJsonOutsideState(DialogBase):
+    """A JSON file or argument nested past the parser's stack takes the path of
+    a malformed one (RecursionError, not ValueError): same outcome, no traceback."""
+
+    DEEP = "[" * 200000
+
+    def same_outcome(self, malformed, deep):
+        self.assertNotIn("Traceback", deep.stderr)
+        self.assertEqual(deep.returncode, malformed.returncode)
+        self.assertEqual(deep.stdout, malformed.stdout)
+        reason = r"( \(|: )(Expecting|Stack overflow|maximum recursion).*"   # only the parser's words differ
+        self.assertEqual(re.sub(reason, "", deep.stderr, flags=re.S), re.sub(reason, "", malformed.stderr, flags=re.S))
+
+    def write_at(self, path, text):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+
+    def test_journal_line(self):
+        self.p.start()
+        task_id = self.p.state()["task_id"]
+        path = os.path.join(self.p.root, ".ai", "reports", task_id, "events.jsonl")
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write("{not json\n" + self.DEEP + "\n")
+        events, skipped = state_mod.read_journal(self.p.root, task_id)
+        self.assertEqual(skipped, 2, "the malformed and the deep line are both skipped")
+        self.assertTrue(events)
+
+    def test_sealed_task_line(self):
+        base = os.path.join(self.p.root, ".ai", "memory")
+        good = json.dumps({"kind": "task", "task": "T-sealed"}, separators=(",", ":"))
+        self.write_at(os.path.join(base, "a.jsonl"),
+                      '{"kind":"task", not json\n{"kind":"task","x":' + self.DEEP + "\n" + good + "\n")
+        self.assertEqual(state_mod.sealed_task_ids(self.p.root), {"T-sealed"})
+
+    def test_quota_file(self):
+        gate = os.path.join(self.p.home, "state", "runtime-gate.json")
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": self.p.home}):
+            self.write_at(gate, "{not json")
+            malformed = state_mod.read_quota("claude")
+            self.write_at(gate, self.DEEP)
+            self.assertEqual(state_mod.read_quota("claude"), malformed)
+        self.assertIsNone(malformed)
+
+    def test_json_object_file(self):
+        path = os.path.join(self.p.tmp.name, "obj.json")
+        self.write_at(path, "{not json")
+        malformed = state_mod.read_json_object(path)
+        self.write_at(path, self.DEEP)
+        self.assertEqual(state_mod.read_json_object(path), malformed)
+        self.assertIsNone(malformed)
+
+    def test_jwt_payload(self):
+        def token(text):
+            return "h.%s.s" % base64.urlsafe_b64encode(text.encode()).decode().rstrip("=")
+        self.assertEqual(state_mod.jwt_plan_type(token(self.DEEP)), state_mod.jwt_plan_type(token("{not json")))
+        self.assertEqual(state_mod.jwt_plan_type(token(self.DEEP)), "")
+
+    def test_event_data_argument(self):
+        self.p.start()
+        deep = "[" * 100000                # one argument is capped at 128 KiB; the parser fails from ~70000
+        malformed = self.p.run("event", "note", "--data", "{not json")
+        self.assertNotEqual(malformed.returncode, 0)
+        self.same_outcome(malformed, self.p.run("event", "note", "--data", deep))
+
+    def test_ask_batch_file(self):
+        self.p.start()
+        path = os.path.join(self.p.tmp.name, "batch.json")
+        self.write_at(path, "{not json")
+        malformed = self.p.run("ask", "--batch", path)
+        self.assertNotEqual(malformed.returncode, 0)
+        self.write_at(path, self.DEEP)
+        self.same_outcome(malformed, self.p.run("ask", "--batch", path))
+
+    def test_plan_file(self):
+        path = os.path.join(self.p.tmp.name, "plan.json")
+        outcomes = []
+        for text in ("{not json", self.DEEP):
+            self.write_at(path, text)
+            outcomes.append(self.p.run("start", "--goal", "g", "--workflow", "feature", "--files", "src/widget.py",
+                                       "--plan-file", path, *ZERO))
+        self.assertNotEqual(outcomes[0].returncode, 0)
+        self.same_outcome(outcomes[0], outcomes[1])
+
+    def test_ledger_valid_deep_valid(self):
+        """The deep line is skipped by both ledger readers and the valid lines around
+        it count: read_ledger returns two entries, mirror_ledger journals two events
+        and moves the cursor past all three lines, the settle sees the decline."""
+        self.p.start()
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
+        self.p.pick("D1", 1)
+        ledger = os.path.join(self.p.root, ".ai", "state", "consent.jsonl")
+        with open(ledger, "a", encoding="utf-8") as fh:
+            fh.write(self.DEEP + "\n")
+        self.p.append(type="decline", decision="D1", why="other_text")
+        with open(ledger, "rb") as fh:
+            size = len(fh.read())
+        self.assertEqual([e["type"] for e in state_mod.read_ledger(self.p.root)], ["pick", "decline"])
+        task_id = self.p.state()["task_id"]
+
+        def mirrored():
+            return [e["event"] for e in self.p.events(task_id) if e["event"] in ("consent_recorded", "decision_declined")]
+        self.assertEqual(mirrored(), [])
+        settled = self.p.run("decision", "settle", "--id", "D1")
+        self.assertEqual(settled.returncode, 0, settled.stderr)
+        self.assertNotIn("Traceback", settled.stderr)
+        self.assertIn("declined", settled.stdout)
+        self.assertEqual(mirrored(), ["consent_recorded", "decision_declined"])
+        self.assertEqual(self.p.state()["dialog"]["ledger_pos"], size)
+        self.assertEqual(self.p.decisions(), [])
 
 
 class TestBatch(Base):
@@ -2881,7 +3222,7 @@ class TestBatch(Base):
         self.assertIn("current s2", self.p.ok("status").stdout)
 
 
-class TestDocumentsOnly(unittest.TestCase):
+class TestDocumentsOnly(unittest.TestCase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     """2b (docs/sdlc/specs/faster-task-cycle.md, D1-D5): after a green suite, a documents-only
     edit closes on a green run of `doc_tests`. Every project builds its own policy."""
 

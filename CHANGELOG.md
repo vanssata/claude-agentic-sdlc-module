@@ -2,6 +2,23 @@
 
 Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+## [3.2.0] — 2026-11-01
+
+### Changed
+- The plugin's two-line statusline replaces your statusline command by default. The replaced command is printed, kept in `~/.claude/riskrails/statusline.json` and in the dated settings.json backup; `--statusline own` restores it once, on the run that switches to own.
+
+### Fixed
+- `decision open` names an open twin (DECISION_DUPLICATE) before the four-question limit, so a twin at the limit takes one round trip, not two; `update --apply` reads a too-deep `migration.json`, and a too-deep policy unchanged since install, as malformed instead of tracebacking.
+- Installer: `--statusline own` restores the replaced command only on the switch to own; a `--then` you removed by hand no longer comes back on the next update.
+- Installer: a malformed `--then` tail is no longer recorded over the command already kept in `riskrails/statusline.json`.
+- Path guard: `.claude/riskrails/statusline.json` is protected config — an agent's Write or Edit is denied, in a task or not.
+- Statusline: a NaN or infinite percentage, cost or context size skips that part only; the rest of both lines is still printed.
+- Quota record: a NaN or infinite weekly or 5-hour percentage is no reading; it is no longer stored in `runtime-gate.json`.
+- Dialog: a second open decision with the same question text is refused in every opener, not only `decision open` — a repeated `state.py ask` stays on the `[Answer]:` file route instead of opening a twin the dialog cannot answer. A twin another session opened names `decision fallback --id` instead of saying to send it.
+- `/rr-setup --update` and `--adopt`: a JSON file nested too deeply to parse takes the same path as malformed JSON (skipped, a conflict, or a refusal that names the file) instead of a traceback.
+
 ## [3.1.0] — 2026-10-30
 
 Project schema 10 → 11: run `/rr-setup --update` after upgrading.
@@ -37,5 +54,6 @@ Project schema 10 → 11: run `/rr-setup --update` after upgrading.
 - Risk tiers replaced by the weight and three modes (light, guarded, full); `/ai-*` and `/sdlc-*` become `/rr-*` (old names kept as aliases).
 - Guards in one Python process; task state in `.ai/state/state.json`. See "Upgrade to 3.0" in the README.
 
+[3.2.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.0.1...v3.1.0
 [3.0.1]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v2.0.2...v3.0.1

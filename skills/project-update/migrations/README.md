@@ -21,7 +21,17 @@ this directory, named `NNNN_slug.py`, numbered contiguously from `0001`, with
   moves a path a task's step may touch must patch it, or the scope guard will
   stop that task on a file that no longer exists.
 - Operations are planned, never written: the dry run must list everything.
-  Paths are project-relative and normalised, and content is `bytes`.
+  Paths are project-relative and normalised, and content is `bytes`; the
+  `note` of `ctx.conflict` / `ctx.edit_text` and the `reason` of `ctx.delete` are
+  `str`. The type is checked when the operation is planned: any other type stops
+  the update with a SchemaError (exit 2). A call that changes nothing (an
+  `edit_text` whose `fn` returns its input, a `delete` of a path that is not
+  there) plans nothing and is not checked.
+- `ctx.edit_json(path, fn)` hands `fn` a deep copy of the document and takes the
+  new one back. `fn` must not recurse in Python over the document (a file that
+  passed the deep copy can still be ~470-490 levels deep), or it guards
+  `RecursionError` itself; an unguarded `fn`'s `RecursionError` fails the run as
+  the migration's own bug, naming no file.
 - `plan(ctx)` runs again on every run until the schema version advances, and a
   conflict or an unconfirmed deletion holds it back. Every `fn` must therefore be
   idempotent: append a line only when it is not already there, or the next run
@@ -45,6 +55,11 @@ own text instead of matching a pattern against the human's prose:
   else.
 - `ctx.hint(text)` — say something to the human that is not an operation on a
   file. The right answer whenever the text is no longer the plugin's.
+- `ctx.conflict(path, note)` — a file the migration cannot handle (wrong JSON
+  types, say) is a conflict: it holds the schema version, so the next run tries
+  again. `note` says why, and must be `str`: any other type stops the update
+  with a SchemaError (`%04d: <path> note must be str, not <type>`, exit 2), as
+  content that is not `bytes` does.
 - `ctx.template(path)` — the bytes the plugin ships today at that path, from the
   scaffold or the shared tree. `ctx.is_shipped(path, data)` — whether these bytes
   are a version ever shipped there (CRLF counts; `index.json` alone answers).

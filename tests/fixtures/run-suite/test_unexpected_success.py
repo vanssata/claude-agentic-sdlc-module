@@ -23,7 +23,7 @@ class AliveMixin:
 class TestUnexpectedSuccess(AliveMixin, unittest.TestCase):
     @unittest.expectedFailure
     def test_passes_though_expected_to_fail(self):
-        self.assertTrue(True)
+        self.assertTrue(True)  # pylint: disable=redundant-unittest-assert  # a deliberate fixture of run_suite: its constant outcome is the point
 
 
 if __name__ == "__main__":

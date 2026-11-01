@@ -55,7 +55,7 @@ def hook_output(out):
     return data if isinstance(data, dict) else {"malformed": out}
 
 
-def fixtures(directory, root, guard=None):
+def fixtures(directory, root, guard=None):  # pylint: disable=redefined-outer-name  # `guard` is a public keyword of this helper
     """(label, expect, payload text) per fixture file, sorted; `guard` picks Codex ones."""
     for path in sorted(glob.glob(os.path.join(directory, "*.json"))):
         with open(path, encoding="utf-8") as fh:
@@ -66,7 +66,7 @@ def fixtures(directory, root, guard=None):
         yield "%s: %s" % (os.path.basename(path), data["case"]), data["expect"], payload
 
 
-def codex_fixtures(guard, root):
+def codex_fixtures(guard, root):  # pylint: disable=redefined-outer-name  # the parameter name matches fixtures()
     return fixtures(os.path.join(FIXTURES, "codex-hooks"), root, guard)
 
 

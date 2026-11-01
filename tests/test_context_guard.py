@@ -772,9 +772,20 @@ class TestPlanDrift(unittest.TestCase):  # pylint: disable=too-many-public-metho
         self.ai()                                       # no dialog.json: the switch is off
         doc = json.loads(self.start())
         self.assertIn("profile set max20 --runtime claude", doc["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("to keep Max and not be told again for this account: python3 ",
+                      doc["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("profile ack --runtime claude", doc["hookSpecificOutput"]["additionalContext"])
         self.assertNotIn("DIALOG_PENDING", doc["hookSpecificOutput"]["additionalContext"])
         self.assertIn("systemMessage", doc)
         self.assertEqual(self.decisions(), [])
+
+    def test_drift_session_start_on_names_no_ack(self):
+        self.ai()
+        self.dialog_on()
+        doc = json.loads(self.start())
+        self.assertRegex(doc["hookSpecificOutput"]["additionalContext"], r"DIALOG_PENDING D1 ")
+        self.assertNotIn("profile ack", doc["hookSpecificOutput"]["additionalContext"],
+                         "with the dialog on, Keep is the dialog's option")
 
     def test_drift_no_ai(self):
         doc = json.loads(self.start())                  # no .ai/ at all: a warning only
@@ -852,6 +863,103 @@ class TestPlanDrift(unittest.TestCase):  # pylint: disable=too-many-public-metho
         self.assertEqual(module.state_py(self.project, "profile", "detect", "--open", "--json"), "")
         took = time.monotonic() - began
         self.assertTrue(2.5 <= took < 5, "a hung state.py is given up after three seconds (took %.1f)" % took)
+
+
+class TestDeepJson(unittest.TestCase):
+    """CPython's json raises RecursionError, not ValueError, on input nested past the
+    C stack limit. Every reader that survives malformed JSON survives a too-deep
+    input the same way: same default, no Traceback."""
+
+    DEEP = "[" * 200000
+    MALFORMED = "{not json"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.config = self.tmp + "/home/.claude"
+        os.makedirs(self.config + "/riskrails")
+        os.makedirs(self.tmp + "/root/.ai/state")
+        patched = {"CLAUDE_CONFIG_DIR": self.config, "AI_CONTEXT_GUARD_STATE": self.tmp + "/gs",
+                   "AI_HOOK_RUNTIME": "claude", "AI_CONTEXT_WARN_TOKENS": "1000", "AI_CONTEXT_BLOCK_TOKENS": "0"}
+        saved = {k: os.environ.get(k) for k in patched}
+        os.environ.update(patched)
+
+        def restore():
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+        self.addCleanup(restore)
+        loader = importlib.machinery.SourceFileLoader("context_guard_deep_under_test", GUARD)
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        self.mod = importlib.util.module_from_spec(spec)
+        loader.exec_module(self.mod)
+
+    def put(self, rel, text):
+        path = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return path
+
+    def both(self, rel, call):
+        """call() with the file malformed, then with it too deep: the same result."""
+        results = []
+        for text in (self.MALFORMED, self.DEEP):
+            self.put(rel, text)
+            results.append(call())
+        self.assertEqual(results[0], results[1], rel)
+        return results[1]
+
+    def test_whole_file_readers(self):
+        mod, root = self.mod, self.tmp + "/root"
+        with self.subTest("user_settings"):
+            self.assertEqual(self.both("home/.claude/settings.json", mod.user_settings), {})
+        with self.subTest("profile_context"):
+            self.assertEqual(self.both("home/.claude/riskrails/profile.json", mod.profile_context), {})
+        with self.subTest("task_in_flight"):
+            self.assertIs(self.both("root/.ai/state/state.json", lambda: mod.task_in_flight(root)), False)
+        with self.subTest("prompt_count"):
+            self.assertEqual(self.both("root/.ai/state/session.json", lambda: mod.prompt_count(root)), 0)
+        with self.subTest("recorded_mtime"):
+            self.assertIsNone(self.both("root/.ai/state/session.json", lambda: mod.recorded_mtime(root)))
+
+        def written():
+            mod.write_session(root, {"k": 1})
+            with open(root + "/.ai/state/session.json", encoding="utf-8") as fh:
+                return json.load(fh)
+        with self.subTest("write_session"):
+            self.assertEqual(self.both("root/.ai/state/session.json", written), {"k": 1})
+
+    def test_transcript_line_readers(self):
+        mod = self.mod
+        good = usage(10, 4000, 10)
+        user_line = line({"type": "user", "message": {"role": "user", "content": "hello there"}})
+        bad = {"malformed": '{"usage" not json\n', "deep": self.DEEP + '"usage" "tool_use" "user"\n'}
+        results = {}
+        for kind, text in bad.items():
+            path = self.put("t-%s.jsonl" % kind, good + user_line + text)
+            results[kind] = (mod.current_context(path), mod.scan_session(path))
+        self.assertEqual(results["deep"], results["malformed"])
+        self.assertEqual(results["deep"][0], 4020)
+        self.assertEqual(results["deep"][1][1], ["hello there"])
+
+    def test_detect_drift_and_marker(self):
+        mod, root = self.mod, self.tmp + "/root"
+        for kind, text in (("malformed", self.MALFORMED), ("deep", self.DEEP)):
+            mod.state_py = lambda *_a, _t=text, **_k: _t
+            with self.subTest("detect_drift " + kind):
+                self.assertIsNone(mod.detect_drift(root, root, "s1"))
+        outs = []
+        for kind, text in (("malformed", self.MALFORMED), ("deep", self.DEEP)):
+            path = self.put("t-marker.jsonl", usage(10, 4000, 10))
+            self.put("gs/s9.json", text)
+            with self.subTest("prompt_warning " + kind):
+                out = mod.prompt_warning({"prompt": "p"}, "s9", path)
+                self.assertIn("Context is", out["systemMessage"])
+                outs.append(out)
+        self.assertEqual(outs[0], outs[1])
 
 
 if __name__ == "__main__":

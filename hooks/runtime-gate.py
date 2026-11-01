@@ -138,7 +138,7 @@ def profile_tier(home, tier, field, default):
         with open(profile_file(home), encoding="utf-8") as fh:
             value = json.load(fh)["tiers"][tier][field]
         return value if isinstance(value, str) and value else default
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, RecursionError):
         return default
 
 
@@ -148,7 +148,7 @@ def profile_fable(home):
     try:
         with open(profile_file(home), encoding="utf-8") as fh:
             return bool(json.load(fh).get("fable", True))
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, AttributeError, RecursionError):
         return True
 
 
@@ -205,7 +205,7 @@ def load(path=None):
         return data if isinstance(data, dict) else {}
     except OSError:
         return import_legacy() if path in (None, STATE) else {}
-    except ValueError:
+    except (ValueError, RecursionError):
         return {}
 
 
@@ -218,7 +218,7 @@ def import_legacy():
     try:
         with open(LEGACY_STATE, encoding="utf-8") as fh:
             old = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return {}
     data = {"imported_from": os.path.basename(LEGACY_STATE)}
     if isinstance(old, dict) and isinstance(old.get("unavailable"), dict):
@@ -341,7 +341,7 @@ def claude_code_version(path):
             continue
         try:
             version = json.loads(line).get("version")
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, RecursionError):
             continue
         m = re.match(r"(\d+)\.(\d+)\.(\d+)", version) if isinstance(version, str) else None
         if m:
@@ -444,7 +444,7 @@ def last_transcript_model(path):
     for line in reversed(transcript_tail(path)):
         try:
             model = (json.loads(line).get("message") or {}).get("model")
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, RecursionError):
             continue
         if isinstance(model, str) and model and not model.startswith("<"):
             return model
@@ -504,9 +504,10 @@ ROLLOUT_TAIL = 64 * 1024
 
 def number(value):
     try:
-        return None if value is None else float(value)
+        x = None if value is None else float(value)
     except (TypeError, ValueError):
         return None
+    return x if x is None or math.isfinite(x) else None   # NaN/Infinity is no reading
 
 
 def record_quota(weekly, five_hour, resets_at, source, seen_at=None):
@@ -564,7 +565,7 @@ def rollout_limits(path):
             continue
         try:
             event = json.loads(line)
-        except ValueError:
+        except (ValueError, RecursionError):
             continue
         limits = (event.get("payload") or {}).get("rate_limits") or {}
         weekly = five = None
@@ -864,7 +865,7 @@ def profile():
         with open(profile_file(HOME), encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return {}
 
 
@@ -919,7 +920,7 @@ def project_task(cwd):
             try:
                 with open(path, encoding="utf-8") as fh:
                     task = json.load(fh).get("task_id")
-            except (OSError, ValueError, AttributeError):
+            except (OSError, ValueError, AttributeError, RecursionError):
                 return None, None
             return (here, task) if task else (None, None)
         parent = os.path.dirname(here)
@@ -985,11 +986,18 @@ def codex_missed_reroute(payload):
         "or an unavailable model, stop and say so instead of retrying.")}})
 
 
+def ai_unattended():
+    """AI_UNATTENDED is set when it is non-empty and not 0, false or no (case
+    and blanks ignored): one rule in every reader (risk 0587)."""
+    return os.environ.get("AI_UNATTENDED", "").strip().lower() not in ("", "0", "false", "no")
+
+
 def unattended():
-    """Nobody can answer an ask: AI_UNATTENDED=1, or Claude Code's own
-    CLAUDE_CODE_SESSION_ATTENDED=0 (set by `claude -p` and the SDK). Unset —
-    an older Claude Code — still asks."""
-    return os.environ.get("AI_UNATTENDED") == "1" or os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0"
+    """Nobody can answer an ask: AI_UNATTENDED set (ai_unattended), or Claude
+    Code's own CLAUDE_CODE_SESSION_ATTENDED=0 (set by `claude -p` and the SDK).
+    Unset — an older Claude Code — still asks. dialog.json background_sessions
+    is the dialog's opt-in only: this gate still treats ATTENDED=0 as unattended."""
+    return ai_unattended() or os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0"
 
 
 def will_ask():
@@ -1117,24 +1125,31 @@ def disabled():
 
 
 def context_line(payload):
-    """`Opus 5.5 [1m] · 123k/1000k (12%)` from a Claude Code statusline payload, or ""
+    """`Opus 5.5 [1m] high · 123k/1000k (12%)` (the effort right after the model,
+    when the payload names one) from a Claude Code statusline payload, or ""
     when it names neither the model nor the context. The context_window fields differ
     between Claude Code versions: the tokens come from current_usage (input plus cache
     reads and writes, what the next turn re-reads), else from used_percentage."""
     model = payload.get("model")
     name = str(model.get("display_name") or model.get("id") or "") if isinstance(model, dict) else ""
+    effort = payload.get("effort")
+    effort = effort.get("level") if isinstance(effort, dict) else None
+    if name and isinstance(effort, str) and effort.strip():
+        name = "%s %s" % (name, effort.strip())
     window = payload.get("context_window")
     window = window if isinstance(window, dict) else {}
 
-    def number(value):
-        return value if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 else None
+    def finite_number(value):
+        # finite only: Infinity makes round() raise and the whole line would be lost
+        return (value if isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(value) and value >= 0 else None)
 
-    size = number(window.get("context_window_size"))
-    pct = number(window.get("used_percentage"))
+    size = finite_number(window.get("context_window_size"))
+    pct = finite_number(window.get("used_percentage"))
     usage = window.get("current_usage")
     used = None
     if isinstance(usage, dict):
-        parts = [number(usage.get(k)) for k in
+        parts = [finite_number(usage.get(k)) for k in
                  ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")]
         if any(p is not None for p in parts):
             used = sum(p or 0 for p in parts)
@@ -1148,15 +1163,96 @@ def context_line(payload):
     return " · ".join(part for part in (name, context) if part)
 
 
+SL_RESET, SL_SEP = "\033[00m", " \033[02m|\033[00m "
+
+
+def reset_text(value, fmt):
+    """A rate-limit window's resets_at (epoch seconds or an ISO timestamp) as
+    local time in `fmt`, or ""."""
+    try:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            when = dt.datetime.fromtimestamp(value)
+        elif isinstance(value, str) and value.strip():
+            text = value.strip()
+            when = (dt.datetime.fromtimestamp(float(text)) if re.fullmatch(r"\d+(\.\d+)?", text)
+                    else dt.datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone())
+        else:
+            return ""
+        return when.strftime(fmt)
+    except (ValueError, OverflowError, OSError):
+        return ""
+
+
+def git_branch(cwd):
+    """The branch checked out in cwd, else the short commit, else ""."""
+    for args in (["symbolic-ref", "--short", "-q", "HEAD"], ["rev-parse", "--short", "HEAD"]):
+        try:
+            done = subprocess.run(["git", "--no-optional-locks", "-C", cwd] + args, capture_output=True,
+                                  text=True, timeout=2, check=False)
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        if done.returncode == 0 and done.stdout.strip():
+            return done.stdout.strip()
+    return ""
+
+
+def second_line(payload):
+    """`user@host:cwd | branch | 5h:12% (↻14:00) 7d:41% (↻Fri 03:04) | $1.23`, the
+    colours of a Debian colour PS1; each part after the prompt is skipped when its
+    data is missing."""
+    workspace = payload.get("workspace")
+    cwd = workspace.get("current_dir") if isinstance(workspace, dict) else None
+    cwd = cwd if isinstance(cwd, str) and cwd else os.getcwd()
+    user = os.environ.get("USER") or os.environ.get("LOGNAME") or ""
+    if not user:
+        try:
+            import getpass  # pylint: disable=import-outside-toplevel
+            user = getpass.getuser()
+        except (ImportError, KeyError, OSError):
+            user = "?"
+    import socket  # pylint: disable=import-outside-toplevel
+    host = socket.gethostname().split(".")[0]
+    out = "\033[01;32m%s@%s%s:\033[01;34m%s%s" % (user, host, SL_RESET, cwd, SL_RESET)
+    branch = git_branch(cwd) if os.path.isdir(cwd) else ""
+    if branch:
+        out += "%s\033[35m%s%s" % (SL_SEP, branch, SL_RESET)
+    limits = payload.get("rate_limits")
+    limits = limits if isinstance(limits, dict) else {}
+    parts = []
+    for key, label, fmt in (("five_hour", "5h", "%H:%M"), ("seven_day", "7d", "%a %H:%M")):
+        window = limits.get(key)
+        pct = window.get("used_percentage") if isinstance(window, dict) else None
+        if isinstance(pct, (int, float)) and not isinstance(pct, bool) and math.isfinite(pct):
+            reset = reset_text(window.get("resets_at"), fmt)
+            parts.append("%s:%d%%%s" % (label, round(pct), " (↻%s)" % reset if reset else ""))
+    if parts:
+        out += "%s\033[33m%s%s" % (SL_SEP, " ".join(parts), SL_RESET)
+    cost = payload.get("cost")
+    cost = cost.get("total_cost_usd") if isinstance(cost, dict) else None
+    if isinstance(cost, (int, float)) and not isinstance(cost, bool) and math.isfinite(cost):
+        out += "%s\033[32m$%.2f%s" % (SL_SEP, cost, SL_RESET)
+    return out
+
+
+def emit(text):
+    """One statusline line as UTF-8 whatever the locale (`·` and `↻` are not ASCII)."""
+    sys.stdout.flush()
+    sys.stdout.buffer.write((text + "\n").encode("utf-8", "replace"))
+    sys.stdout.buffer.flush()
+
+
 def statusline_main(argv):
-    """`statusline [--context] [--then <command>]`: check the weekly limit, print the
-    model and the context use with --context, then hand the same input to the user's
-    own statusline command and pass its output and exit code through. Neither the
-    check nor the line ever gets in the way of the statusline."""
+    """`statusline [--context] [--line] [--then <command>]`: check the weekly limit,
+    print the model, effort and context use with --context (cyan), the prompt line
+    (user@host:cwd | branch | limits | cost) with --line, then hand the same input
+    to the user's own statusline command and pass its output and exit code through.
+    Neither the check nor the lines ever get in the way of the statusline."""
     data = sys.stdin.buffer.read()
-    show_context = argv[1:2] == ["--context"]
-    if show_context:
+    flags = set()
+    while argv[1:2] in (["--context"], ["--line"]):
+        flags.add(argv[1])
         argv = argv[:1] + argv[2:]
+    show_context = "--context" in flags
     payload = None
     try:
         payload = json.loads(data.decode("utf-8", "replace"))
@@ -1171,7 +1267,12 @@ def statusline_main(argv):
         try:
             line = context_line(payload)
             if line:
-                print(line)
+                emit("\033[36m%s%s" % (line, SL_RESET))
+        except Exception:  # pylint: disable=broad-exception-caught  # fail open, as above
+            pass
+    if "--line" in flags and isinstance(payload, dict):
+        try:
+            emit(second_line(payload))
         except Exception:  # pylint: disable=broad-exception-caught  # fail open, as above
             pass
     if len(argv) >= 3 and argv[1] == "--then" and argv[2].strip():

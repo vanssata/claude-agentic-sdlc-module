@@ -51,8 +51,11 @@ Outcome tags: O1 dialog shown · O2 nothing typed, agent runs/records the pick �
 O4 plan drift first consumer · O5 Codex parity or off. Steps 7.0–7f are the delivery order in §Design.
 
 - **R36.1 Project switch** (developer, 2026-10-28). `.ai/policies/dialog.json`. The dialog is on only when
-  `enabled` is true, the runtime's dialog tool is available (R36.19), `AI_UNATTENDED` is unset and this is the main
-  session (not a subagent). Missing or unreadable file = off. The agent cannot flip it: the file is already under
+  `enabled` is true, the runtime's dialog tool is available (R36.19), `AI_UNATTENDED` is unset (empty, `0`, `false`
+  or `no`, case and blanks ignored — one rule in every reader, 2026-10-31), the runtime does not mark the session
+  unattended (`CLAUDE_CODE_SESSION_ATTENDED=0`) unless the project opts in with `"background_sessions": true` —
+  background jobs of the CLI only, never an SDK entrypoint (`CLAUDE_CODE_ENTRYPOINT` `sdk-*`; T-2026-10-31-1650,
+  amended 2026-10-31) — and this is the main session (not a subagent). Missing or unreadable file = off. The agent cannot flip it: the file is already under
   `(^|/)\.ai/policies/[^/]*\.json$` (`hooks/ai-path-guard-defaults.json:31`). New projects are scaffolded with
   `true`, and existing projects get `true` from the migration (next free number after 0008 and 3.4c), which
   prints one line saying the dialog is now on and how to turn it off (Q9, developer, 2026-10-28; C6 makes this
@@ -288,6 +291,8 @@ fires hooks outside plan mode) · **7a** detection refactor (C3) · **7b** `prof
 ```json
 { "version": 1, "enabled": true, "window_seconds": 120, "stop_blocks_max": 2 }
 ```
+Optional: `"background_sessions": true` (only the boolean counts; default off) keeps the dialog on in a CLI
+background job (`CLAUDE_CODE_SESSION_ATTENDED=0`, entrypoint not `sdk-*`), R36.1.
 **`.ai/state/decision.json`** (only `state.py` writes it; deleted when no decision is open):
 ```json
 { "version": 1, "open": [ { "id": "D7", "kind": "approval|commit|question|human_set|plan_drift",
@@ -339,17 +344,18 @@ consent audit [--json]                       read-only; ok | unverifiable | mism
 profile                                      unchanged reader (--field --tier --json)
 profile detect [--runtime R] [--json] [--open]   0 always
 profile set <plan> [--runtime R]             human route (terminal|unattended|dialog)              0 | 5 | 6 PROFILE_NEEDS_INSTALLER
+profile ack [--runtime R]                    human route (terminal|unattended); keeps a drift      0 | 1 | 5
 ```
 `profile detect --json`:
-`{"runtime":"claude","status":"drift","installed":{"plan":"max","profile":"max","plugin_version":"3.1.0"},"live":{"plan":"max20","from":"organizationRateLimitTier default_claude_max_20x","fingerprint":"sha256:9c…"},"render":"profile|installer","command":"python3 /home/vanssa/.claude/skills/ai-task/state.py profile set max20 --runtime claude","decision":"D9|null"}`
+`{"runtime":"claude","status":"drift","installed":{"plan":"max","profile":"max","plugin_version":"3.1.0"},"live":{"plan":"max20","from":"organizationRateLimitTier default_claude_max_20x","fingerprint":"sha256:9c…"},"render":"profile|installer","command":"python3 /home/vanssa/.claude/skills/ai-task/state.py profile set max20 --runtime claude","ack":"python3 /home/vanssa/.claude/skills/ai-task/state.py profile ack --runtime claude|null","decision":"D9|null"}`
 Plain text: `plan: installed max · account max20 (organizationRateLimitTier default_claude_max_20x) → drift` /
-`fix: <command>`; `profile set`: `profile.json: max → max20 (claude); settings, agents and the managed block
+`fix: <command>` / `keep: <ack>`; `profile set`: `profile.json: max → max20 (claude); settings, agents and the managed block
 unchanged`; across tiers: `PROFILE_NEEDS_INSTALLER — max → pro also changes settings.json and the agents: npx
 riskrails@3.1.0 --target claude --plan pro --yes`.
 
 **Additions to `profile.json`:** `"dialog":{"tool":"AskUserQuestion"|"request_user_input"|null}`,
 `"set_by":{"via":"installer|terminal|dialog","at":"…"}`.
-**`<home>/riskrails/drift-ack.json`:** `{"version":1,"claude":{"fingerprint":"sha256:…","kept":"max","at":"…","via":"dialog"},"codex":null}`.
+**`<home>/riskrails/drift-ack.json`:** `{"version":1,"claude":{"fingerprint":"sha256:…","kept":"max","at":"…","via":"dialog|terminal|unattended"},"codex":null}`.
 
 **Amended C5 (one line):** "C5. No agent merges or deploys; an agent commits, pushes or approves only by running,
 verbatim and once, a command a human picked in the runtime's dialog as recorded by the harness — otherwise a human

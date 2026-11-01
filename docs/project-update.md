@@ -57,10 +57,21 @@ there). That is how the update tells files apart.
 | a shared file the plugin once shipped, unedited | `delete?` — the project reads the shared tree instead, once a human confirms |
 | a shared file the project edited | kept as an override, with a hint: it no longer receives the plugin's changes, and nothing tells you when it falls behind |
 
-Old run logs of closed tasks, and the files of abandoned or long-idle (7 days) unclosed tasks, are proposed as `[cleanup]` deletions; they never run on their own.
+Old run logs of closed tasks, and the files of abandoned or long-idle (7 days) unclosed tasks, are proposed as `[cleanup]` deletions; they never run on their own. They are settled only by `update.py <root> --apply --confirm-cleanup <name>`, typed by a human in a terminal of their own — `--confirm-delete` does not settle them. A row under git-ignored `.ai/state/` is marked "not recoverable through git".
 
-A changed or non-regular file where the update expected one stops the run with
-exit 3. The dry run shows every decision; `--apply` writes them. A weight
+A file under `.ai/state/` that git tracks although an ignore rule lists it gets a hint: the rule has no effect on a tracked file, so every run leaves the tree dirty. The hint prints the `git rm --cached` command that untracks it (the file stays on disk); the update itself changes nothing. Ten files get their own hint, and one more line counts the rest.
+
+The dry run shows every decision; `--apply` writes them. `update.py` exits:
+
+| Exit | Means |
+|---|---|
+| 0 | done; with `--check`, the project is current |
+| 1 | `--check`: an update is pending; `--check --budget`: a root instruction file is over its budget |
+| 2 | usage error, missing templates, or a schema the plugin cannot read |
+| 3 | an apply aborted part-way — a changed or non-regular file where the update expected one; nothing after the failing item was written |
+| 5 | refused: `--confirm-delete` or `--confirm-cleanup` without a human |
+
+A weight
 mirror that was in sync stays in sync (`state.py weight --mirror` regenerates
 it); one that was already stale stays flagged.
 

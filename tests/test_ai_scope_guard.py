@@ -11,7 +11,7 @@ import unittest
 from string import Template
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from guard_harness import (FIXTURES, PLUGIN, HookAsserts, guard, codex_fixtures, fixtures,  # noqa: E402  pylint: disable=wrong-import-position
+from guard_harness import (FIXTURES, HookAsserts, guard, codex_fixtures, fixtures,  # noqa: E402  pylint: disable=wrong-import-position
                            run)
 
 TWIN_OF = "test-ai-scope-guard.sh"

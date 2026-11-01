@@ -7,9 +7,8 @@
 
 [MAIN]
 py-version=3.11
-# The gate (CI, release, lint_command): any error or fatal fails, and so does a score
-# under 9.9; warnings and refactor messages are reported without failing the run.
-fail-on=E,F
+# The gate (CI, release, lint_command): any error or fatal fails, a score under 9.9 fails, and so do W0702 and W1510; other warnings and refactor messages are reported without failing.
+fail-on=E,F,W0702,W1510
 fail-under=9.9
 
 [MESSAGES CONTROL]
@@ -32,4 +31,4 @@ disable=
 
 [REFACTORING]
 # die() prints and calls sys.exit(1)
-never-returning-functions=sys.exit,argparse.parse_error,state.die
+never-returning-functions=sys.exit,argparse.parse_error,state.die,rr_state.fs.die

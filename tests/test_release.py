@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Release plumbing: tools/sync-version.py keeps the five version fields in step.
+"""Release plumbing: tools/sync-version.py keeps the five version keys (in four files) in step.
 
 The repository passes `--check`; a copy with one field changed fails it and names
 the file; `--tag` must equal package.json's version; setting a version rewrites the
-five places and nothing else; an invalid version exits 2 and changes nothing.
+five version keys (four files) and nothing else; an invalid version exits 2 and changes nothing.
 Every case works on a copy in a temporary directory.
 """
 import json
