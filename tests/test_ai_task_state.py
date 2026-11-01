@@ -2262,6 +2262,20 @@ class TestDialogDecisions(DialogBase):  # pylint: disable=too-many-public-method
         self.assertIn("DECISION_LIMIT", done.stderr)
         self.assertEqual(len(json.loads(self.p.ok("decision", "show", "--json").stdout)["questions"]), 4)
 
+    def test_a_twin_at_the_limit_says_duplicate(self):
+        """Risk 4f78: with four questions open, a twin of D2 said DECISION_LIMIT, and after
+        settling one the retry said DECISION_DUPLICATE — the twin is named first."""
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m a",
+                  "--command", "git push origin main")
+        for n in range(3):
+            self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m n%d" % n)
+        done = self.commit("git commit -m n0")
+        self.assertEqual(done.returncode, 6, done.stdout + done.stderr)
+        self.assertIn("DECISION_DUPLICATE", done.stderr)
+        self.assertIn("D2", done.stderr)
+        self.assertNotIn("DECISION_LIMIT", done.stderr)
+        self.assertEqual(len(json.loads(self.p.ok("decision", "show", "--json").stdout)["questions"]), 4)
+
     def test_show_with_nothing_open(self):
         done = self.p.run("decision", "show")
         self.assertEqual(done.returncode, 1)

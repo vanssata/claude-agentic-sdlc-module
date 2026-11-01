@@ -8,6 +8,7 @@ Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelo
 - The plugin's two-line statusline replaces your statusline command by default. The replaced command is printed, kept in `~/.claude/riskrails/statusline.json` and in the dated settings.json backup; `--statusline own` restores it once, on the run that switches to own.
 
 ### Fixed
+- `decision open` names an open twin (DECISION_DUPLICATE) before the four-question limit, so a twin at the limit takes one round trip, not two; `update --apply` reads a too-deep `migration.json`, and a too-deep policy unchanged since install, as malformed instead of tracebacking.
 - Installer: `--statusline own` restores the replaced command only on the switch to own; a `--then` you removed by hand no longer comes back on the next update.
 - Installer: a malformed `--then` tail is no longer recorded over the command already kept in `riskrails/statusline.json`.
 - Path guard: `.claude/riskrails/statusline.json` is protected config — an agent's Write or Edit is denied, in a task or not.

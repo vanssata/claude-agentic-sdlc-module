@@ -956,7 +956,7 @@ def three_way(plan, history, key, target, theirs):
             try:
                 policy = leaf_changes(json.loads(ours, object_pairs_hook=OrderedDict),
                                       json.loads(theirs, object_pairs_hook=OrderedDict))
-            except ValueError:  # ours or the template is not JSON: no policy lines
+            except (ValueError, RecursionError):  # not JSON, or too deep to read or flatten: no policy lines
                 policy = None
         plan.add("update", target, "unchanged since it was installed",
                  content=theirs, policy=policy)
@@ -1782,7 +1782,7 @@ def record_migration(plan, ops, deletions):
     if os.path.isfile(full):
         try:
             existing = json.loads(read(full), object_pairs_hook=OrderedDict)
-        except ValueError:
+        except (ValueError, RecursionError):  # too deep reads as malformed
             existing = {}
         if not isinstance(existing, dict):  # hand-edited into another shape
             existing = {}

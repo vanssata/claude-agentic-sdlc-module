@@ -449,6 +449,57 @@ sys.exit(update.main())
         finally:
             p.close()
 
+    # R-9085: record_migration and three_way's policy leaf, in-process with stub plans.
+    DEEP_RECORD = """
+import json, os, sys
+from types import SimpleNamespace
+sys.path.insert(0, os.path.dirname(sys.argv[1]))
+import update
+root = sys.argv[2]
+os.makedirs(os.path.join(root, "rep"))
+with open(os.path.join(root, "rep", "migration.json"), "w") as fh:
+    fh.write("[" * 200000 + "]" * 200000)
+update.record_migration(SimpleNamespace(root=root, report_dir="rep", schema=(5, 6), held=None), [], [])
+print(open(os.path.join(root, "rep", "migration.json")).read())
+"""
+
+    DEEP_POLICY_LEAF = """
+import json, os, sys
+from types import SimpleNamespace
+sys.path.insert(0, os.path.dirname(sys.argv[1]))
+import update
+ours = ('{"k": ' * 3000 + '{}' + '}' * 3000).encode()  # a string: json.dumps of it recurses on 3.11
+theirs = b'{"x": 1}'
+items = []
+plan = SimpleNamespace(read=lambda target: ours,
+                       add=lambda action, target, note="", **kw: items.append((action, target, kw.get("policy"))))
+history = SimpleNamespace(versions=lambda key: [ours])
+update.three_way(plan, history, "ai-init/policies/x.json", ".ai/policies/x.json", theirs)
+print(json.dumps(items))
+"""
+
+    def test_a_too_deep_migration_json_reads_as_a_malformed_one(self):
+        """R-9085: json.loads of a hand-made migration.json past the recursion limit tracebacked
+        update --apply; it is rewritten like a malformed one, with no ops carried"""
+        with tempfile.TemporaryDirectory() as d:
+            run = subprocess.run([sys.executable, "-I", "-c", self.DEEP_RECORD, UPDATE, d],
+                                 capture_output=True, text=True, check=False)
+            self.assertNotIn("Traceback", run.stderr, run.stderr[-2000:])
+            self.assertEqual(run.returncode, 0, run.stderr[-2000:])
+            record = json.loads(run.stdout)
+            self.assertIsInstance(record, dict)
+            self.assertEqual(record["ops"], [])
+            self.assertEqual(record["deletions"], [])
+
+    def test_a_too_deep_policy_unchanged_since_install_updates_with_no_policy_lines(self):
+        """R-9085: the policy-leaf branch of three_way caught only ValueError; flatten of a policy
+        nested 3000 levels raised RecursionError: one update, policy None, no Traceback"""
+        run = subprocess.run([sys.executable, "-I", "-c", self.DEEP_POLICY_LEAF, UPDATE],
+                             capture_output=True, text=True, check=False)
+        self.assertNotIn("Traceback", run.stderr, run.stderr[-2000:])
+        self.assertEqual(run.returncode, 0, run.stderr[-2000:])
+        self.assertEqual(json.loads(run.stdout), [["update", ".ai/policies/x.json", None]])
+
     def test_full_apply(self):
         p = Project(edited=True)
         try:
