@@ -2718,6 +2718,22 @@ def dialog_questions(decision):
 def open_decision(root, state, kind, header, question, options, opened_by, multi=False, **extra):
     """Write one decision; return (it, "") or (None, why) (R36.3, R36.4)."""
     data = read_decisions(root)
+    # Two open decisions with one question text can never be answered in the
+    # dialog: the recorder reads both as ambiguous (risks afd2, 712d). Checked
+    # first, so a twin at the limit is named at once, not after a settle (risk 4f78).
+    shown = (question or "").strip()[:QUESTION_MAX]
+    session = (dialog_on(root) or {}).get("session")
+    twin = next((d for d in data["open"] if d.get("question") == shown), None)
+    if twin:
+        tid = twin.get("id")
+        if twin.get("session") != session:
+            # decision show lists only this session's decisions (risk e3ae).
+            return None, ("DECISION_DUPLICATE — %s is open with this very question from another session; "
+                          "it cannot be sent from here: 'state.py decision fallback --id %s --why …' "
+                          "before opening it again" % (tid, tid))
+        return None, ("DECISION_DUPLICATE — %s is open with this very question; send it ('state.py decision show') "
+                      "and run the pick, or 'state.py decision fallback --id %s --why …', before opening it again"
+                      % (tid, tid))
     questions = sum(len(dialog_questions(d)) for d in data["open"])
     if questions + len(dialog_questions({"options": options, "multi_select": multi})) > DECISIONS_MAX:
         return None, "DECISION_LIMIT — %d questions are open; one dialog call carries %d" % (
@@ -2732,21 +2748,6 @@ def open_decision(root, state, kind, header, question, options, opened_by, multi
             return None, "CONSENT_LABEL_INVALID — %s: %s" % (why, option["label"][:120])
     if len({o["label"] for o in options}) != len(options):
         return None, "CONSENT_LABEL_INVALID — two options carry the same label"
-    # Two open decisions with one question text can never be answered in the
-    # dialog: the recorder reads both as ambiguous (risks afd2, 712d).
-    shown = (question or "").strip()[:QUESTION_MAX]
-    session = (dialog_on(root) or {}).get("session")
-    twin = next((d for d in data["open"] if d.get("question") == shown), None)
-    if twin:
-        tid = twin.get("id")
-        if twin.get("session") != session:
-            # decision show lists only this session's decisions (risk e3ae).
-            return None, ("DECISION_DUPLICATE — %s is open with this very question from another session; "
-                          "it cannot be sent from here: 'state.py decision fallback --id %s --why …' "
-                          "before opening it again" % (tid, tid))
-        return None, ("DECISION_DUPLICATE — %s is open with this very question; send it ('state.py decision show') "
-                      "and run the pick, or 'state.py decision fallback --id %s --why …', before opening it again"
-                      % (tid, tid))
     decision = dict({
         "id": next_decision_id(data, read_ledger(root)), "kind": kind, "task": (state or {}).get("task_id"),
         "runtime": own_runtime(), "session": session,

@@ -29,7 +29,8 @@ class TestParser(unittest.TestCase):
         text = mh.subprocess.run([sys.executable, "-I", mh.STATE, "--root", mh.ROOT, "memory", "risks", "--md"],
                                  capture_output=True, text=True, check=True, env=mh.clean_env()).stdout
         risks, leftovers = mc.parse_known_risks(text)
-        self.assertGreater(len(risks), 10)
+        # non-vacuity only: the live record shrinks whenever a task closes its risks (Q1 of T-2026-11-01-2022)
+        self.assertGreater(len(risks), 0)
         self.assertEqual(mc.render_known_risks(risks, leftovers), text)
         for risk in risks:
             self.assertIn(risk["label"], mf.LABELS)
