@@ -26,9 +26,12 @@ jobs:
         python-version: ["3.11", "3.12", "3.13"]
     env:
       # The smoke list, one place. Keep it to files that are fast and need no network.
+      # The two state files are here because their goldens and hashes depend on the Python
+      # (release 3.2.0 failed on 3.12 while main was green).
       SMOKE_FILES: >-
         tests/test_release.py tests/test_update_notice.py tests/test_install_routes.py
         tests/test_shared_tree.py tests/test_skills_surface.py tests/test_context_guard.py
+        tests/test_state_layout.py tests/test_state_characterization.py
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
