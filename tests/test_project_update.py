@@ -138,7 +138,7 @@ class Project:
         self.tmp.cleanup()
 
 
-class TestMigration0007(unittest.TestCase):
+class TestMigration0007(unittest.TestCase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     def test_conversion(self):
         mod = load_migration()
         base = read_json(os.path.join(POLICIES, "weight.json"))
@@ -199,7 +199,7 @@ class TestMigration0007(unittest.TestCase):
         finally:
             p.close()
 
-    def deep_project(self, name, deep, **kw):
+    def deep_project(self, name, deep, **_kw):
         """A schema-6 project (edited risk tiers) whose `name` policy file is `deep`; the output of --apply"""
         p = Project(edited=True)
         try:
@@ -741,7 +741,8 @@ class TestMigration0008(unittest.TestCase):
         done = self.p.update("--apply")
         self.assertEqual((done.returncode, self.p.version()), (0, "11"), done.stdout + done.stderr)
         self.assertFalse(os.path.exists(self.p.path("state", "state.json")), "no task, no file is invented")
-        self.assertNotIn(b"claude-agentic", open(os.path.join(self.p.root, "CLAUDE.md"), "rb").read())
+        with open(os.path.join(self.p.root, "CLAUDE.md"), "rb") as fh:
+            self.assertNotIn(b"claude-agentic", fh.read())
 
     def test_rule_markers_keep_their_spacing(self):
         spec = importlib.util.spec_from_file_location("migration_0008_under_test", MIGRATION_0008)
@@ -838,8 +839,8 @@ class TestMigration0009(unittest.TestCase):
         self.assertFalse(self.has(self.LEGACY))
 
     def test_both_files_is_a_conflict_and_nothing_changes(self):
-        legacy = "{\"task_id\": \"T-old\"}\n"
-        put(os.path.join(self.p.root, self.LEGACY), legacy)
+        legacy_text = "{\"task_id\": \"T-old\"}\n"
+        put(os.path.join(self.p.root, self.LEGACY), legacy_text)
         put(os.path.join(self.p.root, self.NEW), "{\"task_id\": \"T-new\"}\n")
         self.commit()
         done = self.p.update("--apply")
@@ -848,7 +849,7 @@ class TestMigration0009(unittest.TestCase):
         self.assertIn("already exists", done.stdout)
         self.assertEqual(self.p.version(), "8", "the schema is held at 8")
         self.assertEqual(self.p.read("state", "state.json"), b"{\"task_id\": \"T-new\"}\n")
-        self.assertEqual(self.p.read("state", "current.json"), legacy.encode())
+        self.assertEqual(self.p.read("state", "current.json"), legacy_text.encode())
 
     def test_move_leaves_no_copy_of_the_task_state_in_the_report(self):
         self.start_task()
@@ -2088,7 +2089,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         d = self.mirrored_project("weight-mirror-render-raises")
         wj = os.path.join(d, ".ai", "policies", "weight.json")
         put(wj, '{"axes": [1]}')  # the renderer cannot read it: AttributeError
-        rc, out = self.upd(d, merge=True)
+        _rc, out = self.upd(d, merge=True)
         self.assertNotIn("Traceback", out, out)
         self.assertTrue(has(r"^  hint +\.ai/policies/weight\.md: not rendered from weight\.json \(AttributeError\); merged as text$", out),
                         "the hint names the exception class\n" + out)
@@ -2098,11 +2099,11 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         d = self.current_project("weight-json-deep")
         wj = os.path.join(d, ".ai", "policies", "weight.json")
         put(wj, '{"a":' * 3000 + "1" + "}" * 3000)
-        rc, out = self.upd(d, merge=True)
+        _rc, out = self.upd(d, merge=True)
         self.assertNotIn("Traceback", out, out)
         self.assertNotIn("RecursionError", out, out)
         self.assertTrue(has("conflict .*weight.json.*nested too deeply", out), out)
-        rc, out = self.upd(d, "--apply", merge=True)
+        _rc, out = self.upd(d, "--apply", merge=True)
         self.assertNotIn("Traceback", out, out)
 
     def test_a_weight_json_nested_past_the_parser_limit_is_a_conflict_not_a_crash(self):
@@ -2110,10 +2111,10 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         d = self.current_project("weight-json-unparseable-deep")
         wj = os.path.join(d, ".ai", "policies", "weight.json")
         put(wj, "[" * 200000 + "]" * 200000)
-        rc, out = self.upd(d, merge=True)
+        _rc, out = self.upd(d, merge=True)
         self.assertNotIn("Traceback", out, out)
         self.assertTrue(has("conflict .*weight.json.*nested too deeply", out), out)
-        rc, out = self.upd(d, "--apply", merge=True)
+        _rc, out = self.upd(d, "--apply", merge=True)
         self.assertNotIn("Traceback", out, out)
 
     def test_a_renderer_that_raises_on_a_stale_mirror_draws_no_regenerate_hint(self):
@@ -2121,7 +2122,7 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         d = self.mirrored_project("weight-mirror-render-raises-stale")
         wj = os.path.join(d, ".ai", "policies", "weight.json")
         put(wj, '{"axes": [1]}')  # the renderer cannot read it, and the mirror names another JSON
-        rc, out = self.upd(d, merge=True)
+        _rc, out = self.upd(d, merge=True)
         self.assertNotIn("Traceback", out, out)
         self.assertTrue(has(r"weight\.md: not rendered from weight\.json \(AttributeError\); merged as text", out), out)
         self.assertNotIn("rendered from a different weight.json", out, out)

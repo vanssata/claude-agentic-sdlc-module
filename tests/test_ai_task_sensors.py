@@ -41,7 +41,7 @@ print(done.returncode, open(log).read().replace("\\n", " ").strip())
 """
 
 
-class TestSensors(unittest.TestCase):
+class TestSensors(unittest.TestCase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with  # tearDown ends it
         self.root = os.path.join(self.tmp.name, "with space", "project")

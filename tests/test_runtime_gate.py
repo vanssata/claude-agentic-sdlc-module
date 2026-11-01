@@ -790,7 +790,7 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
                 self.rmrf(cl + "/state", cl + "/riskrails")
                 text = ('{"rate_limits": {"seven_day": {"used_percentage": %s}, '
                         '"five_hour": {"used_percentage": %s}}}' % (weekly, five))
-                rc, _ = self.gate(g, "statusline", "--then", "cat >/dev/null; echo LINE", stdin=text, stderr=True)
+                _rc, _ = self.gate(g, "statusline", "--then", "cat >/dev/null; echo LINE", stdin=text, stderr=True)
                 quota = (read_json(path).get("quota") if os.path.exists(path) else None) or {}
                 for key in ("weekly_pct", "five_hour_pct"):
                     value = quota.get(key)

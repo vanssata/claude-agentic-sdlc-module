@@ -37,7 +37,7 @@ def bump(version, by=1):
     return f"{major}.{minor}.{patch + by}"
 
 
-class TestUpdateNotice(unittest.TestCase):
+class TestUpdateNotice(unittest.TestCase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)

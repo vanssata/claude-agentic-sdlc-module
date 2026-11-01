@@ -460,7 +460,7 @@ class TestTwoFacts(Base):
         self.assertIn("finding:", self.p.task_md(task))
 
 
-class TestSurface(Base):
+class TestSurface(Base):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     def test_size_is_reported_not_gated(self):
         # R4: a 2 000-line, 40-file change closes in light mode; size is only reported.
         self.p.start(files="src/gen/**")
@@ -2115,7 +2115,7 @@ class DialogBase(unittest.TestCase):
                               capture_output=True, text=True, check=False)
 
 
-class TestDialogDecisions(DialogBase):
+class TestDialogDecisions(DialogBase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     """R36.3, R36.4, R36.14, R36.15, R36.24: state.py alone prepares a decision;
     the ledger's lines settle it and are mirrored into the journal."""
 
@@ -2290,7 +2290,7 @@ class TestDialogDecisions(DialogBase):
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write(text)
             results.append(self.p.run("decision", "show"))
-        malformed, deep = results
+        malformed, deep = results  # pylint: disable=unbalanced-tuple-unpacking  # the loop above appends exactly two results
         self.assertNotIn("Traceback", deep.stderr)
         self.assertEqual(deep.returncode, malformed.returncode)
         self.assertIn("is unreadable", deep.stderr)
@@ -2415,7 +2415,7 @@ class TestDialogDecisions(DialogBase):
                 self.assertEqual(self.p.run("event", event).returncode, 5)
 
 
-class TestDialogRoute(DialogBase):
+class TestDialogRoute(DialogBase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     """R36.10: human_route() takes the dialog when a live pick of this session is
     this very command; close and the budget refusals open the decisions (R36.3);
     the dialog off is today, byte for byte (R36.2)."""
@@ -2538,7 +2538,7 @@ class TestDialogRoute(DialogBase):
                     with open(path, "w", encoding="utf-8") as fh:
                         fh.write(original)
             with self.subTest(file=name):
-                malformed, deep = results
+                malformed, deep = results  # pylint: disable=unbalanced-tuple-unpacking  # the loop above appends exactly two results
                 self.assertNotIn("Traceback", deep.stderr)
                 self.assertEqual(deep.returncode, malformed.returncode)
                 self.assertEqual(left, [True, True], "a corrupt %s is never replaced, deep or not" % name)
@@ -2857,7 +2857,7 @@ class TestDeepJsonOutsideState(DialogBase):
             outcomes.append(self.p.run("start", "--goal", "g", "--workflow", "feature", "--files", "src/widget.py",
                                        "--plan-file", path, *ZERO))
         self.assertNotEqual(outcomes[0].returncode, 0)
-        self.same_outcome(*outcomes)
+        self.same_outcome(outcomes[0], outcomes[1])
 
     def test_ledger_valid_deep_valid(self):
         """The deep line is skipped by both ledger readers and the valid lines around
@@ -3208,7 +3208,7 @@ class TestBatch(Base):
         self.assertIn("current s2", self.p.ok("status").stdout)
 
 
-class TestDocumentsOnly(unittest.TestCase):
+class TestDocumentsOnly(unittest.TestCase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     """2b (docs/sdlc/specs/faster-task-cycle.md, D1-D5): after a green suite, a documents-only
     edit closes on a green run of `doc_tests`. Every project builds its own policy."""
 

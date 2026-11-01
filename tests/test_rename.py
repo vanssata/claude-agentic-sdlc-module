@@ -67,7 +67,8 @@ class TestRename(unittest.TestCase):
         try:
             for name in ("new", "old"):
                 os.makedirs(os.path.join(tmp, name, "policies"))
-                open(os.path.join(tmp, name, "policies", "git.md"), "w").close()
+                with open(os.path.join(tmp, name, "policies", "git.md"), "w", encoding="utf-8"):
+                    pass
             os.makedirs(os.path.join(tmp, "p", ".ai"))
             base = {k: v for k, v in os.environ.items() if k not in ("RISKRAILS_SHARED", "CLAUDE_AGENTIC_SHARED")}
             for label, env, want in (

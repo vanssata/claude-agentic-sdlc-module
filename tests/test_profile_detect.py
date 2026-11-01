@@ -79,7 +79,7 @@ class Home:
         self.tmp.cleanup()
 
 
-class ProfileDetect(unittest.TestCase):
+class ProfileDetect(unittest.TestCase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
 
     def detect(self, runtime, case, *extra):
         home = Home(runtime, case)
@@ -195,7 +195,7 @@ class ProfileDetect(unittest.TestCase):
                                                                     "dialog": {"tool": "AskUserQuestion"}},
                                "env": dict({"CLAUDE_CODE_SESSION_ID": "s1"}, **env)})
         self.addCleanup(home.close)
-        home.project = os.path.join(home.home, "project")
+        home.project = os.path.join(home.home, "project")  # pylint: disable=attribute-defined-outside-init  # a per-test extra on the Home fixture
         os.makedirs(os.path.join(home.project, ".ai", "state"))
         if switch:
             write(os.path.join(home.project, ".ai", "policies", "dialog.json"), {"version": 1, "enabled": True})
@@ -584,7 +584,7 @@ class ProfileAck(unittest.TestCase):
                                "installed": {"plan": "max", "plugin_version": "3.1.0"} if installed is None
                                else installed or None, "env": env})
         self.addCleanup(home.close)
-        home.ack = os.path.join(home.claude, "riskrails", "drift-ack.json")
+        home.ack = os.path.join(home.claude, "riskrails", "drift-ack.json")  # pylint: disable=attribute-defined-outside-init  # a per-test extra on the Home fixture
         return home
 
     def detect(self, home):

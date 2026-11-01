@@ -182,7 +182,7 @@ class TestUsageReport(unittest.TestCase):
 
     def test_an_unclosed_task_ends_at_its_last_event_not_at_now(self):
         """#41: no task_closed -> the window ends at the last event and the header says so"""
-        _, p, tr, dirs = self.task_fixture()
+        _, p, _tr, dirs = self.task_fixture()
         t = SHELL_TASK
         write(os.path.join(p, ".ai", "reports", t, "events.jsonl"),
               EVENT % ("2026-09-01T10:00:00.000Z", t, "task_started", "{}")

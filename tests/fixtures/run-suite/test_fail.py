@@ -22,7 +22,7 @@ class AliveMixin:
 
 class TestFail(AliveMixin, unittest.TestCase):
     def test_fails(self):
-        self.assertEqual(1, 2)
+        self.assertEqual(1, 2)  # pylint: disable=redundant-unittest-assert  # a deliberate fixture of run_suite: its constant outcome is the point
 
 
 if __name__ == "__main__":

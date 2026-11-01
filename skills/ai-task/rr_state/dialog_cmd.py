@@ -9,7 +9,7 @@ import json
 import os
 import sys
 
-from rr_state import dialog, fs, profile, questions_cmd, task
+from rr_state import dialog, fs, labels, profile, questions_cmd, task
 from rr_state import ledger as rr_ledger
 from rr_state import runtime as rr_runtime
 
@@ -60,7 +60,7 @@ def decision_open(args, root, rt=rr_runtime.Runtime()):
     if not args.commands:
         fs.die("decision open --kind commit needs --command \"git commit …\" [--command \"git push <remote> <branch>\"]")
     for command in args.commands:
-        why = dialog.validate_label(command)
+        why = labels.validate_label(command)
         if why or command.split()[:2] not in (["git", "commit"], ["git", "push"]):
             fs.die("CONSENT_LABEL_INVALID — %s: %s" % (why or "a commit decision offers git commit and git push only",
                                                      command[:120]), 6)
@@ -96,7 +96,7 @@ def decision_settle(args, root, decision, rt=rr_runtime.Runtime()):
             fs.die("%s has no option %d" % (decision["id"], args.pick))
         if option["kind"] == "command":
             fs.die("option %d is a command: run it in this terminal instead —\n  %s" % (args.pick, option["label"]))
-        apply_choice(root, decision, option, None, dialog.human_name(root), via, rt=rt)
+        apply_choice(root, decision, option, None, labels.human_name(root), via, rt=rt)
         return
     # The human's last answer decides: a decline after a pick wins, and only the
     # latest round's choice counts.
@@ -105,7 +105,7 @@ def decision_settle(args, root, decision, rt=rr_runtime.Runtime()):
     choices = {o["n"]: o for o in decision["options"] if o["kind"] == "choice"}
     picked = [e for e in rr_ledger.latest_rounds(ledger).get(decision["id"], []) if e.get("option") in choices]
     if picked and mine[-1]["type"] == "pick":
-        apply_choice(root, decision, choices[picked[-1]["option"]], picked[-1].get("id"), dialog.human_name(root),
+        apply_choice(root, decision, choices[picked[-1]["option"]], picked[-1].get("id"), labels.human_name(root),
                      "dialog", rt=rt)
         return
     if mine and mine[-1]["type"] == "decline":

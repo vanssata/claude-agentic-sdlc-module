@@ -12,7 +12,7 @@ import re
 import shlex
 import sys
 
-from rr_state import fs, journal, task, dialog, report, profile, handoff
+from rr_state import fs, journal, task, dialog, labels, report, profile, handoff
 from rr_state import policy as rr_policy
 from rr_state import runtime as rr_runtime
 
@@ -163,7 +163,7 @@ def cmd_start(args, root, rt=rr_runtime.Runtime()):
                                "%s — W %s, the weight says %s.\nLower the mode from %s to %s (by %s)?"
                                % (fs.one_line(args.goal, 300), result.w, mode, mode, args.mode, args.by),
                                [{"kind": "choice", "effect": "keep", "label": "Keep mode %s" % mode},
-                                {"kind": "command", "label": dialog.state_label(root, sys.argv[1:])}], "start --mode", rt=rt)
+                                {"kind": "command", "label": labels.state_label(root, sys.argv[1:])}], "start --mode", rt=rt)
                 fs.die("APPROVAL_REFUSED — lowering the mode from %s to %s is a human's decision. Run it in "
                     "your own terminal:\n  python3 %s --root %s start … --mode %s --by %s\nRefused because %s."
                     % (mode, args.mode, shlex.quote(fs.ENTRY), shlex.quote(root),

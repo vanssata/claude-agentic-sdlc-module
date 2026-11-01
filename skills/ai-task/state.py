@@ -82,8 +82,9 @@ from rr_state.locks import LOCK_STALE
 from rr_state.questions import parse_questions
 from rr_state.questions_cmd import close_gate_from_file, sync_answers
 from rr_state.ledger import LEDGER_LINE_MAX, LEDGER_TYPES, live_picks, read_ledger
-from rr_state.dialog import DIALOG_TOOL, JSON_DEPTH_MAX, LABEL_MAX, QUESTION_MAX, SESSION_ENV, json_loads_capped
-from rr_state.dialog import dialog_on, dialog_payload, dialog_policy, dialog_tool_verified, task_facts, validate_label
+from rr_state.dialog import DIALOG_TOOL, JSON_DEPTH_MAX, QUESTION_MAX, SESSION_ENV, json_loads_capped
+from rr_state.dialog import dialog_on, dialog_payload, dialog_policy, dialog_tool_verified, task_facts
+from rr_state.labels import LABEL_MAX, validate_label
 from rr_state.gate import confirm_names
 from rr_state.profile import jwt_plan_type, read_json_object, read_profile, read_quota
 from rr_state.close import archive_v7

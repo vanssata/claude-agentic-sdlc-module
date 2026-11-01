@@ -198,8 +198,10 @@ class TestFindPrint(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             for name in ("b", "a", "c", ".d"):
                 os.mkdir(os.path.join(root, name))
-            open(os.path.join(root, "b", "z"), "w").close()
-            open(os.path.join(root, "b", "y"), "w").close()
+            with open(os.path.join(root, "b", "z"), "w", encoding="utf-8"):
+                pass
+            with open(os.path.join(root, "b", "y"), "w", encoding="utf-8"):
+                pass
             got = [os.fsdecode(p) for p in paths.find_print(root, 3, ())]
         rel = [os.path.relpath(p, root) for p in got]
         self.assertEqual(rel, [".", ".d", "a", "b", "b/y", "b/z", "c"])

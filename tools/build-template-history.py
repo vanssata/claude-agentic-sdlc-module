@@ -88,6 +88,7 @@ def main(argv):
         fh.write("\n")
     print("history: %d files, %d blobs, %d commits; %d shared keys hash only"
           % (len(index), len(blobs), len(commits), len(shared)))
+    return None
 
 
 if __name__ == "__main__":

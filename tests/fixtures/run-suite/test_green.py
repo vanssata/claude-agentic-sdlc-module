@@ -28,7 +28,7 @@ class TestGreen(AliveMixin, unittest.TestCase):
 
     def test_two(self):
         time.sleep(0.3)
-        self.assertTrue(True)
+        self.assertTrue(True)  # pylint: disable=redundant-unittest-assert  # a deliberate fixture of run_suite: its constant outcome is the point
 
 
 if __name__ == "__main__":

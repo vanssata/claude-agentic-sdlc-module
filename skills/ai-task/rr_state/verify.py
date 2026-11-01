@@ -9,7 +9,7 @@ import os
 import shlex
 import sys
 
-from rr_state import dialog, fs, handoff, journal, report, task
+from rr_state import dialog, fs, handoff, journal, labels, report, task
 from rr_state import policy as rr_policy
 from rr_state import runtime as rr_runtime
 
@@ -177,7 +177,7 @@ def cmd_verify(args, root, rt=rr_runtime.Runtime()):
                               " (%s)" % budget_name if rr_policy.batch_on(state) else ""),
                            [{"kind": "choice", "effect": "keep", "label": "Keep the budget — stop here"},
                             {"kind": "command",
-                             "label": dialog.state_label(root, sys.argv[1:] + ["--by", dialog.human_name(root)])}], "verify", rt=rt)
+                             "label": labels.state_label(root, sys.argv[1:] + ["--by", labels.human_name(root)])}], "verify", rt=rt)
             fs.die("SUITE_BUDGET — %d suite runs; weight.json allows %d (%s). Running it "
                 "again is not the next move: the human decides. In their own terminal:\n  python3 %s "
                 "--root %s verify --scope %s --by \"<name>\""

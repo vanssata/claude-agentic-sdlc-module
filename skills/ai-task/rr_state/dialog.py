@@ -1,15 +1,14 @@
 """dialog: the human decision dialog and the authority that tells a human from the agent -- decisions, consent labels, picks, the approval offer.
 
-shell: human_route, human_turn, refuse_approval, DIALOG_PICK, dialog_policy, dialog_tool_verified, dialog_on, validate_label, human_name, state_label, open_decision, print_dialog, offer_decision, settle_decision, settle_written, prune_decisions, mirror_ledger, sync_dialog, dialog_pick, valid_decisions, retire_approvals, task_facts, audit_pick, approve_command, offer_approval
-core: DIALOG_TOOL, SESSION_ENV, DECISIONS_MAX, QUESTION_MAX, HEADER_MAX, LABEL_MAX, LABEL_FORBIDDEN, INTERPRETER_RE, PUSH_REF_RE, INTERPRETER_FLAG_RE, NPX_PACKAGE_RE, JSON_DEPTH_MAX, json_loads_capped, label_argv, subcommand, state_label_ok, subcommand_prefix, dialog_questions, option_description, part_question, dialog_payload, MIRROR, pick_data
+shell: human_route, human_turn, refuse_approval, DIALOG_PICK, dialog_policy, dialog_tool_verified, dialog_on, open_decision, print_dialog, offer_decision, settle_decision, settle_written, prune_decisions, mirror_ledger, sync_dialog, dialog_pick, valid_decisions, retire_approvals, task_facts, audit_pick, approve_command, offer_approval
+core: DIALOG_TOOL, SESSION_ENV, DECISIONS_MAX, QUESTION_MAX, HEADER_MAX, JSON_DEPTH_MAX, json_loads_capped, dialog_questions, option_description, part_question, dialog_payload, MIRROR, pick_data
 """
 import json
 import os
-import re
 import shlex
 import sys
 
-from rr_state import fs, journal, locks
+from rr_state import fs, journal, labels, locks
 from rr_state import ledger as rr_ledger
 from rr_state import policy as rr_policy
 from rr_state import runtime as rr_runtime
@@ -107,13 +106,7 @@ DIALOG_TOOL = {"claude": "AskUserQuestion", "codex": "request_user_input"}
 # checks that and feeds both sides the same switch fixtures.
 SESSION_ENV = {"claude": "CLAUDE_CODE_SESSION_ID", "codex": "CODEX_THREAD_ID"}
 DECISIONS_MAX = 4                         # questions one dialog call carries (R36.3)
-QUESTION_MAX, HEADER_MAX, LABEL_MAX = 1200, 12, 400
-
-LABEL_FORBIDDEN = (";", "&", "|", "\n", "\r", "`", "$(", "<", ">")
-INTERPRETER_RE = re.compile(r"^python3?$")   # a bare name: a path could be any program
-PUSH_REF_RE = re.compile(r"^[A-Za-z0-9._/-]+$")  # no '+' (a force push), no ':' (a refspec), no option
-INTERPRETER_FLAG_RE = re.compile(r"^-[IS]+$")
-NPX_PACKAGE_RE = re.compile(r"^riskrails@[0-9A-Za-z.+-]+$")
+QUESTION_MAX, HEADER_MAX = 1200, 12
 
 # The pick human_route() consumed in this process, held in a one-slot list changed in place:
 # `global` is refused under rr_state/ (R4).
@@ -210,87 +203,6 @@ def dialog_on(root, runtime="unknown"):
     return dict(policy, runtime=runtime, tool=tool, session=session)
 
 
-def label_argv(label):
-    """(script, argv) when a label runs a state.py, else None."""
-    try:
-        tokens = shlex.split(label)
-    except ValueError:
-        return None
-    if not tokens or not INTERPRETER_RE.match(tokens[0]):
-        return None
-    i = 1
-    while i < len(tokens) and INTERPRETER_FLAG_RE.match(tokens[i]):
-        i += 1
-    if i >= len(tokens) or os.path.basename(tokens[i]) != "state.py":
-        return None
-    return tokens[i], tokens[i + 1:]
-
-
-def subcommand(argv):
-    """argv without the global options: what the command is."""
-    rest = list(argv)
-    while rest[:1] in (["--root"], ["--runtime"]) and len(rest) >= 2:
-        rest = rest[2:]
-    return rest
-
-
-def state_label_ok(argv):
-    """approve | reject | profile set | verify --by | review --by | start --mode … --by."""
-    rest = subcommand(argv)
-    if rest[:1] in (["approve"], ["reject"]) or rest[:2] == ["profile", "set"]:
-        return True
-    if rest[:1] in (["verify"], ["review"]):
-        return "--by" in rest
-    return rest[:1] == ["start"] and "--mode" in rest and "--by" in rest
-
-
-def validate_label(label):
-    """None when `label` may be offered as a command (R36.4), else why not."""
-    if not isinstance(label, str) or not label or label != label.strip():
-        return "a label is a non-empty string without surrounding blanks"
-    if len(label) > LABEL_MAX or not label.isprintable():
-        return "a label is at most %d printable characters" % LABEL_MAX
-    bad = [c for c in LABEL_FORBIDDEN if c in label]
-    if bad:
-        return "a label is one simple command (it contains %s)" % " ".join(repr(c) for c in bad)
-    try:
-        tokens = shlex.split(label)
-    except ValueError as exc:
-        return "a label must split as a shell command (%s)" % exc
-    if tokens[:2] == ["git", "commit"]:
-        return None
-    if tokens[:2] == ["git", "push"]:
-        return None if len(tokens) == 4 and all(PUSH_REF_RE.match(t) and not t.startswith("-")
-                                                for t in tokens[2:]) else \
-            "a push label is exactly 'git push <remote> <branch>', no '+', ':' or option"
-    if tokens[:1] == ["npx"] and len(tokens) >= 3 and NPX_PACKAGE_RE.match(tokens[1]) and tokens[-1] == "--yes":
-        return None
-    script = label_argv(label)
-    if script and os.path.realpath(script[0]) == os.path.realpath(fs.ENTRY) \
-            and state_label_ok(script[1]):
-        return None
-    return ("a label starts with git commit, git push <remote> <branch>, state.py approve|reject|"
-            "profile set|verify --by|review --by|start --mode --by, or npx riskrails@<v> … --yes")
-
-
-def human_name(root):
-    """Who the labels name as --by: the repository's git user, else $USER."""
-    return fs.one_line(fs.run_text(root, ["git", "config", "user.name"]) or os.environ.get("USER") or "human", 80)
-
-
-def state_label(root, argv):
-    """The command that runs this state.py with argv: absolute, quoted, with
-    --root, so the human's pick and the agent's call are one string."""
-    if "--root" not in subcommand_prefix(argv):
-        argv = ["--root", root] + list(argv)
-    return "python3 %s %s" % (shlex.quote(fs.ENTRY), shlex.join(argv))
-
-
-def subcommand_prefix(argv):
-    """The global options in front of the subcommand."""
-    return list(argv)[:len(argv) - len(subcommand(argv))]
-
-
 def dialog_questions(decision):
     """One decision as dialog questions: a command list is one multi-select,
     unless a label holds ", " — a joined answer would be ambiguous — and then
@@ -313,9 +225,9 @@ def open_decision(root, state, kind, header, question, options, opened_by, multi
     if not 2 <= len(options) <= 4:
         return None, "a decision has 2 to 4 options"
     for option in options:
-        why = validate_label(option["label"]) if option["kind"] == "command" else (
-            None if 0 < len(option["label"]) <= LABEL_MAX and option["label"].isprintable()
-            else "a choice label is 1 to %d printable characters" % LABEL_MAX)
+        why = labels.validate_label(option["label"]) if option["kind"] == "command" else (
+            None if 0 < len(option["label"]) <= labels.LABEL_MAX and option["label"].isprintable()
+            else "a choice label is 1 to %d printable characters" % labels.LABEL_MAX)
         if why:
             return None, "CONSENT_LABEL_INVALID — %s: %s" % (why, option["label"][:120])
     if len({o["label"] for o in options}) != len(options):
@@ -455,8 +367,8 @@ def prune_decisions(root):
                                      "effect": "fallback"}):
                 keep.remove(decision)
         elif picks and all(p.get("id") in used for p in picks):
-            parsed = label_argv(picks[-1].get("label") or "")
-            effect = "declined" if parsed and subcommand(parsed[1])[:1] == ["reject"] else "approved"
+            parsed = labels.label_argv(picks[-1].get("label") or "")
+            effect = "declined" if parsed and labels.subcommand(parsed[1])[:1] == ["reject"] else "approved"
             if settle_written(root, {"type": "settle", "decision": decision["id"], "pick": picks[-1].get("id"),
                                      "effect": effect}):
                 keep.remove(decision)
@@ -531,11 +443,11 @@ def dialog_pick(root, rt=rr_runtime.Runtime()):
     try:
         with locks.ledger_lock(root):
             for pick in rr_ledger.live_picks(rr_ledger.read_ledger(root), switch["session"]):
-                parsed = label_argv(pick.get("label") or "")
+                parsed = labels.label_argv(pick.get("label") or "")
                 if parsed and os.path.realpath(parsed[0]) == here and parsed[1] == argv \
                         and pick.get("decision") in current:
                     rr_ledger.ledger_append(root, {"type": "use", "id": pick["id"],
-                                         "by": "state.py %s" % " ".join(subcommand(argv)[:1])})
+                                         "by": "state.py %s" % " ".join(labels.subcommand(argv)[:1])})
                     DIALOG_PICK[0] = pick
                     break
     except OSError:
@@ -616,13 +528,13 @@ def approve_command(root, state):
 def offer_approval(root, state, facts, rt=rr_runtime.Runtime()):
     """close's dialog branch (R36.3): Not now, approve, reject — full mode only;
     full_irreversible keeps the terminal command (R36.10)."""
-    name = human_name(root)
+    name = labels.human_name(root)
     retire_approvals(root, state["task_id"], "superseded")
     return offer_decision(
         root, state, "approval", "Approve",
         "%s\nfacts: (a) %s · (b) %s\nApprove this tree for %s?"
         % (task_facts(root, state), facts["a"][1], facts["b"][1], state["task_id"]),
         [{"kind": "choice", "effect": "defer", "label": "Not now — leave the gate open"},
-         {"kind": "command", "label": state_label(root, ["approve", "--by", name])},
-         {"kind": "command", "label": state_label(root, ["reject", "--by", name, "--why", "rejected in the dialog"])}],
+         {"kind": "command", "label": labels.state_label(root, ["approve", "--by", name])},
+         {"kind": "command", "label": labels.state_label(root, ["reject", "--by", name, "--why", "rejected in the dialog"])}],
         "close", gate_id=state["human_approval"]["gate_id"], rt=rt)

@@ -1139,17 +1139,17 @@ def context_line(payload):
     window = payload.get("context_window")
     window = window if isinstance(window, dict) else {}
 
-    def number(value):
+    def finite_number(value):
         # finite only: Infinity makes round() raise and the whole line would be lost
         return (value if isinstance(value, (int, float)) and not isinstance(value, bool)
                 and math.isfinite(value) and value >= 0 else None)
 
-    size = number(window.get("context_window_size"))
-    pct = number(window.get("used_percentage"))
+    size = finite_number(window.get("context_window_size"))
+    pct = finite_number(window.get("used_percentage"))
     usage = window.get("current_usage")
     used = None
     if isinstance(usage, dict):
-        parts = [number(usage.get(k)) for k in
+        parts = [finite_number(usage.get(k)) for k in
                  ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")]
         if any(p is not None for p in parts):
             used = sum(p or 0 for p in parts)

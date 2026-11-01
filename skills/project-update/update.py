@@ -1240,7 +1240,7 @@ def cleanup_update(plan, now=None):
         except ValueError:
             print("project-update: RISKRAILS_NOW %r is not a UTC time like 2026-01-31T12:00:00Z" % env("NOW"),
                   file=sys.stderr)
-            raise SystemExit(2)
+            raise SystemExit(2) from None
     flight = None
     for name in (STATE_FILE, LEGACY_STATE_FILE):
         raw = plan.read(name)

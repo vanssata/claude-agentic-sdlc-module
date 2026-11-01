@@ -61,7 +61,7 @@ class Profiles(ScratchCase):
         """`resolve-profile.py <name> <extra> --print agentic` parsed, cached under key (the shell's $TMP/<key>.json)."""
         key = key or name
         if key not in cls.agentic:
-            rc, out, err = resolve(name, *extra, "--print", "agentic")
+            rc, out, _err = resolve(name, *extra, "--print", "agentic")
             cls.agentic[key] = json.loads(out) if rc == 0 else None
         return cls.agentic[key]
 

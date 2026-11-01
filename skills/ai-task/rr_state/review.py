@@ -10,6 +10,7 @@ import shlex
 import sys
 
 from rr_state import dialog, fs, handoff, journal, task
+from rr_state import labels as rr_labels
 from rr_state import policy as rr_policy
 from rr_state import report as rr_report
 from rr_state import runtime as rr_runtime
@@ -89,8 +90,8 @@ def cmd_review(args, root, rt=rr_runtime.Runtime()):
                               " (%s)" % budget_name if rr_policy.batch_on(state) else ""),
                            [{"kind": "choice", "effect": "keep", "label": "Keep it open — no verdict now"}] +
                            [{"kind": "command",
-                             "label": dialog.state_label(root, ["review", "--verdict", verdict, "--tier", args.tier] +
-                                                  report + ["--by", dialog.human_name(root)])}
+                             "label": rr_labels.state_label(root, ["review", "--verdict", verdict, "--tier", args.tier] +
+                                                     report + ["--by", rr_labels.human_name(root)])}
                             for verdict in ("pass", "pass_with_findings", "blockers_open")], "review", rt=rt)
             fs.die("REVIEW_BUDGET — %d review passes; weight.json allows %d (%s). The next "
                 "verdict is the human's, in their own terminal:\n  python3 %s --root %s review --verdict "

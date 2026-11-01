@@ -253,7 +253,7 @@ class TestSwitchContract(unittest.TestCase):
         for runtime in ("claude", "codex"):
             seen = set()
             with self.subTest(runtime=runtime):
-                cases = (
+                switch_cases = (
                     # policy, AI_UNATTENDED, ATTENDED=0, tool, session id -> hooks' state
                     (("background", False, True, "verified", "sess-1234"), "on"),
                     (("background", False, False, "verified", "sess-1234"), "on"),
@@ -271,7 +271,7 @@ class TestSwitchContract(unittest.TestCase):
                     (("background", False, True, "verified", "sess-1234", "sdk-ts"), "off"),
                     (("background", False, False, "verified", "sess-1234", "sdk-cli"), "on"),
                 )
-                for args, want in cases:
+                for args, want in switch_cases:
                     entrypoint = args[5] if len(args) > 5 else None
                     hooks, got = self.check(runtime, args[0], args[1], args[2], args[3], args[4], args[4], seen,
                                             entrypoint=entrypoint)

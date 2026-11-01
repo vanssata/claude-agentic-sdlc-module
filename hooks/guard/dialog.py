@@ -412,7 +412,7 @@ def write_line(root, data):
         os.close(fd)
 
 
-def read_ledger(root, path=None, types=LEDGER_TYPES):
+def read_ledger(root, path=None, types=LEDGER_TYPES):  # pylint: disable=dangerous-default-value  # read-only: `types` is only tested with `in`, never mutated
     """Every well-formed line of the given types, in order; a torn or foreign
     line is skipped, so a damaged ledger shows fewer picks, never more."""
     entries = []

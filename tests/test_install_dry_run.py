@@ -124,7 +124,7 @@ def is_x(path):
     return os.access(path, os.X_OK)
 
 
-class InstallDryRun(ScratchCase):
+class InstallDryRun(ScratchCase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
 
     def ok(self, label, cond, detail="", subs=None):
         text = label
@@ -166,7 +166,7 @@ class InstallDryRun(ScratchCase):
     def test_02_dry_run_the_shared_tree(self):
         for target in ("claude", "codex"):
             subs = {"$target": target}
-            rc, out = self.dry("--target", target, "--plan", "max", "--codex-plan", "plus",
+            _rc, out = self.dry("--target", target, "--plan", "max", "--codex-plan", "plus",
                                HOME=self.path("h-" + target), CODEX_DIR=self.path("none-x"))
             n = len([ln for ln in out.split("\n") if ln == "   shared:  riskrails/ai (31 files), riskrails/ai-path"])
             self.ok("$target: the would-install list names the shared tree once", n == 1, "shared line count %d\n%s" % (n, out), subs)
@@ -185,32 +185,32 @@ class InstallDryRun(ScratchCase):
 
     # == pro: opusplan session, EXPERT tier pinned to opus
     def test_03_pro_opusplan_session(self):
-        rc, out = self.dry("--plan", "pro")
+        _rc, out = self.dry("--plan", "pro")
         self.ok("pro sets the session model to opusplan", '"model": "opusplan"' in out, out)
         self.ok("pro names opusplan in the CLAUDE.md block", "Opus 5 in plan mode" in out, out)
         self.ok("pro pins model: opus on architect, the EXPERT agent", has_line(out, r"^model: opus"), out)
         self.ok("the block routes every change through /rr-build", "/rr-build <request>" in out, out)
-        rc, out = self.dry("--plan", "max", "--fable", "yes")
+        _rc, out = self.dry("--plan", "max", "--fable", "yes")
         self.ok("max+fable pins fable[1m] on architect", line_eq(out, "model: fable[1m]"), out)
         self.ok("max renders the EXPERT tier at xhigh", line_eq(out, "effort: xhigh"), out)
 
     # == team-pro and team-max share the pro and max profiles
     def test_04_team_profiles(self):
-        rc, out = self.dry("--plan", "team-pro")
+        _rc, out = self.dry("--plan", "team-pro")
         self.ok("team-pro uses the pro profile", "plan=team-pro (Team Pro, pro profile)" in out, out)
         self.ok("team-pro sets the session model to opusplan", '"model": "opusplan"' in out, out)
         self.ok("team-pro pins model: opus on the EXPERT agents", has_line(out, r"^model: opus"), out)
         self.ok("team-pro is named in the CLAUDE.md block", "Model routing (Team Pro plan)" in out, out)
-        rc, out = self.dry("--plan", "team-pro", "--fable", "yes")
+        _rc, out = self.dry("--plan", "team-pro", "--fable", "yes")
         self.ok("team-pro forces --fable no", "fable=no" in out, out)
-        rc, out = self.dry("--plan", "team-max")
+        _rc, out = self.dry("--plan", "team-max")
         self.ok("team-max uses the max profile with Fable and the gate",
                 "plan=team-max (Team Max, max profile) fable=yes fable-gate=on" in out, out)
         self.ok("team-max pins fable[1m] on architect", has_line(out, r"^model: fable\[1m\]"), out)
         self.ok("team-max is named in the CLAUDE.md block", "Model routing (Team Max plan)" in out, out)
-        rc, out = self.dry("--plan", "team-premium")
+        _rc, out = self.dry("--plan", "team-premium")
         self.ok("team-premium is an alias of team-max", "plan=team-max" in out, out)
-        rc, out = self.dry("--plan", "team-standard")
+        _rc, out = self.dry("--plan", "team-standard")
         self.ok("team-standard is an alias of team-pro", "plan=team-pro" in out, out)
 
     # == plan detection reads the seat of a Team org
@@ -236,7 +236,7 @@ class InstallDryRun(ScratchCase):
 
     # == balanced-max: only the session is strong
     def test_06_balanced_max(self):
-        rc, outb = self.dry("--target", "both", "--plan", "balanced-max", CODEX_DIR=self.path("nonecx"))
+        _rc, outb = self.dry("--target", "both", "--plan", "balanced-max", CODEX_DIR=self.path("nonecx"))
         self.ok("--plan balanced-max: BalancedMax on the max profile, Fable off",
                 "plan=balanced-max (BalancedMax, max profile) fable=no" in outb, outb)
         self.ok("balanced-max pins the session to Opus 5.5", '"model": "claude-opus-5-5"' in outb, outb)
@@ -244,21 +244,21 @@ class InstallDryRun(ScratchCase):
         self.ok("balanced-max renders no xhigh", not line_eq(outb, "effort: xhigh"), outb)
         self.ok("--plan balanced-max selects the Codex balanced-max profile", "== codex: plan=balanced-max" in outb, outb)
         self.ok("Codex readers run on Luna", "| FAST | `gpt-5.6-luna`" in outb, outb)
-        rc, o = self.dry("--target", "claude", "--plan", "balanced-max", "--fable", "yes")
+        _rc, o = self.dry("--target", "claude", "--plan", "balanced-max", "--fable", "yes")
         self.ok("--fable yes is refused on balanced-max", "fable=no" in o, o)
 
     # == max20: Max 20x, detected from organizationRateLimitTier (R3)
     def test_07_max20(self):
         home = self.home_t()
         claude_json = os.path.join(home, ".claude.json")
-        rc, out20 = self.dry("--target", "claude", "--plan", "max20")
-        rc, outmax = self.dry("--target", "claude", "--plan", "max")
+        _rc, out20 = self.dry("--target", "claude", "--plan", "max20")
+        _rc, outmax = self.dry("--target", "claude", "--plan", "max")
         self.ok("--plan max20 is Max 20x on the max profile", "plan=max20 (Max 20x, max profile) fable=yes" in out20, out20)
         self.ok("max20's settings snippet equals max's",
                 "\n".join(snippet(out20)).rstrip("\n") == "\n".join(snippet(outmax)).rstrip("\n"), "max20 snippet differs from max")
         for plan in ("pro", "team-pro", "team-max", "max", "max20"):
             subs = {"$plan": plan}
-            rc, o = self.dry("--target", "claude", "--plan", plan)
+            _rc, o = self.dry("--target", "claude", "--plan", plan)
             try:
                 snip = json.loads("\n".join(snippet(o)[1:-1]))
                 leaked = "riskrails" in snip
@@ -277,19 +277,19 @@ class InstallDryRun(ScratchCase):
             good = False
         self.ok("max20 profile.json carries plan, runtime, fable and the max20 budgets", good, "max20 profile.json content")
         write(claude_json, '{"oauthAccount":{"organizationType":"claude_max","organizationRateLimitTier":"default_claude_max_20x"}}')
-        rc, out = self.dry(HOME=home)
+        _rc, out = self.dry(HOME=home)
         self.ok("default_claude_max_20x is detected as max20", "plan=max20 (Max 20x" in out, out)
-        rc, o, err = self.dry(HOME=home, merge=False)
+        _rc, o, err = self.dry(HOME=home, merge=False)
         self.ok("without a terminal the detection is printed on stderr",
                 "detected plan: max20 (organizationRateLimitTier default_claude_max_20x)" in err, err)
         write(claude_json, '{"oauthAccount":{"organizationType":"claude_max","organizationRateLimitTier":"default_claude_max_5x"}}')
-        rc, out = self.dry(HOME=home)
+        _rc, out = self.dry(HOME=home)
         self.ok("default_claude_max_5x stays max", "plan=max (Max" in out, out)
         # An install from before 3.4b recorded its plan under claude-agentic/ (R35).
         prev = self.path("prev")
         write(os.path.join(prev, "claude-agentic", "profile.json"), '{"plan":"max20"}')
         write(claude_json, "{}")
-        rc, out = self.dry(HOME=home, CLAUDE_DIR=prev)
+        _rc, out = self.dry(HOME=home, CLAUDE_DIR=prev)
         self.ok("an undetectable account falls back to the plan the last install recorded", "plan=max20" in out, out)
 
     # == R16/R18: every installed agent's model and effort, per plan
@@ -371,7 +371,7 @@ class InstallDryRun(ScratchCase):
                    PATH=fake + os.pathsep + os.environ.get("PATH", ""))
 
     def test_10c_python_with_an_extra_stdout_line_passes_the_check(self):
-        rc, out = self._fake_python("fakebin-extra", "echo sitecustomize noise\necho 3.12\n")
+        _rc, out = self._fake_python("fakebin-extra", "echo sitecustomize noise\necho 3.12\n")
         self.ok("the version check is not what stops the run",
                 "python3 3.11 or newer is required" not in out, out)
 
@@ -657,7 +657,7 @@ class InstallDryRun(ScratchCase):
         write(os.path.join(d, "hooks", "fable-gate.py"), "#!/usr/bin/env python3\n")
         write(os.path.join(d, "bin", "claude-1m.bak"), "old\n")
         write(os.path.join(d, "skills", "status", "SKILL.md"), "---\nname: status\n---\nold\n")
-        rc, out = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d)
+        _rc, out = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d)
         bk = os.path.join(d, "backups", day)
         self.ok("an installed skills/status is retired into backups/<date>/skills/",
                 not os.path.exists(os.path.join(d, "skills", "status")) and os.path.isfile(os.path.join(bk, "skills", "status", "SKILL.md"))
@@ -748,7 +748,7 @@ class InstallDryRun(ScratchCase):
         d3 = self.path("claude3")
         write(os.path.join(d3, "CLAUDE.md"),
               "<!-- claude-routing:start -->\nrouting rules\n<!-- claude-routing:end -->\n\n# My own notes\n")
-        rc, out = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d3)
+        _rc, out = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d3)
         text = rd(os.path.join(d3, "CLAUDE.md"))
         self.ok("the migration is reported", "migrated the claude-routing block" in out, "migration should be reported\n" + out)
         self.ok("exactly one managed block remains", len([ln for ln in text.split("\n") if "riskrails:start" in ln]) == 1, "expected one block")
@@ -765,11 +765,11 @@ class InstallDryRun(ScratchCase):
         write(os.path.join(d4, "claude-agentic", "notes.txt"), "mine\n")
         write(os.path.join(d4, "CLAUDE.md"),
               "<!-- claude-agentic:start -->\nold block\n<!-- claude-agentic:end -->\n\n# My own notes\n")
-        rc, out = run("--plan", "max", "--fable", "yes", "--dry-run", CLAUDE_DIR=d4)
+        _rc, out = run("--plan", "max", "--fable", "yes", "--dry-run", CLAUDE_DIR=d4)
         self.ok("the dry run names the move", has_line(out, r"^   home:    claude-agentic/ -> riskrails/"), "dry run should name the move\n" + out)
         old = os.path.join(d4, "claude-agentic")
         self.ok("and moves nothing", os.path.isdir(old) and not os.path.islink(old), "dry run moved the home")
-        rc, out = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d4)
+        _rc, out = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d4)
         self.ok("the old home is a relative symlink to riskrails",
                 os.path.islink(old) and os.readlink(old) == "riskrails", "old home is not a symlink\n" + out)
         self.ok("what the old home held moved with it",
@@ -780,7 +780,7 @@ class InstallDryRun(ScratchCase):
                 len([ln for ln in text.split("\n") if "riskrails:start" in ln]) == 1 and "claude-agentic:start" not in text,
                 "global block markers\n" + text)
         self.ok("the user's own text stays", "# My own notes" in text, "user text lost")
-        rc, out = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d4)
+        _rc, out = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d4)
         self.ok("a reinstall leaves the symlink alone", not has_line(out, r"^(moved:|linked:)"), "a reinstall moved again\n" + out)
         d5 = self.path("claude5")
         os.makedirs(os.path.join(d5, "claude-agentic"), exist_ok=True)
@@ -823,18 +823,18 @@ class InstallDryRun(ScratchCase):
         write(os.path.join(d7, "settings.json"), json.dumps({"hooks": {"PreToolUse": old}}))
         for g in ("git", "path", "scope"):
             write(os.path.join(d7, "hooks", "ai-%s-guard.sh" % g), "#!/bin/sh\n")
-        rc, out = run("--plan", "pro", CLAUDE_DIR=d7)
+        _rc, out = run("--plan", "pro", CLAUDE_DIR=d7)
         groups = jload(os.path.join(d7, "settings.json"))["hooks"]["PreToolUse"]
-        cmds = [h["command"] for g in groups for h in g["hooks"]]
-        self.ok("no shell guard entry is left", not [c for c in cmds if "-guard.sh" in c], json.dumps(cmds))
-        self.ok("exactly one ai-guard.py entry", len([c for c in cmds if "ai-guard.py" in c]) == 1, json.dumps(cmds))
+        hook_cmds = [h["command"] for g in groups for h in g["hooks"]]
+        self.ok("no shell guard entry is left", not [c for c in hook_cmds if "-guard.sh" in c], json.dumps(hook_cmds))
+        self.ok("exactly one ai-guard.py entry", len([c for c in hook_cmds if "ai-guard.py" in c]) == 1, json.dumps(hook_cmds))
         self.ok("the install says what it replaced", "replaced: the ai-git/path/scope-guard.sh hooks with ai-guard.py" in out, out)
         day = datetime.date.today().isoformat()
         self.ok("the shim files are retired into backups/", all(
             not os.path.lexists(os.path.join(d7, "hooks", "ai-%s-guard.sh" % g))
             and os.path.isfile(os.path.join(d7, "backups", day, "hooks", "ai-%s-guard.sh" % g))
             for g in ("git", "path", "scope")), out)
-        rc, out = run("--plan", "pro", CLAUDE_DIR=d7)
+        _rc, out = run("--plan", "pro", CLAUDE_DIR=d7)
         self.ok("a reinstall replaces nothing more", "replaced:" not in out and "retired:" not in out, out)
 
     # == R36.20: no dialog timeout on any plan

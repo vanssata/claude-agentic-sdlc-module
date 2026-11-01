@@ -165,13 +165,13 @@ class TestPayload(unittest.TestCase):
                    {"n": 2, "kind": "command", "label": "git commit -m 'a, b'"},
                    {"n": 3, "kind": "command", "label": PUSH}]
         long = "x" * state_mod.QUESTION_MAX
-        decision = {"id": "D3", "question": long, "header": "Commit", "multi_select": True, "options": options}
-        texts = [q["question"] for q in state_mod.dialog_payload([decision], "claude")["questions"]]
+        long_decision = {"id": "D3", "question": long, "header": "Commit", "multi_select": True, "options": options}
+        texts = [q["question"] for q in state_mod.dialog_payload([long_decision], "claude")["questions"]]
         self.assertEqual(len(texts), 2)
         self.assertTrue(all(len(t) <= state_mod.QUESTION_MAX for t in texts), [len(t) for t in texts])
         self.assertEqual([t[-9:] for t in texts], [" (1 of 2)", " (2 of 2)"])
-        self.assertEqual(texts, [q["question"] for _, _, q in dialog.offered([decision], "claude")])
-        unsplit = dict(decision, multi_select=False)
+        self.assertEqual(texts, [q["question"] for _, _, q in dialog.offered([long_decision], "claude")])
+        unsplit = dict(long_decision, multi_select=False)
         self.assertEqual(state_mod.dialog_payload([unsplit], "claude")["questions"][0]["question"], long)
 
     def test_part_question_copies_agree(self):
@@ -194,11 +194,11 @@ class TestPayload(unittest.TestCase):
                 self.assertEqual(len(theirs), 2 if multi else 1)
 
     def test_codex_shape(self):
-        decision = {"id": "D3", "question": "q", "header": "Commit", "multi_select": True,
+        codex_decision = {"id": "D3", "question": "q", "header": "Commit", "multi_select": True,
                     "options": [{"n": 1, "kind": "choice", "label": "Not now — commit nothing"},
                                 {"n": 2, "kind": "command", "label": "git commit -m 'a, b'"},
                                 {"n": 3, "kind": "command", "label": PUSH}]}
-        payload = state_mod.dialog_payload([decision], "codex")
+        payload = state_mod.dialog_payload([codex_decision], "codex")
         self.assertEqual([q["id"] for q in payload["questions"]], ["d3_1", "d3_2"])
         self.assertTrue(all("multiSelect" not in q for q in payload["questions"]))
 
@@ -275,8 +275,8 @@ def relabel(payload, mapping, question, header, qid=None):
         if qid is not None:
             q["id"] = qid
         if "answers" in holder:
-            answer = holder["answers"].pop(old)
-            holder["answers"][question] = ", ".join(mapping.get(i, i) for i in answer.split(", "))
+            picked = holder["answers"].pop(old)
+            holder["answers"][question] = ", ".join(mapping.get(i, i) for i in picked.split(", "))
     if codex:
         [(old, entry)] = json.loads(tool_response)["answers"].items()
         entry["answers"] = [mapping.get(i, i) for i in entry["answers"]]
@@ -406,7 +406,7 @@ class TestEffectiveSwitch(HookCase):
         self.assertEqual(dialog.payload_runtime({}, "/h/.codex/hooks/dialog-gate.py"), "codex")
 
 
-class TestRecorder(HookCase):
+class TestRecorder(HookCase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     """R36.6: the answers come from tool_response; an exact label is a pick,
     anything else a decline whose text is not stored."""
 
@@ -691,6 +691,7 @@ class TestGateHook(HookCase):
         """R-hooks-readers-of-ai-state-files-do-not-c-7d54: prompt_count."""
         self.s.decide(decision("D1", "Commit a.py?", "Commit", [("choice", SAFE), ("command", COMMIT)]))
         for active in (False, True):
+            # pylint: disable-next=unbalanced-tuple-unpacking  # deep_vs_malformed returns a pair
             deep, bad = self.deep_vs_malformed((".ai", "state", "session.json"), lambda t: t, active)
             self.assertEqual(deep, bad)
             self.assertTrue(deep, "an open decision still answers the Stop")
@@ -701,6 +702,7 @@ class TestGateHook(HookCase):
         sid = spike("claude/stop")["session_id"]
         line = json.dumps({"v": 1, "type": dialog.STOP_BLOCK, "session": sid, "turn": None, "decisions": ["D1"]})
         content = lambda t: "%s\n%s\n%s\n" % (line, t, line)
+        # pylint: disable-next=unbalanced-tuple-unpacking  # deep_vs_malformed returns a pair
         deep, bad = self.deep_vs_malformed((".ai", "state", "consent.jsonl"), content, False)
         self.assertEqual(deep, bad)
         self.assertEqual(dialog.read_ledger(self.s.root, types={dialog.STOP_BLOCK}).__len__(), 2)
@@ -810,7 +812,7 @@ class TestGateFastPath(HookCase):
         self.assertLessEqual(floor, budget, "%.1f ms over the interpreter's start" % (floor * 1000))
 
 
-class TestDecisionGate(HookCase):
+class TestDecisionGate(HookCase):  # pylint: disable=too-many-public-methods  # one test per case keeps failures named
     """R36.5, R36.7, R36.8, R36.12, R36.15 (hook half): hooks/ai-guard.py while
     a decision is open, end to end."""
 
