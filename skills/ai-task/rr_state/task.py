@@ -69,11 +69,12 @@ def load(root, required=True, claim=None, rt=rr_runtime.Runtime()):
         return None
     try:
         with open(path, encoding="utf-8") as fh:
-            state = apply_defaults(json.load(fh))
+            data = json.load(fh)
     except (OSError, ValueError, RecursionError) as exc:
         # Loud on purpose: a corrupt state file must never be silently replaced,
         # because ai-scope-guard's boundaries are derived from it.
         fs.die("%s is unreadable (%s). Inspect it by hand; do not delete it blindly." % (path, exc))
+    state = apply_defaults(data)
     # Ownership is taken before the command's own events, so the journal and
     # history both show the handoff ahead of the work it covers.
     if rt.mutating if claim is None else claim:

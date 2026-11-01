@@ -291,6 +291,27 @@ class TestSessionMismatchFailsClosed(unittest.TestCase):
         got, _, _ = self.run_case(COMMIT, env={"CLAUDE_CODE_SESSION_ID": SESSION})
         self.assertEqual(got, "deny", "equal session, no pick: the normal deny")
 
+    def test_background_opt_in_needs_a_live_pick(self):
+        """Risk 665f: with background_sessions: true a commit in a CLI background
+        job (ATTENDED=0) needs this session's live pick; an SDK entrypoint stays
+        off (risk ffae), as before the opt-in."""
+        def opt_in(p):
+            p.write(".ai/policies/dialog.json", {"version": 1, "enabled": True, "window_seconds": 120,
+                                                 "stop_blocks_max": 2, "background_sessions": True})
+
+        def live(p):
+            opt_in(p)
+            p.decide(dec("D1", "commit", COMMIT))
+            p.pick("D1", 2, 1, COMMIT)
+        env = {"CLAUDE_CODE_SESSION_ATTENDED": "0", "CLAUDE_CODE_ENTRYPOINT": "cli",
+               "CLAUDE_CODE_SESSION_ID": SESSION}
+        got, reason, _ = self.run_case(COMMIT, opt_in, env=env)
+        self.assertEqual((got, reason[:16]), ("deny", "CONSENT_REQUIRED"), "no pick: denied")
+        got, reason, ledger = self.run_case(COMMIT, live, env=env)
+        self.assertEqual((got, ledger), ("allow", ["pick", "use"]), reason)
+        got, _, ledger = self.run_case(COMMIT, opt_in, env=dict(env, CLAUDE_CODE_ENTRYPOINT="sdk-cli"))
+        self.assertEqual((got, ledger), ("allow", []), "sdk-*: the opt-in does not apply, the switch is off")
+
     def test_off_is_unchanged(self):
         self.assertEqual(self.run_case(COMMIT, dialog_on=False, agent_id="a1")[0], "allow")
         self.assertEqual(self.run_case(COMMIT, dialog_on=False, session="")[0], "allow")

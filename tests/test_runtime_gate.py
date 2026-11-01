@@ -10,9 +10,11 @@ The sections share one home and one project, in the shell suite's order:
 test_NN_ names keep it.
 """
 import json
+import math
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -22,6 +24,8 @@ from string import Template
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from guard_harness import FIXTURES, PLUGIN  # noqa: E402  pylint: disable=wrong-import-position
+
+CYAN = "\033[36m%s\033[00m"
 
 TWIN_OF = "test-runtime-gate.sh"
 
@@ -364,6 +368,9 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
         out = self.launch(g, "architect", AI_UNATTENDED="1")
         self.assertTrue(decision(out) == "none" and "unattended" in hso(out).get("additionalContext", ""),
                         "AI_UNATTENDED=1: allowed and explained, never asked" + ": %s" % out)
+        for value, asks in (("yes", False), ("true", False), ("0", True), ("false", True), ("no", True)):
+            out = self.launch(g, "architect", AI_UNATTENDED=value)          # risk 0587: one rule
+            self.assertEqual(decision(out) == "ask", asks, "AI_UNATTENDED=%r: %s" % (value, out))
         self.resolve("max20", "yes", cl + "/riskrails/profile.json")
         self.rmrf(cl + "/state")
         o1, o2, o3 = (self.launch(g, "architect") for _ in range(3))
@@ -620,13 +627,14 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
                                     "current_usage": {"input_tokens": 3000, "cache_read_input_tokens": 120000,
                                                       "cache_creation_input_tokens": 0, "output_tokens": 999}}}
         self.assertEqual(self.gate(g, "statusline", "--context", *user, stdin=usage),
-                         (0, "Opus 5.5 [1m] · 123k/1000k (12%)\nUSER\n"),
+                         (0, CYAN % "Opus 5.5 [1m] · 123k/1000k (12%)" + "\nUSER\n"),
                          "current_usage: input plus cache tokens, then the user's own line")
         pct = {"model": {"display_name": "Sonnet 5"},
                "context_window": {"context_window_size": 200000, "used_percentage": 40}}
-        self.assertEqual(self.out(g, "statusline", "--context", stdin=pct), "Sonnet 5 · 80k/200k (40%)\n",
+        self.assertEqual(self.out(g, "statusline", "--context", stdin=pct), CYAN % "Sonnet 5 · 80k/200k (40%)" + "\n",
                          "used_percentage alone gives the tokens")
-        self.assertEqual(self.out(g, "statusline", "--context", stdin={"model": {"display_name": "Haiku"}}), "Haiku\n",
+        self.assertEqual(self.out(g, "statusline", "--context", stdin={"model": {"display_name": "Haiku"}}),
+                         CYAN % "Haiku" + "\n",
                          "no context_window: the model alone")
         for bad in ("garbage", "[1,2]", '{"model": "x", "context_window": {"context_window_size": "lots"}}', ""):
             with self.subTest(bad=bad):
@@ -634,7 +642,64 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
                                  "a bad payload prints no line and the user's line is intact")
         self.assertEqual(self.out(g, "statusline", *user, stdin=usage), "USER\n", "without --context there is no line")
         self.assertEqual(self.out(g, "statusline", "--context", *user, stdin=usage, AI_RUNTIME_GATE="off"),
-                         "Opus 5.5 [1m] · 123k/1000k (12%)\nUSER\n", "the line does not depend on the gate being on")
+                         CYAN % "Opus 5.5 [1m] · 123k/1000k (12%)" + "\nUSER\n",
+                         "the line does not depend on the gate being on")
+        effort = dict(usage, effort={"level": "high"})
+        self.assertEqual(self.out(g, "statusline", "--context", stdin=effort),
+                         CYAN % "Opus 5.5 [1m] high · 123k/1000k (12%)" + "\n", "the effort sits right after the model")
+
+    def test_16b_statusline_second_line(self):
+        """--line: user@host:cwd | branch | 5h/7d limits with their resets | cost,
+        each part skipped when its data is missing; it follows the context line and
+        comes before a --then command's output."""
+        g = self.g
+        repo = os.path.join(self.tmp, "sl-repo")
+        os.makedirs(repo, exist_ok=True)
+        subprocess.run(["git", "init", "-q", "-b", "feat/sl", repo], check=True)
+        plain = os.path.join(self.tmp, "sl-plain")
+        os.makedirs(plain, exist_ok=True)
+        host = socket.gethostname().split(".")[0]
+        env = {"USER": "tester", "LOGNAME": "tester", "TZ": "UTC"}
+        head = "\033[01;32mtester@%s\033[00m:\033[01;34m%s\033[00m"
+        sep = " \033[02m|\033[00m "
+        full = {"workspace": {"current_dir": repo},
+                "rate_limits": {"five_hour": {"used_percentage": 12.4, "resets_at": 1767225600},
+                                "seven_day": {"used_percentage": 40.6, "resets_at": "2026-01-02T03:04:05Z"}},
+                "cost": {"total_cost_usd": 1.234}}
+        want = (head % (host, repo) + sep + "\033[35mfeat/sl\033[00m" + sep
+                + "\033[33m5h:12% (↻00:00) 7d:41% (↻Fri 03:04)\033[00m" + sep + "\033[32m$1.23\033[00m\n")
+        self.assertEqual(self.out(g, "statusline", "--line", stdin=full, **env), want)
+        self.assertEqual(self.out(g, "statusline", "--line", stdin={"workspace": {"current_dir": plain}}, **env),
+                         head % (host, plain) + "\n", "no git, no limits, no cost: the prompt part alone")
+        both = dict(full, model={"display_name": "Opus"}, effort={"level": "low"})
+        rc, out = self.gate(g, "statusline", "--context", "--line", "--then", "cat >/dev/null; echo USER",
+                            stdin=both, **env)
+        self.assertEqual((rc, out), (0, CYAN % "Opus low" + "\n" + want + "USER\n"), "line 1, line 2, then --then")
+        for bad in ("garbage", "[1,2]", ""):
+            with self.subTest(bad=bad):
+                self.assertEqual(self.out(g, "statusline", "--line", "--then", "cat >/dev/null; echo USER",
+                                          stdin=bad, **env), "USER\n", "a bad payload prints no second line")
+        # review I2 of T-2026-10-31-1841 (c7fa): NaN or Infinity in a number skips that
+        # part only; the rest of the line stays (json.loads reads both literals)
+        for bad in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(second_line=bad):
+                text = json.dumps({"workspace": {"current_dir": plain},
+                                   "rate_limits": {"five_hour": {"used_percentage": "@"},
+                                                   "seven_day": {"used_percentage": "@"}},
+                                   "cost": {"total_cost_usd": "@"}}).replace('"@"', bad)
+                self.assertEqual(self.out(g, "statusline", "--line", stdin=text, **env), head % (host, plain) + "\n",
+                                 "a non-finite percentage or cost is skipped; the prompt part stays")
+        text = json.dumps(dict(full, rate_limits={"five_hour": {"used_percentage": "@"},
+                                                 "seven_day": full["rate_limits"]["seven_day"]})).replace('"@"', "Infinity")
+        self.assertEqual(self.out(g, "statusline", "--line", stdin=text, **env),
+                         want.replace("5h:12% (↻00:00) ", ""), "one window infinite: the other window, branch and cost stay")
+        for window in ('{"context_window_size": Infinity, "used_percentage": 10}',
+                       '{"context_window_size": 200000, "used_percentage": Infinity}',
+                       '{"context_window_size": Infinity, "current_usage": {"input_tokens": 5000}}'):
+            with self.subTest(context_line=window):
+                text = '{"model": {"display_name": "Opus"}, "context_window": %s}' % window
+                self.assertEqual(self.out(g, "statusline", "--context", stdin=text, **env), CYAN % "Opus" + "\n",
+                                 "a non-finite context size or percentage drops the context part, not the model")
 
     def test_17_too_deep_json_is_read_as_malformed_json(self):
         """CPython raises RecursionError, not ValueError, on deeply nested JSON: every
@@ -692,9 +757,15 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
                 self.assertEqual(mod.last_transcript_model(path), "opus")
                 ok_event = json.dumps({"payload": {"rate_limits": {"primary": {
                     "used_percent": 5, "window_minutes": 10080, "resets_at": 1}}}, "type": "token_count"})
-                bad_event = '"token_count" "rate_limits" ' + ("[" * 60000 if name == "deep" else "{x")  # the tail is 64 KB
+                # review M1 of T-2026-10-31-1529: the bad line is a JSON object up to the
+                # nesting, so json.loads reaches the [ run; the tail is widened to hold it
+                bad_event = '{"type": "token_count", "rate_limits": ' + (deep if name == "deep" else "{x")
                 rollout = put("r-" + name + ".jsonl", ok_event + "\n" + bad_event + "\n")
-                self.assertIsNotNone(mod.rollout_limits(rollout), "the older valid event is still read")
+                saved_tail, mod.ROLLOUT_TAIL = mod.ROLLOUT_TAIL, 4 * len(deep)
+                try:
+                    self.assertIsNotNone(mod.rollout_limits(rollout), "the older valid event is still read")
+                finally:
+                    mod.ROLLOUT_TAIL = saved_tail
             with self.subTest("project_task: " + name):
                 proj = os.path.join(d, "proj-" + name)
                 os.makedirs(os.path.join(proj, ".ai", "state"), exist_ok=True)
@@ -706,6 +777,29 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
             rc, out = self.gate(self.g, "statusline", "--context", "--then", "cat >/dev/null; echo USER",
                                 stdin=deep, stderr=True)
             self.assertEqual((rc, out), (0, "USER\n"))
+
+
+    def test_18_quota_record_keeps_no_non_finite_percentage(self):
+        """fec7: number() took float('nan') and float('inf') as numbers, so record_quota
+        wrote NaN/Infinity into the quota record, which later comparisons read as never
+        at the limit. A non-finite percentage is no reading: the field stays None."""
+        cl, g = self.cl, self.g
+        path = cl + "/state/runtime-gate.json"
+        for weekly, five in (('NaN', '7'), ('"inf"', '7'), ('"NaN"', 'Infinity'), ('-Infinity', '"-inf"')):
+            with self.subTest(weekly=weekly, five_hour=five):
+                self.rmrf(cl + "/state", cl + "/riskrails")
+                text = ('{"rate_limits": {"seven_day": {"used_percentage": %s}, '
+                        '"five_hour": {"used_percentage": %s}}}' % (weekly, five))
+                rc, _ = self.gate(g, "statusline", "--then", "cat >/dev/null; echo LINE", stdin=text, stderr=True)
+                quota = (read_json(path).get("quota") if os.path.exists(path) else None) or {}
+                for key in ("weekly_pct", "five_hour_pct"):
+                    value = quota.get(key)
+                    self.assertTrue(value is None or math.isfinite(value),
+                                    "%s is stored as %r, not dropped" % (key, value))
+                if five == '7':
+                    self.assertEqual(quota.get("five_hour_pct"), 7, "the finite field is still recorded")
+                else:
+                    self.assertEqual(quota, {}, "no finite number: the record is not written")
 
 
 if __name__ == "__main__":

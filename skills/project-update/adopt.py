@@ -32,6 +32,12 @@ def test_mode():
     return os.environ.get("RISKRAILS_TEST", os.environ.get("CLAUDE_AGENTIC_TEST")) == "1"
 
 
+def ai_unattended():
+    """AI_UNATTENDED is set when it is non-empty and not 0, false or no (case
+    and blanks ignored): one rule in every reader (risk 0587)."""
+    return os.environ.get("AI_UNATTENDED", "").strip().lower() not in ("", "0", "false", "no")
+
+
 def human_gate():
     """(passed, via, why) for --confirm-delete. A terminal outside any agent
     session is a human: via "terminal". Otherwise a launcher that declared the
@@ -44,7 +50,7 @@ def human_gate():
     markers = [name for name in AGENT_MARKERS if name in os.environ]
     if os.isatty(0) and not markers:
         return True, "terminal", ""
-    if os.environ.get("AI_UNATTENDED"):
+    if ai_unattended():
         return True, "unattended", ""
     if markers:
         return False, None, ("this run is inside an agent session (%s %s set); run it in a terminal "
@@ -175,7 +181,7 @@ def load_table(path=MAP_FILE):
     try:
         with open(path, encoding="utf-8") as fh:
             table = json.load(fh)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         raise TableError("%s: %s" % (path, exc)) from exc
     tools = table.get("tools")
     rows = table.get("rows")
@@ -455,7 +461,7 @@ def load_decisions(root):
     try:
         with open(os.path.join(root, where, "decisions.json"), encoding="utf-8") as fh:
             return json.load(fh)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         raise TableError("%s/decisions.json: %s" % (where, exc)) from exc
 
 
@@ -947,7 +953,7 @@ def _state_line(root, shipped_block, skeleton_cap, table, instruction_files, shi
     try:
         with open(os.path.join(root, where, "adopt.json"), encoding="utf-8") as fh:
             record_data = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return 0, "no foreign structure detected"
     date = where.rsplit("adopt-", 1)[-1]
     regenerated = []
@@ -1306,7 +1312,7 @@ def read_record(root, where):
     try:
         with open(os.path.join(root, where, "adopt.json"), encoding="utf-8") as fh:
             return json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return None
 
 
@@ -1331,7 +1337,7 @@ def task_in_flight(root):
     try:
         with open(path, encoding="utf-8") as fh:
             state = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return None
     stage = state.get("current_stage")
     return None if stage in (None, "done") else "%s at stage %s" % (state.get("task_id", "a task"), stage)
@@ -1908,7 +1914,7 @@ def find_proposal(root, cand, stale=False):
             try:
                 with open(os.path.join(base, d, name), encoding="utf-8") as fh:
                     data = json.load(fh)
-            except (OSError, ValueError):
+            except (OSError, ValueError, RecursionError):
                 continue
             if isinstance(data, dict) and data.get("source") == cand.path and (stale or data.get("source_sha") == cand.sha):
                 return ".ai/reports/%s/%s" % (d, name), data

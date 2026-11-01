@@ -123,7 +123,7 @@ def cmd_ask(args, root, rt=rr_runtime.Runtime()):
                              "description": "%s%s" % (fs.one_line(text, 300),
                                                       " (recommended)" if key == item.get("recommend") else "")}
                             for key, text in item["options"]], "ask", rt=rt, question_id=item["id"])
-    if os.environ.get("AI_UNATTENDED"):
+    if fs.ai_unattended():
         # The literal line an unattended launcher greps for (R5).
         print("WAITING_FOR_ANSWERS %s %s" % (relative, " ".join(new_ids)))
 
@@ -270,7 +270,7 @@ def close_gate_from_file(root, state, question, by, rt=rr_runtime.Runtime()):
     seconds: deciding before the lock and applying after it would overwrite them.
     """
     gate_id = question["id"]
-    unattended = bool(os.environ.get("AI_UNATTENDED"))
+    unattended = fs.ai_unattended()
     with locks.question_lock(fs.questions_path(root, state, None)):
         fresh = task.load(root, claim=False, rt=rt)
         if task.open_gate(fresh) != gate_id:

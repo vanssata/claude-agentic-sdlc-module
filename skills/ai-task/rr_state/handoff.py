@@ -91,7 +91,7 @@ def handoff_lines(root, state, reason, rt=rr_runtime.Runtime()):
     if rr_policy.batch_on(state):
         try:
             policy = weight.load_policy(root)[0] if weight else {}
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
             policy = {}                       # best effort: the handoff never fails a command
         out.append("Batch: on · ready %s · review %d/%d · suite %d/%d" % (
             ", ".join(fs.one_line(s["id"], 40) for s in task.ready_steps(state)) or "none",

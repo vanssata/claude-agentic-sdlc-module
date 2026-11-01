@@ -350,6 +350,9 @@ class TestModes(Base):
         self.assertEqual(self.p.state()["stage"], "ship")
         self.assertEqual(self.p.run("close").returncode, 4)                 # the gate's question blocks
         self.assertEqual(self.p.run("approve", "--by", "ivan").returncode, 5)    # no human here
+        for value in ("0", "false", " No "):                                # risk 0587: one rule
+            self.assertEqual(self.p.run("approve", "--by", "ivan", env={"AI_UNATTENDED": value}).returncode, 5,
+                             "AI_UNATTENDED=%r is not the unattended route" % value)
         self.p.ok("approve", "--by", "ivan", human=True)
         self.p.ok("close")
         self.assertFalse(self.p.in_flight())
@@ -2212,6 +2215,43 @@ class TestDialogDecisions(DialogBase):
         only = json.loads(self.p.ok("decision", "show", "--id", "D2", "--json").stdout)
         self.assertEqual(len(only["questions"]), 1)
 
+    def test_a_second_open_with_the_same_question_is_refused(self):
+        """Risk afd2: two open decisions whose question text is one string can
+        never be answered in the dialog, so the second open is refused."""
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m one")
+        done = self.commit("git commit -m one")
+        self.assertEqual(done.returncode, 6, done.stdout + done.stderr)
+        self.assertIn("DECISION_DUPLICATE", done.stderr)
+        self.assertIn("D1", done.stderr)
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+
+    def test_a_twin_ask_takes_the_file_route(self):
+        """Risk 712d: a second ask with the same text opened a second decision
+        the dialog could never answer; it now stays on the [Answer]: file route."""
+        self.p.start()
+        self.p.ok("ask", "Which cache?", "--option", "A: per locale", "--option", "B: global")
+        done = self.p.run("ask", "Which cache?", "--option", "A: per locale", "--option", "B: global")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("Q2 asked", done.stdout)
+        self.assertNotIn("DIALOG_PENDING", done.stdout)
+        self.assertIn("no dialog — DECISION_DUPLICATE", done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+
+    def test_a_twin_from_another_session_names_the_fallback(self):
+        """Risk e3ae: decision show lists only this session's decisions, so a
+        twin another session opened cannot be sent from here: the refusal names
+        decision fallback --id and does not say to send it."""
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m one")
+        done = self.commit("git commit -m one", env={"CLAUDE_CODE_SESSION_ID": "another"})
+        self.assertEqual(done.returncode, 6, done.stdout + done.stderr)
+        self.assertIn("DECISION_DUPLICATE", done.stderr)
+        self.assertIn("decision fallback --id D1", done.stderr)
+        self.assertNotIn("send it", done.stderr)
+        same = self.commit("git commit -m one")
+        self.assertIn("send it", same.stderr, "the own session's twin can still be sent")
+        self.assertEqual([d["id"] for d in self.p.decisions()], ["D1"])
+
     def test_four_open_max(self):
         self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m a",
                   "--command", "git push origin main")
@@ -2477,7 +2517,7 @@ class TestDialogRoute(DialogBase):
         path of a malformed one: no traceback."""
         self.full_gate()
         state_dir = os.path.join(self.p.root, ".ai", "state")
-        for name, command in (("state.json", ("status",)), ("session.json", ("decision", "show"))):
+        for name, command in (("state.json", ("status",)),):
             path = os.path.join(state_dir, name)
             original = None
             if os.path.exists(path):
@@ -2502,12 +2542,71 @@ class TestDialogRoute(DialogBase):
                 self.assertNotIn("Traceback", deep.stderr)
                 self.assertEqual(deep.returncode, malformed.returncode)
                 self.assertEqual(left, [True, True], "a corrupt %s is never replaced, deep or not" % name)
-        with open(os.path.join(state_dir, "consent.jsonl"), "a", encoding="utf-8") as fh:
-            fh.write("[" * 200000 + "\n")
-        self.p.pick("D1", 2)
-        for command in (("decision", "show"), ("decision", "settle", "--id", "D1")):
-            with self.subTest(command=command):
-                self.assertNotIn("Traceback", self.p.run(*command).stderr)
+
+    def test_deep_session_json_reads_as_a_malformed_one(self):
+        """Review M2 of T-2026-10-31-1529: read_session itself, not a command
+        whose runtime marker skips it."""
+        os.makedirs(os.path.join(self.p.root, ".ai", "state"), exist_ok=True)
+        path = state_mod.session_path(self.p.root)
+        seen = []
+        for text in ("{not json", "[" * 200000):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            seen.append(state_mod.read_session(self.p.root))
+        self.assertEqual(seen, [{}, {}])
+
+    def test_deep_consent_line_reads_as_a_malformed_one(self):
+        """Review L2 of T-2026-10-31-1529: a too-deep ledger line is skipped
+        exactly as a torn one, between two good lines."""
+        good = [json.dumps({"v": 1, "type": "use", "id": "C%d" % n, "by": "git", "at": stamp()}) for n in (1, 2)]
+        path = os.path.join(self.p.tmp.name, "consent.jsonl")
+        seen = []
+        for bad in ("{not json", "[" * 200000):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("\n".join([good[0], bad, good[1]]) + "\n")
+            seen.append(state_mod.read_ledger(self.p.root, path))
+        self.assertEqual(seen[1], seen[0])
+        self.assertEqual([e["id"] for e in seen[1]], ["C1", "C2"])
+
+    def test_deep_weight_table_reads_as_a_malformed_one(self):
+        """Review M3 of T-2026-10-31-1529: weight, start and the handoff read
+        .ai/policies/weight.json; deep takes the malformed path, no traceback."""
+        commands = (("weight", "--files", "src/widget.py", "--goal", "g"),
+                    ("start", "--goal", "g", "--workflow", "feature", "--files", "src/widget.py",
+                     "--tests", "tests/test_widget.py") + tuple(ZERO))
+        results = {}
+        for text in ("{not json", "[" * 200000):
+            self.p.write(".ai/policies/weight.json", text)
+            results[text[:1]] = [self.p.run(*command) for command in commands]
+        for n, command in enumerate(commands):
+            with self.subTest(command=command[0]):
+                malformed, deep = results["{"][n], results["["][n]
+                self.assertNotIn("Traceback", deep.stderr)
+                self.assertEqual(deep.returncode, malformed.returncode)
+                self.assertIn("cannot read the weight table", malformed.stderr)
+                self.assertIn("cannot read the weight table", deep.stderr)
+
+    def test_reject_with_an_unreadable_decision_file_writes_nothing(self):
+        """Risk 5580: reject reads decision.json before it records anything, so
+        a malformed or too-deep file refuses the rejection whole."""
+        self.full_gate()
+        path = os.path.join(self.p.root, ".ai", "state", "decision.json")
+        task_md = os.path.join(self.p.root, ".ai", "reports", self.p.state()["task_id"], "task.md")
+
+        def recorded():
+            with open(task_md, encoding="utf-8") as fh:
+                return self.p.state()["human_approval"], fh.read()
+
+        for text in ("{not json", "[" * 200000):
+            with self.subTest(text=text[:2]):
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write(text)
+                before = recorded()
+                done = self.p.run("reject", "--by", "agent", "--why", "redo")
+                self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+                self.assertIn("decision.json is unreadable", done.stderr)
+                self.assertNotIn("Traceback", done.stderr)
+                self.assertEqual(recorded(), before, "nothing is recorded before the refusal")
 
     def test_an_expired_pick_is_no_pick(self):
         self.full_gate()

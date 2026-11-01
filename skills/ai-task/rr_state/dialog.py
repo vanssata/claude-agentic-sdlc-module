@@ -30,7 +30,7 @@ def human_route(root=None, allow_dialog=False, rt=rr_runtime.Runtime()):
     markers = rr_runtime.agent_markers()
     if os.isatty(0) and not markers:
         return "terminal", ""
-    if os.environ.get("AI_UNATTENDED"):
+    if fs.ai_unattended():
         return "unattended", ""
     if allow_dialog and root and dialog_pick(root, rt=rt):
         return "dialog", ""
@@ -193,11 +193,14 @@ def dialog_on(root, runtime="unknown"):
     if not root:
         return None
     policy = dialog_policy(root)
-    if not policy or os.environ.get("AI_UNATTENDED"):
+    if not policy or fs.ai_unattended():
         return None
     # the runtime's unattended marker (a background job, `claude -p`, the SDK)
-    # turns the dialog off unless the project opts in, as the hooks' unattended()
-    if os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0" and not policy["background_sessions"]:
+    # turns the dialog off unless the project opts in, as the hooks' unattended();
+    # the opt-in never covers an SDK entrypoint (sdk-*: `claude -p`, an SDK host — risk ffae)
+    background = policy["background_sessions"] and \
+        not os.environ.get("CLAUDE_CODE_ENTRYPOINT", "").startswith("sdk-")
+    if os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0" and not background:
         return None
     runtime = rr_runtime.own_runtime(runtime=runtime)
     tool = dialog_tool_verified(runtime)
@@ -317,9 +320,24 @@ def open_decision(root, state, kind, header, question, options, opened_by, multi
             return None, "CONSENT_LABEL_INVALID — %s: %s" % (why, option["label"][:120])
     if len({o["label"] for o in options}) != len(options):
         return None, "CONSENT_LABEL_INVALID — two options carry the same label"
+    # Two open decisions with one question text can never be answered in the
+    # dialog: the recorder reads both as ambiguous (risks afd2, 712d).
+    shown = (question or "").strip()[:QUESTION_MAX]
+    session = (dialog_on(root, runtime=rt.name) or {}).get("session")
+    twin = next((d for d in data["open"] if d.get("question") == shown), None)
+    if twin:
+        tid = twin.get("id")
+        if twin.get("session") != session:
+            # decision show lists only this session's decisions (risk e3ae).
+            return None, ("DECISION_DUPLICATE — %s is open with this very question from another session; "
+                          "it cannot be sent from here: 'state.py decision fallback --id %s --why …' "
+                          "before opening it again" % (tid, tid))
+        return None, ("DECISION_DUPLICATE — %s is open with this very question; send it ('state.py decision show') "
+                      "and run the pick, or 'state.py decision fallback --id %s --why …', before opening it again"
+                      % (tid, tid))
     decision = dict({
         "id": rr_ledger.next_decision_id(data, rr_ledger.read_ledger(root)), "kind": kind, "task": (state or {}).get("task_id"),
-        "runtime": rr_runtime.own_runtime(runtime=rt.name), "session": (dialog_on(root, runtime=rt.name) or {}).get("session"),
+        "runtime": rr_runtime.own_runtime(runtime=rt.name), "session": session,
         "tree": fs.current_tree(root), "opened_at": fs.now(), "opened_by": opened_by,
         "header": fs.one_line(header, HEADER_MAX), "multi_select": bool(multi),
         "question": (question or "").strip()[:QUESTION_MAX],

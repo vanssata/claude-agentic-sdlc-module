@@ -3,7 +3,7 @@
 //   npx riskrails [--target auto|claude|codex|both] [--plan pro|team-pro|team-max|max|max20|balanced-max]
 //                 [--fable auto|yes|no] [--codex-plan plus|pro|balanced-max] [--dry-run]
 //                 [--context default|economy] [--statusline-context yes|no]
-//                 [--home DIR] [--codex-home DIR] [--yes] [--version]
+//                 [--statusline riskrails|own] [--home DIR] [--codex-home DIR] [--yes] [--version]
 // --target defaults to auto: each runtime is installed only if its executable is on PATH.
 // --plan   Claude only: pro, team-pro (Team Standard seat), team-max (Team Premium seat), max
 //          or max20 (Max 20x: max's settings, larger budgets). Defaults to auto-detect from
@@ -22,9 +22,17 @@
 //          Max, 300 000 on Pro) and the guard also holds a prompt back past 120% of it.
 //          Without economy, an autoCompactWindow equal to the plan's is removed; any other
 //          value is the user's and stays. Recorded in riskrails/profile.json as `context`.
-// --statusline-context  yes (default) shows the model and the context use in the
-//          statusline: a line before the user's own in Claude Code, `model-with-reasoning`
-//          and `context-used` in Codex's [tui] status_line. no adds nothing and removes nothing.
+// --statusline-context  yes (default) shows the model, effort and context use in the
+//          statusline: the first line in Claude Code (`--context`), `model-with-reasoning`
+//          and `context-used` in Codex's [tui] status_line. no leaves that line out (Claude:
+//          removes `--context`; Codex: adds nothing and removes nothing); not recorded.
+// --statusline  Claude only. riskrails (default) writes the plugin's statusline on every
+//          install and update: the model, effort and context line and the prompt line
+//          (user@host:cwd | branch | 5h/7d limits | cost), over a statusline command of your
+//          own (the old command is printed and kept in riskrails/statusline.json). own keeps
+//          your command behind the quota check, as before 3.2, and brings a replaced one
+//          back. The choice is recorded in riskrails/statusline.json; a later install
+//          without --statusline keeps it.
 // --home / --codex-home  the runtime homes (default ~/.claude and ~/.codex; the environment
 //          variables CLAUDE_DIR and CODEX_DIR mean the same). Naming exactly one of them under
 //          --target auto installs that runtime alone.
@@ -56,7 +64,7 @@ let CODEX_DIR = env.CODEX_DIR || path.join(os.homedir(), '.codex');
 const HOME = env.HOME || os.homedir();
 let PLAN = '', FABLE = 'auto', DRY = false, TARGET = 'auto', PLAN_GIVEN = false;
 let CODEX_PLAN = '', CODEX_PLAN_GIVEN = false, YES = false;
-let CONTEXT = 'default', STATUSLINE_CONTEXT = 'yes';
+let CONTEXT = 'default', STATUSLINE_CONTEXT = 'yes', STATUSLINE = 'riskrails', STATUSLINE_GIVEN = false;
 
 function version() {
   try { return JSON.parse(fs.readFileSync(path.join(SRC, 'package.json'), 'utf8')).version || 'unknown'; }
@@ -88,6 +96,7 @@ function usage() {
       case '--codex-plan': CODEX_PLAN = take(); CODEX_PLAN_GIVEN = true; break;
       case '--context': CONTEXT = take(); break;
       case '--statusline-context': STATUSLINE_CONTEXT = take(); break;
+      case '--statusline': STATUSLINE = take(); STATUSLINE_GIVEN = true; break;
       case '--home': CLAUDE_DIR = path.resolve(take()); CLAUDE_DIR_GIVEN = true; break;
       case '--codex-home': CODEX_DIR = path.resolve(take()); CODEX_DIR_GIVEN = true; break;
       case '--dry-run': DRY = true; break;
@@ -105,6 +114,7 @@ if (!['default', 'economy'].includes(CONTEXT)) die(`--context must be default|ec
 if (!['yes', 'no'].includes(STATUSLINE_CONTEXT)) {
   die(`--statusline-context must be yes|no (got '${STATUSLINE_CONTEXT}')`, 2);
 }
+if (!['riskrails', 'own'].includes(STATUSLINE)) die(`--statusline must be riskrails|own (got '${STATUSLINE}')`, 2);
 const major = Number(process.versions.node.split('.')[0]);
 if (major < 18) die('riskrails needs Node 18 or newer (this is ' + process.versions.node + ')', 1);
 
@@ -572,11 +582,34 @@ function shSplit(s) {                                            // shlex.split,
   return words;
 }
 
-// The wrapper is `<PREFIX> [--context] [--then '<the user's command>']`; --context
-// (--statusline-context yes) adds a line with the model and the context use.
+// The wrapper is `<PREFIX> [--context] [--line] [--then '<the user's command>']`; --context
+// (--statusline-context yes) adds a line with the model, effort and context use, --line
+// (--statusline riskrails, the default) the plugin's prompt line. With riskrails the
+// command is exactly `<PREFIX> [--context] --line`: a command of the user's is replaced
+// (printed, and kept in <home>/riskrails/statusline.json: the dated settings.json backup is
+// replaced by a second run the same day); with own it stays behind --then, and own brings
+// a replaced command back. The mode is recorded there too: a run without --statusline
+// keeps the recorded one, so the update notice's `--yes` does not undo own.
 function statuslineGate(file, gate, mode) {
   const PREFIX = '"$HOME/.claude/hooks/runtime-gate.py" statusline';
-  const WANT = STATUSLINE_CONTEXT === 'yes' ? `${PREFIX} --context` : PREFIX;
+  const RECORD = path.join(path.dirname(file), 'riskrails', 'statusline.json');
+  let record = {};
+  try { const r = JSON.parse(read(RECORD)); if (isObj(r)) record = r; } catch (e) { /* none yet */ }
+  const MODE = STATUSLINE_GIVEN ? STATUSLINE : (['riskrails', 'own'].includes(record.mode) ? record.mode : 'riskrails');
+  const OWN = MODE === 'own';
+  const kept = typeof record.replaced === 'string' && record.replaced.trim() ? record.replaced : '';
+  let saved = '';                                    // a command of the user's this run replaces
+  const persist = () => {
+    if (mode === 'dry') return;
+    const next = Object.assign({}, record, { mode: MODE },
+      saved ? { replaced: saved, replaced_at: BACKUP_DATE } : {});
+    if (JSON.stringify(next) === JSON.stringify(record)) return;
+    mkdirp(path.dirname(RECORD));
+    fs.writeFileSync(RECORD + '.tmp', asciiJSON(next) + '\n');
+    fs.renameSync(RECORD + '.tmp', RECORD);
+  };
+  const CTX = STATUSLINE_CONTEXT === 'yes' ? `${PREFIX} --context` : PREFIX;
+  const WANT = OWN ? CTX : `${CTX} --line`;
   const OLD_PREFIX = '"$HOME/.claude/hooks/fable-gate.py" statusline';
   let settings = {};
   if (exists(file)) {
@@ -589,26 +622,64 @@ function statuslineGate(file, gate, mode) {
     line.command = PREFIX + cmd.slice(OLD_PREFIX.length);
     ours = true; gate = 'moved';
   }
-  // What follows the prefix and an optional --context: the user's --then, byte for byte.
-  const tail = () => line.command.slice(PREFIX.length).trim().replace(/^--context(\s+|$)/, '');
+  // What follows the prefix and its --context/--line flags: the user's --then, byte for byte.
+  const tail = () => line.command.slice(PREFIX.length).trim().replace(/^((--context|--line)(\s+|$))+/, '');
+  // The user's own command inside a `--then '<command>'` tail, for the replaced message.
+  const wrapped = (rest) => {
+    // an unparsable tail is not recorded: an earlier good `replaced` stays, the dated backup holds the line
+    try { const parts = shSplit(rest); return parts.length > 1 ? parts[1] : ''; } catch (e) { return ''; }
+  };
   const shown = STATUSLINE_CONTEXT === 'yes' ? ' with the model and the context use' : '';
+  const plugin = STATUSLINE_CONTEXT === 'yes'
+    ? 'the model, effort and context line and the prompt line' : 'the prompt line';
+  const backup = '--statusline own brings it back';
   let action = null;
   if (gate === 'moved') {
     const rest = tail();
-    line.command = rest ? `${WANT} ${rest}` : WANT;
-    action = 'moved the fable-gate statusline wrapper to runtime-gate (your command is unchanged)';
+    if (OWN) {
+      line.command = rest ? `${WANT} ${rest}` : WANT;
+      action = 'moved the fable-gate statusline wrapper to runtime-gate (your command is unchanged)';
+    } else {
+      line.command = WANT;
+      saved = rest.startsWith('--then') ? wrapped(rest) : '';
+      action = `moved the fable-gate statusline wrapper to runtime-gate, with the plugin's statusline (${plugin})` +
+        (saved ? `; replaced your statusline command: ${saved} (${backup})` : '');
+    }
   } else if (gate === 'on') {
     if (ours) {
       const rest = tail();
-      const want = rest ? `${WANT} ${rest}` : WANT;
-      if (want === cmd) return ['statusline: already records the quota'];
+      const hadLine = /(^|\s)--line(\s|$)/.test(cmd.slice(PREFIX.length));
+      // one-shot: only the run that switches to own restores; once own is recorded, a bare line stays bare
+      const restore = OWN && !rest && kept && record.mode !== 'own';
+      saved = !OWN && rest.startsWith('--then') ? wrapped(rest) : '';
+      const want = restore ? `${WANT} --then ${shQuote(kept)}` : OWN && rest ? `${WANT} ${rest}` : WANT;
+      if (want === cmd) {
+        persist();
+        return [OWN ? 'statusline: already records the quota' : "statusline: already the plugin's statusline"];
+      }
       line.command = want;
-      action = STATUSLINE_CONTEXT === 'yes'
-        ? 'added the model and the context use to the statusline wrapper (your command is unchanged)'
-        : 'removed the model and context line from the statusline wrapper (your command is unchanged)';
+      if (saved) {
+        action = `replaced your statusline command with the plugin's statusline (${plugin}): ${saved} (${backup})`;
+      } else if (restore) {
+        action = `restored your statusline command behind the quota check${shown}: ${kept}`;
+      } else if (!OWN) {
+        action = `set the plugin's statusline (${plugin})`;
+      } else if (hadLine) {
+        action = rest ? `removed the plugin's prompt line; your command runs behind the quota check${shown}`
+          : `removed the plugin's prompt line; no command of yours to restore, so the quota check runs${shown} alone`;
+      } else {
+        action = STATUSLINE_CONTEXT === 'yes'
+          ? 'added the model and the context use to the statusline wrapper (your command is unchanged)'
+          : 'removed the model and context line from the statusline wrapper (your command is unchanged)';
+      }
     } else if (line === undefined || line === null) {
       settings.statusLine = { type: 'command', command: WANT };
-      action = `added a statusline that records the quota (and the Fable weekly limit)${shown}`;
+      action = OWN ? `added a statusline that records the quota (and the Fable weekly limit)${shown}`
+        : `added the plugin's statusline (${plugin}), which also records the quota`;
+    } else if (!OWN && isObj(line) && line.type === 'command' && typeof cmd === 'string' && cmd.trim()) {
+      line.command = WANT;
+      saved = cmd;
+      action = `replaced your statusline command with the plugin's statusline (${plugin}): ${cmd} (${backup})`;
     } else if (isObj(line) && line.type === 'command' && typeof cmd === 'string' && cmd.trim()) {
       line.command = `${WANT} --then ${shQuote(cmd)}`;
       action = `wrapped your statusline command with the quota check${shown} (its output is unchanged)`;
@@ -628,6 +699,7 @@ function statuslineGate(file, gate, mode) {
     }
   }
   if (mode === 'dry') return ['statusline: would have ' + action];
+  persist();                                         // the replaced command first: never lost
   fs.writeFileSync(file + '.tmp', asciiJSON(settings) + '\n');
   fs.renameSync(file + '.tmp', file);
   return ['statusline: ' + action];

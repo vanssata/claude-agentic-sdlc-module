@@ -36,7 +36,7 @@ def cmd_weight(args, root, rt=rr_runtime.Runtime()):
         fs.die("weight.py is missing beside state.py: reinstall the plugin")
     try:
         policy, path = weight.load_policy(root)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         fs.die("cannot read the weight table: %s" % exc)
     if args.mirror:
         own = os.path.join(root, ".ai", "policies", "weight.json")

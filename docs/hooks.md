@@ -187,11 +187,19 @@ clamped to 30–600, `stop_blocks_max`), written on by `/rr-setup --update`
 (migration 0010) and off by setting `"enabled": false`. The gate is inert under
 `AI_UNATTENDED=1`, when `CLAUDE_CODE_SESSION_ATTENDED=0` (a background job,
 `claude -p`, the SDK) unless `dialog.json` says `"background_sessions": true`
-— the project's opt-in for background jobs a human is still chatting in; with
+— the project's opt-in for background jobs of the CLI a human is still
+chatting in; it never covers an SDK entrypoint (`CLAUDE_CODE_ENTRYPOINT`
+`sdk-*`: `claude -p`, an SDK host), where nobody answers the dialog; with
 nobody there the Stop hook ends the turn on the terminal route after
 `stop_blocks_max` — inside a subagent,
 without a session id, or when the installed profile's `dialog.tool` is not the
-runtime's question tool. Option labels are at most 400 characters and may not
+runtime's question tool. The opt-in is the dialog's only: the runtime gate
+still treats `CLAUDE_CODE_SESSION_ATTENDED=0` as unattended. `AI_UNATTENDED`
+counts as set when it is non-empty and not `0`, `false` or `no` (case and
+blanks ignored) — one rule in every hook and in `state.py` and `adopt.py`;
+`AI_UNATTENDED=0` is attended. `decision open` refuses a second commit
+decision whose question text equals an open one (`DECISION_DUPLICATE`, exit 6):
+the dialog cannot tell two equal questions apart. Option labels are at most 400 characters and may not
 contain `; & | $( < >`, a backtick or a newline, so a pick can be run verbatim.
 
 ## cap-large-read — Claude only
@@ -236,7 +244,11 @@ Before a compaction it runs `git branch --show-current` and `git status
 ## runtime-gate — the model ladder, enforced
 
 One hook for both runtimes, registered on the agent-launch events and wrapped
-around the statusline (`runtime-gate.py statusline --then '<your command>'`).
+around the statusline: `runtime-gate.py statusline --context --line` by default
+(`--context` the model, effort and context line; `--line` the prompt line
+`user@host:cwd | branch | 5h/7d limits | cost`), or
+`runtime-gate.py statusline --context --then '<your command>'` after
+`npx riskrails --statusline own`.
 
 - **Reroute.** While the top model is rate-limited or unreachable, a launch
   that asks for it goes one tier down: Fable → Opus on Claude; on Codex an

@@ -51,8 +51,11 @@ Outcome tags: O1 dialog shown · O2 nothing typed, agent runs/records the pick �
 O4 plan drift first consumer · O5 Codex parity or off. Steps 7.0–7f are the delivery order in §Design.
 
 - **R36.1 Project switch** (developer, 2026-10-28). `.ai/policies/dialog.json`. The dialog is on only when
-  `enabled` is true, the runtime's dialog tool is available (R36.19), `AI_UNATTENDED` is unset and this is the main
-  session (not a subagent). Missing or unreadable file = off. The agent cannot flip it: the file is already under
+  `enabled` is true, the runtime's dialog tool is available (R36.19), `AI_UNATTENDED` is unset (empty, `0`, `false`
+  or `no`, case and blanks ignored — one rule in every reader, 2026-10-31), the runtime does not mark the session
+  unattended (`CLAUDE_CODE_SESSION_ATTENDED=0`) unless the project opts in with `"background_sessions": true` —
+  background jobs of the CLI only, never an SDK entrypoint (`CLAUDE_CODE_ENTRYPOINT` `sdk-*`; T-2026-10-31-1650,
+  amended 2026-10-31) — and this is the main session (not a subagent). Missing or unreadable file = off. The agent cannot flip it: the file is already under
   `(^|/)\.ai/policies/[^/]*\.json$` (`hooks/ai-path-guard-defaults.json:31`). New projects are scaffolded with
   `true`, and existing projects get `true` from the migration (next free number after 0008 and 3.4c), which
   prints one line saying the dialog is now on and how to turn it off (Q9, developer, 2026-10-28; C6 makes this
@@ -288,6 +291,8 @@ fires hooks outside plan mode) · **7a** detection refactor (C3) · **7b** `prof
 ```json
 { "version": 1, "enabled": true, "window_seconds": 120, "stop_blocks_max": 2 }
 ```
+Optional: `"background_sessions": true` (only the boolean counts; default off) keeps the dialog on in a CLI
+background job (`CLAUDE_CODE_SESSION_ATTENDED=0`, entrypoint not `sdk-*`), R36.1.
 **`.ai/state/decision.json`** (only `state.py` writes it; deleted when no decision is open):
 ```json
 { "version": 1, "open": [ { "id": "D7", "kind": "approval|commit|question|human_set|plan_drift",

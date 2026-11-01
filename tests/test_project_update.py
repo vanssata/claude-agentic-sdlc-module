@@ -2726,5 +2726,68 @@ class TestMemoryPolicy(unittest.TestCase):
             p.close()
 
 
+DEEP_READERS = r"""
+import datetime, json, os, sys, traceback
+sys.path.insert(0, sys.argv[1])
+import migrations, update
+root, deep = sys.argv[2], "[" * 100000
+
+
+def put(rel, text):
+    path = os.path.join(root, rel)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+
+
+def probe(name, fn):
+    try:
+        out[name] = repr(fn())
+    except migrations.SchemaError as exc:
+        out[name] = "SchemaError: %s" % exc
+    except Exception:  # pylint: disable=broad-except
+        out[name] = "Traceback: " + traceback.format_exc().splitlines()[-1]
+
+
+out = {}
+hist = os.path.join(root, "history")
+put("history/index.json", deep)
+probe("History index.json", lambda: update.History(hist).index)
+put(".ai/state/state.json", deep)
+probe("run_migrations state.json", lambda: update.run_migrations(update.Plan(root), migrations.CURRENT,
+                                                                 update.History(hist)))
+probe("cleanup_update state.json", lambda: (update.cleanup_update(
+    update.Plan(root), now=datetime.datetime(2026, 1, 2, tzinfo=datetime.timezone.utc)), "ran"))
+put(".ai/reports/T-1/events.jsonl", deep + "\n" + json.dumps({"ts": "2026-01-01T00:00:00Z", "event": "x"}))
+put(".ai/state/logs/T-1/state.json", deep)
+probe("task_journal events.jsonl + logs state.json", lambda: update.task_journal(root, "T-1"))
+print(json.dumps(out))
+"""
+
+
+class TestDeepJsonReaders(unittest.TestCase):
+    """Risk d4d1: CPython raises RecursionError, not ValueError, on JSON nested
+    past its parser's limit (100000 levels, measured); every project-update
+    reader takes it the way it takes malformed JSON, with no Traceback.
+    Ctx.read_json and Ctx.edit_json already catch it and are pinned by the L2
+    and M1 tests above."""
+
+    def test_every_reader_takes_a_too_deep_file_as_malformed(self):
+        with tempfile.TemporaryDirectory() as root:
+            done = subprocess.run([sys.executable, "-I", "-c", DEEP_READERS, os.path.dirname(UPDATE), root],
+                                  capture_output=True, text=True, check=False)
+        self.assertNotIn("Traceback", done.stderr, done.stderr)
+        got = json.loads(done.stdout)
+        want = {"History index.json": "{}",
+                "cleanup_update state.json": "(None, 'ran')",
+                "task_journal events.jsonl + logs state.json":
+                    "(False, False, datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc))"}
+        for name, value in want.items():
+            with self.subTest(reader=name):
+                self.assertEqual(got[name], value)
+        with self.subTest(reader="run_migrations state.json"):
+            self.assertRegex(got["run_migrations state.json"], r"^SchemaError: .*state\.json.*inspect it by hand")
+
+
 if __name__ == "__main__":
     unittest.main()

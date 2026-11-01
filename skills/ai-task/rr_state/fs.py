@@ -81,6 +81,12 @@ def session_path(root):
     return os.path.join(root, ".ai", "state", "session.json")
 
 
+def ai_unattended():
+    """AI_UNATTENDED is set when it is non-empty and not 0, false or no (case
+    and blanks ignored): one rule in every reader (risk 0587)."""
+    return os.environ.get("AI_UNATTENDED", "").strip().lower() not in ("", "0", "false", "no")
+
+
 def read_session(root):
     """The hook's sidecar (I5). Absent, half-written or unreadable is normal."""
     try:

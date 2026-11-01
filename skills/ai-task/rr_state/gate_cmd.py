@@ -6,6 +6,7 @@ import os
 import sys
 
 from rr_state import dialog, fs, handoff, journal, report, task
+from rr_state import ledger as rr_ledger
 from rr_state import gate as rr_gate      # cmd_approve_v7 binds a local `gate`
 from rr_state import runtime as rr_runtime
 
@@ -70,6 +71,8 @@ def cmd_reject(args, root, rt=rr_runtime.Runtime()):
     # A rejection needs no route, but a picked reject spends its pick, so the
     # approval decision settles.
     pick = dialog.dialog_pick(root, rt=rt)
+    if os.path.exists(fs.decision_path(root)):
+        rr_ledger.read_decisions(root)    # an unreadable file refuses before anything is recorded (5580)
     task.claim_runtime(root, state, rt=rt)
     state["human_approval"].update({
         "required": True, "granted": False, "granted_by": None, "granted_at": None,

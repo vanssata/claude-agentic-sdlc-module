@@ -1267,7 +1267,8 @@ class PathGuard:                            # pylint: disable=too-many-instance-
         p = self.p
         if p.tool not in ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"):
             return
-        unattended = bool(env_b("AI_UNATTENDED"))
+        # AI_UNATTENDED is set when non-empty and not 0, false or no: one rule (risk 0587)
+        unattended = env_b("AI_UNATTENDED").strip().lower() not in ("", "0", "false", "no")
         if p.tool == "Bash" and not unattended:
             self.confirm_delete(p.bash_command())
         root = find_ai_root(p.cwd, self.ctx.pwd)

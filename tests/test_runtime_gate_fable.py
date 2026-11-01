@@ -14,6 +14,7 @@ suite's order: test_NN_ names keep it.
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -557,9 +558,11 @@ class TestRuntimeGateFable(unittest.TestCase):  # pylint: disable=too-many-publi
         self.assertIn("my-agent-logger.sh", commands(read_json(path), "PostToolUse"),
                       "the user's hook on the same event survives the upgrade")
         self.assertEqual(read_json(path)["statusLine"]["command"],
-                         "\"$HOME/.claude/hooks/runtime-gate.py\" statusline --context --then 'my-line.sh'",
-                         "the old statusline wrapper is re-pointed, the user's command kept")
+                         "\"$HOME/.claude/hooks/runtime-gate.py\" statusline --context --line",
+                         "the old statusline wrapper is re-pointed to the plugin's statusline")
         self.assertIn("statusline: moved the fable-gate statusline wrapper", out, "the move is reported")
+        self.assertEqual(read_json(d + "/riskrails/statusline.json")["replaced"], "my-line.sh",
+                         "the replaced command is recorded on the moved path too (review L4)")
 
     def test_16_installer_the_quota_check_runs_through_the_statusline_on_every_plan(self):
         h = self.tmp + "/h-wrap"
@@ -567,48 +570,126 @@ class TestRuntimeGateFable(unittest.TestCase):  # pylint: disable=too-many-publi
         os.makedirs(d)
         write_json(d + "/settings.json", {"statusLine": {"type": "command", "command": ORIG, "padding": 1}})
 
+        full = PREFIX + " --context --line"
+
         def command():
             return read_json(d + "/settings.json")["statusLine"]["command"]
         out = self.node(d, "--plan", "max", "--fable", "yes", "--dry-run")
-        self.assertIn("statusline: would have wrapped", out, "the dry run says it would wrap the statusline")
+        self.assertIn("statusline: would have replaced your statusline command", out,
+                      "the dry run says it would replace the user's statusline")
         self.assertEqual(command(), ORIG, "and the dry run leaves it alone")
         out = self.node(d, "--plan", "max", "--fable", "yes")
-        cmd = command()
-        self.assertTrue(cmd.startswith(PREFIX + " --context --then "),
-                        "an install wraps an existing statusline command, with the context line: %s" % cmd)
-        self.assertIn("statusline: wrapped", out, "the wrap is reported")
+        self.assertEqual(command(), full, "an install writes the plugin's statusline over the user's command")
+        self.assertIn("statusline: replaced your statusline command", out, "the replacement is reported")
+        self.assertIn(ORIG, out, "with the command it replaced")
+        self.assertEqual(read_json("%s/backups/%s/settings.json" % (d, time.strftime("%Y-%m-%d")))["statusLine"]["command"],
+                         ORIG, "which stays in the settings.json backup")
+        self.assertEqual(read_json(d + "/riskrails/statusline.json"),
+                         {"mode": "riskrails", "replaced": ORIG, "replaced_at": time.strftime("%Y-%m-%d")},
+                         "and in riskrails/statusline.json, which no later run overwrites with the plugin's line")
         self.assertEqual(read_json(d + "/settings.json")["statusLine"]["padding"], 1, "other statusLine fields are kept")
-        self.node(d, "--plan", "max", "--fable", "yes")
-        self.assertEqual(command(), cmd, "a re-install does not wrap twice")
+        out = self.node(d, "--plan", "max", "--fable", "yes")
+        self.assertEqual(command(), full, "a re-install changes nothing")
+        self.assertIn("statusline: already", out)
 
-        write(h + "/.claude/statusline-command.sh", '#!/usr/bin/env bash\ncat >/dev/null; printf "my-statusline %s" "$*"\n')
         self.reset_state()
-        out = self.bash_c(cmd, h, self.high())
-        self.assertEqual(sub(out), "Sonnet\nmy-statusline --flag two words single",
-                         "the installed wrapper prints the model, then runs the original statusline with its arguments intact")
+        lines = self.bash_c(full, h, self.high()).splitlines()
+        self.assertEqual(lines[0], "\033[36mSonnet\033[00m", "line 1: the model (no context_window in this payload)")
+        self.assertTrue(len(lines) == 2 and lines[1].startswith("\033[01;32m"), "line 2: user@host:cwd: %r" % lines)
         self.assertTrue(self.marker_active(), "and records the weekly limit through the installed hook")
 
         self.node(d, "--plan", "max", "--fable", "no")
-        self.assertEqual(command(), cmd, "--fable no keeps the wrapper: the quota is read on every plan")
-        out = self.node(d, "--plan", "max", "--fable", "no", "--statusline-context", "no")
+        self.assertEqual(command(), full, "--fable no keeps it: the quota is read on every plan")
+        self.node(d, "--plan", "max", "--fable", "no", "--statusline-context", "no")
+        self.assertEqual(command(), PREFIX + " --line", "--statusline-context no drops the context line only")
+        self.node(d, "--plan", "max", "--fable", "no")
+        self.assertEqual(command(), full, "and the default puts it back")
+
+        # review B1 of T-2026-10-31-1841: the same-day backup now holds the plugin's line,
+        # yet --statusline own brings the replaced command back, from riskrails/statusline.json
+        out = self.node(d, "--plan", "max", "--fable", "no", "--statusline", "own")
+        restored = command()
+        self.assertTrue(restored.startswith(PREFIX + " --context --then "), restored)
+        self.assertEqual(shlex.split(restored[len(PREFIX + " --context "):])[1:], [ORIG],
+                         "--statusline own restores the replaced command behind --then, byte for byte")
+        self.assertIn("statusline: restored your statusline command", out)
+        # review H1: the choice is remembered, so the update notice's `--yes` keeps it
+        out = self.node(d, "--plan", "max", "--fable", "no", "--yes")
+        self.assertEqual(command(), restored, "a later install without --statusline keeps own")
+        # review M1 of T-2026-10-31-1841 (a8d3): the restore is one-shot — once own is recorded,
+        # a command the user removed by hand does not come back on the next update
+        settings = read_json(d + "/settings.json")
+        settings["statusLine"]["command"] = PREFIX + " --context"
+        write_json(d + "/settings.json", settings)
+        self.node(d, "--plan", "max", "--fable", "no", "--yes")
+        self.assertEqual(command(), PREFIX + " --context",
+                         "a --then the user stripped by hand stays stripped: own restores only on the switch to own")
+        self.node(d, "--plan", "max", "--fable", "no", "--statusline", "riskrails")
+        self.assertEqual(command(), full, "--statusline riskrails, given again, replaces it")
+        self.node(d, "--plan", "max", "--fable", "no")
+        self.assertEqual(command(), full, "and is remembered in turn")
+
+        h = self.tmp + "/h-own"
+        d = h + "/.claude"
+        os.makedirs(d)
+        write_json(d + "/settings.json", {"statusLine": {"type": "command", "command": ORIG, "padding": 1}})
+        out = self.node(d, "--plan", "max", "--fable", "yes", "--statusline", "own")
+        cmd = command()
+        self.assertTrue(cmd.startswith(PREFIX + " --context --then "),
+                        "--statusline own wraps the user's command, with the context line: %s" % cmd)
+        self.assertIn("statusline: wrapped", out, "the wrap is reported")
+        self.node(d, "--plan", "max", "--fable", "yes", "--statusline", "own")
+        self.assertEqual(command(), cmd, "a re-install does not wrap twice")
+        write(h + "/.claude/statusline-command.sh", '#!/usr/bin/env bash\ncat >/dev/null; printf "my-statusline %s" "$*"\n')
+        self.reset_state()
+        out = self.bash_c(cmd, h, self.high())
+        self.assertEqual(sub(out), "\033[36mSonnet\033[00m\nmy-statusline --flag two words single",
+                         "the wrapper prints the model, then runs the original statusline with its arguments intact")
+        out = self.node(d, "--plan", "max", "--fable", "no", "--statusline", "own", "--statusline-context", "no")
         self.assertEqual(command(), PREFIX + " --then " + cmd[len(PREFIX + " --context --then "):],
                          "--statusline-context no rewrites the wrapper in place, the user's command byte for byte")
         self.assertIn("statusline: removed the model and context line", out, "the rewrite is reported")
         self.node(d, "--plan", "max", "--fable", "no")
-        self.assertEqual(command(), cmd, "and --statusline-context yes puts --context back")
+        self.assertEqual(command(), cmd, "own is remembered: an install without --statusline leaves the wrapped "
+                                         "command (and --statusline-context is back at its default, yes)")
+        out = self.node(d, "--plan", "max", "--fable", "no", "--statusline", "riskrails")
+        self.assertEqual(command(), full, "--statusline riskrails replaces the wrapped command")
+        self.assertIn("statusline: replaced your statusline command", out)
 
         h = self.tmp + "/h-none"
         d = h + "/.claude"
         os.makedirs(d)
         self.node(d, "--plan", "max", "--fable", "yes", "--statusline-context", "no")
-        self.assertEqual(command(), PREFIX,
-                         "with no statusline and --statusline-context no, an install adds the bare check")
+        self.assertEqual(command(), PREFIX + " --line",
+                         "with no statusline and --statusline-context no, an install adds the prompt line alone")
         out = self.bash_c(command(), h, self.high())
-        self.assertEqual(out, "", "which prints nothing")
+        self.assertTrue(len(out.splitlines()) == 1 and out.startswith("\033[01;32m"), "which prints one line: %r" % out)
         self.node(d, "--plan", "max", "--fable", "yes")
-        self.assertEqual(command(), PREFIX + " --context", "by default the added statusline shows the model and the context")
-        out = self.bash_c(command(), h, self.high())
-        self.assertEqual(sub(out), "Sonnet", "which prints the model alone when the payload has no context_window")
+        self.assertEqual(command(), full, "by default the added statusline shows both lines")
+        self.node(d, "--plan", "max", "--fable", "yes", "--statusline", "own")
+        self.assertEqual(command(), PREFIX + " --context", "--statusline own with no own command: the context line alone")
+
+        # review M1 (a8d3), second home: a record with no statusline; own twice writes the same line
+        h = self.tmp + "/h-own-twice"
+        d = h + "/.claude"
+        os.makedirs(d + "/riskrails")
+        write_json(d + "/riskrails/statusline.json", {"mode": "riskrails", "replaced": ORIG})
+        self.node(d, "--plan", "max", "--fable", "no", "--statusline", "own")
+        first = command()
+        self.node(d, "--plan", "max", "--fable", "no", "--statusline", "own")
+        self.assertEqual(command(), first, "--statusline own is idempotent: a second run changes nothing")
+
+        # review I5 of T-2026-10-31-1841 (d7ec): a malformed --then tail is not recorded over a good one
+        h = self.tmp + "/h-bad-then"
+        d = h + "/.claude"
+        os.makedirs(d + "/riskrails")
+        write_json(d + "/riskrails/statusline.json", {"mode": "riskrails", "replaced": ORIG})
+        write_json(d + "/settings.json", {"statusLine": {"type": "command",
+                                                         "command": PREFIX + " --context --then 'unterminated"}})
+        self.node(d, "--plan", "max", "--fable", "no")
+        self.assertEqual(command(), full, "the plugin's statusline is written")
+        self.assertEqual(read_json(d + "/riskrails/statusline.json")["replaced"], ORIG,
+                         "an unparsable --then tail does not overwrite the recorded command")
 
         for plan, fable in (("max", "no"), ("pro", "no")):
             h = "%s/h-%s-%s" % (self.tmp, plan, fable)
@@ -616,8 +697,8 @@ class TestRuntimeGateFable(unittest.TestCase):  # pylint: disable=too-many-publi
             os.makedirs(d)
             write_json(d + "/settings.json", {"statusLine": {"type": "command", "command": ORIG}})
             self.node(d, "--plan", plan, "--fable", fable)
-            self.assertTrue(command().startswith(PREFIX + " --context --then "),
-                            "--plan $1 --fable $2 wraps the statusline too (OQ4)".replace("$1", plan).replace("$2", fable))
+            self.assertEqual(command(), full,
+                             "--plan $1 --fable $2 writes the statusline too (OQ4)".replace("$1", plan).replace("$2", fable))
 
 
 if __name__ == "__main__":

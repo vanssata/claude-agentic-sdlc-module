@@ -2,6 +2,20 @@
 
 Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- The plugin's two-line statusline replaces your statusline command by default. The replaced command is printed, kept in `~/.claude/riskrails/statusline.json` and in the dated settings.json backup; `--statusline own` restores it once, on the run that switches to own.
+
+### Fixed
+- Installer: `--statusline own` restores the replaced command only on the switch to own; a `--then` you removed by hand no longer comes back on the next update.
+- Installer: a malformed `--then` tail is no longer recorded over the command already kept in `riskrails/statusline.json`.
+- Path guard: `.claude/riskrails/statusline.json` is protected config — an agent's Write or Edit is denied, in a task or not.
+- Statusline: a NaN or infinite percentage, cost or context size skips that part only; the rest of both lines is still printed.
+- Quota record: a NaN or infinite weekly or 5-hour percentage is no reading; it is no longer stored in `runtime-gate.json`.
+- Dialog: a second open decision with the same question text is refused in every opener, not only `decision open` — a repeated `state.py ask` stays on the `[Answer]:` file route instead of opening a twin the dialog cannot answer. A twin another session opened names `decision fallback --id` instead of saying to send it.
+- `/rr-setup --update` and `--adopt`: a JSON file nested too deeply to parse takes the same path as malformed JSON (skipped, a conflict, or a refusal that names the file) instead of a traceback.
+
 ## [3.1.0] — 2026-10-30
 
 Project schema 10 → 11: run `/rr-setup --update` after upgrading.

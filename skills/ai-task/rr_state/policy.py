@@ -34,7 +34,7 @@ def weight_policy(root):
         fs.die("weight.py is missing beside state.py: reinstall the plugin")
     try:
         return weight.load_policy(root)[0]
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         fs.die("cannot read the weight table: %s" % exc)
     return None                           # unreachable: die() exits
 

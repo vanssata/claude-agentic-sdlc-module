@@ -73,7 +73,7 @@ fs.ENTRY = os.path.abspath(__file__)    # R6a: the one path the package prints a
 # tests/test_dialog_contract.py:176,189 reach as module.json_loads_capped over (dialog, state_mod);
 # json and os are imported above for the same reason: the suites patch state_mod.json.dump and state_mod.os.
 from rr_state.cli import main
-from rr_state.fs import current_tree, state_path
+from rr_state.fs import current_tree, read_session, session_path, state_path
 from rr_state.runtime import AGENT_MARKERS
 from rr_state.journal import append_journal, journal_line, read_journal
 from rr_state.task import TASK_ID_RE, abandon_old, load, next_task_id, sealed_task_ids, valid_task_id
