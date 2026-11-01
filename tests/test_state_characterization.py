@@ -55,6 +55,10 @@ NORMALISE is exactly what is erased before the compare, in this order, and nothi
   TREE9       a 9-character hex word with at least one digit: the same tree, abbreviated in
               prose and tables (`suite green on 3d57d9554`) -> <TREE9>
   DURATION    the duration after a verify run's exit code, `exit 0 in 3s` -> `exit 0 <DURATION>`
+  RUN_DATE    the UTC date the run started on, and the date it ended on when the run crossed
+              midnight, exact (YYYY-MM-DD), -> <DATE>; applied last, after the regular
+              expressions, so ISO_TS sees whole timestamps first. A date that is not one of
+              these (COMMIT_DATE's 2026-01-02) stays visible
 
 Nothing else is erased: not the exit codes, not the order of lines, not a path outside the
 exact ones above, not a number that is not one of these. Add a rule to NORMALISE and to this list
@@ -99,13 +103,13 @@ NORMALISE = (
     ("TREE9", re.compile(r"\b(?=[0-9a-f]*\d)[0-9a-f]{9}\b"), "<TREE9>"),
     ("DURATION", re.compile(r"(?<=\bexit \d )in \d+(?:\.\d+)?s\b"), "<DURATION>"),
 )
-EXACT_RULES = ("STATE_PY", "ROOT", "TMP", "PLUGIN_ROOT", "TASK_IDS")
+EXACT_RULES = ("STATE_PY", "ROOT", "TMP", "PLUGIN_ROOT", "TASK_IDS", "RUN_DATE")
 
 
 class Normaliser:
     """Applies NORMALISE to the text of one run: the exact strings first, longest first."""
 
-    def __init__(self, root, tmp, ids=()):
+    def __init__(self, root, tmp, ids=(), dates=()):
         self.exact = []
         for token, paths in (("<STATE_PY>", {STATE, os.path.realpath(STATE)}),
                              ("<ROOT>", {root, os.path.realpath(root)}),
@@ -114,6 +118,7 @@ class Normaliser:
             self.exact += [(path, token) for path in paths]
         self.exact.sort(key=lambda pair: -len(pair[0]))
         self.ids = list(ids)
+        self.dates = list(dates)
 
     def apply(self, text):
         # An exact replace of the project and of the temporary directory would also rewrite
@@ -124,6 +129,8 @@ class Normaliser:
             text = text.replace(task_id, "<ID%d>" % n)
         for _name, pattern, replacement in NORMALISE:
             text = pattern.sub(replacement, text)
+        for date in self.dates:
+            text = text.replace(date, "<DATE>")
         return text
 
 
@@ -144,12 +151,17 @@ def stamp(at):
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(at))
 
 
+def utc_date():
+    return time.strftime("%Y-%m-%d", time.gmtime())
+
+
 class Scratch:
     """A scratch project: .ai/ with a testing.md whose commands read flag files, one code
     file and its test, committed in a git repository of its own (the approach of
     tests/test_ai_task_state.py's Project, kept here so this file stands alone)."""
 
     def __init__(self, files=None, extra_env=None):
+        self.started_on = utc_date()  # state.py records today's UTC date (RUN_DATE)
         self.tmp = tempfile.mkdtemp(prefix="state-golden-")
         self.root = os.path.join(self.tmp, "p")
         self.flags = os.path.join(self.tmp, "flags")
@@ -245,7 +257,8 @@ class Scratch:
         text = "".join(self.log)
         if files:
             text += "\n##### files under .ai/ at the end\n" + self.files_dump()
-        return Normaliser(self.root, self.tmp, self.task_ids()).apply(text)
+        dates = sorted({self.started_on, utc_date()})  # two when the run crossed midnight
+        return Normaliser(self.root, self.tmp, self.task_ids(), dates).apply(text)
 
     def close(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -533,6 +546,11 @@ class TestNormalise(unittest.TestCase):
         norm = Normaliser("/tmp/x/p", "/tmp/x", ["T-2026-01-02-0304-aa", "T-2026-01-02-0305-bb"])
         self.assertEqual(norm.apply("T-2026-01-02-0305-bb after T-2026-01-02-0304-aa and T-2026-01-02-0306-cc"),
                          "<ID2> after <ID1> and T-2026-01-02-0306-cc")
+
+    def test_run_dates_are_exact(self):
+        norm = Normaliser("/tmp/x/p", "/tmp/x", dates=["2026-10-31", "2026-11-01"])
+        self.assertEqual(norm.apply("(BALANCED, 2026-10-31) · 2026-11-01 · 2026-01-02 · 2026-10-31T12:00:00Z"),
+                         "(BALANCED, <DATE>) · <DATE> · 2026-01-02 · <TS>")
 
 
 if __name__ == "__main__":

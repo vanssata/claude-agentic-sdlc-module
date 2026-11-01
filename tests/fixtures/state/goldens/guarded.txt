@@ -121,10 +121,10 @@ $ state.py --root <ROOT> recall --files src/widget.py
 exit 0
 --- stdout
 # Recall — 1 files · 4 of 4 items · ~122/1 500 tokens · packages 0 + legacy 1 · index none
-- [finding HIGH residual] - — the cache key ignores the locale (<ID1> H1, BALANCED, 2026-10-31)
-- [finding LOW residual] - — naming (<ID1> L1, BALANCED, 2026-10-31)
+- [finding HIGH residual] - — the cache key ignores the locale (<ID1> H1, BALANCED, <DATE>)
+- [finding LOW residual] - — naming (<ID1> L1, BALANCED, <DATE>)
 - [override agent] <ID1> — mode light → guarded by test
-- [task] <ID1> · 2026-10-31 · guarded · closed — tweak the widget (2 files)
+- [task] <ID1> · <DATE> · guarded · closed — tweak the widget (2 files)
 --- stderr
 
 $ state.py --root <ROOT> memory status
