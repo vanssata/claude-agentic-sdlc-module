@@ -152,7 +152,7 @@ table gains one section the loop reads instead of the two budgets above:
   (`model-routing.md`, "Fan-out"); the reviewer keeps the mode's tier.
 - **`default` false.** A project turns the loop on for every task with it; `start --batch
   --by` turns it on for one task, `--no-batch` off. A table without the section runs with these
-  numbers (`BATCH_DEFAULTS` in `state.py`); `/rr-setup --update` adds it.
+  numbers (`BATCH_DEFAULTS` in `skills/ai-task/rr_state/policy.py`); `/rr-setup --update` adds it.
 
 What the loop does not change: the scope guard, the two facts, the e2e rule, the gate in full
 mode, and "the mode only rises". `state.py batch off --by … --why …` returns a task to the
