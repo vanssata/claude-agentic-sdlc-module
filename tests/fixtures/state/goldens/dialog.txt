@@ -522,7 +522,7 @@ handoffs: 6 · suite runs: 1 · review passes: 1
     "at": "<TS>"
   },
   "dialog": {
-    "ledger_pos": 602
+    "ledger_pos": <LEDGER_LINE3>
   },
   "changes": [
     {

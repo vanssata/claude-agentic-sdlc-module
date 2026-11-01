@@ -579,6 +579,15 @@ class TestModuleChecks(unittest.TestCase):
         self.assertEqual([p for p in found if "R16" in p], ["low: all names are core, yet it imports os (R16)"])
 
 
+class TestValueHash(unittest.TestCase):
+    """value_hash is one value on every Python the suite runs on: ast.dump's text changed in 3.13
+    (empty fields left out), so a hash of it recorded on 3.14 never matched on the release 3.12."""
+
+    def test_the_hash_is_pinned_across_pythons(self):
+        value = ast.parse('re.compile(r"^[a-z0-9][a-z0-9-]*$", re.I)', mode="eval").body
+        self.assertEqual(TOOL_MODULE.hash_of(value), "cdcb648a4bcb")
+
+
 class TestPartitionTool(unittest.TestCase):
     """The tool's exits on small synthetic sources: 0 on a clean graph, 1 on each fault."""
 

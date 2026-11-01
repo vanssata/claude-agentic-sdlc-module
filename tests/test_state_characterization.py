@@ -32,7 +32,8 @@ to make a refactoring pass):
 
 Without the switch a missing or different golden fails, with a unified diff.
 
-The goldens depend on the Python (argparse's help wording) and git the suite runs on.
+The goldens depend on the Python (argparse's help wording) and git the suite runs on; not on
+where argparse breaks a usage line (USAGE) nor on the length of the checkout's path (LEDGER_POS).
 
 NORMALISE is exactly what is erased before the compare, in this order, and nothing else
 (FC8: the review reads this list before the diff):
@@ -54,11 +55,19 @@ NORMALISE is exactly what is erased before the compare, in this order, and nothi
               files in it, which carry timestamps -> <TREE40>. base_commit stays
   TREE9       a 9-character hex word with at least one digit: the same tree, abbreviated in
               prose and tables (`suite green on 3d57d9554`) -> <TREE9>
+  USAGE       an argparse usage block, `usage: ...` and its indented continuation lines,
+              joined into one line with single spaces: 3.12 and 3.13+ wrap it at different
+              words. The words and their order stay; the line after a blank or an unindented
+              line (`state.py: error: ...`) is not part of it
   DURATION    the duration after a verify run's exit code, `exit 0 in 3s` -> `exit 0 <DURATION>`
   RUN_DATE    the UTC date the run started on, and the date it ended on when the run crossed
               midnight, exact (YYYY-MM-DD), -> <DATE>; applied last, after the regular
               expressions, so ISO_TS sees whole timestamps first. A date that is not one of
               these (COMMIT_DATE's 2026-01-02) stays visible
+  LEDGER_POS  the number of `"ledger_pos": N` when N is exactly the byte offset of a line end
+              in the run's own .ai/state/consent.jsonl (0 included), -> <LEDGER_LINEk>, k the
+              lines before it: the ledger's labels hold the absolute STATE_PY and ROOT, so the
+              byte count moves with the checkout's path. Any other N stays visible
 
 Nothing else is erased: not the exit codes, not the order of lines, not a path outside the
 exact ones above, not a number that is not one of these. Add a rule to NORMALISE and to this list
@@ -101,15 +110,18 @@ NORMALISE = (
     ("ISO_TS", re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z"), "<TS>"),
     ("TREE40", re.compile(r"(?<=tree\": \")[0-9a-f]{40}(?=\")"), "<TREE40>"),
     ("TREE9", re.compile(r"\b(?=[0-9a-f]*\d)[0-9a-f]{9}\b"), "<TREE9>"),
+    ("USAGE", re.compile(r"(?m)^(usage: .*)((?:\n[ ]+\S.*)+)"),
+     lambda m: " ".join([m.group(1).rstrip()] + [line.strip() for line in m.group(2).split("\n")[1:]])),
     ("DURATION", re.compile(r"(?<=\bexit \d )in \d+(?:\.\d+)?s\b"), "<DURATION>"),
 )
-EXACT_RULES = ("STATE_PY", "ROOT", "TMP", "PLUGIN_ROOT", "TASK_IDS", "RUN_DATE")
+EXACT_RULES = ("STATE_PY", "ROOT", "TMP", "PLUGIN_ROOT", "TASK_IDS", "RUN_DATE", "LEDGER_POS")
+LEDGER_POS = re.compile(r'(?<="ledger_pos": )\d+\b')
 
 
 class Normaliser:
     """Applies NORMALISE to the text of one run: the exact strings first, longest first."""
 
-    def __init__(self, root, tmp, ids=(), dates=()):
+    def __init__(self, root, tmp, ids=(), dates=(), ledger=b""):
         self.exact = []
         for token, paths in (("<STATE_PY>", {STATE, os.path.realpath(STATE)}),
                              ("<ROOT>", {root, os.path.realpath(root)}),
@@ -119,6 +131,13 @@ class Normaliser:
         self.exact.sort(key=lambda pair: -len(pair[0]))
         self.ids = list(ids)
         self.dates = list(dates)
+        # {byte offset of a line end in consent.jsonl: the lines before it}; 0 is the empty ledger
+        self.ledger_ends = {0: 0}
+        offset = 0
+        for count, line in enumerate(ledger.splitlines(keepends=True), 1):
+            offset += len(line)
+            if line.endswith(b"\n"):
+                self.ledger_ends[offset] = count
 
     def apply(self, text):
         # An exact replace of the project and of the temporary directory would also rewrite
@@ -131,7 +150,8 @@ class Normaliser:
             text = pattern.sub(replacement, text)
         for date in self.dates:
             text = text.replace(date, "<DATE>")
-        return text
+        return LEDGER_POS.sub(lambda m: "<LEDGER_LINE%d>" % self.ledger_ends[int(m.group(0))]
+                              if int(m.group(0)) in self.ledger_ends else m.group(0), text)
 
 
 def pinned_env(home, extra=None):
@@ -258,7 +278,12 @@ class Scratch:
         if files:
             text += "\n##### files under .ai/ at the end\n" + self.files_dump()
         dates = sorted({self.started_on, utc_date()})  # two when the run crossed midnight
-        return Normaliser(self.root, self.tmp, self.task_ids(), dates).apply(text)
+        ledger = os.path.join(self.root, ".ai", "state", "consent.jsonl")
+        raw = b""
+        if os.path.exists(ledger):
+            with open(ledger, "rb") as fh:
+                raw = fh.read()
+        return Normaliser(self.root, self.tmp, self.task_ids(), dates, raw).apply(text)
 
     def close(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -551,6 +576,25 @@ class TestNormalise(unittest.TestCase):
         norm = Normaliser("/tmp/x/p", "/tmp/x", dates=["2026-10-31", "2026-11-01"])
         self.assertEqual(norm.apply("(BALANCED, 2026-10-31) · 2026-11-01 · 2026-01-02 · 2026-10-31T12:00:00Z"),
                          "(BALANCED, <DATE>) · <DATE> · 2026-01-02 · <TS>")
+
+    def test_usage_wraps_alike_on_every_python(self):
+        """3.12 and 3.13+ break an argparse usage line at different words; joined, they are one."""
+        norm = Normaliser("/tmp/x/p", "/tmp/x")
+        py312 = ("usage: state.py memory risk add [-h] --title TITLE [--where WHERE]\n"
+                 "                                --label LABEL --what WHAT\n\nnext\n")
+        py314 = ("usage: state.py memory risk add [-h] --title TITLE [--where WHERE] --label\n"
+                 "                                LABEL --what WHAT\n\nnext\n")
+        joined = "usage: state.py memory risk add [-h] --title TITLE [--where WHERE] --label LABEL --what WHAT\n\nnext\n"
+        self.assertEqual(norm.apply(py312), joined)
+        self.assertEqual(norm.apply(py314), joined)
+        self.assertEqual(norm.apply("usage: a b\nstate.py: error: x\n"), "usage: a b\nstate.py: error: x\n")
+
+    def test_ledger_pos_is_exact_to_a_line_end(self):
+        """The byte size of consent.jsonl moves with the paths in its labels; the line it ends at does not."""
+        norm = Normaliser("/tmp/x/p", "/tmp/x", ledger=b'{"a": 1}\n{"b": 22}\n')
+        self.assertEqual(norm.apply('"ledger_pos": 0, "ledger_pos": 9, "ledger_pos": 19'),
+                         '"ledger_pos": <LEDGER_LINE0>, "ledger_pos": <LEDGER_LINE1>, "ledger_pos": <LEDGER_LINE2>')
+        self.assertEqual(norm.apply('"ledger_pos": 10'), '"ledger_pos": 10')
 
 
 if __name__ == "__main__":

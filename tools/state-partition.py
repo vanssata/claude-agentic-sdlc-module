@@ -245,7 +245,9 @@ def signature_of(node):
 
 
 def hash_of(value):
-    return hashlib.sha1(ast.dump(value).encode()).hexdigest()[:12]
+    # ast.unparse, not ast.dump: dump's text changed in 3.13 (empty fields left out), so a hash
+    # recorded on one Python never matched on the other; unparse is the same on 3.11 to 3.14.
+    return hashlib.sha1(ast.unparse(value).encode()).hexdigest()[:12]
 
 
 def read_source(path):

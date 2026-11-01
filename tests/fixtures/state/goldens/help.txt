@@ -1,8 +1,7 @@
 $ state.py --help
 exit 0
 --- stdout
-usage: state.py [-h] [--root ROOT] [--runtime {claude,codex}]
-                {step-done,ask,answer,questions,handoff,profile,weight,event,approve,reject,close,start,steps,batch,verify,review,status,decision,consent,recall,memory} ...
+usage: state.py [-h] [--root ROOT] [--runtime {claude,codex}] {step-done,ask,answer,questions,handoff,profile,weight,event,approve,reject,close,start,steps,batch,verify,review,status,decision,consent,recall,memory} ...
 
 Task state for /ai-task — the small, machine-readable record of one task.
 
@@ -35,10 +34,7 @@ options:
 $ state.py ask --help
 exit 0
 --- stdout
-usage: state.py ask [-h] [--option OPTION] [--recommend RECOMMEND]
-                    [--context CONTEXT] [--gate GATE] [--batch BATCH]
-                    [--topic TOPIC] [--by BY]
-                    [question]
+usage: state.py ask [-h] [--option OPTION] [--recommend RECOMMEND] [--context CONTEXT] [--gate GATE] [--batch BATCH] [--topic TOPIC] [--by BY] [question]
 
 positional arguments:
   question
@@ -57,9 +53,7 @@ options:
 $ state.py answer --help
 exit 0
 --- stdout
-usage: state.py answer [-h] [--prose PROSE] [--by BY] [--via {picker,prose}]
-                       [--topic TOPIC]
-                       [assignment ...]
+usage: state.py answer [-h] [--prose PROSE] [--by BY] [--via {picker,prose}] [--topic TOPIC] [assignment ...]
 
 positional arguments:
   assignment
@@ -75,8 +69,7 @@ options:
 $ state.py questions --help
 exit 0
 --- stdout
-usage: state.py questions [-h] [--pending] [--sync] [--topic TOPIC] [--by BY]
-                          [--format {md,prose,json}]
+usage: state.py questions [-h] [--pending] [--sync] [--topic TOPIC] [--by BY] [--format {md,prose,json}]
 
 options:
   -h, --help            show this help message and exit
@@ -90,10 +83,7 @@ options:
 $ state.py handoff --help
 exit 0
 --- stdout
-usage: state.py handoff [-h] [--print]
-                        [--reason {stage,precompact,manual,session-start}]
-                        [--to {claude,codex}] [--for {continue,review}]
-                        [--why WHY]
+usage: state.py handoff [-h] [--print] [--reason {stage,precompact,manual,session-start}] [--to {claude,codex}] [--for {continue,review}] [--why WHY]
 
 options:
   -h, --help            show this help message and exit
@@ -107,10 +97,7 @@ options:
 $ state.py profile --help
 exit 0
 --- stdout
-usage: state.py profile [-h] [--field FIELD] [--runtime {claude,codex}]
-                        [--open] [--tier {FAST,BALANCED,STRONG,EXPERT}]
-                        [--other] [--json]
-                        [{detect,set,ack}] [plan]
+usage: state.py profile [-h] [--field FIELD] [--runtime {claude,codex}] [--open] [--tier {FAST,BALANCED,STRONG,EXPERT}] [--other] [--json] [{detect,set,ack}] [plan]
 
 positional arguments:
   {detect,set,ack}
@@ -129,8 +116,7 @@ options:
 $ state.py weight --help
 exit 0
 --- stdout
-usage: state.py weight [-h] [--files FILES] [--goal GOAL] [--declare DECLARE]
-                       [--json | --long | --mirror]
+usage: state.py weight [-h] [--files FILES] [--goal GOAL] [--declare DECLARE] [--json | --long | --mirror]
 
 options:
   -h, --help         show this help message and exit
@@ -192,11 +178,7 @@ options:
 $ state.py start --help
 exit 0
 --- stdout
-usage: state.py start [-h] [--goal GOAL] [--workflow WORKFLOW] [--files FILES]
-                      [--tests TESTS] [--declare DECLARE] [--mode MODE]
-                      [--by BY] [--why WHY] [--steps STEPS]
-                      [--plan-file PLAN_FILE] [--task-id TASK_ID]
-                      [--slug SLUG] [--amend] [--batch] [--no-batch]
+usage: state.py start [-h] [--goal GOAL] [--workflow WORKFLOW] [--files FILES] [--tests TESTS] [--declare DECLARE] [--mode MODE] [--by BY] [--why WHY] [--steps STEPS] [--plan-file PLAN_FILE] [--task-id TASK_ID] [--slug SLUG] [--amend] [--batch] [--no-batch]
 
 options:
   -h, --help            show this help message and exit
@@ -248,9 +230,7 @@ options:
 $ state.py verify --help
 exit 0
 --- stdout
-usage: state.py verify [-h] --scope {step,suite,e2e,all} [--files FILES]
-                       [--expect {fail}] [--e2e not-applicable WHY]
-                       [--after-fix AFTER_FIX] [--by BY]
+usage: state.py verify [-h] --scope {step,suite,e2e,all} [--files FILES] [--expect {fail}] [--e2e not-applicable WHY] [--after-fix AFTER_FIX] [--by BY]
 
 options:
   -h, --help            show this help message and exit
@@ -265,10 +245,7 @@ options:
 $ state.py review --help
 exit 0
 --- stdout
-usage: state.py review [-h]
-                       [--verdict {blockers_open,pass,pass_with_findings}]
-                       [--tier {BALANCED,STRONG}] [--focus {security}]
-                       [--report REPORT] [--closes CLOSES] [--by BY]
+usage: state.py review [-h] [--verdict {blockers_open,pass,pass_with_findings}] [--tier {BALANCED,STRONG}] [--focus {security}] [--report REPORT] [--closes CLOSES] [--by BY]
 
 options:
   -h, --help            show this help message and exit
@@ -293,9 +270,7 @@ options:
 $ state.py decision --help
 exit 0
 --- stdout
-usage: state.py decision [-h] [--id ID] [--kind KIND] [--command COMMANDS]
-                         [--pick PICK] [--why WHY] [--json]
-                         {show,open,settle,fallback}
+usage: state.py decision [-h] [--id ID] [--kind KIND] [--command COMMANDS] [--pick PICK] [--why WHY] [--json] {show,open,settle,fallback}
 
 positional arguments:
   {show,open,settle,fallback}
@@ -326,8 +301,7 @@ options:
 $ state.py recall --help
 exit 0
 --- stdout
-usage: state.py recall [-h] [--files FILES] [--budget BUDGET] [--kinds KINDS]
-                       [--all-risks] [--offset OFFSET] [--json]
+usage: state.py recall [-h] [--files FILES] [--budget BUDGET] [--kinds KINDS] [--all-risks] [--offset OFFSET] [--json]
 
 options:
   -h, --help       show this help message and exit
@@ -342,8 +316,7 @@ options:
 $ state.py memory --help
 exit 0
 --- stdout
-usage: state.py memory [-h]
-                       {status,enable,disable,export,verify,show,search,risk,risks,migrate,rebuild,cleanup,restore,pack,redact} ...
+usage: state.py memory [-h] {status,enable,disable,export,verify,show,search,risk,risks,migrate,rebuild,cleanup,restore,pack,redact} ...
 
 positional arguments:
   {status,enable,disable,export,verify,show,search,risk,risks,migrate,rebuild,cleanup,restore,pack,redact}
@@ -365,9 +338,7 @@ options:
 $ state.py memory enable --help
 exit 0
 --- stdout
-usage: state.py memory enable [-h] [--author AUTHOR]
-                              [--period {month,quarter,year}]
-                              [--index {none,sqlite}]
+usage: state.py memory enable [-h] [--author AUTHOR] [--period {month,quarter,year}] [--index {none,sqlite}]
 
 options:
   -h, --help            show this help message and exit
@@ -401,9 +372,7 @@ options:
 $ state.py memory verify --help
 exit 0
 --- stdout
-usage: state.py memory verify [-h] [--all] [--range RANGE] [--fresh-clone]
-                              [--json]
-                              [ids ...]
+usage: state.py memory verify [-h] [--all] [--range RANGE] [--fresh-clone] [--json] [ids ...]
 
 positional arguments:
   ids
@@ -434,10 +403,7 @@ options:
 $ state.py memory search --help
 exit 0
 --- stdout
-usage: state.py memory search [-h] [--kind KIND] [--by BY] [--file FILE]
-                              [--task TASK] [--since SINCE] [--until UNTIL]
-                              [--limit LIMIT] [--offset OFFSET] [--json]
-                              [query]
+usage: state.py memory search [-h] [--kind KIND] [--by BY] [--file FILE] [--task TASK] [--since SINCE] [--until UNTIL] [--limit LIMIT] [--offset OFFSET] [--json] [query]
 
 positional arguments:
   query
@@ -470,9 +436,7 @@ options:
 $ state.py memory risk add --help
 exit 0
 --- stdout
-usage: state.py memory risk add [-h] --title TITLE [--where WHERE]
-                                --label LABEL --what WHAT [--likely LIKELY]
-                                [--fix FIX] [--status STATUS]
+usage: state.py memory risk add [-h] --title TITLE [--where WHERE] --label LABEL --what WHAT [--likely LIKELY] [--fix FIX] [--status STATUS]
 
 options:
   -h, --help       show this help message and exit
@@ -502,9 +466,7 @@ options:
 $ state.py memory risks --help
 exit 0
 --- stdout
-usage: state.py memory risks [-h]
-                             [--status {open,ticketed,accepted,fixed,all}]
-                             [--md] [--json]
+usage: state.py memory risks [-h] [--status {open,ticketed,accepted,fixed,all}] [--md] [--json]
 
 options:
   -h, --help            show this help message and exit
@@ -516,8 +478,7 @@ options:
 $ state.py memory migrate --help
 exit 0
 --- stdout
-usage: state.py memory migrate [-h] (--report | --apply | --move-logs)
-                               [--risks] [--confirm-delete CONFIRM_DELETE]
+usage: state.py memory migrate [-h] (--report | --apply | --move-logs) [--risks] [--confirm-delete CONFIRM_DELETE]
 
 options:
   -h, --help            show this help message and exit
@@ -540,8 +501,7 @@ options:
 $ state.py memory cleanup --help
 exit 0
 --- stdout
-usage: state.py memory cleanup [-h] [--all] [--confirm-delete CONFIRM_DELETE]
-                               [ids ...]
+usage: state.py memory cleanup [-h] [--all] [--confirm-delete CONFIRM_DELETE] [ids ...]
 
 positional arguments:
   ids
@@ -568,8 +528,7 @@ options:
 $ state.py memory pack --help
 exit 0
 --- stdout
-usage: state.py memory pack [-h] --period PERIOD
-                            [--confirm-delete CONFIRM_DELETE]
+usage: state.py memory pack [-h] --period PERIOD [--confirm-delete CONFIRM_DELETE]
 
 options:
   -h, --help            show this help message and exit
