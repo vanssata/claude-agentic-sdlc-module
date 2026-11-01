@@ -4,7 +4,17 @@ Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelo
 
 ## [Unreleased]
 
-## [3.2.0] — 2026-11-01
+## [3.2.1] — 2026-11-02
+
+3.2.0 was tagged but never published: its release job failed before the publish step. 3.2.1 is the first published version with the changes listed under 3.2.0.
+
+### Fixed
+- The full test suite is green again on Python 3.12, the release Python. Three state.py tests depended on the Python version or the checkout path: the partition's value hashes (now `ast.unparse`), argparse's usage wrapping, and the byte offset `ledger_pos`. Nothing shipped changed.
+
+### Changed
+- The smoke gate on every pull request also runs `test_state_layout.py` and `test_state_characterization.py` on Python 3.11, 3.12 and 3.13.
+
+## [3.2.0] — 2026-11-01 (not published)
 
 ### Changed
 - The plugin's two-line statusline replaces your statusline command by default. The replaced command is printed, kept in `~/.claude/riskrails/statusline.json` and in the dated settings.json backup; `--statusline own` restores it once, on the run that switches to own.
@@ -54,6 +64,7 @@ Project schema 10 → 11: run `/rr-setup --update` after upgrading.
 - Risk tiers replaced by the weight and three modes (light, guarded, full); `/ai-*` and `/sdlc-*` become `/rr-*` (old names kept as aliases).
 - Guards in one Python process; task state in `.ai/state/state.json`. See "Upgrade to 3.0" in the README.
 
+[3.2.1]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.0.1...v3.1.0
 [3.0.1]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v2.0.2...v3.0.1
