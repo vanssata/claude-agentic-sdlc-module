@@ -233,89 +233,6 @@ state.py: no task in flight (<ROOT>/.ai/state/state.json does not exist). Start 
 verify_command: sh -c 'test ! -e "$GOLDEN_FLAGS/red"' {files}
 step_test_command: sh -c 'test ! -e "$GOLDEN_FLAGS/stepred"' {files}
 e2e_command: sh -c 'test ! -e "$GOLDEN_FLAGS/e2ered"'
-=== .ai/reports/<ID2>/events.jsonl
-{"ts": "<TS>", "task": "<ID2>", "event": "task_started", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "drop the table", "data": {"goal": "drop the table", "workflow": "feature", "mode": "full_irreversible", "schema": 7}}
-{"ts": "<TS>", "task": "<ID2>", "event": "weight_set", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "W 1 → light", "data": {"w": 1, "mode": "light", "axes": {"scope": 1, "behaviour": 0, "reversibility": 0, "domain": 0, "novelty": 0, "coverage": 0}, "hints": [], "unknown": []}}
-{"ts": "<TS>", "task": "<ID2>", "event": "mode_set", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "light -> full_irreversible by test", "data": {"from": "light", "to": "full_irreversible", "by": "test", "why": ""}}
-{"ts": "<TS>", "task": "<ID2>", "event": "tier_set", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "T6 (mode full_irreversible, compat)", "data": {"tier": "T6", "mode": "full_irreversible", "w": 1}}
-{"ts": "<TS>", "task": "<ID2>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "start", "data": {"reason": "start", "lines": 12}}
-{"ts": "<TS>", "task": "<ID2>", "event": "verify_run", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "suite run 1: exit 0", "data": {"n": 1, "scope": "suite", "exit": 0, "tree": "<TREE40>", "log": ".ai/state/logs/<ID2>/suite-1.log", "expected_fail": false}}
-{"ts": "<TS>", "task": "<ID2>", "event": "verify_run", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "e2e run 2: exit 0", "data": {"n": 2, "scope": "e2e", "exit": 0, "tree": "<TREE40>", "log": ".ai/state/logs/<ID2>/e2e-2.log", "expected_fail": false}}
-{"ts": "<TS>", "task": "<ID2>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "verify", "data": {"reason": "verify", "lines": 12}}
-{"ts": "<TS>", "task": "<ID2>", "event": "review_verdict", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "pass on STRONG (pass 1)", "data": {"verdict": "pass", "tier": "STRONG", "pass_n": 1, "labels": [], "focus": null}}
-{"ts": "<TS>", "task": "<ID2>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "review", "data": {"reason": "review", "lines": 12}}
-{"ts": "<TS>", "task": "<ID2>", "event": "gate_requested", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "G1: human_approval", "data": {"gate": "human_approval", "gate_id": "G1", "requested_at": "<TS>"}}
-{"ts": "<TS>", "task": "<ID2>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "close", "data": {"reason": "close", "lines": 12}}
-{"ts": "<TS>", "task": "<ID2>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "stage", "data": {"reason": "stage", "lines": 12}}
-{"ts": "<TS>", "task": "<ID2>", "event": "gate_approved", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "granted by ivan via unattended", "data": {"by": "ivan", "gate_id": "G1", "via": "unattended", "unattended": true, "tty": false}}
-{"ts": "<TS>", "task": "<ID2>", "event": "task_closed", "actor": "agent", "runtime": "claude", "stage": "done", "detail": "abandoned", "data": {"abandoned": true, "mode": "full_irreversible", "w": 1}}
-=== .ai/reports/<ID2>/task.md
-# <ID2> — drop the table
-
-feature · full_irreversible · started <TS> · claude
-
-## Weight
-
-```
-scope          1  src/widget.py referenced from 2 files
-behaviour      0  synthetic (declared)
-reversibility  0  git revert returns everything
-domain         0  synthetic (declared)
-novelty        0  synthetic (declared)
-coverage       0  1 of 1 code files have a test
-W 1 → light   hints none · unknown none · light ≤2 · guarded 3–7 · full ≥8 or reversibility/domain=2
-```
-override: light → full_irreversible by test at <TS>
-
-## Plan
-
-files: src/widget.py
-tests: tests/test_widget.py
-
-## Questions
-
-<!-- Written by state.py. Answer with `state.py answer Q1=B`, or fill the [Answer]: lines here and run
-     `state.py questions --sync`; the rest of task.md is rewritten from the state, this section is kept. -->
-
-## G1. Approve <ID2> for implementation? (gate: human_approval)
-asked: <TS> · stage: human_approval
-A. Approve
-B. Reject — answer as `B: <reason>`
-X. Other — answer as `X: <text>`
-[Answer]: A — by ivan via unattended at <TS>
-
-## Verify
-
-| n | scope | exit | tree | log | expected_fail |
-|---|---|---|---|---|---|
-| 1 | suite | 0 | <TREE9> | .ai/state/logs/<ID2>/suite-1.log | no |
-| 2 | e2e | 0 | <TREE9> | .ai/state/logs/<ID2>/e2e-2.log | no |
-
-suite passing · e2e passing · suite runs 1
-
-## Review
-
-### Pass 1 — STRONG, pass
-
-```
-FINDINGS
-none
-```
-
-## Changes
-
-| File | Change | New/Edit/Delete |
-|---|---|---|
-
-+0 −0 lines, 0 files
-
-## Verdict
-
-close: abandoned
-facts: (a) green — suite green on <TREE9> (run 1) · (b) green — 0 changed files, all in the task's files
-gate: requested G1 at <TS>; approved by ivan at <TS> via unattended
-confirm: drop the table
-handoffs: 5 · suite runs: 1 · review passes: 1
 === .ai/reports/<ID1>/events.jsonl
 {"ts": "<TS>", "task": "<ID1>", "event": "task_started", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "tweak the widget", "data": {"goal": "tweak the widget", "workflow": "feature", "mode": "full", "schema": 7}}
 {"ts": "<TS>", "task": "<ID1>", "event": "weight_set", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "W 0 → light", "data": {"w": 0, "mode": "light", "axes": {"scope": 0, "behaviour": 0, "reversibility": 0, "domain": 0, "novelty": 0, "coverage": 0}, "hints": [], "unknown": []}}
@@ -415,279 +332,91 @@ facts: (a) green — suite green on <TREE9> (run 3) · (b) green — 1 changed f
 gate: requested G2 at <TS>; approved by ivan at <TS> via unattended
 confirm: none
 handoffs: 7 · suite runs: 2 · review passes: 1
+=== .ai/reports/<ID2>/events.jsonl
+{"ts": "<TS>", "task": "<ID2>", "event": "task_started", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "drop the table", "data": {"goal": "drop the table", "workflow": "feature", "mode": "full_irreversible", "schema": 7}}
+{"ts": "<TS>", "task": "<ID2>", "event": "weight_set", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "W 1 → light", "data": {"w": 1, "mode": "light", "axes": {"scope": 1, "behaviour": 0, "reversibility": 0, "domain": 0, "novelty": 0, "coverage": 0}, "hints": [], "unknown": []}}
+{"ts": "<TS>", "task": "<ID2>", "event": "mode_set", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "light -> full_irreversible by test", "data": {"from": "light", "to": "full_irreversible", "by": "test", "why": ""}}
+{"ts": "<TS>", "task": "<ID2>", "event": "tier_set", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "T6 (mode full_irreversible, compat)", "data": {"tier": "T6", "mode": "full_irreversible", "w": 1}}
+{"ts": "<TS>", "task": "<ID2>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "start", "data": {"reason": "start", "lines": 12}}
+{"ts": "<TS>", "task": "<ID2>", "event": "verify_run", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "suite run 1: exit 0", "data": {"n": 1, "scope": "suite", "exit": 0, "tree": "<TREE40>", "log": ".ai/state/logs/<ID2>/suite-1.log", "expected_fail": false}}
+{"ts": "<TS>", "task": "<ID2>", "event": "verify_run", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "e2e run 2: exit 0", "data": {"n": 2, "scope": "e2e", "exit": 0, "tree": "<TREE40>", "log": ".ai/state/logs/<ID2>/e2e-2.log", "expected_fail": false}}
+{"ts": "<TS>", "task": "<ID2>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "verify", "data": {"reason": "verify", "lines": 12}}
+{"ts": "<TS>", "task": "<ID2>", "event": "review_verdict", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "pass on STRONG (pass 1)", "data": {"verdict": "pass", "tier": "STRONG", "pass_n": 1, "labels": [], "focus": null}}
+{"ts": "<TS>", "task": "<ID2>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "review", "data": {"reason": "review", "lines": 12}}
+{"ts": "<TS>", "task": "<ID2>", "event": "gate_requested", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "G1: human_approval", "data": {"gate": "human_approval", "gate_id": "G1", "requested_at": "<TS>"}}
+{"ts": "<TS>", "task": "<ID2>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "close", "data": {"reason": "close", "lines": 12}}
+{"ts": "<TS>", "task": "<ID2>", "event": "handoff_written", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "stage", "data": {"reason": "stage", "lines": 12}}
+{"ts": "<TS>", "task": "<ID2>", "event": "gate_approved", "actor": "agent", "runtime": "claude", "stage": "implementation", "detail": "granted by ivan via unattended", "data": {"by": "ivan", "gate_id": "G1", "via": "unattended", "unattended": true, "tty": false}}
+{"ts": "<TS>", "task": "<ID2>", "event": "task_closed", "actor": "agent", "runtime": "claude", "stage": "done", "detail": "abandoned", "data": {"abandoned": true, "mode": "full_irreversible", "w": 1}}
+=== .ai/reports/<ID2>/task.md
+# <ID2> — drop the table
+
+feature · full_irreversible · started <TS> · claude
+
+## Weight
+
+```
+scope          1  src/widget.py referenced from 2 files
+behaviour      0  synthetic (declared)
+reversibility  0  git revert returns everything
+domain         0  synthetic (declared)
+novelty        0  synthetic (declared)
+coverage       0  1 of 1 code files have a test
+W 1 → light   hints none · unknown none · light ≤2 · guarded 3–7 · full ≥8 or reversibility/domain=2
+```
+override: light → full_irreversible by test at <TS>
+
+## Plan
+
+files: src/widget.py
+tests: tests/test_widget.py
+
+## Questions
+
+<!-- Written by state.py. Answer with `state.py answer Q1=B`, or fill the [Answer]: lines here and run
+     `state.py questions --sync`; the rest of task.md is rewritten from the state, this section is kept. -->
+
+## G1. Approve <ID2> for implementation? (gate: human_approval)
+asked: <TS> · stage: human_approval
+A. Approve
+B. Reject — answer as `B: <reason>`
+X. Other — answer as `X: <text>`
+[Answer]: A — by ivan via unattended at <TS>
+
+## Verify
+
+| n | scope | exit | tree | log | expected_fail |
+|---|---|---|---|---|---|
+| 1 | suite | 0 | <TREE9> | .ai/state/logs/<ID2>/suite-1.log | no |
+| 2 | e2e | 0 | <TREE9> | .ai/state/logs/<ID2>/e2e-2.log | no |
+
+suite passing · e2e passing · suite runs 1
+
+## Review
+
+### Pass 1 — STRONG, pass
+
+```
+FINDINGS
+none
+```
+
+## Changes
+
+| File | Change | New/Edit/Delete |
+|---|---|---|
+
++0 −0 lines, 0 files
+
+## Verdict
+
+close: abandoned
+facts: (a) green — suite green on <TREE9> (run 1) · (b) green — 0 changed files, all in the task's files
+gate: requested G1 at <TS>; approved by ivan at <TS> via unattended
+confirm: drop the table
+handoffs: 5 · suite runs: 1 · review passes: 1
 === .ai/state/logs/.gitignore
 *
-=== .ai/state/logs/<ID2>/e2e-2.log
-=== .ai/state/logs/<ID2>/state.json
-{
-  "schema": 7,
-  "task_id": "<ID2>",
-  "goal": "drop the table",
-  "workflow": "feature",
-  "mode": "full_irreversible",
-  "weight": {
-    "w": 1,
-    "mode": "light",
-    "axes": {
-      "scope": 1,
-      "behaviour": 0,
-      "reversibility": 0,
-      "domain": 0,
-      "novelty": 0,
-      "coverage": 0
-    },
-    "evidence": {
-      "scope": "src/widget.py referenced from 2 files",
-      "behaviour": "synthetic (declared)",
-      "reversibility": "git revert returns everything",
-      "domain": "synthetic (declared)",
-      "novelty": "synthetic (declared)",
-      "coverage": "1 of 1 code files have a test"
-    },
-    "hints": [],
-    "unknown": [],
-    "notes": [
-      "scope: src/widget.py referenced from 2 files"
-    ],
-    "lines": [
-      "scope          1  src/widget.py referenced from 2 files",
-      "behaviour      0  synthetic (declared)",
-      "reversibility  0  git revert returns everything",
-      "domain         0  synthetic (declared)",
-      "novelty        0  synthetic (declared)",
-      "coverage       0  1 of 1 code files have a test",
-      "W 1 → light   hints none · unknown none · light ≤2 · guarded 3–7 · full ≥8 or reversibility/domain=2"
-    ],
-    "tree": "<TREE40>",
-    "computed_at": "<TS>",
-    "rescores": [],
-    "operations": []
-  },
-  "mode_override": {
-    "from": "light",
-    "to": "full_irreversible",
-    "by": "test",
-    "why": "",
-    "ts": "<TS>"
-  },
-  "stage": "done",
-  "files": [
-    "src/widget.py"
-  ],
-  "tests": [
-    "tests/test_widget.py"
-  ],
-  "steps": [],
-  "amendments": [],
-  "findings": [],
-  "batch": {
-    "on": false,
-    "by": null,
-    "why": null,
-    "since": null
-  },
-  "diff": {
-    "base_tree": "<TREE40>",
-    "base_commit": "f0398017acc3b45a2dfd20a1a41e033ab400df19"
-  },
-  "gate": {
-    "requested_at": "<TS>",
-    "gate_id": "G1",
-    "tree": "<TREE40>",
-    "approved_by": "ivan",
-    "approved_at": "<TS>",
-    "approved_tree": "<TREE40>",
-    "via": "unattended",
-    "confirm": "drop the table",
-    "operations": []
-  },
-  "owner_runtime": "claude",
-  "created": "<TS>",
-  "created_at": "<TS>",
-  "history": [
-    {
-      "at": "<TS>",
-      "event": "task_started",
-      "detail": "drop the table"
-    },
-    {
-      "at": "<TS>",
-      "event": "weight_set",
-      "detail": "W 1 → light"
-    },
-    {
-      "at": "<TS>",
-      "event": "mode_set",
-      "detail": "light -> full_irreversible by test"
-    },
-    {
-      "at": "<TS>",
-      "event": "tier_set",
-      "detail": "T6 (mode full_irreversible, compat)"
-    },
-    {
-      "at": "<TS>",
-      "event": "verify_run",
-      "detail": "suite run 1: exit 0"
-    },
-    {
-      "at": "<TS>",
-      "event": "verify_run",
-      "detail": "e2e run 2: exit 0"
-    },
-    {
-      "at": "<TS>",
-      "event": "review_verdict",
-      "detail": "pass on STRONG (pass 1)"
-    },
-    {
-      "at": "<TS>",
-      "event": "gate_requested",
-      "detail": "G1: human_approval"
-    },
-    {
-      "at": "<TS>",
-      "event": "human_approval",
-      "detail": "granted by ivan via unattended"
-    },
-    {
-      "at": "<TS>",
-      "event": "task_closed",
-      "detail": "abandoned"
-    }
-  ],
-  "resume_point": {
-    "stage": "implementation",
-    "step_id": "task",
-    "next_action": "the human approves in their own terminal, then 'state.py close' again",
-    "at": "<TS>",
-    "runtime": "claude"
-  },
-  "cross_vendor_review": null,
-  "questions": {
-    "file": ".ai/reports/<ID2>/task.md",
-    "pending": []
-  },
-  "handoff": {
-    "file": ".ai/state/handoff.md",
-    "written_at": "<TS>",
-    "reason": "stage",
-    "pending_to": null,
-    "pending_since": null
-  },
-  "human_approval": {
-    "required": true,
-    "granted": true,
-    "granted_by": "ivan",
-    "granted_at": "<TS>",
-    "requested_at": null,
-    "gate_id": null,
-    "requested_session": null,
-    "rejected_at": null,
-    "via": "unattended",
-    "unattended": true
-  },
-  "verify": {
-    "status": "passing",
-    "e2e": "passing",
-    "suite_runs": 1,
-    "runs": [
-      {
-        "n": 1,
-        "scope": "suite",
-        "exit": 0,
-        "tree": "<TREE40>",
-        "tree_moved": false,
-        "log": ".ai/state/logs/<ID2>/suite-1.log",
-        "ts": "<TS>",
-        "expected_fail": false,
-        "runtime": "claude",
-        "command": "sh -c 'test ! -e \"$GOLDEN_FLAGS/red\"' {files}",
-        "duration_s": 0,
-        "after_fix": null,
-        "files": []
-      },
-      {
-        "n": 2,
-        "scope": "e2e",
-        "exit": 0,
-        "tree": "<TREE40>",
-        "tree_moved": false,
-        "log": ".ai/state/logs/<ID2>/e2e-2.log",
-        "ts": "<TS>",
-        "expected_fail": false,
-        "runtime": "claude",
-        "command": "sh -c 'test ! -e \"$GOLDEN_FLAGS/e2ered\"'",
-        "duration_s": 0,
-        "after_fix": null,
-        "files": []
-      }
-    ],
-    "e2e_tree": "<TREE40>"
-  },
-  "review": {
-    "status": "passed",
-    "passes": 1,
-    "tier": "STRONG",
-    "findings": [],
-    "tree": "<TREE40>",
-    "log": [
-      {
-        "n": 1,
-        "tier": "STRONG",
-        "verdict": "pass",
-        "focus": null,
-        "text": "FINDINGS\nnone\n",
-        "tree": "<TREE40>",
-        "ts": "<TS>",
-        "runtime": "claude",
-        "by": null
-      }
-    ],
-    "closed": [],
-    "ts": "<TS>",
-    "runs_at": 2
-  },
-  "current_stage": "done",
-  "approved_plan": {
-    "ref": "inline",
-    "current_step_id": "task",
-    "steps": [
-      {
-        "step_id": "task",
-        "description": "drop the table",
-        "allowed_files": [
-          "src/widget.py",
-          "tests/test_widget.py"
-        ],
-        "forbidden_files": [],
-        "forbidden_reason": "not part of this task",
-        "required_tests": [
-          "tests/test_widget.py"
-        ],
-        "status": "in_progress"
-      }
-    ]
-  },
-  "next_action": "none — task abandoned",
-  "updated_at": "<TS>",
-  "facts": {
-    "a": [
-      true,
-      "suite green on <TREE9> (run 1)"
-    ],
-    "b": [
-      true,
-      "0 changed files, all in the task's files"
-    ],
-    "tree": "<TREE40>",
-    "at": "<TS>"
-  },
-  "changes": [],
-  "result": "abandoned",
-  "closed_at": "<TS>"
-}
-=== .ai/state/logs/<ID2>/suite-1.log
 === .ai/state/logs/<ID1>/e2e-2.log
 === .ai/state/logs/<ID1>/e2e-4.log
 === .ai/state/logs/<ID1>/state.json
@@ -1019,3 +748,274 @@ handoffs: 7 · suite runs: 2 · review passes: 1
 }
 === .ai/state/logs/<ID1>/suite-1.log
 === .ai/state/logs/<ID1>/suite-3.log
+=== .ai/state/logs/<ID2>/e2e-2.log
+=== .ai/state/logs/<ID2>/state.json
+{
+  "schema": 7,
+  "task_id": "<ID2>",
+  "goal": "drop the table",
+  "workflow": "feature",
+  "mode": "full_irreversible",
+  "weight": {
+    "w": 1,
+    "mode": "light",
+    "axes": {
+      "scope": 1,
+      "behaviour": 0,
+      "reversibility": 0,
+      "domain": 0,
+      "novelty": 0,
+      "coverage": 0
+    },
+    "evidence": {
+      "scope": "src/widget.py referenced from 2 files",
+      "behaviour": "synthetic (declared)",
+      "reversibility": "git revert returns everything",
+      "domain": "synthetic (declared)",
+      "novelty": "synthetic (declared)",
+      "coverage": "1 of 1 code files have a test"
+    },
+    "hints": [],
+    "unknown": [],
+    "notes": [
+      "scope: src/widget.py referenced from 2 files"
+    ],
+    "lines": [
+      "scope          1  src/widget.py referenced from 2 files",
+      "behaviour      0  synthetic (declared)",
+      "reversibility  0  git revert returns everything",
+      "domain         0  synthetic (declared)",
+      "novelty        0  synthetic (declared)",
+      "coverage       0  1 of 1 code files have a test",
+      "W 1 → light   hints none · unknown none · light ≤2 · guarded 3–7 · full ≥8 or reversibility/domain=2"
+    ],
+    "tree": "<TREE40>",
+    "computed_at": "<TS>",
+    "rescores": [],
+    "operations": []
+  },
+  "mode_override": {
+    "from": "light",
+    "to": "full_irreversible",
+    "by": "test",
+    "why": "",
+    "ts": "<TS>"
+  },
+  "stage": "done",
+  "files": [
+    "src/widget.py"
+  ],
+  "tests": [
+    "tests/test_widget.py"
+  ],
+  "steps": [],
+  "amendments": [],
+  "findings": [],
+  "batch": {
+    "on": false,
+    "by": null,
+    "why": null,
+    "since": null
+  },
+  "diff": {
+    "base_tree": "<TREE40>",
+    "base_commit": "f0398017acc3b45a2dfd20a1a41e033ab400df19"
+  },
+  "gate": {
+    "requested_at": "<TS>",
+    "gate_id": "G1",
+    "tree": "<TREE40>",
+    "approved_by": "ivan",
+    "approved_at": "<TS>",
+    "approved_tree": "<TREE40>",
+    "via": "unattended",
+    "confirm": "drop the table",
+    "operations": []
+  },
+  "owner_runtime": "claude",
+  "created": "<TS>",
+  "created_at": "<TS>",
+  "history": [
+    {
+      "at": "<TS>",
+      "event": "task_started",
+      "detail": "drop the table"
+    },
+    {
+      "at": "<TS>",
+      "event": "weight_set",
+      "detail": "W 1 → light"
+    },
+    {
+      "at": "<TS>",
+      "event": "mode_set",
+      "detail": "light -> full_irreversible by test"
+    },
+    {
+      "at": "<TS>",
+      "event": "tier_set",
+      "detail": "T6 (mode full_irreversible, compat)"
+    },
+    {
+      "at": "<TS>",
+      "event": "verify_run",
+      "detail": "suite run 1: exit 0"
+    },
+    {
+      "at": "<TS>",
+      "event": "verify_run",
+      "detail": "e2e run 2: exit 0"
+    },
+    {
+      "at": "<TS>",
+      "event": "review_verdict",
+      "detail": "pass on STRONG (pass 1)"
+    },
+    {
+      "at": "<TS>",
+      "event": "gate_requested",
+      "detail": "G1: human_approval"
+    },
+    {
+      "at": "<TS>",
+      "event": "human_approval",
+      "detail": "granted by ivan via unattended"
+    },
+    {
+      "at": "<TS>",
+      "event": "task_closed",
+      "detail": "abandoned"
+    }
+  ],
+  "resume_point": {
+    "stage": "implementation",
+    "step_id": "task",
+    "next_action": "the human approves in their own terminal, then 'state.py close' again",
+    "at": "<TS>",
+    "runtime": "claude"
+  },
+  "cross_vendor_review": null,
+  "questions": {
+    "file": ".ai/reports/<ID2>/task.md",
+    "pending": []
+  },
+  "handoff": {
+    "file": ".ai/state/handoff.md",
+    "written_at": "<TS>",
+    "reason": "stage",
+    "pending_to": null,
+    "pending_since": null
+  },
+  "human_approval": {
+    "required": true,
+    "granted": true,
+    "granted_by": "ivan",
+    "granted_at": "<TS>",
+    "requested_at": null,
+    "gate_id": null,
+    "requested_session": null,
+    "rejected_at": null,
+    "via": "unattended",
+    "unattended": true
+  },
+  "verify": {
+    "status": "passing",
+    "e2e": "passing",
+    "suite_runs": 1,
+    "runs": [
+      {
+        "n": 1,
+        "scope": "suite",
+        "exit": 0,
+        "tree": "<TREE40>",
+        "tree_moved": false,
+        "log": ".ai/state/logs/<ID2>/suite-1.log",
+        "ts": "<TS>",
+        "expected_fail": false,
+        "runtime": "claude",
+        "command": "sh -c 'test ! -e \"$GOLDEN_FLAGS/red\"' {files}",
+        "duration_s": 0,
+        "after_fix": null,
+        "files": []
+      },
+      {
+        "n": 2,
+        "scope": "e2e",
+        "exit": 0,
+        "tree": "<TREE40>",
+        "tree_moved": false,
+        "log": ".ai/state/logs/<ID2>/e2e-2.log",
+        "ts": "<TS>",
+        "expected_fail": false,
+        "runtime": "claude",
+        "command": "sh -c 'test ! -e \"$GOLDEN_FLAGS/e2ered\"'",
+        "duration_s": 0,
+        "after_fix": null,
+        "files": []
+      }
+    ],
+    "e2e_tree": "<TREE40>"
+  },
+  "review": {
+    "status": "passed",
+    "passes": 1,
+    "tier": "STRONG",
+    "findings": [],
+    "tree": "<TREE40>",
+    "log": [
+      {
+        "n": 1,
+        "tier": "STRONG",
+        "verdict": "pass",
+        "focus": null,
+        "text": "FINDINGS\nnone\n",
+        "tree": "<TREE40>",
+        "ts": "<TS>",
+        "runtime": "claude",
+        "by": null
+      }
+    ],
+    "closed": [],
+    "ts": "<TS>",
+    "runs_at": 2
+  },
+  "current_stage": "done",
+  "approved_plan": {
+    "ref": "inline",
+    "current_step_id": "task",
+    "steps": [
+      {
+        "step_id": "task",
+        "description": "drop the table",
+        "allowed_files": [
+          "src/widget.py",
+          "tests/test_widget.py"
+        ],
+        "forbidden_files": [],
+        "forbidden_reason": "not part of this task",
+        "required_tests": [
+          "tests/test_widget.py"
+        ],
+        "status": "in_progress"
+      }
+    ]
+  },
+  "next_action": "none — task abandoned",
+  "updated_at": "<TS>",
+  "facts": {
+    "a": [
+      true,
+      "suite green on <TREE9> (run 1)"
+    ],
+    "b": [
+      true,
+      "0 changed files, all in the task's files"
+    ],
+    "tree": "<TREE40>",
+    "at": "<TS>"
+  },
+  "changes": [],
+  "result": "abandoned",
+  "closed_at": "<TS>"
+}
+=== .ai/state/logs/<ID2>/suite-1.log
