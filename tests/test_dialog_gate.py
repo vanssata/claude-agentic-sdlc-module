@@ -27,7 +27,8 @@ sys.path.insert(0, os.path.join(ROOT, "skills", "ai-task"))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 sys.path.insert(0, os.path.join(ROOT, "hooks"))
 from guard import dialog  # noqa: E402  pylint: disable=wrong-import-position
-import state as state_mod  # noqa: E402  pylint: disable=wrong-import-position
+import state  # noqa: E402,F401  pylint: disable=wrong-import-position,unused-import  # sets rr_state.fs.ENTRY
+from rr_state import dialog as rr_dialog, labels as rr_labels  # noqa: E402  pylint: disable=wrong-import-position
 from test_ai_task_state import CLEAN, STATE, DialogProject  # noqa: E402  pylint: disable=wrong-import-position
 from guard_harness import decision as decision_of, hook_output  # noqa: E402  pylint: disable=wrong-import-position
 
@@ -83,7 +84,7 @@ class TestPayload(unittest.TestCase):
             self.assertLessEqual(len(question["header"]), 12)
             self.assertTrue(2 <= len(question["options"]) <= 4)
             self.assertTrue(question["options"][0]["label"].startswith(("Not now", "Keep")), question)
-            commands = [o for o in question["options"][1:] if state_mod.validate_label(o["label"]) is None]
+            commands = [o for o in question["options"][1:] if rr_labels.validate_label(o["label"]) is None]
             if question["multiSelect"]:
                 self.assertEqual(len(commands), len(question["options"]) - 1)
 
@@ -133,10 +134,10 @@ class TestPayload(unittest.TestCase):
                "git push origin +feat", "git push origin HEAD:main", "git push origin feat:main"]
         for label in good:
             with self.subTest(good=label):
-                self.assertIsNone(state_mod.validate_label(label))
+                self.assertIsNone(rr_labels.validate_label(label))
         for label in bad:
             with self.subTest(bad=label):
-                self.assertIsNotNone(state_mod.validate_label(label))
+                self.assertIsNotNone(rr_labels.validate_label(label))
 
     def test_ambiguous_multiselect_splits(self):
         self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m 'one, two' -- a.py",
@@ -164,15 +165,15 @@ class TestPayload(unittest.TestCase):
         options = [{"n": 1, "kind": "choice", "label": "Not now — commit nothing"},
                    {"n": 2, "kind": "command", "label": "git commit -m 'a, b'"},
                    {"n": 3, "kind": "command", "label": PUSH}]
-        long = "x" * state_mod.QUESTION_MAX
+        long = "x" * rr_dialog.QUESTION_MAX
         long_decision = {"id": "D3", "question": long, "header": "Commit", "multi_select": True, "options": options}
-        texts = [q["question"] for q in state_mod.dialog_payload([long_decision], "claude")["questions"]]
+        texts = [q["question"] for q in rr_dialog.dialog_payload([long_decision], "claude")["questions"]]
         self.assertEqual(len(texts), 2)
-        self.assertTrue(all(len(t) <= state_mod.QUESTION_MAX for t in texts), [len(t) for t in texts])
+        self.assertTrue(all(len(t) <= rr_dialog.QUESTION_MAX for t in texts), [len(t) for t in texts])
         self.assertEqual([t[-9:] for t in texts], [" (1 of 2)", " (2 of 2)"])
         self.assertEqual(texts, [q["question"] for _, _, q in dialog.offered([long_decision], "claude")])
         unsplit = dict(long_decision, multi_select=False)
-        self.assertEqual(state_mod.dialog_payload([unsplit], "claude")["questions"][0]["question"], long)
+        self.assertEqual(rr_dialog.dialog_payload([unsplit], "claude")["questions"][0]["question"], long)
 
     def test_part_question_copies_agree(self):
         """R-two-part-question-copies: state.py's part_question and the hook's
@@ -181,14 +182,14 @@ class TestPayload(unittest.TestCase):
                    {"n": 2, "kind": "command", "label": "git commit -m 'a, b'"},
                    {"n": 3, "kind": "command", "label": PUSH}]
         suffix = len(" (1 of 2)")
-        lengths = (0, 1, 80, state_mod.QUESTION_MAX - suffix - 1, state_mod.QUESTION_MAX - suffix,
-                   state_mod.QUESTION_MAX - suffix + 1, state_mod.QUESTION_MAX - 1,
-                   state_mod.QUESTION_MAX, state_mod.QUESTION_MAX + 1)
+        lengths = (0, 1, 80, rr_dialog.QUESTION_MAX - suffix - 1, rr_dialog.QUESTION_MAX - suffix,
+                   rr_dialog.QUESTION_MAX - suffix + 1, rr_dialog.QUESTION_MAX - 1,
+                   rr_dialog.QUESTION_MAX, rr_dialog.QUESTION_MAX + 1)
         for runtime, multi, length in itertools.product(("claude", "codex"), (True, False), lengths):
             text = "".join("abcdefghij"[i % 10] for i in range(length))
             dec = {"id": "D3", "question": text, "header": "Commit", "multi_select": multi, "options": options}
             with self.subTest(runtime=runtime, multi=multi, length=length):
-                theirs = [q["question"] for q in state_mod.dialog_payload([dec], runtime)["questions"]]
+                theirs = [q["question"] for q in rr_dialog.dialog_payload([dec], runtime)["questions"]]
                 ours = [q["question"] for _, _, q in dialog.offered([dec], runtime)]
                 self.assertEqual(theirs, ours)
                 self.assertEqual(len(theirs), 2 if multi else 1)
@@ -198,7 +199,7 @@ class TestPayload(unittest.TestCase):
                     "options": [{"n": 1, "kind": "choice", "label": "Not now — commit nothing"},
                                 {"n": 2, "kind": "command", "label": "git commit -m 'a, b'"},
                                 {"n": 3, "kind": "command", "label": PUSH}]}
-        payload = state_mod.dialog_payload([codex_decision], "codex")
+        payload = rr_dialog.dialog_payload([codex_decision], "codex")
         self.assertEqual([q["id"] for q in payload["questions"]], ["d3_1", "d3_2"])
         self.assertTrue(all("multiSelect" not in q for q in payload["questions"]))
 
@@ -637,7 +638,7 @@ class TestRecorder(HookCase):  # pylint: disable=too-many-public-methods  # one 
                       # review L1: ASCII only, as state.py's patterns
                       "git push origin mäin", "git push origin ma٣in", "npx riskrails@１.0 --yes"]:
             with self.subTest(label=label):
-                self.assertEqual(dialog.validate_label(label) is None, state_mod.validate_label(label) is None)
+                self.assertEqual(dialog.validate_label(label) is None, rr_labels.validate_label(label) is None)
 
 
 def prompt(scratch):

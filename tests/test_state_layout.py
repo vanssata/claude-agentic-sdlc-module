@@ -20,7 +20,7 @@ Two phases, told by whether state.py still defines `main`:
     are all core imports none of os, subprocess, time, fcntl (R16).
   phase 2 (state.py is the shim, step s8) - TestCutOver: the entry under 200 lines, the missing-
     package message, module sizes (advisory), the partition on every module, one home per name,
-    no `global`, no `__file__`, the re-export list against the two greps of R6, the import
+    no `global`, no `__file__`, the entry's imports (fs and main only, R6), no `state_mod.<name>` in the suites, the import
     graph from the real imports, the forbidden constructs of R4 and R6, hooks isolation (R15),
     R16 at full.
 
@@ -266,16 +266,14 @@ class TestModulesPresent(unittest.TestCase):
 @unittest.skipIf(entry_defines_main(), "state.py still defines main: phase 1 above applies")
 class TestCutOver(unittest.TestCase):
     """Phase 2: state.py is the shim. Entry size (R2), the missing-package message, sizes (Q16),
-    no `global` and no `__file__` (R4, R6a), the re-export list (R6), the import graph from the
+    no `global` and no `__file__` (R4, R6a), the entry's imports and the suites' use of it (R6), the import graph from the
     real imports (R10), the forbidden constructs (R4, R6), hooks isolation (R15), R16 at full,
     exactly one home per name (R3)."""
 
     FORBIDDEN_NAMES = {"ABC", "abstractmethod", "Protocol", "staticmethod"}
     CLASSES = {"Runtime", "Ledger", "Profile"}
-    SHIM_ABSENT = {"json", "os", "__file__", "RUNTIME"}      # R6: imported by the entry, or retired (Q24)
-    # reached through a variable, which neither grep of R6 sees: test_dialog_contract.py runs
-    # `module.json_loads_capped` for module in (dialog, state_mod)
-    INDIRECT = {"json_loads_capped"}
+    # R6, as amended: the suites reach the entry for `main` and `__file__` only
+    ENTRY_ALLOWED = {"main", "__file__"}
 
     @classmethod
     def setUpClass(cls):
@@ -304,7 +302,7 @@ class TestCutOver(unittest.TestCase):
                          "sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))")
         before = [n for n in self.entry.body
                   if n.lineno < inserts[0].lineno and isinstance(n, (ast.Import, ast.ImportFrom))]
-        self.assertEqual([ast.unparse(n) for n in before], ["import json", "import os", "import sys"])
+        self.assertEqual([ast.unparse(n) for n in before], ["import os", "import sys"])
         self.assertTrue(os.access(STATE, os.X_OK), "state.py lost its executable bit")
 
     def test_a_missing_package_exits_with_one_line(self):
@@ -414,42 +412,42 @@ class TestCutOver(unittest.TestCase):
                         mod, node.lineno, base, ", ".join(a.name for a in node.names), base.split(".")[1]))
         self.assertEqual(problems, [], "\n".join(problems))
 
-    # -- R6: the re-export list
-    def expected_reexports(self):
-        found = set()
+    # -- R6: the entry re-exports nothing
+    def test_the_entry_imports_only_fs_and_main_from_the_package(self):
+        found = []
+        for node in ast.walk(self.entry):       # the `fs` import sits in a try
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.split(".")[0] == "rr_state":
+                found += [(node.module, alias.name) for alias in node.names]
+            elif isinstance(node, ast.Import):
+                found += [(alias.name, "") for alias in node.names if alias.name.split(".")[0] == "rr_state"]
+        self.assertEqual(sorted(found), [("rr_state", "fs"), ("rr_state.cli", "main")], "the entry re-exports")
+
+    @classmethod
+    def entry_uses_in(cls, text):
+        """The `state_mod.<name>` and patch.object(state_mod, "<name>") uses of R6, minus the allowed two."""
+        found = set(re.findall(r"state_mod\.([A-Za-z_][A-Za-z_0-9]*)", text))
+        found.update(re.findall(r'patch\.object\(state_mod, "([A-Za-z_][A-Za-z_0-9]*)"', text))
+        return found - cls.ENTRY_ALLOWED
+
+    def test_the_suites_use_nothing_of_the_entry_but_main_and_file(self):
+        problems = []
         for name in sorted(os.listdir(os.path.join(ROOT, "tests"))):
             if not name.endswith(".py") or name == os.path.basename(__file__):
                 continue
             with open(os.path.join(ROOT, "tests", name), encoding="utf-8") as handle:
-                text = handle.read()
-            # R6's two greps; the name class takes digits too, or `archive_v7` would read `archive_v`
-            found.update(re.findall(r"state_mod\.([A-Za-z_][A-Za-z_0-9]*)", text))
-            found.update(re.findall(r'patch\.object\(state_mod, "([A-Za-z_][A-Za-z_0-9]*)"', text))
-        return (found - self.SHIM_ABSENT) | self.INDIRECT | {"main"}
+                problems += ["tests/%s: state_mod.%s" % (name, hit) for hit in sorted(self.entry_uses_in(handle.read()))]
+        self.assertEqual(problems, [], "\n".join(problems))
 
-    def test_the_reexports_are_the_two_greps_of_r6(self):
-        imported = {}
-        for node in self.entry.body:
-            if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("rr_state."):
-                for alias in node.names:
-                    self.assertNotIn(alias.name, imported, "re-exported twice")
-                    imported[alias.name] = node.module.split(".")[1]
-        self.assertEqual(sorted(set(imported) ^ self.expected_reexports()), [], "re-export list differs from the greps")
-        homes = {n: m for m, s in self.part["modules"].items() for n in s["defs"]}
-        self.assertEqual({n: m for n, m in imported.items() if homes.get(n) != m}, {},
-                         "a name imported from a module that is not its home")
+    def test_the_use_check_sees_a_leftover(self):
+        self.assertEqual(self.entry_uses_in("state_mod.load(x); state_mod.main(); state_mod.__file__"), {"load"})
+        self.assertEqual(self.entry_uses_in('patch.object(state_mod, "load")'), {"load"})
+        self.assertEqual(self.entry_uses_in("cmd = 'import state as state_mod; state_mod.json.dump'"), {"json"})
 
-    def test_the_reexports_are_the_objects_of_their_homes(self):
+    def test_the_entry_main_and_paths(self):
         sys.path.insert(0, os.path.dirname(PACKAGE))
         try:
             state = importlib.import_module("state")
-            for node in self.entry.body:
-                if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("rr_state."):
-                    home = importlib.import_module(node.module)
-                    for alias in node.names:
-                        self.assertIs(getattr(state, alias.name), getattr(home, alias.name), alias.name)
-            self.assertIs(state.json, json)
-            self.assertIs(state.os, os)
+            self.assertIs(state.main, importlib.import_module("rr_state.cli").main)
             self.assertEqual(os.path.abspath(state.__file__), STATE)
             self.assertEqual(importlib.import_module("rr_state.fs").ENTRY, STATE)
         finally:
