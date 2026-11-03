@@ -18,10 +18,11 @@ sys.path.insert(0, os.path.join(ROOT, "skills", "ai-task"))
 sys.path.insert(0, os.path.join(ROOT, "hooks"))
 import state as state_mod  # noqa: E402  pylint: disable=wrong-import-position
 from guard import dialog  # noqa: E402  pylint: disable=wrong-import-position
+from rr_state import dialog as rr_dialog, labels as rr_labels, ledger as rr_ledger, locks as rr_locks, profile as rr_profile  # noqa: E402  pylint: disable=wrong-import-position
 
 
 def state_reader(path, session, at):
-    return [p["id"] for p in state_mod.live_picks(state_mod.read_ledger(None, path), session, at)]
+    return [p["id"] for p in rr_ledger.live_picks(rr_ledger.read_ledger(None, path), session, at)]
 
 
 def hooks_reader(path, session, at):
@@ -55,7 +56,7 @@ class TestLedgerContract(unittest.TestCase):
             if name.endswith(".jsonl"):
                 with open(os.path.join(FIXTURES, name), "rb") as fh:
                     for line in fh:
-                        self.assertLessEqual(len(line), state_mod.LEDGER_LINE_MAX, name)
+                        self.assertLessEqual(len(line), rr_ledger.LEDGER_LINE_MAX, name)
 
     def test_both_readers_skip_only_a_too_deep_line(self):
         """A line nested past the parser's stack is torn like any other: both
@@ -67,7 +68,7 @@ class TestLedgerContract(unittest.TestCase):
             path = os.path.join(tmp, "consent.jsonl")
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write("%s\n%s\n%s\n" % (good, "[" * 200000, other))
-            seen = {"state.py": state_mod.read_ledger(None, path), "hooks/guard/dialog.py": dialog.read_ledger(None, path)}
+            seen = {"state.py": rr_ledger.read_ledger(None, path), "hooks/guard/dialog.py": dialog.read_ledger(None, path)}
         for name, entries in seen.items():
             with self.subTest(reader=name):
                 self.assertEqual([e["ids"] for e in entries], [["C1"], ["C2"]])
@@ -95,12 +96,12 @@ class TestLedgerContract(unittest.TestCase):
                   "git commit -m x; ls", "git commit -m $(id)", "git commit -m 'a\tb'"]
         for label in labels:
             with self.subTest(label=label):
-                self.assertEqual(dialog.validate_label(label) is None, state_mod.validate_label(label) is None)
+                self.assertEqual(dialog.validate_label(label) is None, rr_labels.validate_label(label) is None)
 
     def test_both_sides_share_the_limits(self):
         self.assertEqual((dialog.LINE_MAX, dialog.LOCK_STALE_S, dialog.LABEL_MAX, dialog.LEDGER_TYPES),
-                         (state_mod.LEDGER_LINE_MAX, state_mod.LOCK_STALE, state_mod.LABEL_MAX,
-                          state_mod.LEDGER_TYPES))
+                         (rr_ledger.LEDGER_LINE_MAX, rr_locks.LOCK_STALE, rr_labels.LABEL_MAX,
+                          rr_ledger.LEDGER_TYPES))
 
 
 class TestSwitchContract(unittest.TestCase):
@@ -111,9 +112,9 @@ class TestSwitchContract(unittest.TestCase):
              "CLAUDE_CONFIG_DIR", "CODEX_HOME", "CLAUDE_CODE_ENTRYPOINT")
 
     def test_tables_are_equal(self):
-        self.assertEqual(state_mod.SESSION_ENV, dialog.SESSION_ENV)
-        self.assertEqual(state_mod.DIALOG_TOOL, dialog.DIALOG_TOOL)
-        self.assertEqual(state_mod.JSON_DEPTH_MAX, dialog.JSON_DEPTH_MAX)
+        self.assertEqual(rr_dialog.SESSION_ENV, dialog.SESSION_ENV)
+        self.assertEqual(rr_dialog.DIALOG_TOOL, dialog.DIALOG_TOOL)
+        self.assertEqual(rr_dialog.JSON_DEPTH_MAX, dialog.JSON_DEPTH_MAX)
 
     @staticmethod
     def nested(total, key_tail):
@@ -140,14 +141,14 @@ class TestSwitchContract(unittest.TestCase):
                     env = {"CODEX_HOME" if runtime == "codex" else "CLAUDE_CONFIG_DIR": home}
                     with mock.patch.dict(os.environ, env, clear=False):
                         self.assertEqual(dialog.dialog_policy(root) is not None, ok)
-                        self.assertEqual(state_mod.dialog_policy(root) is not None, ok)
+                        self.assertEqual(rr_dialog.dialog_policy(root) is not None, ok)
                         self.assertEqual(dialog.dialog_tool(runtime) == tool, ok)
-                        self.assertEqual(state_mod.dialog_tool_verified(runtime) == tool, ok)
+                        self.assertEqual(rr_dialog.dialog_tool_verified(runtime) == tool, ok)
 
     def test_read_profile_survives_deep_nesting(self):
         """read_profile returns {} for a non-dict too, so the cap cases are objects: a dict
         nested exactly JSON_DEPTH_MAX deep is read, one level deeper is {} only because of the cap."""
-        cap = state_mod.JSON_DEPTH_MAX
+        cap = rr_dialog.JSON_DEPTH_MAX
 
         def balanced(total):
             return '{"a":' + "[" * (total - 1) + "0" + "]" * (total - 1) + "}"
@@ -159,7 +160,7 @@ class TestSwitchContract(unittest.TestCase):
                 with open(os.path.join(tmp, "riskrails", "profile.json"), "w", encoding="utf-8") as fh:
                     fh.write(text)
                 with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": tmp}, clear=False):
-                    self.assertEqual(state_mod.read_profile("claude"), want)
+                    self.assertEqual(rr_profile.read_profile("claude"), want)
 
     def test_scanner_copies_agree_on_escapes(self):
         """The two json_loads_capped scanners are copies; a drift in one copy's string/escape
@@ -189,12 +190,12 @@ class TestSwitchContract(unittest.TestCase):
                 return ("err", type(exc).__name__ if not isinstance(exc, json.JSONDecodeError) else "decode")
         for text in texts:
             with self.subTest(text=text[:60]):
-                a, b = run(dialog, text), run(state_mod, text)
+                a, b = run(dialog, text), run(rr_dialog, text)
                 self.assertEqual(a[0], b[0])
                 if a[0] == "ok":
                     self.assertEqual(a[1], b[1])
         # the cap itself is enforced, not just agreed on, in both copies
-        for module in (dialog, state_mod):
+        for module in (dialog, rr_dialog):
             self.assertEqual(module.json_loads_capped(deep(cap, '"s": "\\"[[[", '))["s"], '"[[[')
             with self.assertRaises(ValueError):
                 module.json_loads_capped(deep(cap + 1, '"s": "\\\\", '))
@@ -355,7 +356,7 @@ class TestSwitchContract(unittest.TestCase):
                     if var not in env:
                         os.environ.pop(var, None)
                 hooks = dialog.switch_state(root, runtime, payload)
-                got = state_mod.dialog_on(root, runtime=runtime)
+                got = rr_dialog.dialog_on(root, runtime=runtime)
         with self.subTest(name):
             seen.add(hooks)
             if diagonal:

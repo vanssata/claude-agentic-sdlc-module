@@ -934,12 +934,12 @@ class TestMigration0009(unittest.TestCase):
         sys.path.insert(0, os.path.join(ROOT, "skills", "ai-task"))
         sys.path.insert(0, os.path.join(ROOT, "tests"))
         try:
-            import state as state_mod  # pylint: disable=import-outside-toplevel
+            from rr_state import fs, task  # pylint: disable=import-outside-toplevel
             from guard_harness import guard, run  # pylint: disable=import-outside-toplevel
         finally:
             del sys.path[:2]
-        self.assertEqual(state_mod.state_path(root), os.path.join(root, self.NEW))
-        self.assertEqual(state_mod.load(root, claim=False)["goal"], "mid-build")
+        self.assertEqual(fs.state_path(root), os.path.join(root, self.NEW))
+        self.assertEqual(task.load(root, claim=False)["goal"], "mid-build")
         outside = {"hook_event_name": "PreToolUse", "tool_name": "Edit", "cwd": root,
                    "tool_input": {"file_path": root + "/src/Elsewhere.php"}}
         inside = dict(outside, tool_input={"file_path": root + "/src/Clock.php"})

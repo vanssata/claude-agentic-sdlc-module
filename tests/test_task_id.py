@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import memory_harness as mh  # noqa: E402  pylint: disable=wrong-import-position
 import memory_format as mf  # noqa: E402  pylint: disable=wrong-import-position
-import state as state_mod  # noqa: E402  pylint: disable=wrong-import-position
+from rr_state import task as task_mod  # noqa: E402  pylint: disable=wrong-import-position
 
 MINUTE = datetime(2026, 10, 28, 17, 39, 12, tzinfo=timezone.utc)
 
@@ -50,7 +50,7 @@ class TestNewId(unittest.TestCase):
         task = mf.new_task_id(MINUTE, "compact-memory")
         self.assertEqual(task, "T-2026-10-28-1739-compact-memory")
         self.assertRegex(task, mf.NEW_ID_RE)
-        self.assertRegex(task, state_mod.TASK_ID_RE)
+        self.assertRegex(task, task_mod.TASK_ID_RE)
         self.assertTrue(re.search(r"(^|/)\.ai/reports/[^/]+/", ".ai/reports/%s/task.md" % task))
         with self.assertRaises(ValueError):
             mf.new_task_id(MINUTE, "No")
@@ -63,7 +63,7 @@ class TestNewId(unittest.TestCase):
 
     def test_legacy_ids_stay_valid(self):
         for task in ("T-2026-09-21-001", "T-2026-10-28-011", "T-OLD", "T-2026.09-a_b"):
-            self.assertEqual(state_mod.valid_task_id(task), task)
+            self.assertEqual(task_mod.valid_task_id(task), task)
         self.assertRegex("T-2026-09-21-001", mf.LEGACY_ID_RE)
         self.assertNotRegex("T-2026-09-21-001", mf.NEW_ID_RE)
 
@@ -78,7 +78,7 @@ class TestNextTaskId(unittest.TestCase):
         self.p.close()
 
     def call(self, goal="Same goal", slug=None):
-        return state_mod.next_task_id(self.p.root, goal, slug, at=MINUTE)
+        return task_mod.next_task_id(self.p.root, goal, slug, at=MINUTE)
 
     def test_report_directory_log_directory_and_seal_each_count_as_taken(self):
         first = self.call()

@@ -25,7 +25,12 @@ from unittest import mock
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(ROOT, "skills", "ai-task", "state.py")
 sys.path.insert(0, os.path.join(ROOT, "skills", "ai-task"))
-import state as state_mod  # noqa: E402  pylint: disable=wrong-import-position
+import state  # noqa: E402,F401  pylint: disable=wrong-import-position,unused-import  # sets rr_state.fs.ENTRY
+from rr_state import close as rr_close  # noqa: E402  pylint: disable=wrong-import-position
+from rr_state import dialog as rr_dialog, fs as rr_fs, gate as rr_gate  # noqa: E402  pylint: disable=wrong-import-position
+from rr_state import journal as rr_journal, labels as rr_labels, ledger as rr_ledger  # noqa: E402  pylint: disable=wrong-import-position
+from rr_state import policy as rr_policy, profile as rr_profile, questions as rr_questions  # noqa: E402  pylint: disable=wrong-import-position
+from rr_state import questions_cmd as rr_questions_cmd, runtime as rr_runtime, task as rr_task  # noqa: E402  pylint: disable=wrong-import-position
 import sensors  # noqa: E402  pylint: disable=wrong-import-position
 import weight  # noqa: E402  pylint: disable=wrong-import-position
 
@@ -87,7 +92,7 @@ class Project:
         """runtime=None leaves AI_RUNTIME unset, so detection decides; env adds
         variables after the agent markers are removed; state_py=None runs SHIM."""
         base = {k: v for k, v in os.environ.items()
-                if k not in state_mod.AGENT_MARKERS and k not in ("AI_UNATTENDED", "AI_RUNTIME",
+                if k not in rr_runtime.AGENT_MARKERS and k not in ("AI_UNATTENDED", "AI_RUNTIME",
                                                                    "AI_HANDOFF_NO_PROMPT")}
         if runtime:
             base["AI_RUNTIME"] = runtime
@@ -629,16 +634,16 @@ class TestSurface(Base):  # pylint: disable=too-many-public-methods  # one test 
     def test_abandon_old_writes_the_archive_atomically(self):
         # Register #9: a failed write leaves no torn state.json at the target.
         target = os.path.join(self.p.root, ".ai", "state", "logs", "T-OLD", "state.json")
-        for patched in (mock.patch.object(state_mod.json, "dump", side_effect=OSError("disk full")),
-                        mock.patch.object(state_mod.os, "replace", side_effect=OSError("disk full"))):
+        for patched in (mock.patch.object(json, "dump", side_effect=OSError("disk full")),
+                        mock.patch.object(os, "replace", side_effect=OSError("disk full"))):
             self.p.write(".ai/state/current.json", json.dumps({
                 "task_id": "T-OLD", "goal": "g", "workflow": "feature", "risk_tier": "T2",
                 "current_stage": "implementation", "approved_plan": {"ref": "inline", "steps": []}}))
             with patched, self.assertRaises(OSError):
-                state_mod.abandon_old(None, self.p.root)
+                rr_task.abandon_old(None, self.p.root)
             self.assertFalse(os.path.exists(target))
-        with mock.patch.object(state_mod.os, "replace", wraps=os.replace) as replaced:
-            state_mod.abandon_old(None, self.p.root)
+        with mock.patch.object(os, "replace", wraps=os.replace) as replaced:
+            rr_task.abandon_old(None, self.p.root)
         self.assertIn(target, [call.args[1] for call in replaced.call_args_list])
         self.assertEqual(self.p.archived("T-OLD")["result"], "abandoned")
 
@@ -655,8 +660,8 @@ class TestSurface(Base):  # pylint: disable=too-many-public-methods  # one test 
         self.p.start()
         state = self.p.state()
         target = os.path.join(self.p.root, ".ai", "state", "logs", state["task_id"], "state.json")
-        with mock.patch.object(state_mod.os, "replace", wraps=os.replace) as replaced:
-            state_mod.archive_v7(self.p.root, state, state_mod.current_tree(self.p.root), "abandoned")
+        with mock.patch.object(os, "replace", wraps=os.replace) as replaced:
+            rr_close.archive_v7(self.p.root, state, rr_fs.current_tree(self.p.root), "abandoned")
         self.assertIn(target, [call.args[1] for call in replaced.call_args_list])
         self.assertEqual(self.p.archived(state["task_id"])["task_id"], state["task_id"])
 
@@ -1030,7 +1035,7 @@ class TestRescore(unittest.TestCase):
         self.p.close()
 
     def rescore(self, files, current=None):
-        return state_mod.rescore_weight(self.p.root, self.base, files, current or dict.fromkeys(weight.AXES, 0),
+        return rr_policy.rescore_weight(self.p.root, self.base, files, current or dict.fromkeys(weight.AXES, 0),
                                  self.policy)
 
     def test_content_already_there_never_raises_past_needs_step(self):
@@ -1051,7 +1056,7 @@ class TestRescore(unittest.TestCase):
     def test_mode_for_matches_compute(self):
         for axes, mode in (({}, "light"), ({"scope": 2, "behaviour": 1}, "guarded"),
                            ({"domain": 2}, "full"), ({"domain": 2, "reversibility": 2}, "full_irreversible")):
-            self.assertEqual(state_mod.mode_for(axes, self.policy), mode)
+            self.assertEqual(rr_policy.mode_for(axes, self.policy), mode)
 
     def test_an_irreversible_pattern_that_starts_with_a_blank_is_nameable(self):
         # Register #46: the keyword is the first run of letters, so no IndexError and a confirm can name it.
@@ -1066,7 +1071,7 @@ class TestRescore(unittest.TestCase):
         p.write("db/migrations/0002.sql", "SELECT 1; PURGE t;\n")
         p.ok("verify", "--scope", "suite")
         self.assertEqual(p.state()["weight"]["operations"], ["PURGE"])
-        self.assertTrue(state_mod.confirm_names("PURGE the table", ["PURGE"]))
+        self.assertTrue(rr_gate.confirm_names("PURGE the table", ["PURGE"]))
         p.write("db/migrations/0002.sql", "a  b\n")          # only the blank-only pattern matches
         p.ok("verify", "--scope", "suite")
         self.assertIn("IRREVERSIBLE", p.state()["weight"]["operations"])
@@ -1223,7 +1228,7 @@ class Ported(Base):
 
     def in_pty(self, *args, set_env=""):
         """state.py from a pseudo-terminal, every agent marker removed, then set_env set."""
-        markers = ",".join(list(state_mod.AGENT_MARKERS) + ["AI_RUNTIME", "AI_UNATTENDED"])
+        markers = ",".join(list(rr_runtime.AGENT_MARKERS) + ["AI_RUNTIME", "AI_UNATTENDED"])
         return subprocess.run([sys.executable, "-c", PTY_RUN, STATE, self.p.root, markers, set_env] + list(args),
                               capture_output=True, text=True, check=False)
 
@@ -1337,7 +1342,7 @@ class TestOwnership(Ported):
             pid = os.fork()
             if pid == 0:
                 for i in range(200):
-                    state_mod.append_journal(self.p.root, "T-concurrent", state_mod.journal_line(
+                    rr_journal.append_journal(self.p.root, "T-concurrent", rr_journal.journal_line(
                         "T-concurrent", "note", "agent", "test", "%s-%03d" % (worker, i),
                         {"kind": "decision", "text": "x" * 300}))
                 os._exit(0)                               # pylint: disable=protected-access
@@ -1350,9 +1355,9 @@ class TestOwnership(Ported):
         self.assertEqual(len([json.loads(line) for line in lines]), 400)
 
     def test_a_journal_line_stays_under_the_cap(self):
-        cut = json.loads(state_mod.journal_line("T-x", "note", "agent", "plan", "d" * 5000, {"error": "e" * 9000}))
+        cut = json.loads(rr_journal.journal_line("T-x", "note", "agent", "plan", "d" * 5000, {"error": "e" * 9000}))
         self.assertEqual((len(cut["detail"]), len(cut["data"]["error"])), (500, 1000))
-        huge = state_mod.journal_line("T-x", "note", "agent", "plan", "d", {"text": "x" * 9000})
+        huge = rr_journal.journal_line("T-x", "note", "agent", "plan", "d", {"text": "x" * 9000})
         self.assertLessEqual(len(huge.encode()), 4096)
         self.assertEqual(json.loads(huge)["data"], {"truncated": True})
 
@@ -1517,7 +1522,7 @@ class TestQuestions(Ported):
         self.p.ok("close", "--abandon")
 
     def test_twelve_asks_at_once_all_land(self):
-        env = {k: v for k, v in os.environ.items() if k not in state_mod.AGENT_MARKERS}
+        env = {k: v for k, v in os.environ.items() if k not in rr_runtime.AGENT_MARKERS}
         env["AI_RUNTIME"] = "claude"
         procs = [subprocess.Popen([sys.executable, "-I", STATE, "--root", self.p.root, "ask", "Question %d?" % i,  # pylint: disable=consider-using-with
                                    "--option", "A: one", "--option", "B: two"], env=env,
@@ -1777,20 +1782,20 @@ class TestGateFileRoute(Ported):
         self.assertEqual(self.of("runtime_handoff")[-1]["data"]["to"], "codex")
 
     def test_a_terminal_rejection_beats_a_sync_already_under_way(self):
-        state = state_mod.load(self.p.root, claim=False)
+        state = rr_task.load(self.p.root, claim=False)
         self.turn("s1", self.requested)
         self.fill("G1", "A")
 
         class Args:                                    # what cmd_questions would pass
             by, sync, pending, topic, format = "the agent", True, False, None, "prose"
-        lines, questions = state_mod.parse_questions(self.qpath())
-        gates = [q for q in state_mod.sync_answers(self.p.root, state, self.qpath(), lines, questions, Args)
+        lines, questions = rr_questions.parse_questions(self.qpath())
+        gates = [q for q in rr_questions_cmd.sync_answers(self.p.root, state, self.qpath(), lines, questions, Args)
                  if q["kind"] == "G"]
         self.assertTrue(gates)
         self.p.ok("reject", "--by", "ivan", "--why", "no rollback plan")      # in those seconds
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             try:
-                state_mod.close_gate_from_file(self.p.root, state, gates[0], "the agent")
+                rr_questions_cmd.close_gate_from_file(self.p.root, state, gates[0], "the agent")
             except SystemExit:
                 pass
         self.assertFalse(self.approval()["granted"])
@@ -2110,7 +2115,7 @@ class DialogBase(unittest.TestCase):
         return [e for e in self.p.events(self.p.state()["task_id"]) if e["event"] == event]
 
     def in_pty(self, *args):
-        markers = ",".join(list(state_mod.AGENT_MARKERS) + ["AI_RUNTIME", "AI_UNATTENDED"])
+        markers = ",".join(list(rr_runtime.AGENT_MARKERS) + ["AI_RUNTIME", "AI_UNATTENDED"])
         return subprocess.run([sys.executable, "-c", PTY_RUN, STATE, self.p.root, markers, ""] + list(args),
                               capture_output=True, text=True, check=False)
 
@@ -2561,12 +2566,12 @@ class TestDialogRoute(DialogBase):  # pylint: disable=too-many-public-methods  #
         """Review M2 of T-2026-10-31-1529: read_session itself, not a command
         whose runtime marker skips it."""
         os.makedirs(os.path.join(self.p.root, ".ai", "state"), exist_ok=True)
-        path = state_mod.session_path(self.p.root)
+        path = rr_fs.session_path(self.p.root)
         seen = []
         for text in ("{not json", "[" * 200000):
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write(text)
-            seen.append(state_mod.read_session(self.p.root))
+            seen.append(rr_fs.read_session(self.p.root))
         self.assertEqual(seen, [{}, {}])
 
     def test_deep_consent_line_reads_as_a_malformed_one(self):
@@ -2578,7 +2583,7 @@ class TestDialogRoute(DialogBase):  # pylint: disable=too-many-public-methods  #
         for bad in ("{not json", "[" * 200000):
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write("\n".join([good[0], bad, good[1]]) + "\n")
-            seen.append(state_mod.read_ledger(self.p.root, path))
+            seen.append(rr_ledger.read_ledger(self.p.root, path))
         self.assertEqual(seen[1], seen[0])
         self.assertEqual([e["id"] for e in seen[1]], ["C1", "C2"])
 
@@ -2675,7 +2680,7 @@ class TestDialogRoute(DialogBase):  # pylint: disable=too-many-public-methods  #
 
     def test_rollback_line_follows_reversibility(self):
         """Review M3: the question states what the weight says about rollback."""
-        facts = state_mod.task_facts
+        facts = rr_dialog.task_facts
         state = {"task_id": "T-1", "goal": "g", "mode": "full", "verify": {"runs": []}, "review": {},
                  "weight": {"w": 8, "axes": {"reversibility": 2}, "evidence": {"reversibility": "deploy/x.yaml"}}}
         self.assertIn("rollback: git revert is not enough — reversibility 2: deploy/x.yaml",
@@ -2721,7 +2726,7 @@ class TestDialogRoute(DialogBase):  # pylint: disable=too-many-public-methods  #
         subprocess.run(["git", "-C", self.p.root, "config", "user.name", "Ivan \"Vanko\" O'Neil"], check=True)
         self.full_gate()
         label = self.label("D1", 2)
-        self.assertIsNone(state_mod.validate_label(label))
+        self.assertIsNone(rr_labels.validate_label(label))
         self.p.pick("D1", 2)
         self.p.ok(*self.argv(label))
         self.assertEqual(self.p.state()["human_approval"]["granted_by"], "Ivan \"Vanko\" O'Neil")
@@ -2813,7 +2818,7 @@ class TestDeepJsonOutsideState(DialogBase):
         path = os.path.join(self.p.root, ".ai", "reports", task_id, "events.jsonl")
         with open(path, "a", encoding="utf-8") as fh:
             fh.write("{not json\n" + self.DEEP + "\n")
-        events, skipped = state_mod.read_journal(self.p.root, task_id)
+        events, skipped = rr_journal.read_journal(self.p.root, task_id)
         self.assertEqual(skipped, 2, "the malformed and the deep line are both skipped")
         self.assertTrue(events)
 
@@ -2822,30 +2827,30 @@ class TestDeepJsonOutsideState(DialogBase):
         good = json.dumps({"kind": "task", "task": "T-sealed"}, separators=(",", ":"))
         self.write_at(os.path.join(base, "a.jsonl"),
                       '{"kind":"task", not json\n{"kind":"task","x":' + self.DEEP + "\n" + good + "\n")
-        self.assertEqual(state_mod.sealed_task_ids(self.p.root), {"T-sealed"})
+        self.assertEqual(rr_task.sealed_task_ids(self.p.root), {"T-sealed"})
 
     def test_quota_file(self):
         gate = os.path.join(self.p.home, "state", "runtime-gate.json")
         with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": self.p.home}):
             self.write_at(gate, "{not json")
-            malformed = state_mod.read_quota("claude")
+            malformed = rr_profile.read_quota("claude")
             self.write_at(gate, self.DEEP)
-            self.assertEqual(state_mod.read_quota("claude"), malformed)
+            self.assertEqual(rr_profile.read_quota("claude"), malformed)
         self.assertIsNone(malformed)
 
     def test_json_object_file(self):
         path = os.path.join(self.p.tmp.name, "obj.json")
         self.write_at(path, "{not json")
-        malformed = state_mod.read_json_object(path)
+        malformed = rr_profile.read_json_object(path)
         self.write_at(path, self.DEEP)
-        self.assertEqual(state_mod.read_json_object(path), malformed)
+        self.assertEqual(rr_profile.read_json_object(path), malformed)
         self.assertIsNone(malformed)
 
     def test_jwt_payload(self):
         def token(text):
             return "h.%s.s" % base64.urlsafe_b64encode(text.encode()).decode().rstrip("=")
-        self.assertEqual(state_mod.jwt_plan_type(token(self.DEEP)), state_mod.jwt_plan_type(token("{not json")))
-        self.assertEqual(state_mod.jwt_plan_type(token(self.DEEP)), "")
+        self.assertEqual(rr_profile.jwt_plan_type(token(self.DEEP)), rr_profile.jwt_plan_type(token("{not json")))
+        self.assertEqual(rr_profile.jwt_plan_type(token(self.DEEP)), "")
 
     def test_event_data_argument(self):
         self.p.start()
@@ -2886,7 +2891,7 @@ class TestDeepJsonOutsideState(DialogBase):
         self.p.append(type="decline", decision="D1", why="other_text")
         with open(ledger, "rb") as fh:
             size = len(fh.read())
-        self.assertEqual([e["type"] for e in state_mod.read_ledger(self.p.root)], ["pick", "decline"])
+        self.assertEqual([e["type"] for e in rr_ledger.read_ledger(self.p.root)], ["pick", "decline"])
         task_id = self.p.state()["task_id"]
 
         def mirrored():
@@ -3392,10 +3397,10 @@ class TestDocumentsOnly(unittest.TestCase):  # pylint: disable=too-many-public-m
         policy = dict(weight.load_policy(ROOT)[0], documents=self.DOCUMENTS)
         paths = ("README.md", "docs/a/b.md", "docs/x.json", ".ai/state/x.json", ".ai/policies/weight.json",
                  ".ai/policies/x.md", "skills/a.md", "src/a.py", "tests/test_a.py", "notes.txt")
-        self.assertEqual([p for p in paths if state_mod.is_document(p, policy)],
+        self.assertEqual([p for p in paths if rr_policy.is_document(p, policy)],
                          ["README.md", "docs/a/b.md", "docs/x.json", ".ai/state/x.json"])
-        self.assertFalse(state_mod.is_document("README.md", {}), "no `documents` key: nothing is a document")
-        self.assertEqual(state_mod.NEVER_DOCUMENTS, (".ai/policies/**", ".ai/rules/**"))
+        self.assertFalse(rr_policy.is_document("README.md", {}), "no `documents` key: nothing is a document")
+        self.assertEqual(rr_policy.NEVER_DOCUMENTS, (".ai/policies/**", ".ai/rules/**"))
 
     def test_a_red_full_run_after_g_with_no_tree_is_off(self):
         # Register E2: a red whole-suite run whose tree moved (tree None) after G still stops the rule.

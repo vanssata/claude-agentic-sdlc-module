@@ -57,8 +57,7 @@ redesign 2.6) answers status, handoff and questions, and close --abandon drops
 it; every other command refuses it.
 """
 
-# pylint: disable=unused-import,wrong-import-position
-import json
+# pylint: disable=wrong-import-position
 import os
 import sys
 
@@ -68,26 +67,7 @@ try:
 except ImportError:
     sys.exit("rr_state/ is missing beside state.py: re-run `npx riskrails`")
 fs.ENTRY = os.path.abspath(__file__)    # R6a: the one path the package prints and compares
-
-# The names the suites reach as state_mod.<name> (R6) and json_loads_capped, which
-# tests/test_dialog_contract.py:176,189 reach as module.json_loads_capped over (dialog, state_mod);
-# json and os are imported above for the same reason: the suites patch state_mod.json.dump and state_mod.os.
 from rr_state.cli import main
-from rr_state.fs import current_tree, read_session, session_path, state_path
-from rr_state.runtime import AGENT_MARKERS
-from rr_state.journal import append_journal, journal_line, read_journal
-from rr_state.task import TASK_ID_RE, abandon_old, load, next_task_id, sealed_task_ids, valid_task_id
-from rr_state.policy import NEVER_DOCUMENTS, is_document, mode_for, rescore_weight
-from rr_state.locks import LOCK_STALE
-from rr_state.questions import parse_questions
-from rr_state.questions_cmd import close_gate_from_file, sync_answers
-from rr_state.ledger import LEDGER_LINE_MAX, LEDGER_TYPES, live_picks, read_ledger
-from rr_state.dialog import DIALOG_TOOL, JSON_DEPTH_MAX, QUESTION_MAX, SESSION_ENV, json_loads_capped
-from rr_state.dialog import dialog_on, dialog_payload, dialog_policy, dialog_tool_verified, task_facts
-from rr_state.labels import LABEL_MAX, validate_label
-from rr_state.gate import confirm_names
-from rr_state.profile import jwt_plan_type, read_json_object, read_profile, read_quota
-from rr_state.close import archive_v7
 
 if __name__ == "__main__":
     main()
