@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "_comment": "Yours. weight.py lays it over the plugin's weight table: objects merge, any other value replaces. /rr-setup --update never rewrites it.",
+  "tests": {
+    "max_suite_runs": 5,
+    "timeout_seconds": 3600,
+    "env_retries": 2
+  },
+  "batch": {
+    "review_rounds_max": 5,
+    "max_suite_runs": 12,
+    "parallel": 5
+  },
+  "documents": {
+    "globs": [
+      "**/*.md",
+      "docs/**/*.json",
+      ".ai/**/*.json"
+    ],
+    "except": [
+      "skills/**",
+      "hooks/**",
+      "agents/**",
+      "instructions/**",
+      "codex/**",
+      "ai/**"
+    ]
+  },
+  "examples": {
+    "light": [
+      "a font or copy change in one template",
+      "a test-only change",
+      "a message-text change",
+      "this repository: a change that moves no guard decision and no state.py refusal — skill or agent text, usage-report, installer paths, performance work that keeps the guard golden byte-identical",
+      "this repository: a change whose files are all documents (weight.json `documents`) or all tests — none of hooks/, skills/, state.py; it measures behaviour, domain, novelty 0; deleting, skipping or loosening a test, or re-recording the guard golden, is not one: declare behaviour=1"
+    ],
+    "guarded": [
+      "a regex fix in a hot guard script",
+      "a dev-environment manifest",
+      "a feature with a new screen and an additive migration",
+      "this repository: a change that adds a decision or a refusal — a new deny, a new sensor, a new state.py check — or changes a deny's reason text, the guard golden re-recorded",
+      "this repository: a change that allows what was denied or weakens a refusal; one that changes the approval path (approve, questions --sync, AI_UNATTENDED, review_status transitions); one that changes how user projects are installed or migrated (install.sh, the project-update merge, tools/)"
+    ]
+  }
+}
