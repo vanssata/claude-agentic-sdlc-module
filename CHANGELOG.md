@@ -4,9 +4,16 @@ Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelo
 
 ## [Unreleased]
 
-## [4.0.0] — 2026-11-04
+## [4.0.1] — 2026-11-11
 
-Breaking. riskrails regenerates a project's files from the plugin and converts nothing. **Run `/rr-setup --update` in each project right after installing 4.0.0**: until then the project's old shapes are not read, so a project weighs without its `domain.modules` (lighter), finds no `verify_command`, and a task still in the old `current.json` is not scope-guarded. Reinstall both routes you use, `npx riskrails@4.0.0` and the plugin install: they are separate copies.
+The first 4.0 on npm. `v4.0.0` was tagged but never published: its release verify failed on a clean checkout. Everything under 4.0.0 below applies; install `npx riskrails@4.0.1`.
+
+### Fixed
+- Three fixture files of `tests/fixtures/regenerate/v3.1.0-edited/` were hidden by the fixture's own `.gitignore` and never committed, so `test_regenerate` failed on a fresh clone. They are tracked now, and `tests/test_fixtures_tracked.py` fails when any fixture file is ignored by git.
+
+## [4.0.0] — 2026-11-04 [not published]
+
+Breaking. riskrails regenerates a project's files from the plugin and converts nothing. **Run `/rr-setup --update` in each project right after installing 4.0** (install 4.0.1: this version was not published): until then the project's old shapes are not read, so a project weighs without its `domain.modules` (lighter), finds no `verify_command`, and a task still in the old `current.json` is not scope-guarded. Reinstall both routes you use, `npx riskrails@4.0.0` and the plugin install: they are separate copies.
 
 A tree that still holds an old shape (`current.json` without `state.json`, `risk-tiers.json` without a weight table, an old `claude-agentic` or `Codex-agentic` marker) is refused (`KEPT_UNREADABLE`, exit 6, naming the file); any other older tree is regenerated without the conversions it missed. So a project last updated before 3.1.0 goes through 3.1.0 first: install `npx riskrails@3.1.0`, run `/rr-setup --update` with it, then install 4.0.0 and run it again.
 
@@ -91,6 +98,8 @@ Project schema 10 → 11: run `/rr-setup --update` after upgrading.
 - Risk tiers replaced by the weight and three modes (light, guarded, full); `/ai-*` and `/sdlc-*` become `/rr-*` (old names kept as aliases).
 - Guards in one Python process; task state in `.ai/state/state.json`. See "Upgrade to 3.0" in the README.
 
+[4.0.1]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.2.2...v4.0.1
+[4.0.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.2.2...v4.0.0
 [3.2.2]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.2.1...v3.2.2
 [3.2.1]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.1.0...v3.2.0
