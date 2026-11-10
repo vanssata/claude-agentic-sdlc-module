@@ -1,21 +1,22 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-look="warm">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>RiskRails — agents on legacy production code, on rails</title>
 <meta name="description" content="RiskRails is a plugin for Claude Code and Codex: each change is weighed on six axes, runs light, guarded or full, and a hook refuses what the task does not allow.">
-<meta name="theme-color" content="#232B27">
+<meta name="theme-color" content="#141413">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@400;700&family=IBM+Plex+Sans:wght@400;600&display=swap">
 <link rel="stylesheet" href="assets/rr.css">
+<script>try{if(localStorage.getItem("rr-look")==="classic")document.documentElement.setAttribute("data-look","classic")}catch(e){}</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="index.html"><span class="lamp" aria-hidden="true"></span>RiskRails <small>3.1.0</small></a>
+    <a class="brand" href="index.html"><span class="lamp" aria-hidden="true"></span>RiskRails <small>4.0.1</small></a>
     <button class="navbtn" aria-expanded="false" aria-controls="nav">Menu</button>
     <ul class="nav" id="nav">
       <li><a href="index.html" aria-current="page">How it works</a></li>
@@ -37,7 +38,7 @@
       <h1 style="margin-top:16px">Every change runs on a <em>set route.</em></h1>
       <p class="lead">RiskRails lets an AI agent work on legacy production code. Each change is weighed on six axes before the agent edits a file, then runs light, guarded or full. A hook refuses an edit outside the task, a read of a production secret, a force push or a deploy.</p>
       <div class="cta">
-        <span class="cmd"><code>npx riskrails@3.1.0</code><button class="copy" type="button" data-copy="npx riskrails@3.1.0">Copy</button></span>
+        <span class="cmd"><code>npx riskrails@4.0.1</code><button class="copy" type="button" data-copy="npx riskrails@4.0.1">Copy</button></span>
         <a class="btn" href="demo.html">Watch two tasks</a>
       </div>
     </div>
@@ -78,6 +79,17 @@
         <circle class="train" cx="10" cy="140" r="7"/>
       </svg>
       <p class="route-caption" aria-live="off"><span>request <b data-req>add a 3% surcharge to card payments</b></span><span>route <span class="chip r" data-mode>full</span></span></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ modes board ============ -->
+<section class="sheet band tight" id="modes">
+  <div class="wrap">
+    <div class="modes">
+      <article class="mode g rv"><header><span class="chip g">Light</span><b>W &le; 2</b></header><div class="mline" aria-hidden="true"><i></i></div><ol class="stops"><li>build</li><li>verify</li><li>close</li></ol><p>Closes on its own once the suite is green and every changed file is inside the task.</p></article>
+      <article class="mode y rv"><header><span class="chip y">Guarded</span><b>W 3&ndash;7</b></header><div class="mline" aria-hidden="true"><i></i></div><ol class="stops"><li class="you">plan &middot; you</li><li>build</li><li>review BAL</li><li>close</li></ol><p>Stops for your plan. One reviewer on the balanced tier reads the diff before the close.</p></article>
+      <article class="mode r rv"><header><span class="chip r">Full</span><b>W &ge; 8</b></header><div class="mline" aria-hidden="true"><i></i></div><ol class="stops"><li class="you">plan &middot; you</li><li>build</li><li>review STRONG</li><li class="you">you sign</li></ol><p>Stops for your plan and for your signature. One reviewer on the strong tier.</p></article>
     </div>
   </div>
 </section>
@@ -225,17 +237,17 @@
 <section class="panel band" id="new">
   <div class="wrap">
     <div class="rv">
-      <span class="eyebrow">What's new in 3.1</span>
-      <h2 class="h2">Project schema 11. <em>A quieter update.</em></h2>
+      <span class="eyebrow">What's new in 4.0</span>
+      <h2 class="h2">Project schema 12. <em>Regenerate, never migrate.</em></h2>
     </div>
     <div class="cards">
-      <div class="card rv"><h3>risk-tiers retired</h3><p>Migration <code>0011</code> takes the project from schema 10 to 11 and retires <code>.ai/policies/risk-tiers.*</code>; <code>weight.json</code> and <code>weight.md</code> replace them.</p></div>
-      <div class="card rv"><h3>A cleaner <code>--update</code></h3><p><code>/rr-setup --update</code> renders <code>weight.md</code> from <code>weight.json</code> instead of merging it, and proposes the cleanup of files the plugin no longer ships.</p></div>
-      <div class="card rv"><h3>Templates from the plugin</h3><p>The plugin supplies the SDLC templates, so a project no longer carries its own copies.</p></div>
-      <div class="card rv"><h3>CI in two tiers</h3><p>A fast smoke suite on every pull request; the full suite nightly, on demand and on release tags.</p></div>
-      <div class="card rv"><h3>Guard and state fixes</h3><p>Fixes in the path guard and in <code>state.py</code>. Upgrade the plugin on every machine before a project is committed at schema 11.</p></div>
+      <div class="card rv"><h3>Regenerate, not migrate</h3><p><code>/rr-setup --update</code> replaces a file that matches a version the plugin once shipped. An edited one becomes a <code>regenerate?</code> row that waits for a human; its original is copied under <code>.ai/reports/</code> first.</p></div>
+      <div class="card rv"><h3>Your settings, split out once</h3><p><code>weight.project.json</code> holds only what the project changed in the weight table, laid over the plugin's. <code>verification.md</code> is the one source of the verify, step and e2e commands.</p></div>
+      <div class="card rv"><h3>Nothing old is read</h3><p>The migrations, the adopt command and the one-version fallbacks are gone. A tree that still holds an old shape is refused, naming the file.</p></div>
+      <div class="card rv"><h3>Only the <code>rr-*</code> commands</h3><p>The alias names of 3.x (<code>/ai-*</code>, <code>/sdlc-*</code>, <code>/project-*</code>, usage-report) are removed. Use <code>/rr-setup</code>, <code>/rr-spec</code>, <code>/rr-plan</code>, <code>/rr-build</code>, <code>/rr-review</code>, <code>/rr-ship</code> and <code>/rr-status</code>.</p></div>
+      <div class="card rv"><h3>Breaking: update right away</h3><p>Run <code>/rr-setup --update</code> in each project right after installing 4.0. A project last updated before 3.1.0 goes through <code>npx riskrails@3.1.0</code> first.</p></div>
     </div>
-    <p class="note rv">Full list in the <a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/CHANGELOG.md">CHANGELOG</a>.</p>
+    <p class="note rv">4.0.1 is the first 4.0 on npm: <code>v4.0.0</code> was tagged but never published. Full list in the <a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/CHANGELOG.md">CHANGELOG</a>.</p>
   </div>
 </section>
 
@@ -247,7 +259,7 @@
       <h2 class="h2">Pin the version. <em>Restart.</em></h2>
       <p class="lead">Node 18+ and <code>python3</code>. The installer detects Claude Code, Codex or both and proposes the plan it found. The hooks it installs see every command an agent runs, so pin the version. In Codex, open <code>/hooks</code> and trust the entries; until you do, nothing is enforced.</p>
       <div class="cta">
-        <span class="cmd"><code>npx riskrails@3.1.0</code><button class="copy" type="button" data-copy="npx riskrails@3.1.0">Copy</button></span>
+        <span class="cmd"><code>npx riskrails@4.0.1</code><button class="copy" type="button" data-copy="npx riskrails@4.0.1">Copy</button></span>
       </div>
     </div>
     <div class="rv">
@@ -256,13 +268,13 @@
 /rr-build &lt;what you want&gt;      <span class="k"># every change</span>
 
 <span class="k"># options</span>
-npx riskrails@3.1.0 --target codex      <span class="k"># auto | claude | codex | both</span>
-npx riskrails@3.1.0 --plan max          <span class="k"># pro | team-pro | team-max | max | max20</span>
-npx riskrails@3.1.0 --dry-run           <span class="k"># print, write nothing</span>
+npx riskrails@4.0.1 --target codex      <span class="k"># auto | claude | codex | both</span>
+npx riskrails@4.0.1 --plan max          <span class="k"># pro | team-pro | team-max | max | max20</span>
+npx riskrails@4.0.1 --dry-run           <span class="k"># print, write nothing</span>
 
-<span class="k"># coming from claude-agentic 2.x</span>
-/rr-setup --update             <span class="k"># dry run first; then --apply</span></pre>
-      <p class="note">Upgrading from 2.x renames the plugin, replaces the risk tiers with the weight and moves the task state. Follow the six steps in the <a href="https://github.com/vanssata/claude-agentic-sdlc-module#upgrade-to-30">README</a>, in order.</p>
+<span class="k"># coming from 3.x</span>
+/rr-setup --update             <span class="k"># right after the install; dry run first</span></pre>
+      <p class="note">4.0 converts nothing: a project last updated before 3.1.0, or one still on claude-agentic 2.x, goes through <code>npx riskrails@3.1.0</code> first. Follow the steps in the <a href="https://github.com/vanssata/claude-agentic-sdlc-module#upgrade-to-40">README</a>, in order.</p>
     </div>
   </div>
 </section>
@@ -271,12 +283,12 @@ npx riskrails@3.1.0 --dry-run           <span class="k"># print, write nothing</
 <footer class="foot">
   <div class="wrap">
     <div class="grid">
-      <div><h4>RiskRails</h4><ul><li>Version 3.1.0 · MIT</li><li>Claude Code and Codex</li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li></ul></div>
+      <div><h4>RiskRails</h4><ul><li>Version 4.0.1 · MIT</li><li>Claude Code and Codex</li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li></ul></div>
       <div><h4>Site</h4><ul><li><a href="index.html">How it works</a></li><li><a href="demo.html">Demo</a></li><li><a href="compare.html">Compare</a></li><li><a href="storage.html">Storage</a></li></ul></div>
       <div><h4>Docs</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/getting-started.md">Getting started</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/weight.md">The weight</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/hooks.md">The guards</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/known-risks.md">Known risks</a></li></ul></div>
       <div><h4>Project</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/ROADMAP.md">Roadmap</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/SECURITY.md">Security</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/CONTRIBUTING.md">Contributing</a></li></ul></div>
     </div>
-    <p class="small">No agent merges or deploys. A commit, a push or an approval runs only as the command you picked.</p>
+    <p class="small">No agent merges or deploys. A commit, a push or an approval runs only as the command you picked. <button type="button" class="look" data-look-toggle hidden>Classic look</button></p>
   </div>
 </footer>
 <script src="assets/rr.js" defer></script>

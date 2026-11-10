@@ -1,21 +1,22 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-look="warm">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>RiskRails demo — two tasks, two routes</title>
 <meta name="description" content="Two illustrative RiskRails sessions: a light typo fix that closes on its own, and a full payment change with a plan, a STRONG review and your approval.">
-<meta name="theme-color" content="#232B27">
+<meta name="theme-color" content="#141413">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@400;700&family=IBM+Plex+Sans:wght@400;600&display=swap">
 <link rel="stylesheet" href="assets/rr.css">
+<script>try{if(localStorage.getItem("rr-look")==="classic")document.documentElement.setAttribute("data-look","classic")}catch(e){}</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="index.html"><span class="lamp" aria-hidden="true"></span>RiskRails <small>3.1.0</small></a>
+    <a class="brand" href="index.html"><span class="lamp" aria-hidden="true"></span>RiskRails <small>4.0.1</small></a>
     <button class="navbtn" aria-expanded="false" aria-controls="nav">Menu</button>
     <ul class="nav" id="nav">
       <li><a href="index.html">How it works</a></li>
@@ -80,20 +81,19 @@
     <div class="ds rv">
       <div class="ds-head"><span><b>RR301</b> · commands</span><span>the same in Claude Code and Codex</span></div>
       <div class="tbl min"><table>
-        <caption><span>5.1</span>The commands in 3.0</caption>
-        <tr><th>You want to</th><th>Run</th><th>Replaces in 2.x</th></tr>
-        <tr><td>set up <code>.ai/</code>, or bring it up to the installed plugin</td><td><code>/rr-setup</code>, <code>/rr-setup --update</code></td><td><code>/ai-init</code>, <code>/project-init</code>, <code>/project-update</code></td></tr>
-        <tr><td>move Spec Kit, Kiro, Cursor or Copilot files into this layout</td><td><code>/rr-setup --adopt</code></td><td>new</td></tr>
-        <tr><td>score the repository against the twelve plays</td><td><code>/rr-setup --audit</code></td><td><code>/ai-audit</code></td></tr>
-        <tr><td>turn an idea into intent, requirements and design</td><td><code>/rr-spec &lt;idea&gt;</code></td><td><code>/sdlc-intent</code>, <code>/sdlc-spec</code></td></tr>
-        <tr><td>plan a spec into tasks, or one task into a mode</td><td><code>/rr-plan</code></td><td><code>/sdlc-plan</code></td></tr>
-        <tr><td>do the work, or resume it</td><td><code>/rr-build &lt;request&gt;</code></td><td><code>/ai-task</code></td></tr>
-        <tr><td>run a whole plan as one task</td><td><code>/rr-build-all &lt;plan&gt;</code></td><td>new</td></tr>
-        <tr><td>review the change</td><td><code>/rr-review</code></td><td>part of <code>/ai-task</code></td></tr>
-        <tr><td>close the task, get your approval</td><td><code>/rr-ship</code></td><td>part of <code>/ai-task</code></td></tr>
-        <tr><td>see where it stands, or what it cost</td><td><code>/rr-status</code>, <code>/rr-status --cost</code></td><td><code>/ai-status</code>, <code>/usage-report</code></td></tr>
+        <caption><span>5.1</span>The commands in 4.0</caption>
+        <tr><th>You want to</th><th>Run</th></tr>
+        <tr><td>set up <code>.ai/</code>, or bring it up to the installed plugin</td><td><code>/rr-setup</code>, <code>/rr-setup --update</code></td></tr>
+        <tr><td>score the repository against the twelve plays</td><td><code>/rr-setup --audit</code></td></tr>
+        <tr><td>turn an idea into intent, requirements and design</td><td><code>/rr-spec &lt;idea&gt;</code></td></tr>
+        <tr><td>plan a spec into tasks, or one task into a mode</td><td><code>/rr-plan</code></td></tr>
+        <tr><td>do the work, or resume it</td><td><code>/rr-build &lt;request&gt;</code></td></tr>
+        <tr><td>run a whole plan as one task</td><td><code>/rr-build-all &lt;plan&gt;</code></td></tr>
+        <tr><td>review the change</td><td><code>/rr-review</code></td></tr>
+        <tr><td>close the task, get your approval</td><td><code>/rr-ship</code></td></tr>
+        <tr><td>see where it stands, or what it cost</td><td><code>/rr-status</code>, <code>/rr-status --cost</code></td></tr>
       </table></div>
-      <p class="fn">The 2.x names stay as aliases for one version.</p>
+      <p class="fn">4.0 removed the 3.x alias names; only the <code>rr-*</code> commands remain.</p>
     </div>
   </div>
 </section>
@@ -102,12 +102,12 @@
 <footer class="foot">
   <div class="wrap">
     <div class="grid">
-      <div><h4>RiskRails</h4><ul><li>Version 3.1.0 · MIT</li><li>Claude Code and Codex</li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li></ul></div>
+      <div><h4>RiskRails</h4><ul><li>Version 4.0.1 · MIT</li><li>Claude Code and Codex</li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li></ul></div>
       <div><h4>Site</h4><ul><li><a href="index.html">How it works</a></li><li><a href="demo.html">Demo</a></li><li><a href="compare.html">Compare</a></li><li><a href="storage.html">Storage</a></li></ul></div>
       <div><h4>Docs</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/getting-started.md">Getting started</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/weight.md">The weight</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/hooks.md">The guards</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/known-risks.md">Known risks</a></li></ul></div>
       <div><h4>Project</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/ROADMAP.md">Roadmap</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/SECURITY.md">Security</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/CONTRIBUTING.md">Contributing</a></li></ul></div>
     </div>
-    <p class="small">No agent merges or deploys. A commit, a push or an approval runs only as the command you picked.</p>
+    <p class="small">No agent merges or deploys. A commit, a push or an approval runs only as the command you picked. <button type="button" class="look" data-look-toggle hidden>Classic look</button></p>
   </div>
 </footer>
 <script src="assets/rr.js" defer></script>

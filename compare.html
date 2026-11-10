@@ -1,21 +1,22 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-look="warm">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>RiskRails compared — processes, not benchmarks</title>
 <meta name="description" content="How RiskRails compares with plain Claude Code, Spec Kit, Kiro, Cursor rules and hooks, and AI-DLC: what each enforces, where each is strong, and what it leaves to you.">
-<meta name="theme-color" content="#232B27">
+<meta name="theme-color" content="#141413">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@400;700&family=IBM+Plex+Sans:wght@400;600&display=swap">
 <link rel="stylesheet" href="assets/rr.css">
+<script>try{if(localStorage.getItem("rr-look")==="classic")document.documentElement.setAttribute("data-look","classic")}catch(e){}</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="index.html"><span class="lamp" aria-hidden="true"></span>RiskRails <small>3.1.0</small></a>
+    <a class="brand" href="index.html"><span class="lamp" aria-hidden="true"></span>RiskRails <small>4.0.1</small></a>
     <button class="navbtn" aria-expanded="false" aria-controls="nav">Menu</button>
     <ul class="nav" id="nav">
       <li><a href="index.html">How it works</a></li>
@@ -73,22 +74,22 @@
       <div class="alt rv">
         <div><h3>Spec Kit</h3><p class="what">GitHub's spec-driven toolkit: constitution, specify, plan, tasks, implement.</p></div>
         <div class="pro"><h4>Strong at</h4><ul><li>A clear path from intent to tasks for a new feature.</li><li>A constitution that later specs are checked against.</li><li>Works with many coding agents.</li></ul></div>
-        <div class="con"><h4>Weak at</h4><ul><li>The same flow for every size of change.</li><li>The task list guides the agent; nothing refuses a step outside it.</li><li>Completion is what the agent reports.</li></ul><p class="with"><code>/rr-setup --adopt</code> moves <code>.specify/</code> and <code>specs/</code> into <code>docs/sdlc/</code> and <code>.ai/</code>, checks that no line was lost and keeps the originals.</p></div>
+        <div class="con"><h4>Weak at</h4><ul><li>The same flow for every size of change.</li><li>The task list guides the agent; nothing refuses a step outside it.</li><li>Completion is what the agent reports.</li></ul><p class="with">The two live side by side: <code>.specify/</code> and <code>specs/</code> stay where they are. 4.0 has no import step; move a spec into <code>docs/sdlc/</code> by hand when you want RiskRails to plan from it.</p></div>
       </div>
       <div class="alt rv">
         <div><h3>Kiro</h3><p class="what">An agentic IDE with specs (requirements, design, tasks), steering files and agent hooks.</p></div>
         <div class="pro"><h4>Strong at</h4><ul><li>Specs and their review inside one editor.</li><li>Steering files give every session the project's context.</li><li>Hooks start agent actions on file events.</li></ul></div>
-        <div class="con"><h4>Weak at</h4><ul><li>Tied to its own IDE and CLI.</li><li>Its hooks start work; they are not a refusal layer.</li><li>No measured weight per change.</li></ul><p class="with"><code>/rr-setup --adopt</code> moves <code>.kiro/</code> into this layout and keeps the originals; <code>--mode coexist</code> leaves them in place and only routes to them.</p></div>
+        <div class="con"><h4>Weak at</h4><ul><li>Tied to its own IDE and CLI.</li><li>Its hooks start work; they are not a refusal layer.</li><li>No measured weight per change.</li></ul><p class="with">The two live side by side: <code>.kiro/</code> stays where it is. 4.0 has no import step; move a spec into <code>docs/sdlc/</code> by hand when you want RiskRails to plan from it.</p></div>
       </div>
       <div class="alt rv">
         <div><h3>Cursor rules + hooks</h3><p class="what">Rules files scoped by glob, plus hooks such as <code>beforeShellExecution</code>.</p></div>
         <div class="pro"><h4>Strong at</h4><ul><li>Lives in the editor many teams already use.</li><li>A shell hook can allow, deny or ask.</li><li>Rules load only where their glob matches.</li></ul></div>
-        <div class="con"><h4>Weak at</h4><ul><li>You write and maintain the whole policy and its tests.</li><li>No task state, no weighing, no measured close.</li><li>Cursor only.</li></ul><p class="with"><code>/rr-setup --adopt</code> moves <code>.cursorrules</code> and <code>.cursor/rules/</code> into this layout and keeps the originals.</p></div>
+        <div class="con"><h4>Weak at</h4><ul><li>You write and maintain the whole policy and its tests.</li><li>No task state, no weighing, no measured close.</li><li>Cursor only.</li></ul><p class="with">The two live side by side: <code>.cursorrules</code> and <code>.cursor/rules/</code> stay where they are. 4.0 has no import step; copy a rule into the project's instruction file, outside the managed block, when the agent should follow it.</p></div>
       </div>
       <div class="alt rv">
         <div><h3>AI-DLC</h3><p class="what">AWS's AI-Driven Development Lifecycle: Inception, Construction and Operations, shipped as rule files.</p></div>
         <div class="pro"><h4>Strong at</h4><ul><li>A full methodology from intent to operations.</li><li>Depth adapts: a small fix skips phases.</li><li>Approval at each phase and an audit trail.</li></ul></div>
-        <div class="con"><h4>Weak at</h4><ul><li>Rules in markdown; the model has to follow them.</li><li>No hook stops an action between approvals.</li><li>Built around team rituals more than one developer.</li></ul><p class="with">A different layer: AI-DLC tells the agent what to do; RiskRails adds what it cannot do. <code>--adopt</code> moves its files.</p></div>
+        <div class="con"><h4>Weak at</h4><ul><li>Rules in markdown; the model has to follow them.</li><li>No hook stops an action between approvals.</li><li>Built around team rituals more than one developer.</li></ul><p class="with">A different layer: AI-DLC tells the agent what to do; RiskRails adds what it cannot do.</p></div>
       </div>
       <div class="alt rv" style="border-color:var(--co)">
         <div><h3>RiskRails</h3><p class="what">Weight, three modes, one guard hook, deterministic gates in <code>state.py</code>, a shared <code>.ai/</code> tree.</p></div>
@@ -117,12 +118,12 @@
 <footer class="foot">
   <div class="wrap">
     <div class="grid">
-      <div><h4>RiskRails</h4><ul><li>Version 3.1.0 · MIT</li><li>Claude Code and Codex</li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li></ul></div>
+      <div><h4>RiskRails</h4><ul><li>Version 4.0.1 · MIT</li><li>Claude Code and Codex</li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li></ul></div>
       <div><h4>Site</h4><ul><li><a href="index.html">How it works</a></li><li><a href="demo.html">Demo</a></li><li><a href="compare.html">Compare</a></li><li><a href="storage.html">Storage</a></li></ul></div>
       <div><h4>Docs</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/getting-started.md">Getting started</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/weight.md">The weight</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/hooks.md">The guards</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/known-risks.md">Known risks</a></li></ul></div>
       <div><h4>Project</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/ROADMAP.md">Roadmap</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/SECURITY.md">Security</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/CONTRIBUTING.md">Contributing</a></li></ul></div>
     </div>
-    <p class="small">No agent merges or deploys. A commit, a push or an approval runs only as the command you picked.</p>
+    <p class="small">No agent merges or deploys. A commit, a push or an approval runs only as the command you picked. <button type="button" class="look" data-look-toggle hidden>Classic look</button></p>
   </div>
 </footer>
 <script src="assets/rr.js" defer></script>

@@ -24,6 +24,19 @@
   window.addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(progress); } }, { passive: true });
   progress();
 
+  /* look switch: the warm palette is the default, the original colours stay one click away */
+  var lk = document.querySelector("[data-look-toggle]");
+  if (lk) {
+    var label = function () { lk.textContent = doc.getAttribute("data-look") === "classic" ? "Warm look" : "Classic look"; };
+    lk.hidden = false; label();
+    lk.addEventListener("click", function () {
+      var next = doc.getAttribute("data-look") === "classic" ? "warm" : "classic";
+      doc.setAttribute("data-look", next);
+      try { localStorage.setItem("rr-look", next); } catch (e) { /* private window: the choice lasts for this page */ }
+      label();
+    });
+  }
+
   /* copy buttons */
   document.querySelectorAll("[data-copy]").forEach(function (b) {
     b.addEventListener("click", function () {
@@ -43,8 +56,19 @@
 
   /* reveal: only what is below the fold at load is hidden, so the first frame is complete */
   if (!reduce && "IntersectionObserver" in window) {
+    /* siblings in a grid arrive one after another, 60 ms apart, at most five steps */
+    var GRID = ".cards, .levers, .facts, .modes";
     var io = new IntersectionObserver(function (es) {
-      es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.remove("pre"); io.unobserve(e.target); } });
+      es.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var el = e.target, par = el.parentNode;
+        if (par && par.matches && par.matches(GRID)) {
+          var i = Math.min(5, Array.prototype.indexOf.call(par.children, el));
+          el.style.transitionDelay = i * 60 + "ms";
+          setTimeout(function () { el.style.transitionDelay = ""; }, 1000);
+        }
+        el.classList.remove("pre"); io.unobserve(el);
+      });
     }, { rootMargin: "0px 0px -8% 0px" });
     document.querySelectorAll(".rv, .bars").forEach(function (el) {
       if (el.getBoundingClientRect().top > window.innerHeight) { el.classList.add("pre"); io.observe(el); }

@@ -294,3 +294,80 @@ td.yes{color:var(--grn);font-weight:700} td.no{color:var(--red);font-weight:700}
   .lever:hover{transform:none}
 }
 td.yes::before{content:"✓ "} td.part::before{content:"◐ "} td.no::before{content:"✕ "}
+
+/* ---------- modes board (both looks) ---------- */
+.band.tight{padding-block:clamp(32px,5vw,56px)}
+.modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media (max-width:860px){.modes{grid-template-columns:minmax(0,1fr)}}
+.mode{--c:var(--grn);background:var(--sheet);border:2px solid var(--rule);padding:18px 20px 20px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.mode.y{--c:var(--yel)} .mode.r{--c:var(--red)}
+.mode header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 12px}
+.mode header b{font:600 13px var(--mono);color:var(--ink2)}
+.mline{height:6px;background:var(--fill);border-radius:3px;overflow:hidden}
+.mline i{display:block;height:100%;background:var(--c);transform-origin:0 50%;transition:transform 1s var(--ease) .2s}
+.js .mode.pre .mline i{transform:scaleX(0)}
+.stops{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 0;font:12.5px var(--mono)}
+.stops li{display:inline-flex;align-items:center}
+.stops li + li::before{content:"\2192";color:var(--ink2);margin:0 8px}
+.stops li.you{font-weight:600}
+.mode p{font-size:14.5px;color:var(--ink2)}
+.look{background:none;border:1px solid currentColor;color:inherit;font:12px var(--mono);padding:3px 8px;margin-left:10px;cursor:pointer}
+.look:hover{color:var(--wh)}
+@media (prefers-reduced-motion:reduce){.mline i{transition:none}.js .mode.pre .mline i{transform:none}}
+
+/* ============ look: warm (the default) ============
+   The same signal box, repainted with the Claude Design palette (the Anthropic brand colours:
+   Slate, Ivory and the warm greys; Olive, Yellow and Clay as the three lamps) and given
+   slower, quieter motion. html[data-look="classic"] shows the original colours. */
+html[data-look="warm"]{
+  --en:#262624; --en2:#1F1E1D; --en3:#141413; --wh:#FAF9F5; --dim:#B0AEA5; --rail:#5E5D59;
+  --red:#D97757; --yel:#C9A82D; --grn:#788C5D;
+  --paper:#FAF9F5; --sheet:#FFFFFF; --ink:#141413; --ink2:#5E5D59; --rule:#141413; --hair:#D1CFC5; --fill:#F0EEE6; --co:#4D4C48; --c-files:#C9A82D; --c-idx:#558A42;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  html[data-look="warm"]{--paper:#1A1918;--sheet:#262624;--ink:#FAF9F5;--ink2:#B0AEA5;--rule:#C2C0B6;--hair:#3D3D3A;--fill:#30302E;--co:#C2C0B6;color-scheme:dark}
+}
+html[data-look="warm"] .sheet{--grn:#558A42}
+html[data-look="warm"] .sheet .h2 em,
+html[data-look="warm"] .fact .n{color:#D97757}
+
+/* hero route and the dark readouts: lamp colours from the tokens */
+html[data-look="warm"] #l-light{stroke:var(--grn)}
+html[data-look="warm"] #l-guarded{stroke:var(--yel)}
+html[data-look="warm"] #l-full{stroke:var(--red)}
+html[data-look="warm"] .tracks .label[fill="#AAB6AF"]{fill:var(--dim)}
+html[data-look="warm"] .tracks .label[fill="#36C27A"]{fill:var(--grn)}
+html[data-look="warm"] .tracks .label[fill="#F3B61F"]{fill:var(--yel)}
+html[data-look="warm"] .tracks .label[fill="#E2412C"]{fill:var(--red)}
+html[data-look="warm"] .tracks .sig{fill:var(--en3)}
+html[data-look="warm"] .tracks .sig.g{fill:var(--grn)}
+html[data-look="warm"] .tracks .sig.y{fill:var(--yel)}
+html[data-look="warm"] .tracks .sig.r{fill:var(--red)}
+html[data-look="warm"] :is(.schema .ty,.screen .c){color:#BCD1CA}
+html[data-look="warm"] .stage-list li.now::before{box-shadow:0 0 0 3px rgba(201,168,45,.25)}
+
+/* motion: slow, short distances, each thing once */
+@media (prefers-reduced-motion:no-preference){
+  html[data-look="warm"] .rv{transition:opacity .8s var(--ease),transform .8s var(--ease)}
+  html[data-look="warm"].js .rv.pre{transform:translateY(10px)}
+  html[data-look="warm"] :is(.card,.fact,.mode,.lever){transition:opacity .8s var(--ease),transform .5s var(--ease),box-shadow .5s var(--ease),border-color .35s}
+  html[data-look="warm"] :is(.card,.fact,.mode,.lever):hover{transform:translateY(-2px);box-shadow:0 12px 24px -16px rgba(20,20,19,.55)}
+  /* the task line draws itself, then its stations light one after another */
+  html[data-look="warm"] .line::before{transform-origin:0 0;transition:transform 1.4s var(--ease) .1s}
+  html[data-look="warm"].js .line.pre::before{transform:scale(0)}
+  html[data-look="warm"] .line li::before{transition:border-color .5s var(--ease),background .3s}
+  html[data-look="warm"].js .line.pre li::before{border-color:var(--rail)}
+  html[data-look="warm"] .line li:nth-child(2)::before{transition-delay:.2s,0s}
+  html[data-look="warm"] .line li:nth-child(3)::before{transition-delay:.4s,0s}
+  html[data-look="warm"] .line li:nth-child(4)::before{transition-delay:.6s,0s}
+  html[data-look="warm"] .line li:nth-child(5)::before{transition-delay:.8s,0s}
+  html[data-look="warm"] .line li:nth-child(6)::before{transition-delay:1s,0s}
+  /* a section's eyebrow bar grows as its heading arrives */
+  html[data-look="warm"] .eyebrow::before{transition:width .7s var(--ease) .2s}
+  html[data-look="warm"].js .rv.pre .eyebrow::before{width:0}
+  /* the lamp by the name breathes */
+  html[data-look="warm"] .brand .lamp{animation:lampBreathe 4.5s ease-in-out infinite}
+}
+@keyframes lampBreathe{50%{box-shadow:0 0 0 3px var(--en2),0 0 16px var(--grn)}}
