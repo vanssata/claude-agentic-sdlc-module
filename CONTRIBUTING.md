@@ -53,6 +53,21 @@ The first line is `verify_command` in `.ai/policies/testing.md`, which
 (`python3-pylint` on Debian and Ubuntu); `pylint` on `PATH` is what
 `lint_command` calls.
 
+**In a cloud session** (Claude Code on the web, a CI runner, any slow or shared
+machine) two things differ from the development machine:
+
+- The timing budgets in `TestTimed` and `TestGateFastPath` are measured there,
+  so a slower container fails them with no regression in the code. Scale them
+  the way CI does:
+
+  ```bash
+  AI_TIMED_FACTOR=3 python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath
+  ```
+
+- A cloud session clones shallow, and `test_project_update.py` runs
+  `git archive` on an old commit. Fetch the history once before the suite:
+  `git fetch --unshallow origin`.
+
 Run the suite to the end and fix every failure before you push.
 
 - **The state machine** is the package `skills/ai-task/rr_state/` (layers 0 to 9,
