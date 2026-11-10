@@ -232,6 +232,7 @@ the `rr-*` names: `/rr-setup`, `/rr-setup --update`, `/rr-build`, `/rr-spec`,
 ## What is `.ai/VERSION`?
 
 The project's schema, 12 today. `/rr-setup --update` regenerates the project's
-files and writes the version last; a project older than 3.1.0 is refused
+files and writes the version last; a tree that still holds an old shape it
+detects is refused, and one last updated before 3.1.0 goes through 3.1.0 first
 ([project-update.md](project-update.md)). It is separate from the task
 state's own schema (7), which `state.py` carries in `state.json`.

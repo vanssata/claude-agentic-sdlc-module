@@ -80,8 +80,8 @@ delete files with no human at the keyboard.
 **Why it stays.** CI jobs, cron and scripted batches have no human to take a
 turn. Without the variable they could not run at all.
 **Limits.** It never hides. The approval is recorded as `unattended` in the
-state and the journal, `adopt.json` and `migration.json` record `via:
-unattended` before the first file is removed, and `/rr-status` names every such
+state and the journal, `migration.json` records `via: unattended` before the
+first file is removed, and `/rr-status` names every such
 event.
 **What to do.** Export it only in the environment of a launcher, never in an
 interactive shell, where it silently disables the gates for every session the
@@ -198,4 +198,4 @@ report's cache: a wrong number is a wrong number in a report, not a wrong
 change to a repository.
 **What to do.** `--no-cache` reports without it. Deleting
 `~/.cache/riskrails/usage-report.json` rebuilds it.
-**Source.** `skills/usage-report/SKILL.md`, "The parse cache".
+**Source.** `skills/rr-status/SKILL.md`, the `--cost` section; the code is `skills/usage-report/usage-report.py`.

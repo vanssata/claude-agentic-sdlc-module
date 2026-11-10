@@ -66,8 +66,8 @@ prompt. Then `/rr-setup --update` in each project ([project-update.md](project-u
 Restart the runtime afterwards.
 
 - **Claude Code**: `/skills` lists `rr-setup`, `rr-spec`, `rr-plan`,
-  `rr-build`, `rr-build-all`, `rr-review`, `rr-ship` and `rr-status`, plus the
-  deprecated aliases; `/hooks` lists `ai-guard.py`, the one guard command.
+  `rr-build`, `rr-build-all`, `rr-review`, `rr-ship` and `rr-status`;
+  `/hooks` lists `ai-guard.py`, the one guard command.
 - **Codex**: `/hooks` shows the hooks — **and you must review and trust them
   there before they run.** Codex does not execute a non-managed hook until it
   has been trusted, so until you do, nothing is being enforced.
@@ -180,7 +180,7 @@ deliberate.
 ## Upgrading from 2.x or 3.0
 
 riskrails 4.0 no longer renames the 2.x home to `<home>/riskrails/`
-and converts no project. From a home or a project older than 3.1.0, install
+and converts no project. From a home or a project last updated before 3.1.0, install
 `npx riskrails@3.1.0` first, run `/rr-setup --update` in each project with it,
 then install 4.0 and run `/rr-setup --update` again.
 

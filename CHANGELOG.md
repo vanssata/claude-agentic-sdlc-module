@@ -8,7 +8,7 @@ Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelo
 
 Breaking. riskrails regenerates a project's files from the plugin and converts nothing. **Run `/rr-setup --update` in each project right after installing 4.0.0**: until then the project's old shapes are not read, so a project weighs without its `domain.modules` (lighter), finds no `verify_command`, and a task still in the old `current.json` is not scope-guarded. Reinstall both routes you use, `npx riskrails@4.0.0` and the plugin install: they are separate copies.
 
-A project last updated by a riskrails before 3.1.0 is refused (`KEPT_UNREADABLE`, exit 6, naming the file): install `npx riskrails@3.1.0`, run `/rr-setup --update` with it, then install 4.0.0 and run it again.
+A tree that still holds an old shape (`current.json` without `state.json`, `risk-tiers.json` without a weight table, an old `claude-agentic` or `Codex-agentic` marker) is refused (`KEPT_UNREADABLE`, exit 6, naming the file); any other older tree is regenerated without the conversions it missed. So a project last updated before 3.1.0 goes through 3.1.0 first: install `npx riskrails@3.1.0`, run `/rr-setup --update` with it, then install 4.0.0 and run it again.
 
 ### Removed
 - `/rr-setup --adopt`, `adopt.py`, `adopt-map.json` and the `--mode`, `--tool`, `--split-request`, `--split`, `--diff` and `--cleanup` flags of `update.py` (they exit 2). A project's own toolbox is no longer inventoried into `policies/toolbox.md`.

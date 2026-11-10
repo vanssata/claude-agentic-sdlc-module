@@ -66,9 +66,21 @@ TOKENS = {
     "dependency_instruction_patterns": r"dependency_instruction_patterns",
     "claude-routing": r"claude-routing",
     "Model allocation": r"Model allocation",
+    # T-2026-11-03-2046's L3, M3 and L7: text that describes what 4.0 removed; scanned over the docs only (DOC_SCOPE).
+    "gate variables": r"CLAUDE_FABLE_GATE|CODEX_MODEL_GATE",
+    "[sdlc] rows": r"\[sdlc\]",
+    "conflict rows": r"A `conflict` line|merge conflicts",
+    "policy rows": r"Lines marked `policy`",
+    "refused before 3.1.0": r"before\s+3\.1\.0\s+is\s+refused|older\s+than\s+3\.1\.0",
+    "adopt.json": r"adopt\.json",
+    "usage-report/SKILL.md": r"usage-report/SKILL\.md",
 }
+DOC_SCOPE = ("docs/", "skills/rr-setup/", "README.md")
 TOKEN_SCOPE = {name: ("hooks/", "bin/") for name in
                ("fable-gate", "codex-model-gate", "dependency_instruction_patterns", "claude-routing", "Model allocation")}
+TOKEN_SCOPE.update((name, DOC_SCOPE) for name in
+                   ("gate variables", "[sdlc] rows", "conflict rows", "policy rows", "refused before 3.1.0",
+                    "adopt.json", "usage-report/SKILL.md"))
 TOKENS.update(("/" + c, r"(?<![\w./-])/" + c + r"\b") for c in COMMANDS)
 PATTERNS = {name: re.compile(pattern) for name, pattern in TOKENS.items()}
 

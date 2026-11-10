@@ -121,8 +121,10 @@ formatting fix. Problems you find are written down, never fixed. Never read
 ## --update
 
 The script regenerates; you show it, confirm what is owed, and merge what it
-cannot. It converts nothing: a project last updated by a riskrails before 3.1.0
-is refused with the version that still converts it. Run it right after a new
+cannot. It converts nothing but the one split. A tree that still holds an old
+shape it detects (the pre-3.4b task state without `state.json`, the risk-tier
+policy without a weight table, a pre-3.4b block marker) is refused with `KEPT_UNREADABLE` (exit 6); a
+project last updated before 3.1.0 goes through `npx riskrails@3.1.0` first. Run it right after a new
 riskrails is installed: until then the project's old shapes are not read.
 
 1. `$STATE status`: with a task in flight, say that updating policies mid-task
@@ -133,8 +135,9 @@ riskrails is installed: until then the project's old shapes are not read.
    `create` is a file the project lacks. A project that still has the mixed
    `testing.md` and `weight.json` gets `verification.md` and `weight.project.json`
    split out of them once.
-3. Lines marked `policy` change `.ai/policies/*.json`, which humans own: explain
-   each in one plain sentence and ask, unless `$ARGUMENTS` holds `--apply`.
+3. A `split` row writes `verification.md` or `weight.project.json`, which humans
+   own from then on: say in one plain sentence what it carries out of
+   `testing.md` or `weight.json`, and ask, unless `$ARGUMENTS` holds `--apply`.
 4. `$UPDATE --apply`. Exit 3 stopped on a changed, non-regular or unwritable
    file and names it; nothing after it was written — run the dry run again.
    Exit 6 (`KEPT_UNREADABLE`): a file the update keeps cannot be read; nothing was
@@ -146,8 +149,10 @@ riskrails is installed: until then the project's old shapes are not read.
    Exit 5 (`CONFIRM_REFUSED`) means an agent session ran it; it wrote nothing.
    Every file replaced or deleted that way is first copied under
    `.ai/reports/project-update-<date>/original/`. Two kinds are housekeeping:
-   `[sdlc]` — an unedited `docs/sdlc/*/TEMPLATE.md`, which the plugin
-   now supplies (an edited one stays as the project's override); `[cleanup]` —
+   `[rules]` — every rule source `.ai/rules/<slug>.md` (an update does not keep
+   them; confirming deletes the source and its rendered blocks with it) and a
+   rendered rule file whose source is gone or no longer sets `paths:`, both
+   settled by `--confirm-delete`; `[cleanup]` —
    the `*.log` files of closed tasks, and the report and log files of an
    abandoned task (its `state.json` stays) or of one unclosed for more than seven
    days (never the task in flight; and none when `.ai/state/state.json` is unreadable).
@@ -161,11 +166,12 @@ riskrails is installed: until then the project's old shapes are not read.
    Show both groups as printed. Rollback is git:
    `git restore --source=<commit before> --staged --worktree -- .ai`, before
    the plugin itself is rolled back.
-5. A `conflict` line: the project file was edited here and changed upstream.
-   Markdown, or the managed block (inside the markers only): read both, keep
-   everything project-specific, take the plugin's rules and structure, edit the
-   project file, delete the copy. A JSON policy: show both values for each
-   listed path and say which the plugin expects and why; the human edits it.
+5. A `regenerate?` row: the project edited a file the plugin generates. Read
+   its reason; anything project-specific in it belongs in a file the update keeps
+   (`.ai/project/`, `weight.project.json`, `verification.md`, the instruction
+   file outside the managed block — not `.ai/rules/`, whose sources are `[rules]`
+   rows too) — say where, the human moves it,
+   then confirms. Never edit the generated file to dodge the row.
 6. Hints. `verify_command is empty`: show `$SETUP survey`'s proposal, ask for
    the one command and what a green run ends with, write it with
    `$SETUP verify --set`, and fill the rest of the Verification block. `the managed block is N B`:

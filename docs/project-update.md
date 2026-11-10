@@ -6,7 +6,7 @@ shared files; it reads them from there. What a project owns stays in the
 project and is brought up to the installed plugin with one command:
 
 ```bash
-/rr-setup --update        # dry run, confirm the policy changes, apply, merge conflicts
+/rr-setup --update        # dry run, apply; regenerate? and delete? rows wait for a human
 ```
 
 Under the skill it is `skills/project-update/update.py <root>` (dry run),
@@ -49,7 +49,8 @@ there). That is how the update tells files apart.
 | a version the plugin once shipped (its hash is in the history) | `regenerate` — replaced; nobody edited it |
 | generated, but edited | `regenerate?` — waits for a human's `--confirm-delete`; the original is first copied to `.ai/reports/project-update-<date>/original/` |
 | `weight.md` | rendered from the plugin's table with `weight.project.json` laid over it |
-| `docs/sdlc/*/TEMPLATE.md` | the plugin supplies them: an unedited project copy is `delete?`, an edited one stays as an override, with a hint |
+| a rule source `.ai/rules/<slug>.md` | `delete?` (`[rules]`): an update does not keep rule sources; confirming deletes it and its rendered blocks, and until then the rule stays rendered |
+| a rendered rule file whose source is gone or no longer sets `paths:` | `delete?` (`[rules]`), once a human confirms |
 | `.ai/project/**`, `.ai/reports`, `.ai/memory`, `.ai/state`, `docs/sdlc`, `verification.md`, `weight.project.json`, `dialog.json`, `CLAUDE.md` outside the block, `.claude/settings.json` | kept, never rewritten |
 | a file the update keeps but cannot read | `KEPT_UNREADABLE`, exit 6: nothing is written until it is fixed or removed |
 | a shared file the plugin once shipped, unedited | `delete?` — the project reads the shared tree instead, once a human confirms |
@@ -67,7 +68,7 @@ The dry run shows every decision; `--apply` writes them. `update.py` exits:
 |---|---|
 | 0 | done; with `--check`, the project is current |
 | 1 | `--check`: an update is pending; `--check --budget`: a root instruction file is over its budget |
-| 2 | usage error (a removed flag, such as the adopt flag, also exits 2), missing templates, or a schema older than 3.1.0 or newer than the plugin |
+| 2 | usage error (a removed flag, such as the adopt flag, also exits 2), missing templates, or an `.ai/VERSION` that cannot be read or is newer than the plugin |
 | 3 | an apply aborted part-way — a changed or non-regular file where the update expected one; nothing after the failing item was written |
 | 5 | refused: `--confirm-delete` or `--confirm-cleanup` without a human (`CONFIRM_REFUSED`) |
 | 6 | a file the update keeps cannot be read (`KEPT_UNREADABLE`); nothing written |
@@ -75,8 +76,14 @@ The dry run shows every decision; `--apply` writes them. `update.py` exits:
 ## Schema version
 
 `.ai/VERSION` carries the project's schema; the current one is **12**. riskrails
-4.0 contains no migrations: a project last updated by a riskrails before 3.1.0
-is refused (exit 2) with the version that still converts it. Install it
+4.0 contains no migrations and reads no schema ladder. It refuses a tree that
+still holds one of the old shapes it detects literally — the task-state file of
+a riskrails before 3.4b without `state.json`, the risk-tier policy of one before
+2.2 without a weight table, or a managed-block marker of one before 3.4b in an
+instruction file — with `KEPT_UNREADABLE` (exit 6), naming the file. Any other older tree is
+regenerated, and a conversion it never received (the dialog switch in `dialog.json`,
+the retirement of `risk-tiers`) is simply not made. So a project last updated by a
+riskrails before 3.1.0 goes through 3.1.0 first: install it
 (`npx riskrails@3.1.0`), run `/rr-setup --update` with it, then install 4.0 and
 run `/rr-setup --update` again, right after the install: until then the
 project's old shapes (a task in the old state file, a weight without its

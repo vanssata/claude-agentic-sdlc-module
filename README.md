@@ -59,8 +59,10 @@ before relying on them. What is decided but not built is in [ROADMAP.md](ROADMAP
 the adopt command are gone, and `/rr-setup --update` regenerates a project's files from
 the plugin. Step by step, in this order:
 
-1. **Come from 3.1.0 or later.** A project last updated by an older riskrails is
-   refused with the version that still converts it: install it
+1. **Come from 3.1.0 or later.** 4.0 refuses a tree that still holds an old
+   shape it detects, naming the file, and regenerates any other older tree
+   without the conversions it missed. So a project last updated by an older
+   riskrails goes through the version that still converts it: install it
    (`npx riskrails@3.1.0`), run `/rr-setup --update` with it, then install 4.0.
 2. **Commit every project's `.ai/`** first; `git restore` is the rollback.
 3. **Update the home** on every machine, for every runtime: `npx riskrails@4.0.0`

@@ -273,8 +273,8 @@ around the statusline: `runtime-gate.py statusline --context --line` by default
   count, `quota --json` prints the record with its `stale` and `resets_at`
   fields.
 - State lives in `<home>/state/runtime-gate.json`; `AI_RUNTIME_GATE=off`
-  disables the hook. The older `CLAUDE_FABLE_GATE_*` and `CODEX_MODEL_GATE_*`
-  variables are still read.
+  disables the hook. Only the `AI_RUNTIME_GATE*` names are read; the 3.x
+  gate variables of the Fable and Codex hooks are ignored.
 
 Codex has no `StopFailure`, so a failure there is attributed at
 `SubagentStop`, and only when the evidence points at an EXPERT agent: its name
