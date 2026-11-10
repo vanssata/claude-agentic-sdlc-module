@@ -3,7 +3,7 @@
 
 Why a separate module: state.py owns every write to state.json and has no
 subprocess use at all; this module shells out to git and to the commands written
-in .ai/policies/testing.md, imports nothing from state.py, and never opens
+in .ai/policies/verification.md, imports nothing from state.py, and never opens
 state.json for writing. state.py imports it, not the reverse. Since redesign
 2.6 it measures nothing else: the size budget, the re-score and the static
 sensors (bite, duplicates, traceability, plan sections, lint, typecheck, detect)
@@ -213,11 +213,11 @@ SCOPE_FIELD = {"suite": "verify_command", "step": "step_test_command",
 
 
 def testing_path(root):
-    return os.path.join(root, ".ai", "policies", "testing.md")
+    return os.path.join(root, ".ai", "policies", "verification.md")
 
 
 def read_commands(root):
-    """The project's own commands, as a human wrote them into testing.md.
+    """The project's own commands, as a human wrote them into verification.md.
 
     A line's value is everything after the colon, minus a trailing comment; the
     template ships the fields with an explanatory comment and no value, and that
@@ -253,7 +253,7 @@ def _escaped(text):
 
 def bite_codes(root):
     """The exit codes that count as "the test fails" under --expect fail: the
-    testing.md `bite_codes` list of integers 1-255, 1 when absent or not a clean list
+    verification.md `bite_codes` list of integers 1-255, 1 when absent or not a clean list
     (an empty part, a non-integer, 0, a negative or a value over 255 all fall back)."""
     raw = read_commands(root).get("bite_codes", "")
     try:
@@ -349,8 +349,6 @@ def resolve_trees(root, args):
     from_tree = args.from_tree
     if not from_tree:
         state = os.path.join(root, ".ai", "state", "state.json")
-        if not os.path.isfile(state):
-            state = os.path.join(root, ".ai", "state", "current.json")  # R34: legacy name, one version
         try:
             with open(state, encoding="utf-8") as fh:
                 from_tree = ((json.load(fh) or {}).get("diff") or {}).get("base_tree")
@@ -387,11 +385,12 @@ def cmd_diff(args, root):
 
 
 def tests_config(root):
-    """The runner's caps from weight.json `tests`, the template's numbers otherwise."""
+    """The runner's caps from the weight table's `tests` (the plugin's, the project's
+    weight.project.json over it), {} when the table cannot be read."""
     try:
-        with open(os.path.join(root, ".ai", "policies", "weight.json"), encoding="utf-8") as fh:
-            config = (json.load(fh) or {}).get("tests") or {}
-    except (OSError, ValueError, AttributeError):
+        import weight  # pylint: disable=import-outside-toplevel  # sits beside this file; only cmd_run needs it
+        config = weight.load_policy(root)[0].get("tests") or {}
+    except (ImportError, OSError, ValueError, AttributeError):
         config = {}
     return config if isinstance(config, dict) else {}
 
@@ -400,7 +399,7 @@ def cmd_run(args, root):
     config = tests_config(root)
     command = command_for(root, args.scope)
     if not command:
-        print("%-13s UNAVAIL  %s is not written down in .ai/policies/testing.md"
+        print("%-13s UNAVAIL  %s is not written down in .ai/policies/verification.md"
               % (args.scope, SCOPE_FIELD.get(args.scope, args.scope)))
         return UNKNOWNCODE
     files = [f.strip() for f in (args.files or "").split(",") if f.strip()]

@@ -8,7 +8,6 @@ the steps; `policies/` holds the rules; this says which to open.
 | You want to | Run |
 |---|---|
 | set up `.ai/` in a project, or bring it up to the installed plugin | `/rr-setup`, `/rr-setup --update` |
-| move another AI tool's files into this layout | `/rr-setup --adopt` |
 | score the repository against the twelve plays | `/rr-setup --audit` |
 | turn an idea into intent, requirements and design | `/rr-spec <idea>` |
 | plan a spec into tasks, or one task into a mode and a start | `/rr-plan <spec or task>` |
@@ -17,8 +16,6 @@ the steps; `policies/` holds the rules; this says which to open.
 | review the change | `/rr-review` — guarded and full, or when `close` asks |
 | close the task, get the human's approval | `/rr-ship` |
 | see where the task stands, or what it cost | `/rr-status`, `/rr-status --cost` |
-
-The old names (`/ai-task`, `/ai-init`, `/sdlc-spec` …) stay one version as aliases.
 
 ## Three modes
 

@@ -110,18 +110,6 @@ UPDATE = os.path.join(ROOT, "skills", "project-update", "update.py")
 OVER_BUDGET_HINT = "trim instructions/stub.md or move the rule to routing.md / a policy"
 SCAFFOLDED = ("CLAUDE.md", "AGENTS.md", "GEMINI.md", ".junie/guidelines.md")
 USER_TEXT = "# mine\n\n" + "a line the user wrote.\n" * 950
-BLOCK_OF = """
-import sys; sys.path.insert(0, sys.argv[1]); import render_instructions as r
-for name in ("Codex-agentic", "codex-agentic"):
-    text = "above\\n<!-- %s:start -->\\nbody\\n<!-- %s:end -->\\nbelow\\n" % (name, name)
-    assert r.block_of(text) == "<!-- %s:start -->\\nbody\\n<!-- %s:end -->" % (name, name), name
-assert r.block_of("<!-- riskrails:start -->\\nlone\\n<!-- Codex-agentic:start -->\\nx\\n<!-- Codex-agentic:end -->\\n") is None
-assert r.block_of("<!-- Codex-agentic:start -->\\nno end\\n") is None
-assert r.block_of("<!-- Codex-agentic:end -->\\n<!-- Codex-agentic:start -->\\n") is None
-cur = "<!-- riskrails:start -->\\nbody\\n<!-- riskrails:end -->"
-assert r.block_of("x\\n" + cur + "\\n<!-- Codex-agentic:start -->\\ny\\n<!-- Codex-agentic:end -->\\n") == cur
-assert r.block_of("x\\n" + cur + "\\ny\\n") == cur
-"""
 
 
 def read(path):
@@ -146,8 +134,8 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
         cls.t = cls.tmp.name
         os.makedirs(os.path.join(cls.t, "home"))
         cls.env = {k: v for k, v in os.environ.items()
-                   if k not in ("CODEX_HOME", "CODEX_DIR", "CLAUDE_DIR", "AI_UNATTENDED", "CLAUDE_AGENTIC_MIGRATIONS",
-                                "CLAUDE_CONFIG_DIR", "CLAUDE_AGENTIC_SHARED", "CLAUDE_AGENTIC_TEMPLATES",
+                   if k not in ("CODEX_HOME", "CODEX_DIR", "CLAUDE_DIR", "AI_UNATTENDED",  
+                                "CLAUDE_CONFIG_DIR", "RISKRAILS_SHARED", "RISKRAILS_TEMPLATES",
                                 "CLAUDE_ROUTING_TEMPLATES") and not k.startswith(("RENDER_", "RISKRAILS_"))}
         cls.env["HOME"] = os.path.join(cls.t, "home")
         # A freshly scaffolded project — in a path with a space. The four instruction
@@ -301,8 +289,10 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
             missing = []
             for ref in refs:
                 probe = re.sub(r"<[a-z-]*>", "*", ref) if "<" in ref else ref
+                # the shipped weight table is read from the plugin, not scaffolded (A2)
                 if not any(glob.glob(os.path.join(base, probe)) for base in
-                           (os.path.join(self.proj, ".ai"), self.proj, os.path.join(ROOT, "ai"))):
+                           (os.path.join(self.proj, ".ai"), self.proj, os.path.join(ROOT, "ai"),
+                            os.path.join(ROOT, "skills", "ai-init", "templates", ".ai"))):
                     missing.append(ref)
             self.assertEqual(missing, [], "the router points at files that do not exist")
         with self.subTest("the router routes; the steps live in the rr- skills"):
@@ -429,8 +419,8 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
             self.assertNotIn("Codex reads at most 32 KiB", out, "a fresh AGENTS.md got the advisory")
 
     def test_project_update_hints_at_an_over_budget_block(self):
-        """/project-update hints at an over-budget block and an oversized constitution"""
-        # Downstream the budget is advisory: /project-update measures, names the byte
+        """/rr-setup --update hints at an over-budget block and an oversized constitution"""
+        # Downstream the budget is advisory: /rr-setup --update measures, names the byte
         # count and says whose the file is to trim. It never rewrites an edited block.
         hint = os.path.join(self.space, "hints")
         shutil.copytree(self.proj, hint, symlinks=True)
@@ -452,19 +442,6 @@ class TestInstructionBudget(unittest.TestCase):  # pylint: disable=too-many-publ
             self.assertIn("docs/sdlc/constitution.md: 20 principles, at most 15", out, "no constitution hint\n" + tail)
         with self.subTest("an edited block is still never rewritten"):
             self.assertNotRegex(out, r"(?m)^  update .*CLAUDE.md", "the plugin planned a write over an edited block")
-
-    def test_a_legacy_codex_agentic_marker_pair_is_the_managed_block_too(self):
-        """measure: the legacy block ($want B) out of a larger file"""
-        legacy_block = self.path("legacy-block")
-        write(legacy_block, re.sub(r"riskrails:(start|end)", r"Codex-agentic:\1", read(BLOCK_TEMPLATE)))
-        lb = self.path("legacy.md")
-        write(lb, "# mine\n\nkeep this.\n\n" + read(legacy_block) + "\n# below\nmore of mine\n")
-        want = self.measure(legacy_block)[-2]
-        got = self.measure(lb)
-        self.assertEqual((got[-2], got[-3]), (want, "block"), "measure: a legacy pair is not seen as the block")
-        with self.subTest("block_of: both legacy spellings, verbatim; half a current pair is none"):
-            rc, out = self.sh(["python3", "-I", "-c", BLOCK_OF, os.path.join(ROOT, "skills", "project-update")])
-            self.assertEqual(rc, 0, "block_of on legacy markers\n" + out)
 
 
 if __name__ == "__main__":

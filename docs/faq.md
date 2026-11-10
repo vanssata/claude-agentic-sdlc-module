@@ -108,8 +108,8 @@ next task goes looking for it. A task whose change reaches no e2e flow passes
 ## I reinstalled the plugin. Why does my project still follow the old rules?
 
 Because a project owns its copies: `weight.json`, `testing.md`, the router,
-the managed block. `/rr-setup --update` brings them up — migrations first,
-then a three-way merge that keeps every edit — and `/rr-status` says when a
+the managed block. `/rr-setup --update` regenerates them — a copy that is a
+shipped version is replaced, an edited one waits for you — and `/rr-status` says when a
 project is behind ([project-update.md](project-update.md)). The shared files
 under `<home>/riskrails/ai/` update with the plugin unless the project
 overrides one.
@@ -221,19 +221,18 @@ The task was started by a plugin older than 3.0. The new commands refuse it;
 `status`, `handoff` and `questions` still answer. Finish it with the version
 that started it, or drop it with `state.py close --abandon`.
 
-## What do the old command names do?
+## What happened to the old command names?
 
-`/ai-task`, `/ai-init`, `/ai-status`, `/ai-audit`, `/project-init`,
-`/project-update`, `/sdlc-intent`, `/sdlc-spec`, `/sdlc-plan` and
-`/usage-report` are aliases of the `rr-*` skills for one version
-(`ROADMAP.md`). `/ai-init` → `/rr-setup`, `/project-update` → `/rr-setup
---update`, `/ai-task` → `/rr-build`, `/sdlc-*` → `/rr-spec` and `/rr-plan`,
-`/usage-report` → `/rr-status --cost`.
+The ten alias commands of 3.x (the `/ai-*`, `/sdlc-*` and `/project-*` names and
+usage-report) were aliases of the `rr-*` skills for a single release and are removed in 4.0
+(the installer moves any left in the home to `backups/<date>/skills/`). Use
+the `rr-*` names: `/rr-setup`, `/rr-setup --update`, `/rr-build`, `/rr-spec`,
+`/rr-plan` and `/rr-status --cost`.
 
 ## What is `.ai/VERSION`?
 
-The project's schema, 10 today; a project initialised before the file existed
-is 0. Migrations under `skills/project-update/migrations/` bring it up during
-`/rr-setup --update`, in order, inside the dry run, and the version is written
-last ([project-update.md](project-update.md)). It is separate from the task
+The project's schema, 12 today. `/rr-setup --update` regenerates the project's
+files and writes the version last; a tree that still holds an old shape it
+detects is refused, and one last updated before 3.1.0 goes through 3.1.0 first
+([project-update.md](project-update.md)). It is separate from the task
 state's own schema (7), which `state.py` carries in `state.json`.

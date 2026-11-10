@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "_comment": "ours",
+  "tests": {
+    "max_suite_runs": 3
+  }
+}

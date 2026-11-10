@@ -1,3 +1,0 @@
-You are working on a TypeScript monorepo.
-Prefer named exports over default exports.
-Never commit secrets; configuration comes from the environment.

@@ -66,11 +66,8 @@ def read_json(path):
 
 
 def read_task_file(root):
-    """The task file the product reads: state.json, else the legacy current.json."""
-    new = os.path.join(root, ".ai", "state", "state.json")
-    if os.path.exists(new):
-        return read_json(new)
-    return read_json(os.path.join(root, ".ai", "state", "current.json"))
+    """The task file the product reads: state.json."""
+    return read_json(os.path.join(root, ".ai", "state", "state.json"))
 
 
 def write_json(path, data):
@@ -199,48 +196,40 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
             with self.subTest(Template("the plugin ships no $s.py").substitute(s=s)):
                 self.assertFalse(os.path.exists(os.path.join(PLUGIN, "hooks", s + ".py")))
 
-    def test_03_new_names_win_over_the_old_ones(self):
+    def test_03_the_old_names_are_not_read(self):
         tmp, g, cxg = self.tmp, self.g, self.cxg
         new, old = tmp + "/new.json", tmp + "/old.json"
         self.gate(g, "set", "60", "x", AI_RUNTIME_GATE_STATE=new, CLAUDE_FABLE_GATE_STATE=old)
-        self.assertTrue(os.path.isfile(new) and not os.path.exists(old),
-                        "AI_RUNTIME_GATE_STATE before CLAUDE_FABLE_GATE_STATE")
+        self.assertTrue(os.path.isfile(new) and not os.path.exists(old), "only AI_RUNTIME_GATE_STATE names the file")
+        self.rmrf(self.cl + "/state")
         self.gate(g, "set", "60", "x", CLAUDE_FABLE_GATE_STATE=old)
-        self.assertTrue(os.path.isfile(old), "the old name still works alone")
-        out = self.out(g, stdin=self.claude_call(), AI_RUNTIME_GATE_STATE=new, CLAUDE_FABLE_GATE_FALLBACK="sonnet",
-                       AI_RUNTIME_GATE_FALLBACK="haiku")
-        self.assertEqual((upd(out) or {}).get("model"), "haiku", "AI_RUNTIME_GATE_FALLBACK before CLAUDE_FABLE_GATE_FALLBACK")
-        out = self.out(g, stdin=self.claude_call(), AI_RUNTIME_GATE="off", CLAUDE_FABLE_GATE="on",
-                       AI_RUNTIME_GATE_STATE=new)
+        self.assertTrue(not os.path.exists(old) and os.path.isfile(self.cl + "/state/runtime-gate.json"),
+                        "CLAUDE_FABLE_GATE_STATE is ignored: the default state file is used")
+        out = self.out(g, stdin=self.claude_call(), AI_RUNTIME_GATE_STATE=new, CLAUDE_FABLE_GATE_FALLBACK="sonnet")
+        self.assertEqual((upd(out) or {}).get("model"), "opus", "CLAUDE_FABLE_GATE_FALLBACK is ignored")
+        out = self.out(g, stdin=self.claude_call(), AI_RUNTIME_GATE="off", AI_RUNTIME_GATE_STATE=new)
         self.assertEqual(out, "", "AI_RUNTIME_GATE=off disables it")
+        out = self.out(g, stdin=self.claude_call(), CLAUDE_FABLE_GATE="off", AI_RUNTIME_GATE_STATE=new)
+        self.assertNotEqual(out, "", "CLAUDE_FABLE_GATE=off no longer disables it")
+        self.gate(g, "clear", AI_RUNTIME_GATE_STATE=new)
+        self.gate(cxg, "set", "60", "x", AI_RUNTIME_GATE_STATE=tmp + "/new-cx.json")
         out = self.out(cxg, stdin=self.codex_call(), CODEX_MODEL_GATE="off", AI_RUNTIME_GATE_STATE=tmp + "/new-cx.json")
-        self.assertEqual(out, "", "CODEX_MODEL_GATE=off still disables the Codex side")
-        self.gate(cxg, "set", "60", "x", CODEX_MODEL_GATE_STATE=tmp + "/cx-old.json",
-                  CLAUDE_FABLE_GATE_STATE=tmp + "/wrong.json")
-        self.assertTrue(os.path.isfile(tmp + "/cx-old.json") and not os.path.exists(tmp + "/wrong.json"),
-                        "each runtime reads only its own old names")
+        self.assertNotEqual(out, "", "CODEX_MODEL_GATE=off no longer disables the Codex side")
 
-    def test_04_an_old_gates_state_is_imported_once(self):
+    def test_04_an_old_gates_state_is_not_imported(self):
         cl, cx, g, cxg = self.cl, self.cx, self.g, self.cxg
         self.rmrf(cl + "/state")
         os.makedirs(cl + "/state")
         write_json(cl + "/state/fable-gate.json", {"unavailable": {"until": int(time.time()) + 600, "reason": "rate_limit",
                                                                    "source": "StopFailure"}, "last_fable_launch": 1})
-        self.assertTrue(has_line("^active: Fable -> opus", self.out(g, "status")), "a live fable-gate record carries over")
-        state = read_json(cl + "/state/runtime-gate.json")
-        self.assertTrue(state.get("imported_from") == "fable-gate.json"
-                        and state.get("unavailable", {}).get("reason") == "rate_limit"
-                        and "last_fable_launch" not in state,
-                        "only the outage record is imported, and the import is recorded" + ": %s" % state)
-        self.gate(g, "clear")
-        self.assertTrue(has_line("^inactive", self.out(g, "status")), "once: clear is not undone by a second import")
+        self.assertTrue(has_line("^inactive", self.out(g, "status")), "a live fable-gate record is not carried over")
+        self.assertFalse(os.path.exists(cl + "/state/runtime-gate.json"), "nothing is imported or written")
         self.rmrf(cx + "/state")
         os.makedirs(cx + "/state")
         write_json(cx + "/state/codex-model-gate.json", {"unavailable": {"until": int(time.time()) + 600,
                                                                          "reason": "model_unavailable",
                                                                          "source": "SubagentStop"}})
-        self.assertTrue(has_line("^active: gpt-6-astra -> gpt-5.6-sol", self.out(cxg, "status")),
-                        "a live codex-model-gate record carries over")
+        self.assertTrue(has_line("^inactive", self.out(cxg, "status")), "a live codex-model-gate record is not carried over")
 
     def test_05_quota_claude_code_from_the_statusline(self):
         cl, g, now, tmp = self.cl, self.g, self.now, self.tmp
@@ -289,7 +278,7 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
         self.gate(g, "statusline", stdin={"rate_limits": {"seven_day": {"used_percentage": 30}}},
                   CLAUDE_FABLE_GATE_STATE=tmp + "/legacy-q.json")
         self.assertTrue(not os.path.exists(tmp + "/legacy-q.json") and read_json(path)["quota"]["weekly_pct"] == 30,
-                        "a state named by the old variable gets no quota; the ledger stays in runtime-gate.json")
+                        "the old variable names nothing; the ledger is in runtime-gate.json")
 
     def test_06_quota_codex_from_the_newest_rollout(self):
         cx, cxg, now = self.cx, self.cxg, self.now
@@ -740,15 +729,6 @@ class TestRuntimeGate(unittest.TestCase):  # pylint: disable=too-many-public-met
                     mod.HOME = saved_home
             with self.subTest("load: " + name):
                 self.assertEqual(mod.load(put("state-" + name, bad)), {})
-            with self.subTest("import_legacy: " + name):
-                saved = (mod.HOME, mod.STATE, mod.LEGACY_STATE)
-                mod.HOME = os.path.join(d, "legacy-" + name)
-                mod.STATE = os.path.join(mod.HOME, "state", "runtime-gate.json")
-                mod.LEGACY_STATE = put("legacy-" + name + ".json", bad)
-                try:
-                    self.assertEqual(mod.import_legacy(), {})
-                finally:
-                    mod.HOME, mod.STATE, mod.LEGACY_STATE = saved
             with self.subTest("transcript and rollout lines: " + name):
                 ok_version = '{"version": "2.1.5", "message": {"model": "opus"}}'
                 line = '{"version": %s}' % deep if name == "deep" else '{"version": x}'

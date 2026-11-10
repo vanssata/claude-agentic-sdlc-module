@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Task state for /ai-task — the small, machine-readable record of one task.
+"""Task state for /rr-build — the small, machine-readable record of one task.
 
 Why a file and not the conversation: a conversation is expensive to re-read and
 impossible for a hook to consult. This file is what ai-scope-guard enforces
-against, what /ai-status reports, and what lets a task survive a /clear or a
+against, what /rr-status reports, and what lets a task survive a /clear or a
 crash. It holds facts, never transcripts.
 
 Everything is stdlib. Writes are atomic (temp file + os.replace), so a hook that
 reads the file while a stage is being recorded never sees half a document.
 
 Every state change is also appended to .ai/reports/<task-id>/events.jsonl, the
-append-only journal /ai-status and /usage-report read at zero model cost. The
+append-only journal /rr-status and /rr-status --cost read at zero model cost. The
 journal is best effort by contract: a line that cannot be written never fails
 the command that emitted it, and nothing here depends on it being lossless.
 history[] keeps its exact shape and its original event names beside it.

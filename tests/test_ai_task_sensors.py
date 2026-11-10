@@ -111,7 +111,7 @@ class TestSensors(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
     def test_untracked_files_and_the_tasks_own_state(self):
         base = self.snapshot()
-        self.write(".ai/state/current.json", "state\n")
+        self.write(".ai/state/state.json", "state\n")
         self.write("src/new.php", "untracked\n")
         tree = self.snapshot()
         self.assertNotEqual(tree, base, "an untracked source file is in the tree, as git diff HEAD would not show")
@@ -150,7 +150,7 @@ class TestSensors(unittest.TestCase):  # pylint: disable=too-many-public-methods
     # section 3: run is the project's own command, to the end, into a log
 
     def test_run(self):
-        self.write(".ai/policies/testing.md", TESTING_MD)
+        self.write(".ai/policies/verification.md", TESTING_MD)
         suite_log = os.path.join(self.tmp.name, "suite.log")
         rc, out = self.n("run", "--scope", "suite", "--log", suite_log)
         self.assertEqual(rc, 0, out)
@@ -181,7 +181,7 @@ class TestSensors(unittest.TestCase):  # pylint: disable=too-many-public-methods
                          "run_command gives the command /dev/null, not a terminal, as stdin")
 
     def test_read_commands_strips_a_trailing_comment_only_for_none_and_bite_codes(self):
-        self.write(".ai/policies/testing.md", TESTING_MD + "doc_tests: none  # no docs suite\n"
+        self.write(".ai/policies/verification.md", TESTING_MD + "doc_tests: none  # no docs suite\n"
                    "lint_command: make lint  # all of it\nbite_codes: 1, 2  # pytest\n")
         commands = sensors.read_commands(self.root)
         self.assertEqual(commands["doc_tests"], "none")
@@ -193,17 +193,17 @@ class TestSensors(unittest.TestCase):  # pylint: disable=too-many-public-methods
         for text in ("bite_codes: x\n", "bite_codes: 1,,2\n", "bite_codes:\n",
                      "bite_codes: 0\n", "bite_codes: -1\n", "bite_codes: 256\n", "bite_codes: 1,0\n",
                      "bite_codes: 1,256\n", "bite_codes: 1,-2\n", "bite_codes: 1;2\n"):
-            self.write(".ai/policies/testing.md", TESTING_MD + text)
+            self.write(".ai/policies/verification.md", TESTING_MD + text)
             self.assertEqual(sensors.bite_codes(self.root), (1,), text)
-        self.write(".ai/policies/testing.md", TESTING_MD + "bite_codes: 101\n")
+        self.write(".ai/policies/verification.md", TESTING_MD + "bite_codes: 101\n")
         self.assertEqual(sensors.bite_codes(self.root), (101,))
-        self.write(".ai/policies/testing.md", TESTING_MD + "bite_codes: 1, 255\n")
+        self.write(".ai/policies/verification.md", TESTING_MD + "bite_codes: 1, 255\n")
         self.assertEqual(sensors.bite_codes(self.root), (1, 255))
 
     def test_bite_codes_says_on_stderr_when_a_value_is_unusable(self):
         import contextlib, io  # pylint: disable=import-outside-toplevel
         for raw in ("1 2", "0", "x", "1,256"):
-            self.write(".ai/policies/testing.md", TESTING_MD + "bite_codes: %s\n" % raw)
+            self.write(".ai/policies/verification.md", TESTING_MD + "bite_codes: %s\n" % raw)
             err, out = io.StringIO(), io.StringIO()
             with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
                 self.assertEqual(sensors.bite_codes(self.root), (1,), raw)
@@ -211,7 +211,7 @@ class TestSensors(unittest.TestCase):  # pylint: disable=too-many-public-methods
                           err.getvalue(), raw)
             self.assertEqual(out.getvalue(), "", raw)
         for text in ("", "bite_codes:\n", "bite_codes: 1, 255\n", "bite_codes: 101  # c\n"):
-            self.write(".ai/policies/testing.md", TESTING_MD + text)
+            self.write(".ai/policies/verification.md", TESTING_MD + text)
             err = io.StringIO()
             with contextlib.redirect_stderr(err):
                 sensors.bite_codes(self.root)
@@ -233,7 +233,7 @@ class TestSensors(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertNotIn("\x1b", text)
 
     def test_read_commands_reads_doc_tests(self):
-        self.write(".ai/policies/testing.md", TESTING_MD + "doc_tests:          tests/test_a.py tests/test_b.py\n")
+        self.write(".ai/policies/verification.md", TESTING_MD + "doc_tests:          tests/test_a.py tests/test_b.py\n")
         self.assertEqual(sensors.read_commands(self.root)["doc_tests"], "tests/test_a.py tests/test_b.py")
 
     # section 4: the old sensors are gone (R6)
@@ -246,6 +246,41 @@ class TestSensors(unittest.TestCase):  # pylint: disable=too-many-public-methods
         for f in ("--tier", "--allowed", "--scope"):
             with self.subTest(Template("diff takes no $f: size is not measured").substitute(f=f)):
                 self.assertEqual(self.n("diff", "--from", base, "--to", after, f, "x")[0], 2)
+
+
+class TestVerificationFile(unittest.TestCase):
+    """R10: .ai/policies/verification.md is the only source of the eight fields; testing.md is not read."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with  # cleanup ends it
+        self.addCleanup(self.tmp.cleanup)
+        self.root = self.tmp.name
+        os.makedirs(os.path.join(self.root, ".ai", "policies"))
+
+    def put(self, name, text):
+        with open(os.path.join(self.root, ".ai", "policies", name), "w", encoding="utf-8") as fh:
+            fh.write(text)
+
+    def test_the_eight_fields_come_from_verification_md(self):
+        self.put("verification.md", "# Verification\n" + "".join(
+            "%s: value-%s\n" % (f, f) for f in sensors.TESTING_FIELDS if f != "bite_codes") + "bite_codes: 1,2\n")
+        got = sensors.read_commands(self.root)
+        self.assertEqual(sorted(got), sorted(sensors.TESTING_FIELDS))
+        self.assertEqual((got["verify_command"], got["bite_codes"]), ("value-verify_command", "1,2"))
+        self.assertEqual(sensors.bite_codes(self.root), (1, 2))
+
+    def test_testing_md_is_not_a_fallback(self):
+        self.put("testing.md", TESTING_MD)
+        self.assertEqual(sensors.read_commands(self.root), {})
+        self.put("verification.md", "# Verification\nverify_command:      \n")
+        self.assertEqual(sensors.read_commands(self.root), {"verify_command": ""})
+
+    def test_run_names_verification_md_when_the_command_is_missing(self):
+        self.put("testing.md", TESTING_MD)
+        done = subprocess.run([sys.executable, "-I", SENSORS, "--root", self.root, "run", "--scope", "suite"],
+                              capture_output=True, text=True, check=False)
+        self.assertEqual(done.returncode, 3, done.stdout)
+        self.assertIn("verification.md", done.stdout)
 
 
 class TestProjectBelowGitTop(unittest.TestCase):

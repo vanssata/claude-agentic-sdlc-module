@@ -4,6 +4,28 @@ Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelo
 
 ## [Unreleased]
 
+## [4.0.0] — 2026-11-04
+
+Breaking. riskrails regenerates a project's files from the plugin and converts nothing. **Run `/rr-setup --update` in each project right after installing 4.0.0**: until then the project's old shapes are not read, so a project weighs without its `domain.modules` (lighter), finds no `verify_command`, and a task still in the old `current.json` is not scope-guarded. Reinstall both routes you use, `npx riskrails@4.0.0` and the plugin install: they are separate copies.
+
+A tree that still holds an old shape (`current.json` without `state.json`, `risk-tiers.json` without a weight table, an old `claude-agentic` or `Codex-agentic` marker) is refused (`KEPT_UNREADABLE`, exit 6, naming the file); any other older tree is regenerated without the conversions it missed. So a project last updated before 3.1.0 goes through 3.1.0 first: install `npx riskrails@3.1.0`, run `/rr-setup --update` with it, then install 4.0.0 and run it again.
+
+### Removed
+- `/rr-setup --adopt`, `adopt.py`, `adopt-map.json` and the `--mode`, `--tool`, `--split-request`, `--split`, `--diff` and `--cleanup` flags of `update.py` (they exit 2). A project's own toolbox is no longer inventoried into `policies/toolbox.md`.
+- The migrations `0001` to `0011` and the schema ladder. `.ai/VERSION` is 12.
+- The one-version fallbacks: the `current.json` reads, the `CLAUDE_AGENTIC_*` environment names, the old `claude-agentic` home and markers, `dependency_instruction_patterns`, the runtime-gate `LEGACY` and `--as` names and the `CLAUDE_FABLE_GATE*` variables, and the claude-routing / "Model allocation" block migration.
+- The alias skills `ai-status`, `sdlc-intent`, `sdlc-plan` and `sdlc-spec`, and the `SKILL.md` of `ai-task`, `project-update`, `ai-init`, `project-init`, `usage-report` and `ai-audit` (their code and templates stay: the `rr-*` skills read them). Use `/rr-setup`, `/rr-setup --update`, `/rr-setup --audit`, `/rr-build`, `/rr-spec`, `/rr-plan`, `/rr-status` and `/rr-status --cost`. The installer moves `skills/{status,ai-status,sdlc-intent,sdlc-plan,sdlc-spec}` out of the home into `backups/<date>/skills/` (the dry run prints a `retire:` line first).
+- `skills/project-update/migrations/**` from the weight hints.
+
+### Changed
+- `/rr-setup --update` regenerates: a file that is a version the plugin once shipped is replaced; an edited one is a `regenerate?` row that waits for `--confirm-delete` (exit 5, `CONFIRM_REFUSED`, without a human), and its original is copied to `.ai/reports/project-update-<date>/original/` first.
+- The weight is the plugin's table plus `.ai/policies/weight.project.json`, the project's own changes laid over it; `weight.md` is rendered from both. `.ai/policies/verification.md` is the only source of `verify_command`, `step_test_command` and `e2e_command`. A project that still has the mixed `weight.json` and `testing.md` gets the two files split out of them once, by the first `/rr-setup --update`.
+- The shared stubs `ai/workflows/{feature,bugfix,hotfix,investigation,refactoring}.md` and `ai/agents/manager.md` are removed; the shared set is 25 files.
+- The template history is rebuilt; the README test count and the router template (`weight.md` and `weight.project.json`) follow.
+
+### Kept
+- The installer's fable-gate sites stay: the statusline wrapper rewrite, the replacement of fable-gate hook entries by runtime-gate, and the retirement of the `fable-gate.py` shim. A settings file written before the runtime gate would otherwise keep a hook that points at a retired file, an error on every tool call. The `fable-gate=` label of the dry run stays with them.
+
 ## [3.2.2] — 2026-11-02
 
 ### Changed

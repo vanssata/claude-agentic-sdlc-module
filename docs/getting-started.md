@@ -6,7 +6,7 @@ dangerous one, then the audit, the update and the bill.
 ## 1. Install
 
 ```bash
-npx riskrails@3.2.2          # detects Claude Code, Codex or both; proposes the plan it detected; Enter confirms
+npx riskrails@4.0.0          # detects Claude Code, Codex or both; proposes the plan it detected; Enter confirms
 ```
 
 Node 18+ and `python3` are needed. The installer writes the managed block into
@@ -48,10 +48,6 @@ The project's `CLAUDE.md` or `AGENTS.md` gets the managed block once; the rest
 of the file stays yours. `.ai/policies/dialog.json` ships on, so approvals and
 guarded git commands come to you as a question in the runtime's own dialog.
 Commit `.ai/`, `docs/sdlc` and `.gitignore`.
-
-A repository that already carries Spec Kit, Kiro, Cursor or Copilot files, or
-an oversized instruction file, starts with `/rr-setup --adopt` instead
-([project-update.md](project-update.md)).
 
 ## 3. A small task, end to end
 
@@ -151,7 +147,7 @@ npx -y riskrails@latest --yes   # the home: settings, hooks, agents, the shared 
 ```
 
 ```
-/rr-setup --update              # the project: a dry run, then --apply; migrations first, then the merge
+/rr-setup --update              # the project: a dry run, then --apply; regenerates from the plugin
 ```
 
 `/rr-status` says when a project is behind the installed plugin. In Codex,

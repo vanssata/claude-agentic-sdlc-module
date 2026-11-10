@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "_comment": "Yours. weight.py lays it over the plugin's weight table: objects merge, any other value replaces. /rr-setup --update never rewrites it."
+}

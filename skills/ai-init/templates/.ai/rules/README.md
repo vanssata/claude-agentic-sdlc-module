@@ -1,7 +1,7 @@
 # Directory rules
 
 One file per slug, `<slug>.md`, holding the rules that apply to a part of this
-repository and nowhere else. `/project-update` renders each of them into a
+repository and nowhere else. `/rr-setup --update` renders each of them into a
 managed block in the instruction file of every directory it names, so an agent
 working there reads them without anything being loaded for a task that never
 goes near that code.
@@ -21,4 +21,4 @@ paths: ["src/Payment/**"]               # optional: also a path-scoped rules fil
   Text outside the markers is yours and is never touched.
 - The body is what an agent reads: rules, not rationale. Keep it under a screen.
 - This file is the format, not a rule: no rule ships with the plugin. Delete a
-  `<slug>.md` and the next `/project-update` offers to remove what it rendered.
+  `<slug>.md` and the next `/rr-setup --update` offers to remove what it rendered.

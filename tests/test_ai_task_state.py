@@ -48,7 +48,7 @@ FINDINGS = "FINDINGS\n[HIGH] H1 the cache key ignores the locale\nin_scope: yes\
 
 
 class Project:
-    """A scratch project with .ai/, a testing.md whose commands read flag files,
+    """A scratch project with .ai/, a verification.md whose commands read flag files,
     one code file and its test, committed."""
 
     def __init__(self, files=None, name="p"):
@@ -63,7 +63,7 @@ class Project:
                  "test -e %s && echo x > \"$(printf \"w\\nFAKE ok\\033[0mz.dat\")\"; "
                  % (os.path.join(self.flags, "touch"), os.path.join(self.flags, "untracked"),
                     os.path.join(self.flags, "weird")))
-        self.write(".ai/policies/testing.md",
+        self.write(".ai/policies/verification.md",
                    "verify_command: sh -c '%stest ! -e %s' {files}\nstep_test_command: sh -c 'test ! -e %s' {files}\n"
                    "e2e_command: test ! -e %s\n" % (touch, red, os.path.join(self.flags, "stepred"), e2e))
         base = {"src/widget.py": "x = 1\n", "tests/test_widget.py": "assert True\n"}
@@ -115,9 +115,8 @@ class Project:
                        "--tests", "tests/test_widget.py", *ZERO, *extra, **kwargs)
 
     def state_file(self):
-        """The file the task sits in: state.json, or a legacy current.json."""
-        new = os.path.join(self.root, ".ai", "state", "state.json")
-        return new if os.path.exists(new) else os.path.join(self.root, ".ai", "state", "current.json")
+        """The file the task sits in: state.json."""
+        return os.path.join(self.root, ".ai", "state", "state.json")
 
     def state(self):
         with open(self.state_file(), encoding="utf-8") as fh:
@@ -241,9 +240,8 @@ class TestStart(Base):
         tier = [e for e in self.p.events(s["task_id"]) if e["event"] == "tier_set"][0]["data"]
         self.assertEqual((tier["tier"], tier["mode"]), ("T2", "light"))
 
-    def test_start_writes_state_json_and_resumes_a_legacy_task_in_place(self):
-        """R34's contract half: a task starts in state.json; one a version before
-        left in current.json is read and saved where it is."""
+    def test_start_writes_state_json_and_a_legacy_current_json_is_inert(self):
+        """A task starts in state.json; the R34 fallback is gone, so a current.json is not read."""
         self.p.start()
         task = self.task_id()
         new = os.path.join(self.p.root, ".ai", "state", "state.json")
@@ -253,12 +251,8 @@ class TestStart(Base):
         self.p.ok("start", "--amend", "--files", "+src/other.py", "--why", "a save")
         self.assertFalse(os.path.exists(legacy), "a save creates no second file")
         os.rename(new, legacy)
-        self.assertIn(task, self.p.ok("status").stdout)
-        self.p.write("src/third.py", "z = 1\n")
-        self.p.ok("start", "--amend", "--files", "+src/third.py", "--why", "a save")
-        self.assertTrue(os.path.exists(legacy) and not os.path.exists(new), "current.json is saved where it is")
-        with open(legacy, encoding="utf-8") as fh:
-            self.assertIn("src/third.py", json.load(fh)["files"])
+        self.assertNotIn(task, self.p.ok("status").stdout)
+        self.assertTrue(os.path.exists(legacy) and not os.path.exists(new), "and nothing is written for it")
 
     def test_declared_evidence_cannot_add_a_heading_to_task_md(self):
         """L5: declared text is one line in §Weight, so task.md keeps one §Questions."""
@@ -286,7 +280,7 @@ class TestStart(Base):
 
     def write_old_task(self):
         """A task the old surface started: no schema key, a tier, a stage."""
-        self.p.write(".ai/state/current.json", json.dumps({
+        self.p.write(".ai/state/state.json", json.dumps({
             "task_id": "T-OLD", "goal": "g", "workflow": "feature", "risk_tier": "T2",
             "current_stage": "implementation", "approved_plan": {"ref": "inline", "steps": []}}))
 
@@ -599,7 +593,7 @@ class TestSurface(Base):  # pylint: disable=too-many-public-methods  # one test 
 
     def test_expect_fail_a_runner_usage_error_is_not_a_bite(self):
         # Register E3: exit 2 is the runner's own usage error, not a failing test.
-        self.p.write(".ai/policies/testing.md", "verify_command: true\nstep_test_command: sh -c 'exit 2' {files}\n"
+        self.p.write(".ai/policies/verification.md", "verify_command: true\nstep_test_command: sh -c 'exit 2' {files}\n"
                                                 "e2e_command: true\n")
         self.p.start()
         done = self.p.run("verify", "--scope", "step", "--files", "tests/test_widget.py", "--expect", "fail")
@@ -608,7 +602,7 @@ class TestSurface(Base):  # pylint: disable=too-many-public-methods  # one test 
         self.assertFalse(self.p.state()["verify"]["runs"][-1]["bites"])
 
     def _bite_run(self, extra, code=2):
-        self.p.write(".ai/policies/testing.md", "verify_command: true\nstep_test_command: sh -c 'exit %d' {files}\n"
+        self.p.write(".ai/policies/verification.md", "verify_command: true\nstep_test_command: sh -c 'exit %d' {files}\n"
                                                 "e2e_command: true\n%s" % (code, extra))
         self.p.start()
         return self.p.run("verify", "--scope", "step", "--files", "tests/test_widget.py", "--expect", "fail")
@@ -636,7 +630,7 @@ class TestSurface(Base):  # pylint: disable=too-many-public-methods  # one test 
         target = os.path.join(self.p.root, ".ai", "state", "logs", "T-OLD", "state.json")
         for patched in (mock.patch.object(json, "dump", side_effect=OSError("disk full")),
                         mock.patch.object(os, "replace", side_effect=OSError("disk full"))):
-            self.p.write(".ai/state/current.json", json.dumps({
+            self.p.write(".ai/state/state.json", json.dumps({
                 "task_id": "T-OLD", "goal": "g", "workflow": "feature", "risk_tier": "T2",
                 "current_stage": "implementation", "approved_plan": {"ref": "inline", "steps": []}}))
             with patched, self.assertRaises(OSError):
@@ -939,9 +933,9 @@ class TestReviewPass2(Base):
 
     def test_e2e_command_none_is_declared_on_every_tree(self):
         # Review N1: `none` is never run, so an edit after it is no dead end.
-        with open(os.path.join(self.p.root, ".ai", "policies", "testing.md"), encoding="utf-8") as fh:
+        with open(os.path.join(self.p.root, ".ai", "policies", "verification.md"), encoding="utf-8") as fh:
             text = fh.read()
-        self.p.write(".ai/policies/testing.md", text.split("e2e_command:")[0] + "e2e_command: none\n")
+        self.p.write(".ai/policies/verification.md", text.split("e2e_command:")[0] + "e2e_command: none\n")
         self.guarded()
         self.assertIn("e2e: not applicable", self.p.ok("verify", "--scope", "all").stdout)
         self.p.ok("review", "--verdict", "pass", "--tier", "BALANCED", "--report", "-", stdin=CLEAN)
@@ -1064,7 +1058,7 @@ class TestRescore(unittest.TestCase):
                   encoding="utf-8") as fh:
             table = json.load(fh)
         table["axes"]["reversibility"]["irreversible_content"] = [r"[;\s]+PURGE", r"\s\s"]
-        p = Project(files={".ai/policies/weight.json": json.dumps(table), "db/migrations/0002.sql": "-- x\n"})
+        p = Project(files={".ai/policies/weight.project.json": json.dumps(table), "db/migrations/0002.sql": "-- x\n"})
         self.addCleanup(p.close)
         p.ok("start", "--goal", "g", "--workflow", "feature", "--files", "db/migrations/0002.sql",
              "--tests", "tests/test_widget.py")
@@ -1082,7 +1076,7 @@ class TestRescore(unittest.TestCase):
                   encoding="utf-8") as fh:
             table = json.load(fh)
         table["documents"] = {"globs": ["**/*.md"], "except": ["skills/**", "hooks/**"]}
-        p = Project(files={".ai/policies/weight.json": json.dumps(table), "README.md": "# r\n"})
+        p = Project(files={".ai/policies/weight.project.json": json.dumps(table), "README.md": "# r\n"})
         self.addCleanup(p.close)
         p.ok("start", "--goal", "fix a typo", "--workflow", "feature", "--files", "README.md",
              "--tests", "tests/test_widget.py")
@@ -1123,7 +1117,7 @@ class TestRescore(unittest.TestCase):
                   encoding="utf-8") as fh:
             table = json.load(fh)
         table["documents"] = {"globs": ["**/*.md"], "except": []}
-        p = Project(files={".ai/policies/weight.json": json.dumps(table), "README.md": "# r\n"})
+        p = Project(files={".ai/policies/weight.project.json": json.dumps(table), "README.md": "# r\n"})
         self.addCleanup(p.close)
         p.ok("start", "--goal", "fix a typo", "--workflow", "feature", "--files", "README.md",
              "--tests", "tests/test_widget.py")
@@ -1255,7 +1249,7 @@ class TestJournal(Ported):
         self.p.start()
         s = self.p.state()
         s["human_approval"] = None
-        self.p.write(".ai/state/current.json", json.dumps(s))
+        self.p.write(".ai/state/state.json", json.dumps(s))
         self.p.ok("status")
         self.p.ok("handoff", "--print")
 
@@ -1919,12 +1913,12 @@ class TestWP5(Ported):
     def start5(self, workflow="feature"):
         return self.s("claude", "start", "--goal", "move it", "--workflow", workflow, "--files", "src/widget.py", *ZERO)
 
-    def test_profile_from_a_home_installed_before_3_4b(self):
-        # Review M2: a skills tree updated without install.sh still finds its plan under claude-agentic/.
+    def test_a_profile_under_the_old_home_is_not_read(self):
+        # The pre-3.4b claude-agentic/ fallback is gone: with only that folder, no plan is known.
         home = self.homes["CLAUDE_CONFIG_DIR"]
         os.rename(os.path.join(home, "riskrails"), os.path.join(home, "claude-agentic"))
         got = self.s("claude", "profile", "--tier", "STRONG")
-        self.assertEqual((got.returncode, got.stdout.strip()), (0, "opus"), got.stderr)
+        self.assertEqual((got.returncode, got.stdout.strip()), (1, ""), got.stderr)
 
     def test_handoff_to_and_exit_7(self):
         self.assertEqual(self.start5().returncode, 0)
@@ -1970,7 +1964,7 @@ class TestWP5(Ported):
         self.start5()
         s = self.p.state()
         s["owner_runtime"] = None
-        self.p.write(".ai/state/current.json", json.dumps(s))
+        self.p.write(".ai/state/state.json", json.dumps(s))
         self.assertEqual(self.s("claude", "handoff", "--to", "claude").returncode, 2)
         self.assertIsNone(self.p.state()["handoff"]["pending_to"])
 
@@ -2048,7 +2042,7 @@ class TestNoTask(unittest.TestCase):
         return out
 
     def test_a_corrupt_state_file_is_loud_and_untouched(self):
-        path = os.path.join(self.root, ".ai", "state", "current.json")
+        path = os.path.join(self.root, ".ai", "state", "state.json")
         with open(path, "w", encoding="utf-8") as fh:
             fh.write("not json at all")
         self.assertIn("unreadable", self.run_state(self.root, "status"),
@@ -2595,7 +2589,7 @@ class TestDialogRoute(DialogBase):  # pylint: disable=too-many-public-methods  #
                      "--tests", "tests/test_widget.py") + tuple(ZERO))
         results = {}
         for text in ("{not json", "[" * 200000):
-            self.p.write(".ai/policies/weight.json", text)
+            self.p.write(".ai/policies/weight.project.json", text)
             results[text[:1]] = [self.p.run(*command) for command in commands]
         for n, command in enumerate(commands):
             with self.subTest(command=command[0]):
@@ -2939,7 +2933,7 @@ class TestBatch(Base):
                 del policy["batch"]
             else:
                 policy["batch"] = dict(policy["batch"], **batch)
-            files[".ai/policies/weight.json"] = json.dumps(policy)
+            files[".ai/policies/weight.project.json"] = json.dumps(policy)
         self.p = Project(files=files)
         return self.p
 
@@ -3252,11 +3246,11 @@ class TestDocumentsOnly(unittest.TestCase):  # pylint: disable=too-many-public-m
             policy = json.load(fh)
         if documents:
             policy["documents"] = self.DOCUMENTS
-        self.p = Project(files={".ai/policies/weight.json": json.dumps(policy), "README.md": "# r\n",
+        self.p = Project(files={".ai/policies/weight.project.json": json.dumps(policy), "README.md": "# r\n",
                                 "docs/guide.md": "g\n", "skills/guide.md": "s\n", ".ai/policies/x.md": "x\n",
                                 "tests/test_docs.py": "assert True\n"})
         if doc_tests is not None:
-            with open(os.path.join(self.p.root, ".ai", "policies", "testing.md"), "a", encoding="utf-8") as fh:
+            with open(os.path.join(self.p.root, ".ai", "policies", "verification.md"), "a", encoding="utf-8") as fh:
                 fh.write("doc_tests: %s\n" % doc_tests)
         return self.p
 

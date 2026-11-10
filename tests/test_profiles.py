@@ -117,8 +117,8 @@ class Profiles(ScratchCase):
                    "pro should not name Fable")
         rc = resolve("no-such-plan")[0]
         self.check("unknown profile exits 2", rc == 2, "unknown profile exit %s" % rc)
-        write(self.path("loop-a.json"), '{"claude_agentic":{"inherits":"loop-b"}}')
-        write(self.path("loop-b.json"), '{"claude_agentic":{"inherits":"loop-a"}}')
+        write(self.path("loop-a.json"), '{"riskrails":{"inherits":"loop-b"}}')
+        write(self.path("loop-b.json"), '{"riskrails":{"inherits":"loop-a"}}')
         for loop in ("loop-a", "loop-b"):
             write(self.path("src", "profiles", loop + ".json"), read_text(self.path(loop + ".json")))
         rc = resolve("loop-a", "--src", self.path("src"))[0]

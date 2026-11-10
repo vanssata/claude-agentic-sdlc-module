@@ -1,4 +1,0 @@
-description = "Create the implementation plan."
-prompt = """
-Run .specify/scripts/bash/setup-plan.sh.
-"""

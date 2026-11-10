@@ -1,5 +1,5 @@
 """Scratch projects for the compact-memory suites (tests/test_memory_*.py,
-tests/test_task_id.py): a git repository with .ai/, a testing.md whose
+tests/test_task_id.py): a git repository with .ai/, a verification.md whose
 commands read flag files outside the tree, and helpers that run state.py the
 way an agent and a human do. Not a test module: discover skips it."""
 import json
@@ -48,7 +48,7 @@ def clean_env(extra=None, runtime="claude", human=False):
 
 
 class Project:
-    """A scratch project: .ai/policies/testing.md, src/widget.py, its test, one commit."""
+    """A scratch project: .ai/policies/verification.md, src/widget.py, its test, one commit."""
 
     def __init__(self, name="p", tmp=None, files=None, clone_of=None):
         self.own_tmp = tmp is None
@@ -61,7 +61,7 @@ class Project:
             return
         os.makedirs(os.path.join(self.root, ".ai", "policies"))
         red = os.path.join(self.flags, "red")
-        self.write(".ai/policies/testing.md",
+        self.write(".ai/policies/verification.md",
                    "verify_command: sh -c 'test ! -e %s' {files}\nstep_test_command: sh -c 'test ! -e %s' "
                    "{files}\ne2e_command: test ! -e %s\n" % (red, os.path.join(self.flags, "stepred"),
                                                              os.path.join(self.flags, "e2ered")))
@@ -154,8 +154,7 @@ class Project:
         return [line.split()[0] for line in out.splitlines() if " started: " in line][0]
 
     def state(self):
-        name = "state.json" if self.exists(".ai/state/state.json") else "current.json"
-        with open(self.path(".ai/state/" + name), encoding="utf-8") as fh:
+        with open(self.path(".ai/state/state.json"), encoding="utf-8") as fh:
             return json.load(fh)
 
     def task_id(self):

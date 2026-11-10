@@ -152,7 +152,6 @@ const exists = (p) => fs.existsSync(p);                       // follows symlink
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch (e) { return false; } };
 const isFile = (p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } };
 const isLink = (p) => { try { return fs.lstatSync(p).isSymbolicLink(); } catch (e) { return false; } };
-const lexists = (p) => { try { fs.lstatSync(p); return true; } catch (e) { return false; } };
 const read = (p) => fs.readFileSync(p, 'utf8');
 const readJSON = (p) => JSON.parse(read(p));
 const pretty = (v) => JSON.stringify(v, null, 2);
@@ -311,7 +310,7 @@ function renderStub(scope, runtime, dst, vars, kind = 'block') {
 // block_size — what the always-loaded block costs, and how much of the file is the user's own.
 function blockSize(file, budget) {
   const text = read(file);
-  const m = text.match(/<!-- (riskrails|claude-agentic|[Cc]odex-agentic):start -->[\s\S]*?<!-- \1:end -->/);
+  const m = text.match(/<!-- riskrails:start -->[\s\S]*?<!-- riskrails:end -->/);
   const block = m ? Buffer.byteLength(m[0]) : 0;
   out(`${path.basename(file)}: managed block ${spaced(block)} B (budget ${spaced(budget)}), file ${spaced(Buffer.byteLength(text))} B — the rest is yours`);
 }
@@ -358,12 +357,10 @@ function writeProfile(home, profile) {
 }
 
 function prevPlan(home) {
-  for (const name of ['riskrails', 'claude-agentic']) {   // before 3.4b it lived under claude-agentic/ (R35)
-    try {
-      const plan = readJSON(path.join(home, name, 'profile.json')).plan;
-      return plan === null || plan === undefined || plan === false ? '' : String(plan);
-    } catch (e) { /* next */ }
-  }
+  try {
+    const plan = readJSON(path.join(home, 'riskrails', 'profile.json')).plan;
+    return plan === null || plan === undefined || plan === false ? '' : String(plan);
+  } catch (e) { /* none */ }
   return '';
 }
 
@@ -748,15 +745,13 @@ function claudeDryRun() {
   if (C.TIER === 'max') out(`   bin:     claude-1m (opus[1m]${FABLE === 'yes' ? ' / fable[1m]' : ''}, pins the model at launch; compacts near ${C.ONE_M_AT})`);
   const plugin = claudePlugin(CLAUDE_DIR);
   skillsLine(plugin);
-  out('   retire:  skills/status (now skills/rr-status), into backups/<date>/ if present');
+  out('   retire:  skills/{status,ai-status,sdlc-intent,sdlc-plan,sdlc-spec}, into backups/<date>/ if present');
   shimLine('settings.json');
   pluginLine(plugin, true);
-  homeLine(CLAUDE_DIR);
   sharedLine();
   out('   config:  ai-git-guard.json (only if absent)');
   out('   routing: riskrails/routing.md');
   out('   profile: riskrails/profile.json');
-  out('== would migrate: the claude-routing managed block, if present, into this one');
 }
 
 // Every backup goes to one dated directory, <root>/backups/<date>/<path>: a backup beside
@@ -780,18 +775,6 @@ function retire(root, rel) {                       // move what nothing installs
   out(`retired: ${rel} -> backups/${BACKUP_DATE}/${rel}`);
 }
 
-// move_home — R35: the install home was <root>/claude-agentic/ before 3.4b. It moves to
-// <root>/riskrails/ and the old path becomes a symlink to it for one version. A real old
-// home beside an existing new one (or a link there, dangling or not) is retired.
-function moveHome(root) {
-  const old = path.join(root, 'claude-agentic'), nw = path.join(root, 'riskrails');
-  if (!isDir(old) || isLink(old)) return;
-  if (lexists(nw)) retire(root, 'claude-agentic');
-  else { fs.renameSync(old, nw); out('moved: claude-agentic/ -> riskrails/'); }
-  fs.symlinkSync('riskrails', old);
-  out('linked: claude-agentic -> riskrails (for one version)');
-}
-
 // sweep_bak — every *.bak an older installer left beside a live file moves into
 // backups/<date>/, keeping its path. Only the directories and root files this installer writes.
 function sweepBak(root, ...names) {
@@ -807,6 +790,8 @@ function sweepBak(root, ...names) {
     out(`moved: ${rel} -> backups/${BACKUP_DATE}/${rel}`);
   }
 }
+
+const RETIRED_SKILLS = ['status', 'ai-status', 'sdlc-intent', 'sdlc-plan', 'sdlc-spec'];
 
 // The seven agents the 2026-09-02 install shipped, and the nine redesign 2.4 removed (with
 // the Codex -strong/-balanced twins). Moved, not deleted: one mv out of backups/ restores one.
@@ -831,8 +816,8 @@ function installFile(src, dst, root = CLAUDE_DIR) {  // back up on a real change
 // their scripts (state.py, ai-path, ...) through $AI_HOME/skills/ as on the npx route.
 function installSkills(root, plugin) {
   const backups = path.join(root, 'backups', BACKUP_DATE, 'skills');
-  // /status became /rr-status (redesign 2.3); a leftover would load as a second status command.
-  retire(root, 'skills/status');
+  // /status became /rr-status (2.3) and the ai-status and sdlc-* aliases ended in 4.0: a leftover would load as a second command.
+  for (const n of RETIRED_SKILLS) retire(root, `skills/${n}`);
   for (const name of ls(path.join(SRC, 'skills')).filter((n) => isDir(path.join(SRC, 'skills', n)))) {
     const d = path.join(SRC, 'skills', name), dst = path.join(root, 'skills', name);
     // A developer who ran the scripts in place leaves __pycache__ behind; it is not copied.
@@ -879,43 +864,15 @@ function installShared(root) {
   installFile(path.join(SRC, 'scripts/resolve-profile.py'), path.join(home, 'scripts/resolve-profile.py'), root);
 }
 
-function homeLine(root) {
-  const old = path.join(root, 'claude-agentic');
-  if (isDir(old) && !isLink(old)) out('   home:    claude-agentic/ -> riskrails/, the old path a symlink for one version');
-}
 const sharedLine = () => out(`   shared:  riskrails/ai (${countFiles(path.join(SRC, 'ai'))} files), riskrails/ai-path`);
 
-// managed_block — replace the one managed block, or append it; migrates the predecessor
-// plugin's block and an unmarked legacy section on the way. Backs up a non-empty target first.
+// managed_block — replace the one managed block, or append it. Backs up a non-empty target first.
 function managedBlock(target, blockFile, label) {
   if (!exists(target)) fs.writeFileSync(target, '');
   if (fs.statSync(target).size > 0) backupFile(target, path.dirname(target));
   const block = read(blockFile).replace(/^\n+|\n+$/g, '');
   let text = read(target);
   const start = '<!-- riskrails:start -->', end = '<!-- riskrails:end -->';
-  const notes = [];
-  const routing = text.match(/<!-- claude-routing:start -->[\s\S]*?<!-- claude-routing:end -->\n?/);
-  if (routing) {
-    text = text.slice(0, routing.index) + text.slice(routing.index + routing[0].length);
-    notes.push('migrated the claude-routing block');
-  }
-  const legacy = text.match(/^# Model allocation by task and scope[\s\S]*?(?=^# |(?![\s\S]))/m);
-  if (legacy && !text.slice(0, legacy.index).includes(start)) {
-    text = text.slice(0, legacy.index) + text.slice(legacy.index + legacy[0].length);
-    notes.push("migrated an unmarked 'Model allocation' section");
-  }
-  // A legacy claude-agentic (before 3.4b) or Codex-agentic pair is the managed block under its
-  // old name: rename it, never append beside it.
-  if (!text.includes(start) && !text.includes(end)) {
-    const pair = text.match(/<!-- (claude-agentic|[Cc]odex-agentic):start -->[\s\S]*?<!-- \1:end -->/);
-    if (pair) {
-      const name = pair[1];
-      text = text.slice(0, pair.index)
-        + pair[0].replace(`<!-- ${name}:start -->`, start).replace(`<!-- ${name}:end -->`, end)
-        + text.slice(pair.index + pair[0].length);
-      notes.push(`renamed the legacy ${name} markers`);
-    }
-  }
   let nw, action;
   if (text.includes(start) && text.includes(end)) {
     const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -928,7 +885,7 @@ function managedBlock(target, blockFile, label) {
   }
   nw = nw.replace(/\n{4,}/g, '\n\n\n');
   fs.writeFileSync(target, nw);
-  out(`${label}: ${action}${notes.length ? ' + ' + notes.join(' + ') : ''}`);
+  out(`${label}: ${action}`);
 }
 
 // The three shell guards 3.5 retired: ai-guard.py runs all of them in one process. Their
@@ -1114,7 +1071,6 @@ const loadJSONFile = (file) => JSON.parse(read(file));
 const writeJSONFile = (file, doc) => { fs.writeFileSync(file + '.tmp', pretty(doc) + '\n'); fs.renameSync(file + '.tmp', file); };
 
 function claudeApply() {
-  moveHome(CLAUDE_DIR);
   for (const d of ['agents', 'hooks/lib', 'hooks/guard', 'skills']) mkdirp(path.join(CLAUDE_DIR, d));
   sweepBak(CLAUDE_DIR, 'settings.json', 'CLAUDE.md');
 
@@ -1390,10 +1346,9 @@ function codexDryRun() {
   out(`   hooks:   ${codexHookFiles().map((f) => path.basename(f)).join(',')}`);
   const plugin = codexPlugin(CODEX_DIR);
   skillsLine(plugin);
-  out('   retire:  skills/status (now skills/rr-status), into backups/<date>/ if present');
+  out('   retire:  skills/{status,ai-status,sdlc-intent,sdlc-plan,sdlc-spec}, into backups/<date>/ if present');
   shimLine('hooks.json');
   pluginLine(plugin, true);
-  homeLine(CODEX_DIR);
   sharedLine();
   out('   config:  ai-git-guard.json (only if absent)');
   out('   routing: riskrails/routing.md');
@@ -1404,7 +1359,6 @@ function codexDryRun() {
 }
 
 function codexApply() {
-  moveHome(CODEX_DIR);
   for (const d of ['agents', 'hooks/lib', 'hooks/guard', 'skills']) mkdirp(path.join(CODEX_DIR, d));
   sweepBak(CODEX_DIR, 'hooks.json', 'config.toml', 'AGENTS.md');
 

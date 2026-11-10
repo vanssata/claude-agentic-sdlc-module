@@ -73,7 +73,7 @@ review: passed_with_findings (2 of 2) · tier BALANCED · open H1
 gate: none in guarded mode
 findings: 0 recorded in task.md
 questions: 0 pending
-schema: project 0 · plugin 11 — behind: run /rr-setup --update
+schema: project 0 · plugin 12 — behind: run /rr-setup --update
 last event: <TS> handoff_written review
 --- stderr
 
@@ -114,7 +114,7 @@ exit 0
 --- stdout
 root: <ROOT>
 task: none — no task in flight
-schema: project 0 · plugin 11 — behind: run /rr-setup --update
+schema: project 0 · plugin 12 — behind: run /rr-setup --update
 --- stderr
 
 $ state.py --root <ROOT> recall --files src/widget.py

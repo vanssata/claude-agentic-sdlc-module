@@ -10,7 +10,7 @@ W 0 → light   hints none · unknown none · light ≤2 · guarded 3–7 · ful
 <ID> started: light · 2 files in scope · .ai/reports/<ID>/task.md
 next: edit, then 'state.py verify --scope all', then 'state.py close'
 -- files
-.ai/policies/testing.md
+.ai/policies/verification.md
 .ai/reports/<ID>/events.jsonl
 .ai/reports/<ID>/task.md
 .ai/state/handoff.md
@@ -35,10 +35,10 @@ review: not_started (0 of 2) · tier -
 gate: none in light mode
 findings: 0 recorded in task.md
 questions: 0 pending
-schema: project 0 · plugin 11 — behind: run /rr-setup --update
+schema: project 0 · plugin 12 — behind: run /rr-setup --update
 last event: <TS> handoff_written start
 -- files
-.ai/policies/testing.md
+.ai/policies/verification.md
 .ai/reports/<ID>/events.jsonl
 .ai/reports/<ID>/task.md
 .ai/state/handoff.md
@@ -62,7 +62,7 @@ Pending questions: none
 ## Latest user instruction (verbatim, never, unknown)
 > none recorded
 -- files
-.ai/policies/testing.md
+.ai/policies/verification.md
 .ai/reports/<ID>/events.jsonl
 .ai/reports/<ID>/task.md
 .ai/state/handoff.md
@@ -79,7 +79,7 @@ log: .ai/state/logs/<ID>/suite-1.log
 e2e: not required in light mode
 suite runs used: 1 of 2
 -- files
-.ai/policies/testing.md
+.ai/policies/verification.md
 .ai/reports/<ID>/events.jsonl
 .ai/reports/<ID>/task.md
 .ai/state/handoff.md
@@ -94,7 +94,7 @@ exit 0
 <ID> closed (light): .ai/reports/<ID>/task.md
 state: .ai/state/logs/<ID>/state.json
 -- files
-.ai/policies/testing.md
+.ai/policies/verification.md
 .ai/reports/<ID>/events.jsonl
 .ai/reports/<ID>/task.md
 .ai/state/logs/<ID>/suite-1.log
@@ -106,9 +106,9 @@ $ state.py status
 exit 0
 root: <ROOT>
 task: none — no task in flight
-schema: project 0 · plugin 11 — behind: run /rr-setup --update
+schema: project 0 · plugin 12 — behind: run /rr-setup --update
 -- files
-.ai/policies/testing.md
+.ai/policies/verification.md
 .ai/reports/<ID>/events.jsonl
 .ai/reports/<ID>/task.md
 .ai/state/logs/<ID>/suite-1.log

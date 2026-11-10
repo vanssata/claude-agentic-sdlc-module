@@ -72,7 +72,7 @@ def memory_parsers(sub):
 def main():
     # description: the first line of state.py's docstring, which argparse printed as __doc__ before the split
     parser = argparse.ArgumentParser(
-        description="Task state for /ai-task — the small, machine-readable record of one task.")
+        description="Task state for /rr-build — the small, machine-readable record of one task.")
     parser.add_argument("--root", default=".", help="project directory (default: search upwards for .ai/)")
     parser.add_argument("--runtime", choices=rr_runtime.RUNTIMES,
                         help="overrides AI_RUNTIME and detection for this call")

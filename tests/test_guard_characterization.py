@@ -38,6 +38,7 @@ SH_C_20K = os.path.join(TESTS, "fixtures", "guard-characterization", "sh-c-20k.t
 
 GIT, PATH, SCOPE = "git", "paths", "scope"
 NAMES = {GIT: "ai-git-guard", PATH: "ai-path-guard", SCOPE: "ai-scope-guard"}
+STATE_FILES = ("current.json", "state.json")   # the frozen shell reads the first, the port the second
 
 # The shell harness's COMMANDS array, element by element.
 COMMANDS = [
@@ -324,7 +325,10 @@ class Tree:
         write(os.path.join(self.bare, ".env"), "SECRET=1\n")
 
     def set_state(self, value):
-        dump(os.path.join(self.root, ".ai/state/current.json"), value)
+        """The frozen shell reads current.json, the port state.json: both are written so that
+        the two guards see the same task (the port no longer reads current.json)."""
+        for name in STATE_FILES:
+            dump(os.path.join(self.root, ".ai/state", name), value)
 
     def env(self, lc="C"):
         env = {k: v for k, v in os.environ.items()
@@ -460,10 +464,10 @@ class Corpus:
             runs.append(("task done: Edit " + p, file_payload("Edit", "file_path", r + "/" + p, r), (PATH,)))
             runs.append(("task done: bash echo > " + p, bash_payload("echo x > " + p, r), (PATH,)))
         yield (lambda: t.set_state(done)), runs
-        yield (lambda: os.remove(os.path.join(r, ".ai/state/current.json"))), [
+        yield (lambda: [os.remove(os.path.join(r, ".ai/state", n)) for n in STATE_FILES]), [
             ("no task: Edit " + p, file_payload("Edit", "file_path", r + "/" + p, r), (PATH,))
             for p in (".claude/agents/ai-reviewer.md", ".codex/config.toml", "vendor/acme/pkg/AGENTS.md")]
-        yield (lambda: write(os.path.join(r, ".ai/state/current.json"), "not json\n")), [
+        yield (lambda: [write(os.path.join(r, ".ai/state", n), "not json\n") for n in STATE_FILES]), [
             ("unparsable state: Edit .claude/agents",
              file_payload("Edit", "file_path", r + "/.claude/agents/ai-reviewer.md", r), (PATH,))]
 

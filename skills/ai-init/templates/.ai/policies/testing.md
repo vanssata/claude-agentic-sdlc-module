@@ -88,24 +88,17 @@ the last step and again after a remediation batch. `e2e_command` runs once, at
 the end of the task. A bugfix still shows its new failing test first — that one
 test only, through `single_test`.
 
-```
-verify_command:      # the full fast suite, e2e excluded — e.g. make test   |   composer qa && vendor/bin/phpunit --exclude-group e2e
-step_test_command:   # the same runner, scoped to a path or filter — e.g. vendor/bin/phpunit {files} | pytest {files}
-e2e_command:         # the end-to-end suite, run once at the end of a task — e.g. make e2e | vendor/bin/behat | npx playwright test
-lint_command:        # e.g. vendor/bin/php-cs-fixer fix --dry-run | ruff check . | npm run lint — write `none` if the project has none
-doc_tests:           # the suites a documents-only edit runs after a green suite — e.g. tests/test_docs.py; `none` if the project has none
-typecheck_command:   # e.g. vendor/bin/phpstan analyse --no-progress | mypy . | npx tsc --noEmit — `none` if the project has none
-healthy_output:      # two or three lines of what a green run ends with
-runtime:             # roughly, for each command, so a hang is recognisable
-single_test:         # how to run one test, for the failing-test-first step of a bugfix
-```
+The commands themselves are written in `policies/verification.md` (`verify_command`,
+`step_test_command`, `e2e_command`, `lint_command`, `typecheck_command`, `single_test`,
+`doc_tests`, `bite_codes`, `healthy_output`): a human fills them in, `state.py` reads them from
+there, and `/rr-setup --update` never rewrites that file.
 
 `step_test_command` may contain `{files}`, which is replaced by the paths the
 step names; without it the paths are appended. The placeholder is what lets
 `sensors.py` run a step's own tests for the "test must bite" check, so a runner
 that only takes a `--filter` gets `bite: unavailable` rather than a wrong answer.
 
-`bite_codes` (optional) lists the exit codes that mean "a test failed" when a
+`bite_codes` (optional, in `policies/verification.md`) lists the exit codes that mean "a test failed" when a
 test is shown failing before its fix; the default is `1`. Runners that exit
 differently say so here — `bite_codes: 1,2` for pytest (2 is a collection
 error, such as a missing import), `1,2` for phpunit, `101` for cargo. Any other

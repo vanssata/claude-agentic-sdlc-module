@@ -1,6 +1,6 @@
 # RiskRails
 
-[![Version](https://img.shields.io/badge/version-3.2.2-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v3.2.2)
+[![Version](https://img.shields.io/badge/version-4.0.0-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v4.0.0)
 [![Runtimes](https://img.shields.io/badge/runtimes-Claude%20Code%20%7C%20Codex-d2f878?labelColor=101210)](docs/routing.md)
 [![Known risks](https://img.shields.io/badge/known%20risks-documented-d2f878?labelColor=101210)](docs/known-risks.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-d2f878?labelColor=101210)](LICENSE)
@@ -18,7 +18,7 @@ approval. Risky actions are stopped by a hook, not by a polite request in a
 prompt.
 
 ```bash
-npx riskrails@3.2.2   # detects Claude Code, Codex or both (Node 18+, Python 3.11+)
+npx riskrails@4.0.0   # detects Claude Code, Codex or both (Node 18+, Python 3.11+)
 ```
 
 Then, in any project: `/rr-setup` once, and `/rr-build <what you want>` for
@@ -50,83 +50,47 @@ Tuned for **one developer who knows the codebase**, on a Claude Pro, Max or
 Team plan, or a ChatGPT Plus or Pro plan, following the
 [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook).
 
-**Version 3.2.2.** The guards have limits: read [Known risks](docs/known-risks.md)
+**Version 4.0.0.** The guards have limits: read [Known risks](docs/known-risks.md)
 before relying on them. What is decided but not built is in [ROADMAP.md](ROADMAP.md).
 
-## Upgrade to 3.1
+## Upgrade to 4.0
 
-From 3.0.x: update the home (`npx riskrails@3.2.2`, restart the runtime), then
-in each project `/rr-setup --update` (dry run first, then `--apply`). Schema 10
-becomes **11**: migration `0011` proposes deleting `.ai/policies/risk-tiers.json`
-and `risk-tiers.md`, which `weight.json` and `weight.md` replaced; confirm with
-`--apply --confirm-delete <name>` in a terminal of your own. The update now
-renders `weight.md` from `weight.json` instead of merging it, reads the
-`docs/sdlc/*/TEMPLATE.md` files from the plugin (an unedited project copy is
-offered for deletion), and proposes cleanup of old run logs and stale tasks.
-See [CHANGELOG.md](CHANGELOG.md).
+4.0 converts nothing any more: the one-version fallbacks, the migrations and
+the adopt command are gone, and `/rr-setup --update` regenerates a project's files from
+the plugin. Step by step, in this order:
 
-## Upgrade to 3.0
+1. **Come from 3.1.0 or later.** 4.0 refuses a tree that still holds an old
+   shape it detects, naming the file, and regenerates any other older tree
+   without the conversions it missed. So a project last updated by an older
+   riskrails goes through the version that still converts it: install it
+   (`npx riskrails@3.1.0`), run `/rr-setup --update` with it, then install 4.0.
+2. **Commit every project's `.ai/`** first; `git restore` is the rollback.
+3. **Update the home** on every machine, for every runtime: `npx riskrails@4.0.0`
+   (the plugin route and the npm route are separate installs: reinstall both
+   if you use both). Restart the runtime. In Codex, open `/hooks` and trust the
+   changed entries.
+4. **Run `/rr-setup --update` in each project right away.** Until you do, the
+   project's old shapes are not read: the weight lacks its `domain.modules`, no
+   `verify_command` is found, and a task in the old state file is not scope-guarded.
+   Dry run first, then `--apply`; a `regenerate?` or `delete?` row is confirmed
+   by you in a terminal of your own.
+5. **Check**: `/rr-status` shows schema 12 and no task in flight.
 
-3.0 renames the plugin from `claude-agentic` to `riskrails`, replaces the risk
-tiers with the weight and the three modes, replaces the `/ai-*` and `/sdlc-*`
-commands with `/rr-*`, ports the guards to one Python process, and moves the
-task state to `.ai/state/state.json`. The old names stay as aliases for this
-version. Step by step, in this order:
-
-1. **Commit every project's `.ai/`** before anything else; the update tells you
-   when the tree is dirty, and `git restore` is the rollback.
-2. **Close or abandon tasks in flight.** A task started by 2.x is refused by
-   the new commands as `old surface`; finish it with the version that started
-   it, or drop it with `python3 ~/.claude/skills/ai-task/state.py close
-   --abandon`. Check with `/rr-status`.
-3. **Update the home** on every machine, for every runtime:
-
-   ```bash
-   npx riskrails@3.2.2              # or: npx -y riskrails@latest --yes
-   ```
-
-   It moves `<home>/claude-agentic/` to `<home>/riskrails/` and leaves a
-   symlink at the old path for one version, replaces the old hook entries with
-   `ai-guard.py` and `runtime-gate.py`, retires the old agents and shim files
-   to `backups/<date>/`, and rewrites the managed block. Restart the runtime.
-   In Codex, open `/hooks` and **trust the changed entries** — until you do,
-   nothing is enforced. `--dry-run` shows all of it first.
-4. **Update each project:**
-
-   ```
-   /rr-setup --update               # dry run first; read it; then --apply
-   ```
-
-   Migrations `0007` to `0010` (and `0011`, see Upgrade to 3.1) run inside the dry run, in order, before the merge:
-   `0007` creates `.ai/policies/weight.json`, carrying over the project's
-   edits to its risk-tier table; `0008` renames the managed-block markers and
-   the router's routes; `0009` moves `current.json` to `state.json`; `0010`
-   creates `.ai/policies/dialog.json` with the dialog on. Edited markdown is
-   three-way merged, JSON policies key by key with a confirmation per key;
-   `delete?` proposals are left for you to confirm. The schema becomes 10 with a 3.0 plugin, 11 with 3.1.
-5. **Decide two things the migrations cannot.** Keep the dialog (then amend
-   constitution C5 as `0010` hints) or set `"enabled": false`; and tune the
-   weight table — `domain.modules`, `customer_visible`, `hot_paths`,
-   `needs_step`, `irreversible` — then `state.py weight --mirror`.
-6. **Verify**: `/rr-status` shows schema 11 and no task in flight; a
-   `/rr-build` on a small change runs light and closes on the two facts.
-   Commit `.ai/`.
-
-Every machine of a team upgrades the plugin before a project at schema 11 is
-committed; an older plugin refuses such a project. Rollback and the full
-migration table are in [docs/project-update.md](docs/project-update.md); the
-home-side details in [docs/installation.md](docs/installation.md).
+The alias commands (the `/ai-*`, `/sdlc-*`, `/project-*` and usage-report names)
+are removed; use the `/rr-*` commands. Details are in
+[docs/project-update.md](docs/project-update.md), the home-side ones in
+[docs/installation.md](docs/installation.md).
 
 ## Install
 
 ```bash
-npx riskrails@3.2.2                       # detects Claude Code, Codex, or both; proposes the detected plan
-npx riskrails@3.2.2 --target codex        # auto | claude | codex | both
-npx riskrails@3.2.2 --plan max --fable no # pro | team-pro | team-max | max | max20 | balanced-max
-npx riskrails@3.2.2 --codex-plan plus     # plus | pro | balanced-max
-npx riskrails@3.2.2 --context economy     # the plan's compaction window; the context guard also blocks
-npx riskrails@3.2.2 --statusline own      # keep your own statusline command (from 3.2.1; default: the plugin's two-line statusline)
-npx riskrails@3.2.2 --dry-run             # print what would be written, write nothing
+npx riskrails@4.0.0                       # detects Claude Code, Codex, or both; proposes the detected plan
+npx riskrails@4.0.0 --target codex        # auto | claude | codex | both
+npx riskrails@4.0.0 --plan max --fable no # pro | team-pro | team-max | max | max20 | balanced-max
+npx riskrails@4.0.0 --codex-plan plus     # plus | pro | balanced-max
+npx riskrails@4.0.0 --context economy     # the plan's compaction window; the context guard also blocks
+npx riskrails@4.0.0 --statusline own      # keep your own statusline command (from 3.2.1; default: the plugin's two-line statusline)
+npx riskrails@4.0.0 --dry-run             # print what would be written, write nothing
 npx -y riskrails@latest --yes             # update in place, keeping the recorded plan
 ```
 
@@ -145,7 +109,6 @@ The same commands in both runtimes:
 | You want to | Run |
 |---|---|
 | set up `.ai/` in a project, or bring it up to the installed plugin | `/rr-setup`, `/rr-setup --update` |
-| move another AI tool's files, or the project's own toolbox, into this layout | `/rr-setup --adopt` |
 | score the repository against the twelve plays | `/rr-setup --audit` |
 | turn an idea into intent, requirements and design | `/rr-spec <idea>` |
 | plan a spec into tasks, or one task into a mode and a start | `/rr-plan <spec or task>` |
@@ -154,10 +117,6 @@ The same commands in both runtimes:
 | review the change | `/rr-review` — guarded and full, or when `close` asks |
 | close the task, get the human's approval | `/rr-ship` |
 | see where the task stands, or what it cost | `/rr-status`, `/rr-status --cost` |
-
-The old names — `/ai-init`, `/ai-task`, `/ai-status`, `/ai-audit`,
-`/project-init`, `/project-update`, `/sdlc-intent`, `/sdlc-spec`,
-`/sdlc-plan`, `/usage-report` — are aliases for one version.
 
 ### Three modes
 
@@ -265,7 +224,6 @@ to do: [docs/known-risks.md](docs/known-risks.md).
 | Codex facts are observed, not guaranteed | grep the journals for `missed_reroute` after a Codex upgrade |
 | The dialog switch is read in two places | when the dialog and the terminal disagree, use the terminal |
 | Budgets and quota are advice, not limits | read the quota with its `stale` field |
-| `--adopt` edge cases fail safe, not smoothly | adopt on a committed tree, keep `original/` |
 | The usage report's parse cache trusts mtime and size | `--no-cache` when a number surprises you |
 
 ## Tests
@@ -276,15 +234,14 @@ python3 -I -m unittest discover -s tests -p 'test_*.py'      # CI's serial oracl
 AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
 ```
 
-Fifty-nine suites, 1045 tests, about 75 seconds in parallel. The guards against JSON fixtures for both runtimes and a
+Fifty-eight suites, 1133 tests, about 75 seconds in parallel. The guards against JSON fixtures for both runtimes and a
 golden of 1 341 recorded decisions, byte for byte, with timed cases that hold
 the hot path under its budget; the state machine, the weight, the batch loop,
 the dialog contract and the documents rule; the compact record and its
 pre-push validator; the installer for every plan and `--target`, the Codex
 agent renderer and the `config.toml` merge against a fixture full of
 third-party settings; `/rr-setup --update` against projects scaffolded from
-the oldest shipped templates and edited by hand; `--adopt` against Spec Kit,
-Kiro and Cursor fixtures; and an end-to-end run that installs both runtimes
+the oldest shipped templates and edited by hand; and an end-to-end run that installs both runtimes
 into scratch directories, drives one task through the guards from Claude and
 then from Codex, and proves both see the same state. No suite reads or writes
 the developer's real `~/.claude` or `~/.codex`.
@@ -295,7 +252,7 @@ the developer's real `~/.claude` or `~/.codex`.
 |---|---|
 | [docs/getting-started.md](docs/getting-started.md) | the first hour: install, `/rr-setup`, a light and a full task, a batch build, the update, the bill |
 | [docs/installation.md](docs/installation.md) | every installer option, what it installs per runtime, what loads on every turn, the limits it sets, the 2.x home-side upgrade |
-| [docs/project-update.md](docs/project-update.md) | shared versus project-owned files, how a file is updated, the migrations and their rollback, `--adopt` |
+| [docs/project-update.md](docs/project-update.md) | shared versus project-owned files, how a file is regenerated, what is kept, the rollback |
 | [docs/architecture.md](docs/architecture.md) | how the pieces fit: the installed home, `.ai/`, the pipeline, the state, the hooks, the two adapters |
 | [docs/weight.md](docs/weight.md) | the six axes, the three modes, what is measured and what is declared, tuning the table |
 | [docs/workflows.md](docs/workflows.md) | feature, bugfix, refactoring, hotfix, investigation |

@@ -69,7 +69,7 @@ def installed(runtime):
 
 
 # Set by the runtimes in every process they start, the `!` prefix's shell
-# included. Duplicated on purpose from skills/project-update/adopt.py
+# included. Duplicated on purpose from the removed adopt script
 # (AGENT_MARKERS): the two skills are installed independently and neither
 # imports the other.
 AGENT_MARKERS = ("CLAUDECODE", "CODEX_THREAD_ID", "CODEX_SESSION_ID", "CODEX_CI",

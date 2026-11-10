@@ -17,7 +17,7 @@ Work starts from a written statement of the problem and the desired outcome,
 committed to the repository, before any design or code.
 
 Look for: `docs/sdlc/intent/`, `intent/`, an issue template that captures
-problem/outcome, a `/sdlc-intent`-style skill.
+problem/outcome, a `/rr-spec`-style skill.
 
 ## 2. Requirements and design (spec.md, policies as skills)
 

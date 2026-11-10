@@ -3,19 +3,17 @@
 and whether superpowers is on (spec R9, R28, SQ5, SQ12 variant B).
 
   setup.py survey [--root DIR]              the toolbox, the proposed verify_command, the superpowers line
-  setup.py check  [--root DIR]              exit 1 VERIFY_COMMAND_MISSING unless testing.md names one
-  setup.py adopt  [--root DIR] [--apply]    .ai/policies/toolbox.md and router rows in .ai/AGENTS.md
-  setup.py verify [--root DIR] --set CMD    write verify_command into testing.md (after the human confirmed)
+  setup.py check  [--root DIR]              exit 1 VERIFY_COMMAND_MISSING unless verification.md names one
+  setup.py verify [--root DIR] --set CMD    write verify_command into verification.md (after the human confirmed)
 
-survey and check write nothing. adopt is a dry run without --apply. The
-toolbox is production behaviour (C1): it is inventoried in place, with links,
-never copied or moved; what to inventory comes from the `own` section of
-skills/project-update/adopt-map.json, which update.py --adopt does not read.
+survey and check write nothing. The toolbox is production behaviour (C1): it is
+inventoried in place, never copied or moved; what to inventory is the constants
+FOREIGN_ROOTS and OWN_* below.
 The enabledPlugins line is printed, never written: .claude/settings.json is the
 human's.
 
-Exit codes: 0 done; 1 VERIFY_COMMAND_MISSING; 2 usage or an unreadable table;
-3 refused (a file exists and differs, or the line is already set).
+Exit codes: 0 done; 1 VERIFY_COMMAND_MISSING; 2 usage;
+3 refused (the line is already set).
 """
 import argparse
 import json
@@ -25,10 +23,7 @@ import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MAP_FILE = os.path.join(os.path.dirname(HERE), "project-update", "adopt-map.json")
-TESTING = os.path.join(".ai", "policies", "testing.md")
-TOOLBOX = os.path.join(".ai", "policies", "toolbox.md")
-ROUTER_FILE = os.path.join(".ai", "AGENTS.md")
+VERIFICATION = os.path.join(".ai", "policies", "verification.md")
 SUPERPOWERS_KEY = "superpowers@superpowers-marketplace"
 SKIP_DIRS = {".git", ".ai", "vendor", "node_modules", "__pycache__", ".venv"}
 PURPOSE_MAX = 120
@@ -36,6 +31,72 @@ UNKNOWN = "UNKNOWN — no description and no leading comment"
 VERIFY_RE = re.compile(r"(?m)^verify_command:[ \t]*(.*)$")
 MAKE_TARGET_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9_. \t-]*?)\s*:(?![=:])(.*)$")
 BLOCK_SCALAR_RE = re.compile(r"^[|>][-+]?$")
+# Paths a foreign AI tool owns (Spec Kit, Kiro, AI-DLC, Cursor, Copilot): no part of the project's own toolbox.
+FOREIGN_ROOTS = [
+    ".specify/",
+    "specs/",
+    ".claude/commands/speckit*",
+    ".claude/skills/speckit-*",
+    ".github/prompts/speckit*",
+    ".github/skills/speckit-*",
+    ".github/agents/speckit*",
+    ".codex/prompts/speckit*",
+    ".agents/skills/speckit-*",
+    ".gemini/commands/speckit*",
+    ".cursor/commands/speckit*",
+    ".cursor/skills/speckit-*",
+    ".kiro/",
+    "aidlc-docs/",
+    ".amazonq/rules/aws-aidlc-rules/",
+    ".amazonq/aws-aidlc-rule-details/",
+    ".cursorrules",
+    ".cursor/",
+    ".github/copilot-instructions.md",
+    ".github/instructions/",
+]
+# What `survey` inventories in place (SQ5): globs by kind, the guards' name words, the verify-command sources.
+OWN_INVENTORY = [
+    {"glob": ".claude/skills/*/SKILL.md", "kind": "skill", "router": "skill"},
+    {"glob": ".claude/commands/**/*.md", "kind": "command", "router": "command"},
+    {"glob": ".claude/rules/**/*.md", "kind": "rule"},
+    {"glob": ".claude/agents/*.md", "kind": "agent"},
+    {"glob": ".claude/hooks/*", "kind": "hook"},
+    {"glob": ".agents/skills/*/SKILL.md", "kind": "skill", "router": "skill"},
+    {"glob": ".codex/skills/*/SKILL.md", "kind": "skill", "router": "skill"},
+    {"glob": ".codex/prompts/*.md", "kind": "command", "router": "command"},
+    {"glob": ".codex/agents/*", "kind": "agent"},
+    {"glob": ".codex/hooks/*", "kind": "hook"},
+    {"glob": "bin/*.sh", "kind": "script"},
+    {"glob": "Makefile", "kind": "make"},
+]
+OWN_GUARDS = {
+    "ai-git-guard": [
+        "git",
+        "commit",
+        "push",
+        "merge"
+    ],
+    "ai-path-guard": [
+        "path",
+        "protect",
+        "protected",
+        "secret",
+        "secrets",
+        "dotenv"
+    ],
+    "ai-scope-guard": [
+        "scope"
+    ]
+}
+OWN_VERIFY = [
+    {"file": "Makefile", "make_target": ["test", "tests", "check", "qa"], "command": "make {name}"},
+    {"file": "composer.json", "script": ["test", "tests", "qa", "check"], "command": "composer {name}"},
+    {"file": "package.json", "script": ["test"], "command": "npm test"},
+    {"file": "bin/*.sh", "stem": ["test", "tests", "run-tests", "check"], "command": "bin/{name}.sh"},
+    {"file": "phpunit.xml.dist", "command": "vendor/bin/phpunit"},
+    {"file": "phpunit.xml", "command": "vendor/bin/phpunit"},
+    {"file": "pytest.ini", "command": "python3 -m pytest"},
+]
 
 
 def die(message, code=2):
@@ -60,20 +121,8 @@ def is_crlf(path):
         return False
 
 
-def load_map():
-    try:
-        with open(MAP_FILE, encoding="utf-8") as fh:
-            table = json.load(fh)
-    except (OSError, ValueError) as exc:
-        die("%s: %s" % (MAP_FILE, exc))
-    own = table.get("own")
-    if not isinstance(own, dict) or not isinstance(own.get("inventory"), list):
-        die("%s: needs an own section with an inventory list" % MAP_FILE)
-    return table
-
-
 def glob_re(pattern):
-    """The adopt.py dialect: `*` stops at `/`, `**` crosses it, `**/` may match nothing."""
+    """The glob dialect: `*` stops at `/`, `**` crosses it, `**/` may match nothing."""
     out, i = [], 0
     while i < len(pattern):
         if pattern.startswith("**/", i):
@@ -89,12 +138,6 @@ def glob_re(pattern):
             out.append(re.escape(pattern[i]))
             i += 1
     return re.compile("".join(out) + r"\Z")
-
-
-def foreign_roots(table):
-    """Paths a foreign tool owns (Spec Kit skills under .claude/ and the like):
-    update.py --adopt handles those, so they are no part of the own toolbox."""
-    return [r for spec in (table.get("tools") or {}).values() for r in spec.get("roots") or []]
 
 
 def under_root(path, root):
@@ -218,13 +261,11 @@ def make_targets(root, rel="Makefile"):
 
 # ---------------------------------------------------------------- inventory
 
-def inventory(root, table):
+def inventory(root):
     """[{path, kind, line, purpose, name, router}] in table order, then path order."""
-    own = table["own"]
-    skip = foreign_roots(table)
-    paths = [p for p in walk(root) if not any(under_root(p, r) for r in skip)]
+    paths = [p for p in walk(root) if not any(under_root(p, r) for r in FOREIGN_ROOTS)]
     items, seen = [], set()
-    for row in own["inventory"]:
+    for row in OWN_INVENTORY:
         pattern = glob_re(row["glob"])
         for rel in paths:
             if rel in seen or not pattern.match(rel):
@@ -255,15 +296,14 @@ def command_name(rel, row):
     return os.path.basename(rel)
 
 
-def guard_overlap(items, table):
+def guard_overlap(items):
     """{guard: [hook paths doing its job]} by the hook file name's words."""
-    guards = table["own"].get("guards") or {}
-    found = {g: [] for g in guards}
+    found = {g: [] for g in OWN_GUARDS}
     for item in items:
         if item["kind"] != "hook":
             continue
         words = set(re.split(r"[^a-z0-9]+", os.path.basename(item["path"]).lower()))
-        for guard, keys in guards.items():
+        for guard, keys in OWN_GUARDS.items():
             if words & set(keys):
                 found[guard].append(item["path"])
     return found
@@ -271,10 +311,10 @@ def guard_overlap(items, table):
 
 # ------------------------------------------------------------------- verify
 
-def verify_candidates(root, table):
+def verify_candidates(root):
     """[(command, source)] in table order; the first is the proposal. Nothing is run."""
     out = []
-    for row in table["own"].get("verify") or []:
+    for row in OWN_VERIFY:
         pattern = row["file"]
         if "*" in pattern:
             regex = glob_re(pattern)
@@ -305,9 +345,9 @@ def verify_candidates(root, table):
 
 
 def verify_value(root):
-    """None when testing.md is missing or has no verify_command line; else the
+    """None when verification.md is missing or has no verify_command line; else the
     value, '' for the template's comment-only line (sensors.read_commands' rule)."""
-    text = read_text(os.path.join(root, TESTING))
+    text = read_text(os.path.join(root, VERIFICATION))
     if text is None:
         return None
     match = VERIFY_RE.search(text)
@@ -344,76 +384,6 @@ def superpowers_line(root):
             "\"enabledPlugins\": {\"%s\": true}" % (" (disabled in %s)" % where if where else "", SUPERPOWERS_KEY))
 
 
-# ----------------------------------------------------------------- rendering
-
-def toolbox_text(items, overlap):
-    lines = ["# Toolbox — this project's own skills, rules, agents, hooks and scripts", "",
-             "<!-- Written by `setup.py adopt` (/rr-setup --adopt). An inventory, not copies: each line links",
-             "     the file in place, which stays the source of truth (C1). Edit freely; adopt never",
-             "     overwrites a toolbox.md that differs from what it would write. -->", ""]
-    kinds = [("skill", "Skills"), ("command", "Commands"), ("rule", "Rules"), ("agent", "Agents"),
-             ("hook", "Hooks"), ("script", "Scripts"), ("make", "Make targets")]
-    for kind, title in kinds:
-        rows = [i for i in items if i["kind"] == kind]
-        if not rows:
-            continue
-        lines += ["## %s" % title, ""]
-        for item in rows:
-            label = item["name"] if kind in ("skill", "command", "make") else item["path"]
-            if kind in ("skill", "command"):
-                label = "/" + label
-            elif kind == "make":
-                label = "make " + label
-            purpose = ("%s — KNOWN FACT `%s:%d`" % (clip(item["purpose"]), item["path"], item["line"])
-                       if item["purpose"] else UNKNOWN)
-            lines.append("- [%s](../../%s) — %s" % (label, item["path"], purpose))
-        lines.append("")
-    if overlap:
-        lines += ["## Guards", ""]
-        for guard, paths in overlap.items():
-            if paths:
-                lines.append("- `%s`: this project's %s does the same job — kept; the plugin's guard is not "
-                             "installed into the project" % (guard, ", ".join("`%s`" % p for p in paths)))
-            else:
-                lines.append("- `%s`: no project hook does its job — the plugin's guard applies" % guard)
-        lines.append("")
-    if not items:
-        lines += ["No skills, rules, agents, hooks, scripts or Make targets found.", ""]
-    return "\n".join(lines)
-
-
-def router_rows(items):
-    """One row per `/name`: a skill mirrored under .claude/ and .agents/ or
-    .codex/, or a command of the same name, is one route (the first found)."""
-    rows = ["| this project's own skills, hooks, agents and scripts | policies/toolbox.md |"]
-    named = set()
-    for item in items:
-        if not item["router"] or item["name"] in named:
-            continue
-        named.add(item["name"])
-        job = clip(item["purpose"] or "the project's %s" % item["name"]).replace("|", "\\|")
-        rows.append("| %s | `/%s` |" % (job, item["name"]))
-    return rows
-
-
-def last_cell(row):
-    cells = row.rstrip().rstrip("|").rsplit("|", 1)
-    return cells[-1].strip() if len(cells) == 2 else None
-
-
-def add_rows(text, rows):
-    """Rows appended after the last table row; a row whose target cell is
-    already some table row's last cell is skipped, so a human's rewording of the
-    job survives and prose that mentions `/<name>` does not count."""
-    lines = text.split("\n")
-    last = max((i for i, l in enumerate(lines) if l.startswith("|")), default=None)
-    if last is None:
-        return None, []
-    targets = {last_cell(l) for l in lines if l.startswith("|")}
-    new = [r for r in rows if last_cell(r) not in targets]
-    return "\n".join(lines[:last + 1] + new + lines[last + 1:]), new
-
-
 def write(path, text):
     """In place through a symlink, keeping the file's mode and a CRLF file's
     line ends; a failed write leaves no temporary file behind."""
@@ -435,19 +405,18 @@ def write(path, text):
 # ----------------------------------------------------------------- commands
 
 def cmd_survey(root):
-    table = load_map()
-    items = inventory(root, table)
+    items = inventory(root)
     print("toolbox: %d item(s)" % len(items))
     for item in items:
         where = "%s:%d" % (item["path"], item["line"]) if item["line"] else item["path"]
         name = " %s" % item["name"] if item["kind"] == "make" else ""
         print("  %-8s %s%s — %s" % (item["kind"], where, name, clip(item["purpose"]) if item["purpose"] else UNKNOWN))
-    for guard, paths in guard_overlap(items, table).items():
+    for guard, paths in guard_overlap(items).items():
         print("  guard    %s: %s" % (guard, ", ".join(paths) + " (same job, kept)" if paths else "no project hook"))
     current = verify_value(root)
-    candidates = verify_candidates(root, table)
+    candidates = verify_candidates(root)
     if current:
-        print("verify_command: %s (testing.md)" % current)
+        print("verify_command: %s (verification.md)" % current)
     elif candidates:
         print("verify_command: proposed `%s` (from %s) — write it with `setup.py verify --set` once the human "
               "confirms" % candidates[0])
@@ -463,42 +432,9 @@ def cmd_check(root):
     value = verify_value(root)
     if not value or value.lower() == "none":
         print("VERIFY_COMMAND_MISSING: %s names no verify_command — propose one with `setup.py survey`, "
-              "write it with `setup.py verify --set \"<command>\"` after the human confirms" % TESTING)
+              "write it with `setup.py verify --set \"<command>\"` after the human confirms" % VERIFICATION)
         return 1
     print("verify_command: %s" % value)
-    return 0
-
-
-def cmd_adopt(root, apply):
-    table = load_map()
-    router = os.path.join(root, ROUTER_FILE)
-    router_text = read_text(router)
-    if router_text is None:
-        die("%s not found — scaffold .ai/ first (/rr-setup)" % ROUTER_FILE)
-    items = inventory(root, table)
-    text = toolbox_text(items, guard_overlap(items, table))
-    toolbox = os.path.join(root, TOOLBOX)
-    existing = read_text(toolbox)
-    new_router, added = add_rows(router_text, router_rows(items))
-    if new_router is None:
-        die("%s has no table to add router rows to" % ROUTER_FILE)
-    if existing is not None and existing != text:
-        print("refused: %s exists and differs from the inventory — compare by hand, or delete it and run "
-              "again" % TOOLBOX)
-        return 3
-    print("%s %s (%d item(s))" % ("unchanged" if existing == text else "write", TOOLBOX, len(items)))
-    for row in added:
-        print("router   %s" % row)
-    if not added:
-        print("router   no new row")
-    if not apply:
-        print("dry run — --apply writes it")
-        return 0
-    if existing != text:
-        write(toolbox, text)
-    if added:
-        write(router, new_router)
-    print("applied")
     return 0
 
 
@@ -506,28 +442,26 @@ def cmd_verify(root, command):
     command = (command or "").strip()
     if not command or "\n" in command or command.startswith("#"):
         die("--set needs one command on one line")
-    path = os.path.join(root, TESTING)
+    path = os.path.join(root, VERIFICATION)
     text = read_text(path)
     if text is None or not VERIFY_RE.search(text):
-        die("%s has no verify_command line — run /rr-setup --update first" % TESTING)
+        die("%s has no verify_command line — run /rr-setup --update first" % VERIFICATION)
     current = verify_value(root)
     if current and current.lower() != "none":
-        print("refused: verify_command is already `%s` — the human edits %s" % (current, TESTING))
+        print("refused: verify_command is already `%s` — the human edits %s" % (current, VERIFICATION))
         return 3
     match = VERIFY_RE.search(text)
     write(path, text[:match.start()] + "verify_command:      " + command + text[match.end():])
-    print("verify_command: %s (written to %s)" % (command, TESTING))
+    print("verify_command: %s (written to %s)" % (command, VERIFICATION))
     return 0
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="setup.py", description=__doc__.split("\n\n", 1)[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
-    for name in ("survey", "check", "adopt", "verify"):
+    for name in ("survey", "check", "verify"):
         p = sub.add_parser(name)
         p.add_argument("--root", default=".")
-        if name == "adopt":
-            p.add_argument("--apply", action="store_true")
         if name == "verify":
             p.add_argument("--set", dest="command", required=True)
     args = parser.parse_args(argv)
@@ -538,8 +472,6 @@ def main(argv=None):
         return cmd_survey(root)
     if args.cmd == "check":
         return cmd_check(root)
-    if args.cmd == "adopt":
-        return cmd_adopt(root, args.apply)
     return cmd_verify(root, args.command)
 
 

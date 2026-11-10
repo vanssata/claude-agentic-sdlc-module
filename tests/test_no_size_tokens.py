@@ -4,8 +4,8 @@ Size never gates (R4, phase 2): no shipped skill, hook, shared policy or
 instruction file names the size gate the redesign removed — `diff_budget`,
 `step-split`, `DIFF_BUDGET_EXCEEDED`, `over_budget`, the `rescore` sensor.
 
-Three places keep the words on purpose: the migrations that read and drop the
-old keys, the frozen template history, and the old `risk-tiers.*` policy
+Two places keep the words on purpose: the frozen template history, which
+holds every old key, and the old `risk-tiers.*` policy
 templates, whose removal changes what a user project receives and is its own
 task (.ai/project/known-risks.md). `rescore_axes` in weight.json is the
 re-score of the weight model, not the sensor, so the match is a whole word.
@@ -21,7 +21,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIRS = ("skills", "hooks", "ai", "instructions")
 TOKENS = ("diff_budget", "step-split", "DIFF_BUDGET_EXCEEDED", "over_budget", "rescore")
 TOKEN_RE = re.compile(r"(?<![\w-])(%s)(?![\w-])" % "|".join(re.escape(t) for t in TOKENS))
-KEPT = ("skills/project-update/migrations/", "skills/project-update/history/",
+KEPT = ("skills/project-update/history/",
         "skills/ai-init/templates/.ai/policies/risk-tiers.json",
         "skills/ai-init/templates/.ai/policies/risk-tiers.md")
 

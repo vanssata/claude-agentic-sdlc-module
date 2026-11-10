@@ -40,7 +40,7 @@ Facts are collected cheaply; thinking is paid for. Session model {{SESSION_MODEL
 - `/clear` between tasks, and after every task that ran a review. Compaction near {{COMPACT_WINDOW}} tokens is a summary of the old task, not a clean start; until then every turn re-reads the whole history.
 - `context-guard` measures the context on every prompt: a one-line warning from {{CONTEXT_WARN}} tokens, {{CONTEXT_BLOCK}}. When its note says the prompt starts a different task, suggest `/clear` before doing the work. Before a compaction it saves the edited files, the latest instructions verbatim, the todo list and the git state, and hands them back afterwards as "Session state before compaction": trust that block over the summary where they differ, and re-read a file before editing it rather than relying on what the summary says it contains.
 - Run tests once, to the end, and fix every failure as one batch. Never one failure, one fix, one run.
-- `/usage-report` shows where the tokens went, at zero model cost; `--provider both` puts Codex next to Claude Code.
+- `/rr-status --cost` shows where the tokens went, at zero model cost; `--provider both` puts Codex next to Claude Code.
 
 <!-- stub: runtime=claude -->
 # Guards
@@ -124,7 +124,7 @@ The main session re-reads its whole context every turn, so context length — mo
 - Run tests once, to the end, and fix every failure as one batch. Never one failure, one fix, one run.
 - Prefer deterministic tools — `rg`, `git`, `jq`, the framework CLI, the test runner — over asking a model to infer what they answer exactly.
 - Tools and MCP servers are context too, in every turn, used or not. Default off: a project enables only what nearly every task needs, a task names anything extra in one line and turns it off again, and `--strict-mcp-config` beats disabling servers afterwards. See `.ai/policies/tooling.md`.
-- `/usage-report` shows where the tokens went, at zero model cost. `--provider both` reports Codex and Claude Code side by side.
+- `/rr-status --cost` shows where the tokens went, at zero model cost. `--provider both` reports Codex and Claude Code side by side.
 
 <!-- stub: runtime=codex -->
 # Guards

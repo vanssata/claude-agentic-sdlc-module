@@ -105,12 +105,14 @@ class TestSQ1(unittest.TestCase):
         self.check(files, [f], declared, (2, 1, 0, 0, 0, 0), "guarded")
 
     def test_migration_deleting_user_files(self):
-        mig, upd = "skills/project-update/migrations/0006_retire.py", "skills/project-update/update.py"
+        mig, upd = "db/migrations/0006_retire.py", "skills/project-update/update.py"
         files = {mig: "x = 1\n", upd: "y = 2\n", "tests/test-project-update.sh": "#!/bin/sh\n"}
         files.update(refs("0006_retire", 6))
         declared = {"behaviour": (2, "deletes files"), "domain": (0, "no money"), "novelty": (1, "new walk")}
-        r = self.check(files, [mig, upd], declared, (2, 2, 2, 0, 1, 1), "full")
-        self.assertIn("touches user trees", r.hints[0])
+        # The shipped table no longer hints the plugin's own migrations directory (gone in 4.0): a
+        # migrations path scores through needs_step only, one point less than before.
+        r = self.check(files, [mig, upd], declared, (2, 2, 1, 0, 1, 1), "guarded")
+        self.assertEqual(r.hints, [])
 
     def test_argocd_dev_manifest(self):
         f = "k8s/apps/env/dev/values.yaml"
@@ -374,6 +376,97 @@ class TestTable(unittest.TestCase):
             self.assertLessEqual(sum(1 for _ in fh), 300)
 
 
+class TestOverlay(unittest.TestCase):
+    """R9: the shipped table with .ai/policies/weight.project.json laid over it; a project's old
+    weight.json is no longer read (OQ4)."""
+
+    SHIPPED = os.path.join(SHIPPED_DIR, "weight.json")
+
+    def project(self, overlay=None, raw=None, old=None):
+        tree = Tree({}, git=False)
+        self.addCleanup(tree.close)
+        policies = os.path.join(tree.root, ".ai", "policies")
+        os.makedirs(policies)
+        for name, text in (("weight.project.json", raw if raw is not None else
+                            (json.dumps(overlay) if overlay is not None else None)),
+                           ("weight.json", old)):
+            if text is not None:
+                with open(os.path.join(policies, name), "w", encoding="utf-8") as fh:
+                    fh.write(text)
+        return tree.root, os.path.join(policies, "weight.project.json")
+
+    def shipped(self):
+        with open(self.SHIPPED, encoding="utf-8") as fh:
+            return json.load(fh)
+
+    def test_no_overlay_is_the_shipped_table(self):
+        root, own = self.project()
+        policy, paths = weight.load_policy(root)
+        self.assertEqual(policy, self.shipped())
+        self.assertEqual(paths, [self.SHIPPED, own])
+
+    def test_dicts_merge_and_the_rest_replaces(self):
+        shipped = self.shipped()
+        root, _own = self.project({"version": 1, "tests": {"max_suite_runs": 9},
+                                   "hints": [{"paths": ["x/**"], "axis": "domain", "note": "n"}],
+                                   "examples": {"light": ["a"]}})
+        policy = weight.load_policy(root)[0]
+        self.assertEqual(policy["tests"]["max_suite_runs"], 9)
+        self.assertEqual({k: v for k, v in policy["tests"].items() if k != "max_suite_runs"},
+                         {k: v for k, v in shipped["tests"].items() if k != "max_suite_runs"})
+        self.assertEqual(policy["hints"], [{"paths": ["x/**"], "axis": "domain", "note": "n"}])
+        self.assertEqual(policy["examples"]["light"], ["a"])
+        self.assertEqual(policy["axes"], shipped["axes"])
+        self.assertEqual(shipped, self.shipped())          # the shipped file is read fresh, never mutated
+
+    def test_a_list_replaces_whole(self):
+        shipped = self.shipped()
+        domain = shipped["axes"]["domain"]
+        key = next(k for k, v in domain.items() if isinstance(v, list))
+        root, _own = self.project({"axes": {"domain": {key: ["only/**"]}}})
+        merged = weight.load_policy(root)[0]["axes"]["domain"]
+        self.assertEqual(merged[key], ["only/**"])
+        self.assertEqual({k: v for k, v in merged.items() if k != key}, {k: v for k, v in domain.items() if k != key})
+
+    def test_a_broken_overlay_names_its_file(self):
+        for raw in ("{not json", "[1, 2]", '"text"', json.dumps({"axes": 5})):
+            with self.subTest(raw=raw):
+                root, own = self.project(raw=raw)
+                with self.assertRaises(ValueError) as caught:
+                    weight.load_policy(root)
+                self.assertIn(own, str(caught.exception))
+
+    def test_mirror_is_rendered_from_the_effective_table(self):
+        """`weight --mirror` writes weight.md from shipped + overlay; no project weight.json is needed."""
+        tree = Tree({}, git=False)
+        self.addCleanup(tree.close)
+        policies = os.path.join(tree.root, ".ai", "policies")
+        os.makedirs(policies)
+        with open(os.path.join(policies, "weight.project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"version": 1, "tests": {"max_suite_runs": 41}}, fh)
+        env = {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "AI_RUNTIME")}
+        done = subprocess.run([sys.executable, "-I", STATE, "--root", tree.root, "weight", "--mirror"],
+                              capture_output=True, text=True, env=env, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        with open(os.path.join(policies, "weight.md"), encoding="utf-8") as fh:
+            text = fh.read()
+        policy = weight.load_policy(tree.root)[0]
+        self.assertEqual(text, weight.mirror(policy))
+        self.assertIn('"max_suite_runs": 41', text)
+        raw = json.dumps(policy, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        self.assertIn("sha256: %s" % hashlib.sha256(raw).hexdigest(), text)
+        self.assertIn("weight.project.json", text)
+        self.assertFalse(os.path.exists(os.path.join(policies, "weight.json")))
+
+    def test_the_old_weight_json_is_not_read(self):
+        table = self.shipped()
+        table["tests"]["max_suite_runs"] = 77
+        root, _own = self.project(old=json.dumps(table))
+        self.assertEqual(weight.load_policy(root)[0], self.shipped())
+        root, _own = self.project(old="{broken")
+        self.assertEqual(weight.load_policy(root)[0], self.shipped())
+
+
 class TestCLI(unittest.TestCase):
 
     def run_state(self, *args, root=ROOT):
@@ -426,7 +519,7 @@ class TestCLI(unittest.TestCase):
             self.assertEqual((done.returncode, "Traceback" in done.stderr), (1, False))
             self.assertEqual(sorted(os.listdir(policies)), ["weight.json", "weight.md"])
             table["axes"]["scope"]["bands"] = 5
-            with open(os.path.join(policies, "weight.json"), "w", encoding="utf-8") as fh:
+            with open(os.path.join(policies, "weight.project.json"), "w", encoding="utf-8") as fh:
                 json.dump(table, fh)
             done = self.run_state("--files", "a.py", root=tree.root)
             self.assertEqual((done.returncode, "Traceback" in done.stderr), (1, False))
@@ -457,7 +550,7 @@ class TestDocumentsOnly(TestCLI):
         if documents:
             table["documents"] = self.DOCUMENTS
         table["hints"] = list(table["hints"]) + list(hints)
-        tree = Tree({".ai/policies/weight.json": json.dumps(table), ".ai/policies/testing.md": "x\n",
+        tree = Tree({".ai/policies/weight.project.json": json.dumps(table), ".ai/policies/testing.md": "x\n",
                      "README.md": readme, "docs/guide.md": "guide\n", "tests/test_x.py": "assert True\n",
                      "src/a.py": "x = 1\n"})
         self.addCleanup(tree.close)
@@ -499,7 +592,7 @@ class TestDocumentsOnly(TestCLI):
         tree = self.tree(readme="the workflow and the queue\n")
         self.assertEqual(self.weigh(["README.md"], tree=tree)["axes"]["behaviour"], 0)
         # Without the key the same text still scores, as today.
-        table = os.path.join(tree.root, ".ai", "policies", "weight.json")
+        table = os.path.join(tree.root, ".ai", "policies", "weight.project.json")
         with open(table, encoding="utf-8") as fh:
             policy = json.load(fh)
         del policy["documents"]
@@ -550,7 +643,7 @@ class TestDocumentsOnly(TestCLI):
 
     def plain_behaviour(self, files, goal, tree):
         """The behaviour the same CLI gives without the `documents` key: plain compute."""
-        table = os.path.join(tree.root, ".ai", "policies", "weight.json")
+        table = os.path.join(tree.root, ".ai", "policies", "weight.project.json")
         with open(table, encoding="utf-8") as fh:
             policy = json.load(fh)
         del policy["documents"]

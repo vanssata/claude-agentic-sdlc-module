@@ -113,7 +113,7 @@ list:
 |---|---|---|
 | `deny_patterns` — secrets | read **and** write | `.env` and its `.local|prod|production|staging|live` variants, `secrets/`, `credentials/`, `.ssh/`, `id_rsa|dsa|ecdsa|ed25519`, `*.pem|p12|pfx|jks|keystore`, `.aws/credentials`, `.docker/config.json`, `kubeconfig` / `.kube/config`, dumps and exports in `.sql|.sql.gz|.sql.bz2|.csv|.xlsx`, any `*.sql|*.sql.gz`, production logs under `var/log/`, `auth.json` |
 | `allow_patterns` | lifts a deny | `.env.dist|example|sample|test|template`, docs and templates under `secrets/`, `migrations/*.sql|.php`, `tests/*.sql`, `fixtures/*.sql|.csv` |
-| `protected_config_patterns` — the pipeline's own files | write refused, read allowed | `.ai/state/` (the task state, the handoff, the consent ledger), `.ai/reports/<id>/task.md`, `questions.md`, `events.jsonl`, `adopt.json`, `migration.json`; `.ai/policies/*.json`; the compact record `.ai/memory/` and `.ai/local/memory/`; the installed guards and their configuration (`.claude/hooks/ai-*`, `.codex/hooks/ai-*`, `runtime-gate.py`, `hooks/guard/`, `hooks/lib/`), `skills/ai-task/` (where `state.py` lives) and the plugin cache `plugins/cache/*/riskrails` |
+| `protected_config_patterns` — the pipeline's own files | write refused, read allowed | `.ai/state/` (the task state, the handoff, the consent ledger), `.ai/reports/<id>/task.md`, `questions.md`, `events.jsonl`; `.ai/policies/*.json`; the compact record `.ai/memory/` and `.ai/local/memory/`; the installed guards and their configuration (`.claude/hooks/ai-*`, `.codex/hooks/ai-*`, `runtime-gate.py`, `hooks/guard/`, `hooks/lib/`), `skills/ai-task/` (where `state.py` lives) and the plugin cache `plugins/cache/*/riskrails` |
 | `task_protected_patterns` — the rules a run is judged by | write refused only while a task is in flight (`.ai/state/state.json` exists and has not reached `done`) | `.claude/settings*.json`, `.codex/config.toml`, `.claude/plugins/installed_plugins.json`, `.ai/policies/`, the shared tree `<home>/riskrails/ai/` and its `ai-path` resolver |
 
 A project's `dependency_instruction_patterns`, from an older policy file, is
@@ -137,8 +137,8 @@ only as the dialog's pick, or under `AI_UNATTENDED=1`:
 - `state.py profile set …` and any `state.py … --by <name>` verdict while the
   dialog is on and no pick covers it;
 - `update.py --apply --confirm-delete …` — in every directory, `.ai/` or not;
-  `adopt.py`'s own `human_gate()` refuses it a second time when an agent
-  marker is in the environment;
+  the script refuses it a second time when an agent marker is in
+  the environment;
 - running `hooks/dialog-gate.py` from a shell, unconditionally.
 
 **Fast path.** A path that matches none of the lists exits in one in-process
@@ -149,8 +149,7 @@ command under 40 ms ([hook-performance.md](hook-performance.md)).
 ## The scope check — during an implementation step
 
 Runs on `Edit`, `Write`, `MultiEdit` and `NotebookEdit` (an `apply_patch`
-arrives as an `Edit`). It reads `.ai/state/state.json` (or the legacy
-`current.json`) and acts only while `current_stage` is `implementation` and a
+arrives as an `Edit`). It reads `.ai/state/state.json` and acts only while `current_stage` is `implementation` and a
 step is current: a write to a file the step does not name in `allowed_files`,
 or names in `forbidden_files`, is refused with `SCOPE_CHANGE_REQUIRED` in the
 reason. Globs use extended-glob syntax. The answer is never to reword the
@@ -184,7 +183,7 @@ always.
 
 The switch is `.ai/policies/dialog.json` (`enabled`, `window_seconds` 120
 clamped to 30–600, `stop_blocks_max`), written on by `/rr-setup --update`
-(migration 0010) and off by setting `"enabled": false`. The gate is inert under
+and off by setting `"enabled": false`. The gate is inert under
 `AI_UNATTENDED=1`, when `CLAUDE_CODE_SESSION_ATTENDED=0` (a background job,
 `claude -p`, the SDK) unless `dialog.json` says `"background_sessions": true`
 — the project's opt-in for background jobs of the CLI a human is still
@@ -196,7 +195,7 @@ without a session id, or when the installed profile's `dialog.tool` is not the
 runtime's question tool. The opt-in is the dialog's only: the runtime gate
 still treats `CLAUDE_CODE_SESSION_ATTENDED=0` as unattended. `AI_UNATTENDED`
 counts as set when it is non-empty and not `0`, `false` or `no` (case and
-blanks ignored) — one rule in every hook and in `state.py` and `adopt.py`;
+blanks ignored) — one rule in every hook and and in `state.py`;
 `AI_UNATTENDED=0` is attended. `decision open` refuses a second commit
 decision whose question text equals an open one (`DECISION_DUPLICATE`, exit 6):
 the dialog cannot tell two equal questions apart. Option labels are at most 400 characters and may not
@@ -274,8 +273,8 @@ around the statusline: `runtime-gate.py statusline --context --line` by default
   count, `quota --json` prints the record with its `stale` and `resets_at`
   fields.
 - State lives in `<home>/state/runtime-gate.json`; `AI_RUNTIME_GATE=off`
-  disables the hook. The older `CLAUDE_FABLE_GATE_*` and `CODEX_MODEL_GATE_*`
-  variables are still read.
+  disables the hook. Only the `AI_RUNTIME_GATE*` names are read; the 3.x
+  gate variables of the Fable and Codex hooks are ignored.
 
 Codex has no `StopFailure`, so a failure there is attributed at
 `SubagentStop`, and only when the evidence points at an EXPERT agent: its name

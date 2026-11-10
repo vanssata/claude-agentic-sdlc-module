@@ -217,8 +217,8 @@ class TestSwitchContract(unittest.TestCase):
                     json.dump({"enabled": policy}, fh)
         home = os.path.join(tmp, "home")
         if tool != "missing":
-            # "legacy": the verified tool, but only in the pre-3.4b <home>/claude-agentic/ file
-            # that read_profile() still falls back to; the hooks never read it.
+            # "legacy": the verified tool, but only in the pre-3.4b <home>/claude-agentic/ file,
+            # which no reader falls back to any more: it counts as no tool.
             folder = "claude-agentic" if tool == "legacy" else "riskrails"
             os.makedirs(os.path.join(home, folder))
             value = dialog.DIALOG_TOOL[runtime] if tool in ("verified", "legacy") else "Wrong"

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """exec" python3 -I "$0" "$@"
 The skills surface (R1): seven `rr-` skills named for the job — eight with
-`rr-build-all`, the batch loop — the ten old names kept for one version as short
-aliases, and no skill text that calls a `state.py` subcommand or an agent the
+`rr-build-all`, the batch loop — the ten old alias skills are gone (R19), and no skill text that calls a `state.py` subcommand or an agent the
 redesign removes.
 
 `step_test_command` hands every test path to bash; the line above makes bash
@@ -19,13 +18,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKILLS = os.path.join(ROOT, "skills")
 
 NEW = ("rr-setup", "rr-spec", "rr-plan", "rr-build", "rr-build-all", "rr-review", "rr-ship", "rr-status")
-# old name -> the body's first line after "deprecated → /"
-ALIASES = {
-    "ai-init": "rr-setup", "ai-audit": "rr-setup --audit", "project-init": "rr-setup",
-    "project-update": "rr-setup --update", "sdlc-intent": "rr-spec", "sdlc-spec": "rr-spec",
-    "sdlc-plan": "rr-plan", "ai-task": "rr-build", "ai-status": "rr-status",
-    "usage-report": "rr-status --cost",
-}
+# The ten old alias skills are gone (R19): their SKILL.md files are deleted; ai-audit, ai-init,
+# ai-task, project-init, project-update and usage-report keep the code and templates their
+# replacements read, so those directories stay without a SKILL.md.
+ALIASES = {}
 # The spec's "removed (19)" (§Interfaces, state.py surface).
 REMOVED_COMMANDS = ("init get stage risk triage quick plan remediate step review-gate test-run step-split "
                     "set risks modules questions note events done archive").split()
@@ -58,7 +54,7 @@ def split(text):
 
 
 class TestInventory(unittest.TestCase):
-    def test_eighteen_skills(self):
+    def test_eight_skills(self):
         found = sorted(os.path.basename(os.path.dirname(p)) for p in glob.glob(os.path.join(SKILLS, "*", "SKILL.md")))
         self.assertEqual(found, sorted(NEW + tuple(ALIASES)))
 
@@ -75,16 +71,13 @@ class TestInventory(unittest.TestCase):
 
 
 class TestAliases(unittest.TestCase):
-    def test_alias_shape(self):
-        for name, target in ALIASES.items():
+    def test_no_alias_skill(self):
+        for name in ("ai-init", "ai-audit", "project-init", "project-update", "sdlc-intent", "sdlc-spec",
+                     "sdlc-plan", "ai-task", "ai-status", "usage-report"):
             with self.subTest(alias=name):
-                text = read(name)
-                fields, body = split(text)
-                self.assertLessEqual(len(text.rstrip("\n").split("\n")), 12, "at most 12 lines")
-                self.assertLessEqual(len(fields.get("description", "").encode()), 80, "description ≤ 80 B")
-                first = next((line for line in body if line.strip()), "")
-                self.assertEqual(first, "deprecated → /%s" % target)
-                self.assertIn("skills/%s/SKILL.md" % target.split()[0], text, "names the target's SKILL.md")
+                self.assertFalse(os.path.exists(os.path.join(SKILLS, name, "SKILL.md")), "R19: alias removed")
+        for name in ("ai-status", "sdlc-intent", "sdlc-plan", "sdlc-spec"):
+            self.assertFalse(os.path.exists(os.path.join(SKILLS, name)), "R19: the directory is gone too")
 
 
 class TestNewSkills(unittest.TestCase):

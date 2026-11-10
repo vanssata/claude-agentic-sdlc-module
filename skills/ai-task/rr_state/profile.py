@@ -22,10 +22,8 @@ from rr_state import task
 
 
 def profile_file(home):
-    """<home>/riskrails/profile.json, or <home>/claude-agentic/profile.json where
-    the installer has not run since 3.4b (R35, one version)."""
-    path = os.path.join(home, "riskrails", "profile.json")
-    return path if os.path.exists(path) else os.path.join(home, "claude-agentic", "profile.json")
+    """<home>/riskrails/profile.json."""
+    return os.path.join(home, "riskrails", "profile.json")
 
 
 def read_profile(runtime=None, rt=rr_runtime.Runtime()):

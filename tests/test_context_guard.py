@@ -73,11 +73,8 @@ def read_json(path):
 
 
 def read_task_file(root):
-    """The task file the product reads: state.json, else the legacy current.json."""
-    new = os.path.join(root, ".ai", "state", "state.json")
-    if os.path.exists(new):
-        return read_json(new)
-    return read_json(os.path.join(root, ".ai", "state", "current.json"))
+    """The task file the product reads: state.json."""
+    return read_json(os.path.join(root, ".ai", "state", "state.json"))
 
 
 def merge(a, b):
@@ -366,11 +363,11 @@ class TestContextGuard(unittest.TestCase):  # pylint: disable=too-many-public-me
                 {"type": "tool_result", "tool_use_id": "t2", "content": "ok"},
                 {"type": "text", "text": "text beside a tool result must not appear"}]}}),
             user("Explain why <command-name>/model</command-name> shows up in the transcript"),
-            user("<command-message>ai-task</command-message> <command-name>/ai-task</command-name> "
+            user("<command-message>rr-build</command-message> <command-name>/rr-build</command-name> "
                  "<command-args>round the totals</command-args>"),
             user("<local-command-stdout>stdout must not appear</local-command-stdout>"),
             user("<command-name>/model</command-name> <command-message>model</command-message> <command-args></command-args>"),
-            user("<command-name>/ai-task</command-name> <command-message>ai-task</command-message> "
+            user("<command-name>/rr-build</command-name> <command-message>rr-build</command-message> "
                  "<command-args>add the VAT column</command-args>"),
             line({"type": "user", "message": {"role": "user", "content": [
                 {"type": "text", "text": "[Request interrupted by user]"}]}}),
@@ -399,11 +396,11 @@ class TestContextGuard(unittest.TestCase):  # pylint: disable=too-many-public-me
         has("Fix the export and keep the CSV header order", snap,
             "a prompt is kept verbatim, without the injected reminder")
         lacks("injected rules", snap, "the reminder itself is dropped")
-        has("/ai-task add the VAT column", snap, "a slash command with arguments is kept as an instruction")
+        has("/rr-build add the VAT column", snap, "a slash command with arguments is kept as an instruction")
         lacks("- /model", snap, "a bare slash command is not")
         has("- Explain why <command-name>/model</command-name> shows up in the transcript", snap,
             "a prompt that quotes the command tags is kept whole")
-        has("/ai-task round the totals", snap, "the older wrapper order, message first, is read as well")
+        has("/rr-build round the totals", snap, "the older wrapper order, message first, is read as well")
         has("And write a test for it", snap, "a prompt sent as a text block is kept")
         lacks("must not appear", snap, "meta, summary, sidechain, tool results and command output are left out")
         lacks("Request interrupted", snap, "an interruption marker is not an instruction")
@@ -589,7 +586,7 @@ class TestContextGuard(unittest.TestCase):  # pylint: disable=too-many-public-me
         with open(self.state + "/ai1.md", encoding="utf-8") as fh:
             snap = fh.read()
         self.assertIn("# Handoff — " + task, snap, "the snapshot embeds handoff.md verbatim")
-        self.assertNotIn('"approved_plan"', snap, "and no longer dumps current.json")
+        self.assertNotIn('"approved_plan"', snap, "and no longer dumps the state file")
         self.assertIn("Keep the fee rounding", snap, "beside the transcript facts state.py cannot know")
         with open(aip + "/.ai/state/handoff.md", encoding="utf-8") as fh:
             first = fh.readline().rstrip("\n")
@@ -598,14 +595,14 @@ class TestContextGuard(unittest.TestCase):  # pylint: disable=too-many-public-me
         # it fails open when state.py cannot answer
         fake = self.tmp + "/fake-plugin"
         os.makedirs(fake + "/hooks")
-        os.makedirs(fake + "/skills/ai-task")
+        os.makedirs(fake + "/skills/rr-build")
         shutil.copy(GUARD, fake + "/hooks/context-guard.py")
         fake_guard = fake + "/hooks/context-guard.py"
         self.reset_state()
         start = {"hook_event_name": "SessionStart", "session_id": "f1", "cwd": aip, "source": "startup"}
         self.expect_silent(self.run_guard(start, guard=fake_guard), "no state.py beside the hook: nothing is injected")
-        self.write(fake + "/skills/ai-task/state.py", "#!/usr/bin/env python3\nimport time\ntime.sleep(30)\n")
-        os.chmod(fake + "/skills/ai-task/state.py", 0o755)
+        self.write(fake + "/skills/rr-build/state.py", "#!/usr/bin/env python3\nimport time\ntime.sleep(30)\n")
+        os.chmod(fake + "/skills/rr-build/state.py", 0o755)
         t0 = time.monotonic()
         self.expect_silent(self.run_guard(start, guard=fake_guard), "a state.py that hangs injects nothing")
         self.assertLessEqual(time.monotonic() - t0, 10, "and gives up inside the hook's own timeout")

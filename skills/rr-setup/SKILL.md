@@ -1,7 +1,7 @@
 ---
 name: rr-setup
-description: Set up and maintain the .ai/ layer of an existing production codebase. With no flag, scaffold docs/sdlc/, the runtime directory and .ai/, survey the code into .ai/project/ (light or full), write the Verification commands, the weight table's project entries and the constitution — read-only towards application code. --update brings a project's files up to the installed plugin (migrations, three-way merges, the managed block); --adopt moves a foreign AI-tool structure (Spec Kit, Kiro, Cursor, Copilot, AI-DLC, an oversized CLAUDE.md or AGENTS.md) into this layout with nothing lost; --audit scores the repository against the twelve plays and writes docs/ai-sdlc-adoption-plan.md. Use on "/rr-setup", "set up this project", "analyse this project for AI work", "update the rules", "обнови правилата", "audit our AI setup", or when /rr-status says the project is behind.
-argument-hint: [--survey light|full] | --update [--apply] | --adopt [--mode coexist] | --audit [context]
+description: Set up and maintain the .ai/ layer of an existing production codebase. With no flag, scaffold docs/sdlc/, the runtime directory and .ai/, survey the code into .ai/project/ (light or full), write the Verification commands, the weight table's project entries and the constitution — read-only towards application code. --update regenerates a project's files from the installed plugin (a copy that is a shipped version is replaced, an edited one waits for the human, the project's own files are kept); run it right after installing a new riskrails; --audit scores the repository against the twelve plays and writes docs/ai-sdlc-adoption-plan.md. Use on "/rr-setup", "set up this project", "analyse this project for AI work", "update the rules", "обнови правилата", "audit our AI setup", or when /rr-status says the project is behind.
+argument-hint: [--survey light|full] | --update [--apply] | --audit [context]
 ---
 
 # /rr-setup $ARGUMENTS
@@ -17,7 +17,7 @@ UPDATE="python3 $AI_HOME/skills/project-update/update.py $PWD"
 SETUP="python3 $AI_HOME/skills/rr-setup/setup.py"
 ```
 
-`--update`, `--adopt` and `--audit` go to their sections below; anything else
+`--update` and `--audit` go to their sections below; anything else
 is **Setup**. In every mode: no application code changes — not a rename, not a
 formatting fix. Problems you find are written down, never fixed. Never read
 `.env`, secrets, dumps or production logs. Do not commit; suggest the `git add`.
@@ -90,13 +90,13 @@ formatting fix. Problems you find are written down, never fixed. Never read
    that `.claude/settings.json` keeps `"enableAllProjectMcpServers": false` and
    that each server in a checked-in `.mcp.json` sits in `enabledMcpjsonServers`
    only if it earned it, else in `disabledMcpjsonServers`; say what you found.
-6. **Weight table.** Propose this codebase's own paths for
-   `.ai/policies/weight.json`: `domain.modules` (money, identity, personal
-   data), `domain.customer_visible`, `scope.hot_paths`,
+6. **Weight table.** The plugin ships the table; this codebase's own paths go in
+   `.ai/policies/weight.project.json`, laid over it: `domain.modules` (money,
+   identity, personal data), `domain.customer_visible`, `scope.hot_paths`,
    `reversibility.needs_step` and `irreversible`, and one or two `examples` per
-   mode. The JSON is the human's to edit (the path guard refuses yours); once
-   they have, `$STATE weight --mirror` regenerates `weight.md`. The thresholds
-   are not this skill's to move.
+   mode. The JSON is the human's to edit (the path guard refuses yours);
+   `--update` renders `weight.md` from the table and the overlay. The
+   thresholds are not this skill's to move.
 7. **Constitution.** Fill `docs/sdlc/constitution.md`: C1–C5 ship prefilled;
    C6 onwards are one line each, drawn from what the code and tests already
    enforce. Leave a slot empty rather than write a platitude; at most fifteen.
@@ -108,7 +108,7 @@ formatting fix. Problems you find are written down, never fixed. Never read
    security observations, missing documentation, areas agents must not touch
    casually, the weight-table entries you chose, recommended next improvements —
    recommendations only, none implemented. When the survey found a toolbox,
-   offer **--adopt**'s own-toolbox path.
+   name each toolbox item the project keeps using; they stay where they are.
 9. **Report.** Files created (a tree from the scaffold output), surprising
    findings, the modes and what puts a change in each, the safety restrictions
    in force (hooks versus policy), the tooling the workflows reuse, assumptions,
@@ -120,27 +120,39 @@ formatting fix. Problems you find are written down, never fixed. Never read
 
 ## --update
 
-The script does the update; you show it, confirm what is owed, and merge what
-it cannot.
+The script regenerates; you show it, confirm what is owed, and merge what it
+cannot. It converts nothing but the one split. A tree that still holds an old
+shape it detects (the pre-3.4b task state without `state.json`, the risk-tier
+policy without a weight table, a pre-3.4b block marker) is refused with `KEPT_UNREADABLE` (exit 6); a
+project last updated before 3.1.0 goes through `npx riskrails@3.1.0` first. Run it right after a new
+riskrails is installed: until then the project's old shapes are not read.
 
 1. `$STATE status`: with a task in flight, say that updating policies mid-task
    can change what the rest of it needs, and ask whether to finish it first.
 2. `$UPDATE` — the dry run; show it as is. Up to date and no hint: say so, stop.
-   `schema N -> M` means migrations run first; `[NNNN]` marks their lines; a
-   `move` carries edits to the new path and keeps the original under
-   `.ai/reports/project-update-<date>/`; `delete?` is a proposal (step 4).
-3. Lines marked `policy` change `.ai/policies/*.json`, which humans own: explain
-   each in one plain sentence and ask, unless `$ARGUMENTS` holds `--apply`.
+   A `regenerate` is a file that matches a version the plugin once shipped and is
+   replaced; a `regenerate?` or `delete?` is a proposal for the human (step 4); a
+   `create` is a file the project lacks. A project that still has the mixed
+   `testing.md` and `weight.json` gets `verification.md` and `weight.project.json`
+   split out of them once.
+3. A `split` row writes `verification.md` or `weight.project.json`, which humans
+   own from then on: say in one plain sentence what it carries out of
+   `testing.md` or `weight.json`, and ask, unless `$ARGUMENTS` holds `--apply`.
 4. `$UPDATE --apply`. Exit 3 stopped on a changed, non-regular or unwritable
    file and names it; nothing after it was written — run the dry run again.
-   **A `delete?` is the human's.** Never pass `--confirm-delete` or `--confirm-cleanup`, not even with
+   Exit 6 (`KEPT_UNREADABLE`): a file the update keeps cannot be read; nothing was
+   written — name it, the human fixes or removes it, then run again.
+   **A `regenerate?` and a `delete?` are the human's.** Never pass `--confirm-delete` or `--confirm-cleanup`, not even with
    `--apply`. Give them, with `$AI_HOME` and `$PWD` substituted, for their own
    terminal (the `!` prefix is refused):
    `python3 "<home>/skills/project-update/update.py" "<project>" --apply --confirm-delete "<your name>"`.
-   The schema stays put until it is settled — that command, or deleting the
-   file by hand; there is no third way. Two kinds are housekeeping, not
-   migrations: `[sdlc]` — an unedited `docs/sdlc/*/TEMPLATE.md`, which the plugin
-   now supplies (an edited one stays as the project's override); `[cleanup]` —
+   Exit 5 (`CONFIRM_REFUSED`) means an agent session ran it; it wrote nothing.
+   Every file replaced or deleted that way is first copied under
+   `.ai/reports/project-update-<date>/original/`. Two kinds are housekeeping:
+   `[rules]` — every rule source `.ai/rules/<slug>.md` (an update does not keep
+   them; confirming deletes the source and its rendered blocks with it) and a
+   rendered rule file whose source is gone or no longer sets `paths:`, both
+   settled by `--confirm-delete`; `[cleanup]` —
    the `*.log` files of closed tasks, and the report and log files of an
    abandoned task (its `state.json` stays) or of one unclosed for more than seven
    days (never the task in flight; and none when `.ai/state/state.json` is unreadable).
@@ -151,16 +163,15 @@ it cannot.
    commit `.ai/` first (the hint says so), and an `original/` copy is kept as for any
    other deletion. They have their own command, the human's too, never passed by the agent:
    `python3 "<home>/skills/project-update/update.py" "<project>" --apply --confirm-cleanup "<your name>"`.
-   Show both groups as printed. For 0006 (shared files) the order is:
-   `install.sh` for every runtime used, commit `.ai/`, read the `delete?` list,
-   then the command with no task in flight. Rollback is git:
+   Show both groups as printed. Rollback is git:
    `git restore --source=<commit before> --staged --worktree -- .ai`, before
    the plugin itself is rolled back.
-5. A `conflict` line: the project file was edited here and changed upstream.
-   Markdown, or the managed block (inside the markers only): read both, keep
-   everything project-specific, take the plugin's rules and structure, edit the
-   project file, delete the copy. A JSON policy: show both values for each
-   listed path and say which the plugin expects and why; the human edits it.
+5. A `regenerate?` row: the project edited a file the plugin generates. Read
+   its reason; anything project-specific in it belongs in a file the update keeps
+   (`.ai/project/`, `weight.project.json`, `verification.md`, the instruction
+   file outside the managed block — not `.ai/rules/`, whose sources are `[rules]`
+   rows too) — say where, the human moves it,
+   then confirms. Never edit the generated file to dodge the row.
 6. Hints. `verify_command is empty`: show `$SETUP survey`'s proposal, ask for
    the one command and what a green run ends with, write it with
    `$SETUP verify --set`, and fill the rest of the Verification block. `the managed block is N B`:
@@ -169,8 +180,7 @@ it cannot.
    fifteen principles or 4096 B: offer to move policy into `.ai/policies/`.
    `that rule is not rendered`: name the `.ai/rules/` file and what it lacks
    (`paths:` and a body). `overrides the plugin's shared copy`: offer to diff
-   each and delete those that add nothing. `foreign structure detected`: offer
-   **--adopt**. `tracked by git but ignored`: show the line as printed and give
+   each and delete those that add nothing. `tracked by git but ignored`: show the line as printed and give
    the human the command it prints, exactly as printed, plus a commit, for their
    own terminal (never rebuilt from the path; only the xargs form untracks every
    such file under `.ai/state`, a printed `rm --cached -- <path>` one file; a
@@ -179,55 +189,6 @@ it cannot.
 7. `$UPDATE --check` and `git diff --stat`; say what changed, what you merged
    and what is the human's. Suggest `git add -A .ai docs/sdlc .gitignore` plus
    the runtime directories and instruction files.
-
-## --adopt
-
-**A project's own toolbox** — its `.claude/` skills, commands, rules, agents
-and hooks, `.codex/*`, `bin/*.sh`, Makefile targets — is production behaviour
-(C1), not a foreign structure: it is inventoried in place, never copied or
-moved. `$SETUP adopt` shows `.ai/policies/toolbox.md` (one line per item: link,
-purpose, KNOWN FACT `file:line` or UNKNOWN) and the router rows it appends to
-`.ai/AGENTS.md` — one per skill or command, naming its job and its `/<name>`. A
-project hook doing a plugin guard's job is kept and noted; a guard with none is
-reported. Ask "apply?", then `$SETUP adopt --apply`; it is idempotent. Exit 3:
-`toolbox.md` differs from the inventory (a human edited it) — show both, never
-overwrite. A foreign tool's structure, below, can be present as well.
-
-Every command is `$UPDATE --adopt …`, with `--mode coexist` on each when the team
-still uses the other tool (router rows only, nothing moves). Exit 5
-`ADOPT_REFUSED`: show the first line and stop. Exit 2: the routing table or a
-migration could not be read (reason on stderr, prefixed `project-update:`),
-nothing written. Exit 4 `ADOPT_INCOMPLETE`:
-`unmapped` files and a `split?` are yours to settle, then dry-run again; a
-`conflict` or a check `FAIL` left after that is the human's — never edit a
-destination or a source to make it pass.
-
-1. Preconditions: no task in flight (`$STATE status`), `git status` clean,
-   `$UPDATE --check` exits 0. Otherwise stop and say which failed.
-2. `$UPDATE --adopt`; show it as is.
-3. Each `unmapped` file: ask the human (drop with a reason, or copy to a named
-   destination) and write the answers to `.ai/reports/adopt-<date>/decisions.json`
-   as `{"version": 1, "unmapped": {"<path>": {"action": "drop", "why": "…"}}}`.
-   A glob key settles a directory (`drop` or `ignore` only); an exact path wins
-   over a glob, a longer glob over a shorter one.
-4. A `split?` (an instruction file too large to keep): on a `pro` or `plus` plan
-   (`jq -r .plan "$AI_HOME/riskrails/profile.json"`), when that fails, or
-   under `AI_UNATTENDED`, use `--split fallback` — every line outside the managed
-   block moves verbatim to `.ai/policies/adopted/`. Otherwise run
-   `--split-request` and write the proposal yourself, once, to the `proposal`
-   path the request names: line ranges, destinations from `allowed_dest`,
-   headings from its `outline` — never text (the tool refuses that). A proposal
-   for the same file sha is reused.
-5. `$UPDATE --adopt --diff`; show it and ask "apply?".
-6. `$UPDATE --adopt --apply` (with `--split fallback` if step 4 chose it); show
-   the two `check` lines and read out each `no-dangling` warning. On a FAIL read
-   `dropped.jsonl`, amend the proposal or decisions, run again.
-7. Point at `.ai/reports/adopt-<date>/report.md`; suggest `git add` of the new
-   structure and the report directory, and a commit.
-8. Cleanup is the human's: show `$UPDATE --adopt --cleanup`, then give the full
-   command with both paths absolute for their own terminal —
-   `python3 "<home>/skills/project-update/update.py" "<project>" --adopt --cleanup --apply --confirm-delete "<your name>"`.
-   Setting `AI_UNATTENDED` to pass it is the same act as typing their name.
 
 ## --audit
 

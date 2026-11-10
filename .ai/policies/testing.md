@@ -151,7 +151,7 @@ is no mechanical map from a source file to its tests; the useful ones are:
 | `hooks/ai-guard.py`, `hooks/guard/**` | `tests/test_ai_path_guard.py`, `tests/test_ai_scope_guard.py`, `tests/test_ai_git_guard.py`, `tests/test_guard_characterization.py`, `tests/test_guard_differential.py`, `tests/test_ere_unit.py` |
 | `skills/ai-task/state.py`, `weight.py` | `tests/test_ai_task_state.py`, `tests/test_ai_status_root.py`, `tests/test_weight.py` |
 | `skills/ai-task/sensors.py` | `tests/test_ai_task_sensors.py` |
-| `skills/project-update/**`, `skills/rr-setup/**`, `hooks/project-scaffold.*` | `tests/test_project_update.py`, `tests/test_merge_migration.py`, `tests/test_project_adopt.py`, `tests/test_scaffold_idempotency.py`, `tests/test_scaffold_differential.py`, `tests/test_setup.py` |
+| `skills/project-update/**`, `skills/rr-setup/**`, `hooks/project-scaffold.*` | `tests/test_project_update.py`, `tests/test_merge_migration.py`, `tests/test_regenerate.py`, `tests/test_no_fallbacks.py`, `tests/test_scaffold_idempotency.py`, `tests/test_scaffold_differential.py`, `tests/test_setup.py` |
 | `bin/riskrails.js`, `profiles/**`, `scripts/resolve-profile.py` | `tests/test_install_dry_run.py`, `tests/test_profiles.py`, `tests/test_codex_install.py`, `tests/test_dual_runtime_install.py`, `tests/test_shared_tree.py`, `tests/test_install_routes.py` |
 | `hooks/runtime-gate.py`, `hooks/context-guard.py` | `tests/test_runtime_gate.py`, `tests/test_context_guard.py`, `tests/test_runtime_gate_fable.py`, `tests/test_runtime_gate_codex.py` |
 | `agents/**`, `codex/**`, `instructions/**`, `skills/*/SKILL.md` | `tests/test_codex_agent_render.py`, `tests/test_shared_prompts_model_free.py`, `tests/test_instruction_budget.py`, `tests/test_skills_surface.py` |

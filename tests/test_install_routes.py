@@ -142,6 +142,22 @@ class InstallRoutes(ScratchCase):
         self.assertEqual(got, rc, out)
         return out
 
+    def test_the_retired_skills_are_moved_to_backups(self):
+        """R20: an install over a home holding the five retired skills moves them into backups/<date>/skills/."""
+        retired = ("status", "ai-status", "sdlc-intent", "sdlc-plan", "sdlc-spec")
+        for runtime in ("claude", "codex"):
+            with self.subTest(runtime=runtime):
+                home = self.path("retire-" + runtime)
+                for name in retired:
+                    os.makedirs(os.path.join(home, "." + runtime, "skills", name))
+                    with open(os.path.join(home, "." + runtime, "skills", name, "SKILL.md"), "w", encoding="utf-8") as fh:
+                        fh.write("---\nname: %s\n---\nold\n" % name)
+                self.npx(home, runtime)
+                day = datetime.date.today().isoformat()
+                for name in retired:
+                    self.assertFalse(os.path.exists(os.path.join(home, "." + runtime, "skills", name)), name)
+                    self.assertTrue(os.path.isfile(os.path.join(home, "." + runtime, "backups", day, "skills", name, "SKILL.md")), name)
+
     def assertSkillsResolve(self, home, runtime):
         """B1: the rr-* skills' own loop finds the install root and runs state.py from it."""
         with open(os.path.join(PLUGIN, "skills", "rr-build", "SKILL.md"), encoding="utf-8") as fh:

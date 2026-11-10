@@ -1,11 +1,11 @@
-"""setup.py (redesign 2.5): R9 — `check` exits 1 VERIFY_COMMAND_MISSING, `adopt`
-writes toolbox.md and router rows on a project shaped like new-shop; R28 — the
-superpowers line is printed and never written; SQ5 — the toolbox is inventoried
-in place, never copied.
+"""setup.py (redesign 2.5): R9 — `check` exits 1 VERIFY_COMMAND_MISSING; R10 — the
+verify command lives in .ai/policies/verification.md; R28 — the superpowers line is
+printed and never written; SQ5 — the toolbox is inventoried in place, never copied;
+OQ3 — there is no `adopt` verb.
 
 The project is tests/fixtures/setup/new-shop-like, stored encoded
 (`dot-claude` → `.claude`, `fixture-CLAUDE.md` → `CLAUDE.md`) and scaffolded with
-the plugin's own scripts, the way tests/test_project_adopt.py builds its fixtures.
+the plugin's own scripts, the way the update tests build their fixtures.
 """
 import hashlib
 import json
@@ -91,8 +91,8 @@ class Project(unittest.TestCase):
             fh.write(text)
 
     def set_verify(self, value):
-        text = self.read(".ai/policies/testing.md")
-        self.write(".ai/policies/testing.md", re.sub(r"(?m)^verify_command:.*$", "verify_command: " + value, text))
+        text = self.read(".ai/policies/verification.md")
+        self.write(".ai/policies/verification.md", re.sub(r"(?m)^verify_command:.*$", "verify_command: " + value, text))
 
 
 class TestCheck(Project):
@@ -109,8 +109,8 @@ class TestCheck(Project):
         self.assertEqual(result.returncode, 1)
         self.assertIn("VERIFY_COMMAND_MISSING", result.stdout)
 
-    def test_no_testing_md_is_missing(self):
-        os.remove(self.path(".ai/policies/testing.md"))
+    def test_no_verification_md_is_missing(self):
+        os.remove(self.path(".ai/policies/verification.md"))
         result = self.run_setup("check")
         self.assertEqual(result.returncode, 1)
         self.assertIn("VERIFY_COMMAND_MISSING", result.stdout)
@@ -128,11 +128,25 @@ class TestVerifySet(Project):
     def test_set_then_refuse(self):
         result = self.run_setup("verify", "--set", "make test")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertRegex(self.read(".ai/policies/testing.md"), r"(?m)^verify_command:\s+make test$")
+        self.assertRegex(self.read(".ai/policies/verification.md"), r"(?m)^verify_command:\s+make test$")
         self.assertEqual(self.run_setup("check").returncode, 0)
         again = self.run_setup("verify", "--set", "composer test")
         self.assertEqual(again.returncode, 3)
-        self.assertRegex(self.read(".ai/policies/testing.md"), r"(?m)^verify_command:\s+make test$")
+        self.assertRegex(self.read(".ai/policies/verification.md"), r"(?m)^verify_command:\s+make test$")
+
+    def test_testing_md_is_not_the_source(self):
+        """R10 / OQ4: a verify_command in testing.md is not read, and `--set` writes verification.md only."""
+        self.write(".ai/policies/testing.md", "verify_command: make test\n")
+        self.assertEqual(self.run_setup("check").returncode, 1)
+        self.assertEqual(self.run_setup("verify", "--set", "composer test").returncode, 0)
+        self.assertRegex(self.read(".ai/policies/verification.md"), r"(?m)^verify_command:\s+composer test$")
+        self.assertEqual(self.read(".ai/policies/testing.md"), "verify_command: make test\n")
+
+    def test_no_verify_command_line_is_refused(self):
+        self.write(".ai/policies/verification.md", "# Verification\n")
+        result = self.run_setup("verify", "--set", "make test")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("verification.md has no verify_command line", result.stderr)
 
     def test_two_lines_refused(self):
         result = self.run_setup("verify", "--set", "make test\nrm -rf /")
@@ -171,7 +185,7 @@ class TestSurvey(Project):
     def test_set_command_is_reported_not_proposed(self):
         self.set_verify("make test")
         out = self.run_setup("survey").stdout
-        self.assertIn("verify_command: make test (testing.md)", out)
+        self.assertIn("verify_command: make test (verification.md)", out)
 
     def test_foreign_tool_paths_are_not_own(self):
         self.write(".claude/skills/speckit-plan/SKILL.md", "---\ndescription: Spec Kit plan\n---\n")
@@ -204,70 +218,18 @@ class TestSuperpowers(Project):
         self.assertIn("superpowers: not enabled (disabled in", out)
 
 
-class TestAdopt(Project):
-    """R9: toolbox.md and router rows; idempotent; a human's toolbox.md is never overwritten."""
+class TestNoAdopt(Project):
+    """OQ3: `setup.py adopt` is gone; argparse refuses the unknown verb and nothing is written."""
 
-    def test_dry_run_writes_nothing(self):
+    def test_adopt_is_an_unknown_verb(self):
         before = tree_sha(self.root)
-        result = self.run_setup("adopt")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("write .ai/policies/toolbox.md (12 item(s))", result.stdout)
-        self.assertIn("router   | Deploy the current branch to staging and smoke-test the checkout. Use on "
-                      "\"deploy to staging\". | `/deploy-staging` |", result.stdout)
+        for extra in ((), ("--apply",)):
+            with self.subTest(extra=extra):
+                result = self.run_setup("adopt", *extra)
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertIn("invalid choice: 'adopt'", result.stderr)
         self.assertEqual(tree_sha(self.root), before)
-
-    def test_apply(self):
-        agents_before = self.read(".ai/AGENTS.md")
-        settings_before = self.read(".claude/settings.json")
-        result = self.run_setup("adopt", "--apply")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        toolbox = self.read(".ai/policies/toolbox.md")
-        self.assertIn("- [/deploy-staging](../../.claude/skills/deploy-staging/SKILL.md) — Deploy the current "
-                      "branch to staging", toolbox)
-        self.assertIn("KNOWN FACT `.claude/skills/deploy-staging/SKILL.md:3`", toolbox)
-        self.assertIn("- [bin/deploy.sh](../../bin/deploy.sh) — UNKNOWN", toolbox)
-        self.assertIn("- [make test](../../Makefile) — The fast suite, e2e excluded — KNOWN FACT `Makefile:12`",
-                      toolbox)
-        self.assertIn("- `ai-git-guard`: this project's `.claude/hooks/block-git-push.sh` does the same job — kept",
-                      toolbox)
-        self.assertIn("- `ai-scope-guard`: no project hook does its job", toolbox)
-        for link in re.findall(r"\]\(\.\./\.\./([^)]+)\)", toolbox):
-            self.assertTrue(os.path.isfile(self.path(link)), link)
-        agents = self.read(".ai/AGENTS.md")
-        self.assertTrue(agents.startswith(agents_before.rsplit("\n|", 1)[0]))
-        added = [l for l in agents.splitlines() if l not in agents_before.splitlines()]
-        self.assertEqual([l.rsplit("|", 2)[-2].strip() for l in added],
-                         ["policies/toolbox.md", "`/deploy-staging`", "`/sylius-fixtures`", "`/release-notes`"])
-        self.assertTrue(os.path.isdir(self.path(".claude/skills/deploy-staging")), "a source moved")
-        self.assertEqual(self.read(".claude/settings.json"), settings_before)
-
-        again = self.run_setup("adopt", "--apply")
-        self.assertEqual(again.returncode, 0)
-        self.assertIn("unchanged .ai/policies/toolbox.md", again.stdout)
-        self.assertIn("router   no new row", again.stdout)
-        self.assertEqual(self.read(".ai/AGENTS.md"), agents)
-
-    def test_reworded_row_is_not_added_twice(self):
-        self.run_setup("adopt", "--apply")
-        agents = self.read(".ai/AGENTS.md").replace("| Load the Sylius fixture suite into the local database |",
-                                                    "| loading fixtures |")
-        self.write(".ai/AGENTS.md", agents)
-        self.run_setup("adopt", "--apply")
-        self.assertEqual(self.read(".ai/AGENTS.md").count("`/sylius-fixtures`"), 1)
-
-    def test_edited_toolbox_is_refused(self):
-        self.run_setup("adopt", "--apply")
-        self.write(".ai/policies/toolbox.md", self.read(".ai/policies/toolbox.md") + "\nMy own note.\n")
-        result = self.run_setup("adopt", "--apply")
-        self.assertEqual(result.returncode, 3)
-        self.assertIn("My own note.", self.read(".ai/policies/toolbox.md"))
-
-    def test_no_router_file(self):
-        os.remove(self.path(".ai/AGENTS.md"))
-        result = self.run_setup("adopt")
-        self.assertEqual(result.returncode, 2)
-        self.assertIn(".ai/AGENTS.md not found", result.stderr)
-
+        self.assertFalse(os.path.exists(self.path(".ai/policies/toolbox.md")))
 
 
 class TestReviewFindings(Project):
@@ -283,11 +245,10 @@ class TestReviewFindings(Project):
     def test_mirrored_skill_is_one_route(self):  # M2
         self.write(".agents/skills/deploy-staging/SKILL.md", self.read(".claude/skills/deploy-staging/SKILL.md"))
         self.write(".claude/commands/sylius-fixtures.md", "# Load fixtures, the command form\n")
-        self.assertEqual(self.run_setup("adopt", "--apply").returncode, 0)
-        agents = self.read(".ai/AGENTS.md")
-        self.assertEqual(agents.count("`/deploy-staging`"), 1)
-        self.assertEqual(agents.count("`/sylius-fixtures`"), 1)
-        self.assertIn(".agents/skills/deploy-staging/SKILL.md", self.read(".ai/policies/toolbox.md"))
+        out = self.run_setup("survey").stdout
+        self.assertIn("skill    .agents/skills/deploy-staging/SKILL.md", out)
+        self.assertIn("skill    .claude/skills/deploy-staging/SKILL.md", out)
+        self.assertIn("command  .claude/commands/sylius-fixtures.md", out)
 
     def test_symlinked_skill_directory(self):  # M3
         self.write("shared/skills/linked/SKILL.md", "---\ndescription: A skill shared between shops\n---\n")
@@ -302,22 +263,12 @@ class TestReviewFindings(Project):
         os.symlink(outside, self.path(".claude/hooks/linked-out.sh"))
         self.write(".claude/hooks/.hidden.sh", "# HIDDEN-MARKER-52\n")
         survey = self.run_setup("survey").stdout
-        self.run_setup("adopt", "--apply")
-        for text in (survey, self.read(".ai/policies/toolbox.md")):
-            self.assertNotIn("SECRET-MARKER-52", text)
-            self.assertNotIn("HIDDEN-MARKER-52", text)
-
-    def test_prose_mention_does_not_suppress_a_row(self):  # L1
-        self.write(".ai/AGENTS.md", self.read(".ai/AGENTS.md") +
-                   "\nRun `/deploy-staging` by hand; policies/toolbox.md lists the rest.\n")
-        self.run_setup("adopt", "--apply")
-        rows = [l for l in self.read(".ai/AGENTS.md").splitlines() if l.startswith("|")]
-        self.assertTrue(any(l.endswith("| `/deploy-staging` |") for l in rows))
-        self.assertTrue(any(l.endswith("| policies/toolbox.md |") for l in rows))
+        self.assertNotIn("SECRET-MARKER-52", survey)
+        self.assertNotIn("HIDDEN-MARKER-52", survey)
 
     def test_crlf_symlink_and_mode_survive(self):  # L2
-        testing = self.path(".ai/policies/testing.md")
-        shared = self.path("shared/testing.md")
+        testing = self.path(".ai/policies/verification.md")
+        shared = self.path("shared/verification.md")
         os.makedirs(os.path.dirname(shared), exist_ok=True)
         with open(testing, encoding="utf-8") as fh:
             text = fh.read()

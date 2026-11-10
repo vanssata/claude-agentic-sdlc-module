@@ -2,7 +2,7 @@
 
 - Repository:
 - Assessed on:
-- Assessed by: Claude Code, `/ai-audit`
+- Assessed by: Claude Code, `/rr-setup --audit`
 - Context supplied by:
 
 ## Inventory

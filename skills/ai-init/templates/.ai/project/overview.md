@@ -1,6 +1,6 @@
 # Project overview
 
-<!-- Filled by /ai-init from the repository. Every statement carries a label:
+<!-- Filled by /rr-setup from the repository. Every statement carries a label:
      KNOWN FACT (with file:line) · INFERENCE (with what it rests on) ·
      UNKNOWN (with what would answer it) · RISK (with what could go wrong). -->
 

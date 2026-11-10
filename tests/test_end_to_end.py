@@ -190,10 +190,14 @@ class TestInstalledPipeline(unittest.TestCase):
         self.sh("git", "-C", repo, "add", "src")
         self.sh("git", "-C", repo, "commit", "-qm", "initial")
         self.sh("bash", os.path.join(self.dir, "skills", "ai-init", "scaffold-ai.sh"), repo,
-                env={"CLAUDE_AGENTIC_TEMPLATES": os.path.join(self.dir, "skills", "ai-init", "templates")})
+                env={"RISKRAILS_TEMPLATES": os.path.join(self.dir, "skills", "ai-init", "templates")})
         self.check(".ai/ scaffolded into the project", os.path.isfile(os.path.join(repo, ".ai", "AGENTS.md")))
-        self.check("the weight table is in place",
-                   os.path.isfile(os.path.join(repo, ".ai", "policies", "weight.json")))
+        self.check("the weight table is read from the plugin: weight.md in place, no project weight.json (A2)",
+                   os.path.isfile(os.path.join(repo, ".ai", "policies", "weight.md"))
+                   and not os.path.exists(os.path.join(repo, ".ai", "policies", "weight.json")))
+        self.check("the project's own files are in place: weight.project.json and verification.md",
+                   all(os.path.isfile(os.path.join(repo, ".ai", "policies", n))
+                       for n in ("weight.project.json", "verification.md")))
         self.check("the retired risk tiers are not shipped",
                    not os.path.exists(os.path.join(repo, ".ai", "policies", "risk-tiers.json")))
 
@@ -217,8 +221,6 @@ class TestInstalledPipeline(unittest.TestCase):
         self.check("start registers the task and arms the scope guard", done.returncode == 0, done.stderr)
         self.assertEqual(done.returncode, 0)
         state_file = os.path.join(repo, ".ai", "state", "state.json")
-        if not os.path.exists(state_file):
-            state_file = os.path.join(repo, ".ai", "state", "current.json")
         with open(state_file, encoding="utf-8") as fh:
             current = json.load(fh)
         task = current["task_id"]

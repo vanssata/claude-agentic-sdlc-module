@@ -176,7 +176,7 @@ def utc_date():
 
 
 class Scratch:
-    """A scratch project: .ai/ with a testing.md whose commands read flag files, one code
+    """A scratch project: .ai/ with a verification.md whose commands read flag files, one code
     file and its test, committed in a git repository of its own (the approach of
     tests/test_ai_task_state.py's Project, kept here so this file stands alone)."""
 
@@ -190,12 +190,16 @@ class Scratch:
             os.makedirs(path)
         self.env = pinned_env(self.home, extra_env)
         # The commands name the flag directory through the environment, so the committed
-        # testing.md, and with it the initial commit's id, do not depend on the temp path.
+        # command file, and with it the initial commit's id, do not depend on the temp path.
         self.env["GOLDEN_FLAGS"] = self.flags
-        self.write(".ai/policies/testing.md",
+        # The commands live in verification.md (R10). The golden was recorded when they sat in testing.md
+        # and its base_commit is the id of the commit holding that file, so the same bytes are committed
+        # there too; verification.md is written after the commit and the dump shows it under the old name.
+        commands = (
                    "verify_command: sh -c 'test ! -e \"$GOLDEN_FLAGS/red\"' {files}\n"
                    "step_test_command: sh -c 'test ! -e \"$GOLDEN_FLAGS/stepred\"' {files}\n"
                    "e2e_command: sh -c 'test ! -e \"$GOLDEN_FLAGS/e2ered\"'\n")
+        self.write(".ai/policies/testing.md", commands)
         base = {"src/widget.py": "x = 1\n", "tests/test_widget.py": "assert True\n"}
         base.update(files or {})
         for rel, text in base.items():
@@ -203,6 +207,7 @@ class Scratch:
         self.git("init", "-q", self.root, cwd=self.tmp)
         self.git("add", "-A")
         self.git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init")
+        self.write(".ai/policies/verification.md", commands)
         self.log = []
 
     def git(self, *args, cwd=None):
@@ -273,6 +278,10 @@ class Scratch:
             for name in sorted(names):
                 path = os.path.join(here, name)
                 rel = os.path.relpath(path, self.root)
+                if rel == ".ai/policies/testing.md":           # the committed twin of verification.md
+                    continue
+                if rel == ".ai/policies/verification.md":      # the golden was recorded when the commands lived in testing.md
+                    rel = ".ai/policies/testing.md"
                 with open(path, encoding="utf-8", errors="replace") as fh:
                     body = fh.read()
                 out.append("=== %s\n%s%s" % (rel, body, "" if body.endswith("\n") or not body else "\n"))

@@ -3,8 +3,8 @@
 runtime-gate.py under Claude Code (the plugin path is not under a .codex/, so
 detect_runtime() answers claude): records Fable unavailability from
 StopFailure / PostToolUse / the statusline, rewrites model: fable -> opus on
-PreToolUse:Agent while the record lives, and fails open. The legacy
-CLAUDE_FABLE_GATE* names are still honoured, so they stay in use here. Then the
+PreToolUse:Agent while the record lives, and fails open. The old
+CLAUDE_FABLE_GATE* names are not read (the cases below pin that). Then the
 installer: the Fable branch is registered only on a Fable install, a later
 non-Fable install strips it again, and the old fable-gate.py shim is retired.
 
@@ -34,7 +34,7 @@ SHELL_MECHANICS = ("$3",)
 GATE = os.path.join(PLUGIN, "hooks", "runtime-gate.py")
 INSTALL = os.path.join(PLUGIN, "bin", "riskrails.js")  # the installer since 3.5
 GATE_VARS = re.compile(r"^(AI_RUNTIME_GATE|CLAUDE_FABLE_GATE|CODEX_MODEL_GATE)[A-Z_]*$")
-UNSET = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "CLAUDE_AGENTIC_SHARED", "CLAUDE_PROJECT_DIR",
+UNSET = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "RISKRAILS_SHARED", "CLAUDE_PROJECT_DIR",
          "CLAUDE_CODE_SUBAGENT_MODEL", "CLAUDE_CODE_SESSION_ATTENDED", "AI_UNATTENDED", "CLAUDE_DIR")
 PREFIX = '"$HOME/.claude/hooks/runtime-gate.py" statusline'
 ORIG = 'bash ~/.claude/statusline-command.sh --flag "two words" \'single\''
@@ -108,10 +108,10 @@ class TestRuntimeGateFable(unittest.TestCase):  # pylint: disable=too-many-publi
         cls.tmp = tmp = tempfile.mkdtemp()
         home = os.path.join(tmp, "home")
         cls.cfg = cfg = os.path.join(home, ".claude")
-        cls.state = os.path.join(tmp, "state", "fable-gate.json")
+        cls.state = os.path.join(tmp, "state", "runtime-gate.json")
         # Isolate from the developer's own ~/.claude: agents, state and env.
         env = {k: v for k, v in os.environ.items() if k not in UNSET and not GATE_VARS.match(k)}
-        env.update(HOME=home, CLAUDE_CONFIG_DIR=cfg, CLAUDE_FABLE_GATE_STATE=cls.state)
+        env.update(HOME=home, CLAUDE_CONFIG_DIR=cfg, AI_RUNTIME_GATE_STATE=cls.state)
         cls.env = env
         os.makedirs(cfg + "/agents")
         os.makedirs(tmp + "/project/.claude/agents")
@@ -295,9 +295,13 @@ class TestRuntimeGateFable(unittest.TestCase):  # pylint: disable=too-many-publi
                                "tool_input": {"file_path": "/x", "model": "fable"}})
         self.assertEqual(out, "", "a non-Agent tool is ignored")
         self.expect_route("unchanged", {"subagent_type": "ai-expert", "prompt": "p"},
-                          "CLAUDE_FABLE_GATE=off disables the rewrite", env={"CLAUDE_FABLE_GATE": "off"})
+                          "AI_RUNTIME_GATE=off disables the rewrite", env={"AI_RUNTIME_GATE": "off"})
+        self.expect_route("opus", {"subagent_type": "ai-expert", "prompt": "p"},
+                          "CLAUDE_FABLE_GATE=off is not read", env={"CLAUDE_FABLE_GATE": "off"})
         self.expect_route("sonnet", {"subagent_type": "ai-expert", "prompt": "p"},
-                          "the fallback model is configurable", env={"CLAUDE_FABLE_GATE_FALLBACK": "sonnet"})
+                          "the fallback model is configurable", env={"AI_RUNTIME_GATE_FALLBACK": "sonnet"})
+        self.expect_route("opus", {"subagent_type": "ai-expert", "prompt": "p"},
+                          "CLAUDE_FABLE_GATE_FALLBACK is not read", env={"CLAUDE_FABLE_GATE_FALLBACK": "sonnet"})
 
     def test_05_the_record_expires_on_its_own(self):
         self.set_marker(now() - 1)
@@ -319,7 +323,7 @@ class TestRuntimeGateFable(unittest.TestCase):  # pylint: disable=too-many-publi
         self.assertTrue(self.marker_active(), "a rate_limit that names Fable records it")
         self.expect_route("opus", {"subagent_type": "ai-expert", "prompt": "p"}, "the next Fable agent is routed to opus")
         left = self.until() - now()  # rounded up, so up to TTL + 1 s
-        self.assertTrue(3000 < left <= 3601, "rate_limit holds for CLAUDE_FABLE_GATE_TTL (1h)")
+        self.assertTrue(3000 < left <= 3601, "rate_limit holds for AI_RUNTIME_GATE_TTL (1h)")
 
         self.reset_state()
         self.stop_failure("model_not_found", {"agent_type": "ai-expert"})
@@ -404,6 +408,7 @@ class TestRuntimeGateFable(unittest.TestCase):  # pylint: disable=too-many-publi
         self.reset_state()
         self.gate("statusline", stdin={"rate_limits": {"seven_day": {"used_percentage": 40}}})
         self.assertFalse(self.marker_active(), "below the threshold nothing is recorded")
+        self.reset_state()
         out = self.gate("statusline", stdin='{"model":{"id":"x"}}')
         self.assertTrue(out == "" and not os.path.exists(self.state),
                         "statusline mode prints nothing and tolerates missing rate_limits")
@@ -443,9 +448,12 @@ class TestRuntimeGateFable(unittest.TestCase):  # pylint: disable=too-many-publi
         rc, out = self.gate_rc("statusline", "--then", "echo partial; exit 3", stdin=high)
         self.assertTrue(rc == 3 and sub(out) == "partial", "the inner command's exit code is passed through")
         self.reset_state()
-        out = self.gate("statusline", "--then", "echo still-here", stdin=high, env={"CLAUDE_FABLE_GATE": "off"})
+        out = self.gate("statusline", "--then", "echo still-here", stdin=high, env={"AI_RUNTIME_GATE": "off"})
         self.assertTrue(sub(out) == "still-here" and not self.marker_active(),
-                        "CLAUDE_FABLE_GATE=off skips the check but keeps the statusline")
+                        "AI_RUNTIME_GATE=off skips the check but keeps the statusline")
+        out = self.gate("statusline", "--then", "echo still-here", stdin=high, env={"CLAUDE_FABLE_GATE": "off"})
+        self.assertTrue(sub(out) == "still-here" and self.marker_active(),
+                        "CLAUDE_FABLE_GATE=off is not read: the check still records")
         out = self.gate("statusline", "--then", "cat", stdin="garbage")
         self.assertEqual(sub(out), "garbage", "unparseable input still reaches the user's statusline")
         out = self.gate("statusline", "--then", 'echo "$HOME" | grep -q . && printf "%s|%s" "a b" \'c"d\'', stdin=high)

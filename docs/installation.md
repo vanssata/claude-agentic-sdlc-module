@@ -5,36 +5,36 @@ version: `npx riskrails` alone runs whatever was published last, and the hooks
 it installs see every command an agent runs.
 
 ```bash
-npx riskrails@3.2.2                       # detects Claude Code, Codex, or both, and updates each
-npx riskrails@3.2.2 --target codex        # auto | claude | codex | both
-npx riskrails@3.2.2 --dry-run             # print what would be written, write nothing
-npx riskrails@3.2.2 --home ~/alt-claude   # another Claude home (--codex-home for Codex)
+npx riskrails@4.0.0                       # detects Claude Code, Codex, or both, and updates each
+npx riskrails@4.0.0 --target codex        # auto | claude | codex | both
+npx riskrails@4.0.0 --dry-run             # print what would be written, write nothing
+npx riskrails@4.0.0 --home ~/alt-claude   # another Claude home (--codex-home for Codex)
 # The installer does not read CLAUDE_CONFIG_DIR or CODEX_HOME: with a home other than
 # ~/.claude or ~/.codex, pass it with --home / --codex-home (or CLAUDE_DIR / CODEX_DIR).
 
 # Claude-side options. The plan is detected from ~/.claude.json (organizationRateLimitTier
 # tells Max 5x from 20x; a Team account by its seat) and, on a terminal, proposed for you
 # to confirm with Enter; --yes takes the detection, or the plan recorded last time, without asking:
-npx riskrails@3.2.2 --plan pro            # Pro: opusplan session, opus pinned for STRONG and EXPERT
-npx riskrails@3.2.2 --plan team-pro       # Team, Standard seat: the pro profile with the Team label
-npx riskrails@3.2.2 --plan team-max       # Team, Premium seat: the max profile, Fable on architect
-npx riskrails@3.2.2 --plan max            # Max 5x: Opus 5.5 [1m] session, Fable only on architect
-npx riskrails@3.2.2 --plan max20          # Max 20x: max's settings, EXPERT twice per task without asking
-npx riskrails@3.2.2 --plan max --fable no # no Fable anywhere; architect inherits the Opus session
-npx riskrails@3.2.2 --plan balanced-max   # BalancedMax: only the session is strong (Opus 5.5, 200k); readers on Haiku,
+npx riskrails@4.0.0 --plan pro            # Pro: opusplan session, opus pinned for STRONG and EXPERT
+npx riskrails@4.0.0 --plan team-pro       # Team, Standard seat: the pro profile with the Team label
+npx riskrails@4.0.0 --plan team-max       # Team, Premium seat: the max profile, Fable on architect
+npx riskrails@4.0.0 --plan max            # Max 5x: Opus 5.5 [1m] session, Fable only on architect
+npx riskrails@4.0.0 --plan max20          # Max 20x: max's settings, EXPERT twice per task without asking
+npx riskrails@4.0.0 --plan max --fable no # no Fable anywhere; architect inherits the Opus session
+npx riskrails@4.0.0 --plan balanced-max   # BalancedMax: only the session is strong (Opus 5.5, 200k); readers on Haiku,
                                           # judgement on Sonnet, reviews on Opus, EXPERT at high, no Fable, no xhigh;
                                           # also picks the Codex balanced-max profile (Sol session, readers on Luna)
 
 # Codex-side options (the ChatGPT plan is read from ~/.codex/auth.json; unknown means pro, and says so):
-npx riskrails@3.2.2 --codex-plan plus     # Plus: Sol at medium, three agent threads, Astra at high, no xhigh
-npx riskrails@3.2.2 --codex-plan pro      # Pro: Sol at high, six agent threads, Astra at xhigh
-npx riskrails@3.2.2 --codex-plan balanced-max  # Pro's budgets, Sol session, FAST readers on Luna, Astra at high
+npx riskrails@4.0.0 --codex-plan plus     # Plus: Sol at medium, three agent threads, Astra at high, no xhigh
+npx riskrails@4.0.0 --codex-plan pro      # Pro: Sol at high, six agent threads, Astra at xhigh
+npx riskrails@4.0.0 --codex-plan balanced-max  # Pro's budgets, Sol session, FAST readers on Luna, Astra at high
 
 # Context (both runtimes):
-npx riskrails@3.2.2 --context economy     # the plan's compaction window (800 000 Max, 300 000 Pro); the guard also blocks
-npx riskrails@3.2.2 --context default     # the default: each runtime's own window and compaction; the guard only warns
-npx riskrails@3.2.2 --statusline-context no  # no model and context line in the statusline (default yes)
-npx riskrails@3.2.2 --statusline own         # Claude: keep your own statusline command (from 3.2.1; default riskrails: the plugin's)
+npx riskrails@4.0.0 --context economy     # the plan's compaction window (800 000 Max, 300 000 Pro); the guard also blocks
+npx riskrails@4.0.0 --context default     # the default: each runtime's own window and compaction; the guard only warns
+npx riskrails@4.0.0 --statusline-context no  # no model and context line in the statusline (default yes)
+npx riskrails@4.0.0 --statusline own         # Claude: keep your own statusline command (from 3.2.1; default riskrails: the plugin's)
 ```
 
 Node 18 or newer and `python3` (Python 3.11 or newer) on `PATH` are required;
@@ -66,8 +66,8 @@ prompt. Then `/rr-setup --update` in each project ([project-update.md](project-u
 Restart the runtime afterwards.
 
 - **Claude Code**: `/skills` lists `rr-setup`, `rr-spec`, `rr-plan`,
-  `rr-build`, `rr-build-all`, `rr-review`, `rr-ship` and `rr-status`, plus the
-  deprecated aliases; `/hooks` lists `ai-guard.py`, the one guard command.
+  `rr-build`, `rr-build-all`, `rr-review`, `rr-ship` and `rr-status`;
+  `/hooks` lists `ai-guard.py`, the one guard command.
 - **Codex**: `/hooks` shows the hooks — **and you must review and trust them
   there before they run.** Codex does not execute a non-managed hook until it
   has been trusted, so until you do, nothing is being enforced.
@@ -177,29 +177,29 @@ The Read guard is a guardrail, not a cage: an explicit `limit` within the
 budget goes through, so reading something large stays possible but has to be
 deliberate.
 
-## Upgrading from 2.x (`claude-agentic`)
+## Upgrading from 2.x or 3.0
 
-`npx riskrails` does the home-side move itself:
+riskrails 4.0 no longer renames the 2.x home to `<home>/riskrails/`
+and converts no project. From a home or a project last updated before 3.1.0, install
+`npx riskrails@3.1.0` first, run `/rr-setup --update` in each project with it,
+then install 4.0 and run `/rr-setup --update` again.
 
-- `<home>/claude-agentic/` is renamed to `<home>/riskrails/` and a symlink is
-  left at the old path for one version; if `riskrails/` already exists, the old
-  directory goes to `backups/<date>/`.
+The installer still does these home-side steps, because a settings file
+written before the runtime gate would otherwise keep a hook that points at a
+retired file:
+
 - the hook entries that named `ai-git-guard.sh`, `ai-path-guard.sh`,
   `ai-scope-guard.sh`, `fable-gate.py` or `codex-model-gate.py` are replaced
   by `ai-guard.py` and `runtime-gate.py`; the old files are retired to
   `backups/<date>/`; the statusline becomes the plugin's (a command of your own
   is replaced and kept in `riskrails/statusline.json`, `--statusline own` brings it
-  back); stale `*.bak` files
-  are swept into the same backup folder;
-- the agents of the old roster (`ai-context`, `ai-expert`, `ai-implementer`,
-  `ai-indexer`, `ai-planner`, `ai-release`, `ai-risk`, `ai-security`,
-  `ai-tester` and the Codex `*-strong` twins) are retired; `reviewer.md` from
-  `claude-routing` is renamed `.superseded` when it is the shipped one;
-- the `<!-- claude-agentic:start/end -->` block in `~/.claude/CLAUDE.md` and
-  `~/.codex/AGENTS.md` becomes a `riskrails` block; an older `claude-routing`
-  block, or an unmarked `# Model allocation by task and scope` section, is
-  removed on the way.
+  back); stale `*.bak` files are swept into the same backup folder;
+- the alias skills `status`, `ai-status`, `sdlc-intent`, `sdlc-plan` and
+  `sdlc-spec` are moved from `<home>/skills/` to `backups/<date>/skills/`
+  (the dry run prints a `retire:` line first);
+- a hand-written model-routing section outside the managed block is reported
+  as superseded.
 
 Every other hook, agent and settings key you have is kept, including ones no
-plugin owns. The project side is a migration: [README.md](../README.md),
-"Upgrade to 3.0" and "Upgrade to 3.1".
+plugin owns. The project side is `/rr-setup --update`: [README.md](../README.md),
+"Upgrade to 4.0".
