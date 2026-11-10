@@ -14,19 +14,18 @@ import re
 import memory_compact as mc
 import memory_format as mf
 
-STATE_NAMES = ("state.json", "current.json")
+STATE_FILE = "state.json"
 
 
 def current_task(root):
     """The task in flight, from the live state, or None."""
-    for name in STATE_NAMES:
-        try:
-            with open(os.path.join(root, ".ai", "state", name), encoding="utf-8") as fh:
-                state = json.load(fh)
-        except (OSError, ValueError):
-            continue
-        if isinstance(state, dict) and state.get("current_stage") != "done" and state.get("task_id"):
-            return state["task_id"]
+    try:
+        with open(os.path.join(root, ".ai", "state", STATE_FILE), encoding="utf-8") as fh:
+            state = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    if isinstance(state, dict) and state.get("current_stage") != "done" and state.get("task_id"):
+        return state["task_id"]
     return None
 
 

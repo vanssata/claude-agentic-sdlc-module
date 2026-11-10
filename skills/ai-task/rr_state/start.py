@@ -39,15 +39,15 @@ def cmd_weight(args, root, rt=rr_runtime.Runtime()):
     except (OSError, ValueError, RecursionError) as exc:
         fs.die("cannot read the weight table: %s" % exc)
     if args.mirror:
-        own = os.path.join(root, ".ai", "policies", "weight.json")
-        if path != own:
-            fs.die("%s has no .ai/policies/weight.json: the mirror is written beside the project's own table"
+        policies = os.path.join(root, ".ai", "policies")
+        if not os.path.isdir(policies):
+            fs.die("%s has no .ai/policies/: the mirror is written beside the project's own table"
                 % root)
-        target = os.path.join(os.path.dirname(own), "weight.md")
+        target = os.path.join(policies, "weight.md")
         tmp = "%s.%d.tmp" % (target, os.getpid())
         try:
             with open(tmp, "w", encoding="utf-8") as fh:
-                fh.write(weight.mirror(own))
+                fh.write(weight.mirror(policy))
             os.replace(tmp, target)
         except OSError as exc:
             with contextlib.suppress(OSError):
@@ -70,9 +70,9 @@ def cmd_weight(args, root, rt=rr_runtime.Runtime()):
     except ValueError as exc:
         fs.die(str(exc))
     except (TypeError, AttributeError) as exc:     # a table whose values have the wrong shape
-        fs.die("%s is malformed: %s" % (path, exc))
+        fs.die("%s is malformed: %s" % (path[-1] if os.path.isfile(path[-1]) else path[0], exc))
     if args.json:
-        out = dict(result.as_dict(), policy=path)
+        out = dict(result.as_dict(), policy=path[0])
         if result.documents_only is not None:
             out["documents_only"] = result.documents_only
         print(json.dumps(out, indent=2, ensure_ascii=False))

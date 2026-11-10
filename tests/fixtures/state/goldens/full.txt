@@ -70,7 +70,7 @@ review: passed (1 of 2) · tier STRONG
 gate: requested G1, waiting for the human
 findings: 0 recorded in task.md
 questions: 1 pending — G1
-schema: project 0 · plugin 11 — behind: run /rr-setup --update
+schema: project 0 · plugin 12 — behind: run /rr-setup --update
 last event: <TS> handoff_written close
 --- stderr
 
@@ -157,7 +157,7 @@ exit 0
 --- stdout
 root: <ROOT>
 task: none — no task in flight
-schema: project 0 · plugin 11 — behind: run /rr-setup --update
+schema: project 0 · plugin 12 — behind: run /rr-setup --update
 --- stderr
 
 $ state.py --root <ROOT> start --goal 'drop the table' --workflow feature --files src/widget.py --tests tests/test_widget.py --declare behaviour=0:synthetic --declare domain=0:synthetic --declare novelty=0:synthetic --mode full_irreversible --by test

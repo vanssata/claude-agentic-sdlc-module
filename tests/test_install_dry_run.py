@@ -168,7 +168,7 @@ class InstallDryRun(ScratchCase):  # pylint: disable=too-many-public-methods  # 
             subs = {"$target": target}
             _rc, out = self.dry("--target", target, "--plan", "max", "--codex-plan", "plus",
                                HOME=self.path("h-" + target), CODEX_DIR=self.path("none-x"))
-            n = len([ln for ln in out.split("\n") if ln == "   shared:  riskrails/ai (31 files), riskrails/ai-path"])
+            n = len([ln for ln in out.split("\n") if ln == "   shared:  riskrails/ai (25 files), riskrails/ai-path"])
             self.ok("$target: the would-install list names the shared tree once", n == 1, "shared line count %d\n%s" % (n, out), subs)
             skills = "\n".join(re.findall(r"^   skills:  (.*)$", out, re.M))
             missing = [s for s in "rr-setup rr-spec rr-plan rr-build rr-review rr-ship rr-status".split()
@@ -176,8 +176,9 @@ class InstallDryRun(ScratchCase):  # pylint: disable=too-many-public-methods  # 
             self.ok("$target: the would-install list names the seven rr- skills and no bare status",
                     not missing and not re.search(r"(^|,)status(,|$)", skills, re.M),
                     "missing:%s - %s" % (missing, skills), subs)
-            self.ok("$target: the dry run names the retire of skills/status",
-                    has_line(out, r"^   retire:  skills/status \(now skills/rr-status\)"), out, subs)
+            self.ok("$target: the dry run names the retire of the five skills (R20)",
+                    has_line(out, r"^   retire:  skills/\{status,ai-status,sdlc-intent,sdlc-plan,sdlc-spec\}, into backups/<date>/ if present$"),
+                    out, subs)
             span = "\n".join(sed_range(out, r"^== (CLAUDE|AGENTS)\.md managed block:", r"^== profile\.json"))
             self.ok("$target: the shared line is outside the block/routing span", not has_line(span, r"^   shared:"), span, subs)
             self.ok("$target: routing.md renders the shared-files line", "riskrails/ai-path <path>" in span, span, subs)
@@ -285,12 +286,16 @@ class InstallDryRun(ScratchCase):  # pylint: disable=too-many-public-methods  # 
         write(claude_json, '{"oauthAccount":{"organizationType":"claude_max","organizationRateLimitTier":"default_claude_max_5x"}}')
         _rc, out = self.dry(HOME=home)
         self.ok("default_claude_max_5x stays max", "plan=max (Max" in out, out)
-        # An install from before 3.4b recorded its plan under claude-agentic/ (R35).
         prev = self.path("prev")
-        write(os.path.join(prev, "claude-agentic", "profile.json"), '{"plan":"max20"}')
+        write(os.path.join(prev, "riskrails", "profile.json"), '{"plan":"max20"}')
         write(claude_json, "{}")
         _rc, out = self.dry(HOME=home, CLAUDE_DIR=prev)
         self.ok("an undetectable account falls back to the plan the last install recorded", "plan=max20" in out, out)
+        # The pre-3.4b claude-agentic/ profile is no longer read (R21 C).
+        old = self.path("prev-old")
+        write(os.path.join(old, "claude-agentic", "profile.json"), '{"plan":"max20"}')
+        _rc, out = self.dry(HOME=home, CLAUDE_DIR=old)
+        self.ok("a plan recorded under claude-agentic/ is not read", "plan=max20" not in out, out)
 
     # == R16/R18: every installed agent's model and effort, per plan
     def test_08_agent_model_and_effort_per_plan(self):
@@ -400,17 +405,15 @@ class InstallDryRun(ScratchCase):  # pylint: disable=too-many-public-methods  # 
         for f in ["agents/ai-discovery.md", "agents/ai-reviewer.md", "agents/architect.md", "agents/Explore.md",
                   "agents/log-reader.md", "hooks/lib/ai-hook-common.sh",
                   "hooks/cap-large-read.py", "hooks/project-scaffold.sh", "hooks/ai-git-guard.json",
-                  "skills/ai-init/SKILL.md", "skills/ai-init/scaffold-ai.sh", "skills/ai-task/state.py",
+                  "skills/rr-setup/SKILL.md", "skills/ai-init/scaffold-ai.sh", "skills/ai-task/state.py",
                   "skills/ai-task/rr_state/__init__.py", "skills/ai-task/rr_state/cli.py",
-                  "skills/ai-audit/SKILL.md", "skills/ai-status/SKILL.md", "skills/project-init/SKILL.md",
+                  "skills/ai-audit/templates/play-scoring-rubric.md",
                   "skills/rr-status/SKILL.md", "skills/rr-status/status.py",
-                  "skills/sdlc-intent/SKILL.md", "skills/sdlc-spec/SKILL.md", "skills/sdlc-plan/SKILL.md",
                   "skills/ai-init/templates/.ai/AGENTS.md", "skills/project-init/templates/intent.md",
-                  "skills/project-update/SKILL.md", "skills/project-update/update.py", "skills/project-update/history/index.json",
-                  "skills/project-update/migrations/__init__.py", "skills/project-update/migrations/0001_schema_version.py",
-                  "skills/usage-report/SKILL.md", "skills/usage-report/usage-report.py",
+                  "skills/project-update/update.py", "skills/project-update/history/index.json",
+                  "skills/usage-report/usage-report.py",
                   "hooks/context-guard.py", "riskrails/routing.md", "riskrails/ai-path",
-                  "riskrails/ai/policies/git.md", "riskrails/ai/workflows/feature.md",
+                  "riskrails/ai/policies/git.md",
                   "skills/project-update/render_instructions.py",
                   "hooks/ai-guard.py", "hooks/guard/__init__.py", "hooks/guard/common.py", "hooks/guard/ere.py",
                   "hooks/guard/git.py", "hooks/guard/paths.py", "hooks/guard/scope.py"]:
@@ -437,6 +440,11 @@ class InstallDryRun(ScratchCase):  # pylint: disable=too-many-public-methods  # 
                 "rr-status/status.py should be executable")
         self.ok("skills/status is not installed (redesign 2.3)", not os.path.exists(os.path.join(d, "skills", "status")),
                 "skills/status installed")
+        gone = [f for f in ("skills/ai-status", "skills/sdlc-intent", "skills/sdlc-plan", "skills/sdlc-spec",
+                            "skills/ai-task/SKILL.md", "skills/project-update/SKILL.md", "skills/ai-init/SKILL.md",
+                            "skills/project-init/SKILL.md", "skills/usage-report/SKILL.md", "skills/ai-audit/SKILL.md")
+                if os.path.exists(os.path.join(d, f))]
+        self.ok("the alias skills (R19) are not installed", not gone, "installed: %s" % gone)
         for f in ("hooks/fable-gate.py", "hooks/codex-model-gate.py"):
             self.ok("$f is not installed (redesign 1.3)", not os.path.exists(os.path.join(d, f)), f + " installed", {"$f": f})
         self.ok("ai-path is executable", is_x(os.path.join(d, "riskrails", "ai-path")), "ai-path should be executable")
@@ -657,11 +665,19 @@ class InstallDryRun(ScratchCase):  # pylint: disable=too-many-public-methods  # 
         write(os.path.join(d, "hooks", "fable-gate.py"), "#!/usr/bin/env python3\n")
         write(os.path.join(d, "bin", "claude-1m.bak"), "old\n")
         write(os.path.join(d, "skills", "status", "SKILL.md"), "---\nname: status\n---\nold\n")
+        for alias in ("ai-status", "sdlc-intent", "sdlc-plan", "sdlc-spec"):
+            write(os.path.join(d, "skills", alias, "SKILL.md"), "---\nname: %s\n---\nold\n" % alias)
         _rc, out = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d)
         bk = os.path.join(d, "backups", day)
         self.ok("an installed skills/status is retired into backups/<date>/skills/",
                 not os.path.exists(os.path.join(d, "skills", "status")) and os.path.isfile(os.path.join(bk, "skills", "status", "SKILL.md"))
                 and ("retired: skills/status -> backups/%s/skills/status" % day) in out, "skills/status not retired\n" + out)
+        for alias in ("ai-status", "sdlc-intent", "sdlc-plan", "sdlc-spec"):
+            self.ok("an installed skills/$a is retired into backups/<date>/skills/",
+                    not os.path.exists(os.path.join(d, "skills", alias))
+                    and os.path.isfile(os.path.join(bk, "skills", alias, "SKILL.md"))
+                    and ("retired: skills/%s -> backups/%s/skills/%s" % (alias, day, alias)) in out,
+                    "skills/%s not retired\n%s" % (alias, out), {"$a": alias})
         self.ok("bin/claude-1m.bak is swept too",
                 not os.path.exists(os.path.join(d, "bin", "claude-1m.bak")) and os.path.isfile(os.path.join(bk, "bin", "claude-1m.bak")),
                 "bin/*.bak not swept\n" + out)
@@ -743,54 +759,19 @@ class InstallDryRun(ScratchCase):  # pylint: disable=too-many-public-methods  # 
         self.ok("unrelated settings keys are preserved", "Bash(ls:*)" in (jv(st, "permissions", "allow") or []),
                 "unrelated settings were lost")
 
-    # == migration off the predecessor plugin's block
-    def test_19_migration_off_the_predecessor_block(self):
+    # == the predecessor plugin's block is no longer migrated: it stays, and the install says so
+    def test_19_predecessor_block_is_left_and_warned(self):
         d3 = self.path("claude3")
         write(os.path.join(d3, "CLAUDE.md"),
               "<!-- claude-routing:start -->\nrouting rules\n<!-- claude-routing:end -->\n\n# My own notes\n")
         _rc, out = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d3)
         text = rd(os.path.join(d3, "CLAUDE.md"))
-        self.ok("the migration is reported", "migrated the claude-routing block" in out, "migration should be reported\n" + out)
-        self.ok("exactly one managed block remains", len([ln for ln in text.split("\n") if "riskrails:start" in ln]) == 1, "expected one block")
-        self.ok("the claude-routing block is migrated away", "claude-routing:start" not in text,
-                "the predecessor block should have been migrated away")
-        self.ok("its superseded content is removed", "routing rules" not in text, "the old block's content should be gone")
-        self.ok("the user's own content is kept", "# My own notes" in text, "user content must survive migration")
-
-    # == R35: an install home from before 3.4b moves to riskrails/, the old path a symlink
-    def test_20_r35_old_install_home_moves(self):
-        d4 = self.path("claude4")
-        os.makedirs(os.path.join(d4, "claude-agentic", "ai"), exist_ok=True)
-        write(os.path.join(d4, "claude-agentic", "profile.json"), '{"plan":"max"}')
-        write(os.path.join(d4, "claude-agentic", "notes.txt"), "mine\n")
-        write(os.path.join(d4, "CLAUDE.md"),
-              "<!-- claude-agentic:start -->\nold block\n<!-- claude-agentic:end -->\n\n# My own notes\n")
-        _rc, out = run("--plan", "max", "--fable", "yes", "--dry-run", CLAUDE_DIR=d4)
-        self.ok("the dry run names the move", has_line(out, r"^   home:    claude-agentic/ -> riskrails/"), "dry run should name the move\n" + out)
-        old = os.path.join(d4, "claude-agentic")
-        self.ok("and moves nothing", os.path.isdir(old) and not os.path.islink(old), "dry run moved the home")
-        _rc, out = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d4)
-        self.ok("the old home is a relative symlink to riskrails",
-                os.path.islink(old) and os.readlink(old) == "riskrails", "old home is not a symlink\n" + out)
-        self.ok("what the old home held moved with it",
-                line_eq(rd(os.path.join(d4, "riskrails", "notes.txt")), "mine"), "old home content lost")
-        self.ok("the old path still reaches routing.md", os.path.isfile(os.path.join(old, "routing.md")), "old path broken")
-        text = rd(os.path.join(d4, "CLAUDE.md"))
-        self.ok("the legacy global block is renamed, not doubled",
-                len([ln for ln in text.split("\n") if "riskrails:start" in ln]) == 1 and "claude-agentic:start" not in text,
-                "global block markers\n" + text)
-        self.ok("the user's own text stays", "# My own notes" in text, "user text lost")
-        _rc, out = run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d4)
-        self.ok("a reinstall leaves the symlink alone", not has_line(out, r"^(moved:|linked:)"), "a reinstall moved again\n" + out)
-        d5 = self.path("claude5")
-        os.makedirs(os.path.join(d5, "claude-agentic"), exist_ok=True)
-        os.makedirs(os.path.join(d5, "riskrails"), exist_ok=True)
-        write(os.path.join(d5, "claude-agentic", "notes.txt"), "stale\n")
-        run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d5)
-        kept = os.path.join(d5, "backups", datetime.date.today().isoformat(), "claude-agentic", "notes.txt")
-        self.ok("an old home beside a new one is retired into backups/, then linked",
-                os.path.islink(os.path.join(d5, "claude-agentic")) and os.path.exists(kept) and line_eq(rd(kept), "stale"),
-                "old home beside new one")
+        self.ok("no migration is reported", "migrated" not in out, "nothing is migrated any more\n" + out)
+        self.ok("exactly one managed block is added", len([ln for ln in text.split("\n") if "riskrails:start" in ln]) == 1, "expected one block")
+        self.ok("the predecessor block is left untouched", "claude-routing:start" in text and "routing rules" in text,
+                "the predecessor block is the user's to remove")
+        self.ok("the install warns about it", "still has routing rules outside the managed block" in out, "the warning is missing\n" + out)
+        self.ok("the user's own content is kept", "# My own notes" in text, "user content must survive")
 
     def test_21_npx_surface(self):
         """R16: the flags npx adds, and install.sh reduced to the npx line."""

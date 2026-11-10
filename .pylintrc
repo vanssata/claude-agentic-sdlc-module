@@ -26,7 +26,7 @@ disable=
     too-few-public-methods,
     use-dict-literal,
     # runtime-gate.py is a standalone hook for two runtimes and must run as a single
-    # file; fable-gate.py and codex-model-gate.py are shims that exec it.
+    # file.
     duplicate-code,
 
 [REFACTORING]

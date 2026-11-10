@@ -56,7 +56,7 @@ class TestCodexAgentRender(unittest.TestCase):
         self.home = self.path("home")
         os.makedirs(self.home)
         self.env = {k: v for k, v in os.environ.items() if k not in ("CODEX_HOME", "CODEX_DIR", "CLAUDE_DIR",
-                                                                     "CLAUDE_CONFIG_DIR", "CLAUDE_AGENTIC_SHARED")
+                                                                     "CLAUDE_CONFIG_DIR", "RISKRAILS_SHARED")
                     and not k.startswith("RISKRAILS_")}
         self.env["HOME"] = self.home
         self.out = self.path("agents")

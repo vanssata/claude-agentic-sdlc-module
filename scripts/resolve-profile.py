@@ -40,7 +40,6 @@ import os
 import sys
 
 KEY = "riskrails"
-OLD_KEY = "claude_agentic"  # R35: a profile written before 3.4b, read for one version
 
 
 def deep_merge(base, over):
@@ -66,8 +65,6 @@ def load(src, name, seen=()):
         raise ValueError("inheritance cycle: " + " -> ".join(seen + (stem,)))
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
-    if KEY not in data and OLD_KEY in data:
-        data[KEY] = data.pop(OLD_KEY)
     parent = (data.get(KEY) or {}).get("inherits")
     if not parent:
         return data

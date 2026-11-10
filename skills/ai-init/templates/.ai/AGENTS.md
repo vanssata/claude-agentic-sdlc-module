@@ -31,8 +31,8 @@ Everything else loads on demand; nothing here is worth reading twice.
 ## Shared files
 
 This `.ai/` holds `project/`, `rules/`, `state/`, `reports/`, `VERSION` and, in
-`policies/`, `weight.json`, `weight.md`, `path-guard.json`, `testing.md`,
-`coding.md`, `safety.md` and `security.md`. Every other path below ships with the
+`policies/`, `weight.project.json`, `weight.md`, `path-guard.json`,
+`testing.md`, `verification.md`, `coding.md`, `safety.md` and `security.md`. Every other path below ships with the
 plugin at `<home>/riskrails/ai/<path>`; `<home>` is `~/.claude`, or
 `$CODEX_HOME` (default `~/.codex`). A file at the same path here overrides it and
 stops receiving its changes; `<home>/riskrails/ai-path <path>` prints the
@@ -45,10 +45,10 @@ copy that applies.
 | anything, first | `policies/safety.md` |
 | which command when, the three modes | `using-riskrails.md` |
 | starting or resuming a task | `state.py handoff --print`, then `/rr-build` (no task: `/rr-plan`) |
-| the weight, the mode, who reviews, what a human approves | `policies/weight.json` (`policies/weight.md` mirrors it) |
+| the weight, the mode, who reviews, what a human approves | `policies/weight.md`; the project's own: `policies/weight.project.json` |
 | choosing an agent or a tier | `policies/model-routing.md` |
 | writing code under `<dir>/` | `policies/coding.md`; `rules/<slug>.md` for that directory |
-| tests | `policies/testing.md` — Verification: the three commands, run by `state.py verify` |
+| tests | `policies/testing.md`; `policies/verification.md` (the commands) |
 | finishing a step, verifying, recording a review, closing | `state.py step-done`, `verify`, `review`, `close` — the measurements are deterministic and the refusals name the way out |
 | schema, data, migrations | `policies/database.md`, `policies/production.md` |
 | auth, secrets, personal data, payments | `policies/security.md` |
@@ -58,10 +58,10 @@ copy that applies.
 | an artefact | `templates/<artefact>.md` → `reports/<task-id>/` |
 | understanding the system | `project/overview.md`, then `project/*.md` |
 | principles, intent, spec, plan, decisions | `docs/sdlc/constitution.md`, `docs/sdlc/` |
-| the project is behind the plugin | `/project-update` (`VERSION` is this tree's schema) |
+| the project is behind the plugin | `/rr-setup --update` (`VERSION` is this tree's schema) |
 
 ## Keeping this directory true
 
 `project/` describes the system as it was last surveyed. When you discover that it
 is wrong, fix it in the same task — a knowledge base nobody trusts is worse than
-none. Re-run `/ai-init` after a large change to refresh it.
+none. Re-run `/rr-setup` after a large change to refresh it.

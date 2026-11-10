@@ -27,8 +27,9 @@ import sys
 NAME = "scaffold-ai"
 # The directory the shell script ran from: templates and the runtime it was installed for.
 HERE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ai-init"))
+SHIPPED_WEIGHT = ".ai/policies/weight.json"
 RUNTIMES = ("claude", "codex", "gemini", "junie")
-BLOCK = re.compile(rb"<!-- (riskrails|claude-agentic|[Cc]odex-agentic):start -->")
+BLOCK = re.compile(rb"<!-- riskrails:start -->")
 
 
 class Exit(Exception):
@@ -212,15 +213,14 @@ def main(argv):
         root = stdin_cwd()
     root = logical_cd(root or logical_pwd())
     project = os.fsencode("/" if root == "/" else os.path.basename(root))
-    tpl = env("RISKRAILS_TEMPLATES") or env("CLAUDE_AGENTIC_TEMPLATES") or os.path.join(HERE, "templates")
+    tpl = env("RISKRAILS_TEMPLATES") or os.path.join(HERE, "templates")
     if not os.path.isdir(os.path.join(tpl, ".ai")):
         raise Exit(1, "%s: templates not found at %s (run riskrails/install.sh)" % (NAME, tpl))
     on = runtimes(runtime, root)
     created = []
 
     # A project that already has .ai/ carries a schema version this scaffold must not
-    # invent: writing .ai/VERSION here would tell /project-update that every migration
-    # has already run. Only a fresh tree starts at the shipped schema.
+    # invent: only a fresh tree starts at the shipped schema.
     had_ai = os.path.isdir(os.path.join(root, ".ai"))
 
     # Copy the .ai/ tree, file by file, skipping anything that already exists.
@@ -230,6 +230,8 @@ def main(argv):
         rel = ".ai/" + os.path.relpath(src, top)
         dst = os.path.join(root, rel)
         if os.path.exists(dst) or (rel == ".ai/VERSION" and had_ai):
+            continue
+        if rel == SHIPPED_WEIGHT:   # A2: the plugin's table is read from the plugin, never copied
             continue
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         # cp: the source's permission bits, less the umask.
@@ -253,9 +255,7 @@ def main(argv):
         created.append(".gitignore (appended)")
 
     # The instruction file: create a minimal one if absent, then append the managed
-    # block once. An existing file is never replaced — only appended to. A legacy
-    # Codex-agentic pair is the block under its old name: nothing is appended beside
-    # it; /project-update renames it.
+    # block once. An existing file is never replaced — only appended to.
     def instruction_file(name, minimal, block):
         md = os.path.join(root, name)
         os.makedirs(os.path.dirname(md), exist_ok=True)

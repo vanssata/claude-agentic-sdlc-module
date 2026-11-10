@@ -157,8 +157,7 @@ def dialog_policy(root):
 def dialog_tool_verified(runtime):
     """profile.json dialog.tool read from <home>/riskrails/profile.json only, as the
     hooks' dialog_tool() does: an installer from 7b on writes dialog.tool, always
-    there, so the pre-3.4b claude-agentic/ fallback of read_profile() is not
-    consulted. A missing, unreadable, malformed, too deeply nested or non-object
+    there. A missing, unreadable, malformed, too deeply nested or non-object
     file is no tool."""
     try:
         with open(os.path.join(rr_runtime.runtime_home(runtime), "riskrails", "profile.json"), encoding="utf-8") as fh:
@@ -171,8 +170,7 @@ def dialog_tool_verified(runtime):
 def dialog_on(root, runtime="unknown"):
     """The effective switch, state.py's copy of the hooks' switch_state() (7d1):
     the project says on, nobody declared the run unattended, the runtime's dialog
-    tool is the one the installer verified (read from riskrails/profile.json
-    only, never the old claude-agentic/ file), and the session has an id to bind
+    tool is the one the installer verified (read from riskrails/profile.json), and the session has an id to bind
     a pick to. The hooks also compare the payload's session id with the
     environment's, which this copy never sees: a differing payload id is "closed"
     there while this returns a dict, and the hook refuses the call, so the dict is

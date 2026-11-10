@@ -3,7 +3,7 @@ exit 0
 --- stdout
 usage: state.py [-h] [--root ROOT] [--runtime {claude,codex}] {step-done,ask,answer,questions,handoff,profile,weight,event,approve,reject,close,start,steps,batch,verify,review,status,decision,consent,recall,memory} ...
 
-Task state for /ai-task — the small, machine-readable record of one task.
+Task state for /rr-build — the small, machine-readable record of one task.
 
 positional arguments:
   {step-done,ask,answer,questions,handoff,profile,weight,event,approve,reject,close,start,steps,batch,verify,review,status,decision,consent,recall,memory}

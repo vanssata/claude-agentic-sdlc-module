@@ -3,7 +3,7 @@ MultiEdit, NotebookEdit and Codex's apply_patch.
 
 During the implementation stage the approved plan names the files a step may
 touch; an edit outside them is refused with SCOPE_CHANGE_REQUIRED. Inert unless
-.ai/state/state.json (or, for one version, the legacy current.json) exists and
+.ai/state/state.json exists and
 its stage is "implementation".
 
 Bash semantics kept: a plan glob is matched as `[[ $rel == $pattern ]]` — "*"
@@ -334,8 +334,6 @@ def check(ctx):
     if root is None:
         return
     state = root + "/.ai/state/state.json"
-    if not is_file(state):
-        state = root + "/.ai/state/current.json"
     if not is_file(state):
         return
     step_id, task_id, allowed, forbidden, reason = read_state(state)

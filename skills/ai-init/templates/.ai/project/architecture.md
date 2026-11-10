@@ -1,6 +1,6 @@
 # Architecture
 
-<!-- Filled by /ai-init. Describe what the code does, not what the framework's
+<!-- Filled by /rr-setup. Describe what the code does, not what the framework's
      documentation says it should do. -->
 
 ## Style

@@ -154,11 +154,10 @@ def schema_line(root):
         project = "0"
     here = os.path.dirname(os.path.dirname(fs.ENTRY))
     try:
-        names = os.listdir(os.path.join(here, "project-update", "migrations"))
+        with open(os.path.join(here, "ai-init", "templates", ".ai", "VERSION"), encoding="utf-8") as fh:
+            plugin = fh.read().strip() or "?"
     except OSError:
-        names = []
-    numbers = [int(n[:4]) for n in names if re.match(r"\d{4}_", n)]
-    plugin = str(max(numbers)) if numbers else "?"
+        plugin = "?"
     behind = project.isdigit() and plugin.isdigit() and int(project) < int(plugin)
     return "schema: project %s · plugin %s%s" % (project, plugin, " — behind: run /rr-setup --update" if behind else "")
 

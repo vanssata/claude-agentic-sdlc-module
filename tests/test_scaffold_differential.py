@@ -32,7 +32,12 @@ REPO = os.path.dirname(TESTS)
 FROZEN = os.path.join(TESTS, "fixtures", "scaffold-port")
 AI_TPL = os.path.join(REPO, "skills", "ai-init", "templates")
 PROJECT_TPL = os.path.join(REPO, "skills", "project-init", "templates")
-ENV_KEYS = ("AI_RUNTIMES", "AI_PROJECT_TEMPLATES", "CLAUDE_ROUTING_TEMPLATES", "CLAUDE_AGENTIC_TEMPLATES")
+ENV_KEYS = ("AI_RUNTIMES", "AI_PROJECT_TEMPLATES", "CLAUDE_ROUTING_TEMPLATES", "RISKRAILS_TEMPLATES",
+            "CLAUDE_AGENTIC_TEMPLATES")
+# The frozen shell still reads the old env name; the port reads RISKRAILS_TEMPLATES only (R23).
+FROZEN_ENV = {"RISKRAILS_TEMPLATES": "CLAUDE_AGENTIC_TEMPLATES"}
+# What the port deliberately no longer does (A2, R21): copy the shipped weight table into a project.
+NOT_SCAFFOLDED = ".ai/policies/weight.json"
 
 # The scripts, as installed: (path in the plugin tree, frozen source, live sources).
 SCRIPTS = {
@@ -128,13 +133,6 @@ def chain(*fns):
     return go
 
 
-def legacy_agents(name):
-    with open(os.path.join(AI_TPL, "AGENTS.block.md"), "rb") as fh:
-        block = fh.read()
-    block = re.sub(rb"claude-agentic:(start|end)", name.encode() + rb":\1", block)
-    return write("AGENTS.md", b"# mine\n\nkeep this.\n\n" + block)
-
-
 R = "<ROOT>"   # replaced by the project dir in args, stdin and env values
 LINK = "link"
 # Cases run again under C.UTF-8 and en_US.UTF-8: those that list many created files or carry UTF-8.
@@ -204,8 +202,6 @@ def cases():
           setup=lambda root: os.symlink(os.path.basename(root), os.path.join(os.path.dirname(root), LINK)))
         c("a project name with sed metacharacters", twice([R, "--runtime", "both"]), name="a&b\\c|d")
         c("a project name with spaces and UTF-8", twice([R, "--runtime", "gemini,junie"]), name="мой проект")
-        for loc in ("Codex-agentic", "codex-agentic", "claude-agentic"):
-            c("a %s block in AGENTS.md" % loc, twice([R, "--runtime", "codex"]), setup=legacy_agents(loc))
     out.append(Case("project: templates not found", "project", [([R], b"", {"AI_PROJECT_TEMPLATES": "/nope"}, False)]))
     out.append(Case("project: CLAUDE_ROUTING_TEMPLATES not found", "project",
                     [([R], b"", {"CLAUDE_ROUTING_TEMPLATES": "/nope"}, False)]))
@@ -213,7 +209,7 @@ def cases():
                     [([R], b"", {"AI_PROJECT_TEMPLATES": "/nope", "CLAUDE_ROUTING_TEMPLATES": PROJECT_TPL}, False),
                      ([R], b"", {"AI_PROJECT_TEMPLATES": PROJECT_TPL, "CLAUDE_ROUTING_TEMPLATES": "/nope"}, False)]))
     # The snippet is read only to append it: a scaffolded .gitignore needs none.
-    no_snippet = {"AI_PROJECT_TEMPLATES": R + "/../tpl", "CLAUDE_AGENTIC_TEMPLATES": R + "/../tpl"}
+    no_snippet = {"AI_PROJECT_TEMPLATES": R + "/../tpl", "RISKRAILS_TEMPLATES": R + "/../tpl"}
     for script, tpl, marker in (("project", PROJECT_TPL, b".claude/settings.local.json\n"),
                                 ("ai", AI_TPL, b".ai/state/*.json\n")):
         def strip_snippet(root, tpl=tpl, marker=marker):
@@ -223,7 +219,7 @@ def cases():
             write(".gitignore", marker)(root)
         out.append(Case("%s: templates without gitignore.snippet, .gitignore scaffolded" % script, script,
                         [([R], b"", no_snippet, False)] * 2, setup=strip_snippet))
-    out.append(Case("ai: templates not found", "ai", [([R], b"", {"CLAUDE_AGENTIC_TEMPLATES": "/nope"}, False)]))
+    out.append(Case("ai: templates not found", "ai", [([R], b"", {"RISKRAILS_TEMPLATES": "/nope"}, False)]))
     return out
 
 
@@ -236,7 +232,7 @@ def exec_templates(base):
     for p in (os.path.join(proj, "sdlc-README.md"), os.path.join(proj, "CLAUDE.md"),
               os.path.join(ai, ".ai", "AGENTS.md"), os.path.join(ai, "CLAUDE.minimal.md")):
         os.chmod(p, 0o755)
-    return {"AI_PROJECT_TEMPLATES": proj, "CLAUDE_AGENTIC_TEMPLATES": ai}
+    return {"AI_PROJECT_TEMPLATES": proj, "RISKRAILS_TEMPLATES": ai}
 
 
 class ScaffoldDifferentialTest(unittest.TestCase):
@@ -254,10 +250,16 @@ class ScaffoldDifferentialTest(unittest.TestCase):
             e = {k: v for k, v in os.environ.items() if k not in ENV_KEYS}
             e.update(extra_env)
             for k, v in env.items():
+                if variant == "shell":
+                    k = FROZEN_ENV.get(k, k)
                 if v is None:
                     e.pop(k, None)
                 else:
                     e[k] = v.replace(R, root)
+            if variant == "shell":
+                for new, old in FROZEN_ENV.items():
+                    if new in extra_env:
+                        e[old] = e.pop(new)
             e["LC_ALL"] = loc
             cwd = os.path.join(parent, LINK) if in_parent == LINK else parent if in_parent else root
             e["PWD"] = cwd
@@ -272,7 +274,11 @@ class ScaffoldDifferentialTest(unittest.TestCase):
             err = subst(p.stderr).replace(b"cd [-L|[-P [-e]] [-@]] [dir]", b"cd [-L|[-P [-e]]] [-@] [dir]")
             if case.loose:
                 err = BASH_PREFIX.sub(b"", err)
-            records.append((p.returncode, subst(p.stdout), err, snapshot(parent)))
+            out, tree = subst(p.stdout), snapshot(parent)
+            if variant == "shell":
+                out = b"".join(ln for ln in out.splitlines(True) if ln.strip() != NOT_SCAFFOLDED.encode())
+                tree = [t for t in tree if not (t[0].endswith("/" + NOT_SCAFFOLDED) and t[0].split("/")[0] != "tpl")]
+            records.append((p.returncode, out, err, tree))
         return records
 
     def records(self, case, loc, exec_tpl=False):

@@ -129,7 +129,7 @@ Two statements, both true, for different purposes:
    scores behaviour 2, and lands in full by its weight, not by a label.
 2. **The compat `tier_set` label is cost-equivalent**, for report continuity
    only: light → T2, guarded → T4, full → T5, full_irreversible → T6. It is
-   journaled for one version beside the mode, so token reports across the
+   journaled for a release beside the mode, so token reports across the
    change still compare. It never decides a gate.
 
 ## Batch — one task for a whole plan (sdlc-lite)

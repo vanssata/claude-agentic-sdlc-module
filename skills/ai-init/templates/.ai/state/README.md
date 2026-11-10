@@ -45,7 +45,7 @@ defaults.
 
 | File | Written by | Committed |
 |---|---|---|
-| `state.json` (legacy `current.json`, still read) | `state.py`, and `update.py` during a migration | no |
+| `state.json` | `state.py` | no |
 | `session.json` | `context-guard.py`, on SessionStart and each prompt | no |
 | `handoff.md` | `state.py handoff` — never a model | no |
 | `../reports/<task-id>/task.md` §Questions | `state.py ask/answer/questions` | yes |

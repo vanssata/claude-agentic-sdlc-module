@@ -119,6 +119,23 @@ class TestStatusRoot(unittest.TestCase):
                          "root, no task in flight and schema: three lines")
 
 
+class TestSchemaLine(unittest.TestCase):
+    """R25: the plugin's schema is the .ai/VERSION template it ships, not a count of migrations."""
+
+    def test_plugin_number_is_the_templates_version(self):
+        with open(os.path.join(PLUGIN, "skills", "ai-init", "templates", ".ai", "VERSION"), encoding="utf-8") as fh:
+            shipped = fh.read().strip()
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, ".ai"))
+            for project, behind in (("3", True), (shipped, False)):
+                with open(os.path.join(tmp, ".ai", "VERSION"), "w", encoding="utf-8") as fh:
+                    fh.write(project + "\n")
+                _, out = status("--root", tmp)
+                self.assertIn("schema: project %s · plugin %s" % (project, shipped), out)
+                self.assertEqual("behind: run /rr-setup --update" in out, behind, out)
+        self.assertFalse(os.path.exists(os.path.join(PLUGIN, "skills", "project-update", "migrations")))
+
+
 class TestPopulatedTask(unittest.TestCase):
     """A populated task stays within twenty lines."""
 
@@ -229,25 +246,15 @@ class TestFallbackReadsSchema7Counters(unittest.TestCase):
 
 
 class TestAlias(unittest.TestCase):
-    """ai-status is an alias."""
-
-    def setUp(self):
-        with open(ALIAS, encoding="utf-8") as fh:
-            self.text = fh.read()
+    """The ai-status alias is gone (R19); rr-status stands alone."""
 
     @staticmethod
     def description(text):
         m = re.search(r"(?m)^description: (.*)$", text)
         return m.group(1) if m else ""
 
-    def test_the_alias_is_short(self):
-        self.assertLessEqual(self.text.count("\n"), 12, "ai-status/SKILL.md is at most 12 lines")
-        self.assertLessEqual(len(self.description(self.text).encode()), 80, "its description is at most 80 bytes")
-
-    def test_its_first_body_line(self):
-        body = self.text.split("\n---\n", 1)[1] if self.text.startswith("---\n") else ""
-        first = next((line for line in body.split("\n") if line.strip()), "")
-        self.assertEqual(first, "deprecated → /rr-status", "its first body line is 'deprecated → /rr-status'")
+    def test_the_alias_is_gone(self):
+        self.assertFalse(os.path.exists(os.path.dirname(ALIAS)), "skills/ai-status is deleted")
 
     def test_rr_status_description(self):
         with open(os.path.join(PLUGIN, "skills", "rr-status", "SKILL.md"), encoding="utf-8") as fh:

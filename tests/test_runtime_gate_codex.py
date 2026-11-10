@@ -5,8 +5,7 @@ expert model cannot serve the account — and must NOT fall back because an agen
 gave a poor answer. Both halves are tested here; the second one is the reason
 the gate matches explicit capacity signals instead of the word "error".
 The gate runs from a copy under a .codex/hooks/ directory, which is how
-detect_runtime() knows it is the Codex gate; the legacy CODEX_MODEL_GATE* names
-are still honoured, so they stay in use here.
+detect_runtime() knows it is the Codex gate.
 
 The sections share one copy of the gate, one Codex home and one state file, in
 the shell suite's order: test_NN_ names keep it.
@@ -29,7 +28,7 @@ TWIN_OF = "test-runtime-gate-codex.sh"
 SRC_GATE = os.path.join(PLUGIN, "hooks", "runtime-gate.py")
 FIX = os.path.join(FIXTURES, "codex-hooks")
 GATE_VARS = re.compile(r"^(AI_RUNTIME_GATE|CLAUDE_FABLE_GATE|CODEX_MODEL_GATE)[A-Z_]*$")
-UNSET = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "CLAUDE_AGENTIC_SHARED", "CLAUDE_PROJECT_DIR",
+UNSET = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "RISKRAILS_SHARED", "CLAUDE_PROJECT_DIR",
          "CLAUDE_CODE_SUBAGENT_MODEL", "CLAUDE_CODE_SESSION_ATTENDED", "AI_UNATTENDED")
 
 
@@ -87,7 +86,7 @@ class TestRuntimeGateCodex(unittest.TestCase):  # pylint: disable=too-many-publi
         """(exit code, stdout[+stderr]) of the gate copy, with the Codex home and state pinned."""
         if not isinstance(stdin, str):
             stdin = json.dumps(stdin)
-        full = dict(self.env, CODEX_HOME=self.codex_home, CODEX_MODEL_GATE_STATE=self.state)
+        full = dict(self.env, CODEX_HOME=self.codex_home, AI_RUNTIME_GATE_STATE=self.state)
         full.update(env or {})
         proc = subprocess.run([self.gate_path, *args], input=stdin, capture_output=True, text=True, env=full,
                               check=False)
@@ -178,7 +177,7 @@ class TestRuntimeGateCodex(unittest.TestCase):  # pylint: disable=too-many-publi
                   "gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)\n"
                   "gate.mark(2000000000.9, 'test', 'test')\n"
                   "print(json.load(open(gate.STATE))['unavailable']['until'])\n")
-        env = dict(self.env, CODEX_HOME=self.codex_home, CODEX_MODEL_GATE_STATE=self.state)
+        env = dict(self.env, CODEX_HOME=self.codex_home, AI_RUNTIME_GATE_STATE=self.state)
         stored = subprocess.run([sys.executable, "-", self.gate_path], input=script, capture_output=True, text=True,
                                 env=env, check=False).stdout
         self.assertEqual(stored.rstrip("\n"), "2000000001",
@@ -209,14 +208,14 @@ class TestRuntimeGateCodex(unittest.TestCase):  # pylint: disable=too-many-publi
                         "model -> gpt-5.6-sol, reasoning_effort -> high, no model_reasoning_effort")
 
     def test_12_context_only_mode_explains_without_rewriting(self):
-        out = self.feed("30-agent-expert-launch.json", env={"CODEX_MODEL_GATE_MODE": "context"})
+        out = self.feed("30-agent-expert-launch.json", env={"AI_RUNTIME_GATE_MODE": "context"})
         self.assertIsNone(hso(out).get("updatedInput"), "context mode does not rewrite the spawn arguments")
         self.assertIn("not rerouted", hso(out).get("additionalContext") or "",
                       "context mode says the launch is not rerouted")
 
     def test_13_the_gate_can_be_turned_off_entirely(self):
-        out = self.feed("30-agent-expert-launch.json", env={"CODEX_MODEL_GATE": "off"})
-        self.assertEqual(out, "", "CODEX_MODEL_GATE=off disables the rewrite")
+        out = self.feed("30-agent-expert-launch.json", env={"AI_RUNTIME_GATE": "off"})
+        self.assertEqual(out, "", "AI_RUNTIME_GATE=off disables the rewrite")
 
     def test_14_malformed_input_fails_open(self):
         for bad in ("", "not json", "[]", '{"hook_event_name":"PreToolUse"}',
@@ -230,7 +229,7 @@ class TestRuntimeGateCodex(unittest.TestCase):  # pylint: disable=too-many-publi
 
     def test_15_an_unwritable_state_directory_does_not_break_a_spawn(self):
         rc, _ = self.gate_rc(stdin=self.fixture("30-agent-expert-launch.json"), stderr=True,
-                             env={"CODEX_MODEL_GATE_STATE": "/proc/cannot/write.json"})
+                             env={"AI_RUNTIME_GATE_STATE": "/proc/cannot/write.json"})
         self.assertEqual(rc, 0, "a state write failure still exits 0")
 
     def test_16_the_cli_reports_usage_for_an_unknown_command(self):

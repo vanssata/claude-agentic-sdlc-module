@@ -1,8 +1,0 @@
----
-description: TypeScript conventions
-globs: *.ts,*.tsx
-alwaysApply: false
----
-
-- Prefer type over interface for unions.
-- No default exports.

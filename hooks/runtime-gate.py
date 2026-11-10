@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Runtime gate: one hook for both runtimes (Claude Code and Codex). The older
-fable-gate.py and codex-model-gate.py remain only as shims that exec this file.
+"""Runtime gate: one hook for both runtimes (Claude Code and Codex).
 
 The most capable model of a plan can stop serving an account — a rate limit, a
 used-up usage limit, a model the account cannot reach — and the runtime's own
@@ -52,11 +51,10 @@ are stored in the state file; `quota --json` prints
 {runtime, weekly_pct, five_hour_pct, resets_at, seen_at, source, stale}.
 
 The runtime is the home the hook runs from (~/.codex/hooks -> Codex, anything
-else -> Claude Code); the shims name theirs. State lives in
-<home>/state/runtime-gate.json; a state file of the old gate is imported once.
+else -> Claude Code). State lives in <home>/state/runtime-gate.json.
 
-Environment, new name before the old one of that runtime before the default:
-AI_RUNTIME_GATE=off (CLAUDE_FABLE_GATE, CODEX_MODEL_GATE) disables every check;
+Environment:
+AI_RUNTIME_GATE=off disables every check;
 AI_RUNTIME_GATE_STATE, _TTL, _NOT_FOUND_TTL, _OVERLOAD_TTL, _LAUNCH_WINDOW,
 _WEEKLY_PCT, _FALLBACK, _EXPERT, _FALLBACK_EFFORT, _MODE tune it.
 """
@@ -76,12 +74,10 @@ try:
 except ImportError:                             # not POSIX: no lock, as before
     fcntl = None
 
-LEGACY = {"claude": ("fable-gate", "CLAUDE_FABLE_GATE"), "codex": ("codex-model-gate", "CODEX_MODEL_GATE")}
-
-# Set by configure(); module-level so the shims (and the old suites through
-# them) can read STATE and call mark() exactly as before.
+# Set by configure(); module-level so the suites
+# can read STATE and call mark() exactly as before.
 RUNTIME = "claude"
-HOME = STATE = LEGACY_STATE = QUOTA_STATE = ""
+HOME = STATE = QUOTA_STATE = ""
 LIMIT_TTL = NOT_FOUND_TTL = OVERLOAD_TTL = LAUNCH_WINDOW = 0
 WEEKLY_PCT = 0.0
 EXPERT = FALLBACK = FALLBACK_EFFORT = MODE = ""
@@ -91,12 +87,11 @@ TTL_BY_ERROR = {}
 
 def setting(name, default, runtime=None, fits=None):
     """AI_RUNTIME_GATE_<RUNTIME>_<name>, AI_RUNTIME_GATE_<name>, then the
-    runtime's old name, then the default. The shared name is read by both
+    default. The shared name is read by both
     runtimes, so `fits` drops a value that belongs to the other one (a Codex
     model exported for Codex must not become a Claude Agent model)."""
     runtime = runtime or RUNTIME
-    old = LEGACY[runtime][1]
-    for key in (f"AI_RUNTIME_GATE_{runtime.upper()}_{name}", f"AI_RUNTIME_GATE_{name}", f"{old}_{name}"):
+    for key in (f"AI_RUNTIME_GATE_{runtime.upper()}_{name}", f"AI_RUNTIME_GATE_{name}"):
         value = os.environ.get(key)
         if value in (None, ""):
             continue
@@ -127,9 +122,8 @@ def codex_model(value):
 
 
 def profile_file(home):
-    """<home>/riskrails/profile.json, or the pre-3.4b claude-agentic/ one (R35, one version)."""
-    path = os.path.join(home, "riskrails", "profile.json")
-    return path if os.path.exists(path) else os.path.join(home, "claude-agentic", "profile.json")
+    """<home>/riskrails/profile.json."""
+    return os.path.join(home, "riskrails", "profile.json")
 
 
 def profile_tier(home, tier, field, default):
@@ -155,7 +149,7 @@ def profile_fable(home):
 def configure(runtime):
     """Bind every setting for one runtime."""
     # pylint: disable=global-statement
-    global RUNTIME, HOME, STATE, LEGACY_STATE, QUOTA_STATE, LIMIT_TTL, NOT_FOUND_TTL, OVERLOAD_TTL
+    global RUNTIME, HOME, STATE, QUOTA_STATE, LIMIT_TTL, NOT_FOUND_TTL, OVERLOAD_TTL
     global LAUNCH_WINDOW, WEEKLY_PCT, EXPERT, FALLBACK, FALLBACK_EFFORT, MODE, TTL_BY_ERROR
     RUNTIME = runtime
     if runtime == "codex":
@@ -163,13 +157,7 @@ def configure(runtime):
     else:
         HOME = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
     STATE = setting("STATE", "") or os.path.join(HOME, "state", "runtime-gate.json")
-    # The quota ledger belongs in runtime-gate.json. A state file named by the
-    # old variable only ever held the outage record, so the ledger does not
-    # move into it: it stays at the default path beside it.
-    QUOTA_STATE = STATE if os.environ.get("AI_RUNTIME_GATE_STATE") or \
-        os.environ.get(f"AI_RUNTIME_GATE_{runtime.upper()}_STATE") or \
-        not os.environ.get(f"{LEGACY[runtime][1]}_STATE") else os.path.join(HOME, "state", "runtime-gate.json")
-    LEGACY_STATE = os.path.join(HOME, "state", LEGACY[runtime][0] + ".json")
+    QUOTA_STATE = STATE
     LIMIT_TTL = number_setting("TTL", 3600)
     NOT_FOUND_TTL = number_setting("NOT_FOUND_TTL", 21600)
     OVERLOAD_TTL = number_setting("OVERLOAD_TTL", 900)
@@ -204,30 +192,9 @@ def load(path=None):
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
     except OSError:
-        return import_legacy() if path in (None, STATE) else {}
+        return {}
     except (ValueError, RecursionError):
         return {}
-
-
-def import_legacy():
-    """First run after the rename: carry a live outage record over from the old
-    gate's own state file, once. Only for the default location — a state file
-    named through the environment is the caller's."""
-    if STATE != os.path.join(HOME, "state", "runtime-gate.json"):
-        return {}
-    try:
-        with open(LEGACY_STATE, encoding="utf-8") as fh:
-            old = json.load(fh)
-    except (OSError, ValueError, RecursionError):
-        return {}
-    data = {"imported_from": os.path.basename(LEGACY_STATE)}
-    if isinstance(old, dict) and isinstance(old.get("unavailable"), dict):
-        data["unavailable"] = old["unavailable"]
-    try:
-        save(data)
-    except OSError:
-        pass
-    return data
 
 
 def save(data, path=None):
@@ -914,8 +881,6 @@ def project_task(cwd):
     here = os.path.abspath(cwd) if isinstance(cwd, str) and cwd else None
     while here:
         path = os.path.join(here, ".ai", "state", "state.json")
-        if not os.path.isfile(path):
-            path = os.path.join(here, ".ai", "state", "current.json")  # R34: legacy name, one version
         if os.path.isfile(path):
             try:
                 with open(path, encoding="utf-8") as fh:
@@ -1117,10 +1082,9 @@ def cli(argv):
 
 
 def disabled():
-    for key in ("AI_RUNTIME_GATE", LEGACY[RUNTIME][1]):
-        value = os.environ.get(key)
-        if value:
-            return value.lower() in ("off", "0", "false", "no")
+    value = os.environ.get("AI_RUNTIME_GATE")
+    if value:
+        return value.lower() in ("off", "0", "false", "no")
     return False
 
 
@@ -1284,11 +1248,7 @@ def statusline_main(argv):
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    runtime = None
-    if argv[:1] == ["--as"] and len(argv) >= 2:     # set by the shims only
-        runtime = {name: rt for rt, (name, _) in LEGACY.items()}.get(argv[1])
-        argv = argv[2:]
-    configure(runtime or detect_runtime())
+    configure(detect_runtime())
     if argv and argv[0] == "statusline":
         return statusline_main(argv)
     if argv:

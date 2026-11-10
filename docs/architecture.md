@@ -12,7 +12,7 @@ except the last section.
 ├── settings.json | config.toml         model, effort, limits, hooks — from profiles/<plan>.json
 ├── agents/                             Explore, log-reader, ai-discovery, ai-reviewer, architect — tier baked in
 ├── hooks/                              ai-guard.py + guard/, cap-large-read, context-guard, runtime-gate, dialog-gate, …
-├── skills/                             rr-setup, rr-spec, rr-plan, rr-build, rr-build-all, rr-review, rr-ship, rr-status (+ aliases)
+├── skills/                             rr-setup, rr-spec, rr-plan, rr-build, rr-build-all, rr-review, rr-ship, rr-status
 │   └── ai-task/                        the state machine every skill drives
 │       ├── state.py                    the entry: a shim that sets fs.ENTRY and calls rr_state.cli.main
 │       ├── rr_state/                   the package behind it, layers 0 to 9 (below)

@@ -55,7 +55,8 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
                   ".claude/rules", ".codex", "vendor/acme/pkg", "node_modules/foo", ".ai/rules", "docs/sdlc"):
             os.makedirs(os.path.join(root, d))
         for rel, text in ((".env", "SECRET=1\n"), (".env.example", "SECRET=\n"),
-                          (".ai/state/current.json", "{}\n"), (".ai/policies/path-guard.json", "{}\n"),
+                          (".ai/state/current.json", "{}\n"), (".ai/state/state.json", "{}\n"),
+                          (".ai/policies/path-guard.json", "{}\n"),
                           ("src/Service.php", "x\n"), ("var/dump-2026-09-01.sql", "x\n"),
                           ("migrations/Version20260101.sql", "x\n"), (".claude/agents/ai-reviewer.md", "x\n"),
                           (".ai/rules/payment.md", "x\n"), (".claude/rules/payment.md", "x\n"),
@@ -79,7 +80,7 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
 
     def state(self, text):
         """The task state file: its text, or None to remove it."""
-        path = os.path.join(self.root, ".ai", "state", "current.json")
+        path = os.path.join(self.root, ".ai", "state", "state.json")
         if text is None:
             if os.path.exists(path):
                 os.remove(path)
@@ -656,8 +657,8 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
         # T-2026-10-13-004, Q4=A: <home>/riskrails/ai/ and ai-path are the rules a
         # run is judged by, like the policies they replace. The installed tree is
         # anchored to the runtime's home (direct-mode-diet D4b): the guard is given
-        # the test home as its own, and every expectation stands. R35: the old home
-        # name is the installer's symlink for one version, and stays frozen too.
+        # the test home as its own, and every expectation stands. The old home
+        # name (claude-agentic) is a deny pattern and stays frozen too.
         env = dict(os.environ, HOME=self.home_t, CLAUDE_CONFIG_DIR="", CODEX_HOME="")
         root, tmp = self.root, self.tmp
         for home, name in ((h, n) for h in (".claude", ".codex") for n in ("riskrails", "claude-agentic")):
@@ -1059,24 +1060,36 @@ class TestAiPathGuard(HookAsserts, unittest.TestCase):  # pylint: disable=too-ma
                    self.b("python3 -c \"print(open('.ai/state/current.json').read())\" # open(" + "(a, b)," * 5800),
                    1000)
 
-    def test_20_a_task_in_flight_under_either_state_file_name(self):
-        # R34: state.json from 3.4b; current.json is still read for one version.
+    def test_20_a_task_in_flight_is_read_from_state_json_only(self):
+        # R34 fallback removed: current.json is no longer read, only protected.
         edit_settings = tool(self.root, "Edit", self.root + "/.claude/settings.json")
-        new = os.path.join(self.root, ".ai", "state", "state.json")
+        legacy = os.path.join(self.root, ".ai", "state", "current.json")
+        with open(legacy, encoding="utf-8") as fh:
+            keep = fh.read()
         try:
-            self.state(None)
-            self.write(new, IMPLEMENTATION)
+            self.state(IMPLEMENTATION)
             self.decide("state.json in implementation: editing the claude settings is denied", "deny",
                         edit_settings)
-            self.write(new, '{"current_stage":"done","task_id":"T-1"}\n')
+            self.state('{"current_stage":"done","task_id":"T-1"}\n')
             self.decide("state.json done: the same edit is allowed", "allow", edit_settings)
-            os.remove(new)
-            self.state(IMPLEMENTATION)
-            self.decide("only the legacy current.json in implementation: denied", "deny", edit_settings)
+            self.state(None)
+            self.write(legacy, IMPLEMENTATION)
+            self.decide("only a legacy current.json in implementation: not read, allowed", "allow", edit_settings)
         finally:
-            if os.path.exists(new):
-                os.remove(new)
+            self.write(legacy, keep)
             self.state("{}\n")
+
+    def test_20b_dependency_instruction_patterns_is_no_longer_read(self):
+        # D8 F: the pre-3.4 key is gone; only deny_patterns refuses a read.
+        cfg = self.root + "/.ai/policies/path-guard.json"
+        read = tool(self.root, "Read", self.root + "/vendor/x/AGENTS.md")
+        try:
+            self.write(cfg, '{"dependency_instruction_patterns": ["vendor/.*AGENTS\\\\.md"]}\n')
+            self.decide("the old key no longer denies the read", "allow", read)
+            self.write(cfg, '{"deny_patterns": ["vendor/.*AGENTS\\\\.md"]}\n')
+            self.decide("deny_patterns still denies the same read", "deny", read)
+        finally:
+            self.write(cfg, "{}\n")
 
     def test_21_the_plugin_cache_is_the_guard_too(self):
         # T-2026-10-27-007 review H2: on the plugin route the guard code, its hook file and

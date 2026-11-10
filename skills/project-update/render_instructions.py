@@ -47,14 +47,10 @@ PLACEHOLDER_RE = re.compile(r"\{\{([A-Z_]+)\}\}")
 # share a file and the text around them stays the project's.
 RULE_START = "<!-- riskrails:rule:%s:start -->"
 RULE_END = "<!-- riskrails:rule:%s:end -->"
-# R35: the spelling before 3.4b, read for one version and rewritten on the next
-# splice or strip, so a project never carries both for one slug.
-LEGACY_RULE_START = "<!-- claude-agentic:rule:%s:start -->"
-LEGACY_RULE_END = "<!-- claude-agentic:rule:%s:end -->"
 RULE_MARKER_RE = re.compile(
-    r"<!--\s*(?:riskrails|claude-agentic):rule:(?P<slug>[a-z0-9][a-z0-9-]*):start\s*-->"
+    r"<!--\s*riskrails:rule:(?P<slug>[a-z0-9][a-z0-9-]*):start\s*-->"
 )
-RULE_GENERATED = ("<!-- generated from .ai/rules/%s.md by /project-update"
+RULE_GENERATED = ("<!-- generated from .ai/rules/%s.md by /rr-setup --update"
                   " \u2014 edit that file -->")
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 FRONTMATTER_RE = re.compile(r"\A---[ \t]*\n(?P<body>.*?)\n---[ \t]*(\n|\Z)", re.S)
@@ -417,18 +413,16 @@ def rule_targets(rules, runtimes):
 
 
 def _rule_span(text, slug):
-    """(start, end) of the rule block of this slug — end past its end marker —
-    under the current markers, else under the legacy ones, else None."""
-    for start_marker, end_marker in ((RULE_START, RULE_END), (LEGACY_RULE_START, LEGACY_RULE_END)):
-        start, end = text.find(start_marker % slug), text.find(end_marker % slug)
-        if start >= 0 and end >= 0:
-            return start, end + len(end_marker % slug)
+    """(start, end) of the rule block of this slug — end past its end marker — or None."""
+    start, end = text.find(RULE_START % slug), text.find(RULE_END % slug)
+    if start >= 0 and end >= 0:
+        return start, end + len(RULE_END % slug)
     return None
 
 
 def splice_rule(text, slug, block):
     """Put one rule block into a file, replacing the block of that slug if it is
-    already there (a legacy-marked one included). Everything outside the
+    already there. Everything outside the
     markers is the project's and is returned untouched."""
     span = _rule_span(text, slug)
     if span is None:
@@ -454,50 +448,23 @@ def rule_slugs_in(text):
     return [m.group("slug") for m in RULE_MARKER_RE.finditer(text)]
 
 
-# A marker pair an older or hand-written instruction file may carry instead of
-# BLOCK_START/BLOCK_END. Every lookup goes through find_block, so a legacy pair
-# is read as the managed block everywhere — measured, merged, renamed — and
-# never has a second block appended beside it.
-LEGACY_MARKER_RE = re.compile(r"<!-- (?P<name>claude-agentic|[Cc]odex-agentic):start -->")
-_LEGACY_MARKER_RE_B = re.compile(LEGACY_MARKER_RE.pattern.encode())
-
-
 def find_block(text):
     """(start, end, start_marker, end_marker) of the managed block in text —
-    end is past the end marker — or None. The current pair wins; a legacy
-    pair counts only when both of its markers are there, in order. Works on
+    end is past the end marker — or None. Half a pair is none. Works on
     str and on bytes alike, offsets in the caller's own units."""
     if isinstance(text, bytes):
-        start, end, legacy, colon = BLOCK_START.encode(), BLOCK_END.encode(), _LEGACY_MARKER_RE_B, b":"
+        start, end = BLOCK_START.encode(), BLOCK_END.encode()
     else:
-        start, end, legacy, colon = BLOCK_START, BLOCK_END, LEGACY_MARKER_RE, ":"
+        start, end = BLOCK_START, BLOCK_END
     s, e = text.find(start), text.find(end)
     if s >= 0 and e >= 0:
         return s, e + len(end), start, end
-    if s >= 0 or e >= 0:
-        return None   # half a current pair: a broken file, not a legacy one
-    m = legacy.search(text)
-    if m is None:
-        return None
-    end_marker = m.group(0).replace(colon + start[start.rfind(colon) + 1:], colon + end[end.rfind(colon) + 1:])
-    e = text.find(end_marker, m.end())
-    if e < 0:
-        return None
-    return m.start(), e + len(end_marker), m.group(0), end_marker
-
-
-def current_markers(block, start_marker, end_marker):
-    """The block with its markers renamed to the current pair; a no-op for a
-    block that already carries them."""
-    if isinstance(block, bytes):
-        return block.replace(start_marker, BLOCK_START.encode()).replace(end_marker, BLOCK_END.encode())
-    return block.replace(start_marker, BLOCK_START).replace(end_marker, BLOCK_END)
+    return None
 
 
 def block_of(text):
     """The managed block of an instruction file, markers included, or None —
-    the verbatim slice, so a caller can `replace` it; a legacy pair keeps its
-    own markers here (see current_markers)."""
+    the verbatim slice, so a caller can `replace` it."""
     found = find_block(text)
     if found is None:
         return None

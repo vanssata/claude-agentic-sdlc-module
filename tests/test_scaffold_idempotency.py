@@ -11,7 +11,6 @@ as the shell suite wrote it, `$f` and all.
 """
 import hashlib
 import os
-import re
 import subprocess
 import tempfile
 import unittest
@@ -28,7 +27,7 @@ TEMPLATES = os.path.join(PLUGIN_ROOT, "skills", "ai-init", "templates")
 def run(script, *args):
     env = {k: v for k, v in os.environ.items() if k not in ("AI_RUNTIMES", "AI_PROJECT_TEMPLATES",
                                                              "CLAUDE_ROUTING_TEMPLATES")}
-    env["CLAUDE_AGENTIC_TEMPLATES"] = TEMPLATES
+    env["RISKRAILS_TEMPLATES"] = TEMPLATES
     p = subprocess.run(["bash", script] + list(args), capture_output=True, text=True, env=env,
                        stdin=subprocess.DEVNULL, check=False, timeout=60)
     return p.returncode, p.stdout + p.stderr
@@ -74,9 +73,12 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         _, out = run(SCAFFOLD, root)
         self.assertIn("created in", out, "first run creates the tree")
         actual = len(files(os.path.join(root, ".ai")))
-        self.assertEqual(len(files(os.path.join(TEMPLATES, ".ai"))), actual, "every template file was copied ($ACTUAL)")
-        for f in ("AGENTS.md", "policies/weight.json", "policies/safety.md", "policies/security.md",
-                  "project/overview.md", "state/README.md", "rules/README.md", "VERSION"):
+        self.assertEqual(len(files(os.path.join(TEMPLATES, ".ai"))) - 1, actual,
+                         "every template file but the shipped weight table was copied ($ACTUAL)")
+        self.assertFalse(os.path.exists(os.path.join(root, ".ai", "policies", "weight.json")),
+                         "A2: the shipped weight table is read from the plugin, never copied into a project")
+        for f in ("AGENTS.md", "policies/weight.project.json", "policies/verification.md",
+                  "policies/safety.md", "policies/security.md", "project/overview.md", "state/README.md", "rules/README.md", "VERSION"):
             with self.subTest(".ai/$f exists", f=f):
                 self.assertTrue(os.path.isfile(os.path.join(root, ".ai", f)))
         # The shared files are read from the plugin (0006): a scaffold carries none of them.
@@ -115,6 +117,13 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
                       "a hand-edited template is not overwritten")
         self.assertIn("custom", read(os.path.join(root, "CLAUDE.md")), "hand-edited CLAUDE.md content survives")
 
+    def test_fresh_scaffold_creates_both_split_targets(self):
+        """H1: the update's second guard must not cost a fresh tree its templates."""
+        fresh = self.project("fresh")
+        run(SCAFFOLD, fresh)
+        for f in ("policies/verification.md", "policies/weight.project.json"):
+            self.assertTrue(os.path.isfile(os.path.join(fresh, ".ai", f)), f)
+
     def test_ignore_snippet_covers_the_state_ledgers(self):
         # register #33: the dialog's consent.jsonl was matched by no line of the snippet.
         root = self.project("project")
@@ -139,10 +148,11 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         self.assertIn("comma list", out, "an unknown runtime is refused by name")
 
     def test_scaffold_ships_no_risk_tiers(self):
-        """migration 0011 retired the tier policy: a new project gets weight.json and no risk-tiers.*"""
+        """a new project gets the weight overlay, no weight.json (A2) and no risk-tiers.*"""
         root = self.project("project")
         run(SCAFFOLD, root)
-        self.assertTrue(os.path.isfile(os.path.join(root, ".ai", "policies", "weight.json")))
+        self.assertTrue(os.path.isfile(os.path.join(root, ".ai", "policies", "weight.project.json")))
+        self.assertFalse(os.path.exists(os.path.join(root, ".ai", "policies", "weight.json")))
         for name in ("risk-tiers.json", "risk-tiers.md"):
             self.assertFalse(os.path.exists(os.path.join(root, ".ai", "policies", name)), name)
 
@@ -180,7 +190,7 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         run(SCAFFOLD, root5, "--runtime", "codex")
         self.assertTrue(os.path.exists(os.path.join(root5, "AGENTS.md")), "AGENTS.md is created")
         self.assertFalse(os.path.exists(os.path.join(root5, "CLAUDE.md")), "no CLAUDE.md is created")
-        self.assertTrue(os.path.isfile(os.path.join(root5, ".ai", "policies", "weight.json")),
+        self.assertTrue(os.path.isfile(os.path.join(root5, ".ai", "policies", "weight.project.json")),
                         "the shared .ai/ tree is still created")
 
     def test_auto_detection(self):
@@ -215,23 +225,6 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         _, out = run(SCAFFOLD2, root8, "--runtime", "both")
         self.assertEqual(before, tree_hash(root8), "a second project scaffold changes no file")
         self.assertIn("nothing to do", out, "it reports nothing to do")
-
-    def test_legacy_codex_agentic_pair(self):
-        """a legacy Codex-agentic pair is the managed block: nothing is appended beside it"""
-        block = read(os.path.join(TEMPLATES, "AGENTS.block.md"))
-        for name in ("Codex-agentic", "codex-agentic"):
-            r9 = self.project("legacy-" + name)
-            write(os.path.join(r9, "AGENTS.md"),
-                  "# mine\n\nkeep this.\n\n" + re.sub(r"riskrails:(start|end)", name + r":\1", block))
-            _, out = run(SCAFFOLD, r9, "--runtime", "codex")
-            text = read(os.path.join(r9, "AGENTS.md"))
-            with self.subTest("$name: one block, the legacy pair is not doubled", name=name):
-                self.assertEqual(1, text.count("agentic:start -->"), out)
-            with self.subTest("$name: no block is reported as appended", name=name):
-                self.assertNotIn("AGENTS.md (agent workflow block appended)", out)
-            with self.subTest("$name: the file is left as it was", name=name):
-                self.assertIn("<!-- %s:start -->" % name, text)
-                self.assertIn("keep this.", text)
 
 
 if __name__ == "__main__":

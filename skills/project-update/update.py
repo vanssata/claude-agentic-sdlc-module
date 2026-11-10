@@ -1,69 +1,76 @@
 #!/usr/bin/env python3
 """Bring a project's RiskRails files up to date with the installed plugin.
 
-  update.py [project-dir] [--apply [--confirm-delete NAME]] [--check [--budget]]
+  update.py [project-dir] [--apply [--confirm-delete NAME] [--confirm-cleanup NAME]] [--check [--budget]]
 
 Default is a dry run: print what would change, write nothing.
   --apply   write the changes
-  --check   print one line and exit 1 when an automatic update is pending
+  --check   print one line and exit 1 when an update is pending
   --check --budget   print one line per root instruction file over its byte
             budget (block over `project`, file over `skeleton`) and exit 1
-  --confirm-delete NAME   a human confirms this run's proposed deletions; refused
-            (exit 5) unless a terminal outside Claude Code or Codex (no agent-session
-            marker) or AI_UNATTENDED; the record says which (via)
+  --confirm-delete NAME   a human confirms this run's gated rows (`regenerate?`,
+            `delete?`); refused (exit 5, CONFIRM_REFUSED) unless a terminal outside
+            Claude Code or Codex (no agent-session marker) or AI_UNATTENDED
+  --confirm-cleanup NAME  the same for the [cleanup] rows
 
 Exit codes:
   0  done (or, with --check, the project is current)
   1  --check: an update is pending; --check --budget: a file is over budget
-  2  usage error, missing templates, a schema the plugin cannot read
+  2  usage error, missing templates, .ai/VERSION unreadable or newer than the plugin
   3  an apply aborted part-way; nothing after the failing item was written
-  5  refused: --confirm-delete without a human (ADOPT_REFUSED on stdout line 1)
+  5  refused: --confirm-* without a human (CONFIRM_REFUSED on stdout line 1)
+  6  a file this update keeps cannot be read (KEPT_UNREADABLE on stdout line 1); nothing written
 
-What it manages, and how:
-  .ai/** the project owns (weight, path-guard,       three-way update
-    testing, coding, safety, security, AGENTS.md)
-  .ai/** the plugin shares (the other policies,      read from the plugin's shared tree; a project
-    agents, workflows, templates)                     copy is an override and is never merged — an
-                                                      unedited one is offered for deletion
-  docs/sdlc/*/TEMPLATE.md                            the plugin supplies them (read in place); an
-                                                    unedited copy is offered for deletion, an
-                                                    edited one is a project override and stays
-  .ai/reports/<task>/, .ai/state/logs/<task>/        proposals only, never run on their own: the
-    of closed, abandoned or long-idle tasks           logs of a closed task, every file of an
-                                                      abandoned or STALE_DAYS-idle unclosed one
-  .claude/memory/README.md, .codex/memory/README.md  three-way update, per runtime the project uses
-  the managed block in CLAUDE.md and/or AGENTS.md    three-way update of the block only
-  .gitignore                                         missing entries appended
-  .ai/project/**, the instruction files themselves,
-  .claude/settings.json, .codex/config.toml          created when missing, never updated
+This version regenerates its own files and converts nothing, except one split:
+a project that still has the mixed files gets .ai/policies/verification.md (the
+command lines of testing.md, verbatim) and .ai/policies/weight.project.json
+(what its weight.json changed against the plugin's table) once, when they are absent.
+
+What it does, per file:
+  GENERATED  .ai/AGENTS.md, .ai/VERSION, .ai/policies/{path-guard.json, coding.md,
+    safety.md, security.md, testing.md, weight.md}, .ai/rules/README.md,
+    .ai/state/README.md, <runtime>/memory/README.md, the managed block of each
+    instruction file: rewritten from the plugin. A copy that is a version the plugin
+    once shipped is replaced (regenerate); an edited one waits for --confirm-delete
+    (regenerate?) and its original is kept under .ai/reports/project-update-<date>/original/.
+  KEPT  .ai/project, .ai/reports, .ai/memory, .ai/state, docs/sdlc, verification.md,
+    weight.project.json, dialog.json, memory.json, .ai/local/memory, edited shared
+    overrides, the text outside the managed blocks, .claude/settings.json,
+    .codex/config.toml, .gitignore (entries appended): never rewritten.
+  REMOVED  .ai/rules/<slug>.md, .ai/local/plugin-update/, the old weight.json after its
+    split, an unedited copy of a shared file: delete?, gated, with a copy in original/.
+  [cleanup] rows are unchanged: proposals only, settled with --confirm-cleanup.
 
 A project uses the runtime(s) it declares: CLAUDE.md or .claude/ means Claude
 Code, AGENTS.md or .codex/ means Codex, both means both. A project that declares
-neither gets the runtime this copy of the plugin was installed for, exactly as
-the scaffolds do.
-
-Three-way update: a file whose content is a version this plugin once shipped was
-never edited, so it is replaced. An edited file is merged against the shipped
-version closest to it (git merge-file for text, per key for JSON), keeping every
-edit. A real conflict leaves the project file alone and puts the plugin's version
-in a git-ignored local directory for a human or /rr-setup --update to merge.
+neither gets the runtime this copy of the plugin was installed for.
 """
-import argparse, contextlib, copy, difflib, hashlib, importlib.util, io, json, os, re, shlex, subprocess, sys, tempfile
+import argparse, contextlib, hashlib, importlib.util, io, json, os, re, shlex, subprocess, sys, tempfile
 from collections import OrderedDict
-from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
+
+try:
+    import tomllib
+except ImportError:  # Python before 3.11: .codex/config.toml is not checked
+    tomllib = None
 
 sys.dont_write_bytecode = True  # never leave __pycache__ in an installed plugin
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import migrations  # noqa: E402  # lives next to this script
-from migrations import SchemaError  # noqa: E402
 import render_instructions  # noqa: E402  # lives next to this script
-import adopt  # noqa: E402  # lives next to this script
 SKILLS = os.path.dirname(HERE)
+LAST_MIGRATING_VERSION = "3.1.0"  # the last riskrails that converts older trees; I3 names it
+EXIT_KEPT_UNREADABLE = 6
+REFUSED = "CONFIRM_REFUSED"
+
+
+class SchemaError(Exception):
+    """The project's schema cannot be read or is newer than this plugin."""
+
+
 def env(name, default=None):
-    """RISKRAILS_<name>, else the pre-3.4b CLAUDE_AGENTIC_<name> (R35, one version)."""
-    return os.environ.get("RISKRAILS_" + name, os.environ.get("CLAUDE_AGENTIC_" + name, default))
+    """RISKRAILS_<name>."""
+    return os.environ.get("RISKRAILS_" + name, default)
 
 
 TEMPLATES = {
@@ -72,37 +79,58 @@ TEMPLATES = {
 }
 HISTORY = env("HISTORY", os.path.join(HERE, "history"))
 # The shared tree every project reads unless it keeps its own copy: installed
-# beside the skills as riskrails/ai (claude-agentic/ai before 3.4b), or ai/ at
-# the root of a checkout.
+# beside the skills as riskrails/ai, or ai/ at the root of a checkout.
 PLUGIN_HOME = os.path.dirname(SKILLS)
 SHARED = env("SHARED") or next(
-    (p for p in (os.path.join(PLUGIN_HOME, "riskrails", "ai"), os.path.join(PLUGIN_HOME, "claude-agentic", "ai"),
-                 os.path.join(PLUGIN_HOME, "ai"))
+    (p for p in (os.path.join(PLUGIN_HOME, "riskrails", "ai"), os.path.join(PLUGIN_HOME, "ai"))
      if os.path.isdir(p)), os.path.join(PLUGIN_HOME, "riskrails", "ai"))
 VERSION_FILE = ".ai/VERSION"
 ROUTER_FILE = ".ai/AGENTS.md"
-# The router must name the shared tree exactly once: a merge that drops the
-# section, or doubles it, is a conflict for a human.
-SHARED_SECTION_RE = re.compile(rb"(?m)^## Shared files[ \t]*\r?$")
-SHARED_SCHEMA = 6  # the schema from which shared copies are overrides (0006)
 STALE_DAYS = 7  # an unclosed task whose last event is older is proposed for cleanup
 STATE_FILE = ".ai/state/state.json"
-LEGACY_STATE_FILE = ".ai/state/current.json"  # R34: the name until migration 0009 moves it
+TESTING_MD = ".ai/policies/testing.md"
+VERIFICATION_MD = ".ai/policies/verification.md"
+WEIGHT_JSON, WEIGHT_MD = ".ai/policies/weight.json", ".ai/policies/weight.md"
+WEIGHT_PROJECT = ".ai/policies/weight.project.json"
+LOCAL_CACHE = ".ai/local/plugin-update"
+
+# D2. GENERATED targets copied from a template as they are. weight.md is rendered,
+# .ai/VERSION is written last, the managed blocks and the runtimes' memory READMEs
+# come from the maps below.
+GENERATED = (ROUTER_FILE, ".ai/policies/path-guard.json", ".ai/policies/coding.md", ".ai/policies/safety.md",
+             ".ai/policies/security.md", TESTING_MD, ".ai/rules/README.md", ".ai/state/README.md")
+# Template files created when missing and never touched again: the project's own from then on.
+CREATE_ONLY = (VERIFICATION_MD, WEIGHT_PROJECT, ".ai/reports/.gitkeep")
+CREATE_ONLY_DIRS = (".ai/project/",)
+# Template files that are not copied: written last, the plugin's own table, the human's switch.
+NOT_COPIED = (VERSION_FILE, WEIGHT_JSON, WEIGHT_MD, ".ai/policies/dialog.json")
+KEPT = (".ai/project/", ".ai/reports/", ".ai/memory/", ".ai/state/", "docs/sdlc/", ".ai/local/memory/",
+        WEIGHT_PROJECT, VERIFICATION_MD, ".ai/policies/dialog.json", ".ai/policies/memory.json",
+        ".claude/settings.json", ".codex/config.toml", ".gitignore")
 
 
-# Templates a migration creates exactly once, on the step to the given schema.
-# From that schema on, a missing file is the human's choice (dialog.json missing
-# means the dialog is off), so the template walk must not re-create it.
-CREATE_ONCE = {".ai/policies/dialog.json": 10}
+def is_kept(path):
+    """True for a path update.py never rewrites. A GENERATED path under a KEPT
+    directory (.ai/state/README.md) is generated: the two sets are disjoint."""
+    if path in GENERATED:
+        return False
+    return any(path == k or (k.endswith("/") and path.startswith(k)) for k in KEPT)
 
 
-def state_file(plan):
-    """The task state's path as this run leaves the project: state.json once it
-    exists there (migration 0009 moved it, or the task started under it), else
-    the legacy current.json."""
-    if not plan.exists(STATE_FILE) and plan.exists(LEGACY_STATE_FILE):
-        return LEGACY_STATE_FILE
-    return STATE_FILE
+# The shared set, literally: the plugin's tree must equal it (tested). A project
+# copy identical to a shipped version is offered for deletion; an edited one is an override.
+SHARED_SET = frozenset((
+    ".ai/policies/production.md", ".ai/policies/database.md", ".ai/policies/git.md", ".ai/policies/release.md",
+    ".ai/policies/context-management.md", ".ai/policies/tooling.md", ".ai/policies/model-routing.md",
+    ".ai/policies/review-economy.md",
+    ".ai/agents/context.md", ".ai/agents/discovery.md", ".ai/agents/implementer.md",
+    ".ai/agents/planner.md", ".ai/agents/release.md", ".ai/agents/reviewer.md", ".ai/agents/risk.md",
+    ".ai/agents/security.md", ".ai/agents/tester.md",
+    ".ai/templates/task-context.md", ".ai/templates/impact-report.md", ".ai/templates/review-report.md",
+    ".ai/templates/release-report.md", ".ai/templates/architecture-decision.md",
+    ".ai/templates/implementation-plan.md",
+    ".ai/using-riskrails.md", ".ai/workflows.md",
+))
 RULES_DIR = ".ai/rules"
 # Directories a stale rule block is never hunted in: a dependency's instruction
 # file is not ours (the path guard refuses it too), and .git is not text.
@@ -114,38 +142,17 @@ RULES_SKIP = {".git", ".ai", "vendor", "node_modules", "bower_components",
               "third_party", "Pods", "site-packages", ".venv", ".pnpm", ".yarn"}
 # Compared case-insensitively: on a case-insensitive filesystem `Vendor/` is `vendor/`.
 RULES_SKIP_FOLDED = frozenset(n.casefold() for n in RULES_SKIP)
-START, END = "<!-- riskrails:start -->", "<!-- riskrails:end -->"
-OLD_START, OLD_END = b"<!-- claude-agentic:start -->", b"<!-- claude-agentic:end -->"  # R35, one version
-
-
-def renamed_markers(block):
-    """A block the plugin shipped before 3.4b, as it reads under the current
-    markers: the version an unedited block was installed from still matches it."""
-    return block.replace(OLD_START, START.encode()).replace(OLD_END, END.encode())
-# The marker lookup is shared with render_instructions (block_of) and adopt:
-# one place knows the legacy Codex-agentic pair.
 find_block = render_instructions.find_block
-current_markers = render_instructions.current_markers
-MISSING = object()
 
-PROJECT_INIT_MAP = [  # template -> target, kind
-    ("sdlc-README.md", "docs/sdlc/README.md", "update"),
-    # read in place by /rr-spec and /rr-plan; a project copy is an override: never created
-    ("intent.md", "docs/sdlc/intent/TEMPLATE.md", "retire"),
-    ("spec.md", "docs/sdlc/specs/TEMPLATE.md", "retire"),
-    ("plan.md", "docs/sdlc/plans/TEMPLATE.md", "retire"),
-    ("adr.md", "docs/sdlc/adr/TEMPLATE.md", "retire"),
-    # the project's own principles: created once, then it is the project's file
-    ("constitution.md", "docs/sdlc/constitution.md", "create"),
-]
-RUNTIME_MAP = {  # the per-runtime layer of the project-init scaffold
-    "claude": [("memory-README.md", ".claude/memory/README.md", "update"),
+RUNTIME_MAP = {  # the per-runtime layer of the project-init scaffold: template, target, kind
+    "claude": [("memory-README.md", ".claude/memory/README.md", "regenerate"),
                ("project-settings.json", ".claude/settings.json", "create")],
-    "codex":  [("memory-README.md", ".codex/memory/README.md", "update"),
+    "codex":  [("memory-README.md", ".codex/memory/README.md", "regenerate"),
                ("project-config.toml", ".codex/config.toml", "create")],
-    "gemini": [("memory-README.md", ".gemini/memory/README.md", "update")],
-    "junie":  [("memory-README.md", ".junie/memory/README.md", "update")],
+    "gemini": [("memory-README.md", ".gemini/memory/README.md", "regenerate")],
+    "junie":  [("memory-README.md", ".junie/memory/README.md", "regenerate")],
 }
+SDLC_CREATE = (("sdlc-README.md", "docs/sdlc/README.md"), ("constitution.md", "docs/sdlc/constitution.md"))
 INSTRUCTION_FILE = {  # runtime -> (file, block template, minimal template)
     "claude": ("CLAUDE.md", "CLAUDE.block.md", "CLAUDE.minimal.md"),
     "codex":  ("AGENTS.md", "AGENTS.block.md", "AGENTS.minimal.md"),
@@ -153,33 +160,6 @@ INSTRUCTION_FILE = {  # runtime -> (file, block template, minimal template)
     "junie":  (".junie/guidelines.md", "junie-guidelines.block.md",
                "junie-guidelines.minimal.md"),
 }
-SKELETON = {  # runtime -> the project-init template that scaffolds its instruction file
-    "claude": "CLAUDE.md",
-    "codex":  "AGENTS.md",
-    "gemini": "GEMINI.md",
-    "junie":  "junie-guidelines.md",
-}
-
-
-def instruction_history_keys():
-    """{instruction file: [history keys]} — a root instruction file is shipped
-    twice, as the project-init skeleton that scaffolds it and as the ai-init
-    minimal template, so a migration that matches shipped text must see both."""
-    out = {}
-    for runtime, (name, _, minimal_tpl) in INSTRUCTION_FILE.items():
-        out[name] = ["project-init/" + SKELETON[runtime], "ai-init/" + minimal_tpl]
-    return out
-
-
-def template_targets():
-    """{project target: history key} for the templates that land outside .ai/.
-    Every runtime's entries, not only this project's, so a rename resolves the
-    same way for a Claude, a Codex and a dual-runtime project."""
-    out = {target: "project-init/" + src for src, target, _ in PROJECT_INIT_MAP}
-    for entries in RUNTIME_MAP.values():
-        for src, target, _ in entries:
-            out[target] = "project-init/" + src
-    return out
 
 
 def project_runtimes(root):
@@ -212,75 +192,41 @@ def read(path):
 
 
 class History:
-    def __init__(self, root, renames=None):
+    """index.json answers "was this ever shipped" from hashes alone; the blobs
+    give the one-time split its base values."""
+
+    def __init__(self, root):
         try:
             with open(os.path.join(root, "index.json"), encoding="utf-8") as fh:
                 self.index = json.load(fh)
         except (OSError, ValueError, RecursionError):
             self.index = {}
         self.root = root
-        # {new key: [old keys]} from the migrations' MOVES: a template that moved
-        # keeps the versions it was shipped under its old name.
-        self.renames = renames or {}
-
-    def chain(self, key):
-        """A template's keys, the oldest name first, ending with this one. The
-        registry rules out cycles; the visited set makes the walk safe anyway."""
-        out, seen = [], set()
-
-        def walk(k):
-            if k in seen:
-                return
-            seen.add(k)
-            for old in self.renames.get(k, []):
-                walk(old)
-            out.append(k)
-        walk(key)
-        return out
 
     def versions(self, key):
-        """Every shipped version of a template, oldest first, as bytes. A file
-        the user edited before a rename is merged against the version it was
-        installed from, which was shipped under the old key."""
+        """Every shipped version of a template, oldest first, as bytes."""
         out = []
-        for k in self.chain(key):
-            for h in self.index.get(k, []):
-                try:
-                    out.append(read(os.path.join(self.root, "blobs", h)))
-                except OSError:
-                    pass
+        for h in self.index.get(key, []):
+            try:
+                out.append(read(os.path.join(self.root, "blobs", h)))
+            except OSError:
+                pass
         return out
 
     def hashes(self, key):
-        """The sha of every version shipped under this key or a name it had
-        before. index.json alone answers it: a version whose blob is gone still
-        counts as shipped."""
-        return {h for k in self.chain(key) for h in self.index.get(k, [])}
+        """The sha of every version shipped under this key; a version whose blob is gone still counts."""
+        return set(self.index.get(key, []))
 
-
-_DECLARED = None
-
-
-def declared_shared():
-    """The shared set as 0006 declares it, literally — read from the migration
-    shipped beside this script, whatever registry RISKRAILS_MIGRATIONS
-    points at. What the installed tree holds never widens it: a file planted
-    there must not turn a project's own file into a deletion candidate."""
-    global _DECLARED  # pylint: disable=global-statement  # loaded once per run
-    if _DECLARED is None:
-        path = os.path.join(HERE, "migrations", "0006_shared_files.py")
-        spec = importlib.util.spec_from_file_location("riskrails_shared_set", path)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        _DECLARED = frozenset(mod.SHARED)
-    return _DECLARED
+    def shipped(self, key, data):
+        """True when these bytes are a version the plugin shipped, also after a checkout turned its line endings into CRLF."""
+        known = self.hashes(key)
+        return sha(data) in known or sha(data.replace(b"\r\n", b"\n")) in known
 
 
 def shared_files():
-    """{".ai/<rel>": bytes} for every declared shared file the shared tree
-    holds; empty when the tree is not installed."""
+    """{".ai/<rel>": bytes} for every shared file the shared tree holds; empty when the tree is not installed."""
     out = {}
-    for path in sorted(declared_shared()):
+    for path in sorted(SHARED_SET):
         full = os.path.join(SHARED, path[len(".ai/"):])
         if os.path.isfile(full):
             out[path] = read(full)
@@ -288,12 +234,12 @@ def shared_files():
 
 
 def undeclared_shared():
-    """Files in the shared tree outside the declared set, as .ai/ paths."""
+    """Files in the shared tree outside the shared set, as .ai/ paths."""
     out = []
     for here, _dirs, files in os.walk(SHARED):
         for name in files:
             rel = ".ai/" + os.path.relpath(os.path.join(here, name), SHARED).replace(os.sep, "/")
-            if rel not in declared_shared():
+            if rel not in SHARED_SET:
                 out.append(rel)
     return sorted(out)
 
@@ -357,109 +303,8 @@ def git_states(root, rel_dir):
     return classify
 
 
-# ---------------------------------------------------------------- merging
-def closest(candidates, ours, score):
-    best, best_score = None, -1.0
-    for c in candidates:  # oldest first; ties keep the older one
-        s = score(c, ours)
-        if s > best_score:
-            best, best_score = c, s
-    return best
-
-
-def text_ratio(a, b):
-    return difflib.SequenceMatcher(None, a.splitlines(), b.splitlines(), autojunk=False).ratio()
-
-
-def merge_text(ours, base, theirs):
-    with tempfile.TemporaryDirectory() as d:
-        paths = [os.path.join(d, n) for n in ("ours", "base", "theirs")]
-        for p, c in zip(paths, (ours, base, theirs)):
-            with open(p, "wb") as fh:
-                fh.write(c)
-        r = subprocess.run(["git", "merge-file", "-p", "--quiet", *paths], capture_output=True, check=False)
-    return r.stdout if r.returncode == 0 else None
-
-
-def flatten(value, prefix=""):
-    if isinstance(value, dict):
-        out = {}
-        for k, v in value.items():
-            out.update(flatten(v, prefix + ("." if prefix else "") + str(k)))
-        return out or {prefix: {}}
-    return {prefix: value}
-
-
-def json_score(base, ours):
-    fb, fo = flatten(base), flatten(ours)
-    return sum(1 for k, v in fo.items() if k in fb and fb[k] == v)
-
-
-def merge_json(base, ours, theirs, path, conflicts):
-    if ours == theirs:
-        return ours
-    if ours == base:
-        return theirs
-    if theirs == base:
-        return ours
-    if isinstance(ours, dict) and isinstance(theirs, dict) and (base is MISSING or isinstance(base, dict)):
-        b = base if isinstance(base, dict) else {}
-        out = OrderedDict()
-        for k in list(ours) + [k for k in theirs if k not in ours]:
-            v = merge_json(b.get(k, MISSING), ours.get(k, MISSING), theirs.get(k, MISSING), path + [k], conflicts)
-            if v is not MISSING:
-                out[k] = v
-        return out
-    conflicts.append(".".join(map(str, path)) or "(root)")
-    return ours
-
-
 def dump_json(value):
     return (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode()
-
-
-def leaf_changes(before, after):
-    """Changed leaf paths; a whole new or removed subtree is reported once, at its top."""
-    fb, fa = flatten(before), flatten(after)
-
-    def top(key, other):
-        parts = key.split(".")
-        for n in range(1, len(parts) + 1):
-            prefix = ".".join(parts[:n])
-            if not any(k == prefix or k.startswith(prefix + ".") for k in other):
-                return prefix
-        return key
-
-    out = set()
-    for k in set(fb) | set(fa):
-        if k not in fb:
-            out.add("+ " + top(k, fb))
-        elif k not in fa:
-            out.add("- " + top(k, fa))
-        elif fb[k] != fa[k]:
-            out.add("~ " + k)
-    return sorted(out, key=lambda c: c[2:])
-
-
-# ---------------------------------------------------------------- schema
-def detect_version(plan):
-    """A project's schema version: None when .ai/ is absent (not an agentic project),
-    0 when .ai/ has no VERSION (every project scaffolded before schema 1)."""
-    if not os.path.isdir(os.path.join(plan.root, ".ai")):
-        return None
-    try:
-        raw = plan.read(VERSION_FILE)
-    except OSError as exc:  # a directory, a mode-000 file, a dangling link
-        raise SchemaError("%s cannot be read: %s" % (VERSION_FILE, exc)) from exc
-    if raw is None:
-        return 0
-    try:
-        text = raw.decode("utf-8").strip()
-    except UnicodeDecodeError:
-        text = ""
-    if not re.fullmatch(r"\d+", text):
-        raise SchemaError("%s is not a schema number: %r" % (VERSION_FILE, raw[:40]))
-    return int(text)
 
 
 def unsafe_path(root, path):
@@ -477,345 +322,251 @@ def unsafe_path(root, path):
         return "%s resolves outside the project (%s)" % (path, real)
     return None
 
-
-class MigrationContext:
-    """What a migration sees: the project as this run leaves it, not the disk."""
-
-    def __init__(self, plan, module, version_from, state, history):
-        self.plan = plan
-        self.module = module
-        self.version_from = version_from
-        self.state = state
-        self.history = history
-        self.root = plan.root
-        self.runtimes = project_runtimes(plan.root)
-
-    # ---- what the plugin shipped, so a migration can recognise its own text
-    # instead of matching a regular expression against the project's prose.
-    def instruction_files(self):
-        """The root instruction files this project actually has, one per runtime
-        it declares."""
-        return [INSTRUCTION_FILE[rt][0] for rt in self.runtimes
-                if self.exists(INSTRUCTION_FILE[rt][0])]
-
-    def shipped(self, path):
-        """Every version of every template the plugin ever shipped at this
-        project path, oldest first. Renamed templates come with it: History
-        follows the MOVES chain and RETIRED."""
-        keys = list(instruction_history_keys().get(path, []))
-        key = migrations.template_key(path, template_targets())
-        if key and key not in keys:
-            keys.append(key)
-        out = []
-        for k in keys:
-            for version in self.history.versions(k):
-                if version not in out:
-                    out.append(version)
-        return out
-
-    def block_status(self, path):
-        """"none" when this file has no managed block, "shipped" when the block
-        is one the plugin installed, "edited" when a human changed it inside the
-        markers — the one case where the plugin never writes over it."""
-        text = self.read(path)
-        runtime = next((rt for rt, entry in INSTRUCTION_FILE.items() if entry[0] == path), None)
-        if text is None or runtime is None:
-            return "none"
-        found = find_block(text)
-        if found is None:
-            return "none"
-        start, end, start_marker, end_marker = found
-        ours = current_markers(text[start:end], start_marker, end_marker) + b"\n"
-        block_tpl = INSTRUCTION_FILE[runtime][1]
-        tpl = read(os.path.join(TEMPLATES["ai-init"], block_tpl))
-        if ours == tpl or ours in map(renamed_markers, self.history.versions("ai-init/" + block_tpl)):
-            return "shipped"
-        return "edited"
-
-    def template(self, path):
-        """The bytes this plugin ships today for a project path: the scaffold
-        template, or the shared tree's copy once the template is retired."""
-        self._check_path(path)
-        if path.startswith(".ai/"):
-            rel = path[len(".ai/"):]
-            candidates = [os.path.join(TEMPLATES["ai-init"], ".ai", rel), os.path.join(SHARED, rel)]
-        else:
-            key = template_targets().get(path)
-            candidates = [os.path.join(TEMPLATES["project-init"], key.split("/", 1)[1])] if key else []
-        for full in candidates:
-            if os.path.isfile(full):
-                return read(full)
-        raise SchemaError("%04d: the plugin ships no template for %s" % (self.module.VERSION, path))
-
-    def is_shipped(self, path, data):
-        """True when these bytes are a version the plugin shipped at this path,
-        also after a checkout turned its line endings into CRLF."""
-        key = migrations.template_key(path, template_targets())
-        if key is None or data is None:
-            return False
-        known = self.history.hashes(key)
-        return sha(data) in known or sha(data.replace(b"\r\n", b"\n")) in known
-
-    def require_shared(self, paths):
-        """Refuse, before anything is written, to drop a project copy whose
-        shared fallback is missing: in this plugin's tree, or in another
-        installed home of a runtime the project declares. A home this machine
-        does not have is not checked."""
-        undeclared = sorted(p for p in paths if (p if p.startswith(".ai/") else ".ai/" + p) not in declared_shared())
-        if undeclared:
-            raise SchemaError("%04d: not in the shared set, never deleted as a shared copy: %s"
-                              % (self.module.VERSION, ", ".join(undeclared)))
-        rels = sorted(p[len(".ai/"):] if p.startswith(".ai/") else p for p in paths)
-        missing = [r for r in rels if not os.path.isfile(os.path.join(SHARED, r))]
-        if missing:
-            raise SchemaError("%04d: the plugin's shared tree %s lacks %d file(s) a project copy would "
-                              "fall back to: %s — reinstall the plugin (install.sh), then run this again"
-                              % (self.module.VERSION, SHARED, len(missing), ", ".join(missing)))
-        homes = {"claude": os.path.join(os.path.expanduser("~"), ".claude"),
-                 "codex": os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")}
-        mine = os.path.realpath(PLUGIN_HOME)
-        for runtime in self.runtimes:
-            home = homes.get(runtime)
-            if (not home or os.path.realpath(home) == mine
-                    or not os.path.isdir(os.path.join(home, "skills", "project-update"))):
-                continue
-            tree = os.path.join(home, "riskrails", "ai")
-            if not os.path.isdir(tree):   # installed before 3.4b (R35, one version)
-                tree = os.path.join(home, "claude-agentic", "ai")
-            missing = [r for r in rels if not os.path.isfile(os.path.join(tree, r))]
-            if missing:
-                raise SchemaError("%04d: %s has this plugin installed for %s, but %d of the %d shared "
-                                  "file(s) a project copy would fall back to are missing from %s — "
-                                  "run `install.sh --target %s` from this build, then run this again"
-                                  % (self.module.VERSION, home, runtime, len(missing), len(rels),
-                                     tree, runtime))
-
-    def unsafe_target(self, path):
-        """Why a file must not be deleted through this path, or None: it is a
-        symlink, it is reached through one, or it resolves outside the project."""
-        self._check_path(path)
-        return unsafe_path(self.root, path)
-
-    def override_note(self, path):
-        """What an edited copy of a shared file now means."""
-        rel = path[len(".ai/"):] if path.startswith(".ai/") else path
-        return ("%s overrides the plugin's shared copy and no longer receives its changes — "
-                "diff against %s; `ai-path %s` shows which applies; delete it when it adds nothing"
-                % (path, os.path.join(SHARED, rel), rel))
-
-    def hint(self, text):
-        """Say something to the human that is not an operation on a file."""
-        if text not in self.plan.hints:
-            self.plan.hints.append(text)
-
-    def conflict(self, path, note):
-        """Hold the schema version on a file this migration could not handle; `note` says why."""
-        self._add("conflict", path, note)
-
-    def exists(self, path):
-        return self.read(path) is not None
-
-    def read(self, path):
-        self._check_path(path)
-        try:
-            return self.plan.read(path)
-        except OSError as exc:
-            raise SchemaError("%04d: %s cannot be read: %s" % (self.module.VERSION, path, exc)) from exc
-
-    def _check_path(self, path):
-        why = migrations.path_error(path)
-        if why:
-            raise SchemaError("%04d: %r is %s" % (self.module.VERSION, path, why))
-
-    def read_json(self, path):
-        raw = self.read(path)
-        if raw is None:
-            return None
-        try:
-            return json.loads(raw, object_pairs_hook=OrderedDict)
-        except ValueError:
-            return None
-        except RecursionError:
-            # Not "absent": a file nested past the parser's limit is there. The migration goes on
-            # as if it were absent (0007 then creates a default weight.json beside it, overwriting
-            # nothing); the conflict holds the schema version, so the next run tries again.
-            self._add("conflict", path, "nested too deeply, so this migration could not read it")
-            return None
-
-    # ---- operations. Each is idempotent: a target already in its final state
-    # records nothing, so a re-run after an interrupted apply is a no-op.
-    def _add(self, action, target, note="", **kw):
-        self._check_path(target)
-        if not isinstance(kw.get("content", b""), bytes):
-            raise SchemaError("%04d: %s content must be bytes, not %s"
-                              % (self.module.VERSION, target, type(kw["content"]).__name__))
-        if not isinstance(note, str):
-            raise SchemaError("%04d: %s note must be str, not %s"
-                              % (self.module.VERSION, target, type(note).__name__))
-        deep = action == "conflict" and isinstance(note, str) and note.startswith("nested too deeply")
-        if action == "conflict" and any(i["action"] == "conflict" and i["target"] == target
-                                        and i["migration"] == self.module.VERSION
-                                        and (i["note"] == note or deep and isinstance(i["note"], str)
-                                             and i["note"].startswith("nested too deeply"))
-                                        for i in self.plan.items):
-            return  # one deep file read twice, or read then edited: one row, one held schema
-        self.plan.add(action, target, note, migration=self.module.VERSION, **kw)
-
-    def create(self, path, content):
-        """Add a file the project does not have yet."""
-        if not self.exists(path):
-            self._add("create", path, content=content)
-
-    def move(self, src, dst):
-        """Move a file the project may have edited. The pair must be in MOVES, so
-        the rename is visible to the history lookup without running the migration."""
-        if (src, dst) not in self.module.MOVES:
-            raise SchemaError("%04d: move(%r, %r) is not in MOVES" % (self.module.VERSION, src, dst))
-        data = self.read(src)
-        if data is None:  # already moved, or the project never had it
-            return
-        there = self.read(dst)
-        if there is not None and there != data:
-            self._add("conflict", dst, "%s was moved here, but this file already exists" % src,
-                      conflict_copy=data, src=src)
-            return
-        # there == data means a previous apply wrote dst and stopped before
-        # removing src: the move simply finishes.
-        self._add("move", dst, content=data, src=src)
-        self.plan.remove(src)
-
-    def edit_text(self, path, fn, note="migrated"):
-        """Rewrite a text file the project has; fn returns its input to do nothing."""
-        data = self.read(path)
-        if data is None:
-            return
-        new = fn(data)
-        if new != data:
-            self._add("update", path, note, content=new)
-
-    def edit_json(self, path, fn):
-        """Rewrite a JSON file the project has. A policy file's leaf changes are
-        listed for confirmation, exactly as a merged policy change is. fn gets a
-        deep copy of the document and returns the new one. It must not walk the
-        document with Python recursion (a file that just passed copy.deepcopy can
-        be 470-490 levels deep at the default limit), or it guards RecursionError
-        itself: an unguarded fn's RecursionError is reported as its own, the run
-        fails and no file is blamed."""
-        raw = self.read(path)
-        if raw is None:
-            return
-        try:
-            before = json.loads(raw, object_pairs_hook=OrderedDict)
-        except ValueError as exc:
-            # Not "nothing to do": the migration could not run. A conflict holds
-            # the schema version, so the next run tries again.
-            self._add("conflict", path, "is not valid JSON, so this migration could not run (%s)" % exc)
-            return
-        except RecursionError:
-            self._add("conflict", path, "nested too deeply, so this migration could not run")
-            return
-        try:
-            copied = copy.deepcopy(before)
-        except RecursionError:
-            self._add("conflict", path, "nested too deeply, so this migration could not run")
-            return
-        # Outside the guard: an unguarded fn's RecursionError is reported as its own, not the file's.
-        after = fn(copied)
-        try:
-            if after == before:
-                return
-            policy = leaf_changes(before, after) if "/policies/" in "/" + path else None
-            content = dump_json(after)
-        except RecursionError:  # comparing or writing past the limit
-            self._add("conflict", path, "nested too deeply, so this migration could not run")
-            return
-        self._add("update", path, "migrated", content=content, policy=policy)
-
-    def patch_state(self, fn):  # noqa: D401
-        """Change the task in flight. update.py writes the state file the
-        way state.py does — atomically, with a history entry — so a task started
-        before the migration keeps working after it."""
-        if self.state is None:
-            return
-        after = fn(copy.deepcopy(self.state))
-        if not isinstance(after, dict):
-            raise SchemaError("%04d: patch_state must return the state object, not %s"
-                              % (self.module.VERSION, type(after).__name__))
-        if after == self.state:
-            return
-        after["updated_at"] = utc_now()
-        after.setdefault("history", []).append(
-            {"at": utc_now(), "event": "schema_migrated",
-             "detail": "%04d %s" % (self.module.VERSION, self.module.TITLE)})
-        self.state = after
-        self._add("update", state_file(self.plan), "task state migrated",
-                  content=(json.dumps(after, indent=2, ensure_ascii=False) + "\n").encode())
-
-    def delete(self, path, reason):
-        """Propose a deletion. It is only listed until a human passes
-        --apply --confirm-delete NAME. Three places remove a file, each behind a
-        human confirmation or a block the plugin owns: this one (a migration),
-        rules_update (a rendered rule block whose rule is gone) and
-        adopt.remove_confirmed (--adopt --cleanup, behind --confirm-delete)."""
-        if not self.exists(path):
-            return
-        if not self.plan.confirm_delete:
-            self._add("delete?", path, reason, reason=reason)
-            return
-        self._add("delete", path, reason, reason=reason)
-        # Out of the virtual tree, so this run's template walk does not put it
-        # back. A template the plugin still ships is re-created by the next run:
-        # a migration that deletes must retire the template in the same release.
-        self.plan.remove(path)
+# ---------------------------------------------------------------- the one gate
+# Set in the environment of a shell an agent runs: Claude Code's CLAUDECODE,
+# and the names Codex gives its tool calls. Present counts, an empty value too.
+AGENT_MARKERS = ("CLAUDECODE", "CODEX_THREAD_ID", "CODEX_SESSION_ID", "CODEX_CI",
+                 "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_VERSION")
 
 
-def run_migrations(plan, version, history):
-    """Plan every migration this project is missing, oldest first, before the
-    three-way merge sees a single file. Returns the modules that ran."""
-    mods = [m for m in migrations.load() if version < m.VERSION <= migrations.CURRENT]
-    state = None
-    path = state_file(plan)
+def ai_unattended():
+    """AI_UNATTENDED is set when it is non-empty and not 0, false or no (case
+    and blanks ignored): one rule in every reader (risk 0587)."""
+    return os.environ.get("AI_UNATTENDED", "").strip().lower() not in ("", "0", "false", "no")
+
+
+def human_gate():
+    """(passed, via, why) for --confirm-delete. A terminal outside any agent
+    session is a human: via "terminal". Otherwise a launcher that declared the
+    run unattended (AI_UNATTENDED) passes: via "unattended", as state.py's
+    approve records it. Anything else is refused, and `why` says what was seen —
+    a terminal alone is not enough, since an agent can open a pty (F3).
+
+    Duplicated in spirit from skills/ai-task/state.py (human_present) on purpose:
+    the two skills are installed independently and neither imports the other."""
+    markers = [name for name in AGENT_MARKERS if name in os.environ]
+    if os.isatty(0) and not markers:
+        return True, "terminal", ""
+    if ai_unattended():
+        return True, "unattended", ""
+    if markers:
+        return False, None, ("this run is inside an agent session (%s %s set); run it in a terminal "
+                             "outside Claude Code or Codex, not through the `!` prefix"
+                             % (", ".join(markers), "is" if len(markers) == 1 else "are"))
+    return False, None, "this run has no terminal"
+
+
+# The name typed into --confirm-delete is the audit trail; the template's own
+# "<your name>" copied verbatim names no one. The whole value, not a substring.
+
+
+# The name typed into --confirm-delete is the audit trail; the template's own
+# "<your name>" copied verbatim names no one. The whole value, not a substring.
+PLACEHOLDER_NAME_RE = re.compile(r"\A\s*(?:<[^>]*>|your\s+name)\s*\Z", re.IGNORECASE)
+
+
+def placeholder_name(name):
+    return bool(PLACEHOLDER_NAME_RE.match(name or ""))
+
+
+def refuse(reason, how):
+    """Print the refusal the way every gate does — the marker on the first
+    stdout line, then what to do — and return exit code 5."""
+    print("%s: %s" % (REFUSED, reason))
+    print("  %s" % how)
+    return 5
+
+
+def budget_offenders(root, files, caps, block_of):
+    """R21: one line per root instruction file over budget — its managed block
+    over `caps["project"]`, or the whole file over `caps["skeleton"]`. Files that
+    do not exist are skipped; a file under both budgets prints nothing."""
+    out = []
+    for name in files:
+        path = os.path.join(root, name)
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        block = block_of(text)
+        size = len(text.encode("utf-8"))
+        if block is not None and caps.get("project") and len(block.encode("utf-8")) > caps["project"]:
+            out.append("%s block %d B over the project budget of %d B"
+                       % (name, len(block.encode("utf-8")), caps["project"]))
+        if caps.get("skeleton") and size > caps["skeleton"]:
+            out.append("%s file %d B over the skeleton budget of %d B" % (name, size, caps["skeleton"]))
+    return out
+
+
+
+
+# ---------------------------------------------------------------- the kept files
+def template_version():
+    """The schema number this plugin ships (its .ai/VERSION template)."""
+    return int(read(os.path.join(TEMPLATES["ai-init"], VERSION_FILE)).decode().strip())
+
+
+def project_version(root):
+    """The project's .ai/VERSION: 0 when there is none; SchemaError when it cannot
+    be read, is not a number, or is newer than this plugin's."""
+    path = os.path.join(root, VERSION_FILE)
     try:
-        raw = plan.read(path)
-    except OSError as exc:
-        raise SchemaError("%s cannot be read: %s — a migration must see the task in flight"
-                          % (path, exc)) from exc
-    if raw is not None:
-        # state.py dies loudly on a corrupt state file because ai-scope-guard
-        # derives its boundaries from it; a migration must not quietly skip it.
+        raw = read(path) if os.path.lexists(path) else None
+    except OSError as exc:  # a directory, a mode-000 file, a dangling link
+        raise SchemaError("%s cannot be read: %s" % (VERSION_FILE, exc)) from exc
+    if raw is None:
+        return 0
+    try:
+        text = raw.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        text = ""
+    if not re.fullmatch(r"\d+", text):
+        raise SchemaError("%s is not a schema number: %r" % (VERSION_FILE, raw[:40]))
+    ours = template_version()
+    if int(text) > ours:
+        raise SchemaError("%s says schema %s, this plugin ships schema %d — update the plugin "
+                          "(riskrails/install.sh)" % (VERSION_FILE, text, ours))
+    return int(text)
+
+
+_MODULES = {}
+
+
+def sibling(name, *parts):
+    """A module of another skill, loaded by path once per run (skills are installed independently)."""
+    if name not in _MODULES:
+        spec = importlib.util.spec_from_file_location("riskrails_" + name, os.path.join(SKILLS, *parts))
+        _MODULES[name] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_MODULES[name])
+    return _MODULES[name]
+
+
+def weight_module():
+    """skills/ai-task/weight.py, the renderer behind `state.py weight --mirror`."""
+    return sibling("weight", "ai-task", "weight.py")
+
+
+def weight_overlay():
+    """skills/ai-task/weight_overlay.py: the plugin's table with the project's laid over it."""
+    return sibling("weight_overlay", "ai-task", "weight_overlay.py")
+
+
+def shipped_weight():
+    return os.path.join(TEMPLATES["ai-init"], WEIGHT_JSON)
+
+
+# Old shapes the update no longer converts: literal checks, nothing parsed (D4).
+OLD_MARKERS = (b"<!-- claude-agentic:", b"<!-- Codex-agentic:")
+
+
+def check_kept(root):
+    """[(path, reason)] for every kept file its own reader cannot take and every old
+    shape this version no longer converts. Reads only: the caller refuses on a
+    non-empty answer before anything is written (R12)."""
+    bad = []
+
+    def raw_of(rel):
+        path = os.path.join(root, rel)
+        if not os.path.lexists(path):
+            return None
         try:
-            state = json.loads(raw, object_pairs_hook=OrderedDict)
-        except ValueError as exc:
-            raise SchemaError("%s is not valid JSON (%s) — inspect it by hand" % (path, exc)) from exc
-        except RecursionError as exc:
-            raise SchemaError("%s is nested too deeply to parse — inspect it by hand" % path) from exc
-        if not isinstance(state, dict):
-            raise SchemaError("%s is not a task state object" % path)
-    for mod in mods:
-        # A copy each, taken from the plan: a migration that mutates ctx.state in
-        # place without patch_state changes nothing for the next one.
-        planned = plan.final.get(state_file(plan))
-        if planned is not None:
-            state = json.loads(planned, object_pairs_hook=OrderedDict)
-        mod.plan(MigrationContext(plan, mod, version, copy.deepcopy(state), history))
-    if state is not None:
-        plan.hints.append("%s: a task is in flight while the schema changes — check that the files "
-                          "its current step may touch still exist afterwards" % state_file(plan))
-    return mods
+            return read(path)
+        except OSError as exc:
+            bad.append((rel, "cannot be read: %s" % (exc.strerror or exc)))
+            return None
+
+    def json_object(rel, data):
+        try:
+            doc = json.loads(data.decode("utf-8"))
+        except (ValueError, RecursionError) as exc:  # UnicodeDecodeError is a ValueError
+            bad.append((rel, "is not valid JSON (%s)" % (type(exc).__name__ if isinstance(exc, RecursionError) else exc)))
+            return None
+        if not isinstance(doc, dict):
+            bad.append((rel, "is not a JSON object"))
+            return None
+        return doc
+
+    for rel in (STATE_FILE, ".ai/policies/dialog.json", ".ai/policies/memory.json", ".claude/settings.json"):
+        data = raw_of(rel)
+        if data is not None:
+            json_object(rel, data)
+    data = raw_of(WEIGHT_PROJECT)
+    if data is not None:
+        doc = json_object(WEIGHT_PROJECT, data)
+        if doc is not None and doc.get("version") != 1:
+            bad.append((WEIGHT_PROJECT, "has no \"version\": 1"))
+        elif doc is not None:
+            try:
+                weight_overlay().load(shipped_weight(), os.path.join(root, WEIGHT_PROJECT))
+            except ValueError as exc:
+                bad.append((WEIGHT_PROJECT, str(exc).split(": ", 1)[-1]))
+    data = raw_of(VERIFICATION_MD)
+    if data is not None:
+        try:
+            data.decode("utf-8")
+        except UnicodeDecodeError:
+            bad.append((VERIFICATION_MD, "is not UTF-8 text"))
+    data = raw_of(".codex/config.toml")
+    if data is not None and tomllib is not None:
+        try:
+            tomllib.loads(data.decode("utf-8"))
+        except ValueError as exc:  # TOMLDecodeError and UnicodeDecodeError
+            bad.append((".codex/config.toml", "is not valid TOML (%s)" % exc))
+    # the old weight.json is read once, by the split, so it must parse then
+    if not os.path.lexists(os.path.join(root, WEIGHT_PROJECT)):
+        data = raw_of(WEIGHT_JSON)
+        if data is not None:
+            json_object(WEIGHT_JSON, data)
+    old_shapes(root, bad)
+    return bad
+
+
+def old_shapes(root, bad):
+    """The four literal detectors of an older riskrails' files (D4)."""
+    exists = lambda rel: os.path.lexists(os.path.join(root, rel))  # noqa: E731
+    if exists(".ai/state/current.json") and not exists(STATE_FILE):
+        bad.append((".ai/state/current.json", "is the task state of a riskrails before 3.4b (there is no state.json)"))
+    if exists(".ai/policies/risk-tiers.json") and not exists(WEIGHT_JSON) and not exists(WEIGHT_PROJECT):
+        bad.append((".ai/policies/risk-tiers.json", "is the risk-tier policy of a riskrails before 2.2 (there is no weight table)"))
+    names = set(render_instructions.RULE_FILE.values()) | {e[0] for e in INSTRUCTION_FILE.values()}
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if d not in RULES_SKIP
+                             and not os.path.lexists(os.path.join(dirpath, d, ".git")))
+        for name in filenames:
+            rel = os.path.relpath(os.path.join(dirpath, name), root).replace(os.sep, "/")
+            if name not in names and rel not in names:
+                continue
+            try:
+                data = read(os.path.join(root, rel))
+            except OSError:
+                continue  # an unreadable instruction file is the plan's to report, not an old shape
+            found = next((m for m in OLD_MARKERS if m in data), None)
+            if found:
+                bad.append((rel, "carries %s of a riskrails before 3.4b" % found.decode()))
+
+
+def kept_refusal(bad):
+    """I3, verbatim: one line per failing file, then the rest."""
+    for rel, why in bad:
+        print("KEPT_UNREADABLE: %s: %s" % (rel, why))
+    print("project-update: nothing was deleted or written. This version regenerates its own files and no longer "
+          "converts older ones.")
+    print("Install riskrails@%s (npx riskrails@%s), run /rr-setup --update with it, then install this version "
+          "and run /rr-setup --update again." % (LAST_MIGRATING_VERSION, LAST_MIGRATING_VERSION))
+    return EXIT_KEPT_UNREADABLE
 
 
 # ---------------------------------------------------------------- planning
 class Plan:
     def __init__(self, root):
         self.root = root
-        self.items = []   # dicts: action, target, note, content, conflict_copy, policy
+        self.items = []   # dicts: action, target, note, content, reason, keep, expect
         self.hints = []
-        self.schema = None  # (from, to, [migration modules]) when migrations are pending
-        self.confirm_delete = None  # the human who confirmed this run's deletions
+        self.confirm_delete = None  # the human who confirmed this run's gated rows
         self.confirm_via = None  # why that gate passed: "terminal" or "unattended"
         self.confirm_cleanup = None  # the human who confirmed this run's [cleanup] deletions
         self.cleanup_via = None
-        self.held = None  # the schema version kept until a migration item is settled
+        self.version_from = None  # the .ai/VERSION this run started from
         self.final = {}   # target -> bytes after this run (for cross-file fixes)
         self.removed = set()  # targets this run takes away
         self.seen = {}    # target -> sha of what was on disk when it was first read,
@@ -846,229 +597,115 @@ class Plan:
     def before(self, target):
         """The sha of the target as this run first read it, None when it was
         absent. Recorded by the read that planned the change, so the precondition
-        and the merge input are the same bytes. A second item for the same target
-        (a move and then its merge) is checked against what this run wrote."""
+        and the planning input are the same bytes."""
         if target not in self.seen:
             path = os.path.join(self.root, target)
             self.seen[target] = sha(read(path)) if os.path.isfile(path) and not os.path.islink(path) else None
         return self.seen[target]
 
-    def add(self, action, target, note="", content=None, conflict_copy=None, policy=None,
-            migration=None, src=None, reason=None, tool=None):
-        expect = self.before(target)
+    def add(self, action, target, note="", content=None, reason=None, keep=False):
         self.items.append(dict(action=action, target=target, note=note, content=content,
-                               conflict_copy=conflict_copy, policy=policy, migration=migration,
-                               src=src, reason=reason, tool=tool, expect=expect,
-                               src_expect=self.before(src) if src else None))
+                               reason=reason, keep=keep, expect=self.before(target)))
         if content is not None:
             self.final[target] = content
             self.removed.discard(target)  # planned content wins over an earlier removal
 
-    @property
-    def local_dir(self):
-        base = ".ai/local/plugin-update" if os.path.isdir(os.path.join(self.root, ".ai")) \
-            else ".claude/memory/local/plugin-update"
-        return base
+    def original_of(self, target):
+        return "%s/original/%s" % (self.report_dir, target)
+
+    def gated(self, action, target, note, content=None, reason=None):
+        """A change that waits for a human: `regenerate?` / `delete?` until
+        --apply --confirm-delete NAME, then `regenerate` / `delete` with the original kept
+        under original/ (R7)."""
+        if self.confirm_delete:
+            self.add(action, target, note, content=content, reason=reason, keep=True)
+            if action == "delete":
+                self.remove(target)
+        else:
+            self.add(action + "?", target, note, reason=reason)
 
 
-WEIGHT_JSON, WEIGHT_MD = ".ai/policies/weight.json", ".ai/policies/weight.md"
-_WEIGHT = None
+# ---------------------------------------------------------------- regenerate
+def lost_lines(ours, theirs):
+    """The lines of the project's copy that the plugin's version does not have."""
+    kept = set(theirs.decode("utf-8", "replace").splitlines())
+    return [line.strip() for line in ours.decode("utf-8", "replace").splitlines()
+            if line.strip() and line not in kept]
 
 
-def weight_module():
-    """skills/ai-task/weight.py, the renderer behind `state.py weight --mirror`."""
-    global _WEIGHT  # pylint: disable=global-statement  # loaded once per run
-    if _WEIGHT is None:
-        spec = importlib.util.spec_from_file_location("riskrails_weight", os.path.join(SKILLS, "ai-task", "weight.py"))
-        _WEIGHT = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(_WEIGHT)
-    return _WEIGHT
-
-
-def render_weight(data):
-    """weight.md for the weight.json bytes `data`; the renderer reads a path."""
-    with tempfile.TemporaryDirectory() as tmp:
-        path = os.path.join(tmp, "weight.json")
-        with open(path, "wb") as fh:
-            fh.write(data)
-        return weight_module().mirror(path).encode("utf-8")
-
-
-def weight_mirror(plan, history, theirs):
-    """weight.md is generated from weight.json. A mirror that is exactly the render of
-    the project's JSON on disk is rendered again from the JSON this run leaves behind:
-    merged as text with the template's, whose sha256 line names the template's JSON, it
-    was a conflict on every update. A mirror edited by hand, or stale, merges as before."""
-    ours = plan.read(WEIGHT_MD)
-    path = os.path.join(plan.root, WEIGHT_JSON)
-    disk = read(path) if os.path.isfile(path) and not os.path.islink(path) else None
-    after = plan.read(WEIGHT_JSON)
-    fresh = None
-    rendering_raised = False
-    if ours is not None and disk is not None and after is not None:
-        try:
-            if ours == render_weight(disk):
-                fresh = render_weight(after)
-        except Exception as exc:  # pylint: disable=broad-except
-            # not a table the renderer reads (or too deep, or no temp dir, or no renderer):
-            # the text merge decides, and it is always safe
-            fresh = None
-            rendering_raised = True
-            # L3: say so, so a renderer bug is not read as a hand-edited mirror
-            plan.hints.append("%s: not rendered from weight.json (%s); merged as text"
-                              % (WEIGHT_MD, type(exc).__name__))
-    if fresh is None:
-        three_way(plan, history, "ai-init/" + WEIGHT_MD, WEIGHT_MD, theirs)
-        # L4: not when the renderer raised: `state.py weight --mirror` would fail the same way
-        stale = None if rendering_raised else stale_mirror_hint(ours, disk)
-        if stale:
-            plan.hints.append(stale)
-    elif fresh != ours:
-        plan.add("update", WEIGHT_MD, "rendered from weight.json", content=fresh)
-
-
-def stale_mirror_hint(ours, disk):
-    """L3: the sha256 in weight.md's header names a weight.json other than the one on disk
-    (an --apply interrupted between the two writes, or a JSON edited without regenerating)."""
-    if ours is None or disk is None:
+def patterns_of(data):
+    """The count of non-empty deny and allow patterns in a path-guard.json, or None when it is not one."""
+    try:
+        doc = json.loads(data)
+        return sum(1 for key in ("deny_patterns", "allow_patterns") for p in doc.get(key) or []
+                   if isinstance(p, str) and p.strip())
+    except (ValueError, AttributeError, TypeError, RecursionError):
         return None
-    head = ours[:2000]
-    found = re.search(r"^<!--.*\bsha256:\s*([0-9a-fA-F]{64})\b.*-->", head if isinstance(head, str) else head.decode("utf-8", "replace"), re.M)
-    if not found or found.group(1).lower() == hashlib.sha256(disk if isinstance(disk, bytes) else disk.encode("utf-8")).hexdigest():
-        return None
-    return ("%s: rendered from a different weight.json than the one on disk (stale: an interrupted "
-            "--apply, or the JSON edited without regenerating) — `state.py weight --mirror` "
-            "regenerates it from the JSON and REPLACES any hand edits in it, so keep or move "
-            "them first" % WEIGHT_MD)
 
 
-def three_way(plan, history, key, target, theirs):
+def edited_note(plan, target, ours, theirs):
+    """What a gated regenerate would lose, and where the original goes (R6)."""
+    lost = lost_lines(ours, theirs)
+    shown = "; ".join("`%s`" % (line[:48] + ("…" if len(line) > 48 else "")) for line in lost[:3])
+    note = "edited here: %d line(s) of yours are not in the plugin's version%s" % (len(lost), " (" + shown + ")" if shown else "")
+    if target.endswith("path-guard.json"):
+        count = patterns_of(ours)
+        note += "; drops %s deny/allow pattern(s)" % ("an unreadable number of" if count is None else count)
+    return "%s; original kept at %s" % (note, plan.original_of(target))
+
+
+def regenerate(plan, history, key, target, theirs):
+    """D5: absent -> create; equal -> nothing; a version the plugin once shipped -> regenerate;
+    anything else is the human's edit -> regenerate? behind the gate."""
     ours = plan.read(target)
     if ours is None:
         plan.add("create", target, content=theirs)
+    elif ours == theirs:
         return
-    if ours == theirs:
-        return
-    versions = [v for v in history.versions(key) if v != theirs]
-    if any(v == ours for v in versions):
-        policy = None
-        if target.endswith(".json") and "/policies/" in "/" + target:
-            try:
-                policy = leaf_changes(json.loads(ours, object_pairs_hook=OrderedDict),
-                                      json.loads(theirs, object_pairs_hook=OrderedDict))
-            except (ValueError, RecursionError):  # not JSON, or too deep to read or flatten: no policy lines
-                policy = None
-        plan.add("update", target, "unchanged since it was installed",
-                 content=theirs, policy=policy)
-        return
-
-    if target.endswith(".json"):
-        try:
-            o = json.loads(ours, object_pairs_hook=OrderedDict)
-            t = json.loads(theirs, object_pairs_hook=OrderedDict)
-            bases = [json.loads(v, object_pairs_hook=OrderedDict) for v in versions]
-        except ValueError:
-            plan.add("conflict", target, "not valid JSON; not merged", conflict_copy=theirs)
-            return
-        except RecursionError:  # parsing, flatten or merge_json past the recursion limit
-            plan.add("conflict", target, "nested too deeply; not merged", conflict_copy=theirs)
-            return
-        try:
-            base = closest(bases, o, json_score) if bases else MISSING
-            conflicts = []
-            merged = merge_json(base, o, t, [], conflicts)
-            policy = leaf_changes(o, merged) if "/policies/" in "/" + target else None
-            content = dump_json(merged) if merged != o else None
-        except RecursionError:
-            plan.add("conflict", target, "nested too deeply; not merged", conflict_copy=theirs)
-            return
-        if merged == o and not conflicts:
-            return
-        if merged != o:
-            plan.add("merge", target, "your edits kept", content=content, policy=policy)
-        if conflicts:
-            plan.add("conflict", target, "kept your value for: " + ", ".join(conflicts), conflict_copy=theirs)
-        return
-
-    if target == ROUTER_FILE and len(SHARED_SECTION_RE.findall(ours)) == 1:
-        router_merge(plan, ours, versions, theirs)
-        return
-    base = closest(versions, ours, text_ratio) if versions else None
-    merged = merge_text(ours, base, theirs) if base is not None else None
-    if merged is not None and target == ROUTER_FILE and len(SHARED_SECTION_RE.findall(merged)) != 1:
-        plan.add("conflict", target, "the merge would not name the shared files exactly once "
-                 "(## Shared files)", conflict_copy=theirs)
-        return
-    if merged is None:
-        plan.add("conflict", target, "edited here and changed in the plugin", conflict_copy=theirs)
-    elif merged != ours:
-        plan.add("merge", target, "your edits kept", content=merged)
+    elif history.shipped(key, ours):
+        plan.add("regenerate", target, "unchanged since it was installed", content=theirs)
+    else:
+        plan.gated("regenerate", target, edited_note(plan, target, ours, theirs), content=theirs)
 
 
-def split_shared_section(text):
-    """(text without its `## Shared files` section, the section, the heading
-    line that followed it) — the section runs from its heading to the next
-    `## ` heading or the end; None when it is not there exactly once."""
-    found = list(SHARED_SECTION_RE.finditer(text))
-    if len(found) != 1:
-        return None
-    start = found[0].start()
-    nxt = re.compile(rb"(?m)^## ").search(text, found[0].end())
-    if nxt is None:  # at the end: the blank line before it belongs to the section
-        head = text[:start]
-        return (head[:-1] if head.endswith(b"\n\n") else head), text[start:], b""
-    end = nxt.start()
-    eol = text.find(b"\n", end)
-    follow = text[end:eol + 1] if eol >= 0 else text[end:]
-    return text[:start] + text[end:], text[start:end], follow
+def effective_weight(plan):
+    """The weight table as this run leaves it: the plugin's with weight.project.json laid over it."""
+    own = plan.read(WEIGHT_PROJECT)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "weight.project.json")
+        if own is not None:
+            with open(path, "wb") as fh:
+                fh.write(own)
+        return weight_overlay().load(shipped_weight(), path)
 
 
-def router_merge(plan, ours, versions, theirs):
-    """A router that already names the shared files once. 0006 put the section
-    in by insertion, so no shipped version is a fair base for it: merge the
-    rest of the router without the section, against the shipped version that
-    rest is closest to, then put the project's section back before the heading
-    it preceded (or where the plugin puts it, or at the end). Nothing to do
-    only when the plugin changed nothing but the section since that base."""
-    crlf = b"\r\n" in ours
-    lf = (lambda b: b.replace(b"\r\n", b"\n")) if crlf else (lambda b: b)
-    o_rest, o_sec, follow = split_shared_section(lf(ours))
-    t_split = split_shared_section(theirs)
-    t_rest = t_split[0] if t_split else theirs
-    rests = [(split_shared_section(v) or (v,))[0] for v in versions]
-    base = closest(rests, o_rest, text_ratio) if rests else None
-    if o_rest == t_rest or (base is not None and base == t_rest):
+GENERATED_HEADER = b"generated by `state.py weight --mirror`"
+
+
+def weight_md(plan, history):
+    """weight.md is always rendered from the shipped table and the overlay (spec :161). A file that is
+    a rendering or a shipped version is replaced; one a human wrote is gated."""
+    try:
+        theirs = weight_module().mirror(effective_weight(plan)).encode("utf-8")
+    except (ValueError, OSError, KeyError, TypeError, AttributeError, RecursionError) as exc:
+        plan.hints.append("%s: not rendered (%s: %s); fix %s, then run this again"
+                          % (WEIGHT_MD, type(exc).__name__, exc, WEIGHT_PROJECT))
         return
-    merged = merge_text(o_rest, base, t_rest) if base is not None else None
-    if merged is not None and not follow:  # the project had it at the end: it stays there
-        merged = merged + (b"" if merged.endswith(b"\n") else b"\n") + b"\n" + o_sec
-    elif merged is not None:
-        merged = put_section(merged, o_sec, [follow, t_split[2] if t_split else b""])
-    if merged is None or len(SHARED_SECTION_RE.findall(merged)) != 1:
-        plan.add("conflict", ROUTER_FILE, "edited here and changed in the plugin", conflict_copy=theirs)
+    ours = plan.read(WEIGHT_MD)
+    if ours is None:
+        plan.add("create", WEIGHT_MD, "rendered from the weight table", content=theirs)
+    elif ours == theirs:
         return
-    if crlf:
-        merged = merged.replace(b"\n", b"\r\n")
-    if merged != ours:
-        plan.add("merge", ROUTER_FILE, "your edits kept", content=merged)
-
-
-def put_section(text, section, follows):
-    """The section inserted before the first of these heading lines that the
-    text has at the start of a line, else appended."""
-    for follow in follows:
-        if not follow:
-            continue
-        m = re.compile(rb"(?m)^" + re.escape(follow.rstrip(b"\n")) + rb"$").search(text)
-        if m:
-            return text[:m.start()] + section + text[m.start():]
-    return text + (b"" if text.endswith(b"\n") else b"\n") + section
+    elif GENERATED_HEADER in ours[:600] or history.shipped("ai-init/" + WEIGHT_MD, ours):
+        plan.add("regenerate", WEIGHT_MD, "rendered from the weight table", content=theirs)
+    else:
+        plan.gated("regenerate", WEIGHT_MD, edited_note(plan, WEIGHT_MD, ours, theirs), content=theirs)
 
 
 def block_update(plan, history, runtime):
+    """R15, D5: the managed block of one instruction file. Rewritten between its markers; no block
+    -> appended; no file -> a minimal one with the block. Text outside the markers is never touched."""
     name, block_tpl, minimal_tpl = INSTRUCTION_FILE[runtime]
-    if name in plan.removed:  # a migration moved this instruction file away
-        return
     tpl = read(os.path.join(TEMPLATES["ai-init"], block_tpl))
     text = plan.read(name)
     if text is None:
@@ -1078,116 +715,222 @@ def block_update(plan, history, runtime):
         return
     found = find_block(text)
     if found is None:
-        plan.add("update", name, "managed block appended",
-                 content=text.rstrip(b"\n") + b"\n\n" + tpl)
+        plan.add("regenerate", name, "managed block appended", content=text.rstrip(b"\n") + b"\n\n" + tpl)
         return
-    s, e, start_marker, end_marker = found
-    legacy = start_marker != START.encode()
-    renamed = " (legacy %s markers renamed)" % start_marker.decode()[len("<!-- "):-len(":start -->")] if legacy else ""
-    ours = current_markers(text[s:e], start_marker, end_marker) + b"\n"
+    s, e = found[0], found[1]
+    ours = text[s:e] + b"\n"
     if ours == tpl:
-        if legacy:
-            plan.add("update", name, "managed block kept" + renamed,
-                     content=text[:s] + tpl.rstrip(b"\n") + text[e:])
         return
-    versions = [v for v in map(renamed_markers, history.versions("ai-init/" + block_tpl)) if v != tpl]
-    if ours in versions:
-        new_block = tpl
-        note = "managed block replaced (unchanged since it was installed)" + renamed
+    content = text[:s] + tpl.rstrip(b"\n") + text[e:]
+    if history.shipped("ai-init/" + block_tpl, ours):
+        plan.add("regenerate", name, "managed block replaced (unchanged since it was installed)", content=content)
     else:
-        base = closest(versions, ours, text_ratio) if versions else None
-        new_block = merge_text(ours, base, tpl) if base is not None else None
-        note = "managed block merged, your edits kept" + renamed
-    if new_block is None and legacy:
-        # The edit cannot be merged, but the markers can still be renamed: the
-        # block stays as edited, and the next run treats it as an edited
-        # current block — a conflict with the plugin's copy beside it.
-        new_block = ours
-        note = "managed block kept as edited" + renamed
-    if new_block is None:
-        plan.add("conflict", name, "the managed block was edited here and changed in the plugin",
-                 conflict_copy=tpl)
-        return
-    if new_block == ours and not legacy:
-        # The merge already holds the plugin's changes: writing it back is no
-        # change, and planning it would keep --check "behind" on every run.
-        return
-    plan.add("update", name, note, content=text[:s] + new_block.rstrip(b"\n") + text[e:])
+        plan.gated("regenerate", name, "managed block " + edited_note(plan, name, ours, tpl), content=content)
 
 
-def shared_update(plan, history, version):
-    """A shared copy in a project that is already at SHARED_SCHEMA: 0006 is not
-    pending, so this is where an unedited copy that came back (a restore, a
-    copy-paste, an old branch) is offered for deletion again, and where edited
-    copies are named once as overrides. Same gate as a migration's deletion."""
-    if version is None or version < SHARED_SCHEMA:
-        return
-    ctx = MigrationContext(plan, SimpleNamespace(VERSION=SHARED_SCHEMA, TITLE="shared", MOVES=[]),
-                           version, None, history)
-    router = plan.read(ROUTER_FILE)
-    named = router is not None and SHARED_SECTION_RE.search(router)
+# ---------------------------------------------------------------- the one-time split
+FIELD_LINE = re.compile(r"(?:%s):" % "|".join(
+    ("verify_command", "step_test_command", "e2e_command", "lint_command", "typecheck_command",
+     "single_test", "doc_tests", "bite_codes", "healthy_output", "runtime")))
+SPECIFICS_RE = re.compile(r"(?m)^## Project specifics[ \t]*$")
+
+
+def split_testing(testing, template):
+    """R11: verification.md from testing.md. The field lines are copied verbatim with their continuation
+    lines (indented, after a field line), then `## Project specifics` to the end of the file."""
+    lines = testing.decode("utf-8").splitlines(keepends=True)
+    fields, taking = [], False
+    for line in lines:
+        if FIELD_LINE.match(line):
+            fields.append(line)
+            taking = True
+        elif taking and line[:1] in (" ", "\t") and line.strip():
+            fields.append(line)
+        else:
+            taking = False
+    text = template.decode("utf-8")
+    if not fields:
+        return template, 0
+    head = text[:re.search(r"(?m)^verify_command:", text).start()]
+    tail = SPECIFICS_RE.search(testing.decode("utf-8"))
+    specifics = testing.decode("utf-8")[tail.start():] if tail else text[SPECIFICS_RE.search(text).start():]
+    body = "".join(fields)
+    return (head + body + ("" if body.endswith("\n") else "\n") + "\n" + specifics).encode("utf-8"), len(fields)
+
+
+def leaves(value, prefix=()):
+    """{path tuple: leaf} — objects are walked, a list or scalar (or an empty object) is one leaf."""
+    if isinstance(value, dict) and value:
+        out = {}
+        for k, v in value.items():
+            out.update(leaves(v, prefix + (k,)))
+        return out
+    return {prefix: value}
+
+
+def split_weight(old, history, template):
+    """R11: weight.project.json from the old weight.json: the leaves that differ from that leaf in every
+    version the plugin shipped (lists whole). -> (bytes, carried paths, uncarried paths that differ from today's table)."""
+    mine = json.loads(old.decode("utf-8"), object_pairs_hook=OrderedDict)
+    tables = []
+    for blob in history.versions("ai-init/" + WEIGHT_JSON) + [read(shipped_weight())]:
+        try:
+            tables.append(leaves(json.loads(blob.decode("utf-8"))))
+        except (ValueError, RecursionError):
+            continue
+    today = tables[-1] if tables else {}
+    carried, uncarried = OrderedDict(), []
+    for path, value in leaves(mine).items():
+        if path[:1] in (("version",), ("_comment",)) or not path:
+            continue
+        if any(path in t and t[path] == value for t in tables):
+            if today.get(path, ...) != value:
+                uncarried.append(".".join(map(str, path)))
+            continue
+        here = carried
+        for part in path[:-1]:
+            here = here.setdefault(part, OrderedDict())
+        here[path[-1]] = value
+    doc = json.loads(template.decode("utf-8"), object_pairs_hook=OrderedDict)
+    doc.update(carried)
+    paths = [".".join(map(str, p)) for p in leaves(carried) if p]
+    return dump_json(doc), paths, uncarried
+
+
+def listed(names, limit=6):
+    shown = ", ".join(names[:limit])
+    return shown + (" and %d more" % (len(names) - limit) if len(names) > limit else "")
+
+
+def unwritten(plan, history, target, template):
+    """True when the new file is absent, or is still a shipped template (today's or any in the history index):
+    a scaffold run over an old tree can leave one, and it carries nothing of the project."""
+    if not plan.exists(target):
+        return True
+    data = plan.read(target)
+    return data is not None and (data.replace(b"\r\n", b"\n") == template.replace(b"\r\n", b"\n")
+                                 or history.shipped("ai-init/" + target, data))
+
+
+def split_once(plan, history):
+    """R11: when verification.md / weight.project.json are absent (or only a shipped template), make them from
+    testing.md / weight.json (once); with a project's own file present the old file is not read again.
+    The old weight.json is then REMOVED, gated."""
+    tpl = TEMPLATES["ai-init"]
+    template = read(os.path.join(tpl, VERIFICATION_MD))
+    if unwritten(plan, history, VERIFICATION_MD, template):
+        absent = not plan.exists(VERIFICATION_MD)
+        testing = plan.read(TESTING_MD)
+        content, count = split_testing(testing, template) if testing is not None else (template, 0)
+        if count:
+            plan.add("split", VERIFICATION_MD, "%d command line(s) of testing.md copied verbatim, with its "
+                     "Project specifics" % count, content=content)
+        elif absent:
+            plan.add("create", VERIFICATION_MD, content=content)
+    template = read(os.path.join(tpl, WEIGHT_PROJECT))
+    if unwritten(plan, history, WEIGHT_PROJECT, template):
+        absent = not plan.exists(WEIGHT_PROJECT)
+        old = plan.read(WEIGHT_JSON)
+        if old is None:
+            if absent:
+                plan.add("create", WEIGHT_PROJECT, content=template)
+        else:
+            content, carried, uncarried = split_weight(old, history, template)
+            if absent or content != plan.read(WEIGHT_PROJECT):
+                note = "%d leaf/leaves of weight.json that differ from the plugin's table carried (%s)" % (
+                    len(carried), listed(carried) or "none")
+                if uncarried:
+                    note += "; %d not carried, equal to an older shipped value: %s" % (len(uncarried), listed(uncarried))
+                plan.add("split", WEIGHT_PROJECT, note, content=content)
+    if plan.exists(WEIGHT_JSON):
+        why = "[split] superseded by %s; the plugin's table is read from the plugin" % WEIGHT_PROJECT
+        plan.gated("delete", WEIGHT_JSON, why, reason=why)
+
+
+# ---------------------------------------------------------------- shared files, rules, caches
+def require_shared(paths, runtimes):
+    """Refuse, before anything is written, to drop a project copy whose shared fallback is missing:
+    in this plugin's tree, or in another installed home of a runtime the project declares. A home
+    this machine does not have is not checked."""
+    undeclared = sorted(p for p in paths if p not in SHARED_SET)
+    if undeclared:
+        raise SchemaError("not in the shared set, never deleted as a shared copy: %s" % ", ".join(undeclared))
+    rels = sorted(p[len(".ai/"):] for p in paths)
+    missing = [r for r in rels if not os.path.isfile(os.path.join(SHARED, r))]
+    if missing:
+        raise SchemaError("the plugin's shared tree %s lacks %d file(s) a project copy would fall back to: %s — "
+                          "reinstall the plugin (install.sh), then run this again" % (SHARED, len(missing), ", ".join(missing)))
+    homes = {"claude": os.path.join(os.path.expanduser("~"), ".claude"),
+             "codex": os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")}
+    mine = os.path.realpath(PLUGIN_HOME)
+    for runtime in runtimes:
+        home = homes.get(runtime)
+        if (not home or os.path.realpath(home) == mine
+                or not os.path.isdir(os.path.join(home, "skills", "project-update"))):
+            continue
+        tree = os.path.join(home, "riskrails", "ai")
+        missing = [r for r in rels if not os.path.isfile(os.path.join(tree, r))]
+        if missing:
+            raise SchemaError("%s has this plugin installed for %s, but %d of the %d shared file(s) a project copy "
+                              "would fall back to are missing from %s — run `install.sh --target %s` from this "
+                              "build, then run this again" % (home, runtime, len(missing), len(rels), tree, runtime))
+
+
+def shared_update(plan, history, runtimes):
+    """R17: an unedited copy of a shared file is offered for deletion; an edited one is an
+    override, kept, and named once (OQ8)."""
     edited, candidates = [], []
     extra = undeclared_shared()
     if extra:
-        ctx.hint("the shared tree %s holds %d file(s) outside the shared set, ignored — reinstall the "
-                 "plugin (install.sh) if you did not put them there: %s" % (SHARED, len(extra), ", ".join(extra)))
+        plan.hints.append("the shared tree %s holds %d file(s) outside the shared set, ignored — reinstall the "
+                          "plugin (install.sh) if you did not put them there: %s" % (SHARED, len(extra), ", ".join(extra)))
     for path in sorted(shared_files()):
         data = plan.read(path)
         if data is None:
             continue
-        why = ctx.unsafe_target(path)
+        why = unsafe_path(plan.root, path)
         if why:
-            ctx.hint("%s: %s, so this update never deletes it — check by hand whether it is still "
-                     "needed" % (path, why))
-        elif not ctx.is_shipped(path, data):
+            plan.hints.append("%s: %s, so this update never deletes it — check by hand whether it is still "
+                              "needed" % (path, why))
+        elif not history.shipped("ai-init/" + path, data):
             edited.append(path)
-        elif not named:
-            ctx.hint("%s: unedited, but %s does not name the shared files (## Shared files), so the "
-                     "copy stays — restore that section, then run /rr-setup --update again"
-                     % (path, ROUTER_FILE))
         else:
             candidates.append(path)
     if candidates:
         try:
-            ctx.require_shared(candidates)
+            require_shared(candidates, runtimes)
         except SchemaError as exc:
-            ctx.hint("%s — the copies stay until then" % exc)
+            plan.hints.append("%s — the copies stay until then" % exc)
             candidates = []
     for path in candidates:
         why = "[shared] identical to a shipped version"
-        if plan.confirm_delete:
-            plan.add("delete", path, why, reason=why)
-            plan.remove(path)
-        else:
-            plan.add("delete?", path, why, reason=why)
+        plan.gated("delete", path, why, reason=why)
     if edited:
-        ctx.hint("%d file(s) override the plugin's shared copy and no longer receive its changes: %s — "
-                 "diff each against %s/<path>; `ai-path <path>` shows which applies; delete one when it "
-                 "adds nothing" % (len(edited), ", ".join(edited), SHARED))
+        plan.hints.append("%d file(s) override the plugin's shared copy and no longer receive its changes: %s — "
+                          "diff each against %s/<path>; `ai-path <path>` shows which applies; delete one when it "
+                          "adds nothing" % (len(edited), ", ".join(edited), SHARED))
 
 
-def retire_templates(plan, history, retired):
-    """[(history key, target)] the plugin now supplies from its own tree. A
-    missing copy stays missing; an unedited one is offered for deletion, same
-    gate as a shared override; an edited one is a project override, named once."""
-    edited = []
-    for key, target in retired:
-        data = plan.read(target)
-        if data is None:
-            continue
-        known = history.hashes(key)
-        if sha(data) not in known and sha(data.replace(b"\r\n", b"\n")) not in known:
-            edited.append(target)
-            continue
-        why = "[sdlc] the plugin supplies it: skills/project-init/templates/" + key.split("/", 1)[1]
-        if plan.confirm_delete:
-            plan.add("delete", target, why, reason=why)
-            plan.remove(target)
-        else:
-            plan.add("delete?", target, why, reason=why)
-    if edited:
-        plan.hints.append("%d file(s) override the plugin's SDLC template and no longer receive its "
-                          "changes: %s" % (len(edited), ", ".join(edited)))
+def rule_sources(plan):
+    """OQ1: a rule source is not kept. Each `.ai/rules/<slug>.md` is `delete?` behind the gate with its
+    original copied; until it is confirmed the rule stays rendered."""
+    rules = os.path.join(plan.root, RULES_DIR)
+    for name in sorted(os.listdir(rules)) if os.path.isdir(rules) else []:
+        rel = "%s/%s" % (RULES_DIR, name)
+        if name.endswith(".md") and name != "README.md" and os.path.isfile(os.path.join(rules, name)) \
+                and not unsafe_path(plan.root, rel):
+            why = "[rules] rule sources are not kept by an update: the rendered blocks go with it"
+            plan.gated("delete", rel, why, reason=why)
+
+
+def local_cache(plan):
+    """R18: .ai/local/plugin-update/ (the old merge's conflict copies) is removed; .ai/local/memory/ is never touched."""
+    for here, _dirs, names in os.walk(os.path.join(plan.root, LOCAL_CACHE)):
+        for name in sorted(names):
+            rel = os.path.relpath(os.path.join(here, name), plan.root).replace(os.sep, "/")
+            if not unsafe_path(plan.root, rel):
+                why = "[local] the old merge's cache, not written any more"
+                plan.gated("delete", rel, why, reason=why)
 
 
 def task_journal(root, task_id):
@@ -1242,14 +985,12 @@ def cleanup_update(plan, now=None):
                   file=sys.stderr)
             raise SystemExit(2) from None
     flight = None
-    for name in (STATE_FILE, LEGACY_STATE_FILE):
-        raw = plan.read(name)
-        if raw is not None:
-            try:
-                flight = json.loads(raw).get("task_id")
-            except (ValueError, AttributeError, RecursionError):
-                return  # unreadable: a task may be in flight, so no task is proposed as stale
-            break
+    raw = plan.read(STATE_FILE)
+    if raw is not None:
+        try:
+            flight = json.loads(raw).get("task_id")
+        except (ValueError, AttributeError, RecursionError):
+            return  # unreadable: a task may be in flight, so no task is proposed as stale
     reports =os.path.join(plan.root, ".ai", "reports")
     logs = os.path.join(plan.root, ".ai", "state", "logs")
 
@@ -1307,14 +1048,14 @@ def cleanup_update(plan, now=None):
 
 
 def deletion_hint(plan):
-    """M4: git is the rollback of a migration's deletion; it must hold .ai/ first.
+    """M4: git is the rollback of a deletion or an overwrite; it must hold .ai/ first.
     A [cleanup] deletion of git-ignored run state is not counted: git does not roll it back;
     one under .ai/reports/ that git tracks, or should, is."""
-    if any(i["action"] in ("delete?", "delete") and i["target"].startswith(".ai/")
+    if any(i["action"] in ("delete?", "delete", "regenerate?") and i["target"].startswith(".ai/")
            and (not (i.get("reason") or "").startswith("[cleanup]") or i["target"] in plan.git_kept)
            for i in plan.items) \
             and git_dirty_ai(plan.root):
-        plan.hints.append("commit .ai/ first: git is this migration's rollback "
+        plan.hints.append("commit .ai/ first: git is this update's rollback "
                           "(`git status -- .ai` lists what it does not hold yet)")
 
 
@@ -1438,25 +1179,17 @@ def _frozen_block(plan, target, slug):
     return held is not None and slug in render_instructions.rule_slugs_in(held.decode("utf-8", "replace"))
 
 
-def rules_update(plan, runtimes, planned=None):
+def rules_update(plan, runtimes):
     """Render `.ai/rules/<slug>.md` into the instruction file of every directory
     it names, and take back what a rule no longer asks for. The text around a
     block belongs to the project and is never read for meaning, only preserved.
-
-    `planned` ({".ai/rules/<slug>.md": text}) are rules this same run is about
-    to write (an adopt): they replace or join the ones on disk by slug, so their
-    blocks render in the same run. The plain update passes nothing."""
+    A rule whose source this run deletes is no longer rendered."""
     rules_path = os.path.join(plan.root, RULES_DIR)
-    if not os.path.isdir(rules_path) and not planned:
+    if not os.path.isdir(rules_path):
         return
     try:
-        rules = render_instructions.load_rules(rules_path)
-        if planned:
-            by_slug = OrderedDict((r.slug, r) for r in rules)
-            for rel, text in sorted(planned.items()):
-                slug = os.path.basename(rel)[:-3]
-                by_slug[slug] = render_instructions.parse_rule(slug, text, where=rel)
-            rules = list(by_slug.values())
+        rules = [r for r in render_instructions.load_rules(rules_path)
+                 if "%s/%s.md" % (RULES_DIR, r.slug) not in plan.removed]
     except render_instructions.RenderError as exc:
         plan.hints.append("%s — that rule is not rendered; the rest are" % exc)
         return
@@ -1488,7 +1221,7 @@ def rules_update(plan, runtimes, planned=None):
             if current is None:
                 plan.add("create", target, "rendered from " + source, content=new)
             elif current != new:
-                plan.add("update", target, "rendered from " + source, content=new)
+                plan.add("regenerate", target, "rendered from " + source, content=new)
             continue
         text = "" if current is None else current.decode("utf-8")
         new = render_instructions.splice_rule(text, item["slug"], content).encode()
@@ -1496,7 +1229,7 @@ def rules_update(plan, runtimes, planned=None):
             plan.add("create", target, "rule block %s from %s" % (item["slug"], source),
                      content=new)
         elif current != new:
-            plan.add("update", target, "rule block %s from %s" % (item["slug"], source),
+            plan.add("regenerate", target, "rule block %s from %s" % (item["slug"], source),
                      content=new)
 
     blocks, docs = rendered_rules(plan)
@@ -1505,7 +1238,7 @@ def rules_update(plan, runtimes, planned=None):
             continue
         text = plan.read(target).decode("utf-8")
         # The block is ours; the file is not. Take the block, leave the file.
-        plan.add("update", target, "rule block %s removed (%s/%s.md no longer renders here)"
+        plan.add("regenerate", target, "rule block %s removed (%s/%s.md no longer renders here)"
                  % (slug, RULES_DIR, slug),
                  content=render_instructions.strip_rule(text, slug).encode())
     for target in docs:
@@ -1536,8 +1269,8 @@ def gitignore_update(plan, snippet_path):
     sep = b"\n" if current and not current.endswith(b"\n") else b""
     new = current + sep + add.encode()
     # Replace an earlier .gitignore item from this run instead of stacking two.
-    plan.items = [i for i in plan.items if i["target"] != ".gitignore" or i["migration"] is not None]
-    plan.add("update", ".gitignore", "entries appended: " + ", ".join(missing), content=new)
+    plan.items = [i for i in plan.items if i["target"] != ".gitignore"]
+    plan.add("regenerate", ".gitignore", "entries appended: " + ", ".join(missing), content=new)
 
 
 def budget_hints(plan, runtimes):
@@ -1586,7 +1319,30 @@ def constitution_hint(plan):
         plan.hints.append(line.replace(path, rel))
 
 
+def verification_hints(plan):
+    """R10: update's empty-field hints read verification.md."""
+    text = plan.read(VERIFICATION_MD)
+    if text is None:
+        return
+    for field, why in (
+        ("verify_command", "the feedback loop needs it"),
+        ("step_test_command", "a step runs only its own tests"),
+        ("e2e_command", "e2e runs once at the end of a task; write 'none' if there is no suite"),
+        ("lint_command", "a sensor reads it; read the project's config files for it, and write 'none' if there is none"),
+        ("typecheck_command", "a sensor reads it; read the project's config files for it, and write 'none' if there is none"),
+    ):
+        if re.search(rb"(?m)^" + field.encode() + rb":[ \t]*(#.*)?$", text):
+            plan.hints.append("%s: %s is empty — %s" % (VERIFICATION_MD, field, why))
+        elif not re.search(rb"(?m)^" + field.encode() + rb":", text):
+            plan.hints.append("%s: %s is missing — %s" % (VERIFICATION_MD, field, why))
+
+
+PHASE = {"split": 0, "delete": 2, "delete?": 2}
+
+
 def build_plan(root, confirm_delete=None, confirm_via=None, confirm_cleanup=None, cleanup_via=None):
+    """D3: split_once -> regenerate -> shared -> block per runtime -> rules -> local -> gitignore, cleanup, hints.
+    The caller has run check_kept: nothing here reads a kept file for meaning."""
     plan = Plan(root)
     plan.confirm_cleanup = confirm_cleanup
     plan.cleanup_via = cleanup_via
@@ -1596,110 +1352,66 @@ def build_plan(root, confirm_delete=None, confirm_via=None, confirm_cleanup=None
     has_sdlc = os.path.isdir(os.path.join(root, "docs", "sdlc"))
     if not (has_ai or has_sdlc):
         return None
-    # Only a project with .ai/ runs migrations, so only it can be carrying a
-    # moved file — and a faulty registry must not break the projects that cannot.
-    # renames() validates the registry, raising the same SchemaError as load().
-    history = History(HISTORY, migrations.renames(template_targets()) if has_ai else {})
-
+    history = History(HISTORY)
     runtimes = project_runtimes(root)
-    version = None
-    if has_ai:
-        version = detect_version(plan)
-        migrations.load()  # CURRENT comes from the file names; this validates the registry
-        if version > migrations.CURRENT:
-            raise SchemaError("%s says schema %d, this plugin ships schema %d — update the plugin "
-                              "(riskrails/install.sh)" % (VERSION_FILE, version, migrations.CURRENT))
-        if version < migrations.CURRENT:
-            mods = run_migrations(plan, version, history)
-            plan.schema = (version, migrations.CURRENT, mods)
-            # The schema only advances when its migrations are done. Writing
-            # VERSION over an unresolved conflict, or over a deletion nobody has
-            # confirmed, would drop the operation: the next run would see a
-            # current project and plan nothing.
-            stuck = [i for i in plan.items if i["migration"] is not None
-                     and i["action"] in ("conflict", "delete?")]
-            if stuck:
-                plan.held = version
-                plan.hints.append("the schema stays at %d until %s — resolve a conflict by hand, confirm a "
-                                  "deletion with --apply --confirm-delete NAME, then run /rr-setup --update again"
-                                  % (version, ", ".join("%s (%s)" % (i["target"], i["action"]) for i in stuck)))
-            else:
-                # Last of the migration items: an apply that stops short leaves the
-                # version alone, and the next run plans the same migrations again.
-                plan.add("update" if plan.exists(VERSION_FILE) else "create", VERSION_FILE,
-                         "schema %d" % migrations.CURRENT, content=b"%d\n" % migrations.CURRENT,
-                         migration=migrations.CURRENT)
+    plan.version_from = project_version(root) if has_ai else None
 
     if has_sdlc:
         tpl = TEMPLATES["project-init"]
-        entries = list(PROJECT_INIT_MAP)
-        retired = []
+        for src, target in SDLC_CREATE:  # the project's own from then on
+            if not plan.exists(target):
+                plan.add("create", target, content=read(os.path.join(tpl, src)).replace(
+                    b"{{PROJECT}}", os.path.basename(root).encode()))
         for rt in runtimes:
-            entries += RUNTIME_MAP[rt]
-        for src, target, kind in entries:
-            content = read(os.path.join(tpl, src))
-            if target in plan.removed:  # a migration moved it away in this run
-                continue
-            if kind == "retire":
-                retired.append(("project-init/" + src, target))
-            elif kind == "create":
-                if not plan.exists(target):
-                    plan.add("create", target, content=content.replace(
-                        b"{{PROJECT}}", os.path.basename(root).encode()))
-            else:
-                three_way(plan, history, "project-init/" + src, target, content)
-        retire_templates(plan, history, retired)
+            for src, target, kind in RUNTIME_MAP[rt]:
+                content = read(os.path.join(tpl, src))
+                if kind == "create":
+                    if not plan.exists(target):
+                        plan.add("create", target, content=content)
+                else:
+                    regenerate(plan, history, "project-init/" + src, target, content)
         gitignore_update(plan, os.path.join(tpl, "gitignore.snippet"))
 
     if has_ai:
         tpl = TEMPLATES["ai-init"]
+        split_once(plan, history)
         files = []
         for dirpath, _, names in os.walk(os.path.join(tpl, ".ai")):
             for n in names:
-                files.append(os.path.relpath(os.path.join(dirpath, n), tpl))
-        # JSON before markdown, so the weight mirror is rendered from the merged JSON.
-        for rel in sorted(files, key=lambda r: (not r.endswith(".json"), r)):
-            if rel == VERSION_FILE:  # owned by the migration step, never merged
+                files.append(os.path.relpath(os.path.join(dirpath, n), tpl).replace(os.sep, "/"))
+        for rel in sorted(files):
+            if rel in NOT_COPIED or rel in (VERIFICATION_MD, WEIGHT_PROJECT):
                 continue
-            if rel in plan.removed:  # a migration moved it away in this run
-                continue
-            if rel in CREATE_ONCE and version >= CREATE_ONCE[rel] and not plan.exists(rel):
-                continue  # past the step that created it: its absence is the human's choice
             content = read(os.path.join(tpl, rel))
-            if rel.startswith(".ai/project/") or rel.startswith(".ai/reports/"):
+            if rel in CREATE_ONLY or rel.startswith(CREATE_ONLY_DIRS):
                 if not plan.exists(rel):
                     plan.add("create", rel, content=content)
-                continue
-            if rel == WEIGHT_MD:
-                weight_mirror(plan, history, content)
-                continue
-            three_way(plan, history, "ai-init/" + rel, rel, content)
-        shared_update(plan, history, version)
+            else:
+                regenerate(plan, history, "ai-init/" + rel, rel, content)
+        weight_md(plan, history)
+        shared_update(plan, history, runtimes)
+        rule_sources(plan)
+        local_cache(plan)
         cleanup_update(plan)
-        deletion_hint(plan)
         for rt in runtimes:
             block_update(plan, history, rt)
         rules_update(plan, runtimes)
+        deletion_hint(plan)
         gitignore_update(plan, os.path.join(tpl, "gitignore.snippet"))
         tracked_ignored_hint(plan)
-
-        testing = plan.read(".ai/policies/testing.md")
-        if testing is not None:
-            for field, why in (
-                ("verify_command", "the feedback loop needs it"),
-                ("step_test_command", "a step runs only its own tests"),
-                ("e2e_command", "e2e runs once at the end of a task; write 'none' if there is no suite"),
-                ("lint_command", "a sensor reads it; read the project's config files for it, and write 'none' if there is none"),
-                ("typecheck_command", "a sensor reads it; read the project's config files for it, and write 'none' if there is none"),
-            ):
-                if re.search(rb"(?m)^" + field.encode() + rb":[ \t]*(#.*)?$", testing):
-                    plan.hints.append(".ai/policies/testing.md: %s is empty — %s" % (field, why))
-                elif not re.search(rb"(?m)^" + field.encode() + rb":", testing):
-                    plan.hints.append(".ai/policies/testing.md: %s is missing — %s" % (field, why))
+        verification_hints(plan)
         budget_hints(plan, runtimes)
-
+        if plan.items and plan.exists(STATE_FILE):
+            plan.hints.append("%s: a task is in flight while files are regenerated — check that the files "
+                              "its current step may touch still exist afterwards" % STATE_FILE)
+        # Last of the items: an apply that stops short leaves the version alone, and the next run plans the rest again.
+        ours = template_version()
+        if plan.version_from != ours:
+            plan.add("regenerate" if plan.exists(VERSION_FILE) else "create", VERSION_FILE,
+                     "schema %d" % ours, content=b"%d\n" % ours)
     if has_sdlc:
         constitution_hint(plan)
+    plan.items.sort(key=lambda i: 3 if i["target"] == VERSION_FILE else PHASE.get(i["action"], 1))
     return plan
 
 
@@ -1772,10 +1484,11 @@ def keep_original(plan, target):
                read(path), mode=os.stat(path).st_mode & 0o7777)
 
 
-def record_migration(plan, ops, deletions):
-    """The record of what was taken away, rewritten after every such operation:
-    an abort must not lose the note of a deletion a human approved. A second run
-    on the same day appends to the record instead of replacing it."""
+
+def record_run(plan, ops, deletions):
+    """The record of what was taken away or overwritten, rewritten after every such operation:
+    an abort must not lose the note of a change a human approved. A second run on the same
+    day appends to the record instead of replacing it."""
     path = os.path.join(plan.report_dir, "migration.json")
     existing = {}
     full = os.path.join(plan.root, path)
@@ -1787,17 +1500,12 @@ def record_migration(plan, ops, deletions):
         if not isinstance(existing, dict):  # hand-edited into another shape
             existing = {}
     record = OrderedDict()
-    record["from"] = existing.get("from", plan.schema[0] if plan.schema else None)
-    # The version the project is actually at now, read from the disk and not from
-    # the plan: this record is written before the files move, and an aborted run
-    # never reaches CURRENT.
+    record["from"] = existing.get("from", plan.version_from)
+    # The version the project is actually at now, read from the disk: this record is
+    # written before the files change, and an aborted run never reaches the template's.
     version_path = os.path.join(plan.root, VERSION_FILE)
     on_disk = read(version_path).decode().strip() if os.path.isfile(version_path) else ""
     record["to"] = int(on_disk) if on_disk.isdigit() else record["from"]
-    if plan.schema and record["to"] != plan.schema[1]:
-        record["target"] = plan.schema[1]
-        if plan.held is not None:
-            record["held_at"] = plan.held
     record["applied_at"] = utc_now()
     # A recovery re-run replays the same operation: record it once.
     record["ops"] = list(existing.get("ops", []))
@@ -1805,6 +1513,8 @@ def record_migration(plan, ops, deletions):
     record["deletions"] = list(existing.get("deletions", []))
     record["deletions"] += [d for d in deletions
                             if not any(e.get("path") == d["path"] for e in record["deletions"])]
+    if existing and all(existing.get(k) == record[k] for k in ("from", "to", "ops", "deletions")):
+        return  # a run that changed nothing leaves the record as it was
     write_file(plan.root, path, dump_json(record))
 
 
@@ -1820,74 +1530,58 @@ def apply(plan):
             raise Abort(exc.item or item, exc.why) from exc
         except OSError as exc:
             raise Abort(item, str(exc)) from exc
-    # The run finished: say which version it actually reached. Also after a run
-    # that replayed an aborted one and so recorded no operation of its own.
+    # The run finished: say which version it actually reached.
     try:
         if recorded or os.path.isfile(os.path.join(plan.root, plan.report_dir, "migration.json")):
-            record_migration(plan, [], [])
+            record_run(plan, [], [])
     except OSError as exc:
         raise Abort(None, str(exc)) from exc
 
 
 def apply_item(plan, item, written, recorded):
     target, action = item["target"], item["action"]
-    cleanup = (item.get("reason") or "").startswith("[cleanup]")
-    if action == "delete?":  # listed only, until a human confirms it
+    reason = item.get("reason") or ""
+    cleanup = reason.startswith("[cleanup]")
+    if action in ("delete?", "regenerate?"):  # listed only, until a human confirms it
         return
-    mode = None
-    if action in ("move", "delete"):
-        source = item["src"] if action == "move" else target
+    by = dict(confirmed_by=plan.confirm_cleanup if cleanup else plan.confirm_delete,
+              via=plan.cleanup_via if cleanup else plan.confirm_via, at=utc_now())
+    if action == "delete":
         # the plan-time symlink check is repeated: a path swapped since is refused
-        why = unsafe_path(plan.root, source)
+        why = unsafe_path(plan.root, target)
         if why:
             raise Abort(item, why)
-        check(plan, item, source, item["src_expect"] if action == "move" else item["expect"], written)
-        if action == "move":
-            check(plan, item, target, item["expect"], written)
-            mode = os.stat(os.path.join(plan.root, source)).st_mode & 0o7777
-        # git-ignored task state: a move is byte-identical; a [cleanup] deletion of it is NOT
-        # recoverable through git (the logs are git-ignored), and copying what it removes
-        # would defeat the cleanup, so no original/ copy is kept. A report file git tracks,
-        # or should, is kept like any other deletion.
-        if not source.startswith(".ai/state/") and (not cleanup or source in plan.git_kept):
-            keep_original(plan, source)
+        check(plan, item, target, item["expect"], written)
+        # git-ignored task state: a [cleanup] deletion of it is NOT recoverable through git, and
+        # copying what it removes would defeat the cleanup, so no original/ copy is kept. A report
+        # file git tracks, or should, is kept like any other deletion.
+        if not target.startswith(".ai/state/") and (not cleanup or target in plan.git_kept):
+            keep_original(plan, target)
         recorded.append(target)
         # Recorded before the file is gone: an abort later must not lose the note
-        # of what was taken away, or of who approved a deletion.
-        record_migration(plan,
-                         [dict(action=action, migration=item["migration"],
-                               **(dict(src=item["src"], dst=target) if action == "move" else dict(path=target)))],
-                         [dict(path=target, confirmed_by=plan.confirm_cleanup if cleanup else plan.confirm_delete,
-                               via=plan.cleanup_via if cleanup else plan.confirm_via, at=utc_now())]
-                         if action == "delete" else [])
-    elif item["content"] is not None:
-        check(plan, item, target, item["expect"], written)
-        # A migration rewriting a file outside .ai/ is rewriting a file the
-        # project owns. Keep what it had, exactly as a move or a deletion does,
-        # so a rewrite a human disagrees with can be read back and undone.
-        if item["migration"] is not None and not target.startswith(".ai/") \
-                and item["expect"] is not None and target not in written \
-                and not os.path.exists(os.path.join(plan.root, plan.report_dir, "original", target)):
-            keep_original(plan, target)
-    if item["content"] is not None:
-        write_file(plan.root, target, item["content"], mode=mode)
-        written[target] = sha(item["content"])
-    if action == "move":
-        os.remove(os.path.join(plan.root, item["src"]))
-        written[item["src"]] = None
-    elif action == "delete":
+        # of what was taken away, or of who approved it.
+        record_run(plan, [dict(action=action, path=target)], [dict(path=target, **by)])
         os.remove(os.path.join(plan.root, target))
         written[target] = None
-        if (item["reason"] or "").startswith("[cleanup]"):
+        if reason.startswith(("[cleanup]", "[local]")):
             prune_empty(plan.root, target)
-    if item["conflict_copy"] is not None:
-        write_file(plan.root, os.path.join(plan.local_dir, target), item["conflict_copy"])
+        return
+    check(plan, item, target, item["expect"], written)
+    if item["keep"] and item["expect"] is not None and target not in written:
+        # A change a human confirmed overwrites what they wrote: keep it, so it can be read back.
+        if not os.path.exists(os.path.join(plan.root, plan.original_of(target))):
+            keep_original(plan, target)
+        recorded.append(target)
+        record_run(plan, [dict(action=action, path=target, **by)], [])
+    write_file(plan.root, target, item["content"])
+    written[target] = sha(item["content"])
 
 
 def prune_empty(root, target):
-    """The directories a cleanup deletion left empty, up to (not including)
-    .ai/reports and .ai/state/logs; a directory with anything in it stays."""
-    top = ".ai/state/logs" if target.startswith(".ai/state/logs/") else ".ai/reports"
+    """The directories a cleanup or cache deletion left empty, up to (not including)
+    .ai/reports, .ai/state/logs and .ai/local; a directory with anything in it stays."""
+    top = ".ai/state/logs" if target.startswith(".ai/state/logs/") else \
+        ".ai/local" if target.startswith(LOCAL_CACHE + "/") else ".ai/reports"
     here = os.path.dirname(target)
     while here.startswith(top + "/"):
         try:
@@ -1897,56 +1591,13 @@ def prune_empty(root, target):
         here = os.path.dirname(here)
 
 
-def plain_pending(root, ignore=()):
-    """True when the plain --check would exit 1: an automatic item or a schema
-    step is pending. Targets in `ignore` (an adopt resuming its own writes) do
-    not count. Same condition as main()'s --check branch."""
-    plan = build_plan(root)
-    if plan is None:
-        return False
-    pending = [i for i in plan.items if i["action"] not in ("conflict", "delete?") and i["target"] not in ignore]
-    return bool(pending or plan.schema)
-
-
-def shipped_ai_files():
-    """{project-relative path: current shipped bytes} for every file this
-    plugin ships unedited into a scaffold: `.ai/**` from the ai-init templates,
-    and the project-init docs (`docs/sdlc/README.md`, the `TEMPLATE.md`s). Used
-    only to tell adopt's no-dangling check that an untouched plugin file
-    mentioning a tool's name in passing (a generic example, a policy) is not a
-    project-specific dependency on it — the same "unedited = ours, not the
-    project's words" rule the three-way update already applies."""
-    out = {}
-    base = os.path.join(TEMPLATES["ai-init"], ".ai")
-    for here, _dirs, files in os.walk(base):
-        for name in files:
-            full = os.path.join(here, name)
-            rel = ".ai/" + os.path.relpath(full, base).replace(os.sep, "/")
-            out[rel] = read(full)
-    for rel, data in shared_files().items():  # read from the plugin, never scaffolded
-        out.setdefault(rel, data)
-    for src, target, _kind in PROJECT_INIT_MAP:
-        path = os.path.join(TEMPLATES["project-init"], src)
-        if os.path.isfile(path):
-            out[target] = read(path)
-    return out
-
-
-def shipped_block(runtime):
-    """The managed block the installed plugin ships for a runtime, as text."""
-    return read(os.path.join(TEMPLATES["ai-init"], INSTRUCTION_FILE[runtime][1])).decode("utf-8").rstrip("\n")
-
-
 def report(plan, applied):
-    auto = [i for i in plan.items if i["action"] not in ("conflict", "delete?")]
-    conflicts = [i for i in plan.items if i["action"] == "conflict"]
-    deletions = [i for i in plan.items if i["action"] == "delete?"]
+    auto = [i for i in plan.items if i["action"] not in ("delete?", "regenerate?")]
+    gated = [i for i in plan.items if i["action"] in ("delete?", "regenerate?")]
     head = "applied" if applied else "dry run, nothing written; --apply to write"
     print("project-update: %s (%s)" % (plan.root, head))
     if not plan.items:
         print("  up to date with the installed plugin")
-    def shown(i):
-        return "%s -> %s" % (i["src"], i["target"]) if i["src"] else i["target"]
     # a cleanup is one line per directory, however many files it holds
     rows, groups = [], {}
     for i in plan.items:
@@ -1957,49 +1608,34 @@ def report(plan, applied):
             if key in groups:
                 groups[key]["count"] += 1
                 continue
-            row = dict(i, migration=None, src=None, count=1)
+            row = dict(i, count=1)
             groups[key] = row
             row["target"] = where
             i = row
         rows.append(i)
     for (where, _action, _note), row in groups.items():
         row["target"] = "%s/ (%d file%s)" % (where, row["count"], "" if row["count"] == 1 else "s")
-    width = max([len(shown(i)) for i in rows] + [10])
-    if plan.schema:
-        frm, to, mods = plan.schema
-        print("  %-9s %-*s  (%d migration%s: %s)" % (
-            "schema", width, "%d -> %d" % (frm, to), len(mods), "" if len(mods) == 1 else "s",
-            ", ".join("%04d %s" % (m.VERSION, m.TITLE) for m in mods)))
+    width = max([len(i["target"]) for i in rows] + [10])
     for i in rows:
         note = i["note"]
-        if i["migration"] is not None:
-            note = "[%04d]%s" % (i["migration"], " " + note if note else "")
-        if i.get("tool") and not note.startswith("[%s]" % i["tool"]):
-            note = "[%s] %s" % (i["tool"], note)
-        if i["action"] == "delete?":
+        if i["action"] in ("delete?", "regenerate?"):
             if (i["reason"] or "").startswith("[cleanup]"):
                 note += "; needs --apply --confirm-cleanup NAME"
                 if i["target"].startswith(".ai/state/"):
                     note += " (git-ignored: not recoverable through git)"
             else:
                 note += "; needs --apply --confirm-delete NAME"
-        if i["action"] == "conflict" and i["conflict_copy"] is not None:
-            note += "; plugin version %s %s/%s" % ("at" if applied else "will be at", plan.local_dir, i["target"])
-        print("  %-9s %-*s  %s" % (i["action"], width, shown(i), note))
-        for change in i["policy"] or []:
-            print("  %-9s %-*s    %s" % ("policy", width, "", change))
+        print("  %-9s %-*s  %s" % (i["action"], width, i["target"], note))
     for h in plan.hints:
         print("  hint      " + h)
     tail = ""
-    if any(i["policy"] for i in auto):
-        tail += ", %d policy change(s) to confirm" % sum(len(i["policy"] or []) for i in auto)
     # the summary names the flag each row names: [cleanup] rows settle with --confirm-cleanup only
-    cleanups = [i for i in deletions if (i["reason"] or "").startswith("[cleanup]")]
-    if len(deletions) > len(cleanups):
-        tail += ", %d deletion(s) awaiting --confirm-delete" % (len(deletions) - len(cleanups))
+    cleanups = [i for i in gated if (i["reason"] or "").startswith("[cleanup]")]
+    if len(gated) > len(cleanups):
+        tail += ", %d change(s) awaiting --confirm-delete" % (len(gated) - len(cleanups))
     if cleanups:
         tail += ", %d cleanup file(s) awaiting --confirm-cleanup" % len(cleanups)
-    print("%d automatic, %d conflict(s)%s" % (len(auto), len(conflicts), tail))
+    print("%d automatic%s" % (len(auto), tail))
 
 
 def main():
@@ -2007,24 +1643,10 @@ def main():
     ap.add_argument("root", nargs="?", default=".")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--check", action="store_true")
-    ap.add_argument("--adopt", action="store_true",
-                    help="adopt a foreign AI-tool structure (Spec Kit, Kiro, Cursor, ...); a dry run unless --apply")
-    ap.add_argument("--mode", choices=("migrate", "coexist"), default="migrate",
-                    help="with --adopt: migrate (default) moves the foreign files; coexist only routes to them")
-    ap.add_argument("--tool", metavar="LIST", help="with --adopt: only these tools, comma-separated")
-    ap.add_argument("--split-request", action="store_true",
-                    help="with --adopt: write split-request.json for each oversized instruction file, nothing else")
-    ap.add_argument("--split", choices=("proposal", "fallback"),
-                    help="with --adopt: split by the session's proposal, or move every line outside the "
-                         "block verbatim to .ai/policies/adopted/ (default: the proposal if one matches)")
-    ap.add_argument("--diff", action="store_true", help="with --adopt: print the unified diff of the dry run")
-    ap.add_argument("--cleanup", action="store_true",
-                    help="with --adopt: list the adopted foreign files for deletion; they are deleted only "
-                         "with --apply --confirm-delete NAME, typed by a human")
     ap.add_argument("--budget", action="store_true",
                     help="with --check: exit 1 when a root instruction file is over its byte budget")
     ap.add_argument("--confirm-delete", metavar="NAME",
-                    help="a human confirms this run's proposed deletions, and is recorded in "
+                    help="a human confirms this run's gated rows (regenerate?, delete?), and is recorded in "
                          "the migration report; only with --apply")
     ap.add_argument("--confirm-cleanup", metavar="NAME",
                     help="a human confirms this run's [cleanup] deletions (run logs and stale task files, "
@@ -2038,52 +1660,27 @@ def main():
         if not args.apply:
             ap.error("%s only makes sense with --apply" % flag)
         if not name.strip():
-            ap.error("%s needs the name of the human who confirmed the deletion" % flag)
-        if adopt.placeholder_name(name):
+            ap.error("%s needs the name of the human who confirmed the change" % flag)
+        if placeholder_name(name):
             ap.error("%s got the placeholder %r; type your own name, it is the audit trail"
                      % (flag, name.strip()))
-        passed, via, why = adopt.human_gate()
+        passed, via, why = human_gate()
         if not passed:
             # Under an agent-session marker the AI_UNATTENDED route is the launcher's
             # to declare, not the agent's to type: the hint names it only otherwise.
             hint = "run the same command yourself in a terminal outside Claude Code or Codex"
             if "agent session" not in why:
                 hint += ", or set AI_UNATTENDED=1 if a launcher runs it unattended on your behalf"
-            return adopt.refuse("%s is typed by a human, and %s" % (flag, why), hint)
+            return refuse("%s is typed by a human, and %s" % (flag, why), hint)
         if flag == "--confirm-delete":
             confirm_via = via
         else:
             cleanup_via = via
     if args.budget and not args.check:
         ap.error("--budget only makes sense with --check")
-    if not args.adopt and (args.tool or args.mode != "migrate" or args.split_request or args.split or args.diff
-                           or args.cleanup):
-        ap.error("--mode, --tool, --split, --split-request, --diff and --cleanup only make sense with --adopt")
     root = os.path.abspath(args.root)
-    if args.adopt and args.confirm_cleanup is not None:
-        ap.error("--confirm-cleanup does not apply to --adopt")
-    if args.adopt:
-        if args.confirm_delete is not None and not args.cleanup:
-            ap.error("--adopt --confirm-delete belongs to --cleanup")
-        if args.cleanup and (args.check or args.split_request or args.split or args.diff or args.tool):
-            ap.error("--cleanup takes only --apply --confirm-delete NAME")
-        if args.cleanup and args.apply and args.confirm_delete is None:
-            ap.error("--cleanup --apply needs --confirm-delete NAME, typed by the human who confirmed it")
-        if sum((args.apply, args.check, args.split_request)) > 1:
-            ap.error("--adopt takes one of --apply, --check and --split-request")
-        if args.diff and (args.apply or args.check or args.split_request):
-            ap.error("--diff is a dry run; it takes no --apply, --check or --split-request")
-        caps = render_instructions.budgets(render_instructions.DEFAULT_SOURCE)
-        instruction_files = frozenset(INSTRUCTION_FILE[rt][0] for rt in INSTRUCTION_FILE)
-        if args.cleanup:
-            return adopt.cleanup_run(Plan(root), args, sys.modules[__name__], caps.get("skeleton"),
-                                     instruction_files, shipped_ai_files())
-        if args.apply:
-            return adopt.apply_run(Plan(root), args, sys.modules[__name__], caps.get("skeleton"),
-                                   instruction_files, shipped_ai_files())
-        return adopt.run(Plan(root), args, shipped_block, caps.get("skeleton"), instruction_files, shipped_ai_files())
     if args.check and args.budget:
-        offenders = adopt.budget_offenders(
+        offenders = budget_offenders(
             root, [INSTRUCTION_FILE[rt][0] for rt in project_runtimes(root)],
             render_instructions.budgets(render_instructions.DEFAULT_SOURCE), render_instructions.block_of)
         for line in offenders:
@@ -2093,44 +1690,32 @@ def main():
         if not os.path.isdir(tpl):
             print("project-update: %s templates not found at %s (run riskrails/install.sh)" % (name, tpl), file=sys.stderr)
             return 2
+    if not (os.path.isdir(os.path.join(root, ".ai")) or os.path.isdir(os.path.join(root, "docs", "sdlc"))):
+        print("project-update: %s has neither .ai/ nor docs/sdlc/ — run /rr-setup first" % root, file=sys.stderr)
+        return 2
     try:
-        plan = build_plan(root, confirm_delete=getattr(args, "confirm_delete", None), confirm_via=confirm_via,
+        if os.path.isdir(os.path.join(root, ".ai")):
+            project_version(root)
+        bad = check_kept(root)
+        if bad:
+            return kept_refusal(bad)
+        plan = build_plan(root, confirm_delete=args.confirm_delete, confirm_via=confirm_via,
                           confirm_cleanup=args.confirm_cleanup, cleanup_via=cleanup_via)
     except SchemaError as exc:
-        # --check is read by /ai-status, which reads stdout: it must see the reason.
+        # --check is read by /rr-status, which reads stdout: it must see the reason.
         print("project-update: %s" % exc, file=sys.stdout if args.check else sys.stderr)
         return 2
-    if plan is None:
-        print("project-update: %s has neither .ai/ nor docs/sdlc/ — run /rr-setup first" % root,
-              file=sys.stderr)
-        return 2
-    if not args.check:
-        # D5: the plain dry run says when a foreign structure waits for --adopt
-        # (never --check, whose one line /ai-status reads byte for byte).
-        caps = render_instructions.budgets(render_instructions.DEFAULT_SOURCE)
-        code, line = adopt.state_line(root, shipped_block, caps.get("skeleton"))
-        if code:
-            plan.hints.append(line)
-    pending = [i for i in plan.items if i["action"] not in ("conflict", "delete?")]
     if args.check:
-        conflicts = sum(1 for i in plan.items if i["action"] == "conflict")
-        if pending or plan.schema:
-            bits = []
-            if plan.schema:
-                bits.append("schema %d -> %d" % plan.schema[:2])
-            files = sum(1 for i in pending if i["migration"] is None)
-            if files:
-                bits.append("%d file(s) to update" % files)
-            if conflicts:
-                bits.append("%d need a manual merge" % conflicts)
-            deletions = sum(1 for i in plan.items if i["action"] == "delete?")
-            if deletions:
-                bits.append("%d deletion(s) a human must confirm" % deletions)
-            if plan.held is not None:
-                bits.append("the schema stays at %d until they are settled" % plan.held)
+        pending = [i for i in plan.items if not i["action"].endswith("?")]
+        waiting = [i for i in plan.items if i["action"].endswith("?") and not (i["reason"] or "").startswith("[cleanup]")]
+        if pending:
+            bits = ["%d file(s) to update" % len(pending)]
+            if waiting:
+                bits.append("%d change(s) a human must confirm" % len(waiting))
             print("project is behind the installed plugin: %s — run /rr-setup --update" % ", ".join(bits))
             return 1
-        print("project matches the installed plugin" + (" (%d file(s) differ by hand-merge choice)" % conflicts if conflicts else ""))
+        print("project matches the installed plugin"
+              + (" (%d change(s) wait for --confirm-delete)" % len(waiting) if waiting else ""))
         return 0
     if args.apply:
         try:

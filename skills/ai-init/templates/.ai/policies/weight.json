@@ -20,7 +20,6 @@
   },
   "hints": [
     {"paths": ["**/login*", "**/Security/**", "**/*Auth*"], "axis": "domain", "note": "auth-shaped path"},
-    {"paths": ["skills/project-update/migrations/**"], "axis": "reversibility", "note": "touches user trees"},
     {"paths": [".ai/policies/**", ".claude/**", ".codex/**", "CLAUDE.md", "AGENTS.md"], "axis": "behaviour", "note": "pipeline"},
     {"paths": ["composer.json", "package.json", "requirements*.txt"], "axis": "novelty", "note": "dependency manifest"}
   ],

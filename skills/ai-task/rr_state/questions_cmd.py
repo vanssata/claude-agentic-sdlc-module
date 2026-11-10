@@ -241,7 +241,7 @@ def cmd_questions(args, root, rt=rr_runtime.Runtime()):
             # into the file must be in the state and the history too.
             # Only a sync that changed something writes at all — questions.pending
             # is a cache, and guard_pending re-parses the file anyway, so a read
-            # (which /ai-status and the session-start hook both perform) never
+            # (which /rr-status and the session-start hook both perform) never
             # races a command that is mid-write.
             _, questions = rr_questions.parse_questions(path)
             rr_questions.set_pending(root, state, questions, path)

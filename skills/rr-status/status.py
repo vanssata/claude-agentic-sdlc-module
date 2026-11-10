@@ -5,7 +5,7 @@
 
 Read-only and model-free. A schema-7 task is described by `state.py status`;
 for any other task, and whenever that call fails, it reads the files directly —
-.ai/state/state.json (or the legacy current.json), the task's events.jsonl, .ai/policies/weight.json (else the shipped table)
+.ai/state/state.json, the task's events.jsonl, .ai/policies/weight.json (else the shipped table)
 and .ai/VERSION — so it answers in a project whose state.py is older, newer or
 broken. The root is found the way the guards find it (find_ai_root in
 hooks/lib/ai-hook-common.sh): the nearest ancestor holding .ai/, not stopping at
@@ -16,7 +16,6 @@ a git root, so a .ai/ inherited from a parent directory shows up here.
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 
@@ -36,9 +35,8 @@ def find_ai_root(start):
 
 
 def state_file(root):
-    """R34: state.json, or the legacy current.json for one version."""
-    path = os.path.join(root, ".ai", "state", "state.json")
-    return path if os.path.isfile(path) else os.path.join(root, ".ai", "state", "current.json")
+    """The task's state file."""
+    return os.path.join(root, ".ai", "state", "state.json")
 
 
 def read_json(path):
@@ -73,13 +71,12 @@ def schema_line(root):
             project = fh.read().strip() or "0"
     except OSError:
         project = "0"
-    # The plugin's schema is its newest migration, as update.py counts it.
+    # The plugin's schema is the .ai/VERSION it ships as a template (R25).
     try:
-        names = os.listdir(os.path.join(SKILLS, "project-update", "migrations"))
+        with open(os.path.join(SKILLS, "ai-init", "templates", ".ai", "VERSION"), encoding="utf-8") as fh:
+            plugin = fh.read().strip() or "?"
     except OSError:
-        names = []
-    numbers = [int(name[:4]) for name in names if re.match(r"\d{4}_", name)]
-    plugin = str(max(numbers)) if numbers else "?"
+        plugin = "?"
     behind = project.isdigit() and plugin.isdigit() and int(project) < int(plugin)
     return "schema: project %s · plugin %s%s" % (project, plugin, " — behind: run /rr-setup --update" if behind else "")
 

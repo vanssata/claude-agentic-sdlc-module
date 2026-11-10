@@ -1,0 +1,10 @@
+{
+  "_comment": "ours",
+  "deny_patterns": [
+    "\\.vault$",
+    "/private/"
+  ],
+  "allow_patterns": [
+    "^/tmp/ok/"
+  ]
+}

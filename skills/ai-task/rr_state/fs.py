@@ -1,7 +1,7 @@
 """The store: where the state, the session, the journal and the logs live, and the clock, the root search and the one subprocess runner.
 
 shell: ENTRY, now, now_ms, find_root, find_root_quiet, die, state_path, remove_state, read_session, safe_sensor, find_docs_root, questions_path, read_lines, run_text, read_text, current_tree, ensure_logs
-core: STATE_NAMES, session_path, journal_path, _split_files, SLUG_RE, one_line, handoff_path, decision_path, ledger_path, logs_dir, task_md_path
+core: session_path, journal_path, _split_files, SLUG_RE, one_line, handoff_path, decision_path, ledger_path, logs_dir, task_md_path
 """
 
 import contextlib
@@ -59,22 +59,14 @@ def die(message, code=1):
     sys.exit(code)
 
 
-STATE_NAMES = ("state.json", "current.json")
-
-
 def state_path(root):
-    """The task's state file, read and written where it is: state.json, or
-    current.json when that is the file a task in flight sits in. A new task
-    starts in state.json (R34's contract half, migration 0009 moves an old one);
-    both names stay readable, so a revert of that move still finds the task."""
-    new, legacy = (os.path.join(root, ".ai", "state", name) for name in STATE_NAMES)
-    return legacy if not os.path.exists(new) and os.path.exists(legacy) else new
+    """The task's state file: state.json, the only name read."""
+    return os.path.join(root, ".ai", "state", "state.json")
 
 
 def remove_state(root):
-    for path in (os.path.join(root, ".ai", "state", name) for name in STATE_NAMES):
-        with contextlib.suppress(FileNotFoundError):
-            os.remove(path)
+    with contextlib.suppress(FileNotFoundError):
+        os.remove(os.path.join(root, ".ai", "state", "state.json"))
 
 
 def session_path(root):

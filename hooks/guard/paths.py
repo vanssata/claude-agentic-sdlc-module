@@ -672,9 +672,8 @@ class PathGuard:                            # pylint: disable=too-many-instance-
     # -------------------------------------------------------------- the task
 
     def _state_file(self):
-        """R34: state.json, or the legacy current.json for one version."""
-        new = self.root + "/.ai/state/state.json"
-        return new if is_file(new) else self.root + "/.ai/state/current.json"
+        """The task's state file."""
+        return self.root + "/.ai/state/state.json"
 
     def _task_line(self):
         loaded = load_json_file(self._state_file())
@@ -720,9 +719,7 @@ class PathGuard:                            # pylint: disable=too-many-instance-
                 if doc is not None and not isinstance(doc, dict):
                     continue
                 for tag, key in (("d", "deny_patterns"), ("a", "allow_patterns"),
-                                 ("p", "protected_config_patterns"), ("k", "task_protected_patterns"),
-                                 # A project's list from before 3.4 keeps its read and write deny.
-                                 ("d", "dependency_instruction_patterns")):
+                                 ("p", "protected_config_patterns"), ("k", "task_protected_patterns")):
                     v = doc.get(key) if doc else None
                     for item in jq_iter(v if v is not None and v is not False else []):
                         if is_jq_string(item) and item != "":

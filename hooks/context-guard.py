@@ -284,7 +284,7 @@ def prompt_text(message):
     text = REMINDER.sub("", content).strip()
     # only a wrapper at the very start is a slash command: a prompt may quote these tags
     command = COMMAND.search(text) if text.startswith(("<command-name>", "<command-message>")) else None
-    if command:                     # "/ai-task fix the export" is an instruction; a bare "/model" is not
+    if command:                     # "/rr-build fix the export" is an instruction; a bare "/model" is not
         name, args = command.group(1).strip(), (COMMAND_ARGS.search(text) or [None, ""])[1].strip()
         return f"{name} {args}" if args else None
     # local command output, caveats, interruptions
@@ -360,7 +360,7 @@ def ai_root(cwd):
     """The project the session is in, or None.
 
     The walk stops at the repository it starts in, and never leaves $HOME. An
-    unbounded walk would let one `/ai-init` in a home directory adopt every
+    unbounded walk would let one `/rr-setup` in a home directory adopt every
     session on the machine: a nested, unrelated checkout would have its prompts
     recorded into the ancestor's session.json and be handed the ancestor's
     handoff at startup. cwd falls back to the process's own, which is where the
@@ -390,8 +390,6 @@ def task_in_flight(root):
     if not root:
         return False
     state = os.path.join(root, ".ai", "state", "state.json")
-    if not os.path.isfile(state):
-        state = os.path.join(root, ".ai", "state", "current.json")  # R34: legacy name, one version
     try:
         with open(state, encoding="utf-8") as fh:
             return (json.load(fh) or {}).get("current_stage") != "done"

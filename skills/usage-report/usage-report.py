@@ -17,7 +17,7 @@ Usage:
     usage-report.py --provider codex      # one runtime only
     usage-report.py --provider claude --root DIR   # explicit transcript dir
     usage-report.py --task T-2026-09-21-001 [--project DIR]
-                                          # one /ai-task task: its window, tokens per
+                                          # one /rr-build task: its window, tokens per
                                           # runtime, and each runtime's plan budget
     usage-report.py --budgets             # the installed plans' budget tables
 
@@ -581,9 +581,8 @@ def runtime_home(runtime: str) -> str:
 
 
 def profile_file(home: str) -> str:
-    """<home>/riskrails/profile.json, or the pre-3.4b claude-agentic/ one (R35, one version)."""
-    path = os.path.join(home, "riskrails", "profile.json")
-    return path if os.path.exists(path) else os.path.join(home, "claude-agentic", "profile.json")
+    """<home>/riskrails/profile.json."""
+    return os.path.join(home, "riskrails", "profile.json")
 
 
 def read_profile(runtime: str) -> dict:
@@ -784,7 +783,7 @@ def main() -> int:
     ap.add_argument("--root", help="explicit transcript directory (needs a single --provider)")
     ap.add_argument("--provider", choices=("auto", "claude", "codex", "both"), default="auto",
                     help="which runtime's transcripts to read (default: auto — whichever are present)")
-    ap.add_argument("--task", metavar="ID", help="one /ai-task task: window, tokens per runtime, budget")
+    ap.add_argument("--task", metavar="ID", help="one /rr-build task: window, tokens per runtime, budget")
     ap.add_argument("--project", metavar="DIR", help="the project holding .ai/ (default: search upwards)")
     ap.add_argument("--no-cache", action="store_true",
                     help="ignore and do not write the incremental parse cache")

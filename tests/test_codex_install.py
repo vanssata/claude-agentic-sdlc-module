@@ -558,31 +558,6 @@ class CodexInstall(ScratchCase):  # pylint: disable=too-many-public-methods  # o
                    os.path.isdir(os.path.join(self.dir, "backups", today(), "skills", "ai-init")),
                    "backup not found in backups/<date>/skills/")
 
-    def test_16_an_agents_md_with_a_legacy_codex_agentic_pair_gets_one_block_renamed(self):
-        lg = self.path("codex-legacy")
-        os.makedirs(lg)
-        block = read(os.path.join(PLUGIN, "skills", "ai-init", "templates", "AGENTS.block.md"))
-        legacy = re.sub(r"riskrails:(start|end)", r"Codex-agentic:\1", block)
-        agents = os.path.join(lg, "AGENTS.md")
-        write(agents, "# legacy\n\nkeep me above\n\n" + legacy + "\n# my notes\nkeep me below\n")
-        _rc, out = self.codex(lg, "--codex-plan", "pro")
-        text = read(agents)
-        self.check("exactly one managed block after the install",
-                   count_lines(r"(riskrails|[Cc]odex-agentic):start", text, extended=True) == 1,
-                   "a legacy pair was doubled")
-        self.check("the legacy markers are renamed", not has("Codex-agentic", text),
-                   "the legacy markers are still there")
-        self.check("the text around the block is kept", has("keep me above", text) and has("keep me below", text),
-                   "text around the legacy block lost")
-        self.check("the install says what it renamed",
-                   has("AGENTS.md: updated + renamed the legacy Codex-agentic markers", out),
-                   "no rename note in the install output")
-        self.check("block_size measures the renamed block", not has("AGENTS.md: managed block 0 B", out),
-                   "block_size measured 0 B")
-        self.codex(lg, "--codex-plan", "pro")
-        self.check("a reinstall keeps one block", count_lines("riskrails:start", read(agents)) == 1,
-                   "reinstall doubled the block")
-
     def test_17_the_shell_guard_entries_of_an_older_install_are_replaced(self):
         """3.5: the three ai-*-guard.sh entries and files give way to one ai-guard.py entry."""
         old = self.path("codex-shims")

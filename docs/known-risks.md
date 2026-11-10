@@ -50,27 +50,26 @@ giving is a finding.
 
 ## The deletion gate stops an agent's command, not an agent's script
 
-**Risk.** `--confirm-delete` of `update.py` (`--apply`, and `--adopt --cleanup
---apply`) is refused two ways: the path guard denies an agent `Bash` command
+**Risk.** `--confirm-delete` of `update.py` (`--apply`) is refused two ways: the path guard denies an agent `Bash` command
 that runs `update.py` with `--apply` and any prefix of `--confirm-delete`, in
-every directory; and `adopt.py` refuses the flag whenever an agent-session
+every directory; and `update.py` itself refuses the flag (exit 5, `CONFIRM_REFUSED`) whenever an agent-session
 marker (`CLAUDECODE`, or Codex's `CODEX_THREAD_ID`, `CODEX_SESSION_ID`,
 `CODEX_CI`, `CODEX_SANDBOX`, `CODEX_SANDBOX_NETWORK_DISABLED`,
 `CODEX_VERSION`) is in its environment, even with a terminal on stdin. The hook
 matches spellings, so a script file written with the Write tool, arguments held
 in a variable, command substitution, `xargs`, inline `-c` code that imports
 `update.py`, or a renamed copy of it are past it. Each still needs the markers
-unset plus a pty, or `AI_UNATTENDED=1`, to pass `adopt.py`, which is
+unset plus a pty, or `AI_UNATTENDED=1`, to pass `update.py`, which is
 deliberate, not an honest mistake.
 **Why it stays.** The hook sees a command line, not what a file it runs will do.
-**Limits.** The record says why the gate passed: `adopt.json` `cleanup.via` and
-`migration.json` `deletions[].via` are `terminal` or `unattended`. A human
+**Limits.** The record says why the gate passed: the `via` of a deletion in the update's
+report is `terminal` or `unattended`. A human
 typing through Claude Code's `!` prefix, or in a shell started from an agent
 session, is refused too — that shell carries the markers.
 **What to do.** Run `--confirm-delete` in a terminal of your own. A `via:
 unattended` on a run nobody launched unattended is a finding.
 **Source.** WP6 finding F3, `.ai/reports/T-2026-09-27-003/`;
-`hooks/guard/paths.py`, `skills/project-update/adopt.py` (`human_gate`).
+`hooks/guard/paths.py`, `skills/project-update/update.py` (the confirm gate).
 
 ## `AI_UNATTENDED=1` turns the human gates off
 
@@ -183,21 +182,6 @@ enforced.
 **What to do.** `runtime-gate.py clear` empties the count after a crash. Read
 the quota with its `stale` and `resets_at` fields, not as a hard figure.
 **Source.** WP5 spec, accepted concerns 1, 3 and 4; `hooks/runtime-gate.py`.
-
-## `--adopt` edge cases fail safe, not smoothly
-
-Three low-severity cases from the WP6 review were accepted; each fails closed
-rather than losing data. An interrupted apply's `planned_writes` excuses those
-paths from the clean-tree check and never decides what is written or deleted.
-On resume, `original/<file>` is reused, so edits made between the crash and the
-resume are not in the saved original — git still has the committed version. In
-a monorepo subdirectory an interrupted apply cannot resume until you commit; it
-refuses rather than guesses. Two things have not been tried by hand: `--adopt`
-on a real Spec Kit or Cursor project (the suites use fixtures), and a cleanup
-run in a real terminal.
-**What to do.** Run `--adopt` on a clean, committed tree, read the dry run
-first, and keep `original/` until you have checked the result.
-**Source.** `.ai/reports/T-2026-09-21-001/review.md`, the LOW rows.
 
 ## The usage report's parse cache trusts mtime and size
 

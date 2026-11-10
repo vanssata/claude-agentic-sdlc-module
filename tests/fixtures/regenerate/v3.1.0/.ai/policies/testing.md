@@ -1,0 +1,131 @@
+# Testing policy
+
+Tests describe behaviour. Coverage percentage is a side effect, not a goal.
+
+## Characterization first
+
+Before changing behaviour that is not covered by a test — which is most legacy
+behaviour — write a test that passes against the code **as it is today**. That
+test is the definition of what must not break. Only then change the code.
+
+```
+characterization test → refactor → verify identical behaviour → feature change
+```
+
+Never do those in one step, and never in one commit.
+
+## What to consider, by kind of change
+
+| Change touches | Also test |
+|---|---|
+| a shared service | the existing callers, not only the new one |
+| money, tax, fiscal | rounding, currency, negative and zero amounts, refunds |
+| a state machine | every transition that is now reachable, and the ones that must stay unreachable |
+| an async consumer | retry, double delivery, out-of-order delivery, poison message |
+| an external integration | timeout, 500, malformed response, partial write |
+| a write path | idempotency, concurrency, transaction boundaries |
+| authorization | the negative case, for every role |
+| a public API or event | the old shape still works |
+
+## Three scopes, three moments
+
+A task runs tests three times at most, and each run has its own scope. Nothing
+else runs in between.
+
+| When | What runs | Command |
+|---|---|---|
+| after each implementation step, before `step-done` | **only the tests the plan named for that step** — the files it touched, their direct callers' tests | `step_test_command` |
+| once, after the **last** step | the full fast suite — unit and integration, no e2e | `verify_command` |
+| once, at the **end of the task**, after the full suite is green | the end-to-end suite | `e2e_command` |
+
+- A step never runs the full suite, and **never** runs e2e. If the plan named
+  no test for a step, nothing runs for it.
+- A step's tests are scoped by path or filter, not by `--stop-on-failure`: the
+  scoped run still goes to the end, and its failures are fixed inside that step.
+- The e2e suite runs **once per task**, at the very end, never per step. Skip it
+  at T0/T1, and when the change cannot reach a flow the e2e suite covers — say
+  which, in one line; silence is not a verdict.
+- A failure in a step's own tests is fixed in that step, before `step-done`;
+  the batch rule below is for the two end-of-task runs.
+- After a green suite, a documents-only edit runs `doc_tests` (step scope), not the suite.
+
+## Reading a failure
+
+**Run to the end, then fix as one batch.** The verification command runs with
+no fail-fast flag and is never interrupted at the first failure. Collect every
+failure, classify each one, fix all the new regressions in one batch
+(`state.py start --amend` widens the task when a fix needs more files), and run the
+command once more. One failure never
+sends the task back to the start: the plan, the tier and the finished steps
+stand. At most two remediation rounds; a third means the human decides.
+
+Classify before fixing. The four answers are:
+
+- **EXISTING TEST FAILURE** — it failed before this change too. Say so, do not
+  fix it inside this task.
+- **NEW REGRESSION** — this change broke it. Fix the code, not the test.
+- **TEST ENVIRONMENT FAILURE** — database, fixtures, network, container. Say what
+  is missing.
+- **UNKNOWN** — you could not tell. Say what you tried.
+
+A review's MEDIUM and LOW findings are recorded with `state.py memory risk add`, not
+fixed in the task; only a BLOCKER, a HIGH or a regression buys an `--after-fix` run.
+
+**Never edit a test to make it pass when production behaviour changed
+unexpectedly.** A test that suddenly disagrees with the code is evidence, and
+deleting evidence is the worst available option.
+
+## Verification
+
+Three commands, one per scope. `verify_command` proves the project is healthy;
+`step_test_command` proves one step is; `e2e_command` proves the whole flow
+still works. Keep each to one command — chain the pieces in a Makefile or
+composer script if there are several — and make sure none of them stops at the
+first failure (`--stop-on-failure`, `-x`, `--bail`, `failfast` are off).
+
+`verify_command` must **exclude** the e2e suite: it is the fast loop run after
+the last step and again after a remediation batch. `e2e_command` runs once, at
+the end of the task. A bugfix still shows its new failing test first — that one
+test only, through `single_test`.
+
+```
+verify_command:      # the full fast suite, e2e excluded — e.g. make test   |   composer qa && vendor/bin/phpunit --exclude-group e2e
+step_test_command:   # the same runner, scoped to a path or filter — e.g. vendor/bin/phpunit {files} | pytest {files}
+e2e_command:         # the end-to-end suite, run once at the end of a task — e.g. make e2e | vendor/bin/behat | npx playwright test
+lint_command:        # e.g. vendor/bin/php-cs-fixer fix --dry-run | ruff check . | npm run lint — write `none` if the project has none
+doc_tests:           # the suites a documents-only edit runs after a green suite — e.g. tests/test_docs.py; `none` if the project has none
+typecheck_command:   # e.g. vendor/bin/phpstan analyse --no-progress | mypy . | npx tsc --noEmit — `none` if the project has none
+healthy_output:      # two or three lines of what a green run ends with
+runtime:             # roughly, for each command, so a hang is recognisable
+single_test:         # how to run one test, for the failing-test-first step of a bugfix
+```
+
+`step_test_command` may contain `{files}`, which is replaced by the paths the
+step names; without it the paths are appended. The placeholder is what lets
+`sensors.py` run a step's own tests for the "test must bite" check, so a runner
+that only takes a `--filter` gets `bite: unavailable` rather than a wrong answer.
+
+`bite_codes` (optional) lists the exit codes that mean "a test failed" when a
+test is shown failing before its fix; the default is `1`. Runners that exit
+differently say so here — `bite_codes: 1,2` for pytest (2 is a collection
+error, such as a missing import), `1,2` for phpunit, `101` for cargo. Any other
+code is the runner's own usage error and does not count as a bite.
+
+`lint_command` and `typecheck_command` are read by the deterministic sensors,
+never by a model. They decide, together with the test run, whether a light-mode change
+can skip its model review (`state.py close` measures them). A **missing** line is
+`unavailable` and keeps the review; only the literal `none`, written by a human,
+says the project has no such tool. Read the exact line from the project's
+config files (`package.json`, `composer.json`, `pyproject.toml`, `Makefile`), and
+never run a command just to find it out.
+
+If the project has no e2e suite, write `e2e_command: none` and say so — an
+empty line is read as "not written down yet" and the next task will go looking
+for it. Say which group, tag or directory marks the e2e tests and how
+`verify_command` excludes them, so a step's scoped run and the fast suite stay
+free of them.
+
+## Project specifics
+
+<!-- The real commands: how to run unit tests, integration tests, a single test.
+     Where fixtures live. What the CI runs. Cite the config. -->
