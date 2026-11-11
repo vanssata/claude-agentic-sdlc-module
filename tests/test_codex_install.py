@@ -226,6 +226,9 @@ class CodexInstall(ScratchCase):  # pylint: disable=too-many-public-methods  # o
                   "skills/ai-task/state.py skills/ai-init/scaffold-ai.sh skills/usage-report/usage-report.py "
                   "hooks/ai-guard.py hooks/guard/__init__.py hooks/guard/common.py hooks/guard/ere.py "
                   "hooks/guard/git.py hooks/guard/paths.py hooks/guard/scope.py "
+                  "hooks/guard/paths_base.py hooks/guard/paths_fs.py hooks/guard/paths_shell.py "
+                  "hooks/guard/paths_human.py hooks/guard/paths_interp.py hooks/guard/paths_classify.py "
+                  "hooks/guard/paths_movers.py hooks/guard/paths_bash.py "
                   "hooks/dialog-gate.py hooks/update_notice.py hooks/guard/dialog.py hooks/guard/decision.py").split():
             self.check("$f installed".replace("$f", f), os.path.exists(os.path.join(self.dir, f)), "%s missing" % f)
         self.check("the guards are executable", os.access(os.path.join(self.dir, "hooks", "ai-guard.py"), os.X_OK),

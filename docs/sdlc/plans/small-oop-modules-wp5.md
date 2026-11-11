@@ -4,8 +4,8 @@ Spec: `docs/sdlc/specs/small-oop-modules.md` (§Work packages row 5: "already a 
 `paths.py` into rule groups", "byte-identical guard golden", the CLAUDE.md `SH_WORD`/`SH_RE`
 invariant; R1–R16 read for `paths.py`, R13, R15) · Programme: `docs/sdlc/plans/small-oop-modules.md`
 · Consumes: WP4 (`9bb5625`, #72), closed · Written 2026-11-12 on `refactor/wp5-guard-paths`
-(from `origin/main` `9bb5625`). **Not started**: `state.py start` runs after the human commits
-this plan.
+(from `origin/main` `9bb5625`). **Started** 2026-11-12 as task
+T-2026-11-11-2211-wp5-hooks-guard-paths-py via `/rr-build-all`.
 
 Kind: **refactoring** (C3) — no guard decision, deny text, cap or clock changes; the guard golden
 stays byte-identical (`hooks/CLAUDE.md`: behaviour 0). A bug found while moving is recorded with
@@ -141,10 +141,17 @@ All in `hooks/guard/`, imported as `guard.<name>` (`hooks/` is on `sys.path` by 
 | 0 | `paths_shell` | `_KEYWORDS`, `_FLAGGED`, `_ASSIGN`, `_SPECIAL_OUT`/`_D`/`_A`, `shell_segments` (the awk segmenter) | 275 | core |
 | 1 | `paths_human` | the `--confirm-delete` rule (`CONFIRM_DEL`, `CONFIRM_CLEAN`, `CONFIRM`, `APPLY`, `HEAD`, `SEP`, `CONFIRM_RE`, `.confirm_delete`) and the human-only `state.py` rules (`ARGS`, `VERB`, `BOUND`, `APPROVE_RE`, `PROFILE_SET_*`, `BY_TOK`, `MODE_LIGHT`, `SKIP`, `HUMAN_BY_*`, `START_LIGHT_*`, `state_verb_re`, `DIALOG_GATE_RE`, `.dialog_consent`) | 70 | core + shell |
 | 1 | `paths_interp` | interpreter one-liners and in-place edits: `INTERP_RE`, `CONTROL_TEXT_RE`, `INPLACE_RE`, the text-tool words (`_TEXT_TOOLS` … `_GIT_CFG`, `_tool_word`, `shell_sink`, `_plain_text_tool`, `text_tool_segment`), `EVAL_WORD_RE`, `SECRET_TEXT_RE`, the `WRITE_*` patterns and `FIRST_ARG`, `.inplace_edit`, `.interpreter_text` | 130 | core + shell |
-| 1 | `paths_classify` | `TOKEN_END`, `.load_patterns`, `.build_loose`, `.setup_anchors`, `.anchor_rels`, `.anchored_hit`, `.unanchored_hit`, `.phys_path`, `.classify`, `.check_path` | 180 | shell |
+| 1 | `paths_classify` | `TOKEN_END`, `.load_patterns`, `.build_loose`, `.setup_anchors`, `.anchor_rels`, `.anchored_hit`, `.unanchored_hit`, `.classify`, `.check_path` | 170 | shell |
 | 1 | `paths_movers` | `MOVERS`, `MOVER_VERBS`, `REMOVE_VERBS`, `MOVER_CHUNK`, `GLOBBY`, `_SED1`, `_SED2`, `_FIND_PRUNE_*`, `MoverState`, `.cover_init`, `.realpath_m_arg`, `.sort_u`, `.roots_under`, `.covers_work`, `.covers_protected`, `.loose_hits`, `.movers`, `.loc_mode`, `.loc_pat`, `.loc_text`, `.from_loc`, `.mover_resolve`, `.mover_check` | 345 | shell |
 | 2 | `paths_bash` | `VERBS_RE`, `READERS`, `COPIERS`, `WRITERS`, `REMOVERS`, `MODES`, `DDWRITE`, `INPLACE`, `LN_RE`, `LN_SRC_RE`, `LONG_CMD`, `LONG_TRIGGER_RE`, `FETCHERS`, `.check_bash` | 150 | shell |
 | 3 | `paths` (entry) | D1 | 90 + table | shell |
+
+**Deviation at implementation** (2026-11-12, the session, after step s1): `phys_path` stays a
+`PathGuard` method in `paths.py`. It reads no `self`; as a module function with `self` first it
+is pylint W0613 `unused-argument` (9.99/10), and R7 allows no new disable. So nine methods stay in
+the class and 27 are bound by the table; the entry also imports `paths_fs`. `partition.json` and
+the layout test say so. The node-for-node move proof is one-shot: `--moved-from HEAD` ran in
+s2 and in the review (`task.md`, review pass 1); after the commit the golden is what stays.
 
 Every name of today's file has one home above (`ast`, 2026-11-12: none left over). Import edges
 by name (no cycle on paper; s0 proves it): `paths_classify` ← `paths_base`, `paths_fs`;

@@ -139,7 +139,7 @@ ALLOWED = (
     ("tests/fixtures/scaffold-port/", ALL, FROZEN),
     ("tests/fixtures/regenerate/", ALL, OLD_TREE),
     ("tests/fixtures/memory/", ALL, OLD_TREE + " (journals and reports as they were written)"),
-    ("hooks/guard/paths.py", ("/project-update",), "KEEP deny message text pinned by the guard golden"),
+    ("hooks/guard/paths_base.py", ("/project-update",), "KEEP deny message text pinned by the guard golden"),
     ("README.md", ("claude-agentic",), "KEEP the repository's URL (claude-agentic-sdlc-module) in the version badge"),
     ("docs/ai-sdlc-adoption-plan.md", ("claude-agentic", "one version"), "KEEP a dated audit output, not a doc of the current behaviour"),
     ("tests/test_ai_status_root.py", ("/ai-init",), "KEEP asserts that the no-root message no longer names /ai-init"),
