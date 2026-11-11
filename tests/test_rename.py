@@ -17,7 +17,7 @@ SKIP_DIRS = {"__pycache__", "history"}   # history/ is every template version ev
 
 ALLOWED = {
     "hooks/ai-path-guard-defaults.json": "a deny: the old home stays protected while it is a symlink; removing it weakens a refusal",
-    "skills/project-update/update.py": "OLD_MARKERS: the old marker pair --update refuses, a literal check (D4)",
+    "skills/project-update/rr_update/kept.py": "OLD_MARKERS: the old marker pair --update refuses, a literal check (D4)",
     # a project's .gitignore matches these lines verbatim; a new header would be appended beside the old
     "skills/ai-init/templates/gitignore.snippet": "the .gitignore header projects already carry",
     "skills/project-init/templates/gitignore.snippet": "the .gitignore header projects already carry",

@@ -1018,15 +1018,15 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
     SWAP = """
 import os, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "skills", "project-update"))
-import update                                            # noqa: E402
+from rr_update import apply, build                       # noqa: E402
 root = sys.argv[2]
-plan = update.build_plan(root, confirm_cleanup="tester", cleanup_via="unattended")
+plan = build.build_plan(root, confirm_cleanup="tester", cleanup_via="unattended")
 reports = os.path.join(root, ".ai", "reports")
 os.rename(os.path.join(reports, "T-2026-01-02-001"), os.path.join(reports, "moved"))
 os.symlink("moved", os.path.join(reports, "T-2026-01-02-001"))     # same bytes, now behind a symlink
 try:
-    update.apply(plan)
-except update.Abort as exc:
+    apply.apply(plan)
+except apply.Abort as exc:
     print("ABORT", exc.why)
     sys.exit(0)
 print("DELETED")
@@ -1125,7 +1125,7 @@ class TestWeightMd(unittest.TestCase):
 DEEP_READERS = r"""
 import datetime, json, os, sys, traceback
 sys.path.insert(0, sys.argv[1])
-import update
+from rr_update import cleanup, history, kept, plan
 root, deep = sys.argv[2], "[" * 100000
 
 
@@ -1139,7 +1139,7 @@ def put(rel, text):
 def probe(name, fn):
     try:
         out[name] = repr(fn())
-    except update.SchemaError as exc:
+    except history.SchemaError as exc:
         out[name] = "SchemaError: %s" % exc
     except Exception:  # pylint: disable=broad-except
         out[name] = "Traceback: " + traceback.format_exc().splitlines()[-1]
@@ -1148,14 +1148,14 @@ def probe(name, fn):
 out = {}
 hist = os.path.join(root, "history")
 put("history/index.json", deep)
-probe("History index.json", lambda: update.History(hist).index)
+probe("History index.json", lambda: history.History(hist).index)
 put(".ai/state/state.json", deep)
-probe("check_kept state.json", lambda: update.check_kept(root))
-probe("cleanup_update state.json", lambda: (update.cleanup_update(
-    update.Plan(root), now=datetime.datetime(2026, 1, 2, tzinfo=datetime.timezone.utc)), "ran"))
+probe("check_kept state.json", lambda: kept.check_kept(root))
+probe("cleanup_update state.json", lambda: (cleanup.cleanup_update(
+    plan.Plan(root), now=datetime.datetime(2026, 1, 2, tzinfo=datetime.timezone.utc)), "ran"))
 put(".ai/reports/T-1/events.jsonl", deep + "\n" + json.dumps({"ts": "2026-01-01T00:00:00Z", "event": "x"}))
 put(".ai/state/logs/T-1/state.json", deep)
-probe("task_journal events.jsonl + logs state.json", lambda: update.task_journal(root, "T-1"))
+probe("task_journal events.jsonl + logs state.json", lambda: cleanup.task_journal(root, "T-1"))
 print(json.dumps(out))
 """
 

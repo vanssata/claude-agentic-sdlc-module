@@ -1,0 +1,1038 @@
+{
+ "schema": 1,
+ "source": "skills/project-update/update.py",
+ "entry_docstring_sha256": "2e51a782a7264c676c5977603ee6c314f9eacdd870f365f6ac591ac4948631a8",
+ "retired": {
+  "find_block": "D3: not moved and not re-exported; blocks.py calls render_instructions.find_block, and tests/test_regenerate.py imports render_instructions for it"
+ },
+ "moves": [
+  {
+   "names": [
+    "report"
+   ],
+   "from": "report (layer 6)",
+   "to": "report (layer 5)",
+   "why": "cli imports report, so report sits one layer below cli; report refers to no other name of the file"
+  },
+  {
+   "names": [
+    "tomllib"
+   ],
+   "from": "not placed in the plan's table",
+   "to": "kept",
+   "why": "the `try: import tomllib` result is read by check_kept alone; kept.py holds the try, so no other module imports tomllib"
+  },
+  {
+   "names": [
+    "find_block"
+   ],
+   "from": "paths (the table's constants list)",
+   "to": "retired",
+   "why": "D3: the alias `render_instructions.find_block` is dropped; block_update calls render_instructions.find_block, so the edge to it is a sibling module, not a rr_update module"
+  },
+  {
+   "names": [
+    "plan"
+   ],
+   "from": "plan (core)",
+   "to": "plan (mixed: Plan and regenerate are shell, lost_lines, patterns_of, edited_note core)",
+   "why": "Plan reads the disk (exists, read, before) and the clock (report_dir); regenerate calls plan.read; so the module is not all-core and R16's import rule does not bind it"
+  },
+  {
+   "names": [
+    "paths"
+   ],
+   "from": "paths (core + constants)",
+   "to": "paths (mixed: env, HERE, SKILLS, TEMPLATES, HISTORY, PLUGIN_HOME, SHARED shell; the literal tables and is_kept core)",
+   "why": "env reads the environment, HERE is __file__, SHARED probes directories at import (D1, D2); the module imports os for them"
+  },
+  {
+   "names": [
+    "verification_hints",
+    "regenerate",
+    "unwritten"
+   ],
+   "from": "core / core / core by the table",
+   "to": "shell",
+   "why": "each calls plan.read or plan.exists, which read the disk"
+  }
+ ],
+ "modules": {
+  "paths": {
+   "layer": 0,
+   "defs": [
+    "HERE",
+    "SKILLS",
+    "LAST_MIGRATING_VERSION",
+    "EXIT_KEPT_UNREADABLE",
+    "REFUSED",
+    "env",
+    "TEMPLATES",
+    "HISTORY",
+    "PLUGIN_HOME",
+    "SHARED",
+    "VERSION_FILE",
+    "ROUTER_FILE",
+    "STALE_DAYS",
+    "STATE_FILE",
+    "TESTING_MD",
+    "VERIFICATION_MD",
+    "WEIGHT_JSON",
+    "WEIGHT_MD",
+    "WEIGHT_PROJECT",
+    "LOCAL_CACHE",
+    "GENERATED",
+    "CREATE_ONLY",
+    "CREATE_ONLY_DIRS",
+    "NOT_COPIED",
+    "KEPT",
+    "is_kept",
+    "SHARED_SET",
+    "RULES_DIR",
+    "RULES_SKIP",
+    "RULES_SKIP_FOLDED",
+    "RUNTIME_MAP",
+    "SDLC_CREATE",
+    "INSTRUCTION_FILE"
+   ],
+   "imports": [],
+   "approx_lines": 73
+  },
+  "files": {
+   "layer": 0,
+   "defs": [
+    "utc_now",
+    "sha",
+    "read",
+    "git_dirty_ai",
+    "git_states",
+    "dump_json",
+    "unsafe_path"
+   ],
+   "imports": [],
+   "approx_lines": 78
+  },
+  "history": {
+   "layer": 1,
+   "defs": [
+    "SchemaError",
+    "project_runtimes",
+    "History",
+    "shared_files",
+    "undeclared_shared",
+    "template_version",
+    "project_version"
+   ],
+   "imports": [
+    "files",
+    "paths"
+   ],
+   "approx_lines": 87
+  },
+  "gate": {
+   "layer": 1,
+   "defs": [
+    "AGENT_MARKERS",
+    "ai_unattended",
+    "human_gate",
+    "PLACEHOLDER_NAME_RE",
+    "placeholder_name",
+    "refuse"
+   ],
+   "imports": [
+    "paths"
+   ],
+   "approx_lines": 34
+  },
+  "siblings": {
+   "layer": 1,
+   "defs": [
+    "_MODULES",
+    "sibling",
+    "weight_module",
+    "weight_overlay",
+    "shipped_weight"
+   ],
+   "imports": [
+    "paths"
+   ],
+   "approx_lines": 16
+  },
+  "kept": {
+   "layer": 2,
+   "defs": [
+    "tomllib",
+    "OLD_MARKERS",
+    "check_kept",
+    "old_shapes",
+    "kept_refusal"
+   ],
+   "imports": [
+    "files",
+    "paths",
+    "siblings"
+   ],
+   "approx_lines": 96
+  },
+  "plan": {
+   "layer": 2,
+   "defs": [
+    "Plan",
+    "lost_lines",
+    "patterns_of",
+    "edited_note",
+    "regenerate"
+   ],
+   "imports": [
+    "files"
+   ],
+   "approx_lines": 100
+  },
+  "weights": {
+   "layer": 3,
+   "defs": [
+    "effective_weight",
+    "GENERATED_HEADER",
+    "weight_md",
+    "FIELD_LINE",
+    "SPECIFICS_RE",
+    "split_testing",
+    "leaves",
+    "split_weight",
+    "listed",
+    "unwritten",
+    "split_once"
+   ],
+   "imports": [
+    "files",
+    "paths",
+    "siblings",
+    "plan"
+   ],
+   "approx_lines": 132
+  },
+  "blocks": {
+   "layer": 3,
+   "defs": [
+    "block_update"
+   ],
+   "imports": [
+    "files",
+    "paths",
+    "plan"
+   ],
+   "approx_lines": 24
+  },
+  "shared": {
+   "layer": 3,
+   "defs": [
+    "require_shared",
+    "shared_update"
+   ],
+   "imports": [
+    "files",
+    "paths",
+    "history"
+   ],
+   "approx_lines": 59
+  },
+  "rules": {
+   "layer": 3,
+   "defs": [
+    "rule_sources",
+    "rendered_rules",
+    "nested_tree",
+    "unwalked_dir",
+    "_frozen_block",
+    "rules_update"
+   ],
+   "imports": [
+    "files",
+    "paths"
+   ],
+   "approx_lines": 155
+  },
+  "cleanup": {
+   "layer": 3,
+   "defs": [
+    "local_cache",
+    "task_journal",
+    "cleanup_update",
+    "deletion_hint",
+    "TRACKED_IGNORED_SHOWN",
+    "tracked_ignored_hint"
+   ],
+   "imports": [
+    "files",
+    "paths"
+   ],
+   "approx_lines": 167
+  },
+  "hints": {
+   "layer": 3,
+   "defs": [
+    "budget_offenders",
+    "gitignore_update",
+    "budget_hints",
+    "constitution_hint",
+    "verification_hints"
+   ],
+   "imports": [
+    "files",
+    "paths"
+   ],
+   "approx_lines": 91
+  },
+  "build": {
+   "layer": 4,
+   "defs": [
+    "PHASE",
+    "build_plan"
+   ],
+   "imports": [
+    "files",
+    "paths",
+    "history",
+    "plan",
+    "blocks",
+    "cleanup",
+    "hints",
+    "rules",
+    "shared",
+    "weights"
+   ],
+   "approx_lines": 74
+  },
+  "apply": {
+   "layer": 5,
+   "defs": [
+    "Abort",
+    "current_sha",
+    "check",
+    "default_mode",
+    "write_file",
+    "keep_original",
+    "record_run",
+    "apply",
+    "apply_item",
+    "prune_empty"
+   ],
+   "imports": [
+    "files",
+    "paths"
+   ],
+   "approx_lines": 154
+  },
+  "report": {
+   "layer": 5,
+   "defs": [
+    "report"
+   ],
+   "imports": [],
+   "approx_lines": 45
+  },
+  "cli": {
+   "layer": 6,
+   "defs": [
+    "main"
+   ],
+   "imports": [
+    "paths",
+    "gate",
+    "history",
+    "kept",
+    "hints",
+    "build",
+    "apply",
+    "report"
+   ],
+   "approx_lines": 89
+  }
+ },
+ "defs": {
+  "tomllib": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": null
+  },
+  "HERE": {
+   "kind": "const",
+   "signature": "",
+   "label": "shell",
+   "value_hash": null
+  },
+  "SKILLS": {
+   "kind": "const",
+   "signature": "",
+   "label": "shell",
+   "value_hash": null
+  },
+  "LAST_MIGRATING_VERSION": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "b279978e39ef"
+  },
+  "EXIT_KEPT_UNREADABLE": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "1fe8a5cbc38e"
+  },
+  "REFUSED": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "7e94ceba8adc"
+  },
+  "SchemaError": {
+   "kind": "class",
+   "signature": "",
+   "label": "core",
+   "value_hash": null
+  },
+  "env": {
+   "kind": "function",
+   "signature": "(name, default=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "TEMPLATES": {
+   "kind": "const",
+   "signature": "",
+   "label": "shell",
+   "value_hash": null
+  },
+  "HISTORY": {
+   "kind": "const",
+   "signature": "",
+   "label": "shell",
+   "value_hash": null
+  },
+  "PLUGIN_HOME": {
+   "kind": "const",
+   "signature": "",
+   "label": "shell",
+   "value_hash": null
+  },
+  "SHARED": {
+   "kind": "const",
+   "signature": "",
+   "label": "shell",
+   "value_hash": null
+  },
+  "VERSION_FILE": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "a47ce8eceefa"
+  },
+  "ROUTER_FILE": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "af4822fc6d89"
+  },
+  "STALE_DAYS": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "ad2708b43581"
+  },
+  "STATE_FILE": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "d9ba2175e18c"
+  },
+  "TESTING_MD": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "565aeb72ceb9"
+  },
+  "VERIFICATION_MD": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "606222b23d60"
+  },
+  "WEIGHT_JSON": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": null
+  },
+  "WEIGHT_MD": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": null
+  },
+  "WEIGHT_PROJECT": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "42dba97d6eee"
+  },
+  "LOCAL_CACHE": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "4f87e88a828d"
+  },
+  "GENERATED": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": null
+  },
+  "CREATE_ONLY": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": null
+  },
+  "CREATE_ONLY_DIRS": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "8f307f4289ef"
+  },
+  "NOT_COPIED": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": null
+  },
+  "KEPT": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": null
+  },
+  "is_kept": {
+   "kind": "function",
+   "signature": "(path)",
+   "label": "core",
+   "value_hash": null
+  },
+  "SHARED_SET": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "1806d5ecd201"
+  },
+  "RULES_DIR": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "187eb3ebd538"
+  },
+  "RULES_SKIP": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "e2c252517475"
+  },
+  "RULES_SKIP_FOLDED": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": null
+  },
+  "find_block": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "723e2cfee9d5"
+  },
+  "RUNTIME_MAP": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "b219ca76c58d"
+  },
+  "SDLC_CREATE": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "6231c4ae3a38"
+  },
+  "INSTRUCTION_FILE": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "c2df22376ad0"
+  },
+  "project_runtimes": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "utc_now": {
+   "kind": "function",
+   "signature": "()",
+   "label": "shell",
+   "value_hash": null
+  },
+  "sha": {
+   "kind": "function",
+   "signature": "(data)",
+   "label": "core",
+   "value_hash": null
+  },
+  "read": {
+   "kind": "function",
+   "signature": "(path)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "History": {
+   "kind": "class",
+   "signature": "",
+   "label": "shell",
+   "value_hash": null
+  },
+  "shared_files": {
+   "kind": "function",
+   "signature": "()",
+   "label": "shell",
+   "value_hash": null
+  },
+  "undeclared_shared": {
+   "kind": "function",
+   "signature": "()",
+   "label": "shell",
+   "value_hash": null
+  },
+  "git_dirty_ai": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "git_states": {
+   "kind": "function",
+   "signature": "(root, rel_dir)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "dump_json": {
+   "kind": "function",
+   "signature": "(value)",
+   "label": "core",
+   "value_hash": null
+  },
+  "unsafe_path": {
+   "kind": "function",
+   "signature": "(root, path)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "AGENT_MARKERS": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "533d05e732e1"
+  },
+  "ai_unattended": {
+   "kind": "function",
+   "signature": "()",
+   "label": "shell",
+   "value_hash": null
+  },
+  "human_gate": {
+   "kind": "function",
+   "signature": "()",
+   "label": "shell",
+   "value_hash": null
+  },
+  "PLACEHOLDER_NAME_RE": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "15f316ad08bf"
+  },
+  "placeholder_name": {
+   "kind": "function",
+   "signature": "(name)",
+   "label": "core",
+   "value_hash": null
+  },
+  "refuse": {
+   "kind": "function",
+   "signature": "(reason, how)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "budget_offenders": {
+   "kind": "function",
+   "signature": "(root, files, caps, block_of)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "template_version": {
+   "kind": "function",
+   "signature": "()",
+   "label": "shell",
+   "value_hash": null
+  },
+  "project_version": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "_MODULES": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "b5df78149401"
+  },
+  "sibling": {
+   "kind": "function",
+   "signature": "(name, *parts)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "weight_module": {
+   "kind": "function",
+   "signature": "()",
+   "label": "shell",
+   "value_hash": null
+  },
+  "weight_overlay": {
+   "kind": "function",
+   "signature": "()",
+   "label": "shell",
+   "value_hash": null
+  },
+  "shipped_weight": {
+   "kind": "function",
+   "signature": "()",
+   "label": "shell",
+   "value_hash": null
+  },
+  "OLD_MARKERS": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "cde86328be1a"
+  },
+  "check_kept": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "old_shapes": {
+   "kind": "function",
+   "signature": "(root, bad)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "kept_refusal": {
+   "kind": "function",
+   "signature": "(bad)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "Plan": {
+   "kind": "class",
+   "signature": "",
+   "label": "shell",
+   "value_hash": null
+  },
+  "lost_lines": {
+   "kind": "function",
+   "signature": "(ours, theirs)",
+   "label": "core",
+   "value_hash": null
+  },
+  "patterns_of": {
+   "kind": "function",
+   "signature": "(data)",
+   "label": "core",
+   "value_hash": null
+  },
+  "edited_note": {
+   "kind": "function",
+   "signature": "(plan, target, ours, theirs)",
+   "label": "core",
+   "value_hash": null
+  },
+  "regenerate": {
+   "kind": "function",
+   "signature": "(plan, history, key, target, theirs)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "effective_weight": {
+   "kind": "function",
+   "signature": "(plan)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "GENERATED_HEADER": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "afdcff22b711"
+  },
+  "weight_md": {
+   "kind": "function",
+   "signature": "(plan, history)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "block_update": {
+   "kind": "function",
+   "signature": "(plan, history, runtime)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "FIELD_LINE": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "d744f9389a28"
+  },
+  "SPECIFICS_RE": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "a5930fe935ef"
+  },
+  "split_testing": {
+   "kind": "function",
+   "signature": "(testing, template)",
+   "label": "core",
+   "value_hash": null
+  },
+  "leaves": {
+   "kind": "function",
+   "signature": "(value, prefix=())",
+   "label": "core",
+   "value_hash": null
+  },
+  "split_weight": {
+   "kind": "function",
+   "signature": "(old, history, template)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "listed": {
+   "kind": "function",
+   "signature": "(names, limit=6)",
+   "label": "core",
+   "value_hash": null
+  },
+  "unwritten": {
+   "kind": "function",
+   "signature": "(plan, history, target, template)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "split_once": {
+   "kind": "function",
+   "signature": "(plan, history)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "require_shared": {
+   "kind": "function",
+   "signature": "(paths, runtimes)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "shared_update": {
+   "kind": "function",
+   "signature": "(plan, history, runtimes)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "rule_sources": {
+   "kind": "function",
+   "signature": "(plan)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "local_cache": {
+   "kind": "function",
+   "signature": "(plan)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "task_journal": {
+   "kind": "function",
+   "signature": "(root, task_id)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "cleanup_update": {
+   "kind": "function",
+   "signature": "(plan, now=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "deletion_hint": {
+   "kind": "function",
+   "signature": "(plan)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "TRACKED_IGNORED_SHOWN": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "4b87ea803e39"
+  },
+  "tracked_ignored_hint": {
+   "kind": "function",
+   "signature": "(plan)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "rendered_rules": {
+   "kind": "function",
+   "signature": "(plan)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "nested_tree": {
+   "kind": "function",
+   "signature": "(root, rel_dir)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "unwalked_dir": {
+   "kind": "function",
+   "signature": "(root, rel_dir)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "_frozen_block": {
+   "kind": "function",
+   "signature": "(plan, target, slug)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "rules_update": {
+   "kind": "function",
+   "signature": "(plan, runtimes)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "gitignore_update": {
+   "kind": "function",
+   "signature": "(plan, snippet_path)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "budget_hints": {
+   "kind": "function",
+   "signature": "(plan, runtimes)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "constitution_hint": {
+   "kind": "function",
+   "signature": "(plan)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "verification_hints": {
+   "kind": "function",
+   "signature": "(plan)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "PHASE": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "7cfd66f51731"
+  },
+  "build_plan": {
+   "kind": "function",
+   "signature": "(root, confirm_delete=None, confirm_via=None, confirm_cleanup=None, cleanup_via=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "Abort": {
+   "kind": "class",
+   "signature": "",
+   "label": "core",
+   "value_hash": null
+  },
+  "current_sha": {
+   "kind": "function",
+   "signature": "(root, target)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "check": {
+   "kind": "function",
+   "signature": "(plan, item, target, expect, written)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "default_mode": {
+   "kind": "function",
+   "signature": "()",
+   "label": "shell",
+   "value_hash": null
+  },
+  "write_file": {
+   "kind": "function",
+   "signature": "(root, target, content, mode=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "keep_original": {
+   "kind": "function",
+   "signature": "(plan, target)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "record_run": {
+   "kind": "function",
+   "signature": "(plan, ops, deletions)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "apply": {
+   "kind": "function",
+   "signature": "(plan)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "apply_item": {
+   "kind": "function",
+   "signature": "(plan, item, written, recorded)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "prune_empty": {
+   "kind": "function",
+   "signature": "(root, target)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "report": {
+   "kind": "function",
+   "signature": "(plan, applied)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "main": {
+   "kind": "function",
+   "signature": "()",
+   "label": "shell",
+   "value_hash": null
+  }
+ }
+}

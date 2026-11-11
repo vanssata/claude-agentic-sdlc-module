@@ -17,6 +17,10 @@ except the last section.
 │       ├── state.py                    the entry: a shim that sets fs.ENTRY and calls rr_state.cli.main
 │       ├── rr_state/                   the package behind it, layers 0 to 9 (below)
 │       └── sensors.py, weight.py, memory_*.py   sibling modules, unchanged
+│   └── project-update/                 what /rr-setup --update runs
+│       ├── update.py                   the entry: the docstring, sys.path, then rr_update.cli.main
+│       ├── rr_update/                  the package behind it, layers 0 to 6 (below)
+│       └── render_instructions.py, history/   the renderer of the managed blocks; the shipped versions
 └── riskrails/
     ├── ai/                             the shared tree: policies, agent contracts, workflows, templates, using-riskrails.md
     ├── ai-path                         prints which copy of a shared file applies to a project
@@ -120,6 +124,28 @@ tools/state-partition.py`):
 - **The hooks never import the package** (R15): they run as `python3 -I -S` on
   the standard library, `hooks/guard/dialog.py` re-implements what it needs of
   the ledger, and nothing under `rr_state/` imports `hooks/`.
+
+`update.py`, the project updater, has the same shape: the entry keeps its
+docstring (the usage and the exit codes), sets `sys.dont_write_bytecode`, puts
+its directory on `sys.path` and calls `rr_update.cli.main`; it re-exports
+nothing. The package `skills/project-update/rr_update/` holds the code in
+layers 0 to 6 (the map is `tests/fixtures/update/partition.json`, checked by
+`tests/test_update_layout.py`):
+
+| Layer | Modules | Job |
+|---|---|---|
+| 0 | `paths`, `files` | the file lists, `HERE` and the plugin's directories; hashing, reads, git |
+| 1 | `history`, `gate`, `siblings` | the shipped versions; who may confirm; `weight.py` loaded by path |
+| 2 | `kept`, `plan` | the files the update keeps and refuses to read; the `Plan` of one run |
+| 3 | `weights`, `blocks`, `shared`, `rules`, `cleanup`, `hints` | one module per kind of row |
+| 4 | `build` | `build_plan`: every row of one run |
+| 5 | `apply`, `report` | write the rows, abort part-way; print them |
+| 6 | `cli` | the parser and `main` |
+
+Tests reach a name through the module that owns it (`from rr_update import
+paths`, then `paths.SHARED`), never through the entry.
+`tests/test_update_characterization.py` pins what the entry prints, returns and
+leaves on disk over the regenerate fixtures.
 
 | File | Written by | Holds |
 |---|---|---|
