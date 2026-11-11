@@ -37,6 +37,16 @@ npx riskrails@4.1.0 --statusline-context no  # no model and context line in the 
 npx riskrails@4.1.0 --statusline own         # Claude: keep your own statusline command (from 3.2.1; default riskrails: the plugin's)
 ```
 
+**Menus on a terminal (from 4.1.0).** Each question is a menu in this order:
+runtime, plan, Fable, context, statusline, Codex plan. The proposal is highlighted
+— the detected or recorded runtime, plan, statusline and Codex plan; Fable `yes`
+and context `default`. ↑/↓ (or k/j), Home/End or 1–9 move, Enter confirms, and
+Esc, q or Ctrl-C stop with nothing written (exit 130). Enter through every menu
+installs what detection proposes; with no detected Claude plan that is `pro`
+(`team-pro` for a Team org). A flag skips its menu. `--yes` or no terminal asks
+nothing; `RISKRAILS_MENU=off` (or `TERM=dumb`) brings back the typed plan
+question, where Enter on an undetected plan exits as in 4.0.
+
 Node 18 or newer and `python3` (Python 3.11 or newer) on `PATH` are required;
 the installer stops with one line when either is missing. From a checkout, `node bin/riskrails.js`
 takes the same flags. `./install.sh` only prints the `npx` line and exits 2.
