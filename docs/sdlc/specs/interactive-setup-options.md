@@ -1,6 +1,7 @@
 # Spec: Interactive setup options — installer menu, /rr-setup dialog, memory + SQLite from setup
 
-Written 2026-11-11 against 4.0.1 (`066a761`). Brainstorm: `docs/sdlc/intent/interactive-setup-options.questions.md`
+Target release: **4.1.0** (a minor: new installer menu, new `/rr-setup --options`, a new dialog route for
+`memory enable`; nothing ships in a 4.0.x patch). Written 2026-11-11 against 4.0.1 (`066a761`). Brainstorm: `docs/sdlc/intent/interactive-setup-options.questions.md`
 (Q1–Q5). Builds on R36 (`docs/sdlc/specs/command-choice-dialog.md`): its gate, ledger and recorder are reused
 unchanged; one opener and one allowed command are added. `docs/sdlc/specs/project-settings-dialog.md` stays
 parked (Q3).
