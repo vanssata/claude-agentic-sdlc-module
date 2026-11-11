@@ -18,7 +18,10 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import memory_harness as mh  # noqa: E402  pylint: disable=wrong-import-position
 import memory_format as mf  # noqa: E402  pylint: disable=wrong-import-position
-import memory_sync as ms  # noqa: E402  pylint: disable=wrong-import-position
+import memory_config as mcfg  # noqa: E402  pylint: disable=wrong-import-position
+import memory_io as mio  # noqa: E402  pylint: disable=wrong-import-position
+import memory_export as mexp  # noqa: E402  pylint: disable=wrong-import-position
+import memory_cleanup as mclean  # noqa: E402  pylint: disable=wrong-import-position
 import sensors  # noqa: E402  pylint: disable=wrong-import-position
 
 
@@ -300,14 +303,14 @@ class TestConcurrency(unittest.TestCase):
         a, _ = p.light_task("alpha")
         b, _ = p.light_task("beta", change="x = 3\n")
         p.ok("memory", "enable", "--author", "dev", human=True)
-        cfg = ms.load_config(p.root)
+        cfg = mcfg.load_config(p.root)
         errors, sealed, already = [], {}, {}
         # Both outboxes are written before either export takes the lock (B2), so
         # the first to lock seals both tasks — the interleaving that used to
         # happen only under load happens on every run. The staggered case, where
         # each export seals its own task, is the sequential path the tests above pin.
         both_written = threading.Barrier(2, timeout=30)
-        real_crash = ms.crash
+        real_crash = mio.crash
 
         def crash(point):
             if point == "B2":
@@ -316,14 +319,14 @@ class TestConcurrency(unittest.TestCase):
 
         def run(task):
             try:
-                result = ms.export(p.root, [task], cfg)
+                result = mexp.export(p.root, [task], cfg)
                 errors.extend(result.failures)
                 sealed[task] = [k.rsplit("#", 1)[0] for k in result.sealed]
                 already[task] = [k.rsplit("#", 1)[0] for k in result.already]
             except Exception as exc:  # pylint: disable=broad-except
                 errors.append(exc)
         threads = [threading.Thread(target=run, args=(t,)) for t in (a, b)]
-        with mock.patch.object(ms, "crash", crash):
+        with mock.patch.object(mio, "crash", crash):
             for t in threads:
                 t.start()
             for t in threads:
@@ -437,9 +440,9 @@ class TestTwelveMonths(unittest.TestCase):
     def close(self, p, n, month, author, cfg):
         when = "2025-%02d-%02dT%02d:00:00Z" % (month, 1 + n % 27, n % 24)
         task = fabricate(p, n, when, author)
-        result = ms.export(p.root, [task], cfg, stamp=when)
+        result = mexp.export(p.root, [task], cfg, stamp=when)
         self.assertEqual(result.failures, [])
-        ms.cleanup_task(p.root, task, cfg)
+        mclean.cleanup_task(p.root, task, cfg)
         return task, when
 
     def tracked(self, p, prefix):
@@ -449,7 +452,7 @@ class TestTwelveMonths(unittest.TestCase):
         seals, cfgs, n = [], {}, 0
         for month in range(1, 13):
             for p, author in ((self.a, "ana"), (self.b, "boris")):
-                cfg = cfgs.setdefault(author, ms.load_config(p.root))
+                cfg = cfgs.setdefault(author, mcfg.load_config(p.root))
                 for _ in range(4 if month % 3 else 5):
                     if n >= 100:
                         break
@@ -471,7 +474,7 @@ class TestTwelveMonths(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
 
     def test_branch_per_task_then_pack(self):
-        cfgs = {"ana": ms.load_config(self.a.root), "boris": ms.load_config(self.b.root)}
+        cfgs = {"ana": mcfg.load_config(self.a.root), "boris": mcfg.load_config(self.b.root)}
         for n in range(50):
             p, author = (self.a, "ana") if n % 2 == 0 else (self.b, "boris")
             p.git("checkout", "-q", "-b", "t-%d" % n)
@@ -489,8 +492,8 @@ class TestTwelveMonths(unittest.TestCase):
             p.git("pull", "-q", "--no-rebase", "--no-edit", "origin", "main")
             for quarter in ("2025-Q1", "2025-Q2", "2025-Q3", "2025-Q4"):
                 try:
-                    ms.pack(p.root, quarter)
-                except ms.MemoryError_ as exc:
+                    mclean.pack(p.root, quarter)
+                except mio.MemoryError_ as exc:
                     self.assertIn("no package", str(exc))
             p.commit("pack")
             p.git("push", "-q", "--no-verify", "origin", "main")

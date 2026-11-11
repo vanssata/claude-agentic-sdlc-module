@@ -17,7 +17,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import guard_harness as gh  # noqa: E402  pylint: disable=wrong-import-position
 import memory_harness as mh  # noqa: E402  pylint: disable=wrong-import-position
 import memory_format as mf  # noqa: E402  pylint: disable=wrong-import-position
-import memory_sync as ms  # noqa: E402  pylint: disable=wrong-import-position
+import memory_io as mio  # noqa: E402  pylint: disable=wrong-import-position
+import memory_verify as mver  # noqa: E402  pylint: disable=wrong-import-position
 
 ZERO = "0" * 40
 FACTOR = float(os.environ.get("AI_TIMED_FACTOR", "1"))
@@ -276,17 +277,17 @@ class TestChecks(Repo):
             self.p.light_task("task %d" % n, change="x = %d\n" % (n + 10))
         head = self.p.commit("six more")
         calls = []
-        real = ms.subprocess.run
+        real = mio.subprocess.run
 
         def counting(args, *a, **kw):
             if "cat-file" in args and "--batch" in args:
                 calls.append(args)
             return real(args, *a, **kw)  # pylint: disable=subprocess-run-check
-        ms.subprocess.run = counting
+        mio.subprocess.run = counting
         try:
-            findings, stats = ms.validate_range(self.p.root, self.head, head)
+            findings, stats = mver.validate_range(self.p.root, self.head, head)
         finally:
-            ms.subprocess.run = real
+            mio.subprocess.run = real
         self.assertEqual(findings, [])
         self.assertEqual(stats["tasks"], 7)
         self.assertLessEqual(len(calls), 3, calls)                      # T's packages, O's, T's journals
@@ -369,7 +370,7 @@ class TestInstall(unittest.TestCase):
             self.assertIn("inside an agent session (CLAUDECODE", done.stderr)
             self.assertFalse(self.p.exists(".ai/policies/memory.json"), args)
             self.assertFalse(os.path.exists(self.hook()), args)
-            self.assertFalse(os.path.exists(ms.local_path(self.p.root, "config.json")), args)
+            self.assertFalse(os.path.exists(mio.local_path(self.p.root, "config.json")), args)
             self.assertEqual(self.p.tree_listing(), written, args)
 
     def test_enable_via_dialog_pick(self):
@@ -391,13 +392,13 @@ class TestInstall(unittest.TestCase):
         self.assertEqual((done.returncode, done.stderr), (0, ""), done.stdout)
         human = mh.Project("human", tmp=self.p.tmp).ok(*argv, human=True).stdout          # the unattended route
         self.assertEqual(human.splitlines()[:2], ["memory: packages mode on (%s); every teammate's next close exports"
-                                                  % ms.POLICY_REL, "pre-push: installed"])
+                                                  % mio.POLICY_REL, "pre-push: installed"])
         self.assertNotIn("via dialog", human)
         self.assertEqual(done.stdout, "memory: via dialog (consent C1, decision D1)\n" + human)
         policy = json.loads(self.p.read(".ai/policies/memory.json"))
         self.assertEqual((policy["mode"], policy["period"]), ("packages", "quarter"))
         self.assertTrue(os.access(self.hook(), os.X_OK))
-        self.assertIn(ms.HOOK_MARKER, self.p.read(".git/hooks/pre-push"))
+        self.assertIn(mio.HOOK_MARKER, self.p.read(".git/hooks/pre-push"))
         ledger = self.ledger(self.p)
         self.assertEqual([line["type"] for line in ledger], ["offer", "pick", "use", "settle"])
         self.assertEqual(ledger[2]["id"], "C1")
@@ -461,7 +462,7 @@ class TestInstall(unittest.TestCase):
         self.assertIn("pre-push: installed", self.p.ok("memory", "enable", human=True).stdout)
         self.assertTrue(os.access(self.hook(), os.X_OK))
         with open(self.hook(), encoding="utf-8") as fh:
-            self.assertIn(ms.HOOK_MARKER, fh.read())
+            self.assertIn(mio.HOOK_MARKER, fh.read())
         self.assertIn("pre-push: current", self.p.ok("memory", "enable", human=True).stdout)
         policy = json.loads(self.p.read(".ai/policies/memory.json"))
         self.assertEqual((policy["mode"], policy["period"], policy["cleanup"]), ("packages", "quarter", False))
@@ -494,8 +495,8 @@ class TestInstall(unittest.TestCase):
 
     def test_the_shim_without_a_validator_warns_and_passes(self):
         self.p.ok("memory", "enable", human=True)
-        text = self.p.read(".git/hooks/pre-push").replace(ms.VALIDATOR, "/nonexistent/memory-pre-push.py")
-        self.p.write(".git/hooks/pre-push", text.replace(ms.SELF, "/nonexistent/memory_sync.py"))
+        text = self.p.read(".git/hooks/pre-push").replace(mio.VALIDATOR, "/nonexistent/memory-pre-push.py")
+        self.p.write(".git/hooks/pre-push", text.replace(mio.SELF, "/nonexistent/memory_sync.py"))
         done = self.run_shim()
         self.assertEqual(done.returncode, 0)
         self.assertIn("validator not found — this push is not checked", done.stderr)
@@ -505,7 +506,7 @@ class TestInstall(unittest.TestCase):
     def test_without_the_hook_file_the_shim_runs_the_module(self):
         """Review M8: a Codex install copies skills/ai-task/ but not every hook."""
         self.p.ok("memory", "enable", "--author", "dev", human=True)
-        text = self.p.read(".git/hooks/pre-push").replace(ms.VALIDATOR, "/nonexistent/memory-pre-push.py")
+        text = self.p.read(".git/hooks/pre-push").replace(mio.VALIDATOR, "/nonexistent/memory-pre-push.py")
         self.p.write(".git/hooks/pre-push", text)
         base = self.p.commit("memory on")
         self.p.light_task("checked through the module")

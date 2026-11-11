@@ -1,0 +1,865 @@
+{
+ "schema": 1,
+ "source": "skills/ai-task/memory_sync.py",
+ "entry_docstring_sha256": "4e53b0bda84f5ebbd405ff03e755d969dc5cf7e8774a27d88293f8229d593a9a",
+ "entry_docstring_chars": 534,
+ "entry": {
+  "module": "memory_sync",
+  "max_lines": 150,
+  "may_import": [
+   "memory_io",
+   "memory_verify"
+  ],
+  "sys_path_line": "sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))",
+  "allowed_importer": "hooks/memory-pre-push.py"
+ },
+ "classes": [
+  "MemoryError_",
+  "MemoryConfig",
+  "GitTreeReader"
+ ],
+ "namedtuples": [
+  "ExportResult",
+  "Finding"
+ ],
+ "moves": [
+  {
+   "names": [
+    "sealed_task_ids"
+   ],
+   "from": "memory_export (layer 4)",
+   "to": "memory_packages (layer 1)",
+   "why": "cleanup (memory_cleanup, layer 3) calls sealed_task_ids, which the plan put in memory_export (layer 4): an upward edge; it reads a loaded packages dict and refers to no other name, so it sits beside load_packages (pending_ids and unmigrated call it from above)"
+  },
+  {
+   "names": [
+    "HERE"
+   ],
+   "from": "not a name of memory_sync.py",
+   "to": "memory_io (layer 0)",
+   "why": "D2: HERE = dirname(abspath(__file__)) is the one path constant in the new modules; VALIDATOR and SELF hang on it; it is the only name the partition adds"
+  },
+  {
+   "names": [
+    "fcntl"
+   ],
+   "from": "memory_sync.py's try/except import",
+   "to": "memory_io (layer 0)",
+   "why": "D6: the fallback moves with locked, its only reader (call graph: locked, and nothing else, refers to fcntl)"
+  }
+ ],
+ "modules": {
+  "memory_io": {
+   "layer": 0,
+   "defs": [
+    "HERE",
+    "fcntl",
+    "POLICY_REL",
+    "MEMORY_REL",
+    "LOCAL_REL",
+    "PENDING_MAX",
+    "BATCH_CHARS",
+    "HOOK_MARKER",
+    "VALIDATOR",
+    "SELF",
+    "FINDINGS_MAX",
+    "ZERO_SHA",
+    "MemoryError_",
+    "now",
+    "crash",
+    "read_json",
+    "atomic_write",
+    "locked",
+    "git",
+    "current_branch",
+    "memory_dir",
+    "local_path",
+    "read_bytes"
+   ],
+   "imports": [],
+   "approx_lines": 108
+  },
+  "memory_config": {
+   "layer": 1,
+   "defs": [
+    "SCHEMA",
+    "DEFAULTS",
+    "author_slug",
+    "MemoryConfig",
+    "load_config",
+    "check_policy",
+    "mode_of"
+   ],
+   "imports": [
+    "memory_io"
+   ],
+   "approx_lines": 110
+  },
+  "memory_packages": {
+   "layer": 1,
+   "defs": [
+    "load_packages",
+    "all_rids",
+    "seals_by_key",
+    "sealed_task_ids",
+    "read_batches",
+    "write_batches",
+    "new_batch_name",
+    "open_batch"
+   ],
+   "imports": [
+    "memory_io"
+   ],
+   "approx_lines": 73
+  },
+  "memory_hook": {
+   "layer": 2,
+   "defs": [
+    "hook_state",
+    "hooks_path",
+    "shim_candidates",
+    "shim_text",
+    "shim_paths",
+    "snippet_text",
+    "install_hook",
+    "remove_hook",
+    "write_policy",
+    "enable",
+    "disable"
+   ],
+   "imports": [
+    "memory_config",
+    "memory_io"
+   ],
+   "approx_lines": 129
+  },
+  "memory_risks": {
+   "layer": 2,
+   "defs": [
+    "risk_add_files",
+    "risk_close_files",
+    "risk_data",
+    "standalone_risk",
+    "append_entries"
+   ],
+   "imports": [
+    "memory_io",
+    "memory_packages"
+   ],
+   "approx_lines": 76
+  },
+  "memory_verify": {
+   "layer": 2,
+   "defs": [
+    "Finding",
+    "kept_lines",
+    "check_packages",
+    "_belongs",
+    "check_journals",
+    "verify",
+    "verify_fresh_clone",
+    "format_finding",
+    "GitTreeReader",
+    "rev",
+    "policy_at",
+    "validate_range"
+   ],
+   "imports": [
+    "memory_config",
+    "memory_io",
+    "memory_packages"
+   ],
+   "approx_lines": 293
+  },
+  "memory_cleanup": {
+   "layer": 3,
+   "defs": [
+    "cleanup_ready",
+    "cleanup_task",
+    "tree_digest",
+    "cleanup",
+    "restore",
+    "redact",
+    "pack"
+   ],
+   "imports": [
+    "memory_config",
+    "memory_io",
+    "memory_packages",
+    "memory_verify"
+   ],
+   "approx_lines": 201
+  },
+  "memory_migrate": {
+   "layer": 3,
+   "defs": [
+    "migration_plan",
+    "migrate_report",
+    "backup",
+    "migrate_apply",
+    "STUB",
+    "migrate_risks",
+    "move_logs"
+   ],
+   "imports": [
+    "memory_config",
+    "memory_io",
+    "memory_packages",
+    "memory_risks",
+    "memory_verify"
+   ],
+   "approx_lines": 172
+  },
+  "memory_export": {
+   "layer": 4,
+   "defs": [
+    "outbox_path",
+    "exportable",
+    "ExportResult",
+    "compact_for_export",
+    "write_outbox",
+    "read_outbox",
+    "export",
+    "record_lines",
+    "index_import",
+    "pending_ids",
+    "after_close"
+   ],
+   "imports": [
+    "memory_cleanup",
+    "memory_config",
+    "memory_io",
+    "memory_packages"
+   ],
+   "approx_lines": 233
+  },
+  "memory_status": {
+   "layer": 5,
+   "defs": [
+    "status_lines",
+    "fts_line",
+    "unmigrated",
+    "show"
+   ],
+   "imports": [
+    "memory_config",
+    "memory_export",
+    "memory_hook",
+    "memory_io",
+    "memory_packages"
+   ],
+   "approx_lines": 66
+  },
+  "memory_sync": {
+   "layer": 6,
+   "defs": [
+    "_git_out",
+    "base_for_new_branch",
+    "pre_push",
+    "pre_push_cli"
+   ],
+   "imports": [
+    "memory_io",
+    "memory_verify"
+   ],
+   "approx_lines": 86
+  }
+ },
+ "defs": {
+  "fcntl": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": null
+  },
+  "POLICY_REL": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "d7ea19c2749f"
+  },
+  "MEMORY_REL": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "05e48b8daf28"
+  },
+  "LOCAL_REL": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "bd7aa44a2e14"
+  },
+  "SCHEMA": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "ba54c567c94a"
+  },
+  "DEFAULTS": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "dc7e9f2d4106"
+  },
+  "PENDING_MAX": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "88be6902c126"
+  },
+  "BATCH_CHARS": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "d55b58577538"
+  },
+  "HOOK_MARKER": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "182534575747"
+  },
+  "VALIDATOR": {
+   "kind": "const",
+   "signature": "",
+   "label": "shell",
+   "value_hash": null
+  },
+  "SELF": {
+   "kind": "const",
+   "signature": "",
+   "label": "shell",
+   "value_hash": null
+  },
+  "FINDINGS_MAX": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "a35fce8254a4"
+  },
+  "ZERO_SHA": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "fb3c380835ef"
+  },
+  "MemoryError_": {
+   "kind": "class",
+   "signature": "",
+   "label": "core",
+   "value_hash": null
+  },
+  "now": {
+   "kind": "function",
+   "signature": "()",
+   "label": "shell",
+   "value_hash": null
+  },
+  "crash": {
+   "kind": "function",
+   "signature": "(point)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "author_slug": {
+   "kind": "function",
+   "signature": "(name)",
+   "label": "core",
+   "value_hash": null
+  },
+  "MemoryConfig": {
+   "kind": "class",
+   "signature": "",
+   "label": "shell",
+   "value_hash": null
+  },
+  "read_json": {
+   "kind": "function",
+   "signature": "(path)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "load_config": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "check_policy": {
+   "kind": "function",
+   "signature": "(policy)",
+   "label": "core",
+   "value_hash": null
+  },
+  "mode_of": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "atomic_write": {
+   "kind": "function",
+   "signature": "(path, data)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "locked": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "git": {
+   "kind": "function",
+   "signature": "(root, *args, stdin=None, binary=False)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "current_branch": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "memory_dir": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "core",
+   "value_hash": null
+  },
+  "local_path": {
+   "kind": "function",
+   "signature": "(root, *parts)",
+   "label": "core",
+   "value_hash": null
+  },
+  "read_bytes": {
+   "kind": "function",
+   "signature": "(path)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "load_packages": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "all_rids": {
+   "kind": "function",
+   "signature": "(packages)",
+   "label": "core",
+   "value_hash": null
+  },
+  "seals_by_key": {
+   "kind": "function",
+   "signature": "(packages)",
+   "label": "core",
+   "value_hash": null
+  },
+  "read_batches": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "write_batches": {
+   "kind": "function",
+   "signature": "(root, data)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "new_batch_name": {
+   "kind": "function",
+   "signature": "(root, period, author)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "open_batch": {
+   "kind": "function",
+   "signature": "(root, cfg, stamp=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "outbox_path": {
+   "kind": "function",
+   "signature": "(root, key)",
+   "label": "core",
+   "value_hash": null
+  },
+  "exportable": {
+   "kind": "function",
+   "signature": "(compactions)",
+   "label": "core",
+   "value_hash": null
+  },
+  "ExportResult": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "287a985ff717"
+  },
+  "compact_for_export": {
+   "kind": "function",
+   "signature": "(root, task_id, cfg)",
+   "label": "core",
+   "value_hash": null
+  },
+  "write_outbox": {
+   "kind": "function",
+   "signature": "(root, compaction)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "read_outbox": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "export": {
+   "kind": "function",
+   "signature": "(root, ids, cfg=None, stamp=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "record_lines": {
+   "kind": "function",
+   "signature": "(result)",
+   "label": "core",
+   "value_hash": null
+  },
+  "index_import": {
+   "kind": "function",
+   "signature": "(root, cfg)",
+   "label": "core",
+   "value_hash": null
+  },
+  "sealed_task_ids": {
+   "kind": "function",
+   "signature": "(packages)",
+   "label": "core",
+   "value_hash": null
+  },
+  "pending_ids": {
+   "kind": "function",
+   "signature": "(root, cfg=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "after_close": {
+   "kind": "function",
+   "signature": "(root, task_id, out=print)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "Finding": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "258b4342b38e"
+  },
+  "kept_lines": {
+   "kind": "function",
+   "signature": "(events, schema=None)",
+   "label": "core",
+   "value_hash": null
+  },
+  "check_packages": {
+   "kind": "function",
+   "signature": "(packages, max_bytes, sizes=None, changed=None, ref_name=None)",
+   "label": "core",
+   "value_hash": null
+  },
+  "_belongs": {
+   "kind": "function",
+   "signature": "(items, rid, seal)",
+   "label": "core",
+   "value_hash": null
+  },
+  "check_journals": {
+   "kind": "function",
+   "signature": "(read, paths, packages, cleanup_on=False)",
+   "label": "core",
+   "value_hash": null
+  },
+  "verify": {
+   "kind": "function",
+   "signature": "(root, scope='all', ids=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "verify_fresh_clone": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "format_finding": {
+   "kind": "function",
+   "signature": "(f, ref=None)",
+   "label": "core",
+   "value_hash": null
+  },
+  "hook_state": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "status_lines": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "fts_line": {
+   "kind": "function",
+   "signature": "(cfg)",
+   "label": "core",
+   "value_hash": null
+  },
+  "unmigrated": {
+   "kind": "function",
+   "signature": "(root, packages)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "show": {
+   "kind": "function",
+   "signature": "(root, task_id, fmt='md', rid=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "risk_add_files": {
+   "kind": "function",
+   "signature": "(root, title, where, label, what, likely, fix, status, found)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "risk_close_files": {
+   "kind": "function",
+   "signature": "(root, rkey, status, why)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "risk_data": {
+   "kind": "function",
+   "signature": "(title, where, label, what, likely, fix, status, why=None, supersedes=None, by=None)",
+   "label": "core",
+   "value_hash": null
+  },
+  "standalone_risk": {
+   "kind": "function",
+   "signature": "(root, cfg, data, runtime='unknown', by=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "append_entries": {
+   "kind": "function",
+   "signature": "(root, cfg, entries)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "GitTreeReader": {
+   "kind": "class",
+   "signature": "",
+   "label": "shell",
+   "value_hash": null
+  },
+  "rev": {
+   "kind": "function",
+   "signature": "(repo, name)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "policy_at": {
+   "kind": "function",
+   "signature": "(repo, sha)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "validate_range": {
+   "kind": "function",
+   "signature": "(repo, old, new, local=False)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "hooks_path": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "shim_candidates": {
+   "kind": "function",
+   "signature": "(validator=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "shim_text": {
+   "kind": "function",
+   "signature": "(validator=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "shim_paths": {
+   "kind": "function",
+   "signature": "(text)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "snippet_text": {
+   "kind": "function",
+   "signature": "(validator=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "install_hook": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "remove_hook": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "write_policy": {
+   "kind": "function",
+   "signature": "(root, policy)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "enable": {
+   "kind": "function",
+   "signature": "(root, author=None, period=None, index=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "disable": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "migration_plan": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "migrate_report": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "backup": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "migrate_apply": {
+   "kind": "function",
+   "signature": "(root, risks=False)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "STUB": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "9bac6128135a"
+  },
+  "migrate_risks": {
+   "kind": "function",
+   "signature": "(root, cfg)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "move_logs": {
+   "kind": "function",
+   "signature": "(root)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "cleanup_ready": {
+   "kind": "function",
+   "signature": "(root, task_id, cfg, packages=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "cleanup_task": {
+   "kind": "function",
+   "signature": "(root, task_id, cfg)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "tree_digest": {
+   "kind": "function",
+   "signature": "(path)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "cleanup": {
+   "kind": "function",
+   "signature": "(root, ids)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "restore": {
+   "kind": "function",
+   "signature": "(root, ids)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "redact": {
+   "kind": "function",
+   "signature": "(root, rid, field, why, by=None)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "pack": {
+   "kind": "function",
+   "signature": "(root, period)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "_git_out": {
+   "kind": "function",
+   "signature": "(repo, *args)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "base_for_new_branch": {
+   "kind": "function",
+   "signature": "(repo, remote, lsha)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "pre_push": {
+   "kind": "function",
+   "signature": "(argv, stdin)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "pre_push_cli": {
+   "kind": "function",
+   "signature": "(argv)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "HERE": {
+   "kind": "const",
+   "signature": "",
+   "label": "shell",
+   "value_hash": null,
+   "new": "D2: memory_io.HERE, the one dirname(abspath(__file__)) the other paths hang on"
+  }
+ }
+}

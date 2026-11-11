@@ -1,0 +1,596 @@
+$ state.py memory enable --author dev (human)
+exit 0
+--- stdout
+memory: packages mode on (.ai/policies/memory.json); every teammate's next close exports
+pre-push: installed
+mode: packages
+period: quarter · author: dev · index: none
+open batch: none (branch main)
+packages: 0 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 0
+pre-push: current
+cleanup: off
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+
+##### .git/hooks/pre-push, mode 755, whole:
+#!/bin/sh
+# riskrails-memory-pre-push 1 — written by 'state.py memory enable'; 'state.py memory disable' removes it
+for v in "<PLUGIN>/hooks/memory-pre-push.py" "$HOME/.claude/hooks/memory-pre-push.py" "${CODEX_HOME:-$HOME/.codex}/hooks/memory-pre-push.py" "<PLUGIN>/skills/ai-task/memory_sync.py" "$HOME/.claude/skills/ai-task/memory_sync.py" "${CODEX_HOME:-$HOME/.codex}/skills/ai-task/memory_sync.py"; do
+  [ -f "$v" ] && exec python3 -I "$v" "$@"
+done
+echo "riskrails memory: validator not found — this push is not checked" >&2; exit 0
+
+##### light task 1 closed: stdout of `state.py close`
+<ID> closed (light): .ai/reports/<ID>/task.md
+state: .ai/state/logs/<ID>/state.json
+record: .ai/memory/<PERIOD>.dev.<B>.jsonl (+3 entries, <ID> sealed, coverage 7/7 lines)
+
+##### light task 2 closed (with a note): stdout of `state.py close`
+<ID> closed (light): .ai/reports/<ID>/task.md
+state: .ai/state/logs/<ID>/state.json
+record: .ai/memory/<PERIOD>.dev.<B>.jsonl (+4 entries, <ID> sealed, coverage 8/8 lines)
+
+$ state.py memory status (after the tasks, before any commit)
+exit 0
+--- stdout
+mode: packages
+period: quarter · author: dev · index: none
+open batch: <PERIOD>.dev.<B>.jsonl (branch main)
+packages: 1 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 0
+pre-push: current
+cleanup: off
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory status (agent)
+exit 0
+--- stdout
+mode: packages
+period: quarter · author: dev · index: none
+open batch: <PERIOD>.dev.<B>.jsonl (branch main)
+packages: 1 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 0
+pre-push: current
+cleanup: off
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory status --json (agent)
+exit 0
+--- stdout
+{"cleanup": "off", "closed, not exported": "none", "legacy, not migrated": "0", "mode": "packages", "open batch": "<PERIOD>.dev.<B>.jsonl (branch main)", "packages": "1 · <N> bytes", "period": "quarter · author: dev · index: none", "pre-push": "current"}
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory show <ID> (agent)
+exit 0
+--- stdout
+# <ID> — tweak the widget
+
+feature · light · W 0 · closed · <TS> → <TS> · claude
+source: close · format 1 · keep rules 1 · 7 journal lines, 0 skipped · 2 entries · sha256:<SHA64>
+
+facts: (a) green — suite green on <SHA9> (run 1) · (b) green — 1 changed files, all in the task's files
+
+## Files
+
+- src/widget.py (+1 −1, M)
+
+## Weight
+
+- set W 0 → light (<RID>, events.jsonl:2)
+
+## Verify
+
+- run 1 suite exit 0 (<RID>, events.jsonl:5)
+
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory show <ID> --md (agent)
+exit 0
+--- stdout
+# <ID> — tweak the widget again
+
+feature · light · W 1 · closed · <TS> → <TS> · claude
+source: close · format 1 · keep rules 1 · 8 journal lines, 0 skipped · 3 entries · sha256:<SHA64>
+
+facts: (a) green — suite green on <SHA9> (run 1) · (b) green — 1 changed files, all in the task's files
+
+## Files
+
+- src/widget.py (+1 −1, M)
+
+## Weight
+
+- set W 1 → light (<RID>, events.jsonl:2)
+
+## Verify
+
+- run 1 suite exit 0 (<RID>, events.jsonl:6)
+
+## Notes
+
+- decision: keep the old key — why: callers depend on it (<RID>, events.jsonl:5)
+
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory show <ID> --json (agent)
+exit 0
+--- stdout
+{"actor":"agent","axes":{"behaviour":0,"coverage":0,"domain":0,"novelty":0,"reversibility":0,"scope":1},"by":null,"change":"set","from":null,"inst":1,"kind":"weight","lines":["scope          1  src/widget.py referenced from 3 files","behaviour      0  synthetic (declared)","reversibility  0  git revert returns everything","domain         0  synthetic (declared)","novelty        0  synthetic (declared)","coverage       0  1 of 1 code files have a test","W 1 → light   hints none · unknown none · light ≤2 · guarded 3–7 · full ≥8 or reversibility/domain=2"],"mode":"light","rid":"<RID>","runtime":"claude","seq":0,"src":["events.jsonl:2"],"task":"<ID>","to":null,"ts":"<TS>","v":1,"w":1}
+{"actor":"agent","by":null,"error":null,"inst":1,"kind":"note","note_kind":"decision","rid":"<RID>","runtime":"claude","seq":1,"src":["events.jsonl:5"],"task":"<ID>","text":"keep the old key","ts":"<TS>","v":1,"why":"callers depend on it"}
+{"actor":"agent","after_fix":null,"by":null,"command":"sh -c 'test ! -e <TMP>/flags-p/red' {files}","duration_s":0,"excerpt":null,"exit":0,"expected_fail":false,"inst":1,"kind":"verify","log":"log:.ai/state/logs/<ID>/suite-1.log","n":1,"rid":"<RID>","runtime":"claude","scope":"suite","seq":2,"src":["events.jsonl:6"],"task":"<ID>","tree":"<SHA40>","ts":"<TS>","v":1,"why":null}
+{"actor":"agent","axes":{"behaviour":0,"coverage":0,"domain":0,"novelty":0,"reversibility":0,"scope":1},"by":null,"changes":[{"added":1,"binary":false,"deleted":1,"path":"src/widget.py","status":"M"}],"closed_at":"<TS>","code":{"base_commit":"<SHA40>","base_tree":"<SHA40>","final_tree":"<SHA40>"},"counts":{"dropped":{"handoff_written":2},"lines":8,"skipped":0},"digest":"sha256:<SHA64>","entries":3,"facts":{"a":[true,"suite green on <SHA9> (run 1)"],"b":[true,"1 changed files, all in the task's files"]},"files":["src/widget.py",".ai/project/known-risks.md"],"goal":"tweak the widget again","inst":1,"kind":"task","mode":"light","people":{"humans":[],"started_by":null},"result":"closed","rid":"<RID>","runtime":"claude","runtimes":["claude"],"schema":7,"seq":3,"source":"close","src":["events.jsonl:1","events.jsonl:8","state.json"],"stages":[["implementation","<TS>"],["done","<TS>"]],"started_at":"<TS>","steps":[],"task":"<ID>","ts":"<TS>","unrecorded":["people.started_by"],"v":1,"verify_runs":[[1,"suite",0,"<SHA40>",false]],"version":1,"w":1,"workflow":"feature"}
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory export (agent)
+exit 0
+--- stdout
+exported: +0 entries — nothing pending
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory export --pending (agent)
+exit 0
+--- stdout
+exported: +0 entries — nothing pending
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory verify --all (agent)
+exit 0
+--- stdout
+memory verify: ok
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory verify <ID> (agent)
+exit 0
+--- stdout
+memory verify: ok
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory verify --all --json (agent)
+exit 0
+--- stdout
+{"findings": [], "ok": true, "stats": null}
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory verify --fresh-clone (agent)
+exit 0
+--- stdout
+memory verify: ok
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory verify --range <SHA40>..HEAD (agent)
+exit 0
+--- stdout
+memory verify: ok
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory verify --range <SHA40>..HEAD --json (agent)
+exit 0
+--- stdout
+{"findings": [], "ok": true, "stats": {"ms": <N>, "packages": 1, "tasks": 2}}
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py close (agent, AI_MEMORY_CRASH_AT=B2)
+exit 70
+--- stdout
+<ID> closed (light): .ai/reports/<ID>/task.md
+state: .ai/state/logs/<ID>/state.json
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/outbox/<ID>~1.jsonl  697046feb34c0c1bab0a6a4d8ffa032fd288c043ac6fd3786bf6caec68e2796b
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory status (agent)
+exit 0
+--- stdout
+mode: packages
+period: quarter · author: dev · index: none
+open batch: <PERIOD>.dev.<B>.jsonl (branch main)
+packages: 1 · <N> bytes
+closed, not exported: <ID>
+legacy, not migrated: 0
+pre-push: current
+cleanup: off
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/outbox/<ID>~1.jsonl  697046feb34c0c1bab0a6a4d8ffa032fd288c043ac6fd3786bf6caec68e2796b
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory export (agent)
+exit 0
+--- stdout
+record: .ai/memory/<PERIOD>.dev.<B>.jsonl (+3 entries, <ID> sealed, coverage 7/7 lines)
+exported: +3 entries
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  710d2f55bb2da819856e1ae0add0909dceb7e97d7b054397b24dce2af45ec7ab
+
+$ state.py memory export (agent)
+exit 0
+--- stdout
+exported: +0 entries — nothing pending
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  710d2f55bb2da819856e1ae0add0909dceb7e97d7b054397b24dce2af45ec7ab
+
+$ state.py close (agent, AI_MEMORY_CRASH_AT=B4)
+exit 70
+--- stdout
+<ID> closed (light): .ai/reports/<ID>/task.md
+state: .ai/state/logs/<ID>/state.json
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/outbox/<ID>~1.jsonl  6139ae0d916f4b5a2f922e37a6c71c08fbb905abebc1c8f32dedfec036c8c5dc
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1cb4c317c89a4740c2c7d9e2d2627a9a8d048828b4af75dc0ce557fff7115784
+
+$ state.py memory status (agent)
+exit 0
+--- stdout
+mode: packages
+period: quarter · author: dev · index: none
+open batch: <PERIOD>.dev.<B>.jsonl (branch main)
+packages: 1 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 0
+pre-push: current
+cleanup: off
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/outbox/<ID>~1.jsonl  6139ae0d916f4b5a2f922e37a6c71c08fbb905abebc1c8f32dedfec036c8c5dc
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1cb4c317c89a4740c2c7d9e2d2627a9a8d048828b4af75dc0ce557fff7115784
+
+$ state.py memory export (agent)
+exit 0
+--- stdout
+record: <ID>#1 already sealed in .ai/memory — nothing added
+exported: +0 entries — nothing pending
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1cb4c317c89a4740c2c7d9e2d2627a9a8d048828b4af75dc0ce557fff7115784
+
+$ state.py memory export (agent)
+exit 0
+--- stdout
+exported: +0 entries — nothing pending
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1cb4c317c89a4740c2c7d9e2d2627a9a8d048828b4af75dc0ce557fff7115784
+
+$ state.py memory verify --all (agent)
+exit 0
+--- stdout
+memory verify: ok
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1cb4c317c89a4740c2c7d9e2d2627a9a8d048828b4af75dc0ce557fff7115784
+
+$ git push origin main (the installed hook runs)
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1cb4c317c89a4740c2c7d9e2d2627a9a8d048828b4af75dc0ce557fff7115784
+
+$ state.py memory risk add --title 'Cache key ignores the locale' --where src/widget.py:1 --label 'KNOWN FACT' --what 'two locales share one cache entry' --likely medium --fix 'add the locale to the key' (agent)
+exit 0
+--- stdout
+risk: R-cache-key-ignores-the-locale-93d1 recorded (<RID>)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1a9dc3cc52c187c20e2468e1d61c3e051e4c3406927aa7fab8e5ea25eaf59901
+
+$ state.py memory risks (agent)
+exit 0
+--- stdout
+# Risks — open · 1
+- [open KNOWN FACT] src/widget.py:1 — Cache key ignores the locale (R-cache-key-ignores-the-locale-93d1)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1a9dc3cc52c187c20e2468e1d61c3e051e4c3406927aa7fab8e5ea25eaf59901
+
+$ state.py memory risks --status all --json (agent)
+exit 0
+--- stdout
+{"actor":"agent","by":null,"fix":"add the locale to the key","found_by":null,"inst":1,"kind":"risk","label":"KNOWN FACT","likelihood":"medium","rid":"<RID>","rkey":"R-cache-key-ignores-the-locale-93d1","runtime":"claude","seq":0,"src":["state.py memory risk"],"status":"open","status_why":null,"task":null,"text":null,"title":"Cache key ignores the locale","ts":"<TS>","v":1,"what":"two locales share one cache entry","where":["src/widget.py:1"]}
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1a9dc3cc52c187c20e2468e1d61c3e051e4c3406927aa7fab8e5ea25eaf59901
+
+$ state.py memory risk close R-cache-key-ignores-the-locale-93d1 --status accepted --why 'callers depend on it' (agent)
+exit 0
+--- stdout
+risk: R-cache-key-ignores-the-locale-93d1 recorded (<RID>)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  da912e94cad246be376352a2dcb628bb61b029cdb54096a1818b893bd081e9d9
+
+$ state.py memory risks --status all (agent)
+exit 0
+--- stdout
+# Risks — all · 1
+- [accepted KNOWN FACT] src/widget.py:1 — Cache key ignores the locale (R-cache-key-ignores-the-locale-93d1)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  da912e94cad246be376352a2dcb628bb61b029cdb54096a1818b893bd081e9d9
+
+$ state.py memory export --pending (agent)
+exit 0
+--- stdout
+exported: +0 entries — nothing pending
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  da912e94cad246be376352a2dcb628bb61b029cdb54096a1818b893bd081e9d9
+
+$ state.py memory verify --all (agent)
+exit 0
+--- stdout
+memory verify: ok
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  da912e94cad246be376352a2dcb628bb61b029cdb54096a1818b893bd081e9d9
+
+$ state.py memory cleanup --all --confirm-delete dev (human)
+exit 0
+--- stdout
+.ai/reports/<ID> → .ai/state/logs/<ID>/report
+.ai/reports/<ID> → .ai/state/logs/<ID>/report
+.ai/reports/<ID> → .ai/state/logs/<ID>/report
+.ai/reports/<ID> → .ai/state/logs/<ID>/report
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  da912e94cad246be376352a2dcb628bb61b029cdb54096a1818b893bd081e9d9
+.ai/state/logs/.gitignore  cdbcae15105d6b781e620813c79c7e868740d4e9cc53ce6f5fcbbc12387adf4b
+.ai/state/logs/<ID>/report/events.jsonl  8af6e63fa3f03c9c3db3b859906570c226270908cb98894d5c4004209d41c951
+.ai/state/logs/<ID>/report/events.jsonl  8e0e0556de848489f4b4ca62031466faea1f5293ee8575d603cfd40e00b974c8
+.ai/state/logs/<ID>/report/events.jsonl  a81895431395a674bec5a64f6e939d50105cab0594bbac8a1c1685fd6322a223
+.ai/state/logs/<ID>/report/events.jsonl  f834591977a349023fd85ab0af61f1e568ff902568b8c05aaf4be98e714167a4
+.ai/state/logs/<ID>/report/task.md  0dc5ab0b7b9921396b8f75b876b7990227f2b35968c8e8697bb3162875f079b6
+.ai/state/logs/<ID>/report/task.md  aa8242b0cc2d10368de32a1c688d57e7798732d09a57b8231ac24f70b1d8edcb
+.ai/state/logs/<ID>/report/task.md  b2f55b7f183493fb50cf153754c154dc77850a517d098f19004e90e83333f5a2
+.ai/state/logs/<ID>/report/task.md  f884c1fd449e626e0d2f619770470b56f9024fec67431ff7d0cff2ba97be6f4f
+.ai/state/logs/<ID>/state.json  102605d8d7cb8aeffeab5ba7bc2b8de44ea6a3892dcabdcb52feb169ed112044
+.ai/state/logs/<ID>/state.json  9fa3e2b227062f0290d950f615ddcd4801a1b2079d9f2b6c28547ea5d886cf31
+.ai/state/logs/<ID>/state.json  d90f7277b89d74a8415f0d5482d6a742ed6b0cbbd45213a42a2f396a89d3e242
+.ai/state/logs/<ID>/state.json  f03add46e0f143fdbd78026e11ee556570b8ea44e2606146e3c18bedb12c6b9c
+.ai/state/logs/<ID>/suite-1.log  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/state/logs/<ID>/suite-1.log  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/state/logs/<ID>/suite-1.log  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/state/logs/<ID>/suite-1.log  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+$ state.py memory restore <ID> (agent)
+exit 0
+--- stdout
+<ID> restored from .ai/state/logs/<ID>/report
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  da912e94cad246be376352a2dcb628bb61b029cdb54096a1818b893bd081e9d9
+.ai/reports/<ID>/events.jsonl  8af6e63fa3f03c9c3db3b859906570c226270908cb98894d5c4004209d41c951
+.ai/reports/<ID>/task.md  0dc5ab0b7b9921396b8f75b876b7990227f2b35968c8e8697bb3162875f079b6
+.ai/state/logs/.gitignore  cdbcae15105d6b781e620813c79c7e868740d4e9cc53ce6f5fcbbc12387adf4b
+.ai/state/logs/<ID>/report/events.jsonl  8e0e0556de848489f4b4ca62031466faea1f5293ee8575d603cfd40e00b974c8
+.ai/state/logs/<ID>/report/events.jsonl  a81895431395a674bec5a64f6e939d50105cab0594bbac8a1c1685fd6322a223
+.ai/state/logs/<ID>/report/events.jsonl  f834591977a349023fd85ab0af61f1e568ff902568b8c05aaf4be98e714167a4
+.ai/state/logs/<ID>/report/task.md  aa8242b0cc2d10368de32a1c688d57e7798732d09a57b8231ac24f70b1d8edcb
+.ai/state/logs/<ID>/report/task.md  b2f55b7f183493fb50cf153754c154dc77850a517d098f19004e90e83333f5a2
+.ai/state/logs/<ID>/report/task.md  f884c1fd449e626e0d2f619770470b56f9024fec67431ff7d0cff2ba97be6f4f
+.ai/state/logs/<ID>/state.json  102605d8d7cb8aeffeab5ba7bc2b8de44ea6a3892dcabdcb52feb169ed112044
+.ai/state/logs/<ID>/state.json  9fa3e2b227062f0290d950f615ddcd4801a1b2079d9f2b6c28547ea5d886cf31
+.ai/state/logs/<ID>/state.json  d90f7277b89d74a8415f0d5482d6a742ed6b0cbbd45213a42a2f396a89d3e242
+.ai/state/logs/<ID>/state.json  f03add46e0f143fdbd78026e11ee556570b8ea44e2606146e3c18bedb12c6b9c
+.ai/state/logs/<ID>/suite-1.log  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/state/logs/<ID>/suite-1.log  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/state/logs/<ID>/suite-1.log  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/state/logs/<ID>/suite-1.log  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+$ state.py memory restore --all (agent)
+exit 0
+--- stdout
+<ID> restored from .ai/state/logs/<ID>/report
+<ID> restored from .ai/state/logs/<ID>/report
+<ID> restored from .ai/state/logs/<ID>/report
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  da912e94cad246be376352a2dcb628bb61b029cdb54096a1818b893bd081e9d9
+.ai/reports/<ID>/events.jsonl  8af6e63fa3f03c9c3db3b859906570c226270908cb98894d5c4004209d41c951
+.ai/reports/<ID>/events.jsonl  8e0e0556de848489f4b4ca62031466faea1f5293ee8575d603cfd40e00b974c8
+.ai/reports/<ID>/events.jsonl  a81895431395a674bec5a64f6e939d50105cab0594bbac8a1c1685fd6322a223
+.ai/reports/<ID>/events.jsonl  f834591977a349023fd85ab0af61f1e568ff902568b8c05aaf4be98e714167a4
+.ai/reports/<ID>/task.md  0dc5ab0b7b9921396b8f75b876b7990227f2b35968c8e8697bb3162875f079b6
+.ai/reports/<ID>/task.md  aa8242b0cc2d10368de32a1c688d57e7798732d09a57b8231ac24f70b1d8edcb
+.ai/reports/<ID>/task.md  b2f55b7f183493fb50cf153754c154dc77850a517d098f19004e90e83333f5a2
+.ai/reports/<ID>/task.md  f884c1fd449e626e0d2f619770470b56f9024fec67431ff7d0cff2ba97be6f4f
+.ai/state/logs/.gitignore  cdbcae15105d6b781e620813c79c7e868740d4e9cc53ce6f5fcbbc12387adf4b
+.ai/state/logs/<ID>/state.json  102605d8d7cb8aeffeab5ba7bc2b8de44ea6a3892dcabdcb52feb169ed112044
+.ai/state/logs/<ID>/state.json  9fa3e2b227062f0290d950f615ddcd4801a1b2079d9f2b6c28547ea5d886cf31
+.ai/state/logs/<ID>/state.json  d90f7277b89d74a8415f0d5482d6a742ed6b0cbbd45213a42a2f396a89d3e242
+.ai/state/logs/<ID>/state.json  f03add46e0f143fdbd78026e11ee556570b8ea44e2606146e3c18bedb12c6b9c
+.ai/state/logs/<ID>/suite-1.log  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/state/logs/<ID>/suite-1.log  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/state/logs/<ID>/suite-1.log  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/state/logs/<ID>/suite-1.log  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+$ state.py memory redact <RID> --field text --why 'a secret' (human)
+exit 0
+--- stdout
+redacted: text in .ai/memory/<PERIOD>.dev.<B>.jsonl (new rid <RID>)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  6ba805fb701d217bd340a039a4b4eb6ed42b5e3f1f9233c591b2f2e79bf2add1
+
+$ state.py memory verify --all (agent)
+exit 0
+--- stdout
+memory verify: ok
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  6ba805fb701d217bd340a039a4b4eb6ed42b5e3f1f9233c591b2f2e79bf2add1
+
+$ state.py memory pack --period <PERIOD> --confirm-delete dev (human)
+exit 0
+--- stdout
+pack: .ai/memory/<PERIOD>.dev.jsonl (16 records; 1 batch(es) removed)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.jsonl  2f77900ac5e4353cea100c1fc71ed11e71e735f6480b7ccfee1682bdebbde7f7
+
+$ state.py memory verify --all (agent)
+exit 0
+--- stdout
+memory verify: ok
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.jsonl  2f77900ac5e4353cea100c1fc71ed11e71e735f6480b7ccfee1682bdebbde7f7
+
+$ state.py memory status (agent)
+exit 0
+--- stdout
+mode: packages
+period: quarter · author: dev · index: none
+open batch: <PERIOD>.dev.<B>.jsonl (branch main)
+packages: 1 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 0
+pre-push: current
+cleanup: on
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.jsonl  2f77900ac5e4353cea100c1fc71ed11e71e735f6480b7ccfee1682bdebbde7f7
+
+$ state.py memory disable (human)
+exit 0
+--- stdout
+memory: files mode; packages and local data kept; pre-push: removed
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.jsonl  2f77900ac5e4353cea100c1fc71ed11e71e735f6480b7ccfee1682bdebbde7f7
+
+##### .git/hooks/pre-push: absent
+
+$ state.py memory status (agent)
+exit 0
+--- stdout
+mode: files
+period: quarter · author: dev · index: none
+open batch: <PERIOD>.dev.<B>.jsonl (branch main)
+packages: 1 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 0
+pre-push: absent
+cleanup: on
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.jsonl  2f77900ac5e4353cea100c1fc71ed11e71e735f6480b7ccfee1682bdebbde7f7
+

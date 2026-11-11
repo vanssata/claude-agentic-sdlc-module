@@ -1,4 +1,4 @@
-"""memory_cmd: the `memory` and `recall` commands over the memory_store and memory_sync modules -- the actions, the human's route, the risk record.
+"""memory_cmd: the `memory` and `recall` commands over the memory_store module and the owner modules memory_io, memory_config, memory_verify, memory_hook, memory_risks, memory_cleanup, memory_migrate, memory_export and memory_status -- the actions, the human's route, the risk record.
 
 shell: memory_modules, memory_config, memory_human, memory_confirm, cmd_recall, cmd_memory, memory_status, memory_enable, memory_disable, memory_export, memory_verify, memory_show, memory_search, risk_scope, memory_risk, memory_risks, memory_migrate, memory_rebuild, memory_cleanup, memory_restore, memory_pack, memory_redact
 core: MEMORY_ACTIONS
@@ -9,6 +9,7 @@ import json
 import os
 import shlex
 import sys
+import types
 
 from rr_state import fs, journal, task
 from rr_state import dialog as rr_dialog
@@ -22,19 +23,31 @@ except ImportError:                       # an old install that shipped state.py
 
 
 def memory_modules():
-    """memory_sync and memory_store, imported only by the commands that use them."""
+    """The owner modules of the memory commands as one namespace (mem.io, mem.config, mem.verify, mem.hook,
+    mem.risks, mem.cleanup, mem.migrate, mem.export, mem.status -- each name is read on its owner at call time)
+    and memory_store, imported only by the commands that use them."""
     try:
         import memory_store               # pylint: disable=import-outside-toplevel
-        import memory_sync                # pylint: disable=import-outside-toplevel
+        import memory_cleanup as cleanup  # pylint: disable=import-outside-toplevel
+        import memory_config as config  # pylint: disable=import-outside-toplevel
+        import memory_export as export  # pylint: disable=import-outside-toplevel
+        import memory_hook as hook  # pylint: disable=import-outside-toplevel
+        import memory_io as io  # pylint: disable=import-outside-toplevel
+        import memory_migrate as migrate  # pylint: disable=import-outside-toplevel
+        import memory_risks as risks  # pylint: disable=import-outside-toplevel
+        import memory_status as status  # pylint: disable=import-outside-toplevel
+        import memory_verify as verify  # pylint: disable=import-outside-toplevel
     except ImportError as exc:
         fs.die("the memory modules are not installed beside state.py (%s)" % exc, 2)
-    return memory_sync, memory_store
+    mem = types.SimpleNamespace(cleanup=cleanup, config=config, export=export, hook=hook, io=io, migrate=migrate,
+                                risks=risks, status=status, verify=verify)
+    return mem, memory_store
 
 
-def memory_config(sync, root):
+def memory_config(mem, root):
     try:
-        return sync.load_config(root)
-    except sync.MemoryError_ as exc:
+        return mem.config.load_config(root)
+    except mem.io.MemoryError_ as exc:
         fs.die(str(exc), exc.code)
     return None
 
@@ -62,8 +75,8 @@ def memory_confirm(cfg, name, what):
 def cmd_recall(args, root, rt=rr_runtime.Runtime()):
     """R10: the open risks, residual findings, decisions, scope changes and task
     one-liners that touch these files, within the budget. Read-only."""
-    sync, store = memory_modules()
-    cfg = memory_config(sync, root)
+    mem, store = memory_modules()
+    cfg = memory_config(mem, root)
     files = fs._split_files(args.files)
     if not files:
         fs.die("recall needs --files \"a,b,dir/**\"", 2)
@@ -82,45 +95,45 @@ def cmd_recall(args, root, rt=rr_runtime.Runtime()):
 
 
 def cmd_memory(args, root, rt=rr_runtime.Runtime()):
-    sync, store = memory_modules()
+    mem, store = memory_modules()
     action = args.memory_action
     try:
-        MEMORY_ACTIONS[action](args, root, sync, store, rt=rt)
-    except sync.MemoryError_ as exc:
+        MEMORY_ACTIONS[action](args, root, mem, store, rt=rt)
+    except mem.io.MemoryError_ as exc:
         fs.die(str(exc), exc.code)
 
 
-def memory_status(args, root, sync, _store, rt=rr_runtime.Runtime()):
-    lines = sync.status_lines(root)
+def memory_status(args, root, mem, _store, rt=rr_runtime.Runtime()):
+    lines = mem.status.status_lines(root)
     if args.json:
         print(json.dumps(dict(line.split(": ", 1) for line in lines), ensure_ascii=False, sort_keys=True))
         return
     print("\n".join(lines))
 
 
-def memory_enable(args, root, sync, _store, rt=rr_runtime.Runtime()):
+def memory_enable(args, root, mem, _store, rt=rr_runtime.Runtime()):
     if memory_human(root, "enable", allow_dialog=True, rt=rt) == "dialog":
         pick = rr_dialog.pick_data(rr_dialog.DIALOG_PICK[0])
         print("memory: via dialog (consent %s, decision %s)" % (pick["consent"], pick["decision"]))
-    hook = sync.enable(root, args.author, args.period, args.index)
-    print("memory: packages mode on (%s); every teammate's next close exports" % sync.POLICY_REL)
+    hook = mem.hook.enable(root, args.author, args.period, args.index)
+    print("memory: packages mode on (%s); every teammate's next close exports" % mem.io.POLICY_REL)
     print("pre-push: %s" % hook)
     if hook in ("foreign", "hookspath"):
         print("not written — %s. Add these lines to your own pre-push hook:\n%s" % (
-            "core.hooksPath is set" if hook == "hookspath" else "a pre-push hook exists", sync.snippet_text()))
-    print("\n".join(sync.status_lines(root)))
+            "core.hooksPath is set" if hook == "hookspath" else "a pre-push hook exists", mem.hook.snippet_text()))
+    print("\n".join(mem.status.status_lines(root)))
 
 
-def memory_disable(_args, root, sync, _store, rt=rr_runtime.Runtime()):
+def memory_disable(_args, root, mem, _store, rt=rr_runtime.Runtime()):
     memory_human(root, "disable", rt=rt)
-    print("memory: files mode; packages and local data kept; pre-push: %s" % sync.disable(root))
+    print("memory: files mode; packages and local data kept; pre-push: %s" % mem.hook.disable(root))
 
 
-def memory_export(args, root, sync, _store, rt=rr_runtime.Runtime()):
-    cfg = memory_config(sync, root)
+def memory_export(args, root, mem, _store, rt=rr_runtime.Runtime()):
+    cfg = memory_config(mem, root)
     ids = "pending" if args.pending or not args.ids else [task.valid_task_id(t, "ID") for t in args.ids]
-    result = sync.export(root, ids, cfg)
-    for line in sync.record_lines(result):
+    result = mem.export.export(root, ids, cfg)
+    for line in mem.export.record_lines(result):
         print(line)
     print("exported: +%d entries%s" % (result.added, "" if result.added else " — nothing pending"))
     for task_id, why in result.failures:
@@ -129,36 +142,36 @@ def memory_export(args, root, sync, _store, rt=rr_runtime.Runtime()):
         sys.exit(1)
 
 
-def memory_verify(args, root, sync, _store, rt=rr_runtime.Runtime()):
+def memory_verify(args, root, mem, _store, rt=rr_runtime.Runtime()):
     stats = None
     if args.range:
         if ".." not in args.range:
             fs.die("--range takes OLD..NEW", 2)
         old, new = args.range.split("..", 1)
-        findings, stats = sync.validate_range(root, sync.rev(root, old), sync.rev(root, new) or new, local=False)
+        findings, stats = mem.verify.validate_range(root, mem.verify.rev(root, old), mem.verify.rev(root, new) or new, local=False)
         findings = findings or []
     elif args.fresh_clone:
-        findings = sync.verify_fresh_clone(root)
+        findings = mem.verify.verify_fresh_clone(root)
     else:
-        findings = sync.verify(root, "all", [task.valid_task_id(t, "ID") for t in args.ids] or None)
+        findings = mem.verify.verify(root, "all", [task.valid_task_id(t, "ID") for t in args.ids] or None)
     failing = [f for f in findings if not f.check.endswith("-warn")]
     if args.json:
         print(json.dumps({"findings": [f._asdict() for f in findings], "ok": not failing, "stats": stats},
                          ensure_ascii=False, sort_keys=True))
     else:
         for f in findings:
-            print(sync.format_finding(f))
+            print(mem.verify.format_finding(f))
         print("memory verify: %s" % ("ok" if not failing else "%d finding(s)" % len(failing)))
     if failing:
         sys.exit(1)
 
 
-def memory_show(args, root, sync, _store, rt=rr_runtime.Runtime()):
-    print("\n".join(sync.show(root, task.valid_task_id(args.id, "ID"), "json" if args.json else "md", args.entry)))
+def memory_show(args, root, mem, _store, rt=rr_runtime.Runtime()):
+    print("\n".join(mem.status.show(root, task.valid_task_id(args.id, "ID"), "json" if args.json else "md", args.entry)))
 
 
-def memory_search(args, root, sync, store, rt=rr_runtime.Runtime()):
-    cfg = memory_config(sync, root)
+def memory_search(args, root, mem, store, rt=rr_runtime.Runtime()):
+    cfg = memory_config(mem, root)
     filters = {"kind": args.kind, "by": args.by, "task": args.task, "since": args.since, "until": args.until,
                "files": fs._split_files(args.file) or None}
     history = store.open_history(root, cfg)
@@ -187,8 +200,8 @@ def risk_scope(state):
             6)
 
 
-def memory_risk(args, root, sync, store, rt=rr_runtime.Runtime()):
-    cfg = memory_config(sync, root)
+def memory_risk(args, root, mem, store, rt=rr_runtime.Runtime()):
+    cfg = memory_config(mem, root)
     state = task.in_flight(root, rt=rt)
     if args.risk_action == "add":
         where = fs._split_files(args.where)
@@ -199,17 +212,17 @@ def memory_risk(args, root, sync, store, rt=rr_runtime.Runtime()):
         if not cfg.packages:
             risk_scope(state)
             found = "%s, by %s" % (fs.now()[:10], state["task_id"] if state else "no task")
-            rkey = sync.risk_add_files(root, args.title, where, args.label, args.what, args.likely, args.fix,
+            rkey = mem.risks.risk_add_files(root, args.title, where, args.label, args.what, args.likely, args.fix,
                                        args.status, found)
             print("risk: %s added to .ai/project/known-risks.md" % rkey)
             return
-        data = sync.risk_data(args.title, where, args.label, args.what, args.likely, args.fix, args.status)
+        data = mem.risks.risk_data(args.title, where, args.label, args.what, args.likely, args.fix, args.status)
     else:
         if args.status not in ("fixed", "accepted", "ticketed"):
             fs.die("--status takes fixed, accepted or ticketed", 2)
         if not cfg.packages:
             risk_scope(state)
-            sync.risk_close_files(root, args.rkey, args.status, args.why)
+            mem.risks.risk_close_files(root, args.rkey, args.status, args.why)
             print("risk: %s is %s" % (args.rkey, args.status))
             return
         history = store.FileHistory(root, cfg)
@@ -217,7 +230,7 @@ def memory_risk(args, root, sync, store, rt=rr_runtime.Runtime()):
         if not found:
             fs.die("no risk %s ('state.py memory risks --status all')" % args.rkey, 1)
         last = found[0]
-        data = sync.risk_data(last["title"], last.get("where"), last.get("label"), last.get("what"),
+        data = mem.risks.risk_data(last["title"], last.get("where"), last.get("label"), last.get("what"),
                               last.get("likelihood"), last.get("fix"), args.status, args.why, last["rid"])
     if state:
         state = task.load(root, rt=rt)
@@ -225,12 +238,12 @@ def memory_risk(args, root, sync, store, rt=rr_runtime.Runtime()):
         task.save(root, state)
         print("risk: %s recorded in %s's journal (exported at close)" % (data["rkey"], state["task_id"]))
         return
-    entry = sync.standalone_risk(root, cfg, data, rt.name)
+    entry = mem.risks.standalone_risk(root, cfg, data, rt.name)
     print("risk: %s recorded (%s)" % (data["rkey"], entry["rid"]))
 
 
-def memory_risks(args, root, sync, store, rt=rr_runtime.Runtime()):
-    cfg = memory_config(sync, root)
+def memory_risks(args, root, mem, store, rt=rr_runtime.Runtime()):
+    cfg = memory_config(mem, root)
     risks = store.open_history(root, cfg).risks(args.status)
     if args.json:
         for e in risks:
@@ -253,57 +266,57 @@ def memory_risks(args, root, sync, store, rt=rr_runtime.Runtime()):
                                           e.get("title"), e.get("rkey")))
 
 
-def memory_migrate(args, root, sync, _store, rt=rr_runtime.Runtime()):
-    cfg = memory_config(sync, root)
+def memory_migrate(args, root, mem, _store, rt=rr_runtime.Runtime()):
+    cfg = memory_config(mem, root)
     if args.move_logs:
         memory_human(root, "migrate --move-logs", rt=rt)
         memory_confirm(cfg, args.confirm_delete, "migrate --move-logs")
-        moved, command = sync.move_logs(root)
+        moved, command = mem.migrate.move_logs(root)
         print("moved %d committed log(s) into .ai/state/logs/<id>/legacy/; now, as its own commit (C3):\n  %s"
               % (len(moved), command))
         return
     if args.apply:
-        print("\n".join(sync.migrate_apply(root, risks=args.risks)))
+        print("\n".join(mem.migrate.migrate_apply(root, risks=args.risks)))
         return
-    report = sync.migrate_report(root)
+    report = mem.migrate.migrate_report(root)
     print("report: %s (%d lines) — read it, then 'state.py memory migrate --apply'"
-          % (os.path.join(sync.LOCAL_REL, "migration-report.md"), report.count("\n")))
+          % (os.path.join(mem.io.LOCAL_REL, "migration-report.md"), report.count("\n")))
 
 
-def memory_rebuild(_args, root, sync, store, rt=rr_runtime.Runtime()):
-    cfg = memory_config(sync, root)
+def memory_rebuild(_args, root, mem, store, rt=rr_runtime.Runtime()):
+    cfg = memory_config(mem, root)
     print("index: rebuilt from %d sources (%s)" % (store.SqliteHistory(root, cfg).rebuild(), store.INDEX_REL))
 
 
-def memory_cleanup(args, root, sync, _store, rt=rr_runtime.Runtime()):
-    cfg = memory_config(sync, root)
+def memory_cleanup(args, root, mem, _store, rt=rr_runtime.Runtime()):
+    cfg = memory_config(mem, root)
     memory_human(root, "cleanup", rt=rt)
     memory_confirm(cfg, args.confirm_delete, "cleanup")
     if not args.all and not args.ids:
         fs.die("memory cleanup takes IDs or --all", 2)
-    print("\n".join(sync.cleanup(root, "all" if args.all else [task.valid_task_id(t, "ID") for t in args.ids])))
+    print("\n".join(mem.cleanup.cleanup(root, "all" if args.all else [task.valid_task_id(t, "ID") for t in args.ids])))
 
 
-def memory_restore(args, root, sync, _store, rt=rr_runtime.Runtime()):
+def memory_restore(args, root, mem, _store, rt=rr_runtime.Runtime()):
     if not args.all and not args.ids:
         fs.die("memory restore takes IDs or --all", 2)
-    print("\n".join(sync.restore(root, "all" if args.all else [task.valid_task_id(t, "ID") for t in args.ids])))
+    print("\n".join(mem.cleanup.restore(root, "all" if args.all else [task.valid_task_id(t, "ID") for t in args.ids])))
 
 
-def memory_pack(args, root, sync, _store, rt=rr_runtime.Runtime()):
-    cfg = memory_config(sync, root)
+def memory_pack(args, root, mem, _store, rt=rr_runtime.Runtime()):
+    cfg = memory_config(mem, root)
     memory_human(root, "pack", rt=rt)
     memory_confirm(cfg, args.confirm_delete, "pack")
-    target, removed, count = sync.pack(root, args.period)
-    print("pack: %s (%d records; %d batch(es) removed)" % (os.path.join(sync.MEMORY_REL, target), count,
+    target, removed, count = mem.cleanup.pack(root, args.period)
+    print("pack: %s (%d records; %d batch(es) removed)" % (os.path.join(mem.io.MEMORY_REL, target), count,
                                                           len(removed)))
 
 
-def memory_redact(args, root, sync, _store, rt=rr_runtime.Runtime()):
+def memory_redact(args, root, mem, _store, rt=rr_runtime.Runtime()):
     via = memory_human(root, "redact", rt=rt)
-    rid, name = sync.redact(root, args.rid, args.field, args.why, by="%s via %s" % (os.environ.get("USER") or
+    rid, name = mem.cleanup.redact(root, args.rid, args.field, args.why, by="%s via %s" % (os.environ.get("USER") or
                                                                                    "unknown", via))
-    print("redacted: %s in %s (new rid %s)" % (args.field, os.path.join(sync.MEMORY_REL, name), rid))
+    print("redacted: %s in %s (new rid %s)" % (args.field, os.path.join(mem.io.MEMORY_REL, name), rid))
 
 
 MEMORY_ACTIONS = {"status": memory_status, "enable": memory_enable, "disable": memory_disable,

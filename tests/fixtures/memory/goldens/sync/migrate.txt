@@ -1,0 +1,267 @@
+$ state.py memory enable --author dev (human)
+exit 0
+--- stdout
+memory: packages mode on (.ai/policies/memory.json); every teammate's next close exports
+pre-push: installed
+mode: packages
+period: quarter · author: dev · index: none
+open batch: none (branch main)
+packages: 0 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 6 — state.py memory migrate --report
+pre-push: current
+cleanup: off
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+
+$ state.py memory status (agent)
+exit 0
+--- stdout
+mode: packages
+period: quarter · author: dev · index: none
+open batch: none (branch main)
+packages: 0 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 6 — state.py memory migrate --report
+pre-push: current
+cleanup: off
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+
+$ state.py memory migrate --report (agent)
+exit 0
+--- stdout
+report: .ai/local/memory/migration-report.md (48 lines) — read it, then 'state.py memory migrate --apply'
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/migration-report.md  ced2adc69f08c0be46313a40ccd5dfd951653c20c4f3b3ceeef9c507ff1a3803
+
+$ (the report) .ai/local/memory/migration-report.md
+exit 0
+--- stdout
+# Migration report — <TS>
+
+HEAD <SHA12>; tracked files only, so every clone gives the same rids.
+
+## Tasks
+
+| task | instances | journal | name in journal | coverage | result | sealed already |
+|---|---|---|---|---|---|---|
+| <ID> | 1 | yes | <ID> | 43/43 | closed | - |
+| <ID> | 1 | no (state-only) | - | 0/0 | closed | - |
+| <ID> | 2 | yes | <ID> | 11/11, 46/46 | restarted, closed | - |
+| <ID> | 1 | yes | <ID> | 41/41 | closed | - |
+| <ID> | 1 | yes | <ID> | 6/6 | abandoned | - |
+| <ID> | 1 | yes | <ID> | 86/86 | closed | - |
+| <ID> | 1 | yes | <ID> | 43/43 | closed | - |
+
+## Kept per kind
+
+- approval: 4
+- handoff: 2
+- note: 51
+- override: 7
+- question: 1
+- review: 3
+- scope: 11
+- verify: 8
+- weight: 6
+
+## Dropped per event (KEEP_RULES v1)
+
+- handoff_written: 89
+
+## Committed logs (6, <N> bytes)
+
+- .ai/reports/<ID>/lint.log (<N> bytes)
+- .ai/reports/<ID>/tests-suite-2.log (<N> bytes)
+- .ai/reports/<ID>/bite-must_fail.log (<N> bytes)
+- .ai/reports/<ID>/lint.log (<N> bytes)
+- .ai/reports/<ID>/tests-e2e-2.log (<N> bytes)
+- .ai/reports/<ID>/tests-suite-2.log (<N> bytes)
+
+## known-risks.md
+
+- sections parsed: 2
+- lines outside a section: 4
+- label derived (no Label line): 1
+- renders byte for byte: yes
+- duplicate titles: none
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/migration-report.md  ced2adc69f08c0be46313a40ccd5dfd951653c20c4f3b3ceeef9c507ff1a3803
+
+$ state.py memory migrate --apply --risks (agent)
+exit 0
+--- stdout
+backup: .ai/local/memory/backup-<STAMP>.tar
+risks: 2 entries into .ai/memory/<PERIOD>.dev.<B>.jsonl; known-risks.md is a stub
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/backup-<STAMP>.tar  37255a1b840b76fe9d376616176584a9f55ae2a43ae0b3d737287723bba703a0
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/migration-report.md  ced2adc69f08c0be46313a40ccd5dfd951653c20c4f3b3ceeef9c507ff1a3803
+.ai/memory/<PERIOD>.dev.<B>.jsonl  fa637fbdfe3f5d08ca165b7ad1611e428c5e3b0022a47b453efc83af8813bfbf
+
+$ state.py memory migrate --apply (agent)
+exit 0
+--- stdout
+backup: .ai/local/memory/backup-<STAMP>.tar
+package: .ai/memory/<PERIOD>.dev.<B>.jsonl (2 tasks, 25 entries)
+package: .ai/memory/<PERIOD>.dev.<B>.jsonl (6 tasks, 76 entries)
+migrated 8 task instance(s); 0 already sealed; 0 incomplete (reported, not exported)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/backup-<STAMP>.tar  37255a1b840b76fe9d376616176584a9f55ae2a43ae0b3d737287723bba703a0
+.ai/local/memory/backup-<STAMP>.tar  96cc181c29dfd56856b227df5a43d07a3bcffc280857b068e67c42610305e6b9
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/migration-report.md  ced2adc69f08c0be46313a40ccd5dfd951653c20c4f3b3ceeef9c507ff1a3803
+.ai/memory/<PERIOD>.dev.<B>.jsonl  0fce3dad7878f5dd3dd0ab620b2c91e6e45e4b20c0ece18b5280d9faa0622e29
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1ab300a547ed24ce4e2063d5887249d3dc8dbf0f6766a45d4c4308d55c82095b
+.ai/memory/<PERIOD>.dev.<B>.jsonl  fa637fbdfe3f5d08ca165b7ad1611e428c5e3b0022a47b453efc83af8813bfbf
+
+$ state.py memory verify --all (agent)
+exit 0
+--- stdout
+memory verify: ok
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/backup-<STAMP>.tar  37255a1b840b76fe9d376616176584a9f55ae2a43ae0b3d737287723bba703a0
+.ai/local/memory/backup-<STAMP>.tar  96cc181c29dfd56856b227df5a43d07a3bcffc280857b068e67c42610305e6b9
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/migration-report.md  ced2adc69f08c0be46313a40ccd5dfd951653c20c4f3b3ceeef9c507ff1a3803
+.ai/memory/<PERIOD>.dev.<B>.jsonl  0fce3dad7878f5dd3dd0ab620b2c91e6e45e4b20c0ece18b5280d9faa0622e29
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1ab300a547ed24ce4e2063d5887249d3dc8dbf0f6766a45d4c4308d55c82095b
+.ai/memory/<PERIOD>.dev.<B>.jsonl  fa637fbdfe3f5d08ca165b7ad1611e428c5e3b0022a47b453efc83af8813bfbf
+
+$ state.py memory risks --status all (agent)
+exit 0
+--- stdout
+# Risks — all · 2
+- [open RISK] src/widget.py:1 — First thing (R-first-thing-70fc)
+- [accepted KNOWN FACT] hooks/x.py — Second thing (R-second-thing-476b)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/backup-<STAMP>.tar  37255a1b840b76fe9d376616176584a9f55ae2a43ae0b3d737287723bba703a0
+.ai/local/memory/backup-<STAMP>.tar  96cc181c29dfd56856b227df5a43d07a3bcffc280857b068e67c42610305e6b9
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/migration-report.md  ced2adc69f08c0be46313a40ccd5dfd951653c20c4f3b3ceeef9c507ff1a3803
+.ai/memory/<PERIOD>.dev.<B>.jsonl  0fce3dad7878f5dd3dd0ab620b2c91e6e45e4b20c0ece18b5280d9faa0622e29
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1ab300a547ed24ce4e2063d5887249d3dc8dbf0f6766a45d4c4308d55c82095b
+.ai/memory/<PERIOD>.dev.<B>.jsonl  fa637fbdfe3f5d08ca165b7ad1611e428c5e3b0022a47b453efc83af8813bfbf
+
+$ state.py memory verify --fresh-clone (agent)
+exit 0
+--- stdout
+memory verify: ok
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/backup-<STAMP>.tar  37255a1b840b76fe9d376616176584a9f55ae2a43ae0b3d737287723bba703a0
+.ai/local/memory/backup-<STAMP>.tar  96cc181c29dfd56856b227df5a43d07a3bcffc280857b068e67c42610305e6b9
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/migration-report.md  ced2adc69f08c0be46313a40ccd5dfd951653c20c4f3b3ceeef9c507ff1a3803
+.ai/memory/<PERIOD>.dev.<B>.jsonl  0fce3dad7878f5dd3dd0ab620b2c91e6e45e4b20c0ece18b5280d9faa0622e29
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1ab300a547ed24ce4e2063d5887249d3dc8dbf0f6766a45d4c4308d55c82095b
+.ai/memory/<PERIOD>.dev.<B>.jsonl  fa637fbdfe3f5d08ca165b7ad1611e428c5e3b0022a47b453efc83af8813bfbf
+
+$ state.py memory migrate --move-logs --confirm-delete dev (agent)
+exit 5
+--- stdout
+--- stderr
+state.py: APPROVAL_REFUSED — 'memory migrate --move-logs' is the human's, from their own terminal:
+  python3 <PLUGIN>/skills/ai-task/state.py --root <ROOT> memory migrate --move-logs --confirm-delete dev
+Refused because this run has no terminal.
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/backup-<STAMP>.tar  37255a1b840b76fe9d376616176584a9f55ae2a43ae0b3d737287723bba703a0
+.ai/local/memory/backup-<STAMP>.tar  96cc181c29dfd56856b227df5a43d07a3bcffc280857b068e67c42610305e6b9
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/migration-report.md  ced2adc69f08c0be46313a40ccd5dfd951653c20c4f3b3ceeef9c507ff1a3803
+.ai/memory/<PERIOD>.dev.<B>.jsonl  0fce3dad7878f5dd3dd0ab620b2c91e6e45e4b20c0ece18b5280d9faa0622e29
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1ab300a547ed24ce4e2063d5887249d3dc8dbf0f6766a45d4c4308d55c82095b
+.ai/memory/<PERIOD>.dev.<B>.jsonl  fa637fbdfe3f5d08ca165b7ad1611e428c5e3b0022a47b453efc83af8813bfbf
+
+$ state.py memory migrate --move-logs --confirm-delete someone (human)
+exit 2
+--- stdout
+--- stderr
+state.py: --confirm-delete names 'someone'; this clone's author is 'dev' (.ai/local/memory/config.json)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/backup-<STAMP>.tar  37255a1b840b76fe9d376616176584a9f55ae2a43ae0b3d737287723bba703a0
+.ai/local/memory/backup-<STAMP>.tar  96cc181c29dfd56856b227df5a43d07a3bcffc280857b068e67c42610305e6b9
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/migration-report.md  ced2adc69f08c0be46313a40ccd5dfd951653c20c4f3b3ceeef9c507ff1a3803
+.ai/memory/<PERIOD>.dev.<B>.jsonl  0fce3dad7878f5dd3dd0ab620b2c91e6e45e4b20c0ece18b5280d9faa0622e29
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1ab300a547ed24ce4e2063d5887249d3dc8dbf0f6766a45d4c4308d55c82095b
+.ai/memory/<PERIOD>.dev.<B>.jsonl  fa637fbdfe3f5d08ca165b7ad1611e428c5e3b0022a47b453efc83af8813bfbf
+
+$ state.py memory migrate --move-logs (human)
+exit 2
+--- stdout
+--- stderr
+state.py: 'memory migrate --move-logs' deletes or moves files: add --confirm-delete dev
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/backup-<STAMP>.tar  37255a1b840b76fe9d376616176584a9f55ae2a43ae0b3d737287723bba703a0
+.ai/local/memory/backup-<STAMP>.tar  96cc181c29dfd56856b227df5a43d07a3bcffc280857b068e67c42610305e6b9
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/migration-report.md  ced2adc69f08c0be46313a40ccd5dfd951653c20c4f3b3ceeef9c507ff1a3803
+.ai/memory/<PERIOD>.dev.<B>.jsonl  0fce3dad7878f5dd3dd0ab620b2c91e6e45e4b20c0ece18b5280d9faa0622e29
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1ab300a547ed24ce4e2063d5887249d3dc8dbf0f6766a45d4c4308d55c82095b
+.ai/memory/<PERIOD>.dev.<B>.jsonl  fa637fbdfe3f5d08ca165b7ad1611e428c5e3b0022a47b453efc83af8813bfbf
+
+$ state.py memory migrate --move-logs --confirm-delete dev (human)
+exit 0
+--- stdout
+moved 6 committed log(s) into .ai/state/logs/<id>/legacy/; now, as its own commit (C3):
+  git rm --cached --quiet --pathspec-from-file=.ai/local/memory/logs-to-rm.txt
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/backup-<STAMP>.tar  37255a1b840b76fe9d376616176584a9f55ae2a43ae0b3d737287723bba703a0
+.ai/local/memory/backup-<STAMP>.tar  96cc181c29dfd56856b227df5a43d07a3bcffc280857b068e67c42610305e6b9
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/logs-to-rm.txt  c966b71914618a422a39e09ab6303d4fd8fb8eb389661d6a9ae36ee995821ca2
+.ai/local/memory/migration-report.md  ced2adc69f08c0be46313a40ccd5dfd951653c20c4f3b3ceeef9c507ff1a3803
+.ai/memory/<PERIOD>.dev.<B>.jsonl  0fce3dad7878f5dd3dd0ab620b2c91e6e45e4b20c0ece18b5280d9faa0622e29
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1ab300a547ed24ce4e2063d5887249d3dc8dbf0f6766a45d4c4308d55c82095b
+.ai/memory/<PERIOD>.dev.<B>.jsonl  fa637fbdfe3f5d08ca165b7ad1611e428c5e3b0022a47b453efc83af8813bfbf
+.ai/state/logs/<ID>/legacy/bite-must_fail.log  3ab539df21907d780d8c5ce8f80b2f95ae746b95937f7de753711f0851ebf7e8
+.ai/state/logs/<ID>/legacy/lint.log  448ae9b5a8a45e39c6989940a7aee34772fc1667213f9b2ea4f09a693213fd7f
+.ai/state/logs/<ID>/legacy/lint.log  611631477dc7186491b87e1d1f58de8f0bb8b64f52247ab4a69e1b28998b2810
+.ai/state/logs/<ID>/legacy/tests-e2e-2.log  00dd6bcd80559795bcca269178bfda85d3cd0f5c786da77d03c7620392433f2c
+.ai/state/logs/<ID>/legacy/tests-suite-2.log  cf2da2b0d97679b36d8559c53a026abe0ca0ff6fb5896879d1c002b5ce7b0213
+.ai/state/logs/<ID>/legacy/tests-suite-2.log  f4039c81d5af033353e7379a2589b029ef881851296d60fea73da3a96fdb00bd
+
+$ state.py memory status (agent)
+exit 0
+--- stdout
+mode: packages
+period: quarter · author: dev · index: none
+open batch: <PERIOD>.dev.<B>.jsonl (branch main)
+packages: 3 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 0
+pre-push: current
+cleanup: off
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/backup-<STAMP>.tar  37255a1b840b76fe9d376616176584a9f55ae2a43ae0b3d737287723bba703a0
+.ai/local/memory/backup-<STAMP>.tar  96cc181c29dfd56856b227df5a43d07a3bcffc280857b068e67c42610305e6b9
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/logs-to-rm.txt  c966b71914618a422a39e09ab6303d4fd8fb8eb389661d6a9ae36ee995821ca2
+.ai/local/memory/migration-report.md  ced2adc69f08c0be46313a40ccd5dfd951653c20c4f3b3ceeef9c507ff1a3803
+.ai/memory/<PERIOD>.dev.<B>.jsonl  0fce3dad7878f5dd3dd0ab620b2c91e6e45e4b20c0ece18b5280d9faa0622e29
+.ai/memory/<PERIOD>.dev.<B>.jsonl  1ab300a547ed24ce4e2063d5887249d3dc8dbf0f6766a45d4c4308d55c82095b
+.ai/memory/<PERIOD>.dev.<B>.jsonl  fa637fbdfe3f5d08ca165b7ad1611e428c5e3b0022a47b453efc83af8813bfbf
+

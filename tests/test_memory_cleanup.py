@@ -17,7 +17,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import memory_harness as mh  # noqa: E402  pylint: disable=wrong-import-position
 import memory_format as mf  # noqa: E402  pylint: disable=wrong-import-position
-import memory_sync as ms  # noqa: E402  pylint: disable=wrong-import-position
+import memory_config as mcfg  # noqa: E402  pylint: disable=wrong-import-position
+import memory_export as mexp  # noqa: E402  pylint: disable=wrong-import-position
 
 USAGE = os.path.join(mh.ROOT, "skills", "usage-report", "usage-report.py")
 
@@ -163,10 +164,10 @@ class TestPack(unittest.TestCase):
         self.addCleanup(p.close)
         ids = [p.light_task("task %d" % i, change="x = %d\n" % i)[0] for i in range(3)]
         p.ok("memory", "enable", "--author", "dev", "--period", "month", human=True)
-        cfg = ms.load_config(p.root)
+        cfg = mcfg.load_config(p.root)
         for i, task in enumerate(ids):
             p.git("checkout", "-q", "-B", "branch-%d" % i)
-            ms.export(p.root, [task], cfg, stamp="2025-03-1%dT00:00:00Z" % i)
+            mexp.export(p.root, [task], cfg, stamp="2025-03-1%dT00:00:00Z" % i)
         batches = sorted(os.listdir(p.path(".ai/memory")))
         self.assertEqual(len(batches), 3)
         rids = {e["rid"] for e in package_entries(p)}

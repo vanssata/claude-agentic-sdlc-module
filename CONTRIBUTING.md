@@ -76,6 +76,18 @@ Run the suite to the end and fix every failure before you push.
   that owns the function. `tests/test_update_layout.py` checks the layout and
   `tests/test_update_characterization.py` the output, against the goldens in
   `tests/fixtures/update/goldens/` (re-recorded only with `UPDATE_GOLDENS=1`).
+- **The packages-mode memory** is the ten modules `skills/ai-task/memory_*.py`
+  (io, config, packages, verify, hook, risks, cleanup, migrate, export,
+  status; layers 0 to 5, imports only downward) behind the validator entry
+  `skills/ai-task/memory_sync.py`, which the pre-push shim runs by path and so
+  stays where it is; the map is in [docs/architecture.md](docs/architecture.md).
+  A change goes in the module that owns the function.
+  `tests/fixtures/memory/partition.json` is the authority;
+  `tests/test_memory_layout.py` checks it and the import graph, and
+  `tests/test_memory_sync_characterization.py` the output against the golden in
+  `tests/fixtures/memory/goldens/sync/`. Run them with `python3 -I
+  tests/run_suite.py tests/test_memory_*.py`; after a change meant to move the
+  behaviour, `UPDATE_GOLDENS=1` re-records the golden.
 - **The state machine** is the package `skills/ai-task/rr_state/` (layers 0 to 9,
   imports only downward) behind the entry `skills/ai-task/state.py`, a shim; the
   map is in [docs/architecture.md](docs/architecture.md). A change goes in the
