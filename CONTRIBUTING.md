@@ -70,6 +70,12 @@ machine) two things differ from the development machine:
 
 Run the suite to the end and fix every failure before you push.
 
+- **The project updater** is the package `skills/project-update/rr_update/`
+  (layers 0 to 6) behind the entry `skills/project-update/update.py`; the map is
+  in [docs/architecture.md](docs/architecture.md). A change goes in the module
+  that owns the function. `tests/test_update_layout.py` checks the layout and
+  `tests/test_update_characterization.py` the output, against the goldens in
+  `tests/fixtures/update/goldens/` (re-recorded only with `UPDATE_GOLDENS=1`).
 - **The state machine** is the package `skills/ai-task/rr_state/` (layers 0 to 9,
   imports only downward) behind the entry `skills/ai-task/state.py`, a shim; the
   map is in [docs/architecture.md](docs/architecture.md). A change goes in the

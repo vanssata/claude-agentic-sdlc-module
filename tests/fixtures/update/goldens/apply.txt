@@ -1,0 +1,304 @@
+########## tree v3.1.0: --apply --confirm-delete, the tree, a second dry run, --check
+$ update.py <ROOT> --apply --confirm-delete tester AI_UNATTENDED=1
+exit 0
+--- stdout
+project-update: <ROOT> (applied)
+  split     .ai/policies/verification.md      9 command line(s) of testing.md copied verbatim, with its Project specifics
+  split     .ai/policies/weight.project.json  0 leaf/leaves of weight.json that differ from the plugin's table carried (none); 1 not carried, equal to an older shipped value: hints
+  regenerate .ai/AGENTS.md                     unchanged since it was installed
+  regenerate .ai/policies/safety.md            unchanged since it was installed
+  regenerate .ai/policies/security.md          unchanged since it was installed
+  regenerate .ai/policies/testing.md           unchanged since it was installed
+  regenerate .ai/rules/README.md               unchanged since it was installed
+  regenerate .ai/state/README.md               unchanged since it was installed
+  regenerate .ai/policies/weight.md            rendered from the weight table
+  delete    .ai/policies/weight.json          [split] superseded by .ai/policies/weight.project.json; the plugin's table is read from the plugin
+  regenerate .ai/VERSION                       schema 12
+  hint      .ai/policies/verification.md: verify_command is empty — the feedback loop needs it
+  hint      .ai/policies/verification.md: step_test_command is empty — a step runs only its own tests
+  hint      .ai/policies/verification.md: e2e_command is empty — e2e runs once at the end of a task; write 'none' if there is no suite
+  hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+  hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+11 automatic
+--- stderr
+
+##### files of the project tree after the run
+5a93f78b4ed4d416c171139b2ce610a117f9c1dd46fbb56ca86729cb4c53d10c  - .gitignore
+401256979228051792f2d7186e4075e457b990304229c2c034008a03df07affe  - CLAUDE.md
+7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
+a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION
+3dd55bf5f9d9471c68af3353166da11593a11e639f7557397ce46787291fa629  - .ai/policies/coding.md
+164cd34c182de88c33de7df35beb29200d792419e1c13a5f0b2104f944e57be7  - .ai/policies/dialog.json
+099f3debfe1ce808502661de4a31c3a349f149f5fe7246691d41a4966179a63c  - .ai/policies/path-guard.json
+8ec171f0fbdf38cc6996d496f01491fd1f21f04a435a118ad979b127a8be06f1  - .ai/policies/safety.md
+7224ede803ea81e65a456e21b6028a0e848e8a880456c6503eebe7534ca4f6aa  - .ai/policies/security.md
+4c45aee9b9fc5f6b4e1d9739e434c4094975a5a8dec6b9703fb25f3080680c77  - .ai/policies/testing.md
+bacec6707b05b552640f17cd219ae8e298c34ec2e626ac223e958bcecfd1a53b  - .ai/policies/verification.md
+08417bd4a2bf1cd0ddce98734ab70842b536db84a687f0320644f3f087b6bd54  - .ai/policies/weight.md
+7f834103e9d97aea44e76717bcdcbbe349c560e5b81a42ce85a1cec341041281  - .ai/policies/weight.project.json
+5cbaaabe2c8d0e24582877aab05eeaaf4d53cb5e9515e81cd18368d13d2fe79e  - .ai/project/architecture.md
+ab13c708e91c1de2adbc9ccdb1caec5c320197708bcaaa6d5cfd30c18a7dac34  - .ai/project/business-rules.md
+0ec82daa4a17bcd5bf9d4df20ce90fd09312d3d439f7064baf7c8dd77a6c44fc  - .ai/project/dependencies.md
+d9abea96dbe584fd77c27d5ed0523eb20d048f2d146e4909d16b2a7948db38c5  - .ai/project/glossary.md
+6af1b12f814384e517e8f09131b0524930ac1c849350db765d8a77c7a59905b9  - .ai/project/initial-assessment.md
+1c2c3e5bbb132a152163ebeb678d57f0f7162a56ea92b84acc43cd2dedd4a935  - .ai/project/integrations.md
+1b554eff73a270086f8cf8cba73f7d9ce162c6b6b9c288b822db36841b8a9228  - .ai/project/known-risks.md
+1987654b78c747f378109dbde1d51c4f31fd0eabc878ff16b3bcfaeaf99c8ff4  - .ai/project/legacy.md
+ab0ce5062b41aaff12b0525d56b42de6b9dee9ce9e1de2938f72675435013c6a  - .ai/project/modules.md
+53376d1fca268d8fdb59a5a0d0e0a4fe2d3bc2a7689a79c00a227f41bd5a2165  - .ai/project/overview.md
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  - .ai/reports/.gitkeep
+fb5d5d5006c9c1fb0880f033cad574af9f5f03ff2b86fabaa7ddde44815a7063  -~ .ai/reports/project-update-<DATE>/migration.json
+5353ca529c46f2443e12947ec205a6887fb594a4de1f87f0eb1c0e6c0f826133  - .ai/reports/project-update-<DATE>/original/.ai/policies/weight.json
+e504529519a371892838725f8b89b5d32e3300e345bcbf2643a3a1a48434b3dd  - .ai/rules/README.md
+d97f46a2cca020406252b1f7baa4184617fa71faca3885e2379c44ae4e1d9327  - .ai/state/README.md
+
+$ update.py <ROOT>
+exit 0
+--- stdout
+project-update: <ROOT> (dry run, nothing written; --apply to write)
+  up to date with the installed plugin
+  hint      .ai/policies/verification.md: verify_command is empty — the feedback loop needs it
+  hint      .ai/policies/verification.md: step_test_command is empty — a step runs only its own tests
+  hint      .ai/policies/verification.md: e2e_command is empty — e2e runs once at the end of a task; write 'none' if there is no suite
+  hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+  hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+0 automatic
+--- stderr
+
+$ update.py <ROOT> --check
+exit 0
+--- stdout
+project matches the installed plugin
+--- stderr
+
+########## tree v3.1.0-edited: --apply --confirm-delete, the tree, a second dry run, --check
+$ update.py <ROOT> --apply --confirm-delete tester AI_UNATTENDED=1
+exit 0
+--- stdout
+project-update: <ROOT> (applied)
+  split     .ai/policies/verification.md                    10 command line(s) of testing.md copied verbatim, with its Project specifics
+  split     .ai/policies/weight.project.json                4 leaf/leaves of weight.json that differ from the plugin's table carried (tests.max_suite_runs, examples.light, domain.modules, scope.hot_paths); 1 not carried, equal to an older shipped value: hints
+  create    docs/sdlc/README.md                             
+  create    .claude/memory/README.md                        
+  regenerate .gitignore                                      entries appended: .claude/settings.local.json, .claude/memory/local/, .codex/memory/local/
+  regenerate .ai/AGENTS.md                                   edited here: 7 line(s) of yours are not in the plugin's version (``policies/`, `weight.json`, `weight.md`, `path-g…`; ``coding.md`, `safety.md` and `security.md`. Ever…`; `| the weight, the mode, who reviews, what a huma…`); original kept at .ai/reports/project-update-<DATE>/original/.ai/AGENTS.md
+  regenerate .ai/policies/coding.md                          edited here: 1 line(s) of yours are not in the plugin's version (`- Money is integer cents, never a float (ours).`); original kept at .ai/reports/project-update-<DATE>/original/.ai/policies/coding.md
+  regenerate .ai/policies/path-guard.json                    edited here: 8 line(s) of yours are not in the plugin's version (`"_comment": "ours",`; `"deny_patterns": [`; `"\\.vault$",`); drops 3 deny/allow pattern(s); original kept at .ai/reports/project-update-<DATE>/original/.ai/policies/path-guard.json
+  regenerate .ai/policies/safety.md                          unchanged since it was installed
+  regenerate .ai/policies/security.md                        unchanged since it was installed
+  regenerate .ai/policies/testing.md                         edited here: 12 line(s) of yours are not in the plugin's version (`verify_command:      python3 -m unittest discove…`; `step_test_command:   python3 -m unittest {files}`; `# continuation line kept with its field`); original kept at .ai/reports/project-update-<DATE>/original/.ai/policies/testing.md
+  regenerate .ai/rules/README.md                             unchanged since it was installed
+  regenerate .ai/state/README.md                             unchanged since it was installed
+  regenerate .ai/policies/weight.md                          rendered from the weight table
+  regenerate CLAUDE.md                                       managed block edited here: 1 line(s) of yours are not in the plugin's version (`- our own line inside the block`); original kept at .ai/reports/project-update-<DATE>/original/CLAUDE.md
+  delete    .ai/policies/weight.json                        [split] superseded by .ai/policies/weight.project.json; the plugin's table is read from the plugin
+  delete    .ai/policies/tooling.md                         [shared] identical to a shipped version
+  delete    .ai/rules/php-style.md                          [rules] rule sources are not kept by an update: the rendered blocks go with it
+  delete    .ai/local/plugin-update/.ai/policies/coding.md  [local] the old merge's cache, not written any more
+  regenerate .ai/VERSION                                     schema 12
+  hint      1 file(s) override the plugin's shared copy and no longer receive its changes: .ai/policies/git.md — diff each against <PLUGIN_ROOT>/ai/<path>; `ai-path <path>` shows which applies; delete one when it adds nothing
+  hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+  hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+  hint      .ai/state/state.json: a task is in flight while files are regenerated — check that the files its current step may touch still exist afterwards
+20 automatic
+--- stderr
+
+##### files of the project tree after the run
+4ce6a6a45d135f3aa7995d376d5055990e1292f4968a7f67cb54798514274daf  - .gitignore
+852ee2139e5cdffb81d03ba97d3fbe947d2925945c89c88138c0f338841499cf  - CLAUDE.md
+7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
+a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION
+8da9942c50c3ea5bb538c9753a21ac09e50ba9324ba9c22858370d59a7784921  - .ai/local/memory/config.json
+3772d96afbca09c03e7d58b3e6ef014f39e8a84898c28b04cebfa58e386e4d42  - .ai/memory/notes.md
+3dd55bf5f9d9471c68af3353166da11593a11e639f7557397ce46787291fa629  - .ai/policies/coding.md
+164cd34c182de88c33de7df35beb29200d792419e1c13a5f0b2104f944e57be7  - .ai/policies/dialog.json
+ba3760a257e9f80ae4b5f229f14c0e78fe0323cd553f5aec5b16b7cba94f1cbb  - .ai/policies/git.md
+d63a548c927cbcbce2ba1c9d0915b0d285b16aeb5a652c68c1525ed58d11970a  - .ai/policies/memory.json
+099f3debfe1ce808502661de4a31c3a349f149f5fe7246691d41a4966179a63c  - .ai/policies/path-guard.json
+8ec171f0fbdf38cc6996d496f01491fd1f21f04a435a118ad979b127a8be06f1  - .ai/policies/safety.md
+7224ede803ea81e65a456e21b6028a0e848e8a880456c6503eebe7534ca4f6aa  - .ai/policies/security.md
+4c45aee9b9fc5f6b4e1d9739e434c4094975a5a8dec6b9703fb25f3080680c77  - .ai/policies/testing.md
+d3ec8c7411bf5647fbad367ceba3212a00b7d9decdedd0436d646df8012357d3  - .ai/policies/verification.md
+4397635c51722aadd2e200426f2c549cfbad20bc8fae86e1773f89f1ee0e60f8  - .ai/policies/weight.md
+15941a6bdb8cc0b889155ef20c7d7d1d32376a5c9375e0dcb11fcc77f1b3603d  - .ai/policies/weight.project.json
+5cbaaabe2c8d0e24582877aab05eeaaf4d53cb5e9515e81cd18368d13d2fe79e  - .ai/project/architecture.md
+ab13c708e91c1de2adbc9ccdb1caec5c320197708bcaaa6d5cfd30c18a7dac34  - .ai/project/business-rules.md
+0ec82daa4a17bcd5bf9d4df20ce90fd09312d3d439f7064baf7c8dd77a6c44fc  - .ai/project/dependencies.md
+d9abea96dbe584fd77c27d5ed0523eb20d048f2d146e4909d16b2a7948db38c5  - .ai/project/glossary.md
+6af1b12f814384e517e8f09131b0524930ac1c849350db765d8a77c7a59905b9  - .ai/project/initial-assessment.md
+1c2c3e5bbb132a152163ebeb678d57f0f7162a56ea92b84acc43cd2dedd4a935  - .ai/project/integrations.md
+1b554eff73a270086f8cf8cba73f7d9ce162c6b6b9c288b822db36841b8a9228  - .ai/project/known-risks.md
+1987654b78c747f378109dbde1d51c4f31fd0eabc878ff16b3bcfaeaf99c8ff4  - .ai/project/legacy.md
+ab0ce5062b41aaff12b0525d56b42de6b9dee9ce9e1de2938f72675435013c6a  - .ai/project/modules.md
+53376d1fca268d8fdb59a5a0d0e0a4fe2d3bc2a7689a79c00a227f41bd5a2165  - .ai/project/overview.md
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  - .ai/reports/.gitkeep
+0ac4f79efae700b5f4c9b6285a078b8dbb7ed52b6a5e834c458b0bdd79f528ff  - .ai/reports/T-2026-01-01-0001/task.md
+18f35ae69bce26b71a6ddc739824e53aaaf63881f7209081c9f9ee594a54ea0a  -~ .ai/reports/project-update-<DATE>/migration.json
+8ecb25961126de32fd1db7f6f5f1c71893b487616e1e25ca524143cf72533ad9  - .ai/reports/project-update-<DATE>/original/CLAUDE.md
+f40da43b01b65ca05445be03afa536e13874e4606797ae48c63bd3751c4f30be  - .ai/reports/project-update-<DATE>/original/.ai/AGENTS.md
+a85aca1d2667865d782cda5e0161e9895ef1bd8416185ec59e014f202225e951  - .ai/reports/project-update-<DATE>/original/.ai/local/plugin-update/.ai/policies/coding.md
+76e9a65c6a7daf6a6929eb00e4e4afb5a2d9abbe631b612e46c115ce48c8e66c  - .ai/reports/project-update-<DATE>/original/.ai/policies/coding.md
+ce8fc9fa366346c787282fc51c22cc474140500abd601d4a3df88769a46843f9  - .ai/reports/project-update-<DATE>/original/.ai/policies/path-guard.json
+3b769e613301d5587e0d1f040be3570f9a994297747cfb97b8eec289d56f6704  - .ai/reports/project-update-<DATE>/original/.ai/policies/testing.md
+2c6afb3518714d35eaf0119bf2ae2154782bbece632dfdbd68988351abde61f5  - .ai/reports/project-update-<DATE>/original/.ai/policies/tooling.md
+9a72875e028a4d9c295422f58885fb04c44a5cfb6c193e1f7e6bb2bda90e5882  - .ai/reports/project-update-<DATE>/original/.ai/policies/weight.json
+c25d4cbfbbc7060beec1f433414ecf3afc51212b3deae3cb35db2ee85c3f1691  - .ai/reports/project-update-<DATE>/original/.ai/rules/php-style.md
+e504529519a371892838725f8b89b5d32e3300e345bcbf2643a3a1a48434b3dd  - .ai/rules/README.md
+d97f46a2cca020406252b1f7baa4184617fa71faca3885e2379c44ae4e1d9327  - .ai/state/README.md
+e6f0c7fd659a1686a4fe5041fba833dd2081760b2c035007d6cf79e766a8bd58  - .ai/state/state.json
+2df64f7d8aadb0283be4441ccc03615cc8750530b116be010de98484e9a36ff6  - .claude/settings.json
+b80e6b2b93a4b8a5a0f8eabc2a745247ad53df3235bb84c63fdd3f10ccc1ae99  - .claude/memory/README.md
+d6e5b34d475e7187d2a8cb2aac7e7f1a427142baf6461bda387d70ceb4d8a8c1  - docs/sdlc/README.md
+302ebbf810cc80900df3d9f6340b77aa53c3b422f6e805b09fa8603520f6167d  - docs/sdlc/constitution.md
+
+$ update.py <ROOT>
+exit 0
+--- stdout
+project-update: <ROOT> (dry run, nothing written; --apply to write)
+  up to date with the installed plugin
+  hint      1 file(s) override the plugin's shared copy and no longer receive its changes: .ai/policies/git.md — diff each against <PLUGIN_ROOT>/ai/<path>; `ai-path <path>` shows which applies; delete one when it adds nothing
+  hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+  hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+0 automatic
+--- stderr
+
+$ update.py <ROOT> --check
+exit 0
+--- stdout
+project matches the installed plugin
+--- stderr
+
+########## tree dual: --apply --confirm-delete, the tree, a second dry run, --check
+$ update.py <ROOT> --apply --confirm-delete tester AI_UNATTENDED=1
+exit 0
+--- stdout
+project-update: <ROOT> (applied)
+  split     .ai/policies/verification.md      9 command line(s) of testing.md copied verbatim, with its Project specifics
+  split     .ai/policies/weight.project.json  0 leaf/leaves of weight.json that differ from the plugin's table carried (none); 1 not carried, equal to an older shipped value: hints
+  regenerate .ai/AGENTS.md                     unchanged since it was installed
+  regenerate .ai/policies/safety.md            unchanged since it was installed
+  regenerate .ai/policies/security.md          unchanged since it was installed
+  regenerate .ai/policies/testing.md           unchanged since it was installed
+  regenerate .ai/rules/README.md               unchanged since it was installed
+  regenerate .ai/state/README.md               unchanged since it was installed
+  regenerate .ai/policies/weight.md            rendered from the weight table
+  delete    .ai/policies/weight.json          [split] superseded by .ai/policies/weight.project.json; the plugin's table is read from the plugin
+  regenerate .ai/VERSION                       schema 12
+  hint      .ai/policies/verification.md: verify_command is empty — the feedback loop needs it
+  hint      .ai/policies/verification.md: step_test_command is empty — a step runs only its own tests
+  hint      .ai/policies/verification.md: e2e_command is empty — e2e runs once at the end of a task; write 'none' if there is no suite
+  hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+  hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+11 automatic
+--- stderr
+
+##### files of the project tree after the run
+5a93f78b4ed4d416c171139b2ce610a117f9c1dd46fbb56ca86729cb4c53d10c  - .gitignore
+caed02a7e1a0dd39b9d0f113cef2579270f5425fc314ce75ee3dd79f6b359bfe  - AGENTS.md
+483fb2bbc26f2d9656f416e3eb6c692c1ebd31fe631b3fb7d0323f2469bb5a3c  - CLAUDE.md
+7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
+a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION
+3dd55bf5f9d9471c68af3353166da11593a11e639f7557397ce46787291fa629  - .ai/policies/coding.md
+164cd34c182de88c33de7df35beb29200d792419e1c13a5f0b2104f944e57be7  - .ai/policies/dialog.json
+099f3debfe1ce808502661de4a31c3a349f149f5fe7246691d41a4966179a63c  - .ai/policies/path-guard.json
+8ec171f0fbdf38cc6996d496f01491fd1f21f04a435a118ad979b127a8be06f1  - .ai/policies/safety.md
+7224ede803ea81e65a456e21b6028a0e848e8a880456c6503eebe7534ca4f6aa  - .ai/policies/security.md
+4c45aee9b9fc5f6b4e1d9739e434c4094975a5a8dec6b9703fb25f3080680c77  - .ai/policies/testing.md
+bacec6707b05b552640f17cd219ae8e298c34ec2e626ac223e958bcecfd1a53b  - .ai/policies/verification.md
+08417bd4a2bf1cd0ddce98734ab70842b536db84a687f0320644f3f087b6bd54  - .ai/policies/weight.md
+7f834103e9d97aea44e76717bcdcbbe349c560e5b81a42ce85a1cec341041281  - .ai/policies/weight.project.json
+5cbaaabe2c8d0e24582877aab05eeaaf4d53cb5e9515e81cd18368d13d2fe79e  - .ai/project/architecture.md
+ab13c708e91c1de2adbc9ccdb1caec5c320197708bcaaa6d5cfd30c18a7dac34  - .ai/project/business-rules.md
+0ec82daa4a17bcd5bf9d4df20ce90fd09312d3d439f7064baf7c8dd77a6c44fc  - .ai/project/dependencies.md
+d9abea96dbe584fd77c27d5ed0523eb20d048f2d146e4909d16b2a7948db38c5  - .ai/project/glossary.md
+6af1b12f814384e517e8f09131b0524930ac1c849350db765d8a77c7a59905b9  - .ai/project/initial-assessment.md
+1c2c3e5bbb132a152163ebeb678d57f0f7162a56ea92b84acc43cd2dedd4a935  - .ai/project/integrations.md
+1b554eff73a270086f8cf8cba73f7d9ce162c6b6b9c288b822db36841b8a9228  - .ai/project/known-risks.md
+1987654b78c747f378109dbde1d51c4f31fd0eabc878ff16b3bcfaeaf99c8ff4  - .ai/project/legacy.md
+ab0ce5062b41aaff12b0525d56b42de6b9dee9ce9e1de2938f72675435013c6a  - .ai/project/modules.md
+53376d1fca268d8fdb59a5a0d0e0a4fe2d3bc2a7689a79c00a227f41bd5a2165  - .ai/project/overview.md
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  - .ai/reports/.gitkeep
+fb5d5d5006c9c1fb0880f033cad574af9f5f03ff2b86fabaa7ddde44815a7063  -~ .ai/reports/project-update-<DATE>/migration.json
+5353ca529c46f2443e12947ec205a6887fb594a4de1f87f0eb1c0e6c0f826133  - .ai/reports/project-update-<DATE>/original/.ai/policies/weight.json
+e504529519a371892838725f8b89b5d32e3300e345bcbf2643a3a1a48434b3dd  - .ai/rules/README.md
+d97f46a2cca020406252b1f7baa4184617fa71faca3885e2379c44ae4e1d9327  - .ai/state/README.md
+
+$ update.py <ROOT>
+exit 0
+--- stdout
+project-update: <ROOT> (dry run, nothing written; --apply to write)
+  up to date with the installed plugin
+  hint      .ai/policies/verification.md: verify_command is empty — the feedback loop needs it
+  hint      .ai/policies/verification.md: step_test_command is empty — a step runs only its own tests
+  hint      .ai/policies/verification.md: e2e_command is empty — e2e runs once at the end of a task; write 'none' if there is no suite
+  hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+  hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+0 automatic
+--- stderr
+
+$ update.py <ROOT> --check
+exit 0
+--- stdout
+project matches the installed plugin
+--- stderr
+
+########## tree fresh: --apply, the tree, a second dry run, --check
+$ update.py <ROOT> --apply
+exit 0
+--- stdout
+project-update: <ROOT> (applied)
+  up to date with the installed plugin
+0 automatic
+--- stderr
+
+##### files of the project tree after the run
+32f0341ce01390d1996cd6d2b86cd07b071d3ce325403147aa431c8c118f4426  - .gitignore
+3e27c5426fbb1ef9b905cb416ee14e32c649e77149b126064b7b4de6c6021800  - CLAUDE.md
+7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
+a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION
+8da9942c50c3ea5bb538c9753a21ac09e50ba9324ba9c22858370d59a7784921  - .ai/local/memory/config.json
+3772d96afbca09c03e7d58b3e6ef014f39e8a84898c28b04cebfa58e386e4d42  - .ai/memory/notes.md
+3dd55bf5f9d9471c68af3353166da11593a11e639f7557397ce46787291fa629  - .ai/policies/coding.md
+164cd34c182de88c33de7df35beb29200d792419e1c13a5f0b2104f944e57be7  - .ai/policies/dialog.json
+d63a548c927cbcbce2ba1c9d0915b0d285b16aeb5a652c68c1525ed58d11970a  - .ai/policies/memory.json
+099f3debfe1ce808502661de4a31c3a349f149f5fe7246691d41a4966179a63c  - .ai/policies/path-guard.json
+8ec171f0fbdf38cc6996d496f01491fd1f21f04a435a118ad979b127a8be06f1  - .ai/policies/safety.md
+7224ede803ea81e65a456e21b6028a0e848e8a880456c6503eebe7534ca4f6aa  - .ai/policies/security.md
+4c45aee9b9fc5f6b4e1d9739e434c4094975a5a8dec6b9703fb25f3080680c77  - .ai/policies/testing.md
+1fe215bdd21b1d4761fd72392e3141ff56880c8c1ea13d8056713d15cfb96262  - .ai/policies/verification.md
+2f6bfa6ae620c1f0d6c2003d3dc60de493333caac3dabd7055ce9863add94ac0  - .ai/policies/weight.md
+466b88a9f466be8801bb4104135fa12f9454abcc115f38fe9bbdcecebfcf6ad5  - .ai/policies/weight.project.json
+449273200dfec2a56885c881ff34d40e8ecc00da53c24c2d09b7fbeb1004d255  - .ai/project/architecture.md
+ab13c708e91c1de2adbc9ccdb1caec5c320197708bcaaa6d5cfd30c18a7dac34  - .ai/project/business-rules.md
+0ec82daa4a17bcd5bf9d4df20ce90fd09312d3d439f7064baf7c8dd77a6c44fc  - .ai/project/dependencies.md
+d9abea96dbe584fd77c27d5ed0523eb20d048f2d146e4909d16b2a7948db38c5  - .ai/project/glossary.md
+ba14a457e83f9dde65e4190fdfab83b912f7398c1442a2a1cb3d89bfac741cf3  - .ai/project/initial-assessment.md
+1c2c3e5bbb132a152163ebeb678d57f0f7162a56ea92b84acc43cd2dedd4a935  - .ai/project/integrations.md
+1b554eff73a270086f8cf8cba73f7d9ce162c6b6b9c288b822db36841b8a9228  - .ai/project/known-risks.md
+1987654b78c747f378109dbde1d51c4f31fd0eabc878ff16b3bcfaeaf99c8ff4  - .ai/project/legacy.md
+ab0ce5062b41aaff12b0525d56b42de6b9dee9ce9e1de2938f72675435013c6a  - .ai/project/modules.md
+0b8f373e2c87666a6d0128b4c8e1f6c119d64bbfa2fa1d92b962b893ee52491a  - .ai/project/overview.md
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  - .ai/reports/.gitkeep
+0ac4f79efae700b5f4c9b6285a078b8dbb7ed52b6a5e834c458b0bdd79f528ff  - .ai/reports/T-2026-01-01-0001/task.md
+e504529519a371892838725f8b89b5d32e3300e345bcbf2643a3a1a48434b3dd  - .ai/rules/README.md
+d97f46a2cca020406252b1f7baa4184617fa71faca3885e2379c44ae4e1d9327  - .ai/state/README.md
+a215d1454a8096aeeba42890560d901834542ddbb226b38b432dfce8f58b8605  - .ai/state/state.json
+daff47f22f1126781e14806d13f9d91dce4a15e3e817417f82733c5fa2368870  - .claude/settings.json
+b80e6b2b93a4b8a5a0f8eabc2a745247ad53df3235bb84c63fdd3f10ccc1ae99  - .claude/memory/README.md
+d6e5b34d475e7187d2a8cb2aac7e7f1a427142baf6461bda387d70ceb4d8a8c1  - docs/sdlc/README.md
+302ebbf810cc80900df3d9f6340b77aa53c3b422f6e805b09fa8603520f6167d  - docs/sdlc/constitution.md
+
+$ update.py <ROOT>
+exit 0
+--- stdout
+project-update: <ROOT> (dry run, nothing written; --apply to write)
+  up to date with the installed plugin
+0 automatic
+--- stderr
+
+$ update.py <ROOT> --check
+exit 0
+--- stdout
+project matches the installed plugin
+--- stderr
+

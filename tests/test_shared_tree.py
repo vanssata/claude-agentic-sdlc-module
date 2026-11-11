@@ -55,8 +55,8 @@ workflows.md""".split("\n")
 SHARED_SET = r'''import os, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "skills", "project-update"))
 sys.dont_write_bytecode = True
-import update
-print("\n".join(sorted(p[len(".ai/"):] for p in update.SHARED_SET)))'''
+from rr_update import paths
+print("\n".join(sorted(p[len(".ai/"):] for p in paths.SHARED_SET)))'''
 
 # Python prints "ok <what>" or "FAIL <what> | <detail>"; each line becomes one assertion.
 HELPER_PASS = "${line#ok }"
@@ -64,8 +64,8 @@ HELPERS = r'''
 import os, shutil, sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.join(os.environ["PLUGIN_ROOT"], "skills", "project-update"))
-import update as U
-SchemaError = U.SchemaError
+from rr_update import files as ufiles, history, paths as upaths, shared
+SchemaError = history.SchemaError
 W = os.environ["W"]
 
 def check(ok, what, detail=""):
@@ -76,7 +76,7 @@ open(os.path.join(proj, "AGENTS.md"), "w").close()  # declares codex
 open(os.path.join(proj, "CLAUDE.md"), "w").close()  # and claude
 P = ".ai/policies/git.md"
 cur = open(os.path.join(os.environ["PLUGIN_ROOT"], "ai", "policies", "git.md"), "rb").read()
-h = U.History(U.HISTORY)
+h = history.History(upaths.HISTORY)
 check(h.versions("ai-init/" + P) == [], "a shared key ships no blob")
 check(h.shipped("ai-init/" + P, cur), "the current bytes are shipped")
 check(not h.shipped("ai-init/" + P, cur + b"x"), "an edited copy is not shipped")
@@ -84,19 +84,19 @@ check(h.shipped("ai-init/" + P, cur.replace(b"\n", b"\r\n")), "a CRLF checkout o
 check(not h.shipped("ai-init/.ai/project/notes.md", cur), "a path the plugin never shipped is not shipped")
 
 bare = os.path.join(W, "history-noblobs"); os.makedirs(bare)
-shutil.copy(os.path.join(U.HISTORY, "index.json"), bare)
-h = U.History(bare)
+shutil.copy(os.path.join(upaths.HISTORY, "index.json"), bare)
+h = history.History(bare)
 check(h.versions("ai-init/" + P) == [], "the bare history has no blobs")
-check(U.sha(cur) in h.hashes("ai-init/" + P), "hashes() answers from index.json alone")
+check(ufiles.sha(cur) in h.hashes("ai-init/" + P), "hashes() answers from index.json alone")
 check(h.shipped("ai-init/" + P, cur), "shipped() needs no blob")
 
-files = U.shared_files()
+files = history.shared_files()
 check(len(files) == 25 and files.get(P) == cur, "shared_files() maps the 25 to .ai/<rel>", len(files))
 
 paths = sorted(files)
 def refused():
     try:
-        U.require_shared(paths, U.project_runtimes(proj)); return None
+        shared.require_shared(paths, history.project_runtimes(proj)); return None
     except SchemaError as exc:
         return str(exc)
 check(refused() is None, "require_shared: no other home on this machine is not checked")
@@ -105,18 +105,18 @@ msg = refused()
 check(msg is not None and codex in msg and "--target codex" in msg,
       "require_shared: a codex home with the plugin but no tree refuses", msg)
 tree = os.path.join(codex, "riskrails", "ai")
-shutil.copytree(U.SHARED, tree)
+shutil.copytree(upaths.SHARED, tree)
 os.remove(os.path.join(tree, "policies", "git.md")); os.remove(os.path.join(tree, "agents", "risk.md"))
 msg = refused()
 check(msg is not None and " 2 of the 25 " in msg, "require_shared: a partial tree refuses with the count", msg)
-shutil.rmtree(tree); shutil.copytree(U.SHARED, tree)
+shutil.rmtree(tree); shutil.copytree(upaths.SHARED, tree)
 check(refused() is None, "require_shared: a full tree in every installed home passes")
-saved = U.SHARED
-U.SHARED = os.path.join(W, "local-shared"); shutil.copytree(saved, U.SHARED)
-os.remove(os.path.join(U.SHARED, "templates", "review-report.md"))
+saved = upaths.SHARED
+upaths.SHARED = os.path.join(W, "local-shared"); shutil.copytree(saved, upaths.SHARED)
+os.remove(os.path.join(upaths.SHARED, "templates", "review-report.md"))
 msg = refused()
 check(msg is not None and "templates/review-report.md" in msg, "require_shared: the local tree names the missing file", msg)
-U.SHARED = saved
+upaths.SHARED = saved
 
 outside = os.path.join(W, "outside"); os.makedirs(outside)
 open(os.path.join(outside, "feature.md"), "w").close()
@@ -124,19 +124,19 @@ os.symlink(outside, os.path.join(proj, ".ai", "workflows"))
 os.makedirs(os.path.join(proj, ".ai", "policies"))
 open(os.path.join(proj, ".ai", "policies", "real.md"), "w").close()
 os.symlink("real.md", os.path.join(proj, ".ai", "policies", "git.md"))
-why = U.unsafe_path(proj, P)
+why = ufiles.unsafe_path(proj, P)
 check(why is not None and "symlink" in why, "unsafe_target: a file under a symlinked directory", why)
-why = U.unsafe_path(proj, ".ai/policies/git.md")
+why = ufiles.unsafe_path(proj, ".ai/policies/git.md")
 check(why is not None and "symlink" in why, "unsafe_target: a symlinked file", why)
-check(U.unsafe_path(proj, ".ai/policies/real.md") is None, "unsafe_target: a regular file is safe")
+check(ufiles.unsafe_path(proj, ".ai/policies/real.md") is None, "unsafe_target: a regular file is safe")
 
 repo = os.path.join(W, "repo"); os.makedirs(os.path.join(repo, ".ai"))
-check(not U.git_dirty_ai(repo), "git_dirty_ai: outside a work tree is False")
+check(not ufiles.git_dirty_ai(repo), "git_dirty_ai: outside a work tree is False")
 import subprocess
 subprocess.run(["git", "init", "-q", repo], check=True)
-check(not U.git_dirty_ai(repo), "git_dirty_ai: an empty .ai/ is clean")
+check(not ufiles.git_dirty_ai(repo), "git_dirty_ai: an empty .ai/ is clean")
 open(os.path.join(repo, ".ai", "x.md"), "w").close()
-check(U.git_dirty_ai(repo), "git_dirty_ai: an untracked .ai/ file is dirty")
+check(ufiles.git_dirty_ai(repo), "git_dirty_ai: an untracked .ai/ file is dirty")
 '''
 
 def lbl(template, **values):

@@ -1,0 +1,28 @@
+########## --help
+$ update.py <ROOT> --help
+exit 0
+--- stdout
+usage: update.py [-h] [--apply] [--check] [--budget] [--confirm-delete NAME] [--confirm-cleanup NAME] [root]
+
+Bring a project's RiskRails files up to date with the installed plugin.
+
+positional arguments:
+  root
+
+options:
+  -h, --help            show this help message and exit
+  --apply
+  --check
+  --budget              with --check: exit 1 when a root instruction file is
+                        over its byte budget
+  --confirm-delete NAME
+                        a human confirms this run's gated rows (regenerate?,
+                        delete?), and is recorded in the migration report;
+                        only with --apply
+  --confirm-cleanup NAME
+                        a human confirms this run's [cleanup] deletions (run
+                        logs and stale task files, git-ignored and not
+                        recoverable through git); only with --apply.
+                        --confirm-delete does not settle them
+--- stderr
+

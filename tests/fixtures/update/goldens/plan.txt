@@ -1,0 +1,134 @@
+########## tree fresh: dry run, --check, --check --budget
+$ update.py <ROOT>
+exit 0
+--- stdout
+project-update: <ROOT> (dry run, nothing written; --apply to write)
+  up to date with the installed plugin
+0 automatic
+--- stderr
+
+$ update.py <ROOT> --check
+exit 0
+--- stdout
+project matches the installed plugin
+--- stderr
+
+$ update.py <ROOT> --check --budget
+exit 0
+--- stdout
+--- stderr
+
+########## tree v3.1.0: dry run, --check, --check --budget
+$ update.py <ROOT>
+exit 0
+--- stdout
+project-update: <ROOT> (dry run, nothing written; --apply to write)
+  split     .ai/policies/verification.md      9 command line(s) of testing.md copied verbatim, with its Project specifics
+  split     .ai/policies/weight.project.json  0 leaf/leaves of weight.json that differ from the plugin's table carried (none); 1 not carried, equal to an older shipped value: hints
+  regenerate .ai/AGENTS.md                     unchanged since it was installed
+  regenerate .ai/policies/safety.md            unchanged since it was installed
+  regenerate .ai/policies/security.md          unchanged since it was installed
+  regenerate .ai/policies/testing.md           unchanged since it was installed
+  regenerate .ai/rules/README.md               unchanged since it was installed
+  regenerate .ai/state/README.md               unchanged since it was installed
+  regenerate .ai/policies/weight.md            rendered from the weight table
+  delete?   .ai/policies/weight.json          [split] superseded by .ai/policies/weight.project.json; the plugin's table is read from the plugin; needs --apply --confirm-delete NAME
+  regenerate .ai/VERSION                       schema 12
+  hint      .ai/policies/verification.md: verify_command is empty — the feedback loop needs it
+  hint      .ai/policies/verification.md: step_test_command is empty — a step runs only its own tests
+  hint      .ai/policies/verification.md: e2e_command is empty — e2e runs once at the end of a task; write 'none' if there is no suite
+  hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+  hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+10 automatic, 1 change(s) awaiting --confirm-delete
+--- stderr
+
+$ update.py <ROOT> --check
+exit 1
+--- stdout
+project is behind the installed plugin: 10 file(s) to update, 1 change(s) a human must confirm — run /rr-setup --update
+--- stderr
+
+$ update.py <ROOT> --check --budget
+exit 0
+--- stdout
+--- stderr
+
+########## tree v3.1.0-edited: dry run, --check, --check --budget
+$ update.py <ROOT>
+exit 0
+--- stdout
+project-update: <ROOT> (dry run, nothing written; --apply to write)
+  split     .ai/policies/verification.md                    10 command line(s) of testing.md copied verbatim, with its Project specifics
+  split     .ai/policies/weight.project.json                4 leaf/leaves of weight.json that differ from the plugin's table carried (tests.max_suite_runs, examples.light, domain.modules, scope.hot_paths); 1 not carried, equal to an older shipped value: hints
+  create    docs/sdlc/README.md                             
+  create    .claude/memory/README.md                        
+  regenerate .gitignore                                      entries appended: .claude/settings.local.json, .claude/memory/local/, .codex/memory/local/
+  regenerate? .ai/AGENTS.md                                   edited here: 7 line(s) of yours are not in the plugin's version (``policies/`, `weight.json`, `weight.md`, `path-g…`; ``coding.md`, `safety.md` and `security.md`. Ever…`; `| the weight, the mode, who reviews, what a huma…`); original kept at .ai/reports/project-update-<DATE>/original/.ai/AGENTS.md; needs --apply --confirm-delete NAME
+  regenerate? .ai/policies/coding.md                          edited here: 1 line(s) of yours are not in the plugin's version (`- Money is integer cents, never a float (ours).`); original kept at .ai/reports/project-update-<DATE>/original/.ai/policies/coding.md; needs --apply --confirm-delete NAME
+  regenerate? .ai/policies/path-guard.json                    edited here: 8 line(s) of yours are not in the plugin's version (`"_comment": "ours",`; `"deny_patterns": [`; `"\\.vault$",`); drops 3 deny/allow pattern(s); original kept at .ai/reports/project-update-<DATE>/original/.ai/policies/path-guard.json; needs --apply --confirm-delete NAME
+  regenerate .ai/policies/safety.md                          unchanged since it was installed
+  regenerate .ai/policies/security.md                        unchanged since it was installed
+  regenerate? .ai/policies/testing.md                         edited here: 12 line(s) of yours are not in the plugin's version (`verify_command:      python3 -m unittest discove…`; `step_test_command:   python3 -m unittest {files}`; `# continuation line kept with its field`); original kept at .ai/reports/project-update-<DATE>/original/.ai/policies/testing.md; needs --apply --confirm-delete NAME
+  regenerate .ai/rules/README.md                             unchanged since it was installed
+  regenerate .ai/state/README.md                             unchanged since it was installed
+  regenerate .ai/policies/weight.md                          rendered from the weight table
+  regenerate? CLAUDE.md                                       managed block edited here: 1 line(s) of yours are not in the plugin's version (`- our own line inside the block`); original kept at .ai/reports/project-update-<DATE>/original/CLAUDE.md; needs --apply --confirm-delete NAME
+  create    src/CLAUDE.md                                   rule block php-style from .ai/rules/php-style.md
+  delete?   .ai/policies/weight.json                        [split] superseded by .ai/policies/weight.project.json; the plugin's table is read from the plugin; needs --apply --confirm-delete NAME
+  delete?   .ai/policies/tooling.md                         [shared] identical to a shipped version; needs --apply --confirm-delete NAME
+  delete?   .ai/rules/php-style.md                          [rules] rule sources are not kept by an update: the rendered blocks go with it; needs --apply --confirm-delete NAME
+  delete?   .ai/local/plugin-update/.ai/policies/coding.md  [local] the old merge's cache, not written any more; needs --apply --confirm-delete NAME
+  regenerate .ai/VERSION                                     schema 12
+  hint      1 file(s) override the plugin's shared copy and no longer receive its changes: .ai/policies/git.md — diff each against <PLUGIN_ROOT>/ai/<path>; `ai-path <path>` shows which applies; delete one when it adds nothing
+  hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+  hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+  hint      .ai/state/state.json: a task is in flight while files are regenerated — check that the files its current step may touch still exist afterwards
+12 automatic, 9 change(s) awaiting --confirm-delete
+--- stderr
+
+$ update.py <ROOT> --check
+exit 1
+--- stdout
+project is behind the installed plugin: 12 file(s) to update, 9 change(s) a human must confirm — run /rr-setup --update
+--- stderr
+
+$ update.py <ROOT> --check --budget
+exit 0
+--- stdout
+--- stderr
+
+########## tree dual: dry run, --check, --check --budget
+$ update.py <ROOT>
+exit 0
+--- stdout
+project-update: <ROOT> (dry run, nothing written; --apply to write)
+  split     .ai/policies/verification.md      9 command line(s) of testing.md copied verbatim, with its Project specifics
+  split     .ai/policies/weight.project.json  0 leaf/leaves of weight.json that differ from the plugin's table carried (none); 1 not carried, equal to an older shipped value: hints
+  regenerate .ai/AGENTS.md                     unchanged since it was installed
+  regenerate .ai/policies/safety.md            unchanged since it was installed
+  regenerate .ai/policies/security.md          unchanged since it was installed
+  regenerate .ai/policies/testing.md           unchanged since it was installed
+  regenerate .ai/rules/README.md               unchanged since it was installed
+  regenerate .ai/state/README.md               unchanged since it was installed
+  regenerate .ai/policies/weight.md            rendered from the weight table
+  delete?   .ai/policies/weight.json          [split] superseded by .ai/policies/weight.project.json; the plugin's table is read from the plugin; needs --apply --confirm-delete NAME
+  regenerate .ai/VERSION                       schema 12
+  hint      .ai/policies/verification.md: verify_command is empty — the feedback loop needs it
+  hint      .ai/policies/verification.md: step_test_command is empty — a step runs only its own tests
+  hint      .ai/policies/verification.md: e2e_command is empty — e2e runs once at the end of a task; write 'none' if there is no suite
+  hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+  hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
+10 automatic, 1 change(s) awaiting --confirm-delete
+--- stderr
+
+$ update.py <ROOT> --check
+exit 1
+--- stdout
+project is behind the installed plugin: 10 file(s) to update, 1 change(s) a human must confirm — run /rr-setup --update
+--- stderr
+
+$ update.py <ROOT> --check --budget
+exit 0
+--- stdout
+--- stderr
+

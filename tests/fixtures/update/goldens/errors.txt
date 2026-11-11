@@ -1,0 +1,204 @@
+########## exit 2: usage errors
+$ update.py <ROOT> --budget
+exit 2
+--- stdout
+--- stderr
+usage: update.py [-h] [--apply] [--check] [--budget] [--confirm-delete NAME] [--confirm-cleanup NAME] [root]
+update.py: error: --budget only makes sense with --check
+
+$ update.py <ROOT> --confirm-delete tester
+exit 2
+--- stdout
+--- stderr
+usage: update.py [-h] [--apply] [--check] [--budget] [--confirm-delete NAME] [--confirm-cleanup NAME] [root]
+update.py: error: --confirm-delete only makes sense with --apply
+
+$ update.py <ROOT> --apply --confirm-delete ''
+exit 2
+--- stdout
+--- stderr
+usage: update.py [-h] [--apply] [--check] [--budget] [--confirm-delete NAME] [--confirm-cleanup NAME] [root]
+update.py: error: --confirm-delete needs the name of the human who confirmed the change
+
+$ update.py <ROOT> --apply --confirm-delete '<your name>'
+exit 2
+--- stdout
+--- stderr
+usage: update.py [-h] [--apply] [--check] [--budget] [--confirm-delete NAME] [--confirm-cleanup NAME] [root]
+update.py: error: --confirm-delete got the placeholder '<your name>'; type your own name, it is the audit trail
+
+$ update.py <ROOT> --confirm-cleanup tester
+exit 2
+--- stdout
+--- stderr
+usage: update.py [-h] [--apply] [--check] [--budget] [--confirm-delete NAME] [--confirm-cleanup NAME] [root]
+update.py: error: --confirm-cleanup only makes sense with --apply
+
+########## exit 2: a newer .ai/VERSION than the plugin
+$ update.py <ROOT>
+exit 2
+--- stdout
+--- stderr
+project-update: .ai/VERSION says schema 13, this plugin ships schema 12 — update the plugin (riskrails/install.sh)
+
+$ update.py <ROOT> --check
+exit 2
+--- stdout
+project-update: .ai/VERSION says schema 13, this plugin ships schema 12 — update the plugin (riskrails/install.sh)
+--- stderr
+
+$ update.py <ROOT> --apply
+exit 2
+--- stdout
+--- stderr
+project-update: .ai/VERSION says schema 13, this plugin ships schema 12 — update the plugin (riskrails/install.sh)
+
+########## exit 2: an unusable .ai/VERSION
+$ update.py <ROOT> --check
+exit 2
+--- stdout
+project-update: .ai/VERSION is not a schema number: b'abc\n'
+--- stderr
+
+########## exit 2: templates not found
+$ update.py <ROOT> RISKRAILS_TEMPLATES=<TMP>/no-templates
+exit 2
+--- stdout
+--- stderr
+project-update: ai-init templates not found at <TMP>/no-templates (run riskrails/install.sh)
+
+########## exit 2: neither .ai/ nor docs/sdlc/
+$ update.py <ROOT>
+exit 2
+--- stdout
+--- stderr
+project-update: <ROOT> has neither .ai/ nor docs/sdlc/ — run /rr-setup first
+
+########## exit 3: a symlinked target aborts the apply
+$ update.py <ROOT> --apply
+exit 3
+--- stdout
+--- stderr
+project-update: aborted at create .ai/policies/coding.md: .ai/policies/coding.md is not a regular file — nothing after it was written; run the dry run again
+
+##### files of the project tree after the run
+32f0341ce01390d1996cd6d2b86cd07b071d3ce325403147aa431c8c118f4426  - .gitignore
+3e27c5426fbb1ef9b905cb416ee14e32c649e77149b126064b7b4de6c6021800  - CLAUDE.md
+7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
+a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION
+8da9942c50c3ea5bb538c9753a21ac09e50ba9324ba9c22858370d59a7784921  - .ai/local/memory/config.json
+3772d96afbca09c03e7d58b3e6ef014f39e8a84898c28b04cebfa58e386e4d42  - .ai/memory/notes.md
+.ai/policies/coding.md  link -> <TMP>/elsewhere
+164cd34c182de88c33de7df35beb29200d792419e1c13a5f0b2104f944e57be7  - .ai/policies/dialog.json
+d63a548c927cbcbce2ba1c9d0915b0d285b16aeb5a652c68c1525ed58d11970a  - .ai/policies/memory.json
+099f3debfe1ce808502661de4a31c3a349f149f5fe7246691d41a4966179a63c  - .ai/policies/path-guard.json
+8ec171f0fbdf38cc6996d496f01491fd1f21f04a435a118ad979b127a8be06f1  - .ai/policies/safety.md
+7224ede803ea81e65a456e21b6028a0e848e8a880456c6503eebe7534ca4f6aa  - .ai/policies/security.md
+4c45aee9b9fc5f6b4e1d9739e434c4094975a5a8dec6b9703fb25f3080680c77  - .ai/policies/testing.md
+1fe215bdd21b1d4761fd72392e3141ff56880c8c1ea13d8056713d15cfb96262  - .ai/policies/verification.md
+2f6bfa6ae620c1f0d6c2003d3dc60de493333caac3dabd7055ce9863add94ac0  - .ai/policies/weight.md
+466b88a9f466be8801bb4104135fa12f9454abcc115f38fe9bbdcecebfcf6ad5  - .ai/policies/weight.project.json
+449273200dfec2a56885c881ff34d40e8ecc00da53c24c2d09b7fbeb1004d255  - .ai/project/architecture.md
+ab13c708e91c1de2adbc9ccdb1caec5c320197708bcaaa6d5cfd30c18a7dac34  - .ai/project/business-rules.md
+0ec82daa4a17bcd5bf9d4df20ce90fd09312d3d439f7064baf7c8dd77a6c44fc  - .ai/project/dependencies.md
+d9abea96dbe584fd77c27d5ed0523eb20d048f2d146e4909d16b2a7948db38c5  - .ai/project/glossary.md
+ba14a457e83f9dde65e4190fdfab83b912f7398c1442a2a1cb3d89bfac741cf3  - .ai/project/initial-assessment.md
+1c2c3e5bbb132a152163ebeb678d57f0f7162a56ea92b84acc43cd2dedd4a935  - .ai/project/integrations.md
+1b554eff73a270086f8cf8cba73f7d9ce162c6b6b9c288b822db36841b8a9228  - .ai/project/known-risks.md
+1987654b78c747f378109dbde1d51c4f31fd0eabc878ff16b3bcfaeaf99c8ff4  - .ai/project/legacy.md
+ab0ce5062b41aaff12b0525d56b42de6b9dee9ce9e1de2938f72675435013c6a  - .ai/project/modules.md
+0b8f373e2c87666a6d0128b4c8e1f6c119d64bbfa2fa1d92b962b893ee52491a  - .ai/project/overview.md
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  - .ai/reports/.gitkeep
+0ac4f79efae700b5f4c9b6285a078b8dbb7ed52b6a5e834c458b0bdd79f528ff  - .ai/reports/T-2026-01-01-0001/task.md
+e504529519a371892838725f8b89b5d32e3300e345bcbf2643a3a1a48434b3dd  - .ai/rules/README.md
+d97f46a2cca020406252b1f7baa4184617fa71faca3885e2379c44ae4e1d9327  - .ai/state/README.md
+a215d1454a8096aeeba42890560d901834542ddbb226b38b432dfce8f58b8605  - .ai/state/state.json
+daff47f22f1126781e14806d13f9d91dce4a15e3e817417f82733c5fa2368870  - .claude/settings.json
+b80e6b2b93a4b8a5a0f8eabc2a745247ad53df3235bb84c63fdd3f10ccc1ae99  - .claude/memory/README.md
+d6e5b34d475e7187d2a8cb2aac7e7f1a427142baf6461bda387d70ceb4d8a8c1  - docs/sdlc/README.md
+302ebbf810cc80900df3d9f6340b77aa53c3b422f6e805b09fa8603520f6167d  - docs/sdlc/constitution.md
+
+########## exit 5: --confirm-* without a human (an agent marker, and no terminal at all)
+$ update.py <ROOT> --apply --confirm-delete tester CLAUDECODE=1
+exit 5
+--- stdout
+CONFIRM_REFUSED: --confirm-delete is typed by a human, and this run is inside an agent session (CLAUDECODE is set); run it in a terminal outside Claude Code or Codex, not through the `!` prefix
+  run the same command yourself in a terminal outside Claude Code or Codex
+--- stderr
+
+$ update.py <ROOT> --apply --confirm-cleanup tester CLAUDECODE=1 CODEX_HOME=<TMP>/home
+exit 5
+--- stdout
+CONFIRM_REFUSED: --confirm-cleanup is typed by a human, and this run is inside an agent session (CLAUDECODE is set); run it in a terminal outside Claude Code or Codex, not through the `!` prefix
+  run the same command yourself in a terminal outside Claude Code or Codex
+--- stderr
+
+$ update.py <ROOT> --apply --confirm-delete tester
+exit 5
+--- stdout
+CONFIRM_REFUSED: --confirm-delete is typed by a human, and this run has no terminal
+  run the same command yourself in a terminal outside Claude Code or Codex, or set AI_UNATTENDED=1 if a launcher runs it unattended on your behalf
+--- stderr
+
+########## exit 6: a kept file the renderer cannot take
+$ update.py <ROOT> --apply
+exit 6
+--- stdout
+KEPT_UNREADABLE: .ai/policies/weight.project.json: <ROOT>/.ai/policies/weight.project.json has no axes or modes table
+project-update: nothing was deleted or written. This version regenerates its own files and no longer converts older ones.
+Install riskrails@3.1.0 (npx riskrails@3.1.0), run /rr-setup --update with it, then install this version and run /rr-setup --update again.
+--- stderr
+
+$ update.py <ROOT>
+exit 6
+--- stdout
+KEPT_UNREADABLE: .ai/policies/weight.project.json: <ROOT>/.ai/policies/weight.project.json has no axes or modes table
+project-update: nothing was deleted or written. This version regenerates its own files and no longer converts older ones.
+Install riskrails@3.1.0 (npx riskrails@3.1.0), run /rr-setup --update with it, then install this version and run /rr-setup --update again.
+--- stderr
+
+$ update.py <ROOT> --check
+exit 6
+--- stdout
+KEPT_UNREADABLE: .ai/policies/weight.project.json: <ROOT>/.ai/policies/weight.project.json has no axes or modes table
+project-update: nothing was deleted or written. This version regenerates its own files and no longer converts older ones.
+Install riskrails@3.1.0 (npx riskrails@3.1.0), run /rr-setup --update with it, then install this version and run /rr-setup --update again.
+--- stderr
+
+##### files of the project tree after the run
+32f0341ce01390d1996cd6d2b86cd07b071d3ce325403147aa431c8c118f4426  - .gitignore
+3e27c5426fbb1ef9b905cb416ee14e32c649e77149b126064b7b4de6c6021800  - CLAUDE.md
+7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
+a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION
+8da9942c50c3ea5bb538c9753a21ac09e50ba9324ba9c22858370d59a7784921  - .ai/local/memory/config.json
+3772d96afbca09c03e7d58b3e6ef014f39e8a84898c28b04cebfa58e386e4d42  - .ai/memory/notes.md
+3dd55bf5f9d9471c68af3353166da11593a11e639f7557397ce46787291fa629  - .ai/policies/coding.md
+164cd34c182de88c33de7df35beb29200d792419e1c13a5f0b2104f944e57be7  - .ai/policies/dialog.json
+d63a548c927cbcbce2ba1c9d0915b0d285b16aeb5a652c68c1525ed58d11970a  - .ai/policies/memory.json
+099f3debfe1ce808502661de4a31c3a349f149f5fe7246691d41a4966179a63c  - .ai/policies/path-guard.json
+8ec171f0fbdf38cc6996d496f01491fd1f21f04a435a118ad979b127a8be06f1  - .ai/policies/safety.md
+7224ede803ea81e65a456e21b6028a0e848e8a880456c6503eebe7534ca4f6aa  - .ai/policies/security.md
+4c45aee9b9fc5f6b4e1d9739e434c4094975a5a8dec6b9703fb25f3080680c77  - .ai/policies/testing.md
+1fe215bdd21b1d4761fd72392e3141ff56880c8c1ea13d8056713d15cfb96262  - .ai/policies/verification.md
+2f6bfa6ae620c1f0d6c2003d3dc60de493333caac3dabd7055ce9863add94ac0  - .ai/policies/weight.md
+ea1b675f59ab9e97cd2b584f1e27428907a650fb8bc917fcf8f683f180cd5bac  - .ai/policies/weight.project.json
+449273200dfec2a56885c881ff34d40e8ecc00da53c24c2d09b7fbeb1004d255  - .ai/project/architecture.md
+ab13c708e91c1de2adbc9ccdb1caec5c320197708bcaaa6d5cfd30c18a7dac34  - .ai/project/business-rules.md
+0ec82daa4a17bcd5bf9d4df20ce90fd09312d3d439f7064baf7c8dd77a6c44fc  - .ai/project/dependencies.md
+d9abea96dbe584fd77c27d5ed0523eb20d048f2d146e4909d16b2a7948db38c5  - .ai/project/glossary.md
+ba14a457e83f9dde65e4190fdfab83b912f7398c1442a2a1cb3d89bfac741cf3  - .ai/project/initial-assessment.md
+1c2c3e5bbb132a152163ebeb678d57f0f7162a56ea92b84acc43cd2dedd4a935  - .ai/project/integrations.md
+1b554eff73a270086f8cf8cba73f7d9ce162c6b6b9c288b822db36841b8a9228  - .ai/project/known-risks.md
+1987654b78c747f378109dbde1d51c4f31fd0eabc878ff16b3bcfaeaf99c8ff4  - .ai/project/legacy.md
+ab0ce5062b41aaff12b0525d56b42de6b9dee9ce9e1de2938f72675435013c6a  - .ai/project/modules.md
+0b8f373e2c87666a6d0128b4c8e1f6c119d64bbfa2fa1d92b962b893ee52491a  - .ai/project/overview.md
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  - .ai/reports/.gitkeep
+0ac4f79efae700b5f4c9b6285a078b8dbb7ed52b6a5e834c458b0bdd79f528ff  - .ai/reports/T-2026-01-01-0001/task.md
+e504529519a371892838725f8b89b5d32e3300e345bcbf2643a3a1a48434b3dd  - .ai/rules/README.md
+d97f46a2cca020406252b1f7baa4184617fa71faca3885e2379c44ae4e1d9327  - .ai/state/README.md
+a215d1454a8096aeeba42890560d901834542ddbb226b38b432dfce8f58b8605  - .ai/state/state.json
+daff47f22f1126781e14806d13f9d91dce4a15e3e817417f82733c5fa2368870  - .claude/settings.json
+b80e6b2b93a4b8a5a0f8eabc2a745247ad53df3235bb84c63fdd3f10ccc1ae99  - .claude/memory/README.md
+d6e5b34d475e7187d2a8cb2aac7e7f1a427142baf6461bda387d70ceb4d8a8c1  - docs/sdlc/README.md
+302ebbf810cc80900df3d9f6340b77aa53c3b422f6e805b09fa8603520f6167d  - docs/sdlc/constitution.md
+

@@ -128,7 +128,7 @@ ALLOWED = (
     ("tests/test_guard_characterization.py", ("current.json",), PINS_DENY + "; the frozen shell reads it"),
     ("tests/test_guard_differential.py", ("current.json",), PINS_DENY),
     ("tests/test_ai_scope_guard.py", ("current.json",), INERT),
-    ("skills/project-update/update.py", ("claude-agentic", "current.json"), D4),
+    ("skills/project-update/rr_update/kept.py", ("claude-agentic", "current.json"), D4),
     ("tests/test_regenerate.py", ("claude-agentic", "current.json"), D4),
     ("tests/test_project_update.py", ("current.json", "--adopt"), D4 + "; the removed flags exit 2"),
     ("tests/test_rename.py", ("claude-agentic", "claude_agentic"), "KEEP the rename test names the old spelling"),

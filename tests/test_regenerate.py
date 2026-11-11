@@ -38,7 +38,10 @@ def load(name, path):
     return mod
 
 
-U = load("update_under_test", UPDATE)
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(UPDATE))
+import render_instructions  # noqa: E402  # pylint: disable=wrong-import-position,import-error
+from rr_update import history, paths  # noqa: E402  # pylint: disable=wrong-import-position,import-error
 W = load("weight_under_test", os.path.join(ROOT, "skills", "ai-task", "weight.py"))
 
 
@@ -166,12 +169,12 @@ class Case(unittest.TestCase):
 
 
 def block_of(data):
-    found = U.find_block(data)
+    found = render_instructions.find_block(data)
     return data[found[0]:found[1]]
 
 
 def outside_block(data):
-    found = U.find_block(data)
+    found = render_instructions.find_block(data)
     return data[:found[0]], data[found[1]:]
 
 
@@ -179,20 +182,20 @@ class TestGenerated(Case):
     """R3: every GENERATED target ends byte-equal to its template, the managed block to its block template."""
 
     def test_every_template_file_is_classified(self):
-        listed = set(U.GENERATED) | set(U.CREATE_ONLY) | set(U.NOT_COPIED)
+        listed = set(paths.GENERATED) | set(paths.CREATE_ONLY) | set(paths.NOT_COPIED)
         for here, _dirs, names in os.walk(os.path.join(AI_TEMPLATES, ".ai")):
             for name in names:
                 rel = os.path.relpath(os.path.join(here, name), AI_TEMPLATES).replace(os.sep, "/")
                 with self.subTest(rel):
-                    self.assertTrue(rel in listed or rel.startswith(U.CREATE_ONLY_DIRS), rel)
+                    self.assertTrue(rel in listed or rel.startswith(paths.CREATE_ONLY_DIRS), rel)
 
     def test_generated_and_kept_are_disjoint(self):
-        for rel in U.GENERATED:
-            self.assertFalse(U.is_kept(rel), rel)
-        for rel in U.CREATE_ONLY:
-            self.assertTrue(U.is_kept(rel), rel)
-        self.assertFalse(U.is_kept(".ai/state/README.md"))
-        self.assertTrue(U.is_kept(".ai/state/state.json"))
+        for rel in paths.GENERATED:
+            self.assertFalse(paths.is_kept(rel), rel)
+        for rel in paths.CREATE_ONLY:
+            self.assertTrue(paths.is_kept(rel), rel)
+        self.assertFalse(paths.is_kept(".ai/state/README.md"))
+        self.assertTrue(paths.is_kept(".ai/state/state.json"))
 
     def test_generated_targets_equal_their_templates(self):
         for kind in TREES:
@@ -200,13 +203,13 @@ class TestGenerated(Case):
                 t = self.tree(kind)
                 done = t.apply()
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-                for rel in U.GENERATED:
+                for rel in paths.GENERATED:
                     self.assertEqual(raw(t.path(rel)), raw(os.path.join(AI_TEMPLATES, rel)), rel)
                 self.assertEqual(raw(t.path(".ai", "VERSION")), raw(os.path.join(AI_TEMPLATES, ".ai", "VERSION")))
                 self.assertEqual(t.apply().returncode, 0)
                 self.assertEqual(raw(t.path(".ai", "policies", "weight.md")),
                                  W.mirror(W.load_policy(t.root)[0]).encode("utf-8"), "weight.md is the effective table")
-                for rt, (name, block_tpl, _) in U.INSTRUCTION_FILE.items():
+                for rt, (name, block_tpl, _) in paths.INSTRUCTION_FILE.items():
                     if os.path.exists(t.path(name)):
                         self.assertEqual(block_of(raw(t.path(name))).rstrip(b"\n") + b"\n",
                                          raw(os.path.join(AI_TEMPLATES, block_tpl)), (name, rt))
@@ -238,7 +241,7 @@ class TestKept(Case):
             with self.subTest(kind):
                 t = self.tree(kind)
                 before = t.snap()
-                kept = {rel: data for rel, data in before.items() if U.is_kept(rel)}
+                kept = {rel: data for rel, data in before.items() if paths.is_kept(rel)}
                 kept.update({rel: before[rel] for rel in before if rel == ".ai/policies/git.md"})  # an edited shared override
                 self.assertGreater(len(kept), 5, "the tree holds kept files")
                 for confirm in (False, True):
@@ -532,12 +535,12 @@ class TestRefusal(Case):
         self.assertTrue(done.stdout.startswith("KEPT_UNREADABLE: .ai/policies/risk-tiers.json: "))
 
     def test_names_version(self):
-        self.assertEqual(U.LAST_MIGRATING_VERSION, "3.1.0")
+        self.assertEqual(paths.LAST_MIGRATING_VERSION, "3.1.0")
         t = self.tree("v3.1.0")
         put(t.path(".ai", "state", "state.json"), "nope")
         out = t.update().stdout
         self.assertIn("Install riskrails@%s (npx riskrails@%s), run /rr-setup --update with it, then install this "
-                      "version and run /rr-setup --update again." % (U.LAST_MIGRATING_VERSION, U.LAST_MIGRATING_VERSION), out)
+                      "version and run /rr-setup --update again." % (paths.LAST_MIGRATING_VERSION, paths.LAST_MIGRATING_VERSION), out)
 
     def test_every_failing_file_has_its_line(self):
         t = self.tree("v3.1.0")
@@ -577,10 +580,10 @@ class TestBlock(Case):
     def test_an_unedited_old_block_needs_no_gate(self):
         t = self.tree("v3.1.0")
         current = raw(os.path.join(AI_TEMPLATES, "CLAUDE.block.md"))
-        older = [v for v in U.History(U.HISTORY).versions("ai-init/CLAUDE.block.md") if v != current and b"<!-- riskrails:start -->" in v]
+        older = [v for v in history.History(paths.HISTORY).versions("ai-init/CLAUDE.block.md") if v != current and b"<!-- riskrails:start -->" in v]
         self.assertTrue(older, "the history holds an older block")
         text = raw(t.path("CLAUDE.md"))
-        found = U.find_block(text)
+        found = render_instructions.find_block(text)
         put(t.path("CLAUDE.md"), text[:found[0]] + older[0].rstrip(b"\n") + text[found[1]:])
         out = t.update().stdout
         self.assertEqual(rows(out).get("CLAUDE.md"), "regenerate", out)
@@ -619,7 +622,7 @@ class TestShared(Case):
         for here, _dirs, names in os.walk(os.path.join(ROOT, "ai")):
             for name in names:
                 found.add(".ai/" + os.path.relpath(os.path.join(here, name), os.path.join(ROOT, "ai")).replace(os.sep, "/"))
-        self.assertEqual(set(U.SHARED_SET), found)
+        self.assertEqual(set(paths.SHARED_SET), found)
 
     def test_unedited_and_edited_copies(self):
         t = self.tree("v3.1.0-edited")
