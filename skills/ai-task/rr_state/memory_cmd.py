@@ -39,9 +39,10 @@ def memory_config(sync, root):
     return None
 
 
-def memory_human(root, what, rt=rr_runtime.Runtime()):
-    """R16: enable, disable, cleanup, pack, redact and move-logs take the human's route, as approve does."""
-    via, why = rr_dialog.human_route(root, rt=rt)
+def memory_human(root, what, allow_dialog=False, rt=rr_runtime.Runtime()):
+    """R16: enable, disable, cleanup, pack, redact and move-logs take the human's route, as approve does. Only
+    enable passes allow_dialog: a live pick of this session that is this very command is the human's answer."""
+    via, why = rr_dialog.human_route(root, allow_dialog=allow_dialog, rt=rt)
     if via is None:
         fs.die("APPROVAL_REFUSED — 'memory %s' is the human's, from their own terminal:\n  python3 %s --root %s "
             "%s\nRefused because %s." % (what, shlex.quote(fs.ENTRY), shlex.quote(root),
@@ -98,7 +99,9 @@ def memory_status(args, root, sync, _store, rt=rr_runtime.Runtime()):
 
 
 def memory_enable(args, root, sync, _store, rt=rr_runtime.Runtime()):
-    memory_human(root, "enable", rt=rt)
+    if memory_human(root, "enable", allow_dialog=True, rt=rt) == "dialog":
+        pick = rr_dialog.pick_data(rr_dialog.DIALOG_PICK[0])
+        print("memory: via dialog (consent %s, decision %s)" % (pick["consent"], pick["decision"]))
     hook = sync.enable(root, args.author, args.period, args.index)
     print("memory: packages mode on (%s); every teammate's next close exports" % sync.POLICY_REL)
     print("pre-push: %s" % hook)

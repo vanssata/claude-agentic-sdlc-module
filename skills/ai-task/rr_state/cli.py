@@ -179,7 +179,7 @@ def main():
 
     p = sub.add_parser("decision"); p.add_argument("action", choices=["show", "open", "settle", "fallback"])
     p.add_argument("--id"); p.add_argument("--kind"); p.add_argument("--command", dest="commands", action="append", default=[])
-    p.add_argument("--pick", type=int); p.add_argument("--why", default="")
+    p.add_argument("--spec"); p.add_argument("--pick", type=int); p.add_argument("--why", default="")
     p.add_argument("--json", action="store_true"); p.set_defaults(func=dialog_cmd.cmd_decision)
 
     p = sub.add_parser("consent"); p.add_argument("action", nargs="?", choices=["audit"])

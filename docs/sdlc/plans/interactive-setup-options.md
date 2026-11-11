@@ -100,8 +100,9 @@ with first line `OPTIONS_DIALOG …` | `OPTIONS_FALLBACK <why>` | `OPTIONS_NONE`
    `test_dialog_consent.py::test_setup_round_memory_first`. Consumes C1, B3.
 3. **C3** `options --json`, read-only. Tests: `test_setup.py::TestOptions::test_fresh_all_unset`,
    `::test_detects_configured`, `::test_writes_nothing`.
-4. **C4** `options --open` + fallback; author per D1. Tests: `::test_open_prints_dialog`,
-   `::test_memory_labels_prefilled`, `::test_no_git_no_memory`, `::test_dialog_off_fallback`. Consumes C1, C3.
+4. **C4** `options --open` + fallback; author per D1. Tests: `::TestOptionsOpen::test_open_prints_dialog`,
+   `::test_memory_labels_prefilled`, `::test_no_git_no_memory`, `::TestOptionsOpenOutcomes::test_dialog_off_fallback`.
+   Consumes C1, C3.
 5. **C5** `--runtime none`. Tests: `test_scaffold_idempotency.py::test_runtime_none`,
    `tests/test_scaffold_differential.py`.
 6. **C6** `SKILL.md` flow. Tests: `test_skills_surface.py::test_rr_setup_options_flow`. Consumes C4, C5.
@@ -152,14 +153,14 @@ Consumes: R (`pickClaudePlan`, `pickCodexPlan`, the pty helpers).
 | R7 | `::TestMenu::test_abort_restores_terminal` |
 | R8 | `::TestMenu::test_menu_off_typed_prompt` |
 | R9 | `tests/test_setup.py::TestOptions::test_fresh_all_unset`, `::test_detects_configured`, `::test_writes_nothing` |
-| R10 | `::TestOptions::test_open_prints_dialog` |
+| R10 | `::TestOptionsOpen::test_open_prints_dialog` |
 | R11 | `tests/test_dialog_gate.py::test_setup_spec_opens_atomically`, `::test_setup_spec_rejects_foreign_command` |
 | R12 | `tests/test_dialog_gate.py::test_setup_settle_prints_pick` |
 | R13 | `tests/test_dialog_gate.py::test_label_validator`, `tests/test_dialog_contract.py::test_both_label_rules_agree` |
 | R14 | `tests/test_memory_pre_push.py::test_enable_refused_dialog_on_no_pick` (first, green before B3), `::test_enable_via_dialog_pick`, `::test_enable_pick_used_once`, `::test_disable_stays_terminal` |
 | R15 | `tests/test_dialog_consent.py::test_setup_round_memory_first` |
-| R16 | `::TestOptions::test_memory_labels_prefilled` (D1: no `--author` when local config or `$USER` gives it; source in the text), `::test_no_git_no_memory` |
-| R17 | `::TestOptions::test_dialog_off_fallback` |
+| R16 | `::TestOptionsOpen::test_memory_labels_prefilled` (D1: no `--author` when local config or `$USER` gives it; source in the text), `::test_no_git_no_memory` |
+| R17 | `::TestOptionsOpenOutcomes::test_dialog_off_fallback` |
 | R18 | `tests/test_scaffold_idempotency.py::test_runtime_none` |
 | R19 | `tests/test_skills_surface.py::test_rr_setup_options_flow` |
 | R20 | doc tests; `tests/test_project_update.py::test_history_covers_every_template` |

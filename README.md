@@ -165,7 +165,8 @@ until it passes. After three failed review passes the next verdict is yours.
 ### The record
 
 A closed task's who, what, how and why travel as a compact record: `state.py
-memory enable` (yours, in a terminal) switches a project to packages mode, in
+memory enable` (yours, in a terminal, or as your pick in the `/rr-setup`
+dialog) switches a project to packages mode, in
 which `close` appends the task's entries to a per-developer batch under
 `.ai/memory/` and a pre-push hook validates them; `state.py recall --files …`
 gives an agent what the record holds about the files it is about to touch,
@@ -234,7 +235,7 @@ python3 -I -m unittest discover -s tests -p 'test_*.py'      # CI's serial oracl
 AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
 ```
 
-Fifty-eight suites, 1133 tests, about 75 seconds in parallel. The guards against JSON fixtures for both runtimes and a
+Fifty-nine suites, 1194 tests, about 75 seconds in parallel. The guards against JSON fixtures for both runtimes and a
 golden of 1 341 recorded decisions, byte for byte, with timed cases that hold
 the hot path under its budget; the state machine, the weight, the batch loop,
 the dialog contract and the documents rule; the compact record and its

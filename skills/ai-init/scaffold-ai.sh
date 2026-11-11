@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Idempotent .ai/ scaffold for RiskRails.
-#   scaffold-ai.sh [project-dir] [--runtime auto|claude|codex|both]   (default: $PWD, auto)
+#   scaffold-ai.sh [project-dir] [--runtime auto|claude|codex|both|none]   (default: $PWD, auto)
+#   none: .ai/ and .gitignore only, no instruction file; a whole value, never part of a comma list
 #
 # A shim: the scaffold lives in skills/rr-setup/scaffold_ai.py and reads its
 # templates from this directory. This file keeps every caller's command working.

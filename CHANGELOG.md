@@ -4,6 +4,14 @@ Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+- `/rr-setup` asks its choices in one dialog before any work: runtime, survey depth, `verify_command` and project memory, only the ones not set yet; `/rr-setup --options` asks them all again. With the dialog off, an unattended run or an unverified Codex tool the questions stay prose. New: `setup.py options --json|--open [--all] [--skip KEY]`, and `state.py decision open --kind setup --spec FILE|-`, which opens all of a round's decisions or none; settling one prints `SETUP_PICK key=value`.
+- Project memory from setup: off, packages, or packages with the SQLite index. A picked `state.py memory enable` runs through the dialog route — verbatim, once, inside the pick window, in the same session — and prints `memory: via dialog (consent C<n>, decision D<n>)`. `disable`, `cleanup`, `pack`, `redact` and `migrate --move-logs` have no dialog route.
+- `scaffold-ai.sh --runtime none`: `.ai/` and its `.gitignore` lines, no instruction file.
+
+### Changed
+- The consent-label allowlists (`rr_state/labels.py`, `hooks/guard/dialog.py`) accept `state.py memory enable [--author S] [--period P] [--index none|sqlite]` and no other `memory` verb; `docs/local-memory.md`, the `safety.md` template and the R36 spec say so.
+
 ## [4.0.1] — 2026-11-11
 
 The first 4.0 on npm. `v4.0.0` was tagged but never published: its release verify failed on a clean checkout. Everything under 4.0.0 below applies; install `npx riskrails@4.0.1`.

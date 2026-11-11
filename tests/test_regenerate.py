@@ -217,9 +217,9 @@ class TestGenerated(Case):
     def test_an_old_shipped_copy_is_regenerated_without_a_gate(self):
         t = self.tree("v3.1.0")
         out = t.update().stdout
-        for rel in (".ai/AGENTS.md", ".ai/policies/testing.md", ".ai/state/README.md", ".ai/VERSION"):
+        for rel in (".ai/AGENTS.md", ".ai/policies/safety.md", ".ai/policies/testing.md", ".ai/state/README.md", ".ai/VERSION"):
             self.assertEqual(rows(out).get(rel), "regenerate", rel + "\n" + out)
-        for rel in (".ai/policies/coding.md", ".ai/policies/safety.md", ".ai/policies/path-guard.json"):
+        for rel in (".ai/policies/coding.md", ".ai/policies/path-guard.json"):
             self.assertNotIn(rel, rows(out), "unchanged since 3.1.0: nothing to do")
         self.assertNotIn("regenerate?", out)
 
