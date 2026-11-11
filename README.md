@@ -95,7 +95,8 @@ npx -y riskrails@latest --yes             # update in place, keeping the recorde
 ```
 
 On a terminal each question is a menu — runtime, plan, Fable, context,
-statusline, Codex plan — with the detected or recorded choice highlighted:
+statusline, Codex plan — with the proposal highlighted (the detected or
+recorded runtime, plan, statusline and Codex plan; Fable `yes`, context `default`):
 ↑/↓ (or k/j), Home/End or 1–9 to move, Enter to confirm, Esc, q or Ctrl-C to
 stop with nothing written. Enter through every menu installs what detection
 proposes. A flag skips its menu; `--yes` or no terminal asks nothing, and

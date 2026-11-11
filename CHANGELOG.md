@@ -9,13 +9,13 @@ Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelo
 The installer asks with arrow-key menus on a terminal, and `/rr-setup` asks its choices — project memory and its SQLite index among them — in one dialog.
 
 ### Added
-- On a terminal the installer asks each question as a menu — runtime, plan, Fable, context, statusline, Codex plan — with the detected or recorded choice highlighted: ↑/↓ (or k/j), Home/End or 1–9 move, Enter confirms, Esc, q or Ctrl-C stop with nothing written (exit 130). A flag skips its menu; `--yes` or no terminal asks nothing and prints what 4.0.1 printed; `RISKRAILS_MENU=off` (or `TERM=dumb`) brings back the typed plan question. New `bin/menu.js`, no npm dependency.
+- On a terminal the installer asks each question as a menu — runtime, plan, Fable, context, statusline, Codex plan — with the proposal highlighted: the detected or recorded runtime, plan, statusline and Codex plan, and the defaults Fable `yes` and context `default`; ↑/↓ (or k/j), Home/End or 1–9 move, Enter confirms, Esc, q or Ctrl-C stop with nothing written (exit 130). A flag skips its menu; `--yes` or no terminal asks nothing and prints what 4.0.1 printed; `RISKRAILS_MENU=off` (or `TERM=dumb`) brings back the typed plan question. New `bin/menu.js`, no npm dependency.
 - `/rr-setup` asks its choices in one dialog before any work: runtime, survey depth, `verify_command` and project memory, only the ones not set yet; `/rr-setup --options` asks them all again. With the dialog off, an unattended run or an unverified Codex tool the questions stay prose. New: `setup.py options --json|--open [--all] [--skip KEY]`, and `state.py decision open --kind setup --spec FILE|-`, which opens all of a round's decisions or none; settling one prints `SETUP_PICK key=value`.
 - Project memory from setup: off, packages, or packages with the SQLite index. A picked `state.py memory enable` runs through the dialog route — verbatim, once, inside the pick window, in the same session — and prints `memory: via dialog (consent C<n>, decision D<n>)`. `disable`, `cleanup`, `pack`, `redact` and `migrate --move-logs` have no dialog route.
 - `scaffold-ai.sh --runtime none`: `.ai/` and its `.gitignore` lines, no instruction file.
 
 ### Changed
-- On a terminal with no detected Claude plan, Enter installs the highlighted plan (`team-pro` for a Team org, else `pro`) instead of exiting. Without a terminal nothing changed.
+- On a terminal with the menu on and no detected Claude plan, Enter installs the highlighted plan (`team-pro` for a Team org, else `pro`) instead of exiting. Without a terminal, or with `RISKRAILS_MENU=off`, it still exits as before.
 - The consent-label allowlists (`rr_state/labels.py`, `hooks/guard/dialog.py`) accept `state.py memory enable [--author S] [--period P] [--index none|sqlite]` and no other `memory` verb; `docs/local-memory.md`, the `safety.md` template and the R36 spec say so.
 
 ## [4.0.1] — 2026-11-11
