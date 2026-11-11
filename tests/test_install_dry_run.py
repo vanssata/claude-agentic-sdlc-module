@@ -407,6 +407,7 @@ class InstallDryRun(ScratchCase):  # pylint: disable=too-many-public-methods  # 
                   "hooks/cap-large-read.py", "hooks/project-scaffold.sh", "hooks/ai-git-guard.json",
                   "skills/rr-setup/SKILL.md", "skills/ai-init/scaffold-ai.sh", "skills/ai-task/state.py",
                   "skills/ai-task/rr_state/__init__.py", "skills/ai-task/rr_state/cli.py",
+                  "skills/ai-task/memory_sync.py", "skills/ai-task/memory_io.py",
                   "skills/ai-audit/templates/play-scoring-rubric.md",
                   "skills/rr-status/SKILL.md", "skills/rr-status/status.py",
                   "skills/ai-init/templates/.ai/AGENTS.md", "skills/project-init/templates/intent.md",

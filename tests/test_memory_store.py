@@ -18,7 +18,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import memory_harness as mh  # noqa: E402  pylint: disable=wrong-import-position
 import memory_store  # noqa: E402  pylint: disable=wrong-import-position
-import memory_sync as ms  # noqa: E402  pylint: disable=wrong-import-position
+import memory_config as mcfg  # noqa: E402  pylint: disable=wrong-import-position
 
 SPEC = importlib.util.spec_from_file_location("benchmark_memory", os.path.join(mh.ROOT, "tools",
                                                                                "benchmark-memory.py"))
@@ -158,7 +158,7 @@ class TestFallback(unittest.TestCase):
         self.assertIn("fts5: yes", status)
         rebuilt = p.ok("memory", "rebuild").stdout
         self.assertIn("index: rebuilt", rebuilt)
-        self.assertEqual(ms.load_config(p.root).index, "sqlite")
+        self.assertEqual(mcfg.load_config(p.root).index, "sqlite")
 
     def test_fts5_unavailable_is_reported(self):
         p = mh.Project()

@@ -16,7 +16,8 @@ except the last section.
 │   └── ai-task/                        the state machine every skill drives
 │       ├── state.py                    the entry: a shim that sets fs.ENTRY and calls rr_state.cli.main
 │       ├── rr_state/                   the package behind it, layers 0 to 9 (below)
-│       └── sensors.py, weight.py, memory_*.py   sibling modules, unchanged
+│       ├── memory_sync.py              the pre-push validator entry: the shim in .git/hooks/pre-push runs it by path
+│       └── sensors.py, weight.py, memory_*.py   sibling modules (the map is below)
 │   └── project-update/                 what /rr-setup --update runs
 │       ├── update.py                   the entry: the docstring, sys.path, then rr_update.cli.main
 │       ├── rr_update/                  the package behind it, layers 0 to 6 (below)
@@ -146,6 +147,32 @@ Tests reach a name through the module that owns it (`from rr_update import
 paths`, then `paths.SHARED`), never through the entry.
 `tests/test_update_characterization.py` pins what the entry prints, returns and
 leaves on disk over the regenerate fixtures.
+
+The memory code beside `state.py` has the same discipline without a package
+directory: `memory_sync.py` is the pre-push validator entry, and it stays at
+that path because every project's `.git/hooks/pre-push` shim runs it by path
+(`SELF` in `memory_io` points at it, and the shim text written into a project
+stays byte for byte). It defines only `_git_out`, `base_for_new_branch`,
+`pre_push` and `pre_push_cli`; the rest of packages mode lives in ten sibling
+modules, in layers 0 to 5 that import only downward (the map is
+`tests/fixtures/memory/partition.json`, checked by `tests/test_memory_layout.py`):
+
+| Layer | Modules | Job |
+|---|---|---|
+| 0 | `memory_io` | the path constants (`HERE`, `VALIDATOR`, `SELF`), `MemoryError_`, the clock, JSON and byte reads, the atomic write, the clone lock, git |
+| 1 | `memory_config`, `memory_packages` | the policy's schema and `MemoryConfig`, the mode; the packages on disk, the id and seal lookups (`sealed_task_ids`), the batch ledger |
+| 2 | `memory_verify`, `memory_hook`, `memory_risks` | the findings, `verify` and the range check the validator runs; the shim, `enable`, `disable`; the risk writers |
+| 3 | `memory_cleanup`, `memory_migrate` | cleanup, restore, redaction, pack; the move from files to packages |
+| 4 | `memory_export` | the outbox, the compaction into a package, export and the close hook `after_close` |
+| 5 | `memory_status` | the lines `memory status` prints; `show` |
+| 6 | `memory_sync` | the validator entry above |
+
+`rr_state/memory_cmd.py` reaches a name through the owner module, `close.py`
+calls `memory_export.after_close`, `rr-setup/setup.py` uses `memory_config` and
+`memory_io`; nothing imports a name through `memory_sync`.
+`tests/test_memory_sync_characterization.py` pins what the packages-mode
+commands print, return and write against `tests/fixtures/memory/goldens/sync/`.
+`memory_compact.py`, `memory_format.py` and `memory_store.py` are unchanged.
 
 | File | Written by | Holds |
 |---|---|---|

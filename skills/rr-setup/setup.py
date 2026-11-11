@@ -440,7 +440,7 @@ def write(path, text):
 
 def sibling(directory, name):
     """A module of this skill or of another, imported once its directory leads sys.path: `python3 -I` puts none
-    there, and the module's own imports are by name (memory_sync reaches memory_compact that way). Skills are
+    there, and the module's own imports are by name (memory_export reaches memory_compact that way). Skills are
     installed independently, so a missing module is an ImportError for the caller to answer."""
     if directory not in sys.path:
         sys.path.insert(0, directory)
@@ -477,7 +477,7 @@ def dialog_on(root):
 
 
 def author_source(cfg):
-    """Where `cfg.author` comes from, in the order memory_sync.MemoryConfig.author tries them."""
+    """Where `cfg.author` comes from, in the order memory_config.MemoryConfig.author tries them."""
     if cfg.local.get("author"):
         return "local config"
     return next(("$" + name for name in ("USER", "USERNAME") if os.environ.get(name)), "default")
@@ -494,22 +494,23 @@ def fts5():
 
 def memory_option(root, git):
     """Packages-mode project memory: set once memory.json exists, its mode being `current`. `author` is what
-    `memory enable` writes without --author (the local config, else $USER): memory_sync's own answer, never git's."""
+    `memory enable` writes without --author (the local config, else $USER): memory_config's own answer, never git's."""
     def unavailable(why):
         return {"key": "memory", "state": "unavailable", "why": why}
     if not git:
         return unavailable("not a git work tree")
     try:
-        sync = sibling(AI_TASK, "memory_sync")
+        memory_config = sibling(AI_TASK, "memory_config")
+        memory_io = sibling(AI_TASK, "memory_io")
     except ImportError as exc:
         return unavailable("the memory modules are not installed beside state.py (%s)" % exc)
     try:
-        cfg = sync.load_config(root)
-    except sync.MemoryError_ as exc:
+        cfg = memory_config.load_config(root)
+    except memory_io.MemoryError_ as exc:
         return unavailable(str(exc))
     return {"key": "memory", "state": "set" if cfg.present else "unset", "current": cfg.mode if cfg.present else None,
             "author": cfg.author, "author_from": author_source(cfg),
-            "period": None if cfg.present else sync.DEFAULTS["period"], "fts5": fts5()}
+            "period": None if cfg.present else memory_config.DEFAULTS["period"], "fts5": fts5()}
 
 
 def runtime_option(root):

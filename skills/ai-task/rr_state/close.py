@@ -165,7 +165,7 @@ def memory_after_close(root, task_id):
     if not os.path.exists(os.path.join(root, ".ai", "policies", "memory.json")):
         return
     try:
-        import memory_sync                # pylint: disable=import-outside-toplevel
+        import memory_export              # pylint: disable=import-outside-toplevel
     except ImportError:
         return
-    memory_sync.after_close(root, task_id)
+    memory_export.after_close(root, task_id)

@@ -3,8 +3,8 @@
 Spec: `docs/sdlc/specs/small-oop-modules.md` (§Work packages row 4: "modules beside
 `memory_store`, `memory_compact`, `memory_format`"; R1–R16 read for `memory_sync.py`, R13) ·
 Programme: `docs/sdlc/plans/small-oop-modules.md` · Consumes: WP3 (`a4e37eb`, #71), closed ·
-Written 2026-11-11. **Not started**: `state.py start` runs after the human accepts this plan
-and commits it.
+Written 2026-11-11. **Started** 2026-11-11 as task T-2026-11-11-1949-wp4-memory-sync-py via
+`/rr-build-all`.
 
 Kind: **refactoring** (C3) — no memory command's output, exit code or file written changes,
 and the pre-push shim text written into a project's `.git/hooks/pre-push` stays byte for byte.
@@ -134,6 +134,9 @@ and D3 (a namespace of modules) over their rejected alternatives.
 | 4 | `memory_export` | `outbox_path`, `exportable`, `ExportResult`, `compact_for_export`, `write_outbox`, `read_outbox`, `export`, `record_lines`, `index_import`, `sealed_task_ids`, `pending_ids`, `after_close` (`:311-547`) | 240 | shell |
 | 5 | `memory_status` | `status_lines`, `fts_line`, `unmigrated`, `show` (`:740-806`) | 70 | shell |
 | 6 | `memory_sync` (entry) | D1: `_git_out`, `base_for_new_branch`, `pre_push`, `pre_push_cli`, `__main__` (`:1485-1571`) | 125 | shell |
+
+Deviation the partition made: `sealed_task_ids` lives in `memory_packages`, not `memory_export`,
+because `cleanup` (layer 3) calls it and export sits above cleanup.
 
 The layers follow the name-level graph (`ast`, 2026-11-11): `after_close` calls `cleanup_task`
 (export above cleanup); `cleanup` calls `verify`; `migrate_apply` calls `check_packages`,
