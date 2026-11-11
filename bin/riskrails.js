@@ -389,21 +389,27 @@ function detectPlan(runtime) {
   return {};
 }
 
+// The plan question on a terminal: the plan the previous install recorded, else the detected
+// one, is proposed and Enter confirms it; a Team seat, or a plan nothing detected, is typed.
+function pickClaudePlan(prev, detected, from, org) {
+  const proposed = prev || detected;
+  if (proposed) {
+    const why = prev ? 'recorded by the previous install' : `detected from ${from}`;
+    return ask(`plan: ${proposed} (${why}) — Enter to confirm, or type pro/team-pro/team-max/max/max20/balanced-max: `) || proposed;
+  } else if (from === 'team') {
+    return ask(`Team org detected (${org}) but not the seat. Enter plan [team-pro/team-max]: `);
+  } else {
+    return ask(`Could not detect plan (organizationType='${org}'). Enter plan [pro/team-pro/team-max/max/max20]: `);
+  }
+}
+
 function claudeRender() {
   const PREV_PLAN = prevPlan(CLAUDE_DIR);
   if (!PLAN) {
     const live = detectPlan('claude');
     const org = live.org || '', detected = live.plan || '', from = live.from || '';
     if (interactive()) {
-      const proposed = PREV_PLAN || detected;
-      if (proposed) {
-        const why = PREV_PLAN ? 'recorded by the previous install' : `detected from ${from}`;
-        PLAN = ask(`plan: ${proposed} (${why}) — Enter to confirm, or type pro/team-pro/team-max/max/max20/balanced-max: `) || proposed;
-      } else if (from === 'team') {
-        PLAN = ask(`Team org detected (${org}) but not the seat. Enter plan [team-pro/team-max]: `);
-      } else {
-        PLAN = ask(`Could not detect plan (organizationType='${org}'). Enter plan [pro/team-pro/team-max/max/max20]: `);
-      }
+      PLAN = pickClaudePlan(PREV_PLAN, detected, from, org);
     } else if (detected) {
       PLAN = detected; err(`detected plan: ${PLAN} (${from})`);
     } else if (from === 'team') {
@@ -1264,6 +1270,18 @@ function claudeSummary() {
 // ~/.codex/auth.json carries chatgpt_plan_type.
 const X = {};   // the Codex branch's rendered values
 
+// The Codex plan question on a terminal: the previous install's plan, else the detected one,
+// is proposed and Enter confirms it; without either the plan is typed.
+function pickCodexPlan(prev, det, why, detected) {
+  const proposed = prev || det;
+  if (proposed) {
+    const w = prev ? 'recorded by the previous install' : `detected from ${why}`;
+    return ask(`codex plan: ${proposed} (${w}) — Enter to confirm, or type plus/pro/balanced-max: `) || proposed;
+  } else {
+    return ask(`Could not detect the ChatGPT plan (chatgpt_plan_type='${detected}'). Enter plan [plus/pro]: `);
+  }
+}
+
 function codexRender() {
   const prev = prevPlan(CODEX_DIR);
   // BalancedMax is one routing idea on both runtimes: --plan balanced-max selects the Codex
@@ -1273,13 +1291,7 @@ function codexRender() {
     const live = detectPlan('codex');
     const detected = live.raw || '', det = live.plan || '', why = live.from || '';
     if (interactive()) {
-      const proposed = prev || det;
-      if (proposed) {
-        const w = prev ? 'recorded by the previous install' : `detected from ${why}`;
-        CODEX_PLAN = ask(`codex plan: ${proposed} (${w}) — Enter to confirm, or type plus/pro/balanced-max: `) || proposed;
-      } else {
-        CODEX_PLAN = ask(`Could not detect the ChatGPT plan (chatgpt_plan_type='${detected}'). Enter plan [plus/pro]: `);
-      }
+      CODEX_PLAN = pickCodexPlan(prev, det, why, detected);
     } else if (det) {
       CODEX_PLAN = det; err(`detected codex plan: ${CODEX_PLAN} (${why})`);
     } else if (prev) {
