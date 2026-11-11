@@ -1,0 +1,490 @@
+$ state.py memory enable --author dev (human)
+exit 0
+--- stdout
+memory: packages mode on (.ai/policies/memory.json); every teammate's next close exports
+pre-push: installed
+mode: packages
+period: quarter · author: dev · index: none
+open batch: none (branch main)
+packages: 0 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 0
+pre-push: current
+cleanup: off
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+
+$ git push origin main (nothing of ours yet)
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+
+##### light task 1 closed: stdout of `state.py close`
+<ID> closed (light): .ai/reports/<ID>/task.md
+state: .ai/state/logs/<ID>/state.json
+record: .ai/memory/<PERIOD>.dev.<B>.jsonl (+3 entries, <ID> sealed, coverage 7/7 lines)
+
+##### light task 2 closed (with a note): stdout of `state.py close`
+<ID> closed (light): .ai/reports/<ID>/task.md
+state: .ai/state/logs/<ID>/state.json
+record: .ai/memory/<PERIOD>.dev.<B>.jsonl (+4 entries, <ID> sealed, coverage 8/8 lines)
+
+$ git fetch origin
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+##### the validator <PLUGIN>/skills/ai-task/memory_sync.py
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py --range <SHA40>..<SHA40>
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py --range <SHA40>..HEAD
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py --tree HEAD
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py --tree <SHA40>
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py --repo <ROOT> --tree HEAD
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py origin <TMP>/remote.git < 'refs/heads/main <SHA40> refs/heads/main <SHA40>'
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py origin <TMP>/remote.git < 'refs/heads/new <SHA40> refs/heads/new <ZERO>'
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py origin <TMP>/remote.git < 'refs/tags/v1 <SHA40> refs/tags/v1 <ZERO>'
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py origin <TMP>/remote.git < '(delete) <ZERO> refs/heads/gone <SHA40>'
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py origin <TMP>/remote.git < (empty stdin)
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py --range <SHA40>..nosuchrev
+exit 3
+--- stdout
+--- stderr
+memory-pre-push: validator error: nosuchrev is not a commit — run 'state.py memory verify --all'; a human may push with 'git push --no-verify'
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py --tree nosuchrev
+exit 3
+--- stdout
+--- stderr
+memory-pre-push: validator error: nosuchrev is not a commit — run 'state.py memory verify --all'; a human may push with 'git push --no-verify'
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py --range nodots
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py origin <TMP>/remote.git < 'refs/heads/main <SHA40> refs/heads/main <SHA40>'
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+##### the validator <PLUGIN>/hooks/memory-pre-push.py
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py --range <SHA40>..<SHA40>
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py --range <SHA40>..HEAD
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py --tree HEAD
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py --tree <SHA40>
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py --repo <ROOT> --tree HEAD
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py origin <TMP>/remote.git < 'refs/heads/main <SHA40> refs/heads/main <SHA40>'
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py origin <TMP>/remote.git < 'refs/heads/new <SHA40> refs/heads/new <ZERO>'
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py origin <TMP>/remote.git < 'refs/tags/v1 <SHA40> refs/tags/v1 <ZERO>'
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py origin <TMP>/remote.git < '(delete) <ZERO> refs/heads/gone <SHA40>'
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py origin <TMP>/remote.git < (empty stdin)
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py --range <SHA40>..nosuchrev
+exit 3
+--- stdout
+--- stderr
+memory-pre-push: validator error: nosuchrev is not a commit — run 'state.py memory verify --all'; a human may push with 'git push --no-verify'
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py --tree nosuchrev
+exit 3
+--- stdout
+--- stderr
+memory-pre-push: validator error: nosuchrev is not a commit — run 'state.py memory verify --all'; a human may push with 'git push --no-verify'
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py --range nodots
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py origin <TMP>/remote.git < 'refs/heads/main <SHA40> refs/heads/main <SHA40>'
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+##### one tampered package, on a branch of its own
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py --range <SHA40>..<SHA40>
+exit 1
+--- stdout
+--- stderr
+memory-pre-push: <SHA40>..<SHA40>: V1: .ai/memory/<PERIOD>.dev.<B>.jsonl:2: CRLF line ending — fix: restore the line from git ('git checkout -- .ai/memory/<PERIOD>.dev.<B>.jsonl') or 'state.py memory verify'
+checked 1 packages, 2 tasks in <N> ms
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py --range <SHA40>..<SHA40>
+exit 1
+--- stdout
+--- stderr
+memory-pre-push: <SHA40>..<SHA40>: V1: .ai/memory/<PERIOD>.dev.<B>.jsonl:2: CRLF line ending — fix: restore the line from git ('git checkout -- .ai/memory/<PERIOD>.dev.<B>.jsonl') or 'state.py memory verify'
+checked 1 packages, 2 tasks in <N> ms
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py --tree <SHA40>
+exit 1
+--- stdout
+--- stderr
+memory-pre-push: <SHA40>: V1: .ai/memory/<PERIOD>.dev.<B>.jsonl:2: CRLF line ending — fix: restore the line from git ('git checkout -- .ai/memory/<PERIOD>.dev.<B>.jsonl') or 'state.py memory verify'
+checked 1 packages, 2 tasks in <N> ms
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py origin <TMP>/remote.git < 'refs/heads/tamper <SHA40> refs/heads/tamper <ZERO>'
+exit 1
+--- stdout
+--- stderr
+memory-pre-push: refs/heads/tamper: V1: .ai/memory/<PERIOD>.dev.<B>.jsonl:2: CRLF line ending — fix: restore the line from git ('git checkout -- .ai/memory/<PERIOD>.dev.<B>.jsonl') or 'state.py memory verify'
+checked 1 packages, 2 tasks in <N> ms
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py origin <TMP>/remote.git < 'refs/heads/main <SHA40> refs/heads/main <SHA40> ; refs/heads/tamper <SHA40> refs/heads/tamper <ZERO>'
+exit 1
+--- stdout
+--- stderr
+memory-pre-push: refs/heads/tamper: V1: .ai/memory/<PERIOD>.dev.<B>.jsonl:2: CRLF line ending — fix: restore the line from git ('git checkout -- .ai/memory/<PERIOD>.dev.<B>.jsonl') or 'state.py memory verify'
+checked 2 packages, 4 tasks in <N> ms
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py --range <SHA40>..<SHA40>
+exit 1
+--- stdout
+--- stderr
+memory-pre-push: <SHA40>..<SHA40>: V1: .ai/memory/<PERIOD>.dev.<B>.jsonl:2: CRLF line ending — fix: restore the line from git ('git checkout -- .ai/memory/<PERIOD>.dev.<B>.jsonl') or 'state.py memory verify'
+checked 1 packages, 2 tasks in <N> ms
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py --range <SHA40>..<SHA40>
+exit 1
+--- stdout
+--- stderr
+memory-pre-push: <SHA40>..<SHA40>: V1: .ai/memory/<PERIOD>.dev.<B>.jsonl:2: CRLF line ending — fix: restore the line from git ('git checkout -- .ai/memory/<PERIOD>.dev.<B>.jsonl') or 'state.py memory verify'
+checked 1 packages, 2 tasks in <N> ms
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py --tree <SHA40>
+exit 1
+--- stdout
+--- stderr
+memory-pre-push: <SHA40>: V1: .ai/memory/<PERIOD>.dev.<B>.jsonl:2: CRLF line ending — fix: restore the line from git ('git checkout -- .ai/memory/<PERIOD>.dev.<B>.jsonl') or 'state.py memory verify'
+checked 1 packages, 2 tasks in <N> ms
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py origin <TMP>/remote.git < 'refs/heads/tamper <SHA40> refs/heads/tamper <ZERO>'
+exit 1
+--- stdout
+--- stderr
+memory-pre-push: refs/heads/tamper: V1: .ai/memory/<PERIOD>.dev.<B>.jsonl:2: CRLF line ending — fix: restore the line from git ('git checkout -- .ai/memory/<PERIOD>.dev.<B>.jsonl') or 'state.py memory verify'
+checked 1 packages, 2 tasks in <N> ms
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/hooks/memory-pre-push.py origin <TMP>/remote.git < 'refs/heads/main <SHA40> refs/heads/main <SHA40> ; refs/heads/tamper <SHA40> refs/heads/tamper <ZERO>'
+exit 1
+--- stdout
+--- stderr
+memory-pre-push: refs/heads/tamper: V1: .ai/memory/<PERIOD>.dev.<B>.jsonl:2: CRLF line ending — fix: restore the line from git ('git checkout -- .ai/memory/<PERIOD>.dev.<B>.jsonl') or 'state.py memory verify'
+checked 2 packages, 4 tasks in <N> ms
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory verify --range <SHA40>..<SHA40> (agent)
+exit 1
+--- stdout
+V1: .ai/memory/<PERIOD>.dev.<B>.jsonl:2: CRLF line ending — fix: restore the line from git ('git checkout -- .ai/memory/<PERIOD>.dev.<B>.jsonl') or 'state.py memory verify'
+memory verify: 1 finding(s)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ state.py memory verify --range <SHA40>..<SHA40> --json (agent)
+exit 1
+--- stdout
+{"findings": [{"check": "V1", "fix": "restore the line from git ('git checkout -- .ai/memory/<PERIOD>.dev.<B>.jsonl') or 'state.py memory verify'", "line": 2, "path": ".ai/memory/<PERIOD>.dev.<B>.jsonl", "what": "CRLF line ending"}], "ok": false, "stats": {"ms": <N>, "packages": 1, "tasks": 2}}
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ git push origin tamper (the installed hook refuses)
+exit 1
+--- stdout
+--- stderr
+memory-pre-push: refs/heads/tamper: V1: .ai/memory/<PERIOD>.dev.<B>.jsonl:2: CRLF line ending — fix: restore the line from git ('git checkout -- .ai/memory/<PERIOD>.dev.<B>.jsonl') or 'state.py memory verify'
+checked 1 packages, 2 tasks in <N> ms
+error: failed to push some refs to '<TMP>/remote.git'
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ git push origin main (the installed hook lets it through)
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+##### files mode at the tip
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py --range <SHA40>..<SHA40>
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+
+$ python3 -I <PLUGIN>/skills/ai-task/memory_sync.py --tree <SHA40>
+exit 0
+--- stdout
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  8773e5a43d769c44e265a6724863eda66e6d968d1de204670991172d97dee768
+

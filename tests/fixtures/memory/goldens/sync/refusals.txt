@@ -1,0 +1,381 @@
+$ state.py memory status (agent)
+exit 0
+--- stdout
+mode: files (no .ai/policies/memory.json)
+period: quarter · author: golden-user · index: none
+open batch: none (branch main)
+packages: 0 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 0
+pre-push: absent
+cleanup: off
+--- listing (path, sha256 of the normalised text)
+
+$ state.py memory export (agent)
+exit 2
+--- stdout
+--- stderr
+state.py: files mode: nothing is exported ('state.py memory enable' turns packages on)
+--- listing (path, sha256 of the normalised text)
+
+$ state.py memory enable --author dev (agent)
+exit 5
+--- stdout
+--- stderr
+state.py: APPROVAL_REFUSED — 'memory enable' is the human's, from their own terminal:
+  python3 <PLUGIN>/skills/ai-task/state.py --root <ROOT> memory enable --author dev
+Refused because this run has no terminal.
+--- listing (path, sha256 of the normalised text)
+
+$ state.py memory enable --author 'Bad Author!' (human)
+exit 0
+--- stdout
+memory: packages mode on (.ai/policies/memory.json); every teammate's next close exports
+pre-push: installed
+mode: packages
+period: quarter · author: bad-author · index: none
+open batch: none (branch main)
+packages: 0 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 0
+pre-push: current
+cleanup: off
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/config.json  75317cf032e62a10808d42609802a72237a8822dcf3917ae7dfd3fd427f6aade
+
+$ state.py memory enable --author dev (human)
+exit 0
+--- stdout
+memory: packages mode on (.ai/policies/memory.json); every teammate's next close exports
+pre-push: current
+mode: packages
+period: quarter · author: dev · index: none
+open batch: none (branch main)
+packages: 0 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 0
+pre-push: current
+cleanup: off
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+
+$ state.py memory enable --author dev (human)
+exit 0
+--- stdout
+memory: packages mode on (.ai/policies/memory.json); every teammate's next close exports
+pre-push: current
+mode: packages
+period: quarter · author: dev · index: none
+open batch: none (branch main)
+packages: 0 · <N> bytes
+closed, not exported: none
+legacy, not migrated: 0
+pre-push: current
+cleanup: off
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+
+$ state.py memory disable (agent)
+exit 5
+--- stdout
+--- stderr
+state.py: APPROVAL_REFUSED — 'memory disable' is the human's, from their own terminal:
+  python3 <PLUGIN>/skills/ai-task/state.py --root <ROOT> memory disable
+Refused because this run has no terminal.
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory cleanup --all --confirm-delete dev (agent)
+exit 5
+--- stdout
+--- stderr
+state.py: APPROVAL_REFUSED — 'memory cleanup' is the human's, from their own terminal:
+  python3 <PLUGIN>/skills/ai-task/state.py --root <ROOT> memory cleanup --all --confirm-delete dev
+Refused because this run has no terminal.
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory cleanup --all (human)
+exit 2
+--- stdout
+--- stderr
+state.py: 'memory cleanup' deletes or moves files: add --confirm-delete dev
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory cleanup --all --confirm-delete someone (human)
+exit 2
+--- stdout
+--- stderr
+state.py: --confirm-delete names 'someone'; this clone's author is 'dev' (.ai/local/memory/config.json)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory cleanup --confirm-delete dev (human)
+exit 2
+--- stdout
+--- stderr
+state.py: memory cleanup takes IDs or --all
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory cleanup <ID> --confirm-delete dev (human)
+exit 2
+--- stdout
+--- stderr
+state.py: cleanup is off: set "cleanup": true in .ai/policies/memory.json once 'memory verify --all' and '--fresh-clone' are green (§D6)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory restore (agent)
+exit 2
+--- stdout
+--- stderr
+state.py: memory restore takes IDs or --all
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory pack --period <PERIOD> --confirm-delete dev (agent)
+exit 5
+--- stdout
+--- stderr
+state.py: APPROVAL_REFUSED — 'memory pack' is the human's, from their own terminal:
+  python3 <PLUGIN>/skills/ai-task/state.py --root <ROOT> memory pack --period <PERIOD> --confirm-delete dev
+Refused because this run has no terminal.
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory pack --period <PERIOD> --confirm-delete dev (human)
+exit 1
+--- stdout
+--- stderr
+state.py: no package of dev for <PERIOD>
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory pack --period <PERIOD> --confirm-delete dev (human)
+exit 2
+--- stdout
+--- stderr
+state.py: period <PERIOD> has not ended (now <PERIOD>)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory pack --period nonsense --confirm-delete dev (human)
+exit 2
+--- stdout
+--- stderr
+state.py: --period takes YYYY-MM, YYYY-Qn or YYYY
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory redact <RID> --field text --why x (agent)
+exit 5
+--- stdout
+--- stderr
+state.py: APPROVAL_REFUSED — 'memory redact' is the human's, from their own terminal:
+  python3 <PLUGIN>/skills/ai-task/state.py --root <ROOT> memory redact <RID> --field text --why x
+Refused because this run has no terminal.
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory redact <RID> --field text --why x (human)
+exit 1
+--- stdout
+--- stderr
+state.py: no entry <RID> in .ai/memory/
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory redact <RID> --field task --why x (human)
+exit 1
+--- stdout
+--- stderr
+state.py: no entry <RID> in .ai/memory/
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory migrate --move-logs --confirm-delete dev (agent)
+exit 5
+--- stdout
+--- stderr
+state.py: APPROVAL_REFUSED — 'memory migrate --move-logs' is the human's, from their own terminal:
+  python3 <PLUGIN>/skills/ai-task/state.py --root <ROOT> memory migrate --move-logs --confirm-delete dev
+Refused because this run has no terminal.
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory verify --range nodots (agent)
+exit 2
+--- stdout
+--- stderr
+state.py: --range takes OLD..NEW
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory verify --range nosuch..alsonot (agent)
+exit 0
+--- stdout
+memory verify: ok
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory verify <ID> (agent)
+exit 0
+--- stdout
+memory verify: ok
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory export not-an-id (agent)
+exit 1
+--- stdout
+exported: +0 entries — nothing pending
+memory: export of not-an-id failed (not-an-id has no closed instance to export)
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory show <ID> (agent)
+exit 1
+--- stdout
+--- stderr
+state.py: nothing recorded for <ID>
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory show not-an-id (agent)
+exit 1
+--- stdout
+--- stderr
+state.py: nothing recorded for not-an-id
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory risk add --title t --label 'NOT A LABEL' --what w (agent)
+exit 2
+--- stdout
+--- stderr
+state.py: --label takes one of: KNOWN FACT, INFERENCE, UNKNOWN, RISK
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory risk add --title t --label 'KNOWN FACT' --what w --status bogus (agent)
+exit 2
+--- stdout
+--- stderr
+state.py: --status takes one of: open, ticketed, accepted, fixed
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory risk close k-none --status fixed --why x (agent)
+exit 1
+--- stdout
+--- stderr
+state.py: no risk k-none ('state.py memory risks --status all')
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory risk close k-none --status open --why x (agent)
+exit 2
+--- stdout
+--- stderr
+state.py: --status takes fixed, accepted or ticketed
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory disable (human)
+exit 0
+--- stdout
+memory: files mode; packages and local data kept; pre-push: removed
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
+$ state.py memory migrate --report (agent)
+exit 0
+--- stdout
+report: .ai/local/memory/migration-report.md (29 lines) — read it, then 'state.py memory migrate --apply'
+--- listing (path, sha256 of the normalised text)
+.ai/local/memory/batches.json  bad9e4cab2d301b20f086737f92018fa00329cceb68e7070455249924f7467af
+.ai/local/memory/config.json  2cb244313e5267bac0d2eaee68d7b356ffcd64e00b21e37f7c1a013cc4af9e5b
+.ai/local/memory/lock  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+.ai/local/memory/migration-report.md  d54387adeb2111ce742eae532349e01162e4f1a82502eb003b166e6de6d30cab
+.ai/memory/<PERIOD>.dev.<B>.jsonl  050a01b4f2d0840cbfa7d7bed7328bcaab4f05f55745487a584244283ee33201
+
