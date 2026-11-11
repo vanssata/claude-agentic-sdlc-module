@@ -43,12 +43,23 @@ def subcommand(argv):
 
 
 def state_label_ok(argv):
-    """approve | reject | profile set | verify --by | review --by | start --mode … --by."""
+    """approve | reject | profile set | verify --by | review --by | start --mode … --by |
+    memory enable [--author S] [--period month|quarter|year] [--index none|sqlite]: each option at most
+    once, as two words, in any order, and no other memory verb. hooks/guard/dialog.py keeps the same
+    rule; tests/test_dialog_contract.py pins the two equal."""
     rest = subcommand(argv)
     if rest[:1] in (["approve"], ["reject"]) or rest[:2] == ["profile", "set"]:
         return True
     if rest[:1] in (["verify"], ["review"]):
         return "--by" in rest
+    if rest[:2] == ["memory", "enable"]:
+        # The pick is the exact command the human read: no `--opt=value`, no abbreviation argparse would
+        # take, no positional, an option once, a value of its own kind (an author never starts with '-').
+        names, values = rest[2::2], rest[3::2]
+        kinds = {"--author": None, "--period": ("month", "quarter", "year"), "--index": ("none", "sqlite")}
+        return (len(names) == len(values) == len(set(names)) and set(names) <= set(kinds)
+                and all((v[:1] not in ("", "-")) if kinds[n] is None else v in kinds[n]
+                        for n, v in zip(names, values)))
     return rest[:1] == ["start"] and "--mode" in rest and "--by" in rest
 
 
@@ -78,7 +89,8 @@ def validate_label(label):
             and state_label_ok(script[1]):
         return None
     return ("a label starts with git commit, git push <remote> <branch>, state.py approve|reject|"
-            "profile set|verify --by|review --by|start --mode --by, or npx riskrails@<v> … --yes")
+            "profile set|verify --by|review --by|start --mode --by|memory enable [--author S] "
+            "[--period P] [--index none|sqlite], or npx riskrails@<v> … --yes")
 
 
 def human_name(root):

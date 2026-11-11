@@ -1,7 +1,7 @@
 ---
 name: rr-setup
-description: Set up and maintain the .ai/ layer of an existing production codebase. With no flag, scaffold docs/sdlc/, the runtime directory and .ai/, survey the code into .ai/project/ (light or full), write the Verification commands, the weight table's project entries and the constitution — read-only towards application code. --update regenerates a project's files from the installed plugin (a copy that is a shipped version is replaced, an edited one waits for the human, the project's own files are kept); run it right after installing a new riskrails; --audit scores the repository against the twelve plays and writes docs/ai-sdlc-adoption-plan.md. Use on "/rr-setup", "set up this project", "analyse this project for AI work", "update the rules", "обнови правилата", "audit our AI setup", or when /rr-status says the project is behind.
-argument-hint: [--survey light|full] | --update [--apply] | --audit [context]
+description: Set up and maintain the .ai/ layer of an existing production codebase. With no flag, scaffold docs/sdlc/, the runtime directory and .ai/, ask the open options (memory, runtimes, survey depth, verify command) in one dialog, survey the code into .ai/project/ (light or full), write the Verification commands, the weight table's project entries and the constitution — read-only towards application code. --options asks them all again; --update regenerates a project's files from the installed plugin (a copy that is a shipped version is replaced, an edited one waits for the human, the project's own files are kept); run it right after installing a new riskrails; --audit scores the repository against the twelve plays and writes docs/ai-sdlc-adoption-plan.md. Use on "/rr-setup", "set up this project", "analyse this project for AI work", "update the rules", "обнови правилата", "audit our AI setup", or when /rr-status says the project is behind.
+argument-hint: [--survey light|full] | --options | --update [--apply] | --audit [context]
 ---
 
 # /rr-setup $ARGUMENTS
@@ -17,29 +17,74 @@ UPDATE="python3 $AI_HOME/skills/project-update/update.py $PWD"
 SETUP="python3 $AI_HOME/skills/rr-setup/setup.py"
 ```
 
-`--update` and `--audit` go to their sections below; anything else
+`--options`, `--update` and `--audit` go to their sections below; anything else
 is **Setup**. In every mode: no application code changes — not a rename, not a
 formatting fix. Problems you find are written down, never fixed. Never read
 `.env`, secrets, dumps or production logs. Do not commit; suggest the `git add`.
 
 ## Setup
 
-1. **Scaffold.** Both scripts are idempotent, never overwrite, and print what
-   they created; note it. They take `--runtime auto|claude|codex|both` (`auto`
-   follows `CLAUDE.md`/`.claude/` and `AGENTS.md`/`.codex/`); pass `both` when
-   the repository is worked on from both runtimes.
+0. **Options.** Project memory, the runtimes, the survey depth and `verify_command`
+   are asked once, in one dialog, before any work; the picks feed steps 1, 3 and 5.
 
    ```bash
-   "$AI_HOME/hooks/project-scaffold.sh" "$PWD"       # docs/sdlc/, the runtime dir, .gitignore
-   "$AI_HOME/skills/ai-init/scaffold-ai.sh" "$PWD"   # .ai/
+   "$AI_HOME/skills/ai-init/scaffold-ai.sh" "$PWD" --runtime none   # 0a
+   $SETUP options --open    # 0b; --options adds --all, a given --survey adds --skip survey
    ```
 
-   If `.ai/project/overview.md` was **not** created, the project was set up
+   **0a** makes `.ai/` (so `.ai/policies/dialog.json`) and its `.gitignore` lines, with no
+   instruction file and no runtime directory; only this script takes `none`
+   (`project-scaffold.sh` refuses it). If its output does **not** list
+   `.ai/project/overview.md`, the project was set up before.
+
+   **0b** prints one of three first lines:
+   - `OPTIONS_DIALOG D<n> …`, then state.py's `DIALOG_PENDING` line and a JSON: send that
+     JSON exactly as printed with the dialog tool the line names (AskUserQuestion; Codex:
+     request_user_input).
+   - `OPTIONS_FALLBACK <why>`: nothing was opened. Ask the numbered questions after it in
+     chat as printed, the answers being the picks; show its `memory is the human's` line
+     as printed and never run it.
+   - `OPTIONS_NONE`: nothing to ask.
+
+   Exit 6 (no first line, the reason on stderr): `DECISION_LIMIT` or `DECISION_DUPLICATE`
+   means a decision is already open — settle every one first (`$STATE decision show` and
+   send it, or `$STATE decision fallback --id <Dn> --why "<why>"`), then run 0b once more.
+   Any other refusal, or a second one: ask the questions of steps 1, 3 and 5 in prose and,
+   in a git work tree, give the human for their own terminal, with `$AI_HOME` and `$PWD`
+   substituted: `python3 "<home>/skills/ai-task/state.py" --root "<project>" memory enable
+   --period quarter [--index sqlite]`.
+
+   **0c** — the human answers. After a dialog, a memory command they picked is run first,
+   at once, verbatim and alone; it prints `memory: via dialog (consent C<n>, decision D<n>)`
+   and its pick settles its decision. Then `$STATE decision settle --id <Dn>` for each other
+   decision: it prints `D<n> settled: <label> (set)` and `SETUP_PICK <key>=<value>`, after
+   a decline `SETUP_PICK <key>=`. Apply each pick where its step needs it:
+   - `runtime=<v>` → step 1's two scaffolds with `--runtime <v>`;
+   - `verify=<cmd>` → `$SETUP verify --set "<cmd>"` after step 2; `keep` and `edit` → nothing;
+   - `survey=light` or `full` → step 3's depth; `keep` → no new survey;
+   - `memory=off` or `keep` → nothing: a picked command already ran.
+
+   An empty value (`verify=` is "Not now"; any key after a decline) or `other` → the step
+   as it was without the dialog: step 1 passes `auto`, step 3 surveys `light`, step 5 asks
+   in chat.
+1. **Scaffold.** Both scripts are idempotent, never overwrite, and print what
+   they created; note it, 0a's too. They take `--runtime auto|claude|codex|both`
+   (`auto` follows `CLAUDE.md`/`.claude/` and `AGENTS.md`/`.codex/`); pass the
+   `runtime` pick, else `auto` — `both` when the repository is worked on from
+   both runtimes.
+
+   ```bash
+   "$AI_HOME/hooks/project-scaffold.sh" "$PWD" --runtime <pick>      # docs/sdlc/, the runtime dir, .gitignore
+   "$AI_HOME/skills/ai-init/scaffold-ai.sh" "$PWD" --runtime <pick>  # the instruction file; .ai/ is 0a's
+   ```
+
+   If 0a did **not** create `.ai/project/overview.md`, the project was set up
    before: run **--update** below, then ask whether the survey should be
    refreshed; a refresh never overwrites a `.ai/project/` file a human edited
-   without saying so first. If only an instruction file was created (no `.ai/`
-   wanted), fill its Commands / Conventions / Architecture from the manifests —
-   one line per command, five sentences of architecture — and stop.
+   without saying so first. If 0a and this step together created only an
+   instruction file (no `.ai/` wanted), fill its Commands / Conventions /
+   Architecture from the manifests — one line per command, five sentences of
+   architecture — and stop.
 2. **Stack.** `$SETUP survey` first: the project's own toolbox
    (`.claude/{skills,commands,rules,agents,hooks}`, `.codex/*`, `bin/*.sh`,
    Makefile targets) with each item's purpose, the guards a project hook
@@ -51,13 +96,15 @@ formatting fix. Problems you find are written down, never fixed. Never read
    (`phpunit.xml*`, `phpstan.neon*`, `playwright.config.*` …). For Symfony or
    Sylius also: bundles, entities, state machines, Messenger, event
    subscribers, payment, shipping, tax, promotions, ERP or fiscal integrations.
-3. **Survey.** `--survey light` is the default, for a developer who knows the
-   project: ask for a ten-minute brain dump (entry points, modules that matter,
-   integrations, unwritten business rules, areas nobody dares touch), confirm
+   Then write the `verify=<cmd>` pick, if any (0c).
+3. **Survey.** The depth is the `survey` pick or `--survey light|full`. `light`,
+   the default, is for a developer who knows the project: ask for a ten-minute
+   brain dump (entry points, modules that matter, integrations,
+   unwritten business rules, areas nobody dares touch), confirm
    each claim with `grep -n`, then fan out exactly **two** `ai-discovery` agents
    in one message: (1) legacy, risks and code that looks unused; (2) tests,
    CI/CD, data and configuration — how secrets are supplied, never their
-   values. `--survey full`, for a codebase new to you: one `Explore` for the
+   values. `full`, for a codebase new to you: one `Explore` for the
    inventory, then six `ai-discovery` agents in one message — entry points;
    domain modules; integrations and their failure handling; business rules and
    legacy; tests and CI/CD; data and configuration. Hand each the slice of the
@@ -68,14 +115,15 @@ formatting fix. Problems you find are written down, never fixed. Never read
    write `Documented behaviour / Observed behaviour / Evidence / Risk` and do
    not resolve it.
 5. **Policies.** Fill the project sections of `.ai/policies/coding.md` and
-   `testing.md` only if step 1 created them. The **Verification** block of
+   `testing.md` only if 0a created them. The **Verification** block of
    `testing.md` is the feedback loop every task runs:
    - `verify_command` — the fast suite to the end, the e2e group **excluded**;
    - `step_test_command` — the same runner on given paths (`{files}`);
    - `e2e_command` — the end-to-end suite, or `none` when there is none;
    - two or three lines of what healthy output looks like.
 
-   `verify_command` comes from the human: show the one `$SETUP survey`
+   `verify_command` comes from the human: the `verify=<cmd>` pick is their yes,
+   written at the end of step 2; without one, show the one `$SETUP survey`
    proposed, ask, and only after a yes in chat write it with
    `$SETUP verify --set "<command>"` (exit 3: one is already set — the human
    edits it). `$SETUP check` then exits 0; `VERIFY_COMMAND_MISSING` (exit 1)
@@ -109,7 +157,7 @@ formatting fix. Problems you find are written down, never fixed. Never read
    casually, the weight-table entries you chose, recommended next improvements —
    recommendations only, none implemented. When the survey found a toolbox,
    name each toolbox item the project keeps using; they stay where they are.
-9. **Report.** Files created (a tree from the scaffold output), surprising
+9. **Report.** Files created (a tree from the scaffold output, 0a's too), surprising
    findings, the modes and what puts a change in each, the safety restrictions
    in force (hooks versus policy), the tooling the workflows reuse, assumptions,
    unresolved questions and who can answer them, the survey's superpowers
@@ -117,6 +165,14 @@ formatting fix. Problems you find are written down, never fixed. Never read
    write it), and the suggested first task:
    `/rr-plan <it>`. Claim nothing was validated that was not run. Suggest
    `git add .ai .gitignore docs/sdlc` plus the instruction files created.
+
+## --options
+
+Reopens every option on a set-up project: 0a, then `$SETUP options --open --all`, then
+send, settle and apply as in step 0 — a `survey` pick runs steps 3–4 at that depth, as a
+refresh (step 1), and a `verify` command is written at once. Say what changed and stop;
+no other step reruns. A project 0a just scaffolded (it listed
+`.ai/project/overview.md`) continues as the plain **Setup**.
 
 ## --update
 

@@ -1,6 +1,6 @@
 # RiskRails
 
-[![Version](https://img.shields.io/badge/version-4.0.1-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v4.0.1)
+[![Version](https://img.shields.io/badge/version-4.1.0-d2f878?labelColor=101210)](https://github.com/vanssata/claude-agentic-sdlc-module/releases/tag/v4.1.0)
 [![Runtimes](https://img.shields.io/badge/runtimes-Claude%20Code%20%7C%20Codex-d2f878?labelColor=101210)](docs/routing.md)
 [![Known risks](https://img.shields.io/badge/known%20risks-documented-d2f878?labelColor=101210)](docs/known-risks.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-d2f878?labelColor=101210)](LICENSE)
@@ -18,7 +18,7 @@ approval. Risky actions are stopped by a hook, not by a polite request in a
 prompt.
 
 ```bash
-npx riskrails@4.0.1   # detects Claude Code, Codex or both (Node 18+, Python 3.11+)
+npx riskrails@4.1.0   # detects Claude Code, Codex or both (Node 18+, Python 3.11+)
 ```
 
 Then, in any project: `/rr-setup` once, and `/rr-build <what you want>` for
@@ -50,7 +50,7 @@ Tuned for **one developer who knows the codebase**, on a Claude Pro, Max or
 Team plan, or a ChatGPT Plus or Pro plan, following the
 [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook).
 
-**Version 4.0.1.** The guards have limits: read [Known risks](docs/known-risks.md)
+**Version 4.1.0.** The guards have limits: read [Known risks](docs/known-risks.md)
 before relying on them. What is decided but not built is in [ROADMAP.md](ROADMAP.md).
 
 ## Upgrade to 4.0
@@ -65,7 +65,7 @@ the plugin. Step by step, in this order:
    riskrails goes through the version that still converts it: install it
    (`npx riskrails@3.1.0`), run `/rr-setup --update` with it, then install 4.0.
 2. **Commit every project's `.ai/`** first; `git restore` is the rollback.
-3. **Update the home** on every machine, for every runtime: `npx riskrails@4.0.1`
+3. **Update the home** on every machine, for every runtime: `npx riskrails@4.1.0`
    (the plugin route and the npm route are separate installs: reinstall both
    if you use both). Restart the runtime. In Codex, open `/hooks` and trust the
    changed entries.
@@ -84,15 +84,23 @@ are removed; use the `/rr-*` commands. Details are in
 ## Install
 
 ```bash
-npx riskrails@4.0.1                       # detects Claude Code, Codex, or both; proposes the detected plan
-npx riskrails@4.0.1 --target codex        # auto | claude | codex | both
-npx riskrails@4.0.1 --plan max --fable no # pro | team-pro | team-max | max | max20 | balanced-max
-npx riskrails@4.0.1 --codex-plan plus     # plus | pro | balanced-max
-npx riskrails@4.0.1 --context economy     # the plan's compaction window; the context guard also blocks
-npx riskrails@4.0.1 --statusline own      # keep your own statusline command (from 3.2.1; default: the plugin's two-line statusline)
-npx riskrails@4.0.1 --dry-run             # print what would be written, write nothing
+npx riskrails@4.1.0                       # detects Claude Code, Codex, or both; proposes the detected plan
+npx riskrails@4.1.0 --target codex        # auto | claude | codex | both
+npx riskrails@4.1.0 --plan max --fable no # pro | team-pro | team-max | max | max20 | balanced-max
+npx riskrails@4.1.0 --codex-plan plus     # plus | pro | balanced-max
+npx riskrails@4.1.0 --context economy     # the plan's compaction window; the context guard also blocks
+npx riskrails@4.1.0 --statusline own      # keep your own statusline command (from 3.2.1; default: the plugin's two-line statusline)
+npx riskrails@4.1.0 --dry-run             # print what would be written, write nothing
 npx -y riskrails@latest --yes             # update in place, keeping the recorded plan
 ```
+
+On a terminal each question is a menu — runtime, plan, Fable, context,
+statusline, Codex plan — with the proposal highlighted (the detected or
+recorded runtime, plan, statusline and Codex plan; Fable `yes`, context `default`):
+↑/↓ (or k/j), Home/End or 1–9 to move, Enter to confirm, Esc, q or Ctrl-C to
+stop with nothing written. Enter through every menu installs what detection
+proposes. A flag skips its menu; `--yes` or no terminal asks nothing, and
+`RISKRAILS_MENU=off` (or `TERM=dumb`) brings back the typed plan question.
 
 Pin the version: the hooks it installs see every command an agent runs. It
 installs the managed block, the plan's settings and limits, the five agents
@@ -165,7 +173,8 @@ until it passes. After three failed review passes the next verdict is yours.
 ### The record
 
 A closed task's who, what, how and why travel as a compact record: `state.py
-memory enable` (yours, in a terminal) switches a project to packages mode, in
+memory enable` (yours, in a terminal, or as your pick in the `/rr-setup`
+dialog) switches a project to packages mode, in
 which `close` appends the task's entries to a per-developer batch under
 `.ai/memory/` and a pre-push hook validates them; `state.py recall --files …`
 gives an agent what the record holds about the files it is about to touch,
@@ -234,7 +243,7 @@ python3 -I -m unittest discover -s tests -p 'test_*.py'      # CI's serial oracl
 AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
 ```
 
-Fifty-eight suites, 1133 tests, about 75 seconds in parallel. The guards against JSON fixtures for both runtimes and a
+Sixty suites, 1217 tests, about 75 seconds in parallel. The guards against JSON fixtures for both runtimes and a
 golden of 1 341 recorded decisions, byte for byte, with timed cases that hold
 the hot path under its budget; the state machine, the weight, the batch loop,
 the dialog contract and the documents rule; the compact record and its

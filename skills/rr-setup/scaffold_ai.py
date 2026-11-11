@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Idempotent .ai/ scaffold for RiskRails.
-  scaffold_ai.py [project-dir] [--runtime auto|claude|codex|both]   (default: $PWD, auto)
+  scaffold_ai.py [project-dir] [--runtime auto|claude|codex|both|none]   (default: $PWD, auto)
 skills/ai-init/scaffold-ai.sh execs it; the templates stay in skills/ai-init/.
 
 Never overwrites an existing file. Run it as often as you like: it creates what
@@ -14,6 +14,10 @@ that points at it differs — CLAUDE.md for Claude Code, AGENTS.md for Codex.
 A port of the shell script it replaced, kept to its bytes: the same files and
 modes, the same listing in the same order, the same messages and exit codes
 (tests/test_scaffold_differential.py runs the frozen shell beside it).
+
+One value is new, and the shell refuses it: `--runtime none` (or AI_RUNTIMES=none) scaffolds .ai/ and its
+.gitignore lines and no instruction file, so /rr-setup can open .ai/ before the project's runtimes are chosen.
+Like `both` and `auto` it is a whole value: inside a list it is an unknown runtime, as in the shell.
 """
 import errno
 import json
@@ -143,7 +147,9 @@ def logical_cd(root):
 
 
 def runtimes(runtime, root):
-    """The runtimes in scope: what the project declares (auto), or the list given."""
+    """The runtimes in scope: what the project declares (auto), the list given, or none at all."""
+    if runtime == "none":
+        return set()
     if runtime == "both":
         runtime = "claude,codex"
     if runtime == "auto":

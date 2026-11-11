@@ -216,12 +216,16 @@ def validate_label(label):
         return None
     if state_label_ok(tokens):
         return None
-    return "a label starts with git commit, git push, a human-only state.py command or npx riskrails@<v>"
+    return ("a label starts with git commit, git push, a human-only state.py command (approve, reject, "
+            "profile set, verify/review/start --by, memory enable) or npx riskrails@<v>")
 
 
 def state_label_ok(tokens):
     """python3 [-I|-S…] <…/state.py> approve|reject|profile set|verify --by|
-    review --by|start --mode … --by."""
+    review --by|start --mode … --by|memory enable [--author S] [--period month|quarter|year]
+    [--index none|sqlite]: each option at most once, as two words, in any order, and no other
+    memory verb. rr_state/labels.py keeps the same rule; tests/test_dialog_contract.py pins the
+    two equal."""
     if not tokens or not INTERPRETER_RE.match(tokens[0]):
         return False
     i = 1
@@ -236,6 +240,14 @@ def state_label_ok(tokens):
         return True
     if rest[:1] in (["verify"], ["review"]):
         return "--by" in rest
+    if rest[:2] == ["memory", "enable"]:
+        # The pick is the exact command the human read: no `--opt=value`, no abbreviation argparse would
+        # take, no positional, an option once, a value of its own kind (an author never starts with '-').
+        names, values = rest[2::2], rest[3::2]
+        kinds = {"--author": None, "--period": ("month", "quarter", "year"), "--index": ("none", "sqlite")}
+        return (len(names) == len(values) == len(set(names)) and set(names) <= set(kinds)
+                and all((v[:1] not in ("", "-")) if kinds[n] is None else v in kinds[n]
+                        for n, v in zip(names, values)))
     return rest[:1] == ["start"] and "--mode" in rest and "--by" in rest
 
 

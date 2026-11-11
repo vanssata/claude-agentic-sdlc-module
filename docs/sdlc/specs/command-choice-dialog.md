@@ -68,7 +68,10 @@ O4 plan drift first consumer · O5 Codex parity or off. Steps 7.0–7f are the d
 - **R36.3 Only `state.py` prepares a decision.** A dialog produces consent only for an open decision in
   `.ai/state/decision.json`, written solely by `state.py`. Openers: `close` (approval), `ask` (Q/G questions), the
   SUITE_BUDGET and REVIEW_BUDGET refusals and a lowering `start --mode` (the "human sets it" decisions),
-  `profile detect --open` (plan drift), and `decision open --kind commit` — the only opener the model may call.
+  `profile detect --open` (plan drift), and `decision open --kind commit` — an opener the model may call. Added in
+  4.1.0: `decision open --kind setup`, the only other one the model may call. It takes choices that run nothing and,
+  as a command, only this `state.py`'s `memory enable … --root <this project>`; it opens all its decisions or none
+  (`docs/sdlc/specs/interactive-setup-options.md`).
   Question text ≤ 1200 characters and self-contained (task, goal, mode/W, tree sha, verify, review verdict and
   open finding labels, rollback; or installed vs live plan), because the modal hides earlier output. Header
   ≤ 12 characters; 2–4 options; the safe option first ("Not now …" / "Keep …"). Command options: the label is the
@@ -78,7 +81,10 @@ O4 plan drift first consumer · O5 Codex parity or off. Steps 7.0–7f are the d
 - **R36.4 What counts as a command label.** One simple command: no `;` `&` `|`, newline, backtick, `$(`, `<`, `>`.
   ≤ 400 printable characters. Must start with an allowed form: `git commit`, `git push <remote> <branch>`,
   `…state.py … approve|reject|profile set|verify --by|review --by|start --mode --by`, or
-  `npx riskrails@<v> … --yes`. The same check runs at `decision open`, in the PreToolUse check on the dialog tool
+  `npx riskrails@<v> … --yes`. Added in 4.1.0:
+  `…state.py … memory enable [--author S] [--period P] [--index none|sqlite]`, offered only by
+  `decision open --kind setup` (`docs/sdlc/specs/interactive-setup-options.md`).
+  The same check runs at `decision open`, in the PreToolUse check on the dialog tool
   and in the recorder. If any label contains `", "` (a joined multi-select answer would be ambiguous) the decision
   is shown as one single-select question per command. Test: `::test_label_validator`,
   `::test_ambiguous_multiselect_splits`. O2. 7c.
@@ -252,8 +258,11 @@ O4 plan drift first consumer · O5 Codex parity or off. Steps 7.0–7f are the d
 
 **Why the model cannot forge consent.** The answer is not the model's: it writes only `tool_input`; the harness
 builds `tool_response` from the human's selection and the recorder reads only that. The model cannot choose what
-is offered: question and options must equal what `state.py` prepared (R36.5), and its only opener accepts plain
-`git commit`/`git push`; a pick never lifts another git rule. The model cannot write a record: both files are under
+is offered: question and options must equal what `state.py` prepared (R36.5), and its openers accept plain
+`git commit`/`git push` and, added in 4.1.0, choices that run nothing plus, as the only command, this `state.py`'s
+`memory enable … --root <this project>`, all decisions opened or none
+(`docs/sdlc/specs/interactive-setup-options.md`); a pick never lifts another git rule. The model cannot write a
+record: both files are under
 `.ai/state/` (protected), no command line writes a pick, invoking the hook script is denied, labels cannot chain
 commands, a pick is one-shot, short-lived, session- and order-bound, and `state.py` checks argv against the label a
 second time. **What remains:** a constructed command (`sh -c` writing the ledger, a hook path behind a variable)
@@ -295,7 +304,7 @@ Optional: `"background_sessions": true` (only the boolean counts; default off) k
 background job (`CLAUDE_CODE_SESSION_ATTENDED=0`, entrypoint not `sdk-*`), R36.1.
 **`.ai/state/decision.json`** (only `state.py` writes it; deleted when no decision is open):
 ```json
-{ "version": 1, "open": [ { "id": "D7", "kind": "approval|commit|question|human_set|plan_drift",
+{ "version": 1, "open": [ { "id": "D7", "kind": "approval|commit|question|human_set|plan_drift|setup",
   "task": "T-2026-10-28-002", "runtime": "claude", "tree": "3f2a1c9…", "opened_at": "…Z", "opened_by": "close",
   "header": "Approve", "multi_select": false, "question": "<≤1200 chars, facts + the ask>",
   "options": [ {"n":1,"kind":"choice","effect":"defer","label":"Not now — leave the gate open"},
@@ -309,7 +318,7 @@ background job (`CLAUDE_CODE_SESSION_ATTENDED=0`, entrypoint not `sdk-*`), R36.1
 {"v":1,"type":"use","id":"C12","by":"git-guard|gate|state.py approve","at":"…"}
 {"v":1,"type":"void","ids":["C13","C14"],"why":"mismatch","command_sha":"sha256:…","at":"…"}
 {"v":1,"type":"decline","decision":"D7","why":"empty|other_text|ambiguous","at":"…"}
-{"v":1,"type":"settle","decision":"D7","pick":"C12|null","effect":"approved|defer|ack|answered|declined|fallback","at":"…"}
+{"v":1,"type":"settle","decision":"D7","pick":"C12|null","effect":"approved|defer|ack|answered|declined|fallback|set|withdrawn","at":"…"}
 ```
 **AskUserQuestion input** (the output of `decision show --json`; options in file order):
 `{"questions":[{"question":"…","header":"Approve","multiSelect":false,"options":[{"label":"Not now — leave the gate open","description":"nothing runs"},{"label":"<cmd>","description":"the session runs exactly this, once"},…]}]}`
@@ -336,7 +345,8 @@ For Codex the same internal shape goes through the adapter into `request_user_in
 **`state.py` commands** (shared exit codes unchanged; the first output line carries the token):
 ```
 decision show [--id D] [--json]              model; dialog JSON of the open decisions (≤4)        0 | 1 none open
-decision open --kind commit --command C…     model (commit only); prints the JSON                 0 | 6 CONSENT_LABEL_INVALID
+decision open --kind commit --command C…     model (commit); prints the JSON                      0 | 6 CONSENT_LABEL_INVALID
+decision open --kind setup --spec FILE|-     model (added in 4.1.0, see below); prints the JSON   0 | 1 dialog off | 2 bad spec | 6 CONSENT_LABEL_INVALID, DECISION_LIMIT, DECISION_DUPLICATE
 decision settle --id D [--pick N]            model applies a recorded pick/decline; --pick = terminal/unattended only   0 | 5
 decision fallback --id D --why "…"           model; off route: prints the terminal commands, removes D   0
 consent [--json]                             read-only; live picks and the ledger tail             0
@@ -346,6 +356,9 @@ profile detect [--runtime R] [--json] [--open]   0 always
 profile set <plan> [--runtime R]             human route (terminal|unattended|dialog)              0 | 5 | 6 PROFILE_NEEDS_INSTALLER
 profile ack [--runtime R]                    human route (terminal|unattended); keeps a drift      0 | 1 | 5
 ```
+`decision open --kind setup` (added in 4.1.0, `docs/sdlc/specs/interactive-setup-options.md`) accepts choices that
+run nothing and, as a command, only this `state.py`'s `memory enable … --root <this project>`; all its decisions are
+opened or none.
 `profile detect --json`:
 `{"runtime":"claude","status":"drift","installed":{"plan":"max","profile":"max","plugin_version":"3.1.0"},"live":{"plan":"max20","from":"organizationRateLimitTier default_claude_max_20x","fingerprint":"sha256:9c…"},"render":"profile|installer","command":"python3 /home/vanssa/.claude/skills/ai-task/state.py profile set max20 --runtime claude","ack":"python3 /home/vanssa/.claude/skills/ai-task/state.py profile ack --runtime claude|null","decision":"D9|null"}`
 Plain text: `plan: installed max · account max20 (organizationRateLimitTier default_claude_max_20x) → drift` /

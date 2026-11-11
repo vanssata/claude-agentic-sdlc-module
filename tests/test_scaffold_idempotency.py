@@ -7,7 +7,8 @@ project whose .ai/ has been edited by hand.
 The twin of test-scaffold-idempotency.sh (R13): the same cases, through the
 same shims — skills/ai-init/scaffold-ai.sh and hooks/project-scaffold.sh —
 which now exec the Python ports. A subTest label carries the shell case's name
-as the shell suite wrote it, `$f` and all.
+as the shell suite wrote it, `$f` and all. test_runtime_none (R18) is new: the
+shell suite never had it, the shell script refuses the value.
 """
 import hashlib
 import os
@@ -207,6 +208,55 @@ class ScaffoldIdempotencyTest(unittest.TestCase):
         rc, out = run(SCAFFOLD, os.path.join(self.tmp, "project7"), "--runtime", "everything")
         with self.subTest("--runtime everything is rejected"):
             self.assertNotEqual(0, rc, out)
+
+    def test_runtime_none(self):
+        """R18: `--runtime none` scaffolds .ai/ and .gitignore and nothing a runtime adds"""
+        root = self.project("project")
+        rc, out = run(SCAFFOLD, root, "--runtime", "none")
+        self.assertEqual(0, rc, out)
+        self.assertIn("created in", out, "the first run creates the tree")
+        self.assertEqual([".ai", ".gitignore"], sorted(os.listdir(root)),
+                         "no instruction file and no runtime directory: .ai/ and .gitignore only")
+        self.assertTrue(os.path.isfile(os.path.join(root, ".ai", "policies", "dialog.json")),
+                        "the dialog's switch is scaffolded, as by every scaffold")
+        self.assertIn(".ai/state/*.json", read(os.path.join(root, ".gitignore")), ".gitignore excludes the state file")
+        bare = tree_hash(root)
+        rc, out = run(SCAFFOLD, root, "--runtime", "none")
+        self.assertEqual(0, rc, out)
+        self.assertIn("nothing to do", out, "the second run reports nothing to do")
+        self.assertEqual(bare, tree_hash(root), "a second run changes no file")
+
+        # A later run adds the runtime's files exactly as a first run with it would have.
+        for later in ("claude", "codex", "both", "auto"):
+            with self.subTest("then --runtime %s" % later, later=later):
+                after = os.path.join(self.tmp, "after-" + later, "project")   # the name is rendered into the file
+                direct = os.path.join(self.tmp, "direct-" + later, "project")
+                os.makedirs(after)
+                os.makedirs(direct)
+                run(SCAFFOLD, after, "--runtime", "none")
+                before = tree_hash(after)
+                run(SCAFFOLD, after, "--runtime", later)
+                run(SCAFFOLD, direct, "--runtime", later)
+                self.assertEqual(tree_hash(direct), tree_hash(after), "the same tree as scaffolding with it at once")
+                self.assertLess(len(before), len(tree_hash(after)), "the later run adds a file")
+                self.assertLessEqual(set(before), set(tree_hash(after)), "and changes none of the files the first run made")
+
+        # `none` adds nothing, not even the managed block to an instruction file that exists.
+        mine = self.project("mine")
+        write(os.path.join(mine, "CLAUDE.md"), "# mine\n")
+        run(SCAFFOLD, mine, "--runtime", "none")
+        self.assertEqual("# mine\n", read(os.path.join(mine, "CLAUDE.md")), "an existing instruction file is left alone")
+        self.assertEqual([".ai", ".gitignore", "CLAUDE.md"], sorted(os.listdir(mine)))
+
+        # A whole value, like `both` and `auto`: inside a list it is an unknown runtime.
+        refused = self.project("refused")
+        for value in ("none,claude", "claude,none", "none,none", "none,"):
+            with self.subTest("--runtime %s is refused" % value, value=value):
+                rc, out = run(SCAFFOLD, refused, "--runtime", value)
+                self.assertEqual(2, rc, out)
+                self.assertIn("comma list", out, "refused as an unknown runtime is")
+                self.assertIn("(got 'none')", out, "by name")
+                self.assertEqual([], os.listdir(refused), "before anything is scaffolded")
 
     def test_project_scaffold(self):
         """project-scaffold.sh covers the same ground"""

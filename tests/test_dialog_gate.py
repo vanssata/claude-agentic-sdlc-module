@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
@@ -28,8 +29,8 @@ sys.path.insert(0, os.path.join(ROOT, "tests"))
 sys.path.insert(0, os.path.join(ROOT, "hooks"))
 from guard import dialog  # noqa: E402  pylint: disable=wrong-import-position
 import state  # noqa: E402,F401  pylint: disable=wrong-import-position,unused-import  # sets rr_state.fs.ENTRY
-from rr_state import dialog as rr_dialog, labels as rr_labels  # noqa: E402  pylint: disable=wrong-import-position
-from test_ai_task_state import CLEAN, STATE, DialogProject  # noqa: E402  pylint: disable=wrong-import-position
+from rr_state import dialog as rr_dialog, dialog_cmd as rr_dialog_cmd, labels as rr_labels  # noqa: E402  pylint: disable=wrong-import-position
+from test_ai_task_state import CLEAN, DIALOG_SESSION, STATE, DialogProject  # noqa: E402  pylint: disable=wrong-import-position
 from guard_harness import decision as decision_of, hook_output  # noqa: E402  pylint: disable=wrong-import-position
 
 PUSH = "git push origin feat/x"
@@ -132,12 +133,58 @@ class TestPayload(unittest.TestCase):
                # review L2: any interpreter path, any state.py, a force push or a refspec
                "/tmp/x/python3 %s --root /p approve --by me" % here, "python3 /tmp/y/state.py approve --by me",
                "git push origin +feat", "git push origin HEAD:main", "git push origin feat:main"]
+        # R13: `memory enable` with --author, --period, --index each at most once, two words each, in any
+        # order — and no other memory verb
+        memory = "python3 %s --root /p memory" % here
+        good += [memory + " enable" + tail for tail in (
+            "", " --author ivan", " --author 'Ivan Kakurov'", " --period month", " --period quarter", " --period year",
+            " --index none", " --index sqlite", " --author ivan --period quarter --index sqlite",
+            " --index sqlite --period year --author ivan")]
+        good.append("python3 -I %s --runtime claude --root /p memory enable --period year" % here)
+        bad += [memory + tail for tail in (
+            # every other verb, and what only looks like the verb
+            "", " disable", " cleanup", " pack", " redact", " migrate --apply", " status", " export", " show T-1",
+            " verify", " search x", " risk add", " risks", " enabled", " Enable", " --author ivan enable",
+            # a missing value, the `=` form, a repeated option, an unknown one (an argparse abbreviation too)
+            " enable --author", " enable --period", " enable --index", " enable --author ivan --period",
+            " enable --author=ivan", " enable --period=quarter", " enable --index=sqlite",
+            " enable --author ivan --author bob", " enable --period month --period year",
+            " enable --period quarter --period quarter", " enable --index none --index sqlite",
+            " enable --force", " enable --apply", " enable --confirm-delete ivan", " enable --help", " enable -h",
+            " enable --json", " enable --auth ivan", " enable --per quarter", " enable --ind sqlite",
+            " enable --root /q", " enable --runtime claude", " enable --by me",
+            # a positional extra
+            " enable now", " enable --author ivan now", " enable now --author ivan", " enable -- --author ivan",
+            " enable --author ivan --period quarter --index sqlite extra",
+            # a value of the wrong kind
+            " enable --period week", " enable --period Quarter", " enable --period ''", " enable --period quarter,year",
+            " enable --index fts", " enable --index SQLITE", " enable --index ''", " enable --index sqlite3",
+            " enable --author -ivan", " enable --author -1", " enable --author ''", " enable --author --index",
+            " enable --author --period quarter",
+            # the one-simple-command rule still holds
+            " enable --author ivan; ls", " enable --author $(id)", " enable --author `id`",
+            " enable --author ivan && git push origin main", " enable --author ivan | tee x",
+            " enable --author ivan > f")]
+        bad += ["python3 /tmp/y/state.py --root /p memory enable", "python3 /tmp/other.py memory enable"]
         for label in good:
             with self.subTest(good=label):
                 self.assertIsNone(rr_labels.validate_label(label))
         for label in bad:
             with self.subTest(bad=label):
                 self.assertIsNotNone(rr_labels.validate_label(label))
+        self.assertIn("memory enable", rr_labels.validate_label("git status"))
+
+    def test_commit_opener_stays_git_only(self):
+        """R13 widens the label rule, not the opener the model may call: `decision open --kind commit` still
+        offers git commit and git push only, so no model-opened decision carries `memory enable`."""
+        for verb in ("memory enable --author ivan --period quarter", "approve --by me"):
+            label = "python3 %s --root %s %s" % (os.path.abspath(STATE), self.p.root, verb)
+            with self.subTest(label=label):
+                self.assertIsNone(rr_labels.validate_label(label))
+                done = self.p.run("decision", "open", "--kind", "commit", "--command", label)
+                self.assertEqual(done.returncode, 6, done.stderr)
+                self.assertIn("a commit decision offers git commit and git push only", done.stderr)
+        self.assertEqual(self.p.decisions(), [])
 
     def test_ambiguous_multiselect_splits(self):
         self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m 'one, two' -- a.py",
@@ -1038,6 +1085,380 @@ class TestDecisionGate(HookCase):  # pylint: disable=too-many-public-methods  # 
         self.assertEqual(hook_output(run_gate(self.s, stop)[1]), {})
         self.open(COMMIT, session=stop["session_id"])
         self.assertEqual(hook_output(run_gate(self.s, stop)[1]).get("decision"), "block")
+
+
+GONE = object()                           # a spec change that removes the field instead of setting it
+# state.py whose third open_decision is refused, as it is when another process wrote decision.json in between
+RACE = """\
+import sys
+sys.path.insert(0, %r)
+import state
+from rr_state import dialog
+real, calls = dialog.open_decision, []
+
+
+def racing(*args, **kwargs):
+    calls.append(args[4])
+    if len(calls) == 3:
+        return None, "DECISION_DUPLICATE - D9 is open with this very question"
+    return real(*args, **kwargs)
+
+
+dialog.open_decision = racing
+state.main()
+"""
+
+
+def edited(spec, path, value):
+    """A copy of `spec` with `value` at `path` (keys and indices); GONE removes the field."""
+    spec = json.loads(json.dumps(spec))
+    holder = spec
+    for step in path[:-1]:
+        holder = holder[step]
+    if value is GONE:
+        del holder[path[-1]]
+    else:
+        holder[path[-1]] = value
+    return spec
+
+
+class TestSetupOpener(unittest.TestCase):
+    """R11, R12: `state.py decision open --kind setup --spec`, the /rr-setup questions. Every check runs before the
+    first write and the decisions open in the spec's order or not at all; a settled choice prints SETUP_PICK."""
+
+    def setUp(self):
+        self.p = DialogProject()
+
+    def tearDown(self):
+        self.p.close()
+
+    @staticmethod
+    def choice(label, value, description=None):
+        return dict({"kind": "choice", "label": label, "value": value},
+                    **({"description": description} if description else {}))
+
+    @staticmethod
+    def command(project, *options):
+        """`memory enable [options]` for this project, as state.py writes the label."""
+        return {"kind": "command", "label": rr_labels.state_label(project.root, ["memory", "enable"] + list(options))}
+
+    def spec(self, project=None):
+        """The four questions /rr-setup opens (spec §Interfaces): memory first, the only commands in it."""
+        project = project or self.p
+        packages = ("--author", "vanssa", "--period", "quarter")
+        return {"schema": 1, "decisions": [
+            {"key": "memory", "header": "Memory", "question": "Project memory for p: off keeps closed tasks only in "
+                                                              ".ai/reports/. Turn it on?",
+             "options": [self.choice("Off — keep files mode", "off", "closed tasks stay in .ai/reports/"),
+                         dict(self.command(project, *packages), description="packages; installs .git/hooks/pre-push"),
+                         self.command(project, *packages, "--index", "sqlite")]},
+            {"key": "runtime", "header": "Runtime", "question": "Which agent runtimes work on p?",
+             "options": [self.choice("Auto — what the repository declares", "auto"),
+                         self.choice("Claude Code only", "claude"), self.choice("Codex only", "codex"),
+                         self.choice("Claude Code and Codex", "both")]},
+            {"key": "survey", "header": "Survey", "question": "How deep should the first survey of p go?",
+             "options": [self.choice("Light — a brain dump and 2 discovery agents", "light"),
+                         self.choice("Full — inventory and 6 discovery agents", "full")]},
+            {"key": "verify", "header": "Verify", "question": "verify_command — the fast suite. Proposed: `make test`.",
+             "options": [self.choice("Not now — ask me in chat", ""), self.choice("Use `make test`", "make test"),
+                         self.choice("Another — I type it in chat", "other")]}]}
+
+    def open(self, spec, stdin=None, **kwargs):
+        return self.p.run("decision", "open", "--kind", "setup", "--spec", "-",
+                          stdin=json.dumps(spec) if stdin is None else stdin, **kwargs)
+
+    def kept(self):
+        """decision.json byte for byte, and the ledger: what a refused open leaves as it found them."""
+        path = os.path.join(self.p.root, ".ai", "state", "decision.json")
+        raw = None
+        if os.path.exists(path):
+            with open(path, "rb") as fh:
+                raw = fh.read()
+        return raw, self.p.ledger()
+
+    def refused(self, spec, code, text, stdin=None, **kwargs):
+        before = self.kept()
+        done = self.open(spec, stdin, **kwargs)
+        self.assertEqual((done.returncode, done.stdout), (code, ""), done.stdout + done.stderr)
+        self.assertIn(text, done.stderr)
+        self.assertEqual(self.kept(), before, "a refused open writes nothing")
+        return done
+
+    def answered(self, project, done, answers, call="toolu_setup"):
+        """The human's answers to the dialog `done` printed, recorded by the PostToolUse hook itself: `answers` maps
+        a question's text to the label picked, or to free text, which the recorder reads as a decline."""
+        questions = json.loads(done.stdout.splitlines()[1])["questions"]
+        payload = dict(json.loads(json.dumps(spike("claude/ask-single"))), session_id=DIALOG_SESSION, tool_use_id=call)
+        for holder in ("tool_input", "tool_response"):
+            payload[holder] = {"questions": questions, "answers": answers}
+        hooked = types.SimpleNamespace(root=project.root, vars={
+            "CLAUDE_CONFIG_DIR": project.home, "CLAUDE_CODE_SESSION_ID": DIALOG_SESSION, "AI_UNATTENDED": "",
+            "CLAUDE_CODE_SESSION_ATTENDED": "1"})
+        self.assertEqual(run_gate(hooked, payload), (0, ""))
+        return questions
+
+    def test_setup_spec_opens_atomically(self):
+        spec = self.spec()
+        # a third decision that cannot open: the four open none
+        self.refused(edited(spec, ("decisions", 2, "options", 0), self.command(self.p, "--author", "vanssa")),
+                     6, "CONSENT_LABEL_INVALID")
+        self.assertFalse(os.path.exists(os.path.join(self.p.root, ".ai", "state", "decision.json")))
+        # one question text twice in a spec (the text as open_decision stores it: stripped)
+        self.refused(edited(spec, ("decisions", 1, "question"), "  %s\n" % spec["decisions"][0]["question"]),
+                     6, "DECISION_DUPLICATE")
+        # the dialog off: exit 1 with its message, nothing opened
+        self.refused(spec, 1, "the dialog is off here", env={"CLAUDE_CODE_SESSION_ID": ""})
+        # one decision already open: four more do not fit, and a question already asked is not asked again
+        self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m one")
+        self.refused(spec, 6, "DECISION_LIMIT")
+        [commit] = self.p.decisions()
+        self.refused({"schema": 1, "decisions": [spec["decisions"][1], dict(spec["decisions"][2], question=commit["question"])]},
+                     6, "DECISION_DUPLICATE")
+        self.assertEqual([d["id"] for d in self.p.decisions()], [commit["id"]])
+        self.p.ok("decision", "fallback", "--id", commit["id"], "--why", "test")
+        # the valid spec opens all four, in its order, as one dialog
+        done = self.open(spec)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        opened = self.p.decisions()
+        ids = [d["id"] for d in opened]
+        self.assertEqual([d["setup_key"] for d in opened], ["memory", "runtime", "survey", "verify"])
+        self.assertEqual({(d["kind"], d["opened_by"], d["multi_select"]) for d in opened},
+                         {("setup", "decision open --kind setup", False)})
+        self.assertEqual([int(i[1:]) for i in ids], list(range(int(ids[0][1:]), int(ids[0][1:]) + 4)))
+        # a choice keeps its value and settles as "set"; a command is only its label
+        stored = [[(o["kind"], o["label"], o.get("value"), o.get("effect")) for o in d["options"]] for d in opened]
+        wanted = [[(o["kind"], o["label"], o.get("value"), "set" if o["kind"] == "choice" else None)
+                   for o in item["options"]] for item in spec["decisions"]]
+        self.assertEqual(stored, wanted)
+        self.assertEqual(opened[0]["options"][0]["description"], "closed tasks stay in .ai/reports/")
+        lines = done.stdout.splitlines()
+        self.assertEqual((len(lines), done.stdout.count("DIALOG_PENDING")), (2, 1), done.stdout)
+        self.assertTrue(lines[0].startswith("DIALOG_PENDING %s — " % " ".join(ids)), lines[0])
+        sent = json.loads(lines[1])
+        self.assertEqual([q["question"] for q in sent["questions"]], [d["question"] for d in spec["decisions"]])
+        self.assertEqual(sent, dialog.dialog_payload(dialog.read_decisions(self.p.root), "claude"),
+                         "the call the gate demands is the one printed")
+
+    def test_setup_spec_rejects_foreign_command(self):
+        entry, root = os.path.abspath(STATE), self.p.root
+        elsewhere = os.path.join(self.p.tmp.name, "elsewhere")
+
+        def memory(tail):
+            return "python3 %s --root %s %s" % (entry, root, tail)
+        # a command label the dialog's own rule may pass, and still not `memory enable` of this state.py and project
+        foreign = {
+            "git commit": "git commit -m x -- a.py", "approve": memory("approve --by me"),
+            "memory disable": memory("memory disable"), "memory cleanup": memory("memory cleanup --all"),
+            "another root": "python3 %s --root %s memory enable" % (entry, elsewhere),
+            "another state.py": "python3 /tmp/y/state.py --root %s memory enable" % root,
+            "a relative state.py": "python3 skills/ai-task/state.py --root %s memory enable" % root,
+            "a --root relative to the cwd": "python3 %s --root %s memory enable" % (entry, os.path.relpath(root)),
+            "a --runtime": memory("--runtime claude memory enable"),
+            "interpreter flags": "python3 -I %s --root %s memory enable" % (entry, root),
+            "two --root": memory("--root %s memory enable" % root), "no --root": "python3 %s memory enable" % entry,
+            "a relative --root": "python3 %s --root . memory enable" % entry,
+            "python, not python3": "python %s --root %s memory enable" % (entry, root),
+            "a second command": memory("memory enable; ls"), "an option the rule has no name for": memory("memory enable --force"),
+        }
+        for name, label in foreign.items():
+            with self.subTest(command=name):
+                self.refused(edited(self.spec(), ("decisions", 0, "options", 1), {"kind": "command", "label": label}),
+                             6, "CONSENT_LABEL_INVALID")
+        # only the memory decision offers a command
+        self.refused(edited(self.spec(), ("decisions", 1, "options", 1), self.command(self.p, "--author", "vanssa")),
+                     6, "only the memory decision offers a command")
+        # a choice never reads as a command: the gate passes a Bash command equal to any pick, and a pick that is a
+        # state.py label is run by dialog_pick
+        command = self.spec()["decisions"][0]["options"][1]["label"]
+        readable = {"python3": "python3 is what runs it", "git": "git status", "npx": "npx riskrails@4.1.0 --yes",
+                    "the command itself": command, "a padded state.py call": "  " + memory("approve --by me"),
+                    "state.py through python": "python %s --root %s approve --by me" % (entry, root),
+                    "a quoted git commit": "\"git\" commit -m x -- a.py"}
+        for name, label in readable.items():
+            with self.subTest(choice=name):
+                self.refused(edited(self.spec(), ("decisions", 2, "options", 1), self.choice(label, "full")),
+                             6, "a choice label never reads as a command")
+        for name, label in {"empty": "", "too long": "x" * (rr_labels.LABEL_MAX + 1), "not printable": "Full\tdeep"}.items():
+            with self.subTest(choice=name):
+                self.refused(edited(self.spec(), ("decisions", 2, "options", 1), self.choice(label, "full")),
+                             6, "a choice label is 1 to")
+        self.refused(edited(self.spec(), ("decisions", 2, "options", 1), self.choice("Light — a brain dump and 2 "
+                     "discovery agents", "full")), 6, "carry the same label")
+        # what is not the spec's shape is a bad spec (exit 2), whatever the labels say
+        deep = "[" * (rr_dialog.JSON_DEPTH_MAX + 1) + "]" * (rr_dialog.JSON_DEPTH_MAX + 1)
+        for name, text in {"empty": "", "not JSON": "{", "a list": "[]", "NaN": "NaN", "nested too deep": deep,
+                           "over the size limit": json.dumps(self.spec()) + " " * rr_dialog_cmd.SETUP_SPEC_MAX}.items():
+            with self.subTest(text=name):
+                self.refused(None, 2, "bad spec", stdin=text)
+        value, text = rr_dialog_cmd.SETUP_VALUE_MAX, "a" * (rr_dialog.QUESTION_MAX + 1)
+        shapes = {
+            "an extra field of the spec": (("extra",), 1), "schema 2": (("schema",), 2), "schema true": (("schema",), True),
+            "schema 1.0": (("schema",), 1.0), "no schema": (("schema",), GONE), "no decisions": (("decisions",), []),
+            "decisions that is no list": (("decisions",), {}), "an unknown key": (("decisions", 1, "key"), "colour"),
+            "a key twice": (("decisions", 1, "key"), "memory"), "a key that is a list": (("decisions", 1, "key"), ["runtime"]),
+            "an empty header": (("decisions", 1, "header"), " "), "an empty question": (("decisions", 1, "question"), "\n"),
+            "a header that is no text": (("decisions", 1, "header"), 7), "an extra field of a decision": (("decisions", 1, "multi"), True),
+            "no header": (("decisions", 1, "header"), GONE), "one option": (("decisions", 2, "options"), [self.choice("Full", "full")]),
+            "options that is no list": (("decisions", 2, "options"), "Light, Full"),
+            "an option that is no object": (("decisions", 1, "options", 0), "Auto"),
+            "an unknown kind": (("decisions", 1, "options", 0, "kind"), "multi"),
+            "a choice without a value": (("decisions", 1, "options", 0, "value"), GONE),
+            "a numeric value": (("decisions", 1, "options", 0, "value"), 5), "a null value": (("decisions", 1, "options", 0, "value"), None),
+            "a value over the limit": (("decisions", 1, "options", 0, "value"), "a" * (value + 1)),
+            "a value with a newline": (("decisions", 1, "options", 0, "value"), "a\nb"),
+            "an extra field of an option": (("decisions", 1, "options", 0, "effect"), "ack"),
+            "a command with a value": (("decisions", 0, "options", 1, "value"), "x"),
+            "a label that is no text": (("decisions", 1, "options", 0, "label"), 5),
+            "a description that is no text": (("decisions", 1, "options", 0, "description"), 5),
+            "a description over the limit": (("decisions", 1, "options", 0, "description"), text),
+            "a lone surrogate": (("decisions", 1, "question"), "a\ud800b")}
+        for name, (path, new) in shapes.items():
+            with self.subTest(shape=name):
+                self.refused(edited(self.spec(), path, new), 2, "bad spec")
+        five = edited(self.spec(), ("decisions",), self.spec()["decisions"] + self.spec()["decisions"][:1])
+        self.refused(five, 2, "1 to 4 decisions")
+        self.refused(edited(self.spec(), ("decisions", 1, "options"), self.spec()["decisions"][1]["options"] * 2),
+                     2, "2 to 4 options")
+        # the rule is not tighter than the command it names: no option at all, or all three in any order, one with a blank
+        spec = {"schema": 1, "decisions": [
+            {"key": "memory", "header": "Memory", "question": "Turn it on?",
+             "options": [self.choice("Off", "off"), self.command(self.p),
+                         self.command(self.p, "--index", "sqlite", "--period", "year", "--author", "Ivan K")]}]}
+        self.assertEqual(self.open(spec).returncode, 0)
+        # usage: --spec belongs to --kind setup, --command to --kind commit, and the kinds are those two
+        for args, code, text in (
+                (("--kind", "setup", "--spec", "-", "--command", "git commit -m x"), 2, "takes --spec FILE|- and no --command"),
+                (("--kind", "setup"), 2, "takes --spec FILE|- and no --command"),
+                (("--kind", "setup", "--spec", os.path.join(self.p.tmp.name, "nope.json")), 2, "bad spec"),
+                (("--kind", "commit", "--spec", "-", "--command", "git commit -m x"), 2, "takes --command, not --spec"),
+                (("--kind", "approval", "--spec", "-"), 1, "takes --kind commit or --kind setup")):
+            with self.subTest(args=args):
+                done = self.p.run("decision", "open", *args, stdin=json.dumps(self.spec()))
+                self.assertEqual((done.returncode, done.stdout), (code, ""), done.stderr)
+                self.assertIn(text, done.stderr)
+
+    def test_setup_values_are_the_vocabulary(self):
+        """What the skill applies is what the human read: a choice sets one of its key's words, and a verify choice
+        that sets a command shows it, whole, inside backticks, in its own label."""
+        words = {"memory": ("off", "keep"), "runtime": ("auto", "claude", "codex", "both"),
+                 "survey": ("light", "full", "keep"), "verify": ("", "other", "keep", "edit")}
+        self.assertEqual(rr_dialog_cmd.SETUP_VALUES, words, "step C4 generates exactly this vocabulary")
+        # another word, a different case, a blank or a word of another key is a bad spec (exit 2)
+        index = {"memory": 0, "runtime": 1, "survey": 2}
+        for key, values in {"memory": ("", "on", "Off", "off ", "packages", "other"),
+                            "runtime": ("", "Claude", "gemini", "claude,codex", "none", "keep"),
+                            "survey": ("", "medium", "Full", "other", "both")}.items():
+            for value in values:
+                with self.subTest(key=key, value=value):
+                    done = self.refused(edited(self.spec(), ("decisions", index[key], "options", 0, "value"), value),
+                                        2, "bad spec")
+                    self.assertIn("a %s choice sets one of: %s" % (key, ", ".join(words[key])), done.stderr)
+        # a verify command that its own label does not show, whole, inside backticks is refused (exit 6)
+        for name, (label, value, description) in {
+                "a label that does not show it": ("Use the fast suite", "make test", None),
+                "a description that shows it": ("Use the fast suite", "make test", "runs `make test`"),
+                "no backticks": ("Use make test", "make test", None), "a bare command": ("make test", "make test", None),
+                "another command in the span": ("Use `make test`", "make lint", None),
+                "a part of the span": ("Use `make test -x`", "make test", None),
+                "an unclosed backtick": ("Use `make test", "make test", None),
+                "a backtick in the value": ("Use `a`b`", "a`b", None),
+                "two spans fused into one value": ("Use `a` `b`", "a` `b", None)}.items():
+            with self.subTest(command=name):
+                self.refused(edited(self.spec(), ("decisions", 3, "options", 1), self.choice(label, value, description)),
+                             6, "CONSENT_LABEL_INVALID — a verify command is shown verbatim in its label, inside backticks")
+        # a command shown whole as a span of its own label opens, one word of a key needs no span, and every word opens
+        commands = {"schema": 1, "decisions": [{"key": "verify", "header": "Verify", "question": "verify_command?", "options": [
+            self.choice("Not now — ask me in chat", ""), self.choice("Keep `make test`", "keep"),
+            self.choice("Run `make lint` first, then `make test`", "make test"),
+            self.choice("Use `sh -c 'pytest -x'`", "sh -c 'pytest -x'")]}]}
+        self.assertEqual(self.open(commands).returncode, 0)
+        self.assertEqual([[o["value"] for o in d["options"]] for d in self.p.decisions()],
+                         [["", "keep", "make test", "sh -c 'pytest -x'"]])
+        self.p.ok("decision", "fallback", "--id", self.p.decisions()[0]["id"], "--why", "test")
+        every = {"schema": 1, "decisions": [
+            {"key": key, "header": key.title(), "question": "Which %s?" % key,
+             "options": [self.choice("%s: %s" % (key, word or "nothing"), word) for word in words[key]]} for key in words]}
+        self.assertEqual(self.open(every).returncode, 0)
+        self.assertEqual([[o["value"] for o in d["options"]] for d in self.p.decisions()],
+                         [list(words[key]) for key in words])
+
+    def test_setup_spec_is_read_from_a_file(self):
+        path = os.path.join(self.p.tmp.name, "spec.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(self.spec(), fh)
+        done = self.p.run("decision", "open", "--kind", "setup", "--spec", path)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual([d["setup_key"] for d in self.p.decisions()], ["memory", "runtime", "survey", "verify"])
+
+    def test_setup_decision_belongs_to_the_task_in_flight(self):
+        """As the commit opener does: the decision names the task, and the journal says it was opened."""
+        self.p.start()
+        task_id = self.p.state()["task_id"]
+        self.assertEqual(self.open({"schema": 1, "decisions": self.spec()["decisions"][2:3]}).returncode, 0)
+        [opened] = self.p.decisions()
+        self.assertEqual((opened["kind"], opened["setup_key"], opened["task"]), ("setup", "survey", task_id))
+        self.assertEqual([(e["data"]["decision"], e["data"]["kind"], e["data"]["options"])
+                          for e in self.p.events(task_id) if e["event"] == "decision_opened"],
+                         [(opened["id"], "setup", 2)])
+
+    def test_setup_open_withdraws_what_it_opened(self):
+        """A race the checks cannot see: the third open_decision is refused, so the two before it are withdrawn."""
+        wrapper = os.path.join(self.p.tmp.name, "race.py")
+        with open(wrapper, "w", encoding="utf-8") as fh:
+            fh.write(RACE % os.path.dirname(STATE))
+        spec = self.spec()
+        spec["decisions"] = spec["decisions"][:3]
+        done = self.open(spec, state_py=wrapper)
+        self.assertEqual((done.returncode, done.stdout), (6, ""), done.stderr)
+        self.assertIn("DECISION_DUPLICATE - D9 is open", done.stderr)
+        self.assertEqual(self.p.decisions(), [])
+        self.assertEqual([(e["decision"], e["effect"]) for e in self.p.ledger() if e["type"] == "settle"],
+                         [("D1", "withdrawn"), ("D2", "withdrawn")])
+
+    def test_setup_settle_prints_pick(self):
+        spec = self.spec()
+        done = self.open(spec)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        questions = [q["question"] for q in json.loads(done.stdout.splitlines()[1])["questions"]]
+        # the human answers all four: two choices, free text (a decline), a choice that sets nothing
+        self.answered(self.p, done, dict(zip(questions, ["Off — keep files mode", "Claude Code and Codex",
+                                                         "something else entirely", "Not now — ask me in chat"])))
+        self.assertEqual([(e["type"], e.get("decision"), e.get("why")) for e in self.p.ledger()],
+                         [("offer", None, None), ("pick", "D1", None), ("pick", "D2", None),
+                          ("decline", "D3", "other text"), ("pick", "D4", None)])
+        settled = [self.p.ok("decision", "settle", "--id", d).stdout for d in ("D1", "D2", "D3", "D4")]
+        self.assertEqual(settled, [
+            "D1 settled: Off — keep files mode (set)\nSETUP_PICK memory=off\n",
+            "D2 settled: Claude Code and Codex (set)\nSETUP_PICK runtime=both\n",
+            "D3 settled: declined in the dialog (other text); nothing runs\nSETUP_PICK survey=\n",
+            "D4 settled: Not now — ask me in chat (set)\nSETUP_PICK verify=\n"])
+        self.assertEqual([e["effect"] for e in self.p.ledger() if e["type"] == "settle"],
+                         ["set", "set", "declined", "set"])
+        self.assertEqual(self.p.decisions(), [])
+        # the terminal route (here a launcher that declared the run unattended) prints it too; a command is run, not settled
+        other = DialogProject()
+        try:
+            done = other.run("decision", "open", "--kind", "setup", "--spec", "-", stdin=json.dumps(self.spec(other)))
+            self.assertEqual(done.returncode, 0, done.stderr)
+            pick = other.run("decision", "settle", "--id", "D2", "--pick", "4", human=True)
+            self.assertEqual((pick.returncode, pick.stdout), (0, "D2 settled: Claude Code and Codex (set)\n"
+                                                                  "SETUP_PICK runtime=both\n"), pick.stderr)
+            spaced = other.run("decision", "settle", "--id", "D4", "--pick", "2", human=True)
+            self.assertEqual((spaced.returncode, spaced.stdout), (0, "D4 settled: Use `make test` (set)\n"
+                                                                     "SETUP_PICK verify=make test\n"), spaced.stderr)
+            command = other.run("decision", "settle", "--id", "D1", "--pick", "2", human=True)
+            self.assertEqual(command.returncode, 1, command.stdout)
+            self.assertIn("is a command: run it in this terminal instead", command.stderr + command.stdout)
+            self.assertNotIn("SETUP_PICK", command.stdout)
+            # a memory command picked in the dialog is run, not settled: no SETUP_PICK for it
+            sqlite = [o["label"] for o in other.decisions()[0]["options"] if o["kind"] == "command"][1]
+            self.answered(other, done, {questions[0]: sqlite}, call="toolu_command")
+            run = other.run("decision", "settle", "--id", "D1")
+            self.assertEqual(run.returncode, 1, run.stdout)
+            self.assertIn("has a live pick: run it verbatim", run.stderr)
+            self.assertNotIn("SETUP_PICK", run.stdout + run.stderr)
+        finally:
+            other.close()
 
 
 class TestRegistrations(unittest.TestCase):

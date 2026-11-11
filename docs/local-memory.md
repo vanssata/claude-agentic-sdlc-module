@@ -32,7 +32,7 @@ hand out the same id. Legacy ids (`T-2026-10-15-001`) stay valid everywhere,
 and `--task-id` still takes any id `state.py` accepted before. A script that
 parsed the trailing `-NNN` needs updating.
 
-## Turning it on (the human, in a terminal outside the agent)
+## Turning it on (the human's route)
 
 ```bash
 python3 ~/.claude/skills/ai-task/state.py memory enable --author vanssa --period quarter [--index sqlite]
@@ -40,8 +40,17 @@ git add .ai/policies/memory.json && git commit -m "memory: packages mode"
 python3 ~/.claude/skills/ai-task/state.py memory status
 ```
 
-`enable`, `disable`, `cleanup`, `pack`, `redact` and `migrate --move-logs` need
-the human route (`approve`'s): run from an agent they exit 5. The mode is per
+`memory enable` takes the human route, as `approve` does: a terminal outside the
+agent (the commands above), a launcher that declared the run unattended, or the
+command the human picked in the dialog that `/rr-setup` opens (spec:
+`docs/sdlc/specs/interactive-setup-options.md`). Only `/rr-setup` opens that
+decision. The pick runs verbatim, once, inside the pick window (120 seconds by
+default) and in the same session, and `enable` prints
+`memory: via dialog (consent C<n>, decision D<n>)` before its usual output. Run
+by an agent without a pick, it exits 5, and the refusal opens no decision.
+`disable`, `cleanup`, `pack`, `redact` and `migrate --move-logs` have no dialog
+route: a terminal outside the agent, or a launcher that declared the run
+unattended; from an agent session they exit 5. The mode is per
 project — every teammate's next close exports. The author and the index are
 per developer, in the git-ignored `.ai/local/memory/config.json`. `disable`
 returns to files mode, removes only our hook and keeps the packages and the

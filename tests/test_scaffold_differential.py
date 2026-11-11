@@ -15,6 +15,10 @@ value and a project directory that does not exist. bash prefixes them with the
 script's path and line, which a port cannot keep; those cases compare the exit
 code, the tree and the message text without the prefix.
 
+One value departs on purpose: `--runtime none` (R18) is new and the frozen shell
+refuses it like any unknown runtime. test_runtime_none_departs_from_the_frozen_shell
+pins both sides; inside a list `none` is unknown to both, so those are ordinary cases.
+
 Every case runs under C, C.UTF-8 and en_US.UTF-8 where the system has them:
 `find | sort` orders the "created" listing by the locale's collation.
 """
@@ -38,6 +42,9 @@ ENV_KEYS = ("AI_RUNTIMES", "AI_PROJECT_TEMPLATES", "CLAUDE_ROUTING_TEMPLATES", "
 FROZEN_ENV = {"RISKRAILS_TEMPLATES": "CLAUDE_AGENTIC_TEMPLATES"}
 # What the port deliberately no longer does (A2, R21): copy the shipped weight table into a project.
 NOT_SCAFFOLDED = ".ai/policies/weight.json"
+# What `--runtime none` leaves out (R18): the shell does not know the value, so the port's run is compared with
+# the shell's run of every runtime, less these files and their lines in the listing.
+INSTRUCTION_FILES = ("CLAUDE.md", "AGENTS.md", "GEMINI.md", ".junie/guidelines.md")
 
 # The scripts, as installed: (path in the plugin tree, frozen source, live sources).
 SCRIPTS = {
@@ -95,6 +102,16 @@ def snapshot(root):
     return out
 
 
+def without_instruction_files(record):
+    """A run's record (exit, stdout, stderr, tree) less the instruction files a runtime adds and their listing."""
+    code, out, err, tree = record
+    listed = {b"  " + f.encode() + suffix + b"\n" for f in INSTRUCTION_FILES
+              for suffix in (b"", b" (agent workflow block appended)")}
+    out = b"".join(ln for ln in out.splitlines(True) if ln not in listed)
+    # A path in the tree starts with the project's name; `.junie` is the one directory a runtime adds here.
+    return code, out, err, [t for t in tree if t[0].split("/", 1)[-1] not in INSTRUCTION_FILES + (".junie",)]
+
+
 # The prefix of a message bash raises itself: "<script>: line <n>: " from the
 # shell, the script's own name from the port.
 BASH_PREFIX = re.compile(rb"^(?:.*?: line \d+|project-scaffold|scaffold-ai): ", re.M)
@@ -148,11 +165,13 @@ def cases():
         c("fresh, then rerun", twice([R]))
         c("fresh from a Codex install", twice([R]), home=".codex")
         for rt in ("both", "codex", "claude", "claude,gemini", "junie", "gemini,junie,codex,claude",
-                   "claude,", ",claude", ",", "nope", "claude,,codex", "auto"):
+                   "claude,", ",claude", ",", "nope", "claude,,codex", "auto",
+                   "none,claude", "claude,none", "none,"):   # `none` is a whole value: in a list it is unknown
             c("--runtime %s" % rt, twice([R, "--runtime", rt]))
         c("--runtime=codex", twice(["--runtime=codex", R]))
         c("--runtime given twice, last wins", twice([R, "--runtime", "nope", "--runtime", "codex"]))
         c("AI_RUNTIMES=codex", twice([R], env={"AI_RUNTIMES": "codex"}))
+        c("AI_RUNTIMES=claude,none", twice([R], env={"AI_RUNTIMES": "claude,none"}))
         c("AI_RUNTIMES overridden by --runtime", twice([R, "--runtime", "claude"], env={"AI_RUNTIMES": "x"}))
         c("--runtime without a value", [([R, "--runtime"], b"", {}, False)], loose=True)
         c("--runtime with an empty value", [([R, "--runtime", ""], b"", {}, False)], loose=True)
@@ -311,6 +330,30 @@ class ScaffoldDifferentialTest(unittest.TestCase):
                             [(["<ROOT>", "--runtime", "both"], b"", {}, False)], umask=mask)
                 with self.subTest(case=case.label):
                     self.compare(case, "C", *self.records(case, "C", exec_tpl=True))
+
+    def test_runtime_none_departs_from_the_frozen_shell(self):
+        """R18: the shell refuses `--runtime none` as an unknown runtime; the port scaffolds what the shell scaffolds
+        for every runtime, less the instruction files. AI_RUNTIMES=none says what the flag says."""
+        runs = lambda args, env=None: [(args, b"", env or {}, False)] * 2
+        none = Case("ai: --runtime none", "ai", runs([R, "--runtime", "none"]))
+        every = Case("ai: every runtime", "ai", runs([R, "--runtime", "claude,codex,gemini,junie"]))
+        by_env = Case("ai: AI_RUNTIMES=none", "ai", runs([R], {"AI_RUNTIMES": "none"}))
+        over_env = Case("ai: AI_RUNTIMES=claude, --runtime none", "ai",
+                        runs([R, "--runtime", "none"], {"AI_RUNTIMES": "claude"}))
+        for loc in locales():
+            with self.subTest(locale=loc):
+                refused, port = self.records(none, loc)
+                for code, out, err, tree in refused:
+                    self.assertEqual(2, code, "the shell refuses it")
+                    self.assertEqual(b"", out)
+                    self.assertTrue(err.endswith(b"(got 'none')\n"), "as an unknown runtime, by name: %r" % err)
+                    self.assertEqual(["proj"], [t[0] for t in tree], "before it scaffolds anything")
+                every_runtime, _ = self.records(every, loc)
+                self.compare(none, loc, [without_instruction_files(r) for r in every_runtime], port)
+                self.assertEqual([0, 0], [r[0] for r in port], "and the port accepts it")
+                self.assertIn(b"nothing to do", port[1][1], "the second run reports nothing to do")
+                for case in (by_env, over_env):
+                    self.compare(case, loc, port, self.records(case, loc)[1])
 
     def test_frozen_copies_are_the_shell_scaffold(self):
         """The fixtures are scripts, not shims: the port is compared with the real thing."""

@@ -4,6 +4,7 @@ rather than importing the hooks' module. This contract feeds every reader the
 same fixtures (tests/fixtures/dialog/ledger/), so the two cannot drift. Task 7c
 asserted the state.py side; 7d1 added hooks/guard/dialog.py's reader to READERS."""
 
+import itertools
 import json
 import os
 import sys
@@ -97,6 +98,81 @@ class TestLedgerContract(unittest.TestCase):
         for label in labels:
             with self.subTest(label=label):
                 self.assertEqual(dialog.validate_label(label) is None, rr_labels.validate_label(label) is None)
+        # R13: `memory enable` with --author, --period, --index each at most once, two words each, in any
+        # order — and no other memory verb. Both rules take, or both refuse, each of these (the same cases as
+        # tests/test_dialog_gate.py::test_label_validator).
+        memory = "python3 %s --root /p memory" % here
+        taken = [" enable" + tail for tail in (
+            "", " --author ivan", " --author 'Ivan Kakurov'", " --period month", " --period quarter", " --period year",
+            " --index none", " --index sqlite", " --author ivan --period quarter --index sqlite",
+            " --index sqlite --period year --author ivan")]
+        refused = [
+            # every other verb, and what only looks like the verb
+            "", " disable", " cleanup", " pack", " redact", " migrate --apply", " status", " export", " show T-1",
+            " verify", " search x", " risk add", " risks", " enabled", " Enable", " --author ivan enable",
+            # a missing value, the `=` form, a repeated option, an unknown one (an argparse abbreviation too)
+            " enable --author", " enable --period", " enable --index", " enable --author ivan --period",
+            " enable --author=ivan", " enable --period=quarter", " enable --index=sqlite",
+            " enable --author ivan --author bob", " enable --period month --period year",
+            " enable --period quarter --period quarter", " enable --index none --index sqlite",
+            " enable --force", " enable --apply", " enable --confirm-delete ivan", " enable --help", " enable -h",
+            " enable --json", " enable --auth ivan", " enable --per quarter", " enable --ind sqlite",
+            " enable --root /q", " enable --runtime claude", " enable --by me",
+            # a positional extra
+            " enable now", " enable --author ivan now", " enable now --author ivan", " enable -- --author ivan",
+            " enable --author ivan --period quarter --index sqlite extra",
+            # a value of the wrong kind
+            " enable --period week", " enable --period Quarter", " enable --period ''", " enable --period quarter,year",
+            " enable --index fts", " enable --index SQLITE", " enable --index ''", " enable --index sqlite3",
+            " enable --author -ivan", " enable --author -1", " enable --author ''", " enable --author --index",
+            " enable --author --period quarter",
+            # the one-simple-command rule still holds
+            " enable --author ivan; ls", " enable --author $(id)", " enable --author `id`",
+            " enable --author ivan && git push origin main", " enable --author ivan | tee x",
+            " enable --author ivan > f"]
+        for tail, ok in [(t, True) for t in taken] + [(t, False) for t in refused]:
+            label = memory + tail
+            with self.subTest(label=label):
+                self.assertEqual((dialog.validate_label(label) is None, rr_labels.validate_label(label) is None),
+                                 (ok, ok))
+        for message in (dialog.validate_label("git status"), rr_labels.validate_label("git status")):
+            self.assertIn("memory enable", message)
+
+    def test_both_memory_enable_rules_match_the_rule_as_a_parser(self):
+        """R13: every argv of up to 4 words over the rule's own words and its near misses, and of up to 6 over
+        its plain ones (so all three options appear, in every order, repeated, with a positional), is taken
+        or refused by both copies as a reference written the other way round says: a loop, not slices."""
+        kinds = {"--author": None, "--period": ("month", "quarter", "year"), "--index": ("none", "sqlite")}
+
+        def reference(tail):
+            seen, i = set(), 0
+            while i < len(tail):
+                name, value = tail[i], tail[i + 1] if i + 1 < len(tail) else None
+                if name not in kinds or name in seen or value is None:
+                    return False
+                if (value == "" or value.startswith("-")) if kinds[name] is None else value not in kinds[name]:
+                    return False
+                seen.add(name)
+                i += 2
+            return True
+
+        wide = ["--author", "--period", "--index", "ivan", "-x", "", "quarter", "year", "none", "sqlite", "week",
+                "--period=quarter", "enable"]
+        plain = ["--author", "--period", "--index", "ivan", "quarter", "sqlite"]
+        tails = [list(t) for words, longest in ((wide, 4), (plain, 6))
+                 for n in range(longest + 1) for t in itertools.product(words, repeat=n)]
+        wrong = []
+        for tail in tails:
+            want = reference(tail)
+            got = (rr_labels.state_label_ok(["--root", "/p", "memory", "enable"] + tail),
+                   dialog.state_label_ok(["python3", "-I", "/h/state.py", "--root", "/p", "memory", "enable"] + tail))
+            if got != (want, want):
+                wrong.append((tail, want, got))
+        self.assertEqual(wrong[:5], [])
+        # not vacuous: the full three-option form, in every order, is among what was taken
+        taken = [t for t in tails if reference(t)]
+        for order in itertools.permutations([["--author", "ivan"], ["--period", "quarter"], ["--index", "sqlite"]]):
+            self.assertIn([word for pair in order for word in pair], taken)
 
     def test_both_sides_share_the_limits(self):
         self.assertEqual((dialog.LINE_MAX, dialog.LOCK_STALE_S, dialog.LABEL_MAX, dialog.LEDGER_TYPES),

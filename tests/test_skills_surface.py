@@ -12,9 +12,10 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT =os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKILLS = os.path.join(ROOT, "skills")
 
 NEW = ("rr-setup", "rr-spec", "rr-plan", "rr-build", "rr-build-all", "rr-review", "rr-ship", "rr-status")
@@ -118,6 +119,104 @@ class TestNewSkills(unittest.TestCase):
         self.assertTrue(all(done.returncode == 0 for done in usage.values()))
         self.assertIn("{show,open,settle,fallback}", usage["decision"].stdout)
         self.assertIn("{audit}", usage["consent"].stdout)
+
+    def test_rr_setup_options_flow(self):
+        """R19 (docs/sdlc/specs/interactive-setup-options.md): step 0 of /rr-setup asks the options still open in
+        one dialog before any work — 0a opens .ai/ with no instruction file, 0b opens the dialog, 0c runs a picked
+        memory command first and verbatim, settles the rest and reads the SETUP_PICK lines — and each pick is
+        applied where its step needs it; `--options` asks all of them again. Every command and marker the text
+        names is one the code has."""
+        text = read("rr-setup")
+        fields = split(text)[0]
+        flat = " ".join(text.split())        # a wrapped line is one phrase
+
+        def part(head, tail):
+            start = flat.find(head)
+            end = flat.find(tail, start)
+            self.assertTrue(0 <= start < end, "/rr-setup has no part from %r to %r" % (head, tail))
+            return flat[start:end]
+
+        step0, step1 = part("0. **Options.**", "1. **Scaffold.**"), part("1. **Scaffold.**", "2. **Stack.**")
+        pick0 = part("**0c**", "1. **Scaffold.**")
+        before_settle = part("**0c**", "$STATE decision settle --id")
+        with self.subTest("the hint and the description name --options"):
+            self.assertEqual(fields["argument-hint"],
+                             "[--survey light|full] | --options | --update [--apply] | --audit [context]")
+            self.assertIn("--options", fields["description"])
+            self.assertIn("`--options`, `--update` and `--audit` go to their sections", flat)
+        with self.subTest("0a: scaffold-ai.sh --runtime none, which project-scaffold.sh refuses"):
+            self.assertIn('scaffold-ai.sh" "$PWD" --runtime none', step0)
+            self.assertRegex(step0, r"project-scaffold\.sh` refuses it")
+        with self.subTest("0b: the opener, --all under --options, --skip survey under --survey"):
+            for phrase in ("$SETUP options --open", "--options adds --all", "a given --survey adds --skip survey"):
+                self.assertIn(phrase, step0)
+        with self.subTest("0b: the three first lines, each handled"):
+            for phrase in ("OPTIONS_DIALOG", "`DIALOG_PENDING` line", "exactly as printed", "AskUserQuestion",
+                           "request_user_input", "OPTIONS_FALLBACK", "never run it", "OPTIONS_NONE"):
+                self.assertIn(phrase, step0)
+        with self.subTest("0b: exit 6 settles what is open and runs 0b once more; any other refusal is prose"):
+            for phrase in ("Exit 6", "`DECISION_LIMIT` or `DECISION_DUPLICATE`", "$STATE decision show",
+                           '$STATE decision fallback --id <Dn> --why "<why>"', "once more",
+                           "ask the questions of steps 1, 3 and 5 in prose", "memory enable --period quarter"):
+                self.assertIn(phrase, step0)
+        with self.subTest("0c: the memory command first, verbatim and alone; then every other decision is settled"):
+            for phrase in ("memory command", "first", "verbatim", "alone", "memory: via dialog"):
+                self.assertIn(phrase, before_settle)
+            for phrase in ("`SETUP_PICK <key>=<value>`", "`SETUP_PICK <key>=`"):
+                self.assertIn(phrase, pick0)
+        with self.subTest("0c: each pick is applied where its step needs it, in the order of the steps"):
+            marks = ("`runtime=<v>` → step 1's two scaffolds with `--runtime <v>`",
+                     '`verify=<cmd>` → `$SETUP verify --set "<cmd>"` after step 2',
+                     "`survey=light` or `full` → step 3's depth", "`keep` → no new survey",
+                     "`memory=off` or `keep` → nothing")
+            at = [pick0.index(mark) for mark in marks]          # raises when one is missing
+            self.assertEqual(at, sorted(at))
+            for phrase in ("An empty value", '"Not now"', "`other`", "step 5 asks in chat"):
+                self.assertIn(phrase, pick0)
+        with self.subTest("steps 1, 2, 3 and 5 take the picks; the set-up-before check reads 0a's output"):
+            self.assertEqual(step1.count("--runtime <pick>"), 2)
+            self.assertIn("If 0a did **not** create `.ai/project/overview.md`, the project was set up before", step1)
+            self.assertNotIn("overview.md` was **not** created", flat)
+            self.assertIn("write the `verify=<cmd>` pick", part("2. **Stack.**", "3. **Survey.**"))
+            self.assertIn("`survey` pick", part("3. **Survey.**", "4. **Write"))
+            policies = part("5. **Policies.**", "6. **Weight table.**")
+            self.assertIn("only if 0a created them", policies)
+            self.assertIn("`verify=<cmd>` pick", policies)
+        with self.subTest("--options reopens every option on a set-up project, applies the picks and stops"):
+            options = part("## --options", "## --update")
+            for phrase in ("$SETUP options --open --all", "settle and apply as in step 0", "Say what changed and stop",
+                           "no other step reruns", "plain **Setup**"):
+                self.assertIn(phrase, options)
+        with self.subTest("setup.py takes the flags and prints the markers the text names"):
+            usage = subprocess.run([sys.executable, "-I", os.path.join(SKILLS, "rr-setup", "setup.py"), "options",
+                                    "--help"], capture_output=True, text=True, check=False)
+            self.assertEqual(usage.returncode, 0, usage.stderr)
+            for flag in ("--all", "--skip", "--open"):
+                self.assertIn(flag, usage.stdout)
+            for path, markers in ((("rr-setup", "setup.py"), ("OPTIONS_DIALOG", "OPTIONS_FALLBACK", "OPTIONS_NONE",
+                                                              "memory is the human's, in their own terminal")),
+                                  (("ai-task", "rr_state", "dialog_cmd.py"), ("SETUP_PICK", "DECISION_LIMIT",
+                                                                              "DECISION_DUPLICATE")),
+                                  (("ai-task", "rr_state", "memory_cmd.py"), ("memory: via dialog",))):
+                with open(os.path.join(SKILLS, *path), encoding="utf-8") as fh:
+                    source = fh.read()
+                for marker in markers:
+                    self.assertIn(marker, source, "%s no longer prints %r" % ("/".join(path), marker))
+        with self.subTest("0a: --runtime none makes .ai/ and no instruction file; a second run lists nothing"):
+            scaffold = ["bash", os.path.join(SKILLS, "ai-init", "scaffold-ai.sh")]
+            with tempfile.TemporaryDirectory() as tmp:
+                first = subprocess.run(scaffold + [tmp, "--runtime", "none"], capture_output=True, text=True, check=False)
+                again = subprocess.run(scaffold + [tmp, "--runtime", "none"], capture_output=True, text=True, check=False)
+                self.assertEqual((first.returncode, again.returncode), (0, 0), first.stderr + again.stderr)
+                self.assertTrue(os.path.isfile(os.path.join(tmp, ".ai", "policies", "dialog.json")))
+                self.assertEqual([n for n in ("CLAUDE.md", "AGENTS.md", ".claude", ".codex")
+                                  if os.path.exists(os.path.join(tmp, n))], [])
+            self.assertIn(".ai/project/overview.md", first.stdout)
+            self.assertNotIn("overview.md", again.stdout)
+            with tempfile.TemporaryDirectory() as tmp:
+                refused = subprocess.run(["bash", os.path.join(ROOT, "hooks", "project-scaffold.sh"), tmp, "--runtime",
+                                          "none"], capture_output=True, text=True, check=False)
+                self.assertNotEqual(refused.returncode, 0, "project-scaffold.sh takes `none` now: 0a says it refuses it")
 
     def test_build_all_names_live_commands(self):
         """The batch loop's skill names the state.py commands it runs, and each

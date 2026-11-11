@@ -270,7 +270,7 @@ options:
 $ state.py decision --help
 exit 0
 --- stdout
-usage: state.py decision [-h] [--id ID] [--kind KIND] [--command COMMANDS] [--pick PICK] [--why WHY] [--json] {show,open,settle,fallback}
+usage: state.py decision [-h] [--id ID] [--kind KIND] [--command COMMANDS] [--spec SPEC] [--pick PICK] [--why WHY] [--json] {show,open,settle,fallback}
 
 positional arguments:
   {show,open,settle,fallback}
@@ -280,6 +280,7 @@ options:
   --id ID
   --kind KIND
   --command COMMANDS
+  --spec SPEC
   --pick PICK
   --why WHY
   --json

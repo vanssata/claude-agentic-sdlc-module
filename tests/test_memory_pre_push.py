@@ -7,18 +7,98 @@ codes; the shim installed only where no hook and no core.hooksPath exist.
 import importlib.util
 import json
 import os
+import shlex
 import subprocess
 import sys
 import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import guard_harness as gh  # noqa: E402  pylint: disable=wrong-import-position
 import memory_harness as mh  # noqa: E402  pylint: disable=wrong-import-position
 import memory_format as mf  # noqa: E402  pylint: disable=wrong-import-position
 import memory_sync as ms  # noqa: E402  pylint: disable=wrong-import-position
 
 ZERO = "0" * 40
 FACTOR = float(os.environ.get("AI_TIMED_FACTOR", "1"))
+DIALOG_SESSION = "sess-memory"
+RECORDER = os.path.join(mh.ROOT, "hooks", "dialog-gate.py")
+ASK_SINGLE = os.path.join(mh.ROOT, "tests", "fixtures", "dialog", "claude", "ask-single.json")
+STAMP = "%Y-%m-%dT%H:%M:%SZ"
+# The memory verbs that stay the human's whatever a pick says (R14): `what` as memory_human names it, and an argv
+# argparse accepts, so that a refusal is memory_human's and not a usage error.
+TERMINAL_ONLY = {
+    "disable": ("memory", "disable"),
+    "cleanup": ("memory", "cleanup", "--all", "--confirm-delete", "dev"),
+    "pack": ("memory", "pack", "--period", "2026-Q4", "--confirm-delete", "dev"),
+    "redact": ("memory", "redact", "r1", "--field", "text", "--why", "a test"),
+    "migrate --move-logs": ("memory", "migrate", "--move-logs", "--confirm-delete", "dev"),
+}
+
+
+def dialog_session(project, session=DIALOG_SESSION):
+    """Turn the dialog on in `project` for one agent session (R36) and return the environment that session's
+    state.py calls carry. Project.run first drops every agent marker and AI_UNATTENDED and sets AI_RUNTIME=claude;
+    this adds what rr_state/dialog.py dialog_on() reads: CLAUDECODE marks an agent, the session id is what a
+    pick is bound to (SESSION_ENV), the runtime home's profile.json names the verified dialog tool (DIALOG_TOOL),
+    and the session is attended. The result does not depend on the session that runs the suite, in an agent
+    session or in plain CI."""
+    home = os.path.join(project.tmp, "home")
+    os.makedirs(os.path.join(home, "riskrails"), exist_ok=True)
+    with open(os.path.join(home, "riskrails", "profile.json"), "w", encoding="utf-8") as fh:
+        json.dump({"plan": "max", "dialog": {"tool": "AskUserQuestion"}}, fh)
+    project.write(".ai/policies/dialog.json",
+                  json.dumps({"version": 1, "enabled": True, "window_seconds": 120, "stop_blocks_max": 2}))
+    return {"CLAUDECODE": "1", "CLAUDE_CODE_SESSION_ID": session, "CLAUDE_CONFIG_DIR": home,
+            "CLAUDE_CODE_SESSION_ATTENDED": "1"}
+
+
+def command_label(project, *argv):
+    """The command a pick carries, written as labels.state_label writes it: this state.py, absolute, with --root,
+    quoted — so the human's pick and the agent's call are one string."""
+    return "python3 %s %s" % (shlex.quote(mh.STATE), shlex.join(["--root", project.root, *argv]))
+
+
+def open_memory_decision(project, env, label):
+    """The memory question of /rr-setup, opened the way the skill opens it (`decision open --kind setup --spec -`);
+    the opener's stdout: DIALOG_PENDING, then the JSON the agent sends to the dialog tool."""
+    spec = {"schema": 1, "decisions": [{
+        "key": "memory", "header": "Memory",
+        "question": "Project memory for p: on shares every closed task with the team. Turn it on?",
+        "options": [{"kind": "choice", "label": "Off — keep files mode", "value": "off"},
+                    {"kind": "command", "label": label}]}]}
+    return project.ok("decision", "open", "--kind", "setup", "--spec", "-", stdin=json.dumps(spec), env=env).stdout
+
+
+def record_pick(project, env, opened, label, call="toolu_memory"):
+    """The human picks `label` in the dialog that `opened` printed, and the PostToolUse hook records it from a
+    harness payload recorded in a real session (tests/fixtures/dialog/claude): nothing is written into the ledger
+    by hand. (exit code, output) of the hook."""
+    questions = json.loads(opened.splitlines()[1])["questions"]
+    with open(ASK_SINGLE, encoding="utf-8") as fh:
+        payload = json.load(fh)["payload"]
+    payload.update(cwd=project.root, session_id=env["CLAUDE_CODE_SESSION_ID"], tool_use_id=call)
+    for holder in ("tool_input", "tool_response"):
+        payload[holder] = {"questions": questions, "answers": {questions[0]["question"]: label}}
+    return gh.run([sys.executable, "-I", "-S", RECORDER], payload, env=mh.clean_env(env), cwd=project.root)
+
+
+def forge_pick(project, argv, session=DIALOG_SESSION):
+    """A live pick of the command `argv`, written by hand: its line in the ledger and the decision it belongs to, as
+    the recorder and state.py write them, in place of whatever was there. For a command the label allowlist
+    refuses to offer, which no dialog could record. The pick."""
+    label, now = command_label(project, *argv), time.time()
+    pick = {"v": 1, "type": "pick", "id": "C1", "decision": "D1", "option": 2, "order": 1, "label": label,
+            "session": session, "tool_use_id": "toolu_forged", "transcript": "", "runtime": "claude",
+            "at": time.strftime(STAMP, time.gmtime(now)), "expires_at": time.strftime(STAMP, time.gmtime(now + 120))}
+    decision = {"id": "D1", "kind": "setup", "task": None, "runtime": "claude", "session": session, "tree": "",
+                "opened_at": pick["at"], "opened_by": "the test", "header": "Memory", "multi_select": False,
+                "question": "Forged: %s" % " ".join(argv),
+                "options": [{"kind": "choice", "label": "Off — keep files mode", "value": "off", "effect": "set", "n": 1},
+                            {"kind": "command", "label": label, "n": 2}]}
+    project.write(".ai/state/decision.json", json.dumps({"version": 1, "open": [decision]}))
+    project.write(".ai/state/consent.jsonl", json.dumps(pick) + "\n")
+    return pick
 
 
 class Repo(unittest.TestCase):
@@ -238,6 +318,35 @@ class TestInstall(unittest.TestCase):
     def hook(self):
         return self.p.path(".git/hooks/pre-push")
 
+    @staticmethod
+    def ledger(project):
+        """consent.jsonl, a dict per line."""
+        if not project.exists(".ai/state/consent.jsonl"):
+            return []
+        return [json.loads(line) for line in project.read(".ai/state/consent.jsonl").splitlines()]
+
+    @staticmethod
+    def kept(project):
+        """What a refused run leaves as it found it: the ledger and the decision file byte for byte, the tree's files."""
+        return tuple(project.read(".ai/state/" + name) if project.exists(".ai/state/" + name) else None
+                     for name in ("consent.jsonl", "decision.json")) + (project.tree_listing(),)
+
+    @staticmethod
+    def live(project, env):
+        """The ids of the picks the dialog route could still consume, as `state.py consent` lists them."""
+        return [pick["id"] for pick in json.loads(project.ok("consent", "--json", env=env).stdout)["live"]]
+
+    def refused(self, project, env, what, argv):
+        """`argv` from the agent is the human's: exit 5 with the usual refusal, nothing printed, nothing written, the
+        ledger as it was."""
+        before = self.kept(project)
+        done = project.run(*argv, env=env)
+        self.assertEqual((done.returncode, done.stdout), (5, ""), (argv, done.stderr))
+        self.assertIn("APPROVAL_REFUSED — 'memory %s' is the human's" % what, done.stderr)
+        self.assertIn("inside an agent session (CLAUDECODE", done.stderr)
+        self.assertEqual(self.kept(project), before, argv)
+        return done
+
     def test_enable_and_disable_need_the_human(self):
         for args in (("memory", "enable"), ("memory", "disable")):
             done = self.p.run(*args)
@@ -245,6 +354,108 @@ class TestInstall(unittest.TestCase):
             self.assertIn("APPROVAL_REFUSED", done.stderr)
         self.assertFalse(self.p.exists(".ai/policies/memory.json"))
         self.assertFalse(os.path.exists(self.hook()))
+
+    def test_enable_refused_dialog_on_no_pick(self):
+        """interactive-setup-options R14, characterization (C2): with the dialog on and no pick in the ledger, an
+        agent's `memory enable` is still the human's: exit 5, nothing written, no decision opened."""
+        env = dialog_session(self.p)
+        consent = json.loads(self.p.ok("consent", "--json", env=env).stdout)
+        self.assertEqual((consent["dialog"], consent["live"], consent["tail"]), (True, [], []))
+        written = self.p.tree_listing()
+        for args in (("memory", "enable"), ("memory", "enable", "--index", "sqlite")):
+            done = self.p.run(*args, env=env)
+            self.assertEqual(done.returncode, 5, (args, done.stdout, done.stderr))
+            self.assertIn("APPROVAL_REFUSED", done.stderr)
+            self.assertIn("inside an agent session (CLAUDECODE", done.stderr)
+            self.assertFalse(self.p.exists(".ai/policies/memory.json"), args)
+            self.assertFalse(os.path.exists(self.hook()), args)
+            self.assertFalse(os.path.exists(ms.local_path(self.p.root, "config.json")), args)
+            self.assertEqual(self.p.tree_listing(), written, args)
+
+    def test_enable_via_dialog_pick(self):
+        """interactive-setup-options R14: the human picks `memory enable …` in the dialog /rr-setup opens and the agent
+        runs the label verbatim. It runs as the human's route and says so on its first line, prints what a human's run
+        prints, switches memory on and installs the hook; the pick is spent, and the decision it settled is closed."""
+        env = dialog_session(self.p)
+        argv = ("memory", "enable", "--author", "dev", "--period", "quarter")
+        label = command_label(self.p, *argv)
+        opened = open_memory_decision(self.p, env, label)
+        self.assertTrue(opened.startswith("DIALOG_PENDING D1 "), opened)
+        self.assertEqual(record_pick(self.p, env, opened, label), (0, ""))
+        [pick] = [line for line in self.ledger(self.p) if line["type"] == "pick"]
+        self.assertEqual((pick["id"], pick["decision"], pick["label"]), ("C1", "D1", label))
+        self.assertEqual(shlex.split(label)[2:], ["--root", self.p.root, *argv], "the label is the argv the agent runs")
+        self.assertEqual(self.live(self.p, env), ["C1"])
+        self.assertFalse(self.p.exists(".ai/policies/memory.json"))
+        done = self.p.run(*argv, env=env)
+        self.assertEqual((done.returncode, done.stderr), (0, ""), done.stdout)
+        human = mh.Project("human", tmp=self.p.tmp).ok(*argv, human=True).stdout          # the unattended route
+        self.assertEqual(human.splitlines()[:2], ["memory: packages mode on (%s); every teammate's next close exports"
+                                                  % ms.POLICY_REL, "pre-push: installed"])
+        self.assertNotIn("via dialog", human)
+        self.assertEqual(done.stdout, "memory: via dialog (consent C1, decision D1)\n" + human)
+        policy = json.loads(self.p.read(".ai/policies/memory.json"))
+        self.assertEqual((policy["mode"], policy["period"]), ("packages", "quarter"))
+        self.assertTrue(os.access(self.hook(), os.X_OK))
+        self.assertIn(ms.HOOK_MARKER, self.p.read(".git/hooks/pre-push"))
+        ledger = self.ledger(self.p)
+        self.assertEqual([line["type"] for line in ledger], ["offer", "pick", "use", "settle"])
+        self.assertEqual(ledger[2]["id"], "C1")
+        self.assertEqual((ledger[3]["decision"], ledger[3]["pick"]), ("D1", "C1"))
+        self.assertEqual(self.live(self.p, env), [])
+        self.assertFalse(self.p.exists(".ai/state/decision.json"))
+
+    def test_enable_pick_used_once(self):
+        """interactive-setup-options R14: a pick is one command, once. With the pick live, any other argv — an option
+        added or left out, another value, another order, another project — is refused (exit 5) and leaves it live and
+        unspent; the exact command then runs, and run again it is refused."""
+        env = dialog_session(self.p)
+        argv = ("memory", "enable", "--author", "dev", "--period", "quarter")
+        label = command_label(self.p, *argv)
+        self.assertEqual(record_pick(self.p, env, open_memory_decision(self.p, env, label), label), (0, ""))
+        elsewhere = mh.Project("elsewhere", tmp=self.p.tmp)               # the same pick, in another project
+        dialog_session(elsewhere)
+        for name in ("consent.jsonl", "decision.json"):
+            elsewhere.write(".ai/state/" + name, self.p.read(".ai/state/" + name))
+        others = {"an option added": argv + ("--index", "sqlite"), "an option left out": argv[:-2],
+                  "another value": ("memory", "enable", "--author", "dev", "--period", "month"),
+                  "another author": ("memory", "enable", "--author", "mallory", "--period", "quarter"),
+                  "another order": ("memory", "enable", "--period", "quarter", "--author", "dev")}
+        for name, other in others.items():
+            with self.subTest(argv=name):
+                self.refused(self.p, env, "enable", other)
+                self.assertEqual(self.live(self.p, env), ["C1"])
+        with self.subTest(argv="another project"):
+            self.refused(elsewhere, env, "enable", argv)
+            self.assertEqual(self.live(elsewhere, env), ["C1"])
+        self.assertEqual([line["type"] for line in self.ledger(self.p)], ["offer", "pick"])
+        done = self.p.run(*argv, env=env)
+        self.assertEqual(done.returncode, 0, (done.stdout, done.stderr))
+        self.assertEqual([line["id"] for line in self.ledger(self.p) if line["type"] == "use"], ["C1"])
+        self.assertEqual(self.live(self.p, env), [])
+        written = (self.p.read(".ai/policies/memory.json"), self.p.read(".git/hooks/pre-push"))
+        self.refused(self.p, env, "enable", argv)
+        self.assertEqual((self.p.read(".ai/policies/memory.json"), self.p.read(".git/hooks/pre-push")), written)
+        self.assertEqual([line["id"] for line in self.ledger(self.p) if line["type"] == "use"], ["C1"])
+
+    def test_disable_stays_terminal(self):
+        """interactive-setup-options R14: only `memory enable` answers to a pick. With a live pick that is exactly the
+        command, an agent's disable, cleanup, pack, redact and migrate --move-logs are still the human's: exit 5, the
+        pick unspent. No dialog can record such a pick (the label allowlist refuses it), so each is forged; the
+        control comes first — the same forgery lets `memory enable` through, which the rest need on anyway."""
+        env = dialog_session(self.p)
+        enable = ("memory", "enable", "--author", "dev")
+        forge_pick(self.p, enable)
+        done = self.p.run(*enable, env=env)
+        self.assertEqual(done.returncode, 0, (done.stdout, done.stderr))
+        self.assertEqual(done.stdout.splitlines()[0], "memory: via dialog (consent C1, decision D1)")
+        for what, argv in TERMINAL_ONLY.items():
+            with self.subTest(what=what):
+                forge_pick(self.p, argv)
+                self.assertEqual(self.live(self.p, env), ["C1"])
+                self.refused(self.p, env, what, argv)
+                self.assertEqual(self.live(self.p, env), ["C1"])
+                self.assertEqual([line["type"] for line in self.ledger(self.p)], ["pick"])
 
     def test_install_idempotent_and_removed(self):
         self.assertIn("pre-push: installed", self.p.ok("memory", "enable", human=True).stdout)

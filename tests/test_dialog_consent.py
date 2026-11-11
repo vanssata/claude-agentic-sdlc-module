@@ -12,6 +12,7 @@ suites and the golden corpus), where a case that needs a ledger cannot hold."""
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -22,9 +23,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 sys.path.insert(0, os.path.join(ROOT, "hooks"))
 from guard import dialog  # noqa: E402  pylint: disable=wrong-import-position
-from guard_harness import decision as decision_of  # noqa: E402  pylint: disable=wrong-import-position
+from guard_harness import decision as decision_of, run as run_hook  # noqa: E402  pylint: disable=wrong-import-position
 import test_dialog_gate as tg  # noqa: E402  pylint: disable=wrong-import-position
 import test_ai_task_state as tas  # noqa: E402  pylint: disable=wrong-import-position
+from rr_state import labels as rr_labels  # noqa: E402  pylint: disable=wrong-import-position
 
 SESSION = "sess-main"
 SAFE = tg.SAFE
@@ -409,6 +411,147 @@ class TestForgeryOnStatePy(tas.DialogBase):
         self.p.ok("decision", "open", "--kind", "commit", "--command", "git commit -m x")
         self.p.pick("D1", 2, tool_use_id="toolu_hand_written", transcript=transcript)
         self.assertIn("C1 D1 mismatch", self.p.run("consent", "audit").stdout)
+
+
+class TestSetupRound(unittest.TestCase):
+    """interactive-setup-options R15, concern B3 (risk 5): /rr-setup opens its four questions as one dialog and the
+    human answers them in one call. The gate lets a Bash command through only when it is the next live pick, the
+    earliest of the live picks; the picks of one dialog call carry one timestamp, so that is the first in the ledger,
+    the question opened first. Run as a session meets it, state.py and the hooks, no line of the ledger written by
+    hand: with memory opened first its command is the next live pick and runs; opened last, the gate answers
+    DECISION_PENDING to it until the choices before it are settled."""
+
+    CALL = "toolu_setup"
+    ARGV = ("memory", "enable", "--author", "dev", "--period", "quarter")
+    # By key: header, question, the choices as (label, value). The human picks the last choice of every question
+    # but memory's, where the pick is the command, the option after its one choice.
+    QUESTIONS = {
+        "memory": ("Memory", "Project memory for p: off keeps closed tasks only in .ai/reports/. Turn it on?",
+                   [("Off — keep files mode", "off")]),
+        "runtime": ("Runtime", "Which agent runtimes work on p?",
+                    [("Auto — what the repository declares", "auto"), ("Claude Code only", "claude")]),
+        "survey": ("Survey", "How deep should the first survey of p go?",
+                   [("Light — a brain dump and 2 discovery agents", "light"),
+                    ("Full — inventory and 6 discovery agents", "full")]),
+        "verify": ("Verify", "verify_command — the fast suite. Proposed: `make test`.",
+                   [("Not now — ask me in chat", ""), ("Use `make test`", "make test")])}
+
+    def project(self):
+        project = tas.DialogProject()
+        self.addCleanup(project.close)
+        return project
+
+    @staticmethod
+    def hook(project, script, payload):
+        """(exit code, output) of hooks/<script> for one call of the agent's session in `project`."""
+        env = dict(os.environ, CLAUDE_CONFIG_DIR=project.home, CLAUDE_CODE_SESSION_ID=tas.DIALOG_SESSION,
+                   AI_UNATTENDED="", CLAUDE_CODE_SESSION_ATTENDED="1")
+        return run_hook(["python3", "-I", "-S", os.path.join(ROOT, "hooks", script)], payload, env=env,
+                        cwd=project.root)
+
+    def gate(self, project, command=None, tool="Bash", tool_input=None, call="toolu_run"):
+        """The PreToolUse gate's answer to one call of the agent's session: ("allow", "") or (the verdict, why)."""
+        payload = {"session_id": tas.DIALOG_SESSION, "transcript_path": os.path.join(project.root, "t.jsonl"),
+                   "cwd": project.root, "hook_event_name": "PreToolUse", "tool_name": tool, "tool_use_id": call,
+                   "tool_input": tool_input or {"command": command}, "prompt_id": "turn_1"}
+        code, out = self.hook(project, "ai-guard.py", payload)
+        self.assertEqual(code, 0, out)
+        verdict = decision_of(out)
+        if verdict != "deny":
+            return verdict, out
+        return verdict, json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"]
+
+    @staticmethod
+    def live(project):
+        """The ids of the picks the dialog route could still consume, as `state.py consent` lists them."""
+        return sorted(pick["id"] for pick in json.loads(project.ok("consent", "--json").stdout)["live"])
+
+    def answered(self, project, *keys):
+        """/rr-setup's round up to the human's answer, the questions in the order of `keys`: the opener, the dialog it
+        printed sent through the gate as printed, then the answer — the memory command, the last choice of every other
+        question — recorded by the PostToolUse hook. The decision ids by key, and the memory command's label."""
+        command = rr_labels.state_label(project.root, list(self.ARGV))
+        decisions = []
+        for key in keys:
+            header, question, choices = self.QUESTIONS[key]
+            options = [{"kind": "choice", "label": label, "value": value} for label, value in choices]
+            if key == "memory":
+                options.append({"kind": "command", "label": command})
+            decisions.append({"key": key, "header": header, "question": question, "options": options})
+        done = project.run("decision", "open", "--kind", "setup", "--spec", "-",
+                           stdin=json.dumps({"schema": 1, "decisions": decisions}))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        ids = {d["setup_key"]: d["id"] for d in project.decisions()}
+        self.assertEqual(list(ids), list(keys), "the decisions open in the spec's order")
+        lines = done.stdout.splitlines()
+        self.assertEqual(len(lines), 2, done.stdout)
+        self.assertTrue(lines[0].startswith("DIALOG_PENDING %s — " % " ".join(ids.values())), lines[0])
+        sent = json.loads(lines[1])
+        self.assertEqual(self.gate(project, tool=dialog.DIALOG_TOOL["claude"], tool_input=sent, call=self.CALL),
+                         ("allow", ""), "the dialog, exactly as printed")
+        self.assertEqual([(e["type"], e["decisions"], e["session"], e["tool_use_id"]) for e in project.ledger()],
+                         [("offer", list(ids.values()), tas.DIALOG_SESSION, self.CALL)])
+        picked = [command if key == "memory" else self.QUESTIONS[key][2][-1][0] for key in keys]
+        payload = dict(tg.spike("claude/ask-single"), cwd=project.root, session_id=tas.DIALOG_SESSION,
+                       tool_use_id=self.CALL)
+        for holder in ("tool_input", "tool_response"):
+            payload[holder] = {"questions": sent["questions"],
+                               "answers": {q["question"]: label for q, label in zip(sent["questions"], picked)}}
+        self.assertEqual(self.hook(project, "dialog-gate.py", payload), (0, ""))
+        self.assertEqual([(e["id"], e["decision"], e["label"]) for e in project.ledger() if e["type"] == "pick"],
+                         [("C%d" % n, ids[key], label) for n, (key, label) in enumerate(zip(keys, picked), 1)])
+        return ids, command
+
+    def settle(self, project, ids, key):
+        """The agent settles the choice of `key`: the gate lets `decision settle` through, and state.py prints what
+        the human picked as SETUP_PICK."""
+        label, value = self.QUESTIONS[key][2][-1]
+        command = rr_labels.state_label(project.root, ["decision", "settle", "--id", ids[key]])
+        self.assertEqual(self.gate(project, command), ("allow", ""), key)
+        done = project.run("decision", "settle", "--id", ids[key])
+        self.assertEqual((done.returncode, done.stdout),
+                         (0, "%s settled: %s (set)\nSETUP_PICK %s=%s\n" % (ids[key], label, key, value)), done.stderr)
+
+    def runs(self, project, ids, command):
+        """The agent runs the memory command it was handed, verbatim: exit 0, and the via line comes first."""
+        self.assertEqual(shlex.split(command)[2:], ["--root", project.root, *self.ARGV], "the label is the argv run")
+        [memory] = [e for e in project.ledger() if e["type"] == "pick" and e["decision"] == ids["memory"]]
+        done = project.run(*self.ARGV)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.splitlines()[0],
+                         "memory: via dialog (consent %s, decision %s)" % (memory["id"], ids["memory"]))
+
+    def test_setup_round_memory_first(self):
+        with self.subTest("memory opened first: its command is the next live pick"):
+            p = self.project()
+            ids, command = self.answered(p, "memory", "runtime", "survey", "verify")
+            self.assertEqual(self.live(p), ["C1", "C2", "C3", "C4"], "the choices' picks are live beside it")
+            before = p.ledger()
+            self.assertEqual(self.gate(p, command), ("allow", ""))
+            self.assertEqual(p.ledger(), before, "the gate spends nothing; state.py spends the pick of its command")
+            self.runs(p, ids, command)
+            self.assertEqual([d["id"] for d in p.decisions()], [ids["runtime"], ids["survey"], ids["verify"]])
+            for key in ("runtime", "survey", "verify"):
+                self.settle(p, ids, key)
+            self.assertEqual(p.decisions(), [])
+        with self.subTest("memory opened last: the gate holds its command until the choices before it are settled"):
+            p = self.project()
+            ids, command = self.answered(p, "runtime", "survey", "verify", "memory")
+            self.assertEqual(self.live(p), ["C1", "C2", "C3", "C4"], "the same four live picks")
+            waiting = list(ids.values())
+            for key in ("runtime", "survey", "verify"):
+                before = p.ledger()
+                verdict, why = self.gate(p, command)
+                self.assertEqual(verdict, "deny", why)
+                self.assertTrue(why.startswith("DECISION_PENDING %s — " % " ".join(waiting)), why)
+                self.assertIn("decision settle --id %s" % ids[key], why)
+                self.assertEqual(p.ledger(), before, "the refusal voids nothing: every pick stays live")
+                self.settle(p, ids, key)
+                waiting.remove(ids[key])
+            self.assertEqual(self.live(p), ["C4"], "the memory pick is all that is left")
+            self.assertEqual(self.gate(p, command), ("allow", ""))
+            self.runs(p, ids, command)
+            self.assertEqual(p.decisions(), [])
 
 
 if __name__ == "__main__":
