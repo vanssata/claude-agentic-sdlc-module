@@ -6,8 +6,13 @@ dangerous one, then the audit, the update and the bill.
 ## 1. Install
 
 ```bash
-npx riskrails@4.1.0          # detects Claude Code, Codex or both; proposes the plan it detected; Enter confirms
+npx riskrails@4.1.0          # detects Claude Code, Codex or both; each question a menu on a terminal; Enter confirms
 ```
+
+On a terminal each question — runtime, plan, Fable, context, statusline, Codex
+plan — is a menu with the proposal highlighted; Enter through all of them
+installs what detection proposes, Esc stops with nothing written.
+[Installation](installation.md) has the keys and the flags that skip a menu.
 
 Node 18+ and `python3` are needed. The installer writes the managed block into
 `~/.claude/CLAUDE.md` (or `~/.codex/AGENTS.md`), the plan's settings, the five
