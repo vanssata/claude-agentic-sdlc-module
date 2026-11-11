@@ -94,6 +94,13 @@ npx riskrails@4.0.1 --dry-run             # print what would be written, write n
 npx -y riskrails@latest --yes             # update in place, keeping the recorded plan
 ```
 
+On a terminal each question is a menu — runtime, plan, Fable, context,
+statusline, Codex plan — with the detected or recorded choice highlighted:
+↑/↓ (or k/j), Home/End or 1–9 to move, Enter to confirm, Esc, q or Ctrl-C to
+stop with nothing written. Enter through every menu installs what detection
+proposes. A flag skips its menu; `--yes` or no terminal asks nothing, and
+`RISKRAILS_MENU=off` (or `TERM=dumb`) brings back the typed plan question.
+
 Pin the version: the hooks it installs see every command an agent runs. It
 installs the managed block, the plan's settings and limits, the five agents
 with their tiers baked in, the hooks, the skills, the shared tree at

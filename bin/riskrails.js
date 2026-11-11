@@ -37,6 +37,12 @@
 //          variables CLAUDE_DIR and CODEX_DIR mean the same). Naming exactly one of them under
 //          --target auto installs that runtime alone.
 // --dry-run prints everything that would be written, per runtime, and writes nothing.
+// On a terminal each choice no flag names is an arrow-key menu, in this order: runtime (only
+//          without --target, --home and --codex-home), plan, fable (max, max20, team-max),
+//          context, statusline, codex plan. The proposal above is highlighted and Enter
+//          confirms it (an undetected plan proposes pro); ↑/↓ or k/j, Home/End and 1-9 move;
+//          Esc, q or Ctrl-C stop with nothing written (exit 130). RISKRAILS_MENU=off or 0, or
+//          TERM=dumb: the typed plan question instead. --yes or no terminal: no question.
 //
 // This is the port of the install.sh that shipped up to 2.0.2: the same tree, the same
 // messages, the same backups (backups/<date>/<path> under the runtime's home). JSON merges
@@ -65,6 +71,8 @@ const HOME = env.HOME || os.homedir();
 let PLAN = '', FABLE = 'auto', DRY = false, TARGET = 'auto', PLAN_GIVEN = false;
 let CODEX_PLAN = '', CODEX_PLAN_GIVEN = false, YES = false;
 let CONTEXT = 'default', STATUSLINE_CONTEXT = 'yes', STATUSLINE = 'riskrails', STATUSLINE_GIVEN = false;
+// A flag that names a choice skips its menu on a terminal (bin/menu.js).
+let TARGET_GIVEN = false, FABLE_GIVEN = false, CONTEXT_GIVEN = false;
 
 function version() {
   try { return JSON.parse(fs.readFileSync(path.join(SRC, 'package.json'), 'utf8')).version || 'unknown'; }
@@ -90,11 +98,11 @@ function usage() {
       return v;
     };
     switch (a) {
-      case '--target': TARGET = take(); break;
+      case '--target': TARGET = take(); TARGET_GIVEN = true; break;
       case '--plan': PLAN = take(); PLAN_GIVEN = true; break;
-      case '--fable': FABLE = take(); PLAN_GIVEN = true; break;
+      case '--fable': FABLE = take(); PLAN_GIVEN = true; FABLE_GIVEN = true; break;
       case '--codex-plan': CODEX_PLAN = take(); CODEX_PLAN_GIVEN = true; break;
-      case '--context': CONTEXT = take(); break;
+      case '--context': CONTEXT = take(); CONTEXT_GIVEN = true; break;
       case '--statusline-context': STATUSLINE_CONTEXT = take(); break;
       case '--statusline': STATUSLINE = take(); STATUSLINE_GIVEN = true; break;
       case '--home': CLAUDE_DIR = path.resolve(take()); CLAUDE_DIR_GIVEN = true; break;
@@ -260,6 +268,51 @@ function ask(prompt) {
 }
 const interactive = () => !YES && process.stdin.isTTY === true;
 
+// A choice on a terminal, as an arrow-key menu: bin/menu.js runs as a child that owns the
+// terminal (raw mode, the menu on stderr) and writes the picked value to stdout. null means
+// no menu — not a terminal, RISKRAILS_MENU=off|0, TERM=dumb, or the child could not take the
+// terminal (exit 3) — and the caller asks as before. An abort exits 130 here, before anything
+// is written: every menu runs in claudeRender/codexRender, ahead of the apply steps.
+const menuOff = () => !interactive() || ['off', '0'].includes(env.RISKRAILS_MENU) || env.TERM === 'dumb';
+function choose(title, items, initial, why) {
+  if (menuOff() || initial < 0) return null;
+  const spec = JSON.stringify({ title, why: why || '', items, initial });
+  const r = spawnSync(process.execPath, [path.join(__dirname, 'menu.js')],
+    { stdio: ['inherit', 'pipe', 'inherit'], env: { ...env, RISKRAILS_MENU_SPEC: spec }, encoding: 'utf8' });
+  if (r.status === 0 && items.some((it) => it.value === r.stdout)) return r.stdout;
+  if (r.status === 130 || r.signal) {
+    if (r.signal) err(`riskrails: the menu was stopped by ${r.signal}; run \`stty sane\` if the terminal misbehaves`);
+    die('riskrails: aborted — nothing was written', 130);
+  }
+  return null;
+}
+const pick = (values, notes) => values.map((v, i) => ({ value: v, label: v, note: notes[i] || '' }));
+
+// --context on a terminal, asked once: by the Claude branch, else before the Codex plan.
+let CONTEXT_ASKED = false;
+function askContext() {
+  if (CONTEXT_GIVEN || CONTEXT_ASKED) return;
+  CONTEXT_ASKED = true;
+  const c = choose('context', pick(['default', 'economy'], ["each runtime's own context window and compaction",
+    "the plan's autoCompactWindow; context-guard also holds a prompt back past 120% of it"]), 0);
+  if (c) CONTEXT = c;
+}
+// --statusline on a terminal: the mode riskrails/statusline.json records is the proposal, read as
+// statuslineGate reads it. Only a different pick counts as given, so Enter keeps today's run.
+function askStatusline() {
+  if (STATUSLINE_GIVEN) return;
+  let mode = '';
+  try {
+    const r = readJSON(path.join(CLAUDE_DIR, 'riskrails', 'statusline.json'));
+    if (isObj(r) && ['riskrails', 'own'].includes(r.mode)) mode = r.mode;
+  } catch (e) { /* none yet */ }
+  const MODES = ['riskrails', 'own'];
+  const v = choose('statusline', pick(MODES, ["the plugin's statusline over your own command (kept, --statusline own brings it back)",
+    'your own statusline command, behind the quota check']), MODES.indexOf(mode || 'riskrails'),
+  mode ? 'recorded by the previous install' : '');
+  if (v && v !== (mode || 'riskrails')) { STATUSLINE = v; STATUSLINE_GIVEN = true; }
+}
+
 // ------------------------------------------------------------------ runtime detection
 let DO_CLAUDE = false, DO_CODEX = false;
 const skippedRuntime = (rt, dir) => err(`${rt}: ${dir} found but no ${rt} on PATH — skipped (--target ${rt} for it alone, --target both for both)`);
@@ -287,7 +340,16 @@ Code or Codex first, or name the runtime yourself:
   npx riskrails --target both        # both, whether or not they are detected`);
   process.exit(1);
 }
-if (TARGET === 'auto') out('detected runtime:' + (DO_CLAUDE ? ' claude' : '') + (DO_CODEX ? ' codex' : ''));
+// On a terminal, with nothing naming the runtime, the detected set is the menu's first proposal.
+let RUNTIME_PICKED = false;
+if (TARGET === 'auto' && !TARGET_GIVEN && !CLAUDE_DIR_GIVEN && !CODEX_DIR_GIVEN) {
+  const RUNTIMES = ['claude', 'codex', 'both'];
+  const detected = DO_CLAUDE && DO_CODEX ? 'both' : DO_CLAUDE ? 'claude' : 'codex';
+  const rt = choose('runtime', pick(RUNTIMES, ['Claude Code', 'Codex', 'Claude Code and Codex']),
+    RUNTIMES.indexOf(detected), `detected: ${detected}`);
+  if (rt && rt !== detected) { DO_CLAUDE = rt !== 'codex'; DO_CODEX = rt !== 'claude'; RUNTIME_PICKED = true; }
+}
+if (TARGET === 'auto' && !RUNTIME_PICKED) out('detected runtime:' + (DO_CLAUDE ? ' claude' : '') + (DO_CODEX ? ' codex' : ''));
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'riskrails-'));
 process.on('exit', () => rmrf(TMP));
@@ -391,8 +453,18 @@ function detectPlan(runtime) {
 
 // The plan question on a terminal: the plan the previous install recorded, else the detected
 // one, is proposed and Enter confirms it; a Team seat, or a plan nothing detected, is typed.
+// On a terminal with the menu on, the six plans are a menu instead: the proposal is the same,
+// and without one it is team-pro for a Team org, else pro (Enter installs it rather than exiting).
+const CLAUDE_PLANS = ['pro', 'team-pro', 'team-max', 'max', 'max20', 'balanced-max'];
+const CLAUDE_PLAN_NOTES = ['Pro', 'Team Standard seat', 'Team Premium seat', 'Max',
+  "Max 20x: max's settings, larger budgets", 'Max account, only the session runs Opus 5.5 (200k window)'];
 function pickClaudePlan(prev, detected, from, org) {
   const proposed = prev || detected;
+  const first = proposed || (from === 'team' ? 'team-pro' : 'pro');
+  const menuWhy = prev ? 'recorded by the previous install' : detected ? `detected from ${from}`
+    : from === 'team' ? `Team org ${org}, seat unknown` : `could not detect the plan, organizationType='${org}'`;
+  const picked = choose('plan', pick(CLAUDE_PLANS, CLAUDE_PLAN_NOTES), CLAUDE_PLANS.indexOf(first), menuWhy);
+  if (picked !== null) return picked;
   if (proposed) {
     const why = prev ? 'recorded by the previous install' : `detected from ${from}`;
     return ask(`plan: ${proposed} (${why}) — Enter to confirm, or type pro/team-pro/team-max/max/max20/balanced-max: `) || proposed;
@@ -431,6 +503,14 @@ function claudeRender() {
   if (['balanced_max', 'balancedmax'].includes(PLAN)) PLAN = 'balanced-max';
   if (!plans[PLAN]) die(`--plan must be pro, team-pro, team-max, max, max20 or balanced-max (got '${PLAN}')`, 2);
   const [TIER, PROFILE_NAME, PLAN_LABEL] = plans[PLAN];
+  // The option menus on a terminal, each skipped by its own flag: fable, context, statusline.
+  if (!FABLE_GIVEN && TIER === 'max' && PLAN !== 'balanced-max') {
+    const f = choose('fable', pick(['yes', 'no'], ['Fable 5.1 pinned on architect, the runtime gate on',
+      'no Fable anywhere in this install']), 0, `auto on ${PLAN}`);
+    if (f === 'no') FABLE = 'no';
+  }
+  askContext();
+  askStatusline();
   if (FABLE === 'auto') FABLE = TIER === 'max' && PLAN !== 'balanced-max' ? 'yes' : 'no';
   else if (!['yes', 'no'].includes(FABLE)) die('--fable must be auto|yes|no', 2);
   if ((TIER === 'pro' || PLAN === 'balanced-max') && FABLE === 'yes') {
@@ -1272,8 +1352,14 @@ const X = {};   // the Codex branch's rendered values
 
 // The Codex plan question on a terminal: the previous install's plan, else the detected one,
 // is proposed and Enter confirms it; without either the plan is typed.
+const CODEX_PLANS = ['plus', 'pro', 'balanced-max'];
+const CODEX_PLAN_NOTES = ['ChatGPT Plus', 'ChatGPT Pro', 'only the session runs the strong model'];
 function pickCodexPlan(prev, det, why, detected) {
   const proposed = prev || det;
+  const menuWhy = prev ? 'recorded by the previous install' : det ? `detected from ${why}`
+    : `could not detect the ChatGPT plan, chatgpt_plan_type='${detected}'`;
+  const picked = choose('codex plan', pick(CODEX_PLANS, CODEX_PLAN_NOTES), CODEX_PLANS.indexOf(proposed || 'pro'), menuWhy);
+  if (picked !== null) return picked;
   if (proposed) {
     const w = prev ? 'recorded by the previous install' : `detected from ${why}`;
     return ask(`codex plan: ${proposed} (${w}) — Enter to confirm, or type plus/pro/balanced-max: `) || proposed;
@@ -1287,6 +1373,7 @@ function codexRender() {
   // BalancedMax is one routing idea on both runtimes: --plan balanced-max selects the Codex
   // balanced-max profile too, unless --codex-plan says otherwise.
   if (!CODEX_PLAN && PLAN === 'balanced-max') CODEX_PLAN = 'balanced-max';
+  askContext();
   if (!CODEX_PLAN) {
     const live = detectPlan('codex');
     const detected = live.raw || '', det = live.plan || '', why = live.from || '';
