@@ -241,8 +241,8 @@
       <h2 class="h2">Menus in the installer. <em>One dialog in setup.</em></h2>
     </div>
     <div class="cards">
-      <div class="card rv"><h3>Arrow-key installer</h3><p>On a terminal each question is a menu: runtime, plan, Fable, context, statusline, Codex plan. Enter confirms the proposal, Esc stops with nothing written. A flag skips its menu; <code>--yes</code>, no terminal or <code>RISKRAILS_MENU=off</code> ask as in 4.0.</p></div>
-      <div class="card rv"><h3>Setup asks once</h3><p><code>/rr-setup</code> asks runtime, survey depth, <code>verify_command</code> and project memory in one dialog before any work, only the ones not set yet. <code>/rr-setup --options</code> asks them all again.</p></div>
+      <div class="card rv"><h3>Arrow-key installer</h3><p>On a terminal each question is a menu: runtime, plan, Fable, context, statusline, Codex plan. Enter confirms the proposal, Esc stops with nothing written. A flag skips its menu; <code>--yes</code> or no terminal asks nothing, and <code>RISKRAILS_MENU=off</code> brings back the typed plan question.</p></div>
+      <div class="card rv"><h3>Setup asks once</h3><p><code>/rr-setup</code> asks runtime, survey depth, <code>verify_command</code> and project memory in one dialog before any work, only the ones not set yet. <code>/rr-setup --options</code> asks them all again. With the dialog off or in an unattended run the questions stay prose.</p></div>
       <div class="card rv"><h3>Memory from setup</h3><p>Off, packages, or packages with the SQLite index. A picked <code>memory enable</code> runs through the dialog, verbatim and once; <code>disable</code>, <code>cleanup</code>, <code>pack</code> and <code>redact</code> stay in your own terminal.</p></div>
       <div class="card rv"><h3>No instruction file</h3><p><code>scaffold-ai.sh --runtime none</code> writes <code>.ai/</code> and its <code>.gitignore</code> lines and no instruction file.</p></div>
     </div>
