@@ -88,6 +88,15 @@ Run the suite to the end and fix every failure before you push.
   `tests/fixtures/memory/goldens/sync/`. Run them with `python3 -I
   tests/run_suite.py tests/test_memory_*.py`; after a change meant to move the
   behaviour, `UPDATE_GOLDENS=1` re-records the golden.
+- **The path guard** is the entry `hooks/guard/paths.py` (`PathGuard` and
+  `check`) and eight sibling modules `hooks/guard/paths_*.py` (layers 0 to 2);
+  the map is in [docs/architecture.md](docs/architecture.md). A change goes in
+  the module that owns the function. `tests/fixtures/guard/partition.json` is
+  the authority and `tests/test_guard_layout.py` checks it. A move between the
+  modules is proved by the golden plus that suite, with `partition.json` changed
+  to the new home. `python3 -I tests/test_guard_layout.py --moved-from <rev>`
+  compares the modules with the single-file `paths.py` of `<rev>`: it proved the
+  WP5 split and works only against a revision from before it.
 - **The state machine** is the package `skills/ai-task/rr_state/` (layers 0 to 9,
   imports only downward) behind the entry `skills/ai-task/state.py`, a shim; the
   map is in [docs/architecture.md](docs/architecture.md). A change goes in the

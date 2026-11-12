@@ -174,6 +174,22 @@ calls `memory_export.after_close`, `rr-setup/setup.py` uses `memory_config` and
 commands print, return and write against `tests/fixtures/memory/goldens/sync/`.
 `memory_compact.py`, `memory_format.py` and `memory_store.py` are unchanged.
 
+The path guard follows the same rule. `hooks/guard/paths.py` stays the module
+`hooks/ai-guard.py` imports: it holds `PathGuard`, the state of one tool call
+(the clock and the work caps, the task memo, `phys_path` and `check`), and
+`check(ctx)`, and re-exports nothing. The rules live in eight sibling modules,
+in layers 0 to 2: `paths_base` (the shared texts and deny messages), `paths_fs`
+(`realpath -m`, `find` and `cd -P` in Python), `paths_shell` (the segmenter) in
+layer 0; `paths_human` (the human-only gates), `paths_interp` (interpreter
+one-liners and in-place edits), `paths_classify` (the sensitive and protected
+patterns), `paths_movers` (cp, mv, rm and kin) in layer 1; `paths_bash` (the
+Bash rule) in layer 2. A rule that was a method is now a function with `self`
+first, and a method table in the body of `PathGuard` binds it
+(`classify = paths_classify.classify`); nothing is inherited. The map is
+`tests/fixtures/guard/partition.json`, checked by `tests/test_guard_layout.py`.
+Nothing under `hooks/` imports `rr_state`, and `rr_state` imports nothing under
+`hooks/`.
+
 | File | Written by | Holds |
 |---|---|---|
 | `.ai/state/state.json` | `state.py` | the task (schema 7): id, goal, workflow, mode, stage, files, tests, steps, the weight with its axes and re-scores, verify runs, review passes, the gate, the batch flag, the facts |

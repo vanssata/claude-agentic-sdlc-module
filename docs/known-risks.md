@@ -46,7 +46,8 @@ only on the approval it produced.
 audit`, before you merge a full-mode change. An approval you do not remember
 giving is a finding.
 **Source.** WP2 security review; `docs/sdlc/specs/command-choice-dialog.md`
-§Open questions; `hooks/guard/paths.py`, `hooks/guard/dialog.py`.
+§Open questions; `hooks/guard/paths_human.py`, `hooks/guard/paths_bash.py`,
+`hooks/guard/dialog.py`.
 
 ## The deletion gate stops an agent's command, not an agent's script
 
@@ -69,7 +70,7 @@ session, is refused too — that shell carries the markers.
 **What to do.** Run `--confirm-delete` in a terminal of your own. A `via:
 unattended` on a run nobody launched unattended is a finding.
 **Source.** WP6 finding F3, `.ai/reports/T-2026-09-27-003/`;
-`hooks/guard/paths.py`, `skills/project-update/update.py` (the confirm gate).
+`hooks/guard/paths_human.py`, `skills/project-update/update.py` (the confirm gate).
 
 ## `AI_UNATTENDED=1` turns the human gates off
 

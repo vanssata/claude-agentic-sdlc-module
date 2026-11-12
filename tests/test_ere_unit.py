@@ -16,7 +16,7 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "hooks"))
-from guard import common, ere, paths  # noqa: E402  pylint: disable=wrong-import-position
+from guard import common, ere, paths_fs  # noqa: E402  pylint: disable=wrong-import-position
 
 TIMED_FACTOR = float(os.environ.get("AI_TIMED_FACTOR") or 1)
 
@@ -202,7 +202,7 @@ class TestFindPrint(unittest.TestCase):
                 pass
             with open(os.path.join(root, "b", "y"), "w", encoding="utf-8"):
                 pass
-            got = [os.fsdecode(p) for p in paths.find_print(root, 3, ())]
+            got = [os.fsdecode(p) for p in paths_fs.find_print(root, 3, ())]
         rel = [os.path.relpath(p, root) for p in got]
         self.assertEqual(rel, [".", ".d", "a", "b", "b/y", "b/z", "c"])
 

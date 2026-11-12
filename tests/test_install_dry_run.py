@@ -418,7 +418,11 @@ class InstallDryRun(ScratchCase):  # pylint: disable=too-many-public-methods  # 
                   "riskrails/ai/policies/git.md",
                   "skills/project-update/render_instructions.py",
                   "hooks/ai-guard.py", "hooks/guard/__init__.py", "hooks/guard/common.py", "hooks/guard/ere.py",
-                  "hooks/guard/git.py", "hooks/guard/paths.py", "hooks/guard/scope.py"]:
+                  "hooks/guard/git.py", "hooks/guard/paths.py", "hooks/guard/scope.py",
+                  "hooks/guard/paths_base.py", "hooks/guard/paths_fs.py", "hooks/guard/paths_shell.py",
+                  "hooks/guard/paths_human.py", "hooks/guard/paths_interp.py",
+                  "hooks/guard/paths_classify.py", "hooks/guard/paths_movers.py",
+                  "hooks/guard/paths_bash.py"]:
             self.ok("$f installed", os.path.exists(os.path.join(d, f)), f + " missing", {"$f": f})
         self.ok("hooks are executable", is_x(os.path.join(d, "hooks", "ai-guard.py")), "hooks should be executable")
         # The installed hooks/ai-guard.py and its guard/ package must run, not only
