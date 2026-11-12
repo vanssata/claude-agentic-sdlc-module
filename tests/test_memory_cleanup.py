@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import memory_harness as mh  # noqa: E402  pylint: disable=wrong-import-position
 import memory_format as mf  # noqa: E402  pylint: disable=wrong-import-position
 import memory_config as mcfg  # noqa: E402  pylint: disable=wrong-import-position
+import memory_compact as mc  # noqa: E402  pylint: disable=wrong-import-position
 import memory_export as mexp  # noqa: E402  pylint: disable=wrong-import-position
 
 USAGE = os.path.join(mh.ROOT, "skills", "usage-report", "usage-report.py")
@@ -156,6 +157,40 @@ class TestRedact(Base):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(self.p.run("memory", "redact", note["rid"], "--field", "text", "--why", "again",
                                     human=True).returncode, 1)
+
+    def test_a_stuck_oversized_seal_is_shortened_by_redacting_its_changes(self):
+        """GitHub #74: a seal line over the cap blocked the push and `redact` found no entry."""
+        name = os.listdir(self.p.path(".ai/memory"))[0]
+        header, entries, errors = mf.parse_package(self.p.read(".ai/memory/" + name, binary=True), name)
+        self.assertEqual(errors, [])
+        seal = [mf.strip_private(e) for e in entries if e["kind"] == "task"][0]
+        rows = [{"path": "bulk/module_%04d/a_rather_long_directory_name/generated_file_%04d.txt" % (i, i),
+                 "status": "A", "added": 1, "deleted": 0, "binary": False} for i in range(1500)]
+        big = mf.with_rid(dict({k: v for k, v in seal.items() if k != "rid"}, changes=rows))
+        rest = [mf.strip_private(e) for e in entries if e["kind"] != "task"]
+        self.p.write(".ai/memory/" + name, mf.render_package(header, rest + [big]), mode="wb")
+        archived = ".ai/state/logs/%s/state.json" % self.task
+        state = json.loads(self.p.read(archived))
+        state["changes"] = rows                    # the local sources still compact to the oversized seal
+        self.p.write(archived, json.dumps(state))
+        base = self.p.git("rev-parse", "HEAD").stdout.strip()
+        old = self.p.commit("the stuck seal")
+        mexp.write_outbox(self.p.root, mc.Compaction(rest, big, {}, []))
+        outbox = self.p.path(".ai/local/memory/outbox")
+        self.assertTrue(os.listdir(outbox))
+        self.p.run("memory", "export", "--pending")
+        self.assertEqual(os.listdir(outbox), [])
+        self.p.commit("export pending")
+        done = mh.hook_run(self.p.root, "--range", "%s..HEAD" % base)
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertRegex(done.stdout + done.stderr, r"V1.*state\.py memory redact %s --field changes" % big["rid"])
+        out = self.p.ok("memory", "redact", big["rid"], "--field", "changes", "--why", "x", human=True).stdout
+        self.assertIn("redacted: changes", out)
+        self.assertEqual(self.p.ok("memory", "verify").stdout.splitlines()[-1], "memory verify: ok")
+        new = self.p.commit("shortened")
+        done = mh.hook_run(self.p.root, "--range", "%s..%s" % (old, new))
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.p.run("memory", "show", self.task).returncode, 0)
 
 
 class TestPack(unittest.TestCase):

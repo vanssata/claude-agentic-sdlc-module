@@ -275,7 +275,9 @@ def sort_entries(entries):
 
 def parse_package(data, name=None):
     """(header, entries, errors): errors are (line, what) pairs; a line that
-    fails is left out of entries, so a reader still sees the rest."""
+    fails is left out of entries, so a reader still sees the rest. A line over
+    LINE_MAX_BYTES is an error, and a valid entry on it is still kept, with its
+    byte length in `_over` (GitHub #74)."""
     errors, entries, header = [], [], None
     if isinstance(data, str):
         data = data.encode("utf-8")
@@ -293,7 +295,6 @@ def parse_package(data, name=None):
             raw = raw[:-1]
         if len(raw) > LINE_MAX_BYTES:
             errors.append((number, "line is %d bytes, over %d" % (len(raw), LINE_MAX_BYTES)))
-            continue
         try:
             obj = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, ValueError) as exc:
@@ -318,6 +319,8 @@ def parse_package(data, name=None):
             errors.append((number, "; ".join(problems)))
             continue
         obj["_line"] = number
+        if len(raw) > LINE_MAX_BYTES:
+            obj["_over"] = len(raw)
         entries.append(obj)
     if header is None and not errors:
         errors.append((1, "empty package"))
@@ -688,7 +691,8 @@ def render_task_md(entries):
         facts = seal.get("facts") or {}
         if facts:
             out += ["facts: (a) %s · (b) %s" % tuple(_fact(facts.get(k)) for k in ("a", "b")), ""]
-        files = seal.get("changes") or []
+        files = seal.get("changes")
+        files = files if isinstance(files, list) else []
         out += ["## Files", ""]
         if files:
             out += ["- %s (%s, %s)" % (c.get("path"), "binary" if c.get("binary") else "+%s −%s" % (

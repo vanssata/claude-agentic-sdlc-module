@@ -663,7 +663,10 @@ titles.
 - Checks, with one `ls-tree`, one `diff --name-status O T -- .ai` and one
   `cat-file --batch` for every blob:
   - V1 every package changed in O..T parses: header, JSON, schema per kind,
-    rid equal to the hash, lines ≤ 64 KB, name matching its header;
+    rid equal to the hash, lines ≤ 64 KB, name matching its header. An
+    over-long line is a V1 finding; when it is a valid entry it is still read
+    (read-back, `memory redact` and the next export see it), and the finding's
+    hint names `memory redact <rid> --field <largest field>`;
   - V2 rids(O) ⊆ rids(T) ∪ redacted(T);
   - V3 each key has one seal, or seals chained by `supersedes`; a new-shape
     key with two unchained seals is refused; a legacy duplicate is allowed
@@ -887,7 +890,7 @@ end, `verify_command` once to the end then `e2e_command`
 | runtime | str | yes | claude, codex or unknown |
 | src | [str] | yes, ≥ 1 | pointers (§D3) |
 | unrecorded | [str] | no | fields absent at the source |
-| truncated | [str] | no | agent fields cut at 2 000 characters |
+| truncated | [str] | no | agent fields cut at 2 000 characters; also `changes` when a seal's change table was cut to fit one line |
 | supersedes | str | no | rid |
 
 Required fields per kind:
@@ -895,7 +898,9 @@ Required fields per kind:
 - `task` (the seal): result, goal, workflow, mode, w, axes, started_at,
   closed_at, files, steps, stages, changes, code, facts, verify_runs,
   counts{lines, skipped, dropped}, people, runtimes, entries, digest, source,
-  schema, version; optional legacy_tier.
+  schema, version; optional legacy_tier and changes_truncated{rows, added,
+  deleted} (the totals of the whole table, present only when `changes` was cut
+  so the line stays within 65 536 bytes).
 - `weight`: change, w, mode, axes, from, to, lines.
 - `override`: what, from, to, via, why; optional pick.
 - `scope`: change (plan or amend), added, why; optional steps.

@@ -37,13 +37,21 @@ def check_packages(packages, max_bytes, sizes=None, changed=None, ref_name=None)
     """V1, V3, V4, V8 over one tree's packages."""
     findings = []
     sizes = sizes or {}
-    for name, (_, _, errors) in sorted(packages.items()):
+    for name, (_, kept, errors) in sorted(packages.items()):
         if changed is not None and name not in changed:
             continue
+        over = {e["_line"]: e for e in kept if "_over" in e}
         for line, what in errors:
-            findings.append(Finding("V1", os.path.join(mio.MEMORY_REL, name), line, what,
-                                    "restore the line from git ('git checkout -- %s') or 'state.py memory verify'"
-                                    % os.path.join(mio.MEMORY_REL, name)))
+            fix = ("restore the line from git ('git checkout -- %s') or 'state.py memory verify'"
+                   % os.path.join(mio.MEMORY_REL, name))
+            if line in over and what.startswith("line is "):
+                entry = over[line]
+                sizes_of = {k: len(mf.canonical(v)) for k, v in entry.items()
+                            if k not in mf.ENVELOPE and not k.startswith("_")}
+                field = max(sizes_of, key=sizes_of.get, default="changes")
+                fix = ("shorten it: 'state.py memory redact %s --field %s --why \"…\"' (the human's route)"
+                       % (entry["rid"], field))
+            findings.append(Finding("V1", os.path.join(mio.MEMORY_REL, name), line, what, fix))
     by_key = collections.defaultdict(list)
     conflicts = set()
     redacted = {}
