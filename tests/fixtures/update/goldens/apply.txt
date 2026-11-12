@@ -12,18 +12,20 @@ project-update: <ROOT> (applied)
   regenerate .ai/rules/README.md               unchanged since it was installed
   regenerate .ai/state/README.md               unchanged since it was installed
   regenerate .ai/policies/weight.md            rendered from the weight table
+  regenerate .gitignore                        entries appended: .ai/memory/, .ai/reports/
   delete    .ai/policies/weight.json          [split] superseded by .ai/policies/weight.project.json; the plugin's table is read from the plugin
   regenerate .ai/VERSION                       schema 12
+  hint      .ai/memory/ and .ai/reports/ are local now. Files git already tracks stay tracked: 'git rm -r --cached --ignore-unmatch .ai/memory .ai/reports' untracks them (yours to run); 'state.py memory enable --share git' keeps sharing them.
   hint      .ai/policies/verification.md: verify_command is empty — the feedback loop needs it
   hint      .ai/policies/verification.md: step_test_command is empty — a step runs only its own tests
   hint      .ai/policies/verification.md: e2e_command is empty — e2e runs once at the end of a task; write 'none' if there is no suite
   hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
   hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
-11 automatic
+12 automatic
 --- stderr
 
 ##### files of the project tree after the run
-5a93f78b4ed4d416c171139b2ce610a117f9c1dd46fbb56ca86729cb4c53d10c  - .gitignore
+fa0cb370b024e1a30e1355912032657b08f609e47773a603c193b1e609b0f997  - .gitignore
 401256979228051792f2d7186e4075e457b990304229c2c034008a03df07affe  - CLAUDE.md
 7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
 a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION
@@ -80,7 +82,6 @@ project-update: <ROOT> (applied)
   split     .ai/policies/weight.project.json                4 leaf/leaves of weight.json that differ from the plugin's table carried (tests.max_suite_runs, examples.light, domain.modules, scope.hot_paths); 1 not carried, equal to an older shipped value: hints
   create    docs/sdlc/README.md                             
   create    .claude/memory/README.md                        
-  regenerate .gitignore                                      entries appended: .claude/settings.local.json, .claude/memory/local/, .codex/memory/local/
   regenerate .ai/AGENTS.md                                   edited here: 7 line(s) of yours are not in the plugin's version (``policies/`, `weight.json`, `weight.md`, `path-g…`; ``coding.md`, `safety.md` and `security.md`. Ever…`; `| the weight, the mode, who reviews, what a huma…`); original kept at .ai/reports/project-update-<DATE>/original/.ai/AGENTS.md
   regenerate .ai/policies/coding.md                          edited here: 1 line(s) of yours are not in the plugin's version (`- Money is integer cents, never a float (ours).`); original kept at .ai/reports/project-update-<DATE>/original/.ai/policies/coding.md
   regenerate .ai/policies/path-guard.json                    edited here: 8 line(s) of yours are not in the plugin's version (`"_comment": "ours",`; `"deny_patterns": [`; `"\\.vault$",`); drops 3 deny/allow pattern(s); original kept at .ai/reports/project-update-<DATE>/original/.ai/policies/path-guard.json
@@ -91,12 +92,14 @@ project-update: <ROOT> (applied)
   regenerate .ai/state/README.md                             unchanged since it was installed
   regenerate .ai/policies/weight.md                          rendered from the weight table
   regenerate CLAUDE.md                                       managed block edited here: 1 line(s) of yours are not in the plugin's version (`- our own line inside the block`); original kept at .ai/reports/project-update-<DATE>/original/CLAUDE.md
+  regenerate .gitignore                                      entries appended: .claude/settings.local.json, .claude/memory/local/, .codex/memory/local/, .ai/memory/, .ai/reports/
   delete    .ai/policies/weight.json                        [split] superseded by .ai/policies/weight.project.json; the plugin's table is read from the plugin
   delete    .ai/policies/tooling.md                         [shared] identical to a shipped version
   delete    .ai/rules/php-style.md                          [rules] rule sources are not kept by an update: the rendered blocks go with it
   delete    .ai/local/plugin-update/.ai/policies/coding.md  [local] the old merge's cache, not written any more
   regenerate .ai/VERSION                                     schema 12
   hint      1 file(s) override the plugin's shared copy and no longer receive its changes: .ai/policies/git.md — diff each against <PLUGIN_ROOT>/ai/<path>; `ai-path <path>` shows which applies; delete one when it adds nothing
+  hint      .ai/memory/ and .ai/reports/ are local now. Files git already tracks stay tracked: 'git rm -r --cached --ignore-unmatch .ai/memory .ai/reports' untracks them (yours to run); 'state.py memory enable --share git' keeps sharing them.
   hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
   hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
   hint      .ai/state/state.json: a task is in flight while files are regenerated — check that the files its current step may touch still exist afterwards
@@ -104,7 +107,7 @@ project-update: <ROOT> (applied)
 --- stderr
 
 ##### files of the project tree after the run
-4ce6a6a45d135f3aa7995d376d5055990e1292f4968a7f67cb54798514274daf  - .gitignore
+01ee2368e771d10c01b26583e0cadd03a43b267e785854497b419ed77b559243  - .gitignore
 852ee2139e5cdffb81d03ba97d3fbe947d2925945c89c88138c0f338841499cf  - CLAUDE.md
 7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
 a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION
@@ -182,18 +185,20 @@ project-update: <ROOT> (applied)
   regenerate .ai/rules/README.md               unchanged since it was installed
   regenerate .ai/state/README.md               unchanged since it was installed
   regenerate .ai/policies/weight.md            rendered from the weight table
+  regenerate .gitignore                        entries appended: .ai/memory/, .ai/reports/
   delete    .ai/policies/weight.json          [split] superseded by .ai/policies/weight.project.json; the plugin's table is read from the plugin
   regenerate .ai/VERSION                       schema 12
+  hint      .ai/memory/ and .ai/reports/ are local now. Files git already tracks stay tracked: 'git rm -r --cached --ignore-unmatch .ai/memory .ai/reports' untracks them (yours to run); 'state.py memory enable --share git' keeps sharing them.
   hint      .ai/policies/verification.md: verify_command is empty — the feedback loop needs it
   hint      .ai/policies/verification.md: step_test_command is empty — a step runs only its own tests
   hint      .ai/policies/verification.md: e2e_command is empty — e2e runs once at the end of a task; write 'none' if there is no suite
   hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
   hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
-11 automatic
+12 automatic
 --- stderr
 
 ##### files of the project tree after the run
-5a93f78b4ed4d416c171139b2ce610a117f9c1dd46fbb56ca86729cb4c53d10c  - .gitignore
+fa0cb370b024e1a30e1355912032657b08f609e47773a603c193b1e609b0f997  - .gitignore
 caed02a7e1a0dd39b9d0f113cef2579270f5425fc314ce75ee3dd79f6b359bfe  - AGENTS.md
 483fb2bbc26f2d9656f416e3eb6c692c1ebd31fe631b3fb7d0323f2469bb5a3c  - CLAUDE.md
 7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
@@ -252,7 +257,7 @@ project-update: <ROOT> (applied)
 --- stderr
 
 ##### files of the project tree after the run
-32f0341ce01390d1996cd6d2b86cd07b071d3ce325403147aa431c8c118f4426  - .gitignore
+a0407ffa0983094e8bae38c36e9e5a0c61dd8c66238a05945c4ceca1261ef67f  - .gitignore
 3e27c5426fbb1ef9b905cb416ee14e32c649e77149b126064b7b4de6c6021800  - CLAUDE.md
 7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
 a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION

@@ -164,7 +164,9 @@ formatting fix. Problems you find are written down, never fixed. Never read
    line as printed (the `enabledPlugins` line is the human's to add — never
    write it), and the suggested first task:
    `/rr-plan <it>`. Claim nothing was validated that was not run. Suggest
-   `git add .ai .gitignore docs/sdlc` plus the instruction files created.
+   `git add .ai .gitignore docs/sdlc` plus the instruction files created
+   (`.ai/memory/` and `.ai/reports/` are git-ignored; memory stays local unless the human runs
+   `memory enable --share git`).
 
 ## --options
 
@@ -243,7 +245,7 @@ riskrails is installed: until then the project's old shapes are not read.
    second machine runs the same before its next pull, else a modify/delete
    conflict); never run it yourself.
 7. `$UPDATE --check` and `git diff --stat`; say what changed, what you merged
-   and what is the human's. Suggest `git add -A .ai docs/sdlc .gitignore` plus
+   and what is the human's. Suggest `git add -A .ai docs/sdlc .gitignore` (the record and task logs are git-ignored) plus
    the runtime directories and instruction files.
 
 ## --audit

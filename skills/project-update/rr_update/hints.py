@@ -35,11 +35,20 @@ def budget_offenders(root, files, caps, block_of):
     return out
 
 
+RECORD_HINT = (".ai/memory/ and .ai/reports/ are local now. Files git already tracks stay tracked: "
+               "'git rm -r --cached --ignore-unmatch .ai/memory .ai/reports' untracks them (yours to run); "
+               "'state.py memory enable --share git' keeps sharing them.")
+
+
+GITIGNORE_NOTE = "entries appended: "
+
+
 def gitignore_update(plan, snippet_path):
     snippet = files_mod.read(snippet_path).decode().splitlines()
     current = plan.read(".gitignore") or b""
     have = set(current.decode().splitlines())
-    missing = [l for l in snippet if l.strip() and not l.startswith("#") and l not in have]
+    missing = [l for l in snippet if l.strip() and not l.startswith("#") and l not in have
+               and "!" + l not in have]
     if not missing:
         return
     header = [l for l in snippet if l.startswith("#") and l not in have]
@@ -47,8 +56,12 @@ def gitignore_update(plan, snippet_path):
     sep = b"\n" if current and not current.endswith(b"\n") else b""
     new = current + sep + add.encode()
     # Replace an earlier .gitignore item from this run instead of stacking two.
+    earlier = [i["note"][len(GITIGNORE_NOTE):] for i in plan.items
+               if i["target"] == ".gitignore" and i["note"].startswith(GITIGNORE_NOTE)]
     plan.items = [i for i in plan.items if i["target"] != ".gitignore"]
-    plan.add("regenerate", ".gitignore", "entries appended: " + ", ".join(missing), content=new)
+    plan.add("regenerate", ".gitignore", GITIGNORE_NOTE + ", ".join(earlier + missing), content=new)
+    if {".ai/memory/", ".ai/reports/"} & set(missing) and RECORD_HINT not in plan.hints:
+        plan.hints.append(RECORD_HINT)
 
 
 def budget_hints(plan, runtimes):

@@ -52,7 +52,9 @@ ends with three things only you can give it:
 The project's `CLAUDE.md` or `AGENTS.md` gets the managed block once; the rest
 of the file stays yours. `.ai/policies/dialog.json` ships on, so approvals and
 guarded git commands come to you as a question in the runtime's own dialog.
-Commit `.ai/`, `docs/sdlc` and `.gitignore`.
+Commit `.ai/`, `docs/sdlc` and `.gitignore`. `.ai/memory/` and `.ai/reports/` are
+git-ignored, so the commit carries configuration (policies, rules, project
+knowledge) only.
 
 ## 3. A small task, end to end
 
