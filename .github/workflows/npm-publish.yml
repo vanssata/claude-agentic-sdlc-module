@@ -1,11 +1,15 @@
-# Release the npm package `riskrails` when a human pushes a tag v<version>.
+# Release the npm package `riskrails` when a version bump reaches main, or when a human
+# pushes a tag v<version>.
 #
 # How a human releases:
 #   python3 tools/sync-version.py X.Y.Z     # the four files, five version keys
+#   a "## [X.Y.Z] - date" section in CHANGELOG.md (the Release notes carry it)
 #   git commit -m "release X.Y.Z" -- package.json .claude-plugin/plugin.json \
-#     .claude-plugin/marketplace.json .codex-plugin/plugin.json
-#   git tag vX.Y.Z
-#   git push origin vX.Y.Z                  # this workflow does the rest
+#     .claude-plugin/marketplace.json .codex-plugin/plugin.json CHANGELOG.md
+#   merge that commit to main                # this workflow tags vX.Y.Z, publishes, releases
+# Pushing the tag by hand (git tag vX.Y.Z, then pushing it) still works.
+# A push to main that changes package.json without a new version releases nothing: the
+# detect job skips it when the tag or the Release already exists.
 #
 # One-time setup, either of:
 #   - Trusted publishing (preferred, gives provenance with no secret): npmjs.com ->
@@ -13,20 +17,69 @@
 #     vanssata/claude-agentic-sdlc-module, workflow npm-publish.yml, environment npm.
 #   - An NPM_TOKEN repository secret (a fallback; the publish step passes it along).
 #
-# Nothing here merges or deploys code: the job publishes the tagged tree and opens a
-# GitHub Release, which notifies the repository's watchers.
+# Nothing here merges or deploys code: the job publishes the tested tree, creates the
+# version tag on it when it is missing, and opens a GitHub Release, which notifies the
+# repository's watchers.
 name: Release
 
 on:
   push:
     tags: ['v*.*.*']
+    branches: [main]
+    paths: [package.json]
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release
   cancel-in-progress: false
 
 jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.decide.outputs.tag }}
+      release: ${{ steps.decide.outputs.release }}
+    steps:
+    - uses: actions/checkout@v7
+    - name: Decide the tag and whether a release is due
+      id: decide
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REF_TYPE: ${{ github.ref_type }}
+      run: |
+        set -euo pipefail
+        if [ "$REF_TYPE" = "tag" ]; then
+          TAG="$GITHUB_REF_NAME"
+        else
+          TAG="v$(node -p "require('./package.json').version")"
+        fi
+        RE='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+        if ! [[ "$TAG" =~ $RE ]]; then
+          echo "::error::The version is not a version tag (vX.Y.Z or vX.Y.Z-prerelease)."
+          exit 1
+        fi
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+        RELEASE=true
+        if gh release view "$TAG" >/dev/null 2>&1; then
+          echo "Release $TAG exists; nothing to do."
+          RELEASE=false
+        elif [ "$REF_TYPE" != "tag" ]; then
+          REMOTE="$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}")"
+          # An annotated tag lists its own object and the peeled commit (^{}); the peeled one wins.
+          TAGGED="$(printf '%s\n' "$REMOTE" | awk '$2 ~ /\^\{\}$/ {p=$1} $2 !~ /\^\{\}$/ {o=$1} END {print (p != "" ? p : o)}')"
+          if [ -n "$TAGGED" ] && [ "$TAGGED" != "$GITHUB_SHA" ]; then
+            echo "::warning::Tag $TAG already exists at $TAGGED, not at $GITHUB_SHA: bump the version in package.json."
+            RELEASE=false
+          fi
+        fi
+        echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+
   verify:
+    needs: detect
+    if: needs.detect.outputs.release == 'true'
+    env:
+      TAG: ${{ needs.detect.outputs.tag }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,7 +98,9 @@ jobs:
           command -v "$tool" || { echo "missing $tool"; exit 1; }
         done
     - name: The tag matches the five version keys
-      run: python3 tools/sync-version.py --check --tag "$GITHUB_REF_NAME"
+      run: python3 tools/sync-version.py --check --tag "$TAG"
+    - name: The CHANGELOG has a section for this version
+      run: python3 tools/changelog-section.py "${TAG#v}" >/dev/null
     # node before the tests: tests/test_dual_runtime_install.py runs the installer through it.
     - uses: actions/setup-node@v7
       with:
@@ -75,7 +130,7 @@ jobs:
         RUN_ATTEMPT: ${{ github.run_attempt }}
       run: |
         set -euo pipefail
-        V="${GITHUB_REF_NAME#v}"
+        V="${TAG#v}"
         FOUND="$(npm view "riskrails@$V" version 2>/dev/null || true)"
         if [ -n "$FOUND" ] && [ "$RUN_ATTEMPT" = "1" ]; then
           echo "riskrails@$V is already on the registry; bump the version and tag again."
@@ -83,7 +138,9 @@ jobs:
         fi
 
   publish:
-    needs: verify
+    needs: [detect, verify]
+    env:
+      TAG: ${{ needs.detect.outputs.tag }}
     runs-on: ubuntu-latest
     # The environment lets the repository owner require a manual approval before this job
     # runs: GitHub -> Settings -> Environments -> npm -> Required reviewers.
@@ -108,7 +165,7 @@ jobs:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       run: |
         set -euo pipefail
-        V="${GITHUB_REF_NAME#v}"
+        V="${TAG#v}"
         if [ "$(npm view "riskrails@$V" version 2>/dev/null || true)" = "$V" ]; then
           # A rerun must publish the same commit: a tag re-pointed since the upload fails here.
           HEAD_SHA="$(npm view "riskrails@$V" gitHead 2>/dev/null || true)"
@@ -127,14 +184,28 @@ jobs:
           *-*) npm publish --provenance --access public --tag next ;;
           *) npm publish --provenance --access public ;;
         esac
+    - name: Create the tag
+      run: |
+        set -euo pipefail
+        REMOTE="$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}")"
+        TAGGED="$(printf '%s\n' "$REMOTE" | awk '$2 ~ /\^\{\}$/ {p=$1} $2 !~ /\^\{\}$/ {o=$1} END {print (p != "" ? p : o)}')"
+        if [ -z "$TAGGED" ]; then
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+        elif [ "$TAGGED" = "$GITHUB_SHA" ]; then
+          echo "Tag $TAG is already on the remote at this commit."
+        else
+          echo "Tag $TAG exists at $TAGGED, not at $GITHUB_SHA."
+          exit 1
+        fi
     - name: Announce as a GitHub Release
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        V="${GITHUB_REF_NAME#v}"
-        if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-          echo "Release $GITHUB_REF_NAME exists; nothing to do."
+        V="${TAG#v}"
+        if gh release view "$TAG" >/dev/null 2>&1; then
+          echo "Release $TAG exists; nothing to do."
           exit 0
         fi
         {
@@ -152,5 +223,7 @@ jobs:
           echo
           echo "npm: https://www.npmjs.com/package/riskrails/v/$V"
         } > "$RUNNER_TEMP/notes.md"
-        gh release create "$GITHUB_REF_NAME" --title "RiskRails $V" \
+        echo >> "$RUNNER_TEMP/notes.md"
+        python3 tools/changelog-section.py "$V" >> "$RUNNER_TEMP/notes.md"
+        gh release create "$TAG" --title "RiskRails $V" \
           --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
