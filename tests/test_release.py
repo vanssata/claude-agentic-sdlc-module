@@ -105,16 +105,63 @@ class TestReleaseWorkflow(unittest.TestCase):
         self.text = read(ROOT, ".github/workflows/npm-publish.yml")
         head, _, self.publish = self.text.partition("\n  publish:\n")
         self.verify = head.partition("\n  verify:\n")[2]
+        self.detect = head.partition("\n  detect:\n")[2].partition("\n  verify:\n")[0]
 
-    def test_triggers_only_on_version_tags(self):
+    def test_triggers_on_version_tags_and_a_package_json_change_on_main(self):
         on = self.text.partition("\non:\n")[2].partition("\nconcurrency:")[0]
         self.assertIn("tags: ['v*.*.*']", on)
-        self.assertNotIn("branches", on)
+        self.assertIn("branches: [main]", on)
+        self.assertIn("paths: [package.json]", on)
         self.assertNotIn("pull_request", on)
-        self.assertIn("cancel-in-progress: false", self.text)
+        concurrency = self.text.partition("\nconcurrency:")[2].partition("\n\n")[0]
+        self.assertIn("group: release\n", concurrency + "\n")
+        self.assertNotIn("ref_name", concurrency)
+        self.assertIn("cancel-in-progress: false", concurrency)
+
+    def test_detect_job_decides_the_tag_and_whether_to_release(self):
+        self.assertNotEqual(self.detect.strip(), "", "no detect job")
+        self.assertIn("contents: read", self.detect)
+        self.assertNotIn("contents: write", self.detect)
+        self.assertNotIn("id-token", self.detect)
+        outputs = self.detect.partition("outputs:")[2]
+        self.assertRegex(outputs, r"(?m)^\s+tag:")
+        self.assertRegex(outputs, r"(?m)^\s+release:")
+        for needle in ("^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$", "gh release view",
+                       "git ls-remote", "$GITHUB_SHA"):
+            self.assertIn(needle, self.detect)
+
+    def test_detect_validates_the_whole_tag_string_not_line_by_line(self):
+        check = ("RE='^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$'\n"
+                 'if ! [[ "$TAG" =~ $RE ]]; then\n')
+        self.assertIn(check, "\n".join(line.strip() for line in self.detect.splitlines()) + "\n")
+        self.assertNotRegex(self.detect, r"printf[^\n]*\$TAG[^\n]*\|\s*grep")
+        self.assertNotIn("$TAG' is not", self.detect)
+        script = check + "  echo refused\n  exit 1\nfi\necho accepted\n"
+        for tag, code in (("v1.2.3", 0), ("v1.2.3-rc.1", 0), ("v1.2.3\nrelease=true", 1)):
+            res = subprocess.run(["bash", "-c", 'set -euo pipefail\nTAG="$1"\n' + script, "bash", tag],
+                                 capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, code, "%r: %s" % (tag, res.stdout + res.stderr))
+
+    def test_verify_job_waits_for_detect_and_runs_only_when_a_release_is_due(self):
+        self.assertIn("needs: detect", self.verify)
+        self.assertIn("if: needs.detect.outputs.release == 'true'", self.verify)
+        self.assertIn("TAG: ${{ needs.detect.outputs.tag }}", self.verify)
+        self.assertIn("tools/changelog-section.py", self.verify)
+        self.assertNotIn("$GITHUB_REF_NAME", self.verify)
+        self.assertNotIn("$GITHUB_REF_NAME", self.publish)
+
+    def test_no_needs_expression_inside_a_run_script(self):
+        lines = self.text.splitlines()
+        self.assertTrue(any("needs.detect.outputs" in line for line in lines), "no detect output is used")
+        for line in lines:
+            if "${{ needs." not in line:
+                continue
+            key = line.strip().split(":", 1)[0]
+            self.assertTrue(key == "if" or re.fullmatch(r"[A-Z][A-Z0-9_]*", key),
+                            "a needs expression outside env:/if: -> " + line)
 
     def test_verify_job_runs_the_gates(self):
-        for needle in ('tools/sync-version.py --check --tag "$GITHUB_REF_NAME"',
+        for needle in ('tools/sync-version.py --check --tag "$TAG"',
                        "python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed"
                        " --serial test_dialog_gate.TestGateFastPath",
                        "AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py",
@@ -132,13 +179,27 @@ class TestReleaseWorkflow(unittest.TestCase):
         self.assertLess(self.verify.index('AI_TIMED_FACTOR: "3"'), suite)
 
     def test_publish_job_is_gated_and_has_provenance(self):
-        self.assertIn("needs: verify", self.publish)
+        self.assertRegex(self.publish, r"needs: \[detect, verify\]")
+        self.assertIn("TAG: ${{ needs.detect.outputs.tag }}", self.publish)
         self.assertIn("environment: npm", self.publish)
         self.assertIn("id-token: write", self.publish)
         self.assertIn("contents: write", self.publish)
         self.assertIn("--provenance --access public", self.publish)
         self.assertIn("gh release view", self.publish)
         self.assertIn("--verify-tag", self.publish)
+
+    def test_publish_creates_the_tag_between_the_upload_and_the_release_with_the_changelog(self):
+        for needle in ('git push origin "refs/tags/$TAG"', "gh release create"):
+            self.assertIn(needle, self.publish)
+        upload = self.publish.index("npm publish")
+        push = self.publish.index('git push origin "refs/tags/$TAG"')
+        release = self.publish.index("gh release create")
+        self.assertLess(upload, push)
+        self.assertLess(push, release)
+        self.assertIn('git tag "$TAG" "$GITHUB_SHA"', self.publish)
+        self.assertIn("Create the tag", self.publish)
+        self.assertIn('python3 tools/changelog-section.py "$V"', self.publish)
+        self.assertLess(self.publish.index("tools/changelog-section.py"), release)
 
     def test_a_prerelease_publishes_under_the_next_tag(self):
         self.assertIn("--provenance --access public --tag next", self.publish)
@@ -182,6 +243,88 @@ class TestReleaseWorkflow(unittest.TestCase):
         notice = os.path.join(ROOT, "hooks", "update_notice.py")
         self.assertTrue(os.path.exists(notice), "hooks/update_notice.py is missing")
         self.assertIn(COMMAND, read(ROOT, "hooks/update_notice.py"))
+
+
+CHANGELOG = """# Changelog
+
+## [Unreleased]
+
+### Added
+- not yet
+
+## [1.3.0] \u2014 2026-01-03
+
+### Fixed
+- middle fix
+
+## [1.2.3-rc.1] \u2014 2026-01-02
+
+- candidate
+
+## [1.2.2] \u2014 2026-01-01
+
+### Added
+- last one
+- second line
+
+"""
+
+
+class TestChangelogSection(unittest.TestCase):
+    """tools/changelog-section.py prints the section of a CHANGELOG for a given version."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
+        self.addCleanup(self._tmp.cleanup)
+        self.assertTrue(os.path.isfile(os.path.join(ROOT, "tools", "changelog-section.py")),
+                        "tools/changelog-section.py is missing")
+        self.log = os.path.join(self._tmp.name, "CHANGELOG.md")
+        write(self._tmp.name, "CHANGELOG.md", CHANGELOG)
+
+    @staticmethod
+    def section(*args):
+        """The tool through the current interpreter, isolated."""
+        tool = os.path.join(ROOT, "tools", "changelog-section.py")
+        return subprocess.run([sys.executable, "-I", tool, *args], capture_output=True, text=True, check=False)
+
+    def test_a_middle_section_comes_without_its_heading_or_the_next_section(self):
+        res = self.section("1.3.0", "--file", self.log)
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertEqual(res.stdout.strip("\n"), "### Fixed\n- middle fix")
+        self.assertNotIn("## [", res.stdout)
+
+    def test_the_last_section_runs_to_the_end_of_the_file(self):
+        res = self.section("1.2.2", "--file", self.log)
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertEqual(res.stdout.strip("\n"), "### Added\n- last one\n- second line")
+
+    def test_a_prerelease_version_is_found(self):
+        res = self.section("1.2.3-rc.1", "--file", self.log)
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertEqual(res.stdout.strip("\n"), "- candidate")
+
+    def test_a_missing_version_exits_1_and_says_so(self):
+        res = self.section("9.9.9", "--file", self.log)
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("has no section for 9.9.9", res.stderr)
+        self.assertEqual(res.stdout, "")
+
+    def test_an_empty_section_exits_1_and_says_so(self):
+        write(self._tmp.name, "EMPTY.md",
+              "# Changelog\n\n## [1.0.0] — 2026-01-02\n\n  \n## [0.9.0] — 2026-01-01\n\n- old\n")
+        res = self.section("1.0.0", "--file", os.path.join(self._tmp.name, "EMPTY.md"))
+        self.assertEqual(res.returncode, 1, res.stdout + res.stderr)
+        self.assertIn("empty section for 1.0.0", res.stderr)
+        self.assertEqual(res.stdout, "")
+
+    def test_an_invalid_version_exits_2(self):
+        for bad in ("abc", "1.2", "Unreleased", "v1.2.3"):
+            self.assertEqual(self.section(bad, "--file", self.log).returncode, 2, bad)
+
+    def test_the_repository_changelog_has_the_4_1_0_section(self):
+        res = self.section("4.1.0")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("### Added", res.stdout)
 
 
 SMOKE = ("test_release.py", "test_update_notice.py", "test_install_routes.py",
