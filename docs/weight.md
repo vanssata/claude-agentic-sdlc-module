@@ -1,11 +1,12 @@
 # Weight — how heavy a change is, measured
 
 A task's mode (light, guarded, full) comes from its **weight**: six axes, 0 to 2
-each, summed. The table is one file, `.ai/policies/weight.json`; the plugin ships
-its default at `skills/ai-init/templates/.ai/policies/weight.json`, and a project
-without its own reads that one. Beside the JSON sits `weight.md`, a generated
-mirror carrying the JSON's `sha256:`. Never edit the mirror; edit the JSON and run
-`state.py weight --mirror`. This page is the prose: why each rule is what it is.
+each, summed. The table is the plugin's `weight.json`
+(`skills/ai-init/templates/.ai/policies/weight.json`) with the project's own
+changes, `.ai/policies/weight.project.json`, laid over it: objects merge, other
+values replace. Beside them sits `weight.md`, a generated mirror carrying the
+`sha256:` of the merged table. Never edit the mirror; edit `weight.project.json`
+and run `state.py weight --mirror`. This page is the prose: why each rule is what it is.
 
 ```
 state.py weight --files "a,b" [--goal "…"] [--declare axis=n:"evidence"]… [--json|--long]
@@ -161,8 +162,8 @@ and is the human's, from their own terminal.
 
 ## Changing the table
 
-Edit `.ai/policies/weight.json`, then run `state.py weight --mirror` and commit
-both. `tests/test_weight.py::test_mirror_fresh` fails while the shipped mirror is
+Edit `.ai/policies/weight.project.json`, then run `state.py weight --mirror` and
+commit both. `tests/test_weight.py::test_mirror_fresh` fails while the shipped mirror is
 stale. Lowering a measured axis, or a mode, for one task is a human's act:
 `--mode … --by <name>` on `start`, journaled; raising a mode the same way is
 anyone's.

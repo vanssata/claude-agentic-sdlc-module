@@ -1,6 +1,6 @@
 # Known risks
 
-What version 3.0 knowingly does **not** protect against. Each entry says what
+What version 4.2 knowingly does **not** protect against. Each entry says what
 can happen, why it was left that way, what limits the damage and what you
 should do. None is a secret. Each was found in a review or a spec, then
 accepted or deferred with a written reason in the record named under

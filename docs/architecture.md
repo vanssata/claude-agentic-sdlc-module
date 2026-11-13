@@ -33,7 +33,7 @@ except the last section.
 ├── docs/sdlc/                          constitution.md; intent/, specs/, plans/, adr/
 └── .ai/
     ├── AGENTS.md                       the router: one row per job → the policy that answers it
-    ├── VERSION                         the schema (11)
+    ├── VERSION                         the schema (12)
     ├── project/                        the surveyed knowledge base, every claim labelled
     ├── policies/                       weight.json + weight.md, dialog.json, path-guard.json, testing.md, coding.md, safety.md, security.md
     ├── rules/                          rules scoped to directories, rendered into their instruction files
@@ -150,7 +150,8 @@ leaves on disk over the regenerate fixtures.
 
 The memory code beside `state.py` has the same discipline without a package
 directory: `memory_sync.py` is the pre-push validator entry, and it stays at
-that path because every project's `.git/hooks/pre-push` shim runs it by path
+that path because the `.git/hooks/pre-push` shim of every project that shares
+its record (`memory enable --share git`) runs it by path
 (`SELF` in `memory_io` points at it, and the shim text written into a project
 stays byte for byte). It defines only `_git_out`, `base_for_new_branch`,
 `pre_push` and `pre_push_cli`; the rest of packages mode lives in ten sibling
@@ -199,6 +200,10 @@ Nothing under `hooks/` imports `rr_state`, and `rr_state` imports nothing under
 | `.ai/state/session.json` | `context-guard.py` | the runtime driving, the prompt count, the last human turn |
 | `.ai/state/decision.json`, `consent.jsonl` | `state.py`, `dialog-gate.py` | an open decision for the runtime's dialog, and the picks the human made |
 | `.ai/state/logs/<task-id>/` | `state.py verify` | the full test output per run; the archived `state.json` after close; never committed |
+
+From 4.2, `.ai/reports/` and `.ai/memory/` are git-ignored by default; they go
+to git only in a project that shares its record (`state.py memory enable
+--share git`).
 
 The commands, by group: `start` (with `--amend`, `--mode --by`, `--plan-file`,
 `--batch`), `step-done`, `steps`, `batch`, `verify`, `review`, `close`;

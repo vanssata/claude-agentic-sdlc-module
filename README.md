@@ -64,7 +64,9 @@ the plugin. Step by step, in this order:
    without the conversions it missed. So a project last updated by an older
    riskrails goes through the version that still converts it: install it
    (`npx riskrails@3.1.0`), run `/rr-setup --update` with it, then install 4.0.
-2. **Commit every project's `.ai/`** first; `git restore` is the rollback.
+2. **Commit every project's `.ai/`** first; `git restore` is the rollback. From
+   4.2 that commit holds the configuration: `.ai/memory/` and `.ai/reports/` are
+   git-ignored, so copy them aside if you want them back.
 3. **Update the home** on every machine, for every runtime: `npx riskrails@4.2.0`
    (the plugin route and the npm route are separate installs: reinstall both
    if you use both). Restart the runtime. In Codex, open `/hooks` and trust the
@@ -172,11 +174,14 @@ until it passes. After three failed review passes the next verdict is yours.
 
 ### The record
 
-A closed task's who, what, how and why travel as a compact record: `state.py
+A closed task's who, what, how and why are kept as a compact record: `state.py
 memory enable` (yours, in a terminal, or as your pick in the `/rr-setup`
 dialog) switches a project to packages mode, in
 which `close` appends the task's entries to a per-developer batch under
-`.ai/memory/` and a pre-push hook validates them; `state.py recall --files …`
+`.ai/memory/`. From 4.2 the record is local by default (`.ai/memory/` and
+`.ai/reports/` are git-ignored); `state.py memory enable --share git`, in your
+own terminal, shares it through git and installs a pre-push hook that validates
+it, and `--share local` takes it back. `state.py recall --files …`
 gives an agent what the record holds about the files it is about to touch,
 within a token budget. Task ids are `T-YYYY-MM-DD-HHMM-<slug>`
 ([docs/local-memory.md](docs/local-memory.md)).
