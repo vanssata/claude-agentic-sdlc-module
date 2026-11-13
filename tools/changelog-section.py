@@ -7,7 +7,7 @@
 The heading line is left out; the body runs to the next line starting "## [" (or the end
 of the file), with leading and trailing blank lines trimmed. "## [Unreleased]" is never
 returned for a version. A version is X.Y.Z, optionally -prerelease.
-Exit 0 ok, 1 no section for the version, 2 a refused version or a usage error.
+Exit 0 ok, 1 no section for the version or an empty one, 2 a refused version or a usage error.
 """
 import argparse
 import os
@@ -60,6 +60,9 @@ def main(argv):
     body = section(lines, args.version)
     if body is None:
         print("%s has no section for %s" % (args.file, args.version), file=sys.stderr)
+        return 1
+    if not body:
+        print("%s has an empty section for %s" % (args.file, args.version), file=sys.stderr)
         return 1
     print("\n".join(body))
     return 0

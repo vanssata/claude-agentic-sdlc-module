@@ -309,6 +309,14 @@ class TestChangelogSection(unittest.TestCase):
         self.assertIn("has no section for 9.9.9", res.stderr)
         self.assertEqual(res.stdout, "")
 
+    def test_an_empty_section_exits_1_and_says_so(self):
+        write(self._tmp.name, "EMPTY.md",
+              "# Changelog\n\n## [1.0.0] — 2026-01-02\n\n  \n## [0.9.0] — 2026-01-01\n\n- old\n")
+        res = self.section("1.0.0", "--file", os.path.join(self._tmp.name, "EMPTY.md"))
+        self.assertEqual(res.returncode, 1, res.stdout + res.stderr)
+        self.assertIn("empty section for 1.0.0", res.stderr)
+        self.assertEqual(res.stdout, "")
+
     def test_an_invalid_version_exits_2(self):
         for bad in ("abc", "1.2", "Unreleased", "v1.2.3"):
             self.assertEqual(self.section(bad, "--file", self.log).returncode, 2, bad)

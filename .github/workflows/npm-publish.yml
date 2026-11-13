@@ -11,6 +11,11 @@
 # A push to main that changes package.json without a new version releases nothing: the
 # detect job skips it when the tag or the Release already exists.
 #
+# After a red verify on a version bump nothing is tagged or published, and nothing retries
+# it: "Re-run" tests the same red commit, and a fix on main that leaves package.json alone
+# starts no run. Merge the fix to main, then tag it by hand: git tag vX.Y.Z <fix-commit>,
+# then push that tag; the tag run tests and releases the fixed tree.
+#
 # One-time setup, either of:
 #   - Trusted publishing (preferred, gives provenance with no secret): npmjs.com ->
 #     riskrails -> Settings -> Trusted Publisher = GitHub Actions, repository
