@@ -16,7 +16,7 @@
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="index.html"><span class="lamp" aria-hidden="true"></span>RiskRails <small>4.1.0</small></a>
+    <a class="brand" href="index.html"><span class="lamp" aria-hidden="true"></span>RiskRails <small>4.2.0</small></a>
     <button class="navbtn" aria-expanded="false" aria-controls="nav">Menu</button>
     <ul class="nav" id="nav">
       <li><a href="index.html" aria-current="page">How it works</a></li>
@@ -38,7 +38,7 @@
       <h1 style="margin-top:16px">Every change runs on a <em>set route.</em></h1>
       <p class="lead">RiskRails lets an AI agent work on legacy production code. Each change is weighed on six axes before the agent edits a file, then runs light, guarded or full. A hook refuses an edit outside the task, a read of a production secret, a force push or a deploy.</p>
       <div class="cta">
-        <span class="cmd"><code>npx riskrails@4.1.0</code><button class="copy" type="button" data-copy="npx riskrails@4.1.0">Copy</button></span>
+        <span class="cmd"><code>npx riskrails@4.2.0</code><button class="copy" type="button" data-copy="npx riskrails@4.2.0">Copy</button></span>
         <a class="btn" href="demo.html">Watch two tasks</a>
       </div>
     </div>
@@ -178,7 +178,7 @@
       <div class="lever warn rv"><small>Lever 5 · Claude Code</small><h3>Large read</h3><code>cap-large-read.py</code><p>An unbounded <code>Read</code> over 4 000 lines or 250 KB is refused; a <code>limit</code> within budget passes.</p></div>
       <div class="lever go rv"><small>Lever 6 · both</small><h3>Context</h3><code>context-guard.py</code><p>Warns from 80% of the compaction point, snapshots before compaction, injects the handoff when a session starts.</p></div>
       <div class="lever go rv"><small>Lever 7 · both</small><h3>Runtime</h3><code>runtime-gate.py</code><p>Sends the top model's launches one tier down during an outage or at 90% of the weekly limit.</p></div>
-      <div class="lever rv"><small>Lever 8 · your push</small><h3>Record</h3><code>memory-pre-push.py</code><p>Reads the pushed commits before they leave: a malformed package, a lost record, a second seal or a SQLite file under <code>.ai/</code> stops the push.</p></div>
+      <div class="lever rv"><small>Lever 8 · your push</small><h3>Record</h3><code>memory-pre-push.py</code><p>When the record is shared through git, reads the pushed commits before they leave: a malformed package, a lost record, a second seal or a SQLite file under <code>.ai/</code> stops the push.</p></div>
     </div>
     <p class="note rv">The guards are regex over a command line or a path: a tripwire for the honest mistake, not a security boundary. Branch protection, secrets off the developer machine and human review stay the real backstops. <a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/known-risks.md">Read the known risks</a> before relying on them.</p>
   </div>
@@ -223,11 +223,11 @@
     <div class="head rv">
       <span class="eyebrow">Files carry decisions</span>
       <h2 class="h2">One tree. Two runtimes. <em>One record.</em></h2>
-      <p class="lead">Start a task in Claude Code and finish it in Codex. The knowledge base, the policies, the task state and the compact record of every closed task live in <code>.ai/</code>, in the repository, next to the code they describe.</p>
+      <p class="lead">Start a task in Claude Code and finish it in Codex. The knowledge base, the policies, the task state and the compact record of every closed task live in <code>.ai/</code>, next to the code they describe; the record stays local unless you share it.</p>
     </div>
     <div class="cards">
       <div class="card rv"><h3>The task state</h3><p><code>.ai/state/state.json</code> and a journal a human can read. A guard keeps agents from writing either directly.</p></div>
-      <div class="card rv"><h3>The record</h3><p>On close, who, what, how and why become JSON lines in <code>.ai/memory/</code>, sealed and checked by a pre-push hook. <code>recall</code> hands an agent what the record says about the files it is about to touch.</p></div>
+      <div class="card rv"><h3>The record</h3><p>On close, who, what, how and why become JSON lines in <code>.ai/memory/</code>, sealed, and local to your machine unless you share them through git, where a pre-push hook checks them. <code>recall</code> hands an agent what the record says about the files it is about to touch.</p></div>
       <div class="card rv"><h3>The local index</h3><p>Optional SQLite with full-text search. It is rebuilt from the files whenever they change and is never the only copy of anything.</p><a class="more" href="storage.html">How storage works →</a></div>
     </div>
   </div>
@@ -237,16 +237,15 @@
 <section class="panel band" id="new">
   <div class="wrap">
     <div class="rv">
-      <span class="eyebrow">What's new in 4.1</span>
-      <h2 class="h2">Menus in the installer. <em>One dialog in setup.</em></h2>
+      <span class="eyebrow">What's new in 4.2</span>
+      <h2 class="h2">The record stays <em>on your machine.</em> Releases tag themselves.</h2>
     </div>
     <div class="cards">
-      <div class="card rv"><h3>Arrow-key installer</h3><p>On a terminal each question is a menu: runtime, plan, Fable, context, statusline, Codex plan. Enter confirms the proposal, Esc stops with nothing written. A flag skips its menu; <code>--yes</code> or no terminal asks nothing, and <code>RISKRAILS_MENU=off</code> brings back the typed plan question.</p></div>
-      <div class="card rv"><h3>Setup asks once</h3><p><code>/rr-setup</code> asks runtime, survey depth, <code>verify_command</code> and project memory in one dialog before any work, only the ones not set yet. <code>/rr-setup --options</code> asks them all again. With the dialog off or in an unattended run the questions stay prose.</p></div>
-      <div class="card rv"><h3>Memory from setup</h3><p>Off, packages, or packages with the SQLite index. A picked <code>memory enable</code> runs through the dialog, verbatim and once; <code>disable</code>, <code>cleanup</code>, <code>pack</code> and <code>redact</code> stay in your own terminal.</p></div>
-      <div class="card rv"><h3>No instruction file</h3><p><code>scaffold-ai.sh --runtime none</code> writes <code>.ai/</code> and its <code>.gitignore</code> lines and no instruction file.</p></div>
+      <div class="card rv"><h3>Local by default</h3><p>A new project's <code>.gitignore</code> ignores <code>.ai/memory/</code> and <code>.ai/reports/</code>; <code>.ai/project/</code> stays in git. The record is shared exactly when git does not ignore it: <code>state.py memory enable --share git</code> in your own terminal opts in, <code>--share local</code> opts out.</p></div>
+      <div class="card rv"><h3>A long seal fits</h3><p>A task that changed many files no longer writes a seal line too long to read (#74). Its <code>changes</code> keep the longest prefix that fits and <code>changes_truncated</code> holds the full counts; an over-long line already in a package is read, and V1 names the redact that shortens it.</p></div>
+      <div class="card rv"><h3>Automatic release</h3><p>A version bump merged to <code>main</code> is tested, tagged, published to npm with provenance and released on GitHub, with its CHANGELOG section as the notes. A missing or empty section stops it. An agent still never publishes.</p></div>
     </div>
-    <p class="note rv">After installing, run <code>/rr-setup --update</code> in each project: it brings the 4.1 <code>safety.md</code> text. Full list in the <a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/CHANGELOG.md">CHANGELOG</a>.</p>
+    <p class="note rv">After installing, run <code>/rr-setup --update</code> in each project: it adds the two ignore lines. Files git already tracks stay tracked until you untrack them (<code>git rm -r --cached .ai/memory .ai/reports</code>) or keep sharing them with <code>--share git</code>. Full list in the <a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/CHANGELOG.md">CHANGELOG</a>.</p>
   </div>
 </section>
 
@@ -258,7 +257,7 @@
       <h2 class="h2">Pin the version. <em>Restart.</em></h2>
       <p class="lead">Node 18+ and <code>python3</code>. The installer detects Claude Code, Codex or both and proposes the plan it found. The hooks it installs see every command an agent runs, so pin the version. In Codex, open <code>/hooks</code> and trust the entries; until you do, nothing is enforced.</p>
       <div class="cta">
-        <span class="cmd"><code>npx riskrails@4.1.0</code><button class="copy" type="button" data-copy="npx riskrails@4.1.0">Copy</button></span>
+        <span class="cmd"><code>npx riskrails@4.2.0</code><button class="copy" type="button" data-copy="npx riskrails@4.2.0">Copy</button></span>
       </div>
     </div>
     <div class="rv">
@@ -267,9 +266,9 @@
 /rr-build &lt;what you want&gt;      <span class="k"># every change</span>
 
 <span class="k"># options</span>
-npx riskrails@4.1.0 --target codex      <span class="k"># auto | claude | codex | both</span>
-npx riskrails@4.1.0 --plan max          <span class="k"># pro | team-pro | team-max | max | max20</span>
-npx riskrails@4.1.0 --dry-run           <span class="k"># print, write nothing</span>
+npx riskrails@4.2.0 --target codex      <span class="k"># auto | claude | codex | both</span>
+npx riskrails@4.2.0 --plan max          <span class="k"># pro | team-pro | team-max | max | max20</span>
+npx riskrails@4.2.0 --dry-run           <span class="k"># print, write nothing</span>
 
 <span class="k"># coming from 3.x</span>
 /rr-setup --update             <span class="k"># right after the install; dry run first</span></pre>
@@ -282,7 +281,7 @@ npx riskrails@4.1.0 --dry-run           <span class="k"># print, write nothing</
 <footer class="foot">
   <div class="wrap">
     <div class="grid">
-      <div><h4>RiskRails</h4><ul><li>Version 4.1.0 · MIT</li><li>Claude Code and Codex</li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li></ul></div>
+      <div><h4>RiskRails</h4><ul><li>Version 4.2.0 · MIT</li><li>Claude Code and Codex</li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module">GitHub</a></li></ul></div>
       <div><h4>Site</h4><ul><li><a href="index.html">How it works</a></li><li><a href="demo.html">Demo</a></li><li><a href="compare.html">Compare</a></li><li><a href="storage.html">Storage</a></li></ul></div>
       <div><h4>Docs</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/getting-started.md">Getting started</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/weight.md">The weight</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/hooks.md">The guards</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/docs/known-risks.md">Known risks</a></li></ul></div>
       <div><h4>Project</h4><ul><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/ROADMAP.md">Roadmap</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/SECURITY.md">Security</a></li><li><a href="https://github.com/vanssata/claude-agentic-sdlc-module/blob/main/CONTRIBUTING.md">Contributing</a></li></ul></div>
