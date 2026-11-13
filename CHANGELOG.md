@@ -4,6 +4,20 @@ Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelo
 
 ## [Unreleased]
 
+## [4.2.0] — 2026-11-13
+
+A task seal that changed many files fits one line again (#74), the agent record is local by default, and a version bump merged to `main` is tagged, published and released by CI.
+
+### Fixed
+- `memory export` wrote the seal of a task that changed many files over `LINE_MAX_BYTES`, which `memory redact` could not reach and which blocked every push (#74). A seal whose `changes` list makes it too long now keeps the longest prefix of `changes` that fits and says so in `changes_truncated {rows, added, deleted}` and `truncated`; only `changes` is capped, so a seal whose other fields (a huge `files` list) are over the limit still needs a redact. An over-long line already in a package is read and kept, so V1 names it with the `state.py memory redact <rid> --field <field>` that shortens it.
+
+### Changed
+- The agent record is local by default: a new project's `.gitignore` ignores `.ai/memory/` and `.ai/reports/`; `.ai/project/` stays in git. The record is shared exactly when git does not ignore `.ai/memory/`. `state.py memory enable --share git` (the human's own terminal, no dialog route) opts in and installs the pre-push hook; `--share local` opts out. For a local record the pre-push hook exits 0 and `memory verify --fresh-clone` exits 2; `--range` and `--tree` (the CI form) still validate what the checked commits carry.
+- **Upgrade:** `/rr-setup --update` appends the two ignore lines to an existing project, unless the negations are already there, and prints a hint. Files git already tracks stay tracked, and while the ignore lines are in, the pre-push hook no longer checks pushes of them: untrack them with `git rm -r --cached --ignore-unmatch .ai/memory .ai/reports` (yours to run; on every other clone, copy the two directories aside before pulling that commit), or keep sharing with `state.py memory enable --share git`.
+
+### Added
+- Automatic release: a version bump (`package.json`) merged to `main` is tested, tagged `vX.Y.Z`, published to npm and released on GitHub, with this file's section for the version as the notes (`tools/changelog-section.py`; a missing or empty section fails the release). Pushing a tag by hand still works. The header of `.github/workflows/npm-publish.yml` says how to recover after a red verify.
+
 ## [4.1.0] — 2026-11-11
 
 The installer asks with arrow-key menus on a terminal, and `/rr-setup` asks its choices — project memory and its SQLite index among them — in one dialog.
@@ -112,6 +126,7 @@ Project schema 10 → 11: run `/rr-setup --update` after upgrading.
 - Risk tiers replaced by the weight and three modes (light, guarded, full); `/ai-*` and `/sdlc-*` become `/rr-*` (old names kept as aliases).
 - Guards in one Python process; task state in `.ai/state/state.json`. See "Upgrade to 3.0" in the README.
 
+[4.2.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.2.2...v4.0.1
 [4.0.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.2.2...v4.0.0
