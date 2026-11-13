@@ -91,8 +91,11 @@ record then takes the text from task.md (questions, answers, the gate's note
 or reason, `amended` lines, whitespace folded) or from the archived state (the
 amendments, the mode override), and a field that neither holds is listed in
 `unrecorded` — never filled in. Agent text is capped at 2 000 characters and
-listed in `truncated`. Evidence runs (every expected-fail run,
-the last suite, the last e2e) keep a redacted excerpt of at most
+listed in `truncated`. A seal whose line would pass `LINE_MAX_BYTES` keeps the
+longest prefix of `changes` that fits, and `changes_truncated {rows, added,
+deleted}` holds the full counts; an over-long line already in a package is read
+and kept, and V1 names it with the `memory redact` command that shortens it.
+Evidence runs (every expected-fail run, the last suite, the last e2e) keep a redacted excerpt of at most
 `excerpt_max_bytes`; the full log stays local. Every journal line is accounted
 for: as an entry's `src`, summarised into the seal, or counted as dropped by
 KEEP_RULES v1; an unknown event is kept as a note.

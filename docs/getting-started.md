@@ -6,7 +6,7 @@ dangerous one, then the audit, the update and the bill.
 ## 1. Install
 
 ```bash
-npx riskrails@4.1.0          # detects Claude Code, Codex or both; each question a menu on a terminal; Enter confirms
+npx riskrails@4.2.0          # detects Claude Code, Codex or both; each question a menu on a terminal; Enter confirms
 ```
 
 On a terminal each question — runtime, plan, Fable, context, statusline, Codex
