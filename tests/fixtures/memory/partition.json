@@ -71,6 +71,7 @@
     "atomic_write",
     "locked",
     "git",
+    "shared",
     "current_branch",
     "memory_dir",
     "local_path",
@@ -124,6 +125,10 @@
     "install_hook",
     "remove_hook",
     "write_policy",
+    "GITIGNORE_LOCAL",
+    "GITIGNORE_SHARED",
+    "append_gitignore",
+    "apply_share",
     "enable",
     "disable"
    ],
@@ -413,6 +418,12 @@
   "git": {
    "kind": "function",
    "signature": "(root, *args, stdin=None, binary=False)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "shared": {
+   "kind": "function",
+   "signature": "(root)",
    "label": "shell",
    "value_hash": null
   },
@@ -734,9 +745,33 @@
    "label": "shell",
    "value_hash": null
   },
+  "GITIGNORE_LOCAL": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "57993bf3bb32"
+  },
+  "GITIGNORE_SHARED": {
+   "kind": "const",
+   "signature": "",
+   "label": "core",
+   "value_hash": "bc28111454bf"
+  },
+  "append_gitignore": {
+   "kind": "function",
+   "signature": "(root, lines)",
+   "label": "shell",
+   "value_hash": null
+  },
+  "apply_share": {
+   "kind": "function",
+   "signature": "(root, share)",
+   "label": "shell",
+   "value_hash": null
+  },
   "enable": {
    "kind": "function",
-   "signature": "(root, author=None, period=None, index=None)",
+   "signature": "(root, author=None, period=None, index=None, share=None)",
    "label": "shell",
    "value_hash": null
   },

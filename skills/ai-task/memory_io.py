@@ -89,6 +89,15 @@ def git(root, *args, stdin=None, binary=False):
     return done.returncode, done.stdout, done.stderr
 
 
+def shared(root):
+    """False only when git ignores .ai/memory/ (the record is local, nothing of it travels); True when it does not,
+    and when git cannot answer: the validator then keeps checking."""
+    try:
+        return git(root, "check-ignore", "-q", "--no-index", ".ai/memory/x")[0] != 0
+    except OSError:
+        return True
+
+
 def current_branch(root):
     code, out, _ = git(root, "symbolic-ref", "--short", "-q", "HEAD")
     if code == 0 and out.strip():

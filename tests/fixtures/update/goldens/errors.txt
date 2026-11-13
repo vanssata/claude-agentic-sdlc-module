@@ -82,7 +82,7 @@ exit 3
 project-update: aborted at create .ai/policies/coding.md: .ai/policies/coding.md is not a regular file — nothing after it was written; run the dry run again
 
 ##### files of the project tree after the run
-32f0341ce01390d1996cd6d2b86cd07b071d3ce325403147aa431c8c118f4426  - .gitignore
+a0407ffa0983094e8bae38c36e9e5a0c61dd8c66238a05945c4ceca1261ef67f  - .gitignore
 3e27c5426fbb1ef9b905cb416ee14e32c649e77149b126064b7b4de6c6021800  - CLAUDE.md
 7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
 a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION
@@ -166,7 +166,7 @@ Install riskrails@3.1.0 (npx riskrails@3.1.0), run /rr-setup --update with it, t
 --- stderr
 
 ##### files of the project tree after the run
-32f0341ce01390d1996cd6d2b86cd07b071d3ce325403147aa431c8c118f4426  - .gitignore
+a0407ffa0983094e8bae38c36e9e5a0c61dd8c66238a05945c4ceca1261ef67f  - .gitignore
 3e27c5426fbb1ef9b905cb416ee14e32c649e77149b126064b7b4de6c6021800  - CLAUDE.md
 7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
 a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION

@@ -486,6 +486,16 @@ class TestOptions(OptionsProject):
         self.build()
         self.assertEqual(self.options(root="shop", cwd=self.tmp)["root"], self.root)
 
+    def test_scaffold_ignores_the_record(self):
+        """The record and the task logs are local data by default: the scaffold's .gitignore ignores both."""
+        os.makedirs(self.root)
+        self.git_init()
+        subprocess.run([sys.executable, "-I", SCAFFOLD, self.root, "--runtime", "claude"], check=True,
+                       capture_output=True, env=self.env)
+        lines = read_bytes(self.path(".gitignore")).decode().splitlines()
+        self.assertIn(".ai/memory/", lines)
+        self.assertIn(".ai/reports/", lines)
+
     def test_scaffolded_project(self):
         """The scaffold's own output, then the proposal `survey` prints: the same command and sources."""
         os.makedirs(self.root)
@@ -683,13 +693,14 @@ class OpenProject(OptionsProject):
     projects with the dialog on, and the reading of what state.py opened."""
 
     MEMORY = ("Project memory for shop: off keeps closed tasks only in .ai/reports/. packages also writes one compact "
-              "committed file per developer per quarter under .ai/memory/, checked by a pre-push hook. "
+              "file per developer per quarter under .ai/memory/; both stay local (git-ignored) unless you run "
+              "'state.py memory enable --share git' in your own terminal. "
               "Author tester (from $USER), period quarter. Turn it on?")
     RUNTIME = ("Which agent runtimes work on shop? The scaffold adds their instruction files and directories and "
                "never removes one.")
     SURVEY = "How deep should the first survey of shop go?"
     VERIFY = "verify_command — the fast suite every task runs, e2e excluded."
-    PACKAGES = "packages; installs .git/hooks/pre-push unless one exists or core.hooksPath is set"
+    PACKAGES = "packages; local, git-ignored record under .ai/memory/"
     INDEXED = "plus a local, git-ignored SQLite index; FTS5 no — without it search scans: same results, slower"
     LIGHT = "Light — your 10-minute brain dump + 2 discovery agents"
     FULL = "Full — inventory + 6 discovery agents"
@@ -773,6 +784,10 @@ class TestOptionsOpen(OpenProject):
         self.assertEqual([(d["kind"], d["setup_key"]) for d in opened],
                          [("setup", key) for key in ("memory", "runtime", "survey", "verify")])
         self.assertEqual([q["header"] for q in questions], ["Memory", "Runtime", "Survey", "Verify"])
+        for old in ("committed", "checked by a pre-push hook"):
+            self.assertNotIn(old, questions[0]["question"])
+        self.assertIn("both stay local (git-ignored) unless you run 'state.py memory enable --share git' "
+                      "in your own terminal", questions[0]["question"])
         self.assertEqual([q["question"] for q in questions],
                          [self.MEMORY, self.RUNTIME, self.SURVEY, "%s Proposed: `make test` (from Makefile test)." % self.VERIFY])
         self.assertEqual([[o["label"] for o in q["options"]] for q in questions], [

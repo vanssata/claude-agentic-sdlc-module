@@ -34,6 +34,7 @@ def memory_parsers(sub):
     m = msub.add_parser("status"); m.add_argument("--json", action="store_true")
     m = msub.add_parser("enable"); m.add_argument("--author"); m.add_argument("--period", choices=["month", "quarter", "year"])
     m.add_argument("--index", choices=["none", "sqlite"])
+    m.add_argument("--share", choices=["git", "local"])
     msub.add_parser("disable")
     m = msub.add_parser("export"); m.add_argument("ids", nargs="*"); m.add_argument("--pending", action="store_true")
     m = msub.add_parser("verify"); m.add_argument("ids", nargs="*"); m.add_argument("--all", action="store_true")

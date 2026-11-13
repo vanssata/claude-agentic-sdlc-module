@@ -603,17 +603,17 @@ def memory_decision(option, root, name):
     if option["state"] == "set":
         first = choice_option("Keep — %s mode" % option["current"], "keep")
         question = ("Project memory for %s is in %s mode: off keeps closed tasks only in .ai/reports/. packages also writes "
-                    "one compact committed file per developer per period under .ai/memory/, checked by a pre-push hook. "
-                    "%s. Keep it, or run memory enable?" % (name, option["current"], who))
+                    "one compact file per developer per period under .ai/memory/; both stay local (git-ignored) unless you "
+                    "run 'state.py memory enable --share git' in your own terminal. %s. Keep it, or run memory enable?" % (name, option["current"], who))
     else:
         first = choice_option("Off — keep files mode", "off")
         question = ("Project memory for %s: off keeps closed tasks only in .ai/reports/. packages also writes one compact "
-                    "committed file per developer per %s under .ai/memory/, checked by a pre-push hook. %s, period %s. "
-                    "Turn it on?" % (name, option["period"], who, option["period"]))
+                    "file per developer per %s under .ai/memory/; both stay local (git-ignored) unless you run "
+                    "'state.py memory enable --share git' in your own terminal. %s, period %s. Turn it on?" % (name, option["period"], who, option["period"]))
     return decision("memory", question, [
         first,
         command_option(state_label(root, "memory", "enable", *period),
-                       "packages; installs .git/hooks/pre-push unless one exists or core.hooksPath is set"),
+                       "packages; local, git-ignored record under .ai/memory/"),
         command_option(state_label(root, "memory", "enable", *period, "--index", "sqlite"),
                        "plus a local, git-ignored SQLite index; FTS5 %s — without it search scans: same results, slower"
                        % ("yes" if option["fts5"] else "no"))])

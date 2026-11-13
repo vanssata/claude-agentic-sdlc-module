@@ -109,7 +109,35 @@ def write_policy(root, policy):
     mio.atomic_write(os.path.join(root, mio.POLICY_REL), json.dumps(policy, indent=2, ensure_ascii=False) + "\n")
 
 
-def enable(root, author=None, period=None, index=None):
+GITIGNORE_LOCAL = (".ai/memory/", ".ai/reports/")
+GITIGNORE_SHARED = ("!.ai/memory/", "!.ai/reports/")
+
+
+def append_gitignore(root, lines):
+    """Append `lines` to .gitignore (created when absent), after a newline if the file lacks one; never rewrites."""
+    path = os.path.join(root, ".gitignore")
+    current = mio.read_bytes(path) or b""
+    sep = b"\n" if current and not current.endswith(b"\n") else b""
+    with open(path, "ab") as fh:
+        fh.write(sep + "".join(line + "\n" for line in lines).encode())
+
+
+def apply_share(root, share):
+    """--share git: the negations (the record is shared through git); --share local: the ignore lines. Append only."""
+    if share == "git":
+        have = (mio.read_bytes(os.path.join(root, ".gitignore")) or b"").decode("utf-8", "replace").splitlines()
+        add = [line for line in GITIGNORE_SHARED if line not in have]
+        if not add and not mio.shared(root):
+            add = list(GITIGNORE_SHARED)
+        if add:
+            append_gitignore(root, add)
+    elif share == "local" and mio.shared(root):
+        append_gitignore(root, GITIGNORE_LOCAL)
+
+
+def enable(root, author=None, period=None, index=None, share=None):
+    """Packages mode on. The hook is installed only while the record is shared (.ai/memory/ not git-ignored);
+    a local record has no hook of ours and the state is reported as `local`."""
     cfg = mcfg.load_config(root)
     policy = dict(mcfg.DEFAULTS)
     policy.update(cfg.policy if cfg.present else {})
@@ -128,6 +156,11 @@ def enable(root, author=None, period=None, index=None):
         local["index"] = index
     local.setdefault("index", "none")
     mio.atomic_write(mio.local_path(root, "config.json"), json.dumps(local, sort_keys=True) + "\n")
+    if share:
+        apply_share(root, share)
+    if not mio.shared(root):
+        remove_hook(root)
+        return "local"
     return install_hook(root)
 
 

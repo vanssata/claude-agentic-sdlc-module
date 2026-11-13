@@ -24,7 +24,8 @@ def status_lines(root):
              "packages: %d · %s bytes" % (len(packages), mf.fmt_n(size)),
              "closed, not exported: %s" % (", ".join(pending) if pending else "none"),
              "legacy, not migrated: %d%s" % (len(legacy), " — state.py memory migrate --report" if legacy else ""),
-             "pre-push: %s" % mhook.hook_state(root), "cleanup: %s" % ("on" if cfg.cleanup else "off")]
+             "pre-push: %s" % ("not needed — the record is local (.ai/memory/ is git-ignored)"
+                              if not mio.shared(root) else mhook.hook_state(root)), "cleanup: %s" % ("on" if cfg.cleanup else "off")]
     return lines
 
 
