@@ -45,6 +45,10 @@ other runtime resumes it, every state change from anywhere else exits 7
 | `.ai/state/session.json` | which runtime is driving, the prompt count, when the human last took a turn |
 | `.ai/state/logs/<task-id>/` | the full test output, so it never reaches a context window; not committed |
 
+`.ai/reports/` is git-ignored from 4.2 too: the journal and the record stay on
+your machine unless the project shares its record (`state.py memory enable
+--share git`).
+
 ## Model tiers
 
 | Tier | Claude Code | Codex | Does |

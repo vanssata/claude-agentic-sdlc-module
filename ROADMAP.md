@@ -69,7 +69,6 @@ Rows a human owns, or small tasks a review left behind. Each names its record.
 | Memory G4 | human | after ten real closes in packages mode: `state.py memory verify --all` and `--fresh-clone` both exit 0, then `cleanup: true` in `.ai/policies/memory.json` and `memory cleanup --all --confirm-delete <author>` | `docs/sdlc/plans/compact-project-memory.md`, G4 |
 | Memory M1, M9 | task (bugfix) | `memory_compact.py` loses or mis-attributes a journal line over 4 KB (`{"truncated": true}`); `export` skips the repair of a sealed key with a missing entry | `.ai/reports/T-2026-10-28-011/task.md`, review pass 2 |
 | Dialog OQs | spec | an API-key account: its own `profiles/api.json` or `unsupported`; plan drift is per user while the dialog switch is per project; `window_seconds` 120 against pre-commit hooks that run before the push | `docs/sdlc/specs/command-choice-dialog.md`, §Open questions |
-| `--adopt` by hand | human | `/rr-setup --adopt` on a real Spec Kit or Cursor project, and a `--cleanup` run in a real terminal; the suites use fixtures | README, Known risks |
 | Shared policy texts | task (docs) | `ai/policies/model-routing.md` and `ai/policies/review-economy.md` still describe tiers T0–T6, `pipeline_profile` and `risk-tiers.json`; the project files were rewritten by the redesign, the shared ones were not | this file, 2026-10-30 |
 | Routing hooks under the path guard | task | `runtime-gate.py` and `context-guard.py` are not protected by name the way the three guards' configuration is | README, Known risks; WP5 OQ3 |
 
@@ -79,9 +78,6 @@ Sixty-three risks are open in the project record on 2026-10-30; `state.py
 memory risks` lists them, `state.py recall --files <paths>` shows the ones that
 touch the files of a task. The ones that shape the next work:
 
-- `state.py` still reads the task state in several places through a
-  `state.json` / `current.json` fallback (migration 0009 moved the file; the
-  copies are listed as a C1 risk, not fixed).
 - The hooks' dialog switch and `state.py`'s can disagree on Codex and across
   sessions; with the dialog off there is no route to "Keep".
 - A task glob beside documents weighs light at `start`; the documents rule
@@ -102,8 +98,6 @@ touch the files of a task. The ones that shape the next work:
 - **An agent that approves.** Approval, a lower mode, a run past a budget and
   a confirmed deletion are a human's, from their own terminal or as the command
   they picked in the dialog. No operating mode in §1 changes that.
-- **The old command names past one version.** `/ai-task`, `/ai-init`,
-  `/ai-status`, `/ai-audit`, `/project-init`, `/project-update`,
-  `/sdlc-intent`, `/sdlc-spec`, `/sdlc-plan` and `/usage-report` are aliases of
-  the `/rr-*` skills in 3.x and go away in the next major version, together
-  with the `<home>/claude-agentic` symlink and the `current.json` fallback.
+- **The old command names.** The 3.x aliases (`/ai-task`, `/ai-status`,
+  `/sdlc-*` and the rest), the `<home>/claude-agentic` symlink and the
+  `current.json` fallback were removed in 4.0; they do not come back.

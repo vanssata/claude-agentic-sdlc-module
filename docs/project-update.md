@@ -102,5 +102,7 @@ git restore --source=<commit before the run> --staged --worktree -- .ai
 
 That also reverts everything else under `.ai/` committed since. Without a
 commit, the originals under `.ai/reports/project-update-<date>/original/`
-bring replaced or deleted files back, and nothing else. Roll projects back
+bring replaced or deleted files back, and nothing else. From 4.2 `.ai/reports/`
+is git-ignored, so those originals exist only on the machine that ran the
+update. Roll projects back
 before installing a plugin older than the shared tree.

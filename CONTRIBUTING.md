@@ -37,7 +37,7 @@ runs the verification. `CLAUDE.md` holds the lessons earlier reviews taught.
 Locally, run the parallel runner: one process per test file, the same test ids
 as `unittest discover`, the same `Ran N tests` / `OK` tail, exit 1 on anything
 red, the two timed classes serial. CI runs the serial `unittest discover` as
-the oracle, plus the end-to-end suite, on release tags (`npm-publish.yml`); a
+the oracle, plus the end-to-end suite, on every release (`npm-publish.yml`); a
 pull request runs a smoke subset (`tests.yml`), the full suite runs nightly and
 on demand:
 
@@ -166,11 +166,25 @@ Run the suite to the end and fix every failure before you push.
 
 ## Releases
 
-A release bumps `version` in `package.json`, `.claude-plugin/plugin.json` and
-`.codex-plugin/plugin.json`, the badge and the version line at the top of the
-README, and the version named in `docs/known-risks.md`, all in one commit. It
-is then tagged `vX.Y.Z` and published to npm from CI with provenance; `npm
-publish` from a developer machine is refused by the git guard on purpose.
+A release is one pull request to `main`:
+
+- `python3 tools/sync-version.py X.Y.Z` sets the five version keys in
+  `package.json`, `.claude-plugin/plugin.json`,
+  `.claude-plugin/marketplace.json` and `.codex-plugin/plugin.json`;
+- a `## [X.Y.Z] — <date>` section in `CHANGELOG.md`, and its compare link;
+- the badge, the version line and the `npx riskrails@X.Y.Z` lines in the
+  README, `docs/installation.md` and `docs/getting-started.md`, and the version
+  named in `docs/known-risks.md`.
+
+Merging it releases: `.github/workflows/npm-publish.yml` runs on a
+`package.json` change on `main`, runs the gates (`sync-version.py --check
+--tag`, the CHANGELOG section through `tools/changelog-section.py`, the full
+suite), then tags `vX.Y.Z`, publishes to npm with provenance and creates the
+GitHub Release with that section as its notes. A missing or empty section stops
+it. Pushing a tag `vX.Y.Z` by hand still works; after a red verify, merge the
+fix and tag the fix commit by hand (the workflow's header says how). `npm
+publish` from a developer machine is refused by the git guard on purpose, and
+no agent merges the release PR.
 
 ## License
 

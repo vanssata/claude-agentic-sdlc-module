@@ -36,12 +36,13 @@ memory is least reliable, legacy and risks, tests and data; `--survey full`
 sends six for a codebase new to you — and never touches application code. It
 ends with three things only you can give it:
 
-- the **Verification commands** in `.ai/policies/testing.md`:
+- the **Verification commands** in `.ai/policies/verification.md`:
   `verify_command` (the fast suite, no fail-fast), `step_test_command` (with
   `{files}`), `e2e_command` or `none`, which every later task runs before
   reporting done; the skill proposes them from the project's own configuration
   and writes them only after you say yes;
-- the **weight table** in `.ai/policies/weight.json`: the money, identity and
+- the **weight table** in `.ai/policies/weight.project.json`, laid over the
+  plugin's table: the money, identity and
   personal-data modules, the customer-visible paths, the hot paths, the
   directories that need a migration step, the irreversible ones — followed by
   `state.py weight --mirror`;

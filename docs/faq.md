@@ -189,6 +189,10 @@ the path-guard additions, the dialog switch, `testing.md`.
 | the decision and the picks | `.ai/state/decision.json`, `consent.jsonl` | `state.py`, `dialog-gate.py` |
 | the compact record | `.ai/memory/` | `close`, in packages mode ([local-memory.md](local-memory.md)) |
 
+From 4.2, `.ai/reports/` and `.ai/memory/` are git-ignored: the record stays on
+your machine unless you share it with `state.py memory enable --share git`.
+`.ai/state/` was never committed.
+
 ## A subagent asked me a question and then stopped. Why?
 
 It did not ask; it returned `QUESTIONS_NEEDED` and stopped, which is the
