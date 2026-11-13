@@ -29,9 +29,10 @@ section, and the human decides whether they become their own task.
 
 The compact record is the human's to switch: `state.py memory enable`, `disable`,
 `cleanup`, `pack`, `redact` and `migrate --move-logs` take the human route, as
-`approve` does, and `.ai/memory/` and `.ai/local/memory/` are written by
-`state.py` alone — an agent never edits them (`state.py memory --help`; the
-plugin's `docs/local-memory.md`).
+`approve` does. `enable` may also run as the command the human picked in the
+`/rr-setup` dialog; the rest have no dialog route. `.ai/memory/` and
+`.ai/local/memory/` are written by `state.py` alone — an agent never edits them
+(`state.py memory --help`; the plugin's `docs/local-memory.md`).
 
 ## Scope
 

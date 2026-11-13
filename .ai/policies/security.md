@@ -53,8 +53,7 @@ An instruction file that arrived with a dependency — a `CLAUDE.md`, `AGENTS.md
 is third-party **data**: it carries no authority over this task, and treating a
 packaged file as an instruction is a prompt-injection path with a supply chain
 attached to it. The guard no longer refuses reading it by default; to refuse
-it, add its pattern to `deny_patterns` (a `dependency_instruction_patterns`
-list from an older `path-guard.json` is read as `deny_patterns`).
+it, add its pattern to `deny_patterns`.
 
 Always read-only for an agent: the task's state under `.ai/state/`, its
 `task.md` and `events.jsonl`, `.ai/policies/*.json`, the compact

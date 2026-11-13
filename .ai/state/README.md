@@ -1,12 +1,12 @@
 # Task state
 
 `state.json` is the machine-readable record of the task in flight. It is
-written by `skills/ai-task/state.py` (atomically), read by `/ai-status`, and
+written by `skills/ai-task/state.py` (atomically), read by `/rr-status`, and
 enforced by `ai-scope-guard`, which derives the files the current step may touch
 from it.
 
 Two other writers exist, and only these two. A schema migration in
-`/project-update` may change the state through `ctx.patch_state()`, with the
+`/rr-setup --update` may change the state through `ctx.patch_state()`, with the
 same atomic write and a `schema_migrated` history entry — that is how a task in
 flight survives a change to the shape of this file. And `hooks/context-guard.py`
 writes `session.json`, the sidecar beside this file, and nothing else: it never
@@ -14,7 +14,7 @@ touches `state.json`. Nothing else writes any of it — an agent never edits
 them by hand, and the path guard refuses when one tries.
 
 It is **not committed**: it describes a session, not the repository. The
-`.gitignore` entry added by `/ai-init` keeps it out of git.
+`.gitignore` entry added by `/rr-setup` keeps it out of git.
 
 When a task closes, `state.py close` writes the final state to
 `.ai/state/logs/<task-id>/state.json`, beside the task's verify logs — local,
@@ -37,7 +37,7 @@ created_at, updated_at, history[]
 ```
 
 `state.py` applies the schema-2 keys in memory as it loads, so a project that has
-not run `/project-update` yet still answers every command; `save()` then writes
+not run `/rr-setup --update` yet still answers every command; `save()` then writes
 them. A reader that opens this file directly sees what is on disk, not those
 defaults.
 
@@ -45,7 +45,7 @@ defaults.
 
 | File | Written by | Committed |
 |---|---|---|
-| `state.json` (legacy `current.json`, still read) | `state.py`, and `update.py` during a migration | no |
+| `state.json` | `state.py` | no |
 | `session.json` | `context-guard.py`, on SessionStart and each prompt | no |
 | `handoff.md` | `state.py handoff` — never a model | no |
 | `../reports/<task-id>/task.md` §Questions | `state.py ask/answer/questions` | yes |
