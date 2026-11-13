@@ -115,9 +115,13 @@ def memory_enable(args, root, mem, _store, rt=rr_runtime.Runtime()):
     if memory_human(root, "enable", allow_dialog=True, rt=rt) == "dialog":
         pick = rr_dialog.pick_data(rr_dialog.DIALOG_PICK[0])
         print("memory: via dialog (consent %s, decision %s)" % (pick["consent"], pick["decision"]))
-    hook = mem.hook.enable(root, args.author, args.period, args.index)
+    hook = mem.hook.enable(root, args.author, args.period, args.index, args.share)
     print("memory: packages mode on (%s); every teammate's next close exports" % mem.io.POLICY_REL)
-    print("pre-push: %s" % hook)
+    if hook == "local":
+        print("record: local — .ai/memory/ and .ai/reports/ are git-ignored; 'state.py memory enable --share git' "
+              "in your own terminal shares them through git and checks pushes")
+    else:
+        print("pre-push: %s" % hook)
     if hook in ("foreign", "hookspath"):
         print("not written — %s. Add these lines to your own pre-push hook:\n%s" % (
             "core.hooksPath is set" if hook == "hookspath" else "a pre-push hook exists", mem.hook.snippet_text()))
@@ -151,6 +155,9 @@ def memory_verify(args, root, mem, _store, rt=rr_runtime.Runtime()):
         findings, stats = mem.verify.validate_range(root, mem.verify.rev(root, old), mem.verify.rev(root, new) or new, local=False)
         findings = findings or []
     elif args.fresh_clone:
+        if not mem.io.shared(root):
+            fs.die("the record is local (.ai/memory/ is git-ignored): a fresh clone has none — "
+                   "'state.py memory enable --share git' shares it", 2)
         findings = mem.verify.verify_fresh_clone(root)
     else:
         findings = mem.verify.verify(root, "all", [task.valid_task_id(t, "ID") for t in args.ids] or None)

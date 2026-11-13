@@ -499,6 +499,40 @@ class TestProjectUpdate(unittest.TestCase):  # pylint: disable=too-many-public-m
         line = next(x for x in out.splitlines() if x.lstrip().startswith("hint") and (" %s: tracked" % name) in x)
         return self.run_printed(d, line)
 
+    RECORD = (".ai/memory/", ".ai/reports/")
+    RECORD_HINT = ("hint .ai/memory/ and .ai/reports/ are local now. Files git already tracks stay tracked: "
+                   "'git rm -r --cached --ignore-unmatch .ai/memory .ai/reports' untracks them (yours to run); "
+                   "'state.py memory enable --share git' keeps sharing them.")
+
+    @staticmethod
+    def gitignore_without(d, drop, extra=()):
+        """The project's .gitignore with the lines `drop` removed and the lines `extra` appended."""
+        path = os.path.join(d, ".gitignore")
+        kept = [x for x in text_of(path).splitlines() if x not in drop]
+        put(path, "\n".join(kept + list(extra)) + "\n")
+
+    def test_record_ignore_lines_are_appended_with_a_hint(self):
+        """the record and the task logs are local by default: a .gitignore without the two lines gets them appended
+        (a plan item), and the run says what that leaves to the human: tracked files stay tracked"""
+        d = self.current_project("record-local")
+        self.gitignore_without(d, self.RECORD)
+        _, out = self.upd(d, merge=True)
+        self.assertTrue(has(r"entries appended: .*\.ai/memory/, \.ai/reports/", out), out)
+        self.assertIn(self.RECORD_HINT, " ".join(out.split()), out)
+        self.upd(d, "--apply", merge=True)
+        lines = text_of(os.path.join(d, ".gitignore")).splitlines()
+        self.assertTrue(all(x in lines for x in self.RECORD), lines)
+
+    def test_a_shared_record_is_not_ignored_again(self):
+        """a .gitignore that negates the two lines (the record is shared through git) gets neither appended"""
+        d = self.current_project("record-shared")
+        self.gitignore_without(d, self.RECORD, extra=("!.ai/memory/", "!.ai/reports/"))
+        _, out = self.upd(d, "--apply", merge=True)
+        lines = text_of(os.path.join(d, ".gitignore")).splitlines()
+        for line in self.RECORD:
+            self.assertNotIn(line, lines, out)
+        self.assertNotIn("are local now", out)
+
     def test_tracked_but_ignored_state_file_is_reported(self):
         """a .ai/state file git holds although an ignore rule ignores it is a hint with the untrack command,
         not a pending update; untracked, or outside a git work tree, nothing is said; --apply writes nothing for it"""

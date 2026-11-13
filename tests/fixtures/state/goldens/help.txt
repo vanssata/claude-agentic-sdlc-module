@@ -339,13 +339,14 @@ options:
 $ state.py memory enable --help
 exit 0
 --- stdout
-usage: state.py memory enable [-h] [--author AUTHOR] [--period {month,quarter,year}] [--index {none,sqlite}]
+usage: state.py memory enable [-h] [--author AUTHOR] [--period {month,quarter,year}] [--index {none,sqlite}] [--share {git,local}]
 
 options:
   -h, --help            show this help message and exit
   --author AUTHOR
   --period {month,quarter,year}
   --index {none,sqlite}
+  --share {git,local}
 --- stderr
 
 $ state.py memory disable --help

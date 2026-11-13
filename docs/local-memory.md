@@ -10,14 +10,16 @@ budget, and how a push is checked before the record travels. Spec:
 | | files mode (default) | packages mode |
 |---|---|---|
 | switch | no `.ai/policies/memory.json`, or `"mode": "files"` | `state.py memory enable` (the human's) |
-| a closed task | `.ai/reports/<id>/events.jsonl` + `task.md`, committed | the same, plus its entries and seal appended to the developer's batch under `.ai/memory/` |
+| a closed task | `.ai/reports/<id>/events.jsonl` + `task.md`, git-ignored (local) | the same, plus its entries and seal appended to the developer's batch under `.ai/memory/` |
 | risks | `.ai/project/known-risks.md` | `risk` entries; after migration `known-risks.md` is a stub |
 | local data | `.ai/state/logs/<id>/` | the same, plus `.ai/local/memory/` (outbox, lock, batches, config, index) |
-| git hook | none | `pre-push`, installed by `enable` where it is safe |
+| git hook | none | `pre-push`, only when the record is shared through git ("Sharing through git") and `enable` finds it safe |
 
 Files mode writes exactly what it wrote before this feature, except the task
 id (characterised by `tests/test_memory_characterization.py`). `recall`,
 `memory search|show|risks` and `memory risk add|close` work in both modes.
+The task logs under `.ai/reports/` and the packages under `.ai/memory/` are
+local, git-ignored data by default; sharing them is an opt-in.
 
 ## The task id
 
@@ -39,6 +41,9 @@ python3 ~/.claude/skills/ai-task/state.py memory enable --author vanssa --period
 git add .ai/policies/memory.json && git commit -m "memory: packages mode"
 python3 ~/.claude/skills/ai-task/state.py memory status
 ```
+
+When `.ai/memory/` is git-ignored, `enable` installs no hook and prints
+`record: local — …`; the record stays on this machine.
 
 `memory enable` takes the human route, as `approve` does: a terminal outside the
 agent (the commands above), a launcher that declared the run unattended, or the
@@ -125,7 +130,23 @@ recorded during a task goes into its journal (`risk_recorded`, an event only
 `memory risk` may write) and is compacted at close; without a task it is one
 entry in the open batch.
 
-## The pre-push check
+## Sharing through git
+
+The record is shared exactly when git does not ignore `.ai/memory/`; a local
+record (git-ignored, the default) has nothing for git to carry. `state.py
+memory enable --share git` — the human's own terminal, no dialog route —
+appends `!.ai/memory/` and `!.ai/reports/` to `.gitignore` and installs the
+pre-push hook; `--share local` appends the ignore lines again and removes our
+hook. The checks V1–V9 and `memory verify --fresh-clone` apply to a shared
+record only: for a local one the pre-push hook exits 0 and `--fresh-clone` exits 2.
+`--range` and `--tree` (the CI form) always validate what the checked commits
+carry, whatever the checkout ignores.
+`/rr-setup --update` adds the two ignore lines to an existing project unless
+the negations are already there, and prints `git rm -r --cached
+--ignore-unmatch .ai/memory .ai/reports`; files git already tracks stay tracked
+until a human runs it. `memory migrate` reads tracked reports only.
+
+## The pre-push check (a shared record)
 
 `enable` writes a small shim to `$(git rev-parse --git-path hooks)/pre-push`
 only when no hook exists and `core.hooksPath` is unset; otherwise it prints the
@@ -155,7 +176,7 @@ python3 -I "$RUNNER_TEMP/rr/hooks/memory-pre-push.py" --range origin/main..HEAD
 state.py memory migrate --report          # read .ai/local/memory/migration-report.md
 state.py memory migrate --apply           # closed legacy tasks → batches by closed_at period
 state.py memory migrate --apply --risks   # known-risks.md → risk entries + a stub
-git add .ai/memory .ai/project/known-risks.md && git commit -m "memory: migrate tasks and risks"
+git add .ai/memory .ai/project/known-risks.md && git commit -m "memory: migrate tasks and risks"   # shared record only
 state.py memory migrate --move-logs --confirm-delete <author>
 git rm --cached --quiet --pathspec-from-file=.ai/local/memory/logs-to-rm.txt && git commit -m "memory: drop committed logs"
 state.py memory enable --period quarter
@@ -167,7 +188,7 @@ reports — never exports — a task whose coverage is incomplete.
 
 ## Cleanup, restore, redact, pack
 
-Cleanup ships off. Turn it on (`"cleanup": true`) only when `memory verify
+Cleanup ships off (and `--fresh-clone` needs a shared record). Turn it on (`"cleanup": true`) only when `memory verify
 --all` and `memory verify --fresh-clone` both exit 0 and at least ten tasks
 closed in packages mode; then `memory cleanup --all --confirm-delete <author>`.
 It moves `.ai/reports/<id>/` to `.ai/state/logs/<id>/report/` (copy, verify,

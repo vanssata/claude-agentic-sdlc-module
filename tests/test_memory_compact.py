@@ -214,5 +214,43 @@ class TestExcerpt(unittest.TestCase):
         self.assertEqual(len(c.seal["verify_runs"]), 2)
 
 
+class TestSealSize(Fixture):
+    """GitHub #74: a task that changed ~1200 files wrote a seal line over the line cap."""
+
+    def with_changes(self, rows):
+        """Rewrites a fixture report so its `## Changes` table holds `rows` (path, added, deleted); returns its task id."""
+        src = self.p.path(".ai/reports/T-2026-10-26-002/task.md")
+        with open(src, encoding="utf-8") as fh:
+            text = fh.read()
+        table = "".join("| %s | +%d \u2212%d | Edit |\n" % row for row in rows)
+        head, tail = text.split("|---|---|---|\n\n+0", 1)
+        tail = "\n+0" + tail
+        task = "T-2026-10-26-002"
+        with open(src, "w", encoding="utf-8") as fh:
+            fh.write(head + "|---|---|---|\n" + table + tail)
+        return task
+
+    def test_a_seal_over_the_line_cap_keeps_a_prefix_of_the_changes(self):
+        rows = [("src/generated/module_%04d/a_rather_long_directory_name/file_%04d.php" % (i, i), i % 7 + 1, i % 3)
+                for i in range(1500)]
+        task = self.with_changes(rows)
+        seal = self.compact(task)[-1].seal
+        self.assertLessEqual(len(mf.canonical(seal)), mf.LINE_MAX_BYTES)
+        self.assertEqual(mf.validate(seal), [])
+        kept = seal["changes"]
+        self.assertTrue(kept)
+        self.assertEqual([(r["path"], r["added"], r["deleted"]) for r in kept], rows[:len(kept)])
+        self.assertIn("changes", seal["truncated"])
+        self.assertEqual(seal["changes_truncated"], {"rows": 1500, "added": sum(r[1] for r in rows),
+                                                     "deleted": sum(r[2] for r in rows)})
+
+    def test_a_small_seal_is_not_truncated(self):
+        task = self.with_changes([("src/a.py", 3, 1), ("src/b.py", 0, 2)])
+        seal = self.compact(task)[-1].seal
+        self.assertEqual(len(seal["changes"]), 2)
+        self.assertNotIn("changes_truncated", seal)
+        self.assertNotIn("changes", seal.get("truncated", []))
+
+
 if __name__ == "__main__":
     unittest.main()

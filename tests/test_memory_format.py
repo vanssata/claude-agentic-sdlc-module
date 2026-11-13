@@ -169,5 +169,32 @@ class TestRank(unittest.TestCase):
         self.assertEqual(kinds, ["- [decision agent"] * 3 + ["- [task"] * 3)
 
 
+class TestLongLine(unittest.TestCase):
+    """GitHub #74: a line over the cap is an error, and a valid one is still read."""
+
+    def package(self, line_entry):
+        header = mf.package_header("2026-Q4", "dev", "abcd", "2026-10-28T00:00:00Z")
+        return mf.render_package(header, [entry(seq=0), line_entry])
+
+    def test_a_valid_long_entry_is_an_error_and_is_kept(self):
+        big = entry(seq=1, text="x" * (mf.LINE_MAX_BYTES + 100))
+        data = self.package(big)
+        size = len(mf.canonical(big))
+        _, entries, errors = mf.parse_package(data, "2026-Q4.dev.abcd.jsonl")
+        self.assertEqual(errors, [(3, "line is %d bytes, over %d" % (size, mf.LINE_MAX_BYTES))])
+        kept = [e for e in entries if e["rid"] == big["rid"]]
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(kept[0]["_line"], 3)
+        self.assertEqual(kept[0]["_over"], size)
+
+    def test_a_long_line_that_is_not_json_gives_no_entry(self):
+        data = self.package(entry(seq=1)) + b"x" * (mf.LINE_MAX_BYTES + 1) + b"\n"
+        _, entries, errors = mf.parse_package(data, "2026-Q4.dev.abcd.jsonl")
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(errors[0][0], 4)
+        self.assertEqual(errors[0][1], "line is %d bytes, over %d" % (mf.LINE_MAX_BYTES + 1, mf.LINE_MAX_BYTES))
+        self.assertEqual([e for e in entries if e.get("_line") == 4], [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -523,5 +523,110 @@ class TestInstall(unittest.TestCase):
         self.assertNotIn("validator missing", self.p.ok("memory", "status").stdout)
 
 
+LOCAL_IGNORE = ".ai/state/\n.ai/local/\n.ai/memory/\n.ai/reports/\n"
+NOT_NEEDED = "pre-push: not needed — the record is local (.ai/memory/ is git-ignored)"
+
+
+class TestLocalRecord(unittest.TestCase):
+    """The record is local exactly when .ai/memory/ is git-ignored: no hook, no validator, nothing for git to share;
+    `memory enable --share git` is the opt-in and `--share local` the way back (terminal only)."""
+
+    def setUp(self):
+        self.p = mh.Project()
+        self.addCleanup(self.p.close)
+        self.p.write(".gitignore", LOCAL_IGNORE)
+        self.p.commit("local record")
+
+    def hook(self):
+        return self.p.path(".git/hooks/pre-push")
+
+    def pending(self):
+        os.makedirs(self.p.path(".ai/local/memory/outbox"), exist_ok=True)
+        self.p.write(".ai/local/memory/outbox/T-x~1.jsonl", "{}\n")
+
+    def push_check(self):
+        head = self.p.commit("work")
+        stdin = "refs/heads/main %s refs/heads/main %s\n" % (head, ZERO)
+        return mh.hook_run(self.p.root, "origin", "url", stdin=stdin)
+
+    def test_enable_installs_no_hook_and_says_the_record_is_local(self):
+        done = self.p.ok("memory", "enable", "--author", "dev", human=True)
+        self.assertIn("record: local", done.stdout)
+        self.assertFalse(os.path.exists(self.hook()))
+        self.assertIn(NOT_NEEDED, self.p.ok("memory", "status").stdout)
+
+    def test_a_closed_task_exports_locally_and_git_sees_nothing(self):
+        self.p.ok("memory", "enable", "--author", "dev", human=True)
+        task, _ = self.p.light_task("first change")
+        self.assertTrue(self.p.files_under(".ai/memory"))
+        self.assertIn(task, self.p.ok("recall", "--files", "src/widget.py").stdout)
+        listed = self.p.git("status", "--porcelain", "--untracked-files=all").stdout
+        self.assertNotIn(".ai/memory", listed)
+        self.assertNotIn(".ai/reports", listed)
+
+    def test_the_validator_is_silent_with_an_export_pending(self):
+        self.p.ok("memory", "enable", "--author", "dev", human=True)
+        self.pending()
+        done = self.push_check()
+        self.assertEqual((done.returncode, done.stderr), (0, ""))
+
+    def test_share_git_then_share_local(self):
+        self.p.ok("memory", "enable", "--author", "dev", human=True)
+        self.pending()
+        self.p.ok("memory", "enable", "--author", "dev", "--share", "git", human=True)
+        self.assertEqual(self.p.read(".gitignore").splitlines()[-2:], ["!.ai/memory/", "!.ai/reports/"])
+        self.assertIn(mio.HOOK_MARKER, self.p.read(".git/hooks/pre-push"))
+        done = self.push_check()
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("V9", done.stderr)
+        self.p.ok("memory", "enable", "--author", "dev", "--share", "local", human=True)
+        self.assertEqual(self.p.read(".gitignore").splitlines()[-2:], [".ai/memory/", ".ai/reports/"])
+        self.assertFalse(os.path.exists(self.hook()))
+
+    def test_fresh_clone_of_a_local_record_says_there_is_none(self):
+        self.p.ok("memory", "enable", "--author", "dev", human=True)
+        done = self.p.run("memory", "verify", "--fresh-clone")
+        self.assertEqual(done.returncode, 2, (done.stdout, done.stderr))
+        self.assertIn("the record is local (.ai/memory/ is git-ignored): a fresh clone has none — "
+                      "'state.py memory enable --share git' shares it", done.stdout + done.stderr)
+
+    def test_range_and_tree_check_a_tracked_record_whatever_the_checkout_ignores(self):
+        """Only the hook form is silent for a local record. A shared project that committed the two ignore lines
+        still has tracked packages: --range and --tree (the CI form) validate what the commits carry."""
+        self.p.write(".gitignore", ".ai/state/\n.ai/local/\n")
+        self.p.ok("memory", "enable", "--author", "dev", human=True)
+        self.p.light_task("first change")
+        old = self.p.commit("record shared")
+        self.p.write(".gitignore", LOCAL_IGNORE)
+        name = ".ai/memory/" + sorted(os.listdir(self.p.path(".ai/memory")))[0]
+        lines = self.p.read(name, binary=True).split(b"\n")[:-1]
+        lines[2] = lines[2] + b"\r"
+        self.p.write(name, b"\n".join(lines) + b"\n", mode="wb")
+        new = self.p.commit("local lines, damaged package")
+        self.assertFalse(mio.shared(self.p.root))
+        for argv in (("--range", "%s..%s" % (old, new)), ("--tree", new)):
+            done = mh.hook_run(self.p.root, *argv)
+            self.assertEqual(done.returncode, 1, (argv, done.stderr))
+            self.assertIn("V1", done.stderr)
+        stdin = "refs/heads/main %s refs/heads/main %s\n" % (new, old)
+        done = mh.hook_run(self.p.root, "origin", "url", stdin=stdin)
+        self.assertEqual((done.returncode, done.stderr), (0, ""))
+
+    def test_a_dialog_pick_cannot_carry_share_git(self):
+        """The label allowlist offers only `memory enable [--author S] [--period P] [--index …]`: a label with
+        --share never reaches the ledger, so the opt-in stays the human's own terminal."""
+        env = dialog_session(self.p)
+        label = command_label(self.p, "memory", "enable", "--author", "dev", "--share", "git")
+        spec = {"schema": 1, "decisions": [{
+            "key": "memory", "header": "Memory", "question": "Share the record through git?",
+            "options": [{"kind": "choice", "label": "Off — keep files mode", "value": "off"},
+                        {"kind": "command", "label": label}]}]}
+        opened = self.p.run("decision", "open", "--kind", "setup", "--spec", "-", stdin=json.dumps(spec), env=env)
+        self.assertNotEqual(opened.returncode, 0, opened.stdout)
+        done = self.p.run("memory", "enable", "--author", "dev", "--share", "git", env=env)
+        self.assertEqual(done.returncode, 5, (done.stdout, done.stderr))
+        self.assertNotIn("!.ai/memory/", self.p.read(".gitignore"))
+
+
 if __name__ == "__main__":
     unittest.main()

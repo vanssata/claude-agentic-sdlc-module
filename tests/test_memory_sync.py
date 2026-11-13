@@ -506,5 +506,27 @@ class TestTwelveMonths(unittest.TestCase):
         print("\nA1 branch per task: %d package files after pack" % len(files))
 
 
+class TestBigChangeTable(unittest.TestCase):
+    """GitHub #74: a task that changed ~1500 files must export a package every line of which fits."""
+
+    def test_a_task_with_1500_changed_files_exports_cleanly(self):
+        p = enabled()
+        self.addCleanup(p.close)
+        old = p.git("rev-parse", "HEAD").stdout.strip()
+        task = p.start("bulk change", files="src/widget.py,bulk/*")
+        for i in range(1500):
+            p.write("bulk/module_%04d/a_rather_long_directory_name/generated_file_%04d.txt" % (i, i), "x\n")
+        p.ok("verify", "--scope", "all")
+        out = p.ok("close").stdout
+        self.assertNotIn("failed", out)
+        for name in os.listdir(p.path(".ai/memory")):
+            for line in p.read(".ai/memory/" + name, binary=True).split(b"\n"):
+                self.assertLessEqual(len(line), mf.LINE_MAX_BYTES, name)
+        self.assertEqual([n for n in os.listdir(p.path(".ai/local/memory/outbox")) if n.startswith(task)], [])
+        new = p.commit("bulk")
+        done = mh.hook_run(p.root, "--range", "%s..%s" % (old, new))
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

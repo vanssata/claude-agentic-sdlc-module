@@ -872,7 +872,32 @@ def _seal(ctx, entries, inst, last, state, started, closed, seal_src, summary, d
     if truncated:
         seal["truncated"] = truncated
     seal["unrecorded"] = sorted(set(unrecorded))
+    _fit_changes(seal)
     return mf.with_rid(seal)
+
+
+def _fit_changes(seal):
+    """GitHub #74: a seal line over mf.LINE_MAX_BYTES (a task that changed ~1200 files) is unreadable to
+    parse_package. Keep the longest prefix of `changes` whose line fits, say so in `truncated` and
+    `changes_truncated`. A seal that fits is untouched; the result depends only on the seal's own fields."""
+    rows = seal.get("changes")
+    if not isinstance(rows, list) or not rows or len(mf.canonical(mf.with_rid(seal))) <= mf.LINE_MAX_BYTES:
+        return
+    total = {k: sum(r[k] for r in rows if isinstance(r, dict) and isinstance(r.get(k), int)
+                    and not isinstance(r.get(k), bool)) for k in ("added", "deleted")}
+    seal["changes_truncated"] = {"rows": len(rows), "added": total["added"], "deleted": total["deleted"]}
+    seal["truncated"] = sorted(set(seal.get("truncated") or []) | {"changes"})
+    seal["changes"] = []
+    room = mf.LINE_MAX_BYTES - len(mf.canonical(mf.with_rid(seal)))
+    keep = 0
+    for row in rows:
+        room -= len(mf.canonical(row)) + (1 if keep else 0)
+        if room < 0:
+            break
+        keep += 1
+    seal["changes"] = rows[:keep]
+    while seal["changes"] and len(mf.canonical(mf.with_rid(seal))) > mf.LINE_MAX_BYTES:
+        seal["changes"] = seal["changes"][:-1]
 
 
 # ------------------------------------------------------------------ known-risks.md (§D9, R24)

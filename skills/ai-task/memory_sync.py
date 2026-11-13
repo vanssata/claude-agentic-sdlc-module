@@ -75,6 +75,8 @@ def pre_push(argv, stdin):
             known = rsha != mio.ZERO_SHA and _git_out(repo, "cat-file", "-e", rsha + "^{commit}")[0] == 0
             jobs.append((lref, rsha if known else base_for_new_branch(repo, remote, lsha), lsha))
     failing, shown, packages, tasks, ms = [], 0, 0, 0, 0
+    if local and jobs and not mio.shared(repo):
+        return 0                          # the hook form, a local record (.ai/memory/ git-ignored): nothing travels
     for ref, old, new in jobs:
         findings, stats = mver.validate_range(repo, old, new, local=local)
         if findings is None:

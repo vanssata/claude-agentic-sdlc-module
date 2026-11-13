@@ -33,7 +33,7 @@ project owns:
 | `.ai/policies/testing.md`, `coding.md`, `safety.md`, `security.md` | generated from the plugin; the project's own half of `coding.md` is the human's |
 | `.ai/policies/memory.json` | present once a human ran `state.py memory enable` |
 | `.ai/AGENTS.md`, `.ai/rules/`, `.ai/VERSION` | the router, the scoped rules, the schema number |
-| `.ai/state/`, `.ai/reports/`, `.ai/memory/` | the task in flight, the closed tasks, the compact record |
+| `.ai/state/`, `.ai/reports/`, `.ai/memory/` | the task in flight, the closed tasks, the compact record; the last two are local (git-ignored) by default |
 | `docs/sdlc/`, the managed block in `CLAUDE.md` / `AGENTS.md` | the SDLC artefacts, the always-loaded rules |
 
 The plugin ships every version of every project-owned template it has ever
@@ -51,7 +51,7 @@ there). That is how the update tells files apart.
 | `weight.md` | rendered from the plugin's table with `weight.project.json` laid over it |
 | a rule source `.ai/rules/<slug>.md` | `delete?` (`[rules]`): an update does not keep rule sources; confirming deletes it and its rendered blocks, and until then the rule stays rendered |
 | a rendered rule file whose source is gone or no longer sets `paths:` | `delete?` (`[rules]`), once a human confirms |
-| `.ai/project/**`, `.ai/reports`, `.ai/memory`, `.ai/state`, `docs/sdlc`, `verification.md`, `weight.project.json`, `dialog.json`, `CLAUDE.md` outside the block, `.claude/settings.json` | kept, never rewritten |
+| `.ai/project/**`, `.ai/reports`, `.ai/memory`, `.ai/state`, `docs/sdlc`, `verification.md`, `weight.project.json`, `dialog.json`, `CLAUDE.md` outside the block, `.claude/settings.json` | kept, never rewritten; `.ai/reports` and `.ai/memory` are local by default: the update appends their two ignore lines to `.gitignore` and prints the untrack command for files git already tracks |
 | a file the update keeps but cannot read | `KEPT_UNREADABLE`, exit 6: nothing is written until it is fixed or removed |
 | a shared file the plugin once shipped, unedited | `delete?` — the project reads the shared tree instead, once a human confirms |
 | a shared file the project edited | kept as an override, with a hint: it no longer receives the plugin's changes, and nothing tells you when it falls behind |
