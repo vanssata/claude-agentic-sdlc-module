@@ -2,7 +2,7 @@
 
 ## Things Claude Code gets wrong
 
-- A BLOCKER is closed only with a test that pins it; for a regex's running time, a `timed` case at the measured size that fails on the tree before the fix. Reviews of T-2026-10-20-003 found an untested blocker twice, and its BLOCKERs 2, 4 and 5 all came from edits to `SH_WORD`/`SH_RE` in `hooks/ai-path-guard.sh`, where the invariant is: no piece of a word crosses the blank after a match start's `sh`.
+- A BLOCKER is closed only with a test that pins it; for a regex's running time, a `timed` case at the measured size that fails on the tree before the fix. Reviews of T-2026-10-20-003 found an untested blocker twice, and its BLOCKERs 2, 4 and 5 came from edits to `SH_WORD`/`SH_RE` in the retired `hooks/ai-path-guard.sh`. Those regexes were deleted in R22 (`710a2aa`): `hooks/guard/paths_bash.py` splits top-level segments only (`paths_shell.py` `shell_segments`; a `sh -c`/`eval` string is not re-parsed, `:70-71`) and refuses unread a command over `LONG_CMD` = 4096 characters that names a guarded path or a gate verb (`:33,49`). A new pattern over command text gets its own `timed` case beside `tests/test_ai_path_guard.py:398-413`.
 - A change to this plugin's hooks, skills or `state.py` does not score behaviour 2 for being "a process every call runs through": T-2026-10-21-001, a 51-line guard bugfix, ran as T4 and cost 25.4M tokens and three STRONG reviews. Weigh it by what it does to a user project's decisions — the "this repository:" examples in `.ai/policies/weight.project.json`, `docs/weight.md` (Modes and the old tiers), constitution C6.
 
 <!-- riskrails:start -->
