@@ -20,7 +20,6 @@ What a user project trusts this plugin to refuse: agent merge, push, publish and
 
 ## Legacy hotspots
 
-- The shell-to-Python guard port: CLAUDE.md still names the retired `hooks/ai-path-guard.sh` and `SH_WORD`/`SH_RE`.
 - Old-shape refusals in project-update (`KEPT_UNREADABLE`, `LAST_MIGRATING_VERSION 3.1.0`).
 - Old tier remnants (`tier_set`, `MODE_TIER`) and `_v7` names.
 

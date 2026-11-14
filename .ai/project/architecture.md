@@ -56,8 +56,8 @@ Evidence: `paths_bash.py:33`; pinned by `tests/test_ai_path_guard.py:405,413`.
 Risk: agents size their commands from the wrong number.
 
 Documented behaviour: `docs/hooks.md:124` says top-level `sh -c '…'` and `eval` segments "are split and each one checked".
-Observed behaviour: `hooks/guard/paths_bash.py:70-71` splits top-level segments only; the string a `sh -c` or `eval` runs is not re-parsed for the movers (R22, SQ13; accepted in known-risks.md). The token scan still sees its words.
-Evidence: `docs/hooks.md:124`; `paths_bash.py:70-72`.
+Observed behaviour: `hooks/guard/paths_bash.py:70-71` splits top-level segments only; the string a `sh -c` or `eval` runs is not re-parsed for the movers (R22, SQ13; accepted in known-risks.md). The token scan still sees its words only for secret reads, `>`-redirects and FETCHERS, which match against the whole command. REMOVERS, WRITERS, MODES, DDWRITE and INPLACE match against the top-level segments and miss it: `sh -c 'rm -f .ai/state/current.json'` is allowed (fixture `tests/fixtures/path-guard/73-bash-sh-c-rm.json`).
+Evidence: `docs/hooks.md:124`; `paths_bash.py:70-72,145-159`; fixture 73.
 Risk: a reader of docs/hooks.md expects the mover check inside a `sh -c` string. Not resolved: docs/hooks.md is outside this task.
 
 Documented behaviour: `.ai/policies/verification.md:27` says verify is "one unittest discover".
