@@ -25,8 +25,12 @@ class TestParser(unittest.TestCase):
         with open(KNOWN, encoding="utf-8") as fh:
             known = fh.read()
         self.assertEqual(mc.render_known_risks(*mc.parse_known_risks(known)), known)
-        # since the migration (packages mode) this repository's risks live in the record
-        text = mh.subprocess.run([sys.executable, "-I", mh.STATE, "--root", mh.ROOT, "memory", "risks", "--md"],
+        # since the migration (packages mode) this repository's risks live in the record; from 4.2 the record
+        # is git-ignored, so a fresh checkout (CI) has none and the live half has nothing to check
+        record = os.path.join(mh.ROOT, ".ai", "memory")
+        if not (os.path.isdir(record) and any(n.endswith(".jsonl") for n in os.listdir(record))):
+            self.skipTest("no local agent record (.ai/memory/ is git-ignored)")
+        text =mh.subprocess.run([sys.executable, "-I", mh.STATE, "--root", mh.ROOT, "memory", "risks", "--md"],
                                  capture_output=True, text=True, check=True, env=mh.clean_env()).stdout
         risks, leftovers = mc.parse_known_risks(text)
         # non-vacuity only: the live record shrinks whenever a task closes its risks (Q1 of T-2026-11-01-2022)
