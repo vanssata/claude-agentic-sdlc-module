@@ -528,11 +528,18 @@ class _Found:                               # pylint: disable=too-few-public-met
 
 
 class Compiled:
-    """One pattern in one mode. `rx` is None when the pattern is invalid."""
-    __slots__ = ("rx", "required", "anchored", "dfa")
+    """One pattern in one mode. `rx` is None when the pattern is invalid.
+
+    The pattern is parsed here (parse errors are caught here), but the regex
+    and the DFA are built on the first read of `rx`: `search` runs the cheap
+    `required` prefilter first, so a subject it rejects never pays for
+    `re.compile` (a fresh process holds ~34 patterns, most never get past it).
+    """
+    __slots__ = ("_rx", "_pending", "required", "anchored", "dfa")
 
     def __init__(self, pattern, mode, capture):
-        self.rx = None
+        self._rx = None
+        self._pending = None                # (tree, mode, capture) until built
         self.required = None
         self.anchored = False
         self.dfa = None
@@ -546,17 +553,29 @@ class Compiled:
                 tree = _strip_leading(tree)
             elif capture:
                 self.anchored = _starts_with_dotstar(tree)
-            flags = re.ASCII if mode == "b" else 0
-            self.rx = re.compile(_emit(tree, mode), flags)
-            if not capture and _nested(tree) and _dfa_ok(tree):
-                self.dfa = _Dfa(tree, mode)
+            self._pending = (tree, mode, capture)
         except (EreError, re.error, RecursionError, OverflowError):
-            self.rx = None
+            self._pending = None
+
+    @property
+    def rx(self):
+        if self._pending is not None:
+            tree, mode, capture = self._pending
+            self._pending = None
+            try:
+                flags = re.ASCII if mode == "b" else 0
+                self._rx = re.compile(_emit(tree, mode), flags)
+                if not capture and _nested(tree) and _dfa_ok(tree):
+                    self.dfa = _Dfa(tree, mode)
+            except (EreError, re.error, RecursionError, OverflowError):
+                self._rx = None
+                self.dfa = None
+        return self._rx
 
     def search(self, subject):
-        if self.rx is None:
-            return None
         if self.required is not None and not any(r in subject for r in self.required):
+            return None
+        if self.rx is None:
             return None
         if self.dfa is not None:
             return _Found() if self.dfa.search(subject) else None
