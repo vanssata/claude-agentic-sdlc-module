@@ -69,3 +69,11 @@ A. both stay in scope; if the uninstall step is still red after one fixer batch 
 B. uninstall out of scope from the start
 X. Other — answer as `X: <text>`
 [Answer]: A — by vanssa via prose at 2026-11-15T11:46:27Z
+
+## Q10. Which ideas from LearnPrompt/andrej-karpathy-skills enter the release (K1 simplest-first for the implementer, K2 reviewer looks for padding, K3 the dependency question, K4 coding.md lines, K5 error format, K6 close section, K13 platform diet)?
+asked: 2026-11-15T12:40:16Z · stage: intent
+A. K1-K4 only (recommended)
+B. K1-K6 in 4.3.0, K13 as the next step for 4.4.0
+C. none
+X. Other — answer as `X: <text>`
+[Answer]: B — by vanssa via prose at 2026-11-15T12:40:24Z

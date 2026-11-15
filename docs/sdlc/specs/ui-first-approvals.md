@@ -17,6 +17,15 @@ shows "what is waiting on me" (the statusline has model, context, limits, cost �
 after another with no colour, no back, no review before writing and no uninstall
 (`bin/menu.js:50-58`, `bin/riskrails.js:270-299`, `:845-853`).
 
+Second, added by Q10: nothing tells an agent under this platform to write the
+simplest code that works. The implementer contract speaks of files, behaviour
+and tests only (`ai/agents/implementer.md:32-39`); neither reviewer list names
+padding (`ai/agents/reviewer.md:7-23`, `agents/ai-reviewer.md.tmpl:68`); a new
+dependency is checked only under the security focus
+(`agents/ai-reviewer.md.tmpl:101`); the coding policy a project receives has no
+line on what a function is (`skills/ai-init/templates/.ai/policies/coding.md`).
+The record holds no case of padded code — the rules are preventive, and cheap.
+
 **Outcome (testable).**
 - With the dialog on, a user takes every routine human decision of a task from
   the runtime's question dialog; every message that reaches the human names a
@@ -26,9 +35,14 @@ after another with no colour, no back, no review before writing and no uninstall
 - On a TTY the installer is one coloured step wizard with back, a review screen
   before any write, and an uninstall; without a TTY or with `--yes` its output
   is byte-identical to 4.2.0.
+- An implementer is told to write the simplest version and not to add a
+  dependency; a reviewer reports padding and an unplanned dependency; in full
+  mode the human sees, before approving, the places to read first.
 
 **Affected.** End users of both runtimes; `hooks/`, `skills/ai-task/rr_state/`,
-`skills/rr-build`, `skills/rr-spec`, `skills/rr-status`, `bin/`, `docs/`.
+`skills/rr-build`, `skills/rr-spec`, `skills/rr-status`, `bin/`, `docs/`; by Q10
+also `ai/agents/`, `agents/ai-reviewer.md.tmpl`, `skills/ai-init/templates/`,
+`skills/rr-ship`.
 
 **Constraints and non-goals.** `package.json` `dependencies` stay `{}`. Hooks
 keep `python3 -I -S` and never import `rr_state`. With the dialog off, and under
@@ -67,12 +81,22 @@ of them by answering the question again.
   deletion keeps the terminal; a reversible lowering of rigor may be picked.
 - Q9 uninstall stays in scope; still red after one fixer batch, it is deferred
   (flag not registered, planner and tests kept) and the cycle goes on.
+- Q10 (Ivan's own answer, 2026-11-15, option B) tight code, from a reading of
+  `LearnPrompt/andrej-karpathy-skills` (MIT; ideas reworded, no text copied):
+  K1 simplest version first, K2 the reviewer looks for padding, K3 the
+  dependency question, K4 and K5 three lines in the coding policy template, K6
+  the places to read before approving — all in 4.3.0. K13, the platform's own
+  diet, is the next step, for 4.4.0. Rejected, each with its reason in the
+  session of that day: a size cap or diff-size sensor (removed on purpose,
+  `tests/test_no_size_tokens.py`), a dependency audit in the core, a stop after
+  N regressions (the budgets do it), a "must not require" line (non-goals do
+  it), the skills as a layer of their own, a word cap on CLAUDE.md entries.
 
 ## Requirements
 
 Axis in brackets (CLAUDE.md, C6). "Pick": a live pick of this session that
 equals the command, run verbatim, once, inside the window. "Dialog off": today's
-bytes. O1–O3 are the three outcomes above.
+bytes. O1–O4 are the four outcomes above.
 
 **Dialog (O1)**
 - **R1 [2]** Both label twins (`rr_state/labels.py`, `hooks/guard/dialog.py`)
@@ -118,7 +142,8 @@ bytes. O1–O3 are the three outcomes above.
 - **R11 [0]** Statusline segment (§Interfaces). No task and no open decision:
   byte-identical line; at most 10 ms more with 100 decisions. Proof:
   `tests/test_statusline_task.py` (new, with a `timed` case).
-- **R12 [0]** `/rr-status` line 1 is `waiting on …`; `--json` gains `waiting`;
+- **R12 [0]** With a task in flight or an open decision, `/rr-status` line 1 is
+  `waiting on …`; otherwise the output is today's; `--json` gains `waiting`;
   the 20-line cap holds. Proof: `tests/test_ai_status_root.py`.
 
 **Installer (O3)**
@@ -151,8 +176,38 @@ bytes. O1–O3 are the three outcomes above.
   `docs/known-risks.md` updated for the install decision. A step that touches a
   shipped template or `ai/` runs `tools/build-template-history.py`.
 - **R21 [0]** The lessons file has one row per step, written as the build goes.
+  Its "review findings" cell counts the `padding:` findings on that step's
+  files — "padding 0" is written, not left out.
 - **R22 [0]** `tools/sync-version.py 4.3.0` and a `## [4.3.0]` CHANGELOG
   section; `sync-version.py --check` green.
+
+**Tight code (Q10, O4)** — texts only; no guard decision and no `state.py`
+refusal moves. Exact wording: §Interfaces. Proof for R23–R27:
+`tests/test_tight_code_texts.py` plus the `doc_tests`.
+- **R23 [0]** `ai/agents/implementer.md`, "While implementing": the simplest
+  version that passes the step's tests; nothing a requirement or a failing test
+  does not ask for.
+- **R24 [0]** Both reviewer lists (`ai/agents/reviewer.md`,
+  `agents/ai-reviewer.md.tmpl` "Look for") name padding: only in the lines the
+  change added, last in the list and on a first pass only; MEDIUM at most,
+  three findings at most, each titled `padding:` and naming what to delete. It
+  never buys an `--after-fix` run.
+- **R25 [0]** The implementer does not add a dependency: the standard library
+  or a short function first, else `SCOPE_CHANGE_REQUIRED`. Both reviewer lists
+  name a dependency without its line in the plan — outside the security focus
+  too.
+- **R26 [0]** `skills/ai-init/templates/.ai/policies/coding.md`, "General":
+  one function one thing; inputs in, result out, IO at the edge; an error
+  message says what failed, what was expected, what was found and the way out.
+  The file's conventions still win in existing code.
+  `tools/build-template-history.py` runs in the same step.
+- **R27 [0]** In full mode the reviewer's output ends with `## READ FIRST` — at
+  most five `file:line` and what it could not verify — and `/rr-ship` §2 shows
+  those lines with the summary. `state.py review` is unchanged: it reads
+  FINDINGS and the verdict line only (`rr_state/review.py:47-63`).
+- **R28 [0]** `ROADMAP.md` names the next step, for 4.4.0: the platform's own
+  diet — design limits in `.pylintrc` and the modules over 600 lines — as a
+  refactoring of its own (C3), with the sizes measured on 2026-11-15.
 
 ## Design
 
@@ -221,28 +276,50 @@ Rules that keep one cycle honest: a step's tests run before it reports; a
 failure goes to one fixer batch per wave; a thinking task that failed is not
 retried on a cheaper model; the whole suite runs once, after the last wave.
 
-| Step | Files | After |
-|---|---|---|
-| s1 label twins | `rr_state/labels.py`, `hooks/guard/dialog.py`, `tests/test_dialog_contract.py`, `tests/test_dialog_gate.py`, state and guard `partition.json` | – |
-| s2 statusline | `hooks/runtime-gate.py`, `tests/test_statusline_task.py` | – |
-| s3 notice | `hooks/update_notice.py`, `hooks/context-guard.py`, `tests/test_update_notice.py` | – |
-| s4 picker texts | `skills/rr-build/SKILL.md`, `skills/rr-spec/SKILL.md`, `tests/test_picker_first_texts.py` | – |
-| s5 installer golden | `tests/test_install_non_tty.py`, `tests/fixtures/install/non-tty.golden` | – |
-| s6 colour and menu | `bin/ansi.js`, `bin/menu.js`, `tests/test_install_menu.py` | – |
-| s7 planners | `bin/wizard.js`, `bin/uninstall.js`, `tests/test_install_wizard.py`, `tests/test_install_uninstall_plan.py` | – |
-| s8 dialog core | `rr_state/dialog.py`, `dialog_cmd.py`, `cli.py`, state `partition.json`, `tests/test_dialog_human_verbs.py` | s1 |
-| s9 hooks | `hooks/guard/{paths_base,paths_bash,git,decision}.py`, `hooks/dialog-gate.py`, the guard golden, guard `partition.json`, `tests/test_dialog_consent.py`, `tests/test_dialog_gate.py`, `tests/test_dialog_first_hooks.py` | s1 |
-| s10 backups, uninstall | `bin/riskrails.js`, `tests/test_install_uninstall.py`, `tests/test_install_backups.py` | s5, s7 |
-| s11 batch | `rr_state/steps.py`, `tests/test_dialog_batch.py` | s8 |
-| s12 state texts | `rr_state/{questions_cmd,gate,close,start,verify,review}.py`, `tests/test_dialog_first_state.py` | s8, s9 |
-| s13 status | `rr_state/{report,report_cmd}.py`, `skills/rr-status/{status.py,SKILL.md}`, `tests/test_ai_status_root.py` | s8 |
-| s14 wizard wiring | `bin/riskrails.js`, `tests/test_install_wizard_pty.py` | s6, s7, s10 |
-| s15 docs | `docs/{glossary,dialog-probe}.md`, `docs/{faq,installation,known-risks}.md`, `docs/media/wizard.tape`, `README.md` | s9, s12, s14 |
-| s16 version, record | the `sync-version` files, `CHANGELOG.md`, `README.md` (test count), the lessons file | all |
+The steps, their files and their order are the plan's:
+`docs/sdlc/plans/ui-first-approvals.md`, **Order of work** — seventeen steps in six waves,
+at most five agents at once.
 
-Waves: s1–s7 · s8, s9, s10 · s11–s14 · s15 · s16. Serialized by a shared file:
-the twins (one step), the guard golden (s9 only), the partitions (s1→s8, s1→s9),
-`test_dialog_gate.py` (s1→s9), `riskrails.js` (s10→s14), `README.md` (s15→s16).
+### Tight code (Q10)
+
+Six sentences in four texts the agents already read, and one section in the
+reviewer's output. Nothing is measured and nothing gates: the implementer is
+told, the reviewer reports, the human reads. The reviewer is the only
+enforcement, so R23 without R24 would be a wish.
+
+- **Where.** The implementer and the reviewer contracts are shared files
+  (`ai/agents/`), read from the plugin by every project that has not overridden
+  them — the change reaches them with the install. The coding policy is a
+  project file: a new project gets the lines from the template; an existing
+  one through `/rr-setup --update`, which replaces an unedited copy and leaves
+  an edited one for the human.
+- **A dependency** is already a decision with its own line in the plan
+  (`ai/workflows.md:17`). R25 adds the question that comes before the decision
+  and gives the implementer the refusal it already has; no new signal.
+- **`READ FIRST`** is the reviewer's, not the session's: `/rr-ship` §3 allows
+  no new opinion, so the list of places comes from the one agent that read the
+  system. Full mode only — that is where a human approves a tree.
+- **This build is the first measurement.** The installed plugin is 4.2.0 and a
+  policy is frozen during a task, so the session carries the Q10 sentences in
+  its own briefs: every implementer brief of this plan holds the two
+  implementer lines and the three coding lines, and the reviewer's brief holds
+  the two list items and `READ FIRST`. Seventeen steps written under the rules
+  and one review that counts `padding:` findings give the number the record
+  lacks. The count is of findings, never of lines: no size is measured.
+- **Exit.** The 4.4.0 spec reads that number first. No `padding:` finding in
+  4.3.0 or in the tasks up to then: R24's item is reconsidered — kept as it
+  is only with a reason written there.
+
+Rejected:
+- A diff-size or line-growth sensor: removed in the redesign because the number
+  distorted the picture (`docs/redesign-analysis-2026-10-24.md:53-55`); a test
+  forbids its names.
+- A `/rr-minimal` skill, or the source skills installed as they are: one more
+  trigger and one more text to read, for rules that fit in six sentences.
+- A function-size limit in the template: a number invites the split that the
+  "three call sites" rule exists to prevent.
+- Padding as a HIGH finding: it would buy a suite run and a review round for a
+  matter of taste.
 
 ## Interfaces
 
@@ -281,8 +358,8 @@ you: D3`.
 ('state.py decision show' sends it again)` · `waiting on you: gate G1 — approve
 in the dialog ('state.py close' offers it) or in your own terminal` · `waiting
 on you: Q2, Q4 — answer in the dialog or the chat, or fill [Answer]: in
-<task.md>` · `waiting on the agent: <stage> — <next action>` · `waiting on
-nobody: no task in flight`. `--json`: `"waiting": {"on": "you|agent|nobody",
+<task.md>` · `waiting on the agent: <stage> — <next action>`. With no task and no open decision the output is
+today's. `--json`: `"waiting": {"on": "you|agent|nobody",
 "decisions": [], "gate": null, "questions": []}`.
 
 **Installer.** `--uninstall`, allowed only with `--target`, `--home`,
@@ -325,6 +402,59 @@ exist, else `backups/<YYYY-MM-DD>T<HHMMSS>/`, else the same with `-2`, `-3`.
 (error text, at most two lines) | what fixed it | review findings | tokens |
 what the base behaviour should change |` — "none" is a finding too.
 
+**Tight-code texts** (R23–R27), as they are added.
+
+`ai/agents/implementer.md`, under "While implementing":
+
+```markdown
+- Write the simplest version that passes the step's tests. A branch, an option,
+  a parameter or a layer is added only when a requirement or a failing test
+  asks for it.
+- A new dependency is not yours to add. Ask first whether the standard library
+  or one function of about fifty lines does the job; when it does not, return
+  `SCOPE_CHANGE_REQUIRED` naming the manifest and the reason.
+```
+
+`ai/agents/reviewer.md` "Look specifically for" and
+`agents/ai-reviewer.md.tmpl` "Look for", the same two items in each list's own
+punctuation:
+
+```markdown
+- padding, last and on a first pass only, in the lines this change added: an
+  abstraction with one implementation, an option nobody sets, a block or a test
+  that repeats another, lines no requirement and no test asks for — MEDIUM at
+  most, three findings at most, each titled `padding:` and naming what to
+  delete;
+- a new dependency without its line in the plan, or one the standard library
+  or a short function would replace;
+```
+
+`agents/ai-reviewer.md.tmpl` "Output", after VERDICT, full mode only:
+
+```markdown
+## READ FIRST
+- <file:line> — <why a human reads this before approving>   # at most five
+unverified: <what the review could not check, and what would check it>   # or: none
+```
+
+`skills/ai-init/templates/.ai/policies/coding.md`, at the end of "General":
+
+```markdown
+- A function does one thing and its name says which. When the name needs
+  "and", split it.
+- Inputs come in as parameters and the result goes out as the return value;
+  files, the network and the clock stay at the edge, in the caller.
+- An error message says what failed, what was expected, what was found, and
+  the way out.
+
+In existing code the file's conventions win; the last three lines hold for the
+functions you add.
+```
+
+`skills/rr-ship/SKILL.md` §2: "Show the human the summary (§3), the review's
+`READ FIRST` lines, the open findings, the rollback, and that command
+**verbatim**".
+
 ## Policy conformance
 
 - **C1.** Dialog off and `AI_UNATTENDED`: today's bytes, pinned by R7's off
@@ -343,6 +473,13 @@ what the base behaviour should change |` — "none" is a finding too.
 - **`.ai/policies/safety.md`.** Untouched: the memory verbs and deletions keep
   the terminal (Q8). The threat model stands — a pick is recorded, not proven.
 - **Testing policy.** `state.py verify --scope all` once, after the last wave.
+- **Tight code (R23–R28).** C3: K13 is a refactoring and stays out of this
+  feature — R28 only names it. C6: texts only, behaviour 0. The new coding
+  lines sit under the template's first rule, the file's conventions, and beside
+  "no new abstraction until three call sites" (`coding.md:9-12`), which they
+  do not replace. `tests/test_no_size_tokens.py` stands: no size is named, no
+  size gates. `tests/test_instruction_budget.py` stands: the added lines are
+  inside the budgets or the step reports the number.
 
 ## Flagged concerns
 
@@ -366,23 +503,69 @@ what the base behaviour should change |` — "none" is a finding too.
 5. **The two switch readers** (`docs/known-risks.md:160-170`) now also cover
    the install decision and `batch on`; their fallback is still "use the
    terminal". Accepted, written into the known-risks entry by s15.
-6. **Size.** Sixteen steps, about 3k changed lines and one review is at the
-   edge of one cycle. The pre-agreed cut is uninstall (Q9); the next is s14's
-   review screen, never a dialog step.
+6. **Size.** Seventeen steps, about 3k changed lines and one review is at the
+   edge of one cycle. The pre-agreed cut is uninstall (Q9); the next is the wizard's
+   review screen (s13), never a dialog step. Of the Q10 texts, R27 is cut
+   first: it is the only one that changes what the reviewer returns.
 7. **`fix/ere-lazy-compile`** (`5e0a2a8`) is not on `main` and edits the guard.
-   If it merges first, this branch rebases before s9; if after, its author
-   rebases onto the new texts.
+   Ivan chose on 2026-11-15 to merge it first (PR #82) and rebase this branch
+   before the task starts.
 8. **Uninstall leaves Codex `config.toml` values** — `merge-codex-config.py` has
    no remove mode. Printed as kept; a follow-up.
+9. **Q10 answers a problem the record does not show.** No lesson, risk or
+   review in this repository reports padded code; the measured cost follows the
+   mode, not the size (`docs/sdlc/specs/direct-mode-diet.md:135-141`).
+   Answered, with Ivan, on 2026-11-15: this build is the first measurement —
+   the briefs carry the rules, the review counts `padding:` findings, the
+   lessons rows record the count (R21), and the 4.4.0 spec reads it first
+   (§Design, Exit). What stays open: there is no number from before the rules.
+   A reading of the last three merged diffs against the same list would give
+   one; not done, because 4.3.0 gives the first number anyway.
+10. **Policy against policy, inside one file.** "Follow the conventions of the
+    file" and "a function does one thing" disagree in a file of long functions,
+    and this repository's own `.pylintrc` switches every design limit off as
+    house style. Answered: conventions win in existing code, the new lines
+    hold for added functions, and the reviewer reports padding only in the
+    lines the change added — a rule the diff can check. What stays open: this
+    repository's compact house style is not written in its `coding.md`
+    "Project specifics"; that file is frozen during the task and is Ivan's to
+    extend after the release.
+11. **The reviewer may spend its budget on taste.** Answered: padding is the
+    last item, never in place of another, on a first pass only — a re-review
+    after remediation keeps its two questions — three findings at most, none
+    above MEDIUM, none buys a run. If reviews still grow longer, the cap drops
+    to one.
+12. **This project's own `.ai/policies/coding.md`** is identical to the
+    template and is frozen during the task, and the installed plugin is 4.2.0.
+    Answered for the build: the session's briefs carry every Q10 sentence
+    (§Design), so 4.3.0 is written and reviewed under the new rules without a
+    policy edit. The project's copy receives the three lines when Ivan runs
+    `/rr-setup --update` after the release. Adding them by hand before the
+    start was rejected: a copy that differs from the future template by one
+    byte is an edited copy for `project-update`, and waits for the human.
+13. **The source is unverified.** The skills attribute their rules to Andrej
+    Karpathy with like counts and post links nobody here checked, and the
+    repository is derived from another. Answered: no rule rests on the
+    attribution. No shipped text carries the name; the CHANGELOG credits the
+    repository as what was read, not as an authority; nothing is quoted, so
+    its MIT licence asks for nothing. The original posts were not checked —
+    the result would change no line here.
 
 ## Open questions
 
-- Can the session append to the lessons file between waves, when no step that
-  owns it is active? If the scope guard refuses, the rows wait in the task's
-  report folder and s16 writes them. Owner: `/rr-plan`.
 - How many installer suites run two installs in one day and pin
   `backups/<date>`? s10 counts them before it changes the stamp. Owner: s10.
 - May `report.py`'s layer import the ledger reader (`docs/architecture.md:106`)?
-  Owner: s13.
+  Owner: s12.
 - Follow-up spec, after the probe: the memory verbs and `--confirm-delete` in
   the dialog, with the policy change. Owner: Ivan.
+- Which suites or goldens pin the bytes of `ai/agents/implementer.md`,
+  `ai/agents/reviewer.md`, the reviewer template or the coding template
+  (`tests/test_shared_tree.py`, the installer's dry-run lists, the
+  `project-update` history)? Owner: s17, counted before the first edit.
+- Does Codex install its own copy of the reviewer text, apart from
+  `agents/ai-reviewer.md.tmpl`? Owner: s17; a second copy gets the same lines.
+- Follow-up spec for 4.4.0, the platform's diet (K13, R28): which design limits
+  come back in `.pylintrc` and in what order the modules over 600 lines are
+  split (`hooks/runtime-gate.py` 1275, `bin/riskrails.js` 1578 first). Owner:
+  Ivan, after the release.
