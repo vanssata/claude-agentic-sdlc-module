@@ -104,8 +104,8 @@ tools/state-partition.py`):
 | 1 | `runtime`, `questions`, `ledger` | which runtime drives; parse and render `## Questions`; the consent ledger |
 | 2 | `journal` | the append-only `events.jsonl` |
 | 3 | `policy`, `task` | pure reads of `weight.json` / `dialog.json`, modes; load and save the task dict |
-| 4 | `gate`, `dialog`, `report` | the approval gate; the dialog, its picks and the authority checks; the two facts and the `task.md` lines |
-| 5 | `profile`, `memory_cmd` | the resolved plan and its advice; `recall` and `memory` |
+| 4 | `dialog`, `report` | the dialog, its picks and the authority checks; the two facts and the `task.md` lines |
+| 5 | `gate`, `profile`, `memory_cmd` | the approval gate, which names the dialog in its refusal; the resolved plan and its advice; `recall` and `memory` |
 | 6 | `handoff` | `handoff.md` and the resume point |
 | 7 | `questions_cmd`, `gate_cmd`, `report_cmd`, `steps`, `start`, `verify`, `review`, `close` | one module per command group |
 | 8 | `dialog_cmd` | `decision` and `consent` |

@@ -42,6 +42,13 @@ WHY_APPROVE = T(
     "and tells the session to run state.py questions --sync. An unattended run\n"
     "exports AI_UNATTENDED=1 in the launcher's environment, and the journal then\n"
     "records the approval as unattended for ever. See .ai/policies/safety.md.")
+WHY_APPROVE_DIALOG = T(
+    "\n\nApproval is the human's. Ask them in the dialog: when the task's gate is open, state.py has opened the\n"
+    "approval decision; send it ('state.py decision show'), then run the command they pick, verbatim, once.\n"
+    "Or they run, in their own terminal:\n"
+    "  python3 <plugin>/skills/ai-task/state.py --root . approve --by \"<name>\"\n"
+    "An unattended run exports AI_UNATTENDED=1 in the launcher's environment, and the journal then\n"
+    "records the approval as unattended for ever. See .ai/policies/safety.md.")
 WHY_WORK_CAP = T(
     "This command names more paths than the guard can check within its timeout; split it into "
     "smaller commands, or pass the list through a file and xargs.")

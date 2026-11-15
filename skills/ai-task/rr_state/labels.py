@@ -1,7 +1,7 @@
 """labels: the consent labels a decision may offer as commands -- the one-simple-command rule, the state.py command a label runs, and the absolute command the agent and the human share.
 
 shell: validate_label, human_name, state_label
-core: LABEL_MAX, LABEL_FORBIDDEN, INTERPRETER_RE, PUSH_REF_RE, INTERPRETER_FLAG_RE, NPX_PACKAGE_RE, label_argv, subcommand, state_label_ok, subcommand_prefix
+core: BATCH_ON, DESCRIPTIONS, describe, LABEL_MAX, LABEL_FORBIDDEN, INTERPRETER_RE, PUSH_REF_RE, INTERPRETER_FLAG_RE, NPX_PACKAGE_RE, label_argv, subcommand, state_label_ok, subcommand_prefix
 """
 
 import os
@@ -16,6 +16,17 @@ INTERPRETER_RE = re.compile(r"^python3?$")   # a bare name: a path could be any 
 PUSH_REF_RE = re.compile(r"^[A-Za-z0-9._/-]+$")  # no '+' (a force push), no ':' (a refspec), no option
 INTERPRETER_FLAG_RE = re.compile(r"^-[IS]+$")
 NPX_PACKAGE_RE = re.compile(r"^riskrails@[0-9A-Za-z.+-]+$")
+BATCH_ON = {"--by": True, "--why": False}   # `batch on` options, each at most once; True = required. hooks/guard/dialog.py keeps the same table
+DESCRIPTIONS = {   # what each offered command does, in words a person without a terminal reads
+    ("approve",): "Approve the task's result as it is now, so it can be closed.",
+    ("reject",): "Reject the task's result and send it back for changes.",
+    ("profile", "set"): "Change the plan profile, which sets the models the work runs on.",
+    ("verify",): "Run the test suite once more, past the number of runs this task allows.",
+    ("review",): "Record the next review verdict as yours, past the review passes this task allows.",
+    ("start",): "Start the task in the mode the command names instead of the one its weight gives.",
+    ("memory", "enable"): "Turn on the project's compact record of tasks.",
+    ("batch", "on"): "Turn the batch loop on for this task: more test runs and review passes before you are asked.",
+}
 
 
 def label_argv(label):
@@ -44,10 +55,15 @@ def subcommand(argv):
 
 def state_label_ok(argv):
     """approve | reject | profile set | verify --by | review --by | start --mode … --by |
-    memory enable [--author S] [--period month|quarter|year] [--index none|sqlite]: each option at most
+    batch on --by S [--why S] | memory enable [--author S] [--period month|quarter|year] [--index none|sqlite]: each option at most
     once, as two words, in any order, and no other memory verb. hooks/guard/dialog.py keeps the same
     rule; tests/test_dialog_contract.py pins the two equal."""
     rest = subcommand(argv)
+    if rest[:2] == ["batch", "on"]:
+        names, values = rest[2::2], rest[3::2]
+        return (len(names) == len(values) == len(set(names)) and set(names) <= set(BATCH_ON)
+                and all(n in names for n, need in BATCH_ON.items() if need)
+                and all(v[:1] not in ("", "-") for v in values))
     if rest[:1] in (["approve"], ["reject"]) or rest[:2] == ["profile", "set"]:
         return True
     if rest[:1] in (["verify"], ["review"]):
@@ -89,8 +105,8 @@ def validate_label(label):
             and state_label_ok(script[1]):
         return None
     return ("a label starts with git commit, git push <remote> <branch>, state.py approve|reject|"
-            "profile set|verify --by|review --by|start --mode --by|memory enable [--author S] "
-            "[--period P] [--index none|sqlite], or npx riskrails@<v> … --yes")
+            "profile set|verify --by|review --by|start --mode --by|batch on --by S [--why S]|memory enable "
+            "[--author S] [--period P] [--index none|sqlite], or npx riskrails@<v> … --yes")
 
 
 def human_name(root):
@@ -109,3 +125,16 @@ def state_label(root, argv):
 def subcommand_prefix(argv):
     """The global options in front of the subcommand."""
     return list(argv)[:len(argv) - len(subcommand(argv))]
+
+
+def describe(argv):
+    """One plain-words line for the command a label runs; argv is the label split into words."""
+    if argv[:2] == ["git", "commit"]:
+        return "Save the finished work as a commit in git."
+    if argv[:2] == ["git", "push"]:
+        return "Send the committed work to the remote repository."
+    if argv[:1] == ["npx"]:
+        return "Install this RiskRails version into your runtime's home; start a new session afterwards."
+    script = label_argv(shlex.join(argv))
+    rest = subcommand(script[1]) if script else []
+    return DESCRIPTIONS.get(tuple(rest[:2])) or DESCRIPTIONS.get(tuple(rest[:1])) or "Run a command you have read."

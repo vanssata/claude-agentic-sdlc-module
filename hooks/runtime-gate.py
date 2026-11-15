@@ -1160,6 +1160,90 @@ def git_branch(cwd):
     return ""
 
 
+def read_json_file(path):
+    """The parsed JSON file, or None when it is missing, unreadable or not JSON."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError, RecursionError):
+        return None
+
+
+def still_waiting(decisions, path):
+    """The decisions guard/dialog.py `pending` keeps, from the consent ledger at path: not
+    settled, and not every command pick of the latest dialog call used. A missing or
+    torn ledger leaves them all."""
+    used, settled, rounds = set(), set(), {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for raw in fh:
+                try:
+                    entry = json.loads(raw)
+                except (ValueError, RecursionError):
+                    continue
+                kind = entry.get("type") if isinstance(entry, dict) and entry.get("v") == 1 else None
+                if kind == "use":
+                    used.add(entry.get("id"))
+                elif kind == "settle":
+                    settled.add(entry.get("decision"))
+                elif kind == "pick" and isinstance(entry.get("order"), int) and not isinstance(entry["order"], bool):
+                    call, chain = rounds.get(entry.get("decision"), (None, []))
+                    if chain and call == entry.get("tool_use_id"):
+                        chain.append(entry)
+                    else:
+                        rounds[entry.get("decision")] = (entry.get("tool_use_id"), [entry])
+    except OSError:
+        return decisions
+    out = []
+    for decision in decisions:
+        options = decision.get("options")
+        commands = {o.get("n") for o in options if isinstance(o, dict) and o.get("kind") == "command"} \
+            if isinstance(options, list) else set()
+        picks = [p for p in rounds.get(decision.get("id"), (None, []))[1] if p.get("option") in commands]
+        if decision.get("id") not in settled and not (picks and all(p.get("id") in used for p in picks)):
+            out.append(decision)
+    return out
+
+
+def waiting_ids(decisions, state):
+    """The ids that wait on the human, `D3 D4 Q2 G1`: at most three per kind, then `+n`."""
+    state = state or {}
+    asked, approval = state.get("questions"), state.get("human_approval")
+    questions = asked.get("pending") if isinstance(asked, dict) else None
+    approval = approval if isinstance(approval, dict) else {}
+    kinds = ([d.get("id") for d in decisions],
+             [q for q in questions if not str(q).startswith("G")] if isinstance(questions, list) else [],
+             [approval["gate_id"]] if approval.get("requested_at") and approval.get("gate_id") else [])
+    out = []
+    for ids in kinds:
+        ids = [str(i) for i in ids if i]
+        out += ids[:3] + (["+%d" % (len(ids) - 3)] if len(ids) > 3 else [])
+    return " ".join(out)
+
+
+def task_segment(cwd):
+    """`<task> · <mode> · <stage> waiting on you: D3 Q2`, or `riskrails · waiting on you: D3`
+    with no task, read from the .ai/state files at or above cwd; "" when nothing is in flight
+    or waits."""
+    here = os.path.abspath(cwd)
+    while not os.path.isdir(os.path.join(here, ".ai", "state")):
+        parent = os.path.dirname(here)
+        if parent == here:
+            return ""
+        here = parent
+    folder = os.path.join(here, ".ai", "state")
+    state = read_json_file(os.path.join(folder, "state.json"))
+    state = state if isinstance(state, dict) and state.get("task_id") else None
+    decisions = read_json_file(os.path.join(folder, "decision.json"))
+    opened = decisions.get("open") if isinstance(decisions, dict) else None
+    opened = [d for d in opened if isinstance(d, dict)] if isinstance(opened, list) else []
+    waiting = waiting_ids(still_waiting(opened, os.path.join(folder, "consent.jsonl")) if opened else [], state)
+    if not state:
+        return "riskrails · waiting on you: " + waiting if waiting else ""
+    return " · ".join(str(state.get(k)) for k in ("task_id", "mode", "stage")) \
+        + (" waiting on you: " + waiting if waiting else "")
+
+
 def second_line(payload):
     """`user@host:cwd | branch | 5h:12% (↻14:00) 7d:41% (↻Fri 03:04) | $1.23`, the
     colours of a Debian colour PS1; each part after the prompt is skipped when its
@@ -1180,6 +1264,9 @@ def second_line(payload):
     branch = git_branch(cwd) if os.path.isdir(cwd) else ""
     if branch:
         out += "%s\033[35m%s%s" % (SL_SEP, branch, SL_RESET)
+    segment = task_segment(cwd)
+    if segment:
+        out += "%s\033[36m%s%s" % (SL_SEP, segment, SL_RESET)
     limits = payload.get("rate_limits")
     limits = limits if isinstance(limits, dict) else {}
     parts = []

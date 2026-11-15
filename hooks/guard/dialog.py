@@ -45,6 +45,7 @@ INTERPRETER_RE = re.compile(r"^python3?$")
 INTERPRETER_FLAG_RE = re.compile(r"^-[IS]+$")
 PUSH_REF_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 NPX_PACKAGE_RE = re.compile(r"^riskrails@[0-9A-Za-z.+-]+$")
+BATCH_ON = {"--by": True, "--why": False}   # `batch on` options, each at most once; True = required. rr_state/labels.py keeps the same table
 TS = "%Y-%m-%dT%H:%M:%SZ"
 
 # hooks/guard/dialog.py -> the plugin root; the Stop reminder names its
@@ -217,12 +218,12 @@ def validate_label(label):
     if state_label_ok(tokens):
         return None
     return ("a label starts with git commit, git push, a human-only state.py command (approve, reject, "
-            "profile set, verify/review/start --by, memory enable) or npx riskrails@<v>")
+            "profile set, verify/review/start --by, batch on --by, memory enable) or npx riskrails@<v>")
 
 
 def state_label_ok(tokens):
     """python3 [-I|-S…] <…/state.py> approve|reject|profile set|verify --by|
-    review --by|start --mode … --by|memory enable [--author S] [--period month|quarter|year]
+    review --by|start --mode … --by|batch on --by S [--why S]|memory enable [--author S] [--period month|quarter|year]
     [--index none|sqlite]: each option at most once, as two words, in any order, and no other
     memory verb. rr_state/labels.py keeps the same rule; tests/test_dialog_contract.py pins the
     two equal."""
@@ -236,6 +237,11 @@ def state_label_ok(tokens):
     rest = tokens[i + 1:]
     while rest[:1] in (["--root"], ["--runtime"]) and len(rest) >= 2:
         rest = rest[2:]
+    if rest[:2] == ["batch", "on"]:
+        names, values = rest[2::2], rest[3::2]
+        return (len(names) == len(values) == len(set(names)) and set(names) <= set(BATCH_ON)
+                and all(n in names for n, need in BATCH_ON.items() if need)
+                and all(v[:1] not in ("", "-") for v in values))
     if rest[:1] in (["approve"], ["reject"]) or rest[:2] == ["profile", "set"]:
         return True
     if rest[:1] in (["verify"], ["review"]):
@@ -587,6 +593,10 @@ def decision_command(command):
 
 def is_git_label(label):
     return (label or "").split()[:1] == ["git"]
+
+
+def is_npx_label(label):
+    return (label or "").split()[:1] == ["npx"]
 
 
 def used_note(pick):

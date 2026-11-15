@@ -740,6 +740,15 @@ def take_snapshot(session, transcript):
     return text
 
 
+def dialog_is_on(runtime, payload):
+    """The dialog's effective switch (hooks/guard/dialog.py); False when the guard package is missing."""
+    try:
+        from guard import dialog  # pylint: disable=import-outside-toplevel
+        return dialog.effective_switch(ai_root(payload.get("cwd")), runtime, payload)
+    except Exception:  # pylint: disable=broad-except
+        return False
+
+
 def update_notice_for(payload):
     """The npm update notice for a startup, as (systemMessage, additionalContext); fails open."""
     if payload.get("source") not in (None, "", "startup"):
@@ -752,7 +761,8 @@ def update_notice_for(payload):
         if runtime == "codex":
             home = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
         plugin_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        return update_notice.notice(runtime, home, plugin_root, time.time())
+        return update_notice.notice(runtime, home, plugin_root, time.time(),
+                                    dialog=dialog_is_on(runtime, payload))
     except Exception:  # pylint: disable=broad-except
         return "", ""
 

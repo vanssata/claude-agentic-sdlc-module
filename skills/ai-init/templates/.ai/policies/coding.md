@@ -18,6 +18,15 @@
   install and reviewable in git.
 - Dead code is deleted only in a task that is about deleting it, with evidence
   that it is dead.
+- A function does one thing and its name says which. When the name needs
+  "and", split it.
+- Inputs come in as parameters and the result goes out as the return value;
+  files, the network and the clock stay at the edge, in the caller.
+- An error message says what failed, what was expected, what was found, and
+  the way out.
+
+In existing code the file's conventions win; the last three lines hold for the
+functions you add.
 
 ## Comments
 

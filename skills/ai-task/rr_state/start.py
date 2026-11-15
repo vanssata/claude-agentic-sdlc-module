@@ -159,15 +159,18 @@ def cmd_start(args, root, rt=rr_runtime.Runtime()):
         if rr_policy.MODES.index(args.mode) < rr_policy.MODES.index(mode):
             via, why = dialog.human_route(root, allow_dialog=True, rt=rt)
             if via is None:
-                dialog.offer_decision(root, None, "human_set", "Mode",
-                               "%s — W %s, the weight says %s.\nLower the mode from %s to %s (by %s)?"
-                               % (fs.one_line(args.goal, 300), result.w, mode, mode, args.mode, args.by),
-                               [{"kind": "choice", "effect": "keep", "label": "Keep mode %s" % mode},
-                                {"kind": "command", "label": labels.state_label(root, sys.argv[1:])}], "start --mode", rt=rt)
-                fs.die("APPROVAL_REFUSED — lowering the mode from %s to %s is a human's decision. Run it in "
-                    "your own terminal:\n  python3 %s --root %s start … --mode %s --by %s\nRefused because %s."
-                    % (mode, args.mode, shlex.quote(fs.ENTRY), shlex.quote(root),
-                       args.mode, shlex.quote(args.by), why), 5)
+                decision = dialog.offer_decision(
+                    root, None, "human_set", "Mode",
+                    "%s\nThe task's weight says mode %s. Lower it to %s (by %s)? A lower mode means lighter checks "
+                    "and a lighter review." % (fs.one_line(args.goal, 300), mode, args.mode, args.by),
+                    [{"kind": "choice", "effect": "keep", "label": "Keep mode %s" % mode},
+                     {"kind": "command", "label": labels.state_label(root, sys.argv[1:])}], "start --mode", rt=rt)
+                cmd = "python3 %s --root %s start … --mode %s --by %s" % (
+                    shlex.quote(fs.ENTRY), shlex.quote(root), args.mode, shlex.quote(args.by))
+                what = "lowering the mode from %s to %s" % (mode, args.mode)
+                fs.die(dialog.human_refusal(what, cmd, why, decision and decision["id"])
+                       or "APPROVAL_REFUSED — %s is a human's decision. Run it in your own terminal:\n  %s\n"
+                       "Refused because %s." % (what, cmd, why), 5)
         override = {"from": mode, "to": args.mode, "by": args.by, "why": args.why, "ts": fs.now()}
         mode = args.mode
     if args.slug is not None:

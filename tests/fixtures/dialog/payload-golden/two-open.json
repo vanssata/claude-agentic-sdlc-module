@@ -10,7 +10,7 @@
     },
     {
      "label": "git commit -m 'it'\"'\"'s done' -- src/widget.py",
-     "description": "the session runs exactly this, once"
+     "description": "Save the finished work as a commit in git."
     }
    ],
    "multiSelect": false
@@ -25,11 +25,11 @@
     },
     {
      "label": "git commit -m x -- src/widget.py",
-     "description": "the session runs exactly this, once"
+     "description": "Save the finished work as a commit in git."
     },
     {
      "label": "git push origin feat/x",
-     "description": "the session runs exactly this, once"
+     "description": "Send the committed work to the remote repository."
     }
    ],
    "multiSelect": true

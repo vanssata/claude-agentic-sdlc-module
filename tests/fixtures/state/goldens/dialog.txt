@@ -44,44 +44,43 @@ exit 0
 <ID1> full ready for approval: tweak the widget
 facts: (a) suite green on <TREE9> (run 1) · (b) 1 changed files, all in the task's files
 DIALOG_PENDING D1 — call AskUserQuestion with exactly this JSON, then run the picked command verbatim or 'state.py decision settle --id D1':
-{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nfacts: (a) suite green on <TREE9> (run 1) · (b) 1 changed files, all in the task's files\nApprove this tree for <ID1>?", "header": "Approve", "options": [{"label": "Not now — leave the gate open", "description": "nothing runs"}, {"label": "python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'", "description": "the session runs exactly this, once"}, {"label": "python3 <STATE_PY> --root <ROOT> reject --by 'Rita Human' --why 'rejected in the dialog'", "description": "the session runs exactly this, once"}], "multiSelect": false}]}
+{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nfacts: (a) suite green on <TREE9> (run 1) · (b) 1 changed files, all in the task's files\nApprove this tree for <ID1>?", "header": "Approve", "options": [{"label": "Not now — leave the gate open", "description": "nothing runs"}, {"label": "python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'", "description": "Approve the task's result as it is now, so it can be closed."}, {"label": "python3 <STATE_PY> --root <ROOT> reject --by 'Rita Human' --why 'rejected in the dialog'", "description": "Reject the task's result and send it back for changes."}], "multiSelect": false}]}
 --- stderr
 
 $ state.py --root <ROOT> decision show
 exit 0
 --- stdout
 DIALOG_PENDING D1 — call AskUserQuestion with exactly this JSON, then run the picked command verbatim or 'state.py decision settle --id D1':
-{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nfacts: (a) suite green on <TREE9> (run 1) · (b) 1 changed files, all in the task's files\nApprove this tree for <ID1>?", "header": "Approve", "options": [{"label": "Not now — leave the gate open", "description": "nothing runs"}, {"label": "python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'", "description": "the session runs exactly this, once"}, {"label": "python3 <STATE_PY> --root <ROOT> reject --by 'Rita Human' --why 'rejected in the dialog'", "description": "the session runs exactly this, once"}], "multiSelect": false}]}
+{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nfacts: (a) suite green on <TREE9> (run 1) · (b) 1 changed files, all in the task's files\nApprove this tree for <ID1>?", "header": "Approve", "options": [{"label": "Not now — leave the gate open", "description": "nothing runs"}, {"label": "python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'", "description": "Approve the task's result as it is now, so it can be closed."}, {"label": "python3 <STATE_PY> --root <ROOT> reject --by 'Rita Human' --why 'rejected in the dialog'", "description": "Reject the task's result and send it back for changes."}], "multiSelect": false}]}
 --- stderr
 
 $ state.py --root <ROOT> decision show --json
 exit 0
 --- stdout
-{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nfacts: (a) suite green on <TREE9> (run 1) · (b) 1 changed files, all in the task's files\nApprove this tree for <ID1>?", "header": "Approve", "options": [{"label": "Not now — leave the gate open", "description": "nothing runs"}, {"label": "python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'", "description": "the session runs exactly this, once"}, {"label": "python3 <STATE_PY> --root <ROOT> reject --by 'Rita Human' --why 'rejected in the dialog'", "description": "the session runs exactly this, once"}], "multiSelect": false}]}
+{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nfacts: (a) suite green on <TREE9> (run 1) · (b) 1 changed files, all in the task's files\nApprove this tree for <ID1>?", "header": "Approve", "options": [{"label": "Not now — leave the gate open", "description": "nothing runs"}, {"label": "python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'", "description": "Approve the task's result as it is now, so it can be closed."}, {"label": "python3 <STATE_PY> --root <ROOT> reject --by 'Rita Human' --why 'rejected in the dialog'", "description": "Reject the task's result and send it back for changes."}], "multiSelect": false}]}
 --- stderr
 
 $ state.py --root <ROOT> decision open --kind commit --command 'git commit -m '"'"'golden'"'"' -- src/widget.py'
 exit 0
 --- stdout
 DIALOG_PENDING D2 — call AskUserQuestion with exactly this JSON, then run the picked command verbatim or 'state.py decision settle --id D2':
-{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nbranch master · 1 file changed, 1 insertion(+), 1 deletion(-)\nRun these, in this order?\n  git commit -m 'golden' -- src/widget.py", "header": "Commit", "options": [{"label": "Not now — commit nothing", "description": "nothing runs"}, {"label": "git commit -m 'golden' -- src/widget.py", "description": "the session runs exactly this, once"}], "multiSelect": false}]}
+{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nbranch master · 1 file changed, 1 insertion(+), 1 deletion(-)\nRun these, in this order?\n  git commit -m 'golden' -- src/widget.py", "header": "Commit", "options": [{"label": "Not now — commit nothing", "description": "nothing runs"}, {"label": "git commit -m 'golden' -- src/widget.py", "description": "Save the finished work as a commit in git."}], "multiSelect": false}]}
 --- stderr
 
 $ state.py --root <ROOT> decision show --id D2
 exit 0
 --- stdout
 DIALOG_PENDING D2 — call AskUserQuestion with exactly this JSON, then run the picked command verbatim or 'state.py decision settle --id D2':
-{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nbranch master · 1 file changed, 1 insertion(+), 1 deletion(-)\nRun these, in this order?\n  git commit -m 'golden' -- src/widget.py", "header": "Commit", "options": [{"label": "Not now — commit nothing", "description": "nothing runs"}, {"label": "git commit -m 'golden' -- src/widget.py", "description": "the session runs exactly this, once"}], "multiSelect": false}]}
+{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nbranch master · 1 file changed, 1 insertion(+), 1 deletion(-)\nRun these, in this order?\n  git commit -m 'golden' -- src/widget.py", "header": "Commit", "options": [{"label": "Not now — commit nothing", "description": "nothing runs"}, {"label": "git commit -m 'golden' -- src/widget.py", "description": "Save the finished work as a commit in git."}], "multiSelect": false}]}
 --- stderr
 
 $ state.py --root <ROOT> approve --by 'Rita Human'
 exit 5
 --- stdout
 --- stderr
-state.py: APPROVAL_REFUSED — approval happens outside the agent. Run in your own terminal:
+state.py: APPROVAL_REFUSED — 'state.py approve' is the human's. Ask them in the dialog: send DIALOG_PENDING D1 (printed above), then run the command they pick, verbatim, once. Or they run, in their own terminal:
   python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'
-or set [Answer]: A on G1 in .ai/reports/<ID1>/task.md and tell the session to sync. An unattended run exports AI_UNATTENDED=1 in the launcher's environment; the journal then records the approval as unattended.
-Refused because this run is inside an agent session (CLAUDECODE is set); run it in a terminal outside Claude Code or Codex, not through the `!` prefix.
+Refused because this run is inside an agent session (CLAUDECODE is set); run it in a terminal outside Claude Code or Codex, not through the `!` prefix. Or set [Answer]: A on G1 in .ai/reports/<ID1>/task.md and tell the session to sync.
 
 # the human picks option 2 of D1: python3 <STATE_PY> --root <ROOT> approve --by 'Rita Human'
 $ state.py --root <ROOT> approve --by 'Rita Human'
@@ -120,7 +119,7 @@ $ state.py --root <ROOT> decision show
 exit 0
 --- stdout
 DIALOG_PENDING D2 — call AskUserQuestion with exactly this JSON, then run the picked command verbatim or 'state.py decision settle --id D2':
-{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nbranch master · 1 file changed, 1 insertion(+), 1 deletion(-)\nRun these, in this order?\n  git commit -m 'golden' -- src/widget.py", "header": "Commit", "options": [{"label": "Not now — commit nothing", "description": "nothing runs"}, {"label": "git commit -m 'golden' -- src/widget.py", "description": "the session runs exactly this, once"}], "multiSelect": false}]}
+{"questions": [{"question": "<ID1> — tweak the widget\nmode full · W 0 · tree <TREE9>\nverify: green · review: passed\nrollback: git revert\nbranch master · 1 file changed, 1 insertion(+), 1 deletion(-)\nRun these, in this order?\n  git commit -m 'golden' -- src/widget.py", "header": "Commit", "options": [{"label": "Not now — commit nothing", "description": "nothing runs"}, {"label": "git commit -m 'golden' -- src/widget.py", "description": "Save the finished work as a commit in git."}], "multiSelect": false}]}
 --- stderr
 
 $ state.py --root <ROOT> decision settle --id D2 --why 'not now'

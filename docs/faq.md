@@ -70,6 +70,30 @@ for it. Answer in the conversation (`state.py answer Q1=B`) or on the
 `[Answer]:` line of `.ai/reports/<task-id>/task.md` §Questions followed by
 `state.py questions --sync`. Never on the human's behalf.
 
+## A pending decision holds every tool. What do I do?
+
+**What you see.** Every tool call the agent makes is refused with
+`DECISION_PENDING D3 — …` and the dialog to send; at the end of a turn the Stop
+hook says `DECISION_PENDING D3 is still open`. The statusline shows
+`waiting on you: D3`.
+
+**Why.** A decision is yours (the approval, a budget, a commit, a push). The
+agent may not go on around it, so the gate lets through only the dialog, the
+command you picked, and `state.py decision show|settle|fallback`.
+
+**Ways out**, in this order:
+
+1. Answer the dialog. If it is gone, reply in the chat (for example "ask me
+   again") and the session sends it again.
+2. In your own terminal, `state.py decision settle --id D3 --pick <n>` records
+   your answer.
+3. When the dialog cannot be used, `state.py decision fallback --id D3 --why
+   "<why>"` hands the decision back to the terminal route.
+
+**What needs a terminal** whatever the dialog does: every `state.py memory` verb
+except `enable`, `update.py --confirm-delete`, and approving a
+`full_irreversible` task ([glossary.md](glossary.md)).
+
 ## Why does the pipeline never commit, merge or deploy?
 
 Because the commit is the point where a human reads the diff, and the guards

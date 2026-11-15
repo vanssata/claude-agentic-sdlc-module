@@ -171,18 +171,23 @@ def cmd_verify(args, root, rt=rr_runtime.Runtime()):
     max_runs, budget_name = rr_policy.budget(policy, state, "max_suite_runs")
     if scope in ("suite", "all") and state["verify"]["suite_runs"] >= max_runs:
         if not args.by:
-            dialog.offer_decision(root, state, "human_set", "Budget",
-                           "%s\nSUITE_BUDGET: %d suite runs; weight.json allows %d%s. Run it once more?"
-                           % (dialog.task_facts(root, state), state["verify"]["suite_runs"], max_runs,
-                              " (%s)" % budget_name if rr_policy.batch_on(state) else ""),
-                           [{"kind": "choice", "effect": "keep", "label": "Keep the budget — stop here"},
-                            {"kind": "command",
-                             "label": labels.state_label(root, sys.argv[1:] + ["--by", labels.human_name(root)])}], "verify", rt=rt)
-            fs.die("SUITE_BUDGET — %d suite runs; weight.json allows %d (%s). Running it "
-                "again is not the next move: the human decides. In their own terminal:\n  python3 %s "
-                "--root %s verify --scope %s --by \"<name>\""
-                % (state["verify"]["suite_runs"], max_runs, budget_name, shlex.quote(fs.ENTRY),
-                   shlex.quote(root), scope), 6)
+            runs = state["verify"]["suite_runs"]
+            decision = dialog.offer_decision(
+                root, state, "human_set", "Budget",
+                "%s\nThe test suite has run %d times; this task allows %d%s. Run it once more?"
+                % (dialog.task_facts(root, state), runs, max_runs,
+                   " (%s)" % budget_name if rr_policy.batch_on(state) else ""),
+                [{"kind": "choice", "effect": "keep", "label": "Keep the budget — stop here"},
+                 {"kind": "command",
+                  "label": labels.state_label(root, sys.argv[1:] + ["--by", labels.human_name(root)])}], "verify", rt=rt)
+            cmd = "python3 %s --root %s verify --scope %s --by \"<name>\"" % (
+                shlex.quote(fs.ENTRY), shlex.quote(root), scope)
+            asked = dialog.human_refusal("a run past the suite budget", cmd, "the budget is spent: %d runs, %d allowed"
+                                         % (runs, max_runs), decision and decision["id"])
+            fs.die(("SUITE_BUDGET — %d suite runs; weight.json allows %d (%s).\n%s" % (runs, max_runs, budget_name, asked))
+                   if asked else
+                   "SUITE_BUDGET — %d suite runs; weight.json allows %d (%s). Running it again is not the next "
+                   "move: the human decides. In their own terminal:\n  %s" % (runs, max_runs, budget_name, cmd), 6)
         via, why = dialog.human_route(root, allow_dialog=True, rt=rt)
         if via is None:
             fs.die("APPROVAL_REFUSED — a run past the suite budget is the human's, from their own terminal."

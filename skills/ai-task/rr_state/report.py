@@ -1,14 +1,16 @@
 """report: the text the state is rendered to — the two close facts, the status lines, the schema line, task.md and its writer.
 
-core: md_cell
-shell: two_facts, status_lines, schema_line, task_md_lines, write_task_md
+core: md_cell, waiting_line
+shell: two_facts, pending_questions, waiting_decisions, waiting, status_lines, schema_line, task_md_lines, write_task_md
 """
 import contextlib
+import json
 import os
 import re
 import sys
 
 from rr_state import fs, journal, locks, questions, task
+from rr_state import ledger as rr_ledger
 from rr_state import policy as rr_policy   # status_lines names a local `policy`, as state.py does
 
 # weight.py and sensors.py sit beside state.py; the entry puts that directory on sys.path.
@@ -73,20 +75,81 @@ def two_facts(root, state, tree):
         b = (True, "%d changed files, all in the task's files" % len(diff))
     return {"a": a, "b": b, "diff": diff or [], "outside": outside, "documents": documents}
 
-def status_lines(root, state):
-    """≤ 20 lines; read-only (the facts are measured, nothing is written)."""
-    lines = ["root: %s" % root]
-    if not state or not state.get("task_id"):
-        return lines + ["task: none — no task in flight", schema_line(root)]
-    events, _ = journal.read_journal(root, state["task_id"])
-    last = events[-1] if events else {}
-    pending = (state.get("questions") or {}).get("pending") or []
+def pending_questions(root, state):
+    """The ids the status shows as pending: the cache, and for schema 7 `## Questions`
+    as the file has it (the cache lags a hand-filled [Answer]:, as guard_pending reads it)
+    plus an open gate's id."""
+    pending = ((state or {}).get("questions") or {}).get("pending") or []
     if task.is_v7(state):
-        # The cache lags a hand-filled [Answer]:; the file is the truth, as guard_pending reads it.
         with contextlib.suppress(OSError, ValueError, KeyError):
             _, asked = questions.parse_questions(fs.questions_path(root, state, None))
             gate_id = task.open_gate(state)
             pending = [q["id"] for q in asked if (q["kind"] != "G" and questions.is_pending(q)) or q["id"] == gate_id]
+    return pending
+
+
+def waiting_decisions(root):
+    """The open decisions that still wait — dialog.prune_decisions' rule without its
+    writes: not settled, and not every command pick of the latest dialog call used.
+    An unreadable decision.json waits for nobody here; the decision commands say why."""
+    try:
+        with open(fs.decision_path(root), encoding="utf-8") as fh:
+            opened = json.load(fh)["open"]
+    except (OSError, ValueError, KeyError, TypeError, RecursionError):
+        return []
+    ledger = rr_ledger.read_ledger(root)
+    settled = {e.get("decision") for e in ledger if e["type"] == "settle"}
+    used = {e.get("id") for e in ledger if e["type"] == "use"}
+    rounds = rr_ledger.latest_rounds(ledger)
+    out = []
+    for decision in opened:
+        commands = {o.get("n") for o in decision.get("options") or [] if o.get("kind") == "command"}
+        picks = [e for e in rounds.get(decision.get("id"), []) if e.get("option") in commands]
+        if decision.get("id") not in settled and not (picks and all(p.get("id") in used for p in picks)):
+            out.append(decision)
+    return out
+
+
+def waiting(root, state, pending):
+    """R12: who the task waits on and for what — decisions, then the gate, then questions."""
+    decisions = waiting_decisions(root)
+    gate = task.open_gate(state) if task.is_v7(state) else None
+    asked = [q for q in pending if q != gate]
+    on = "you" if decisions or gate or asked else "agent" if (state or {}).get("task_id") else "nobody"
+    return {"on": on, "decisions": decisions, "gate": gate, "questions": asked}
+
+
+def waiting_line(root, state, wait):
+    """Line 1 of the status, or None with no task in flight and nothing open. When
+    several wait, one line joins them in this order: decisions, the gate, questions."""
+    if wait["on"] == "nobody":
+        return None
+    if wait["on"] == "agent":
+        return "waiting on the agent: %s — %s" % (state.get("stage") or state.get("current_stage") or "?",
+                                                   fs.one_line(state.get("next_action"), 140) or "?")
+    parts = []
+    if wait["decisions"]:
+        parts.append("%s — the dialog ('state.py decision show' sends it again)" % ", ".join(
+            "%s %s" % (d.get("id"), fs.one_line(d.get("header"), 40)) for d in wait["decisions"][:4]))
+    if wait["gate"]:
+        parts.append("gate %s — approve in the dialog ('state.py close' offers it) or in your own terminal"
+                     % wait["gate"])
+    if wait["questions"]:
+        parts.append("%s — answer in the dialog or the chat, or fill [Answer]: in %s" % (
+            ", ".join(map(str, wait["questions"][:4])),
+            os.path.relpath(fs.questions_path(root, state, None), root)))
+    return "waiting on you: " + "; ".join(parts)
+
+
+def status_lines(root, state):
+    """≤ 20 lines; read-only (the facts are measured, nothing is written)."""
+    pending = pending_questions(root, state)
+    head = waiting_line(root, state, waiting(root, state, pending))
+    lines = ([head] if head else []) + ["root: %s" % root]
+    if not state or not state.get("task_id"):
+        return lines + ["task: none — no task in flight", schema_line(root)]
+    events, _ = journal.read_journal(root, state["task_id"])
+    last = events[-1] if events else {}
     lines.append("task: %s — %s" % (state["task_id"], fs.one_line(state.get("goal"), 140)))
     if not task.is_v7(state):
         lines += ["tier: %s · workflow %s · stage %s" % (state.get("risk_tier") or "?", state.get("workflow"),

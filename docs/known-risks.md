@@ -161,15 +161,67 @@ recorded Codex payloads to compare against.
 files on its own. Across sessions, and on a Codex install whose profile names
 no question tool, the two can disagree: `close` prints `DIALOG_PENDING` while
 the gate treats the decision as off, or the reverse. With the dialog off there
-is no route to "Keep" a mode a re-score raised.
+is no route to "Keep" a mode a re-score raised. Since 4.3.0 the same two
+readers also cover the install decision (`decision open --kind install`) and
+`batch on`.
 **Why it stays.** Found by the STRONG review of the dialog tasks and recorded
 as C1 risks; the fix is a spec question (one switch, one reader).
-**Limits.** The fallback is always the terminal command `close` prints; a pick
-never lifts a git rule; an unanswered offer falls back within one tool call.
+**Limits.** The fallback is still the terminal: the command `close` prints, or
+the one the refusal names after the dialog; a pick never lifts a git rule; an
+unanswered offer falls back within one tool call.
 **What to do.** When `DIALOG_PENDING` and the terminal command disagree, use
 the terminal. `"enabled": false` in `dialog.json` turns the dialog off for the
 project.
 **Source.** `state.py memory risks`, the dialog entries of 2026-10-28.
+
+## The install decision is an offer, not a gate
+
+**Risk.** `npx riskrails@… --yes` is not a guarded command. With no decision
+pending any session can run it, and a subagent can run it at any time, because
+the pending gate does not bind a subagent (`hooks/guard/dialog.py`, a payload
+with an `agent_id` is not bound to a session). The install decision
+(`decision open --kind install`) offers the update in the dialog; it does not
+stop the same command typed by an agent.
+**Why it stays.** The guards defend against an agent's mistakes, not a
+constructed command (`.ai/policies/safety.md`); an install is also what a user
+runs on purpose, in a terminal, outside any task.
+**Limits.** The offer is refused with the dialog off and while a task is in
+flight (`INSTALL_DURING_TASK`); an `npx` pick is spent when it runs. The hooks
+the install writes are the ones this guard is made of, so read the diff of a
+reinstall like any other.
+**What to do.** Pin the version, and look at `backups/<stamp>/` after an
+install you did not run yourself.
+**Source.** `docs/sdlc/specs/ui-first-approvals.md`, "Flagged concerns".
+
+## Uninstall keeps the Codex `config.toml` values
+
+**Risk.** `--uninstall` moves the files the installer wrote and edits the
+shared ones, but `scripts/merge-codex-config.py` has no remove mode, so the
+Codex `config.toml` keeps the six managed keys. The run prints them as `kept:`.
+It also leaves `__pycache__` directories under the hook directories it moved.
+**Why it stays.** Removing a value from a file the user edits needs a TOML
+writer the standard library does not have; the merge refuses to touch any key
+it does not manage.
+**Limits.** The values name a model and a thread cap; with the hooks gone they
+enforce nothing. The `__pycache__` folders are inert.
+**What to do.** Edit `config.toml` by hand if you want the old model back;
+the install that replaced your model saved the old one in
+`backups/<stamp>/config.toml`. Delete the leftover folders when you wish.
+**Source.** `docs/installation.md`, "Uninstalling"; `bin/uninstall.js`.
+
+## Remote Control is unverified
+
+**Risk.** No one has run the approval dialog under Claude Code Remote Control,
+the desktop app or the web. If such a session is reported unattended
+(`CLAUDE_CODE_SESSION_ATTENDED=0`) or carries no session id, the dialog is off
+there, and the decisions of this release do not reach that user. "Reply in this
+chat" assumes a reply reaches the same session.
+**Why it stays.** It can only be seen by running it on each surface.
+**Limits.** Off means the terminal route, as before; nothing is lost, but the
+user without a terminal has no route.
+**What to do.** Fill [dialog-probe.md](dialog-probe.md) after the release. A
+"no" becomes the next spec, not a fix.
+**Source.** `docs/sdlc/specs/ui-first-approvals.md`, "Flagged concerns" 2.
 
 ## Budgets and quota are advice, not limits
 

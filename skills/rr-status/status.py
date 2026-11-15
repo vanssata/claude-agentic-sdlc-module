@@ -174,9 +174,11 @@ def main(argv=None):
         return 1
     lines, task_id = None, None
     state = read_json(state_file(root))
-    if state.get("schema") == 7:
-        # A schema-7 task is state.py's to describe; this file's own read stays for
-        # an older task, and for an install whose state.py cannot answer.
+    decisions = read_json(os.path.join(root, ".ai", "state", "decision.json")).get("open")
+    if state.get("schema") == 7 or (not state.get("task_id") and decisions):
+        # A schema-7 task, or an open decision with no task, is state.py's to describe
+        # (its first line says who waits); this file's own read stays for an older
+        # task, and for an install whose state.py cannot answer.
         done = subprocess.run([sys.executable, "-I", os.path.join(SKILLS, "ai-task", "state.py"),
                                "--root", root, "status"], capture_output=True, text=True, check=False)
         if done.returncode == 0 and done.stdout.strip():

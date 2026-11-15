@@ -6,8 +6,9 @@ shell: cmd_step_done_v7, cmd_steps, cmd_batch
 # (uniform cli dispatch: every cmd_* takes rt last, whether it uses it or not)
 import json
 import shlex
+import sys
 
-from rr_state import dialog, fs, handoff, journal, report, task
+from rr_state import dialog, fs, handoff, journal, labels, report, task
 from rr_state import policy as rr_policy   # cmd_batch binds a local `policy`
 from rr_state import runtime as rr_runtime
 
@@ -103,11 +104,18 @@ def cmd_batch(args, root, rt=rr_runtime.Runtime()):
         return
     via = None
     if want:
-        via, why = dialog.human_route(root, rt=rt)
+        via, why = dialog.human_route(root, allow_dialog=True, rt=rt)
         if via is None:
-            fs.die("APPROVAL_REFUSED — turning the batch loop on during a task lowers the rigor, so it is the "
-                "human's. In their own terminal:\n  python3 %s --root %s batch on --by \"<name>\"\nRefused "
-                "because %s." % (shlex.quote(fs.ENTRY), shlex.quote(root), why), 5)
+            decision = dialog.offer_decision(
+                root, state, "human_set", "Batch",
+                "%s\nTurn the batch loop on for this task? It lowers the rigor for the rest of the task: the batch "
+                "budgets replace the standard ones." % dialog.task_facts(root, state),
+                [{"kind": "choice", "effect": "keep", "label": "Keep the standard loop"},
+                 {"kind": "command", "label": labels.state_label(root, sys.argv[1:])}], "batch on", rt=rt)
+            cmd = "python3 %s --root %s batch on --by \"<name>\"" % (shlex.quote(fs.ENTRY), shlex.quote(root))
+            fs.die(dialog.human_refusal("turning the batch loop on during a task", cmd, why, decision and decision["id"])
+                   or "APPROVAL_REFUSED — turning the batch loop on during a task lowers the rigor, so it is the "
+                   "human's. In their own terminal:\n  %s\nRefused because %s." % (cmd, why), 5)
     elif not (args.why or "").strip():
         fs.die("batch off needs --why \"<why the standard loop from here>\"")
     policy = rr_policy.weight_policy(root)
@@ -118,8 +126,9 @@ def cmd_batch(args, root, rt=rr_runtime.Runtime()):
         # At the gate (stage ship) the next action is the human's and stays so.
         state["next_action"] = rr_policy.review_next_action(state)
     journal.emit(root, state, "batch_set", "%s by %s%s" % (args.action, args.by, " via %s" % via if via else ""),
-         {"on": want, "by": args.by, "why": args.why or None, "via": via,
-          "review_passes": state["review"]["passes"], "suite_runs": state["verify"]["suite_runs"]},
+         dict({"on": want, "by": args.by, "why": args.why or None, "via": via,
+               "review_passes": state["review"]["passes"], "suite_runs": state["verify"]["suite_runs"]},
+              **dialog.pick_data(dialog.DIALOG_PICK[0])),
          actor="human" if via == "terminal" else "agent", rt=rt)
     handoff.set_resume_point(state, rt=rt)
     handoff.write_handoff(root, state, "batch", rt=rt)

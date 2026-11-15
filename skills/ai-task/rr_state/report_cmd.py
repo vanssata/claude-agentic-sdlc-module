@@ -225,6 +225,8 @@ def cmd_status(args, root, rt=rr_runtime.Runtime()):
                                                                             "operations")}
             out["facts"] = {"a": list(facts["a"]), "b": list(facts["b"]), "tree": tree}
             out["questions_pending"] = len((state.get("questions") or {}).get("pending") or [])
+        wait = report.waiting(root, state, report.pending_questions(root, state))
+        out["waiting"] = dict(wait, decisions=[d.get("id") for d in wait["decisions"]])
         print(json.dumps(out, indent=2, ensure_ascii=False))
         return
     print("\n".join(report.status_lines(root, state)))

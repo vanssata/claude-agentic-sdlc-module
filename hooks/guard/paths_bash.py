@@ -7,8 +7,8 @@ Moved from paths.py in WP5 (small-oop-modules), unchanged.
 import re
 from guard.common import (Allow, Deny, abs_path, chomp_all, ere_escape, exists, herestring_lines,
                           real_path, realpath_strict, strip1)
-from guard.paths_base import (SEGMENT, T, WHY_APPROVE, WHY_HUMAN, WHY_PICK, WHY_PROTECTED,
-                              WHY_SENSITIVE, WHY_TASK)
+from guard.paths_base import (SEGMENT, T, WHY_APPROVE, WHY_APPROVE_DIALOG, WHY_HUMAN, WHY_PICK,
+                              WHY_PROTECTED, WHY_SENSITIVE, WHY_TASK)
 from guard.paths_shell import shell_segments
 from guard.paths_human import (APPROVE_RE, DIALOG_GATE_RE, HUMAN_BY_RE, PROFILE_SET_RE,
                                START_LIGHT_RE)
@@ -56,7 +56,7 @@ def check_bash(self, unattended):           # pylint: disable=too-many-branches,
                    "('state.py decision settle --id D<n> --pick <n>'). See .ai/policies/safety.md.")
     on, picked = self.dialog_consent(cmd)
     if m.ere_match(APPROVE_RE, cmd_joined) and not unattended and self.task_in_flight() and not picked:
-        raise Deny("Refusing 'state.py approve' from an agent session." + WHY_APPROVE)
+        raise Deny("Refusing 'state.py approve' from an agent session." + (WHY_APPROVE_DIALOG if on else WHY_APPROVE))
     if on and not picked and not unattended and m.ere_match(PROFILE_SET_RE, cmd_joined):
         raise Deny("Refusing 'state.py profile set' from an agent session." + WHY_PICK)
     if not picked and not unattended and m.ere_match(HUMAN_BY_RE, cmd_joined):

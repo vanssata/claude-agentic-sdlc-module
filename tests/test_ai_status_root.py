@@ -194,6 +194,150 @@ class TestPopulatedTask(unittest.TestCase):
         self.assertIn("(+26 more)", self.out, "a long file list is shortened, not wrapped")
 
 
+class TestWaiting(unittest.TestCase):
+    """R12: line 1 says who the task waits on — decisions, then the gate, then questions —
+    and a decision waits by the rule the statusline and the guards use."""
+
+    OPTIONS = [{"n": 1, "kind": "choice", "label": "Not now"}, {"n": 2, "kind": "command", "label": "state.py x"}]
+
+    def setUp(self):
+        self.p = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.p, ignore_errors=True)
+        os.makedirs(os.path.join(self.p, "src"))
+        os.makedirs(os.path.join(self.p, ".ai", "policies"))
+        git("-C", self.p, "init", "-q", "-b", "main")
+        git("-C", self.p, "config", "user.email", "t@example.com")
+        git("-C", self.p, "config", "user.name", "t")
+        with open(os.path.join(self.p, "src", "a.py"), "w", encoding="utf-8") as fh:
+            fh.write("base\n")
+        with open(os.path.join(self.p, ".ai", "VERSION"), "w", encoding="utf-8") as fh:
+            fh.write("7\n")
+        git("-C", self.p, "add", "-A")
+        git("-C", self.p, "commit", "-qm", "base")
+
+    def state(self, *args):
+        env = {k: v for k, v in os.environ.items() if k != "AI_UNATTENDED"}
+        subprocess.run([sys.executable, STATE, "--root", self.p] + list(args), capture_output=True,
+                       env=env, check=False)
+
+    def start(self):
+        self.state("start", "--goal", "g", "--workflow", "feature", "--files", "src/a.py",
+                   "--declare", "behaviour=0:fixture", "--declare", "domain=0:fixture",
+                   "--declare", "novelty=0:fixture")
+
+    def write(self, name, data):
+        os.makedirs(os.path.join(self.p, ".ai", "state"), exist_ok=True)
+        with open(os.path.join(self.p, ".ai", "state", name), "w", encoding="utf-8") as fh:
+            fh.write(data)
+
+    def decisions(self, *named):
+        self.write("decision.json", json.dumps({"version": 1, "open": [
+            {"id": i, "header": h, "options": self.OPTIONS} for i, h in named]}))
+
+    def ledger(self, *entries):
+        self.write("consent.jsonl", "".join(json.dumps(dict(e, v=1)) + "\n" for e in entries))
+
+    def read_state_file(self, name):
+        with open(os.path.join(self.p, ".ai", "state", name), "rb") as fh:
+            return fh.read()
+
+    def gate(self, **extra):
+        data = json.loads(self.read_state_file("state.json"))
+        data["human_approval"] = {"requested_at": "2026-01-01T00:00:00Z", "gate_id": "G1"}
+        self.write("state.json", json.dumps(dict(data, **extra)))
+
+    def lines(self):
+        rc, out = status("--root", self.p)
+        self.assertEqual(rc, 0, out)
+        return out.splitlines()
+
+    def waiting(self):
+        done = subprocess.run([sys.executable, "-I", STATE, "--root", self.p, "status", "--json"],
+                              capture_output=True, text=True, check=False)
+        return json.loads(done.stdout)["waiting"]
+
+    def test_decisions(self):
+        self.start()
+        self.decisions(("D3", "Approve"), ("D4", "Commit"))
+        self.assertEqual(self.lines()[0], "waiting on you: D3 Approve, D4 Commit — the dialog "
+                                          "('state.py decision show' sends it again)")
+        self.assertEqual(self.waiting(), {"on": "you", "decisions": ["D3", "D4"], "gate": None, "questions": []})
+
+    def test_gate(self):
+        self.start()
+        self.gate()
+        self.assertEqual(self.lines()[0], "waiting on you: gate G1 — approve in the dialog "
+                                          "('state.py close' offers it) or in your own terminal")
+        self.assertEqual(self.waiting()["gate"], "G1")
+
+    def test_questions(self):
+        self.start()
+        self.state("ask", "one", "--option", "A: yes", "--option", "B: no")
+        self.state("ask", "two", "--option", "A: yes", "--option", "B: no")
+        first = self.lines()[0]
+        self.assertRegex(first, r"^waiting on you: Q1, Q2 — answer in the dialog or the chat, "
+                                r"or fill \[Answer\]: in \.ai/reports/T-[^/]+/task\.md$")
+        self.assertEqual(self.waiting()["questions"], ["Q1", "Q2"])
+
+    def test_agent(self):
+        self.start()
+        first = self.lines()[0]
+        self.assertRegex(first, r"^waiting on the agent: build — edit, then ")
+        self.assertEqual(self.waiting(), {"on": "agent", "decisions": [], "gate": None, "questions": []})
+
+    def test_several_wait_decisions_then_gate_then_questions(self):
+        self.start()
+        self.state("ask", "one", "--option", "A: yes", "--option", "B: no")
+        self.gate()
+        self.decisions(("D1", "Approve"))
+        first = self.lines()[0]
+        self.assertLess(first.index("D1 Approve"), first.index("gate G1"))
+        self.assertLess(first.index("gate G1"), first.index("Q1 —"))
+        self.assertTrue(first.startswith("waiting on you: "), first)
+
+    def test_a_decision_that_is_settled_or_fully_used_does_not_wait(self):
+        self.start()
+        self.decisions(("D1", "Settled"), ("D2", "Used"), ("D3", "Open"))
+        pick = {"type": "pick", "tool_use_id": "t", "order": 1, "option": 2}
+        self.ledger(dict(pick, decision="D1", id="P1"), {"type": "settle", "decision": "D1"},
+                    dict(pick, decision="D2", id="P2"), {"type": "use", "id": "P2"})
+        self.assertIn("waiting on you: D3 Open — the dialog", self.lines()[0])
+        self.assertEqual(self.waiting()["decisions"], ["D3"])
+        self.decisions(("D2", "Used"))
+        self.assertTrue(self.lines()[0].startswith("waiting on the agent: "), self.lines()[0])
+
+    def test_no_task_no_decision_is_todays_output(self):
+        self.decisions()
+        self.assertEqual(self.lines(), ["root: %s" % self.p, "task: none — no task in flight",
+                                        status("--root", self.p)[1].splitlines()[2]])
+        self.assertTrue(self.lines()[2].startswith("schema: project 7 · plugin "))
+        self.assertEqual(self.waiting()["on"], "nobody")
+
+    def test_no_task_but_an_open_decision(self):
+        self.decisions(("D1", "Approve"))
+        lines = self.lines()
+        self.assertEqual(lines[0], "waiting on you: D1 Approve — the dialog ('state.py decision show' sends it again)")
+        self.assertEqual(lines[1:3], ["root: %s" % self.p, "task: none — no task in flight"])
+
+    def test_the_fullest_status_stays_within_twenty_lines(self):
+        self.start()
+        for i in range(5):
+            self.state("ask", "q%d" % i, "--option", "A: yes", "--option", "B: no")
+        self.gate(batch={"on": True, "by": "Rita"})
+        self.decisions(*[("D%d" % i, "Header") for i in range(1, 7)])
+        self.assertLessEqual(len(self.lines()), 20)
+
+    def test_status_writes_nothing(self):
+        self.start()
+        self.decisions(("D1", "Used"))
+        self.ledger({"type": "pick", "decision": "D1", "tool_use_id": "t", "order": 1, "option": 2, "id": "P1"},
+                    {"type": "use", "id": "P1"})
+        before = {n: self.read_state_file(n) for n in ("decision.json", "consent.jsonl")}
+        self.lines()
+        after = {n: self.read_state_file(n) for n in before}
+        self.assertEqual(before, after, "a used decision is shown as not waiting but is not pruned by status")
+
+
 class TestLegacyBudgets(unittest.TestCase):
     """status.py's own read (a task that is not schema 7) shows the budgets
     state.py enforces: weight.json's, the batch section's while the batch loop is on."""

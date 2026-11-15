@@ -26,6 +26,7 @@ project-update: <ROOT> (dry run, nothing written; --apply to write)
   split     .ai/policies/verification.md      9 command line(s) of testing.md copied verbatim, with its Project specifics
   split     .ai/policies/weight.project.json  0 leaf/leaves of weight.json that differ from the plugin's table carried (none); 1 not carried, equal to an older shipped value: hints
   regenerate .ai/AGENTS.md                     unchanged since it was installed
+  regenerate .ai/policies/coding.md            unchanged since it was installed
   regenerate .ai/policies/safety.md            unchanged since it was installed
   regenerate .ai/policies/security.md          unchanged since it was installed
   regenerate .ai/policies/testing.md           unchanged since it was installed
@@ -41,13 +42,13 @@ project-update: <ROOT> (dry run, nothing written; --apply to write)
   hint      .ai/policies/verification.md: e2e_command is empty — e2e runs once at the end of a task; write 'none' if there is no suite
   hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
   hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
-11 automatic, 1 change(s) awaiting --confirm-delete
+12 automatic, 1 change(s) awaiting --confirm-delete
 --- stderr
 
 $ update.py <ROOT> --check
 exit 1
 --- stdout
-project is behind the installed plugin: 11 file(s) to update, 1 change(s) a human must confirm — run /rr-setup --update
+project is behind the installed plugin: 12 file(s) to update, 1 change(s) a human must confirm — run /rr-setup --update
 --- stderr
 
 $ update.py <ROOT> --check --budget
@@ -108,6 +109,7 @@ project-update: <ROOT> (dry run, nothing written; --apply to write)
   split     .ai/policies/verification.md      9 command line(s) of testing.md copied verbatim, with its Project specifics
   split     .ai/policies/weight.project.json  0 leaf/leaves of weight.json that differ from the plugin's table carried (none); 1 not carried, equal to an older shipped value: hints
   regenerate .ai/AGENTS.md                     unchanged since it was installed
+  regenerate .ai/policies/coding.md            unchanged since it was installed
   regenerate .ai/policies/safety.md            unchanged since it was installed
   regenerate .ai/policies/security.md          unchanged since it was installed
   regenerate .ai/policies/testing.md           unchanged since it was installed
@@ -123,13 +125,13 @@ project-update: <ROOT> (dry run, nothing written; --apply to write)
   hint      .ai/policies/verification.md: e2e_command is empty — e2e runs once at the end of a task; write 'none' if there is no suite
   hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
   hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
-11 automatic, 1 change(s) awaiting --confirm-delete
+12 automatic, 1 change(s) awaiting --confirm-delete
 --- stderr
 
 $ update.py <ROOT> --check
 exit 1
 --- stdout
-project is behind the installed plugin: 11 file(s) to update, 1 change(s) a human must confirm — run /rr-setup --update
+project is behind the installed plugin: 12 file(s) to update, 1 change(s) a human must confirm — run /rr-setup --update
 --- stderr
 
 $ update.py <ROOT> --check --budget

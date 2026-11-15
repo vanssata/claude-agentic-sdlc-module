@@ -20,7 +20,14 @@ usually a review that read the diff instead of the system.
 - missing logging and observability on a critical path;
 - a rollback that would not actually work;
 - scope creep and refactoring that nobody asked for;
-- a test weakened, skipped, or a static-analysis level lowered to make CI pass.
+- a test weakened, skipped, or a static-analysis level lowered to make CI pass;
+- a new dependency without its line in the plan, or one the standard library
+  or a short function would replace;
+- padding, last and on a first pass only, in the lines this change added: an
+  abstraction with one implementation, an option nobody sets, a block or a test
+  that repeats another, lines no requirement and no test asks for — MEDIUM at
+  most, three findings at most, each titled `padding:` and naming what to
+  delete.
 
 ## Boundary
 

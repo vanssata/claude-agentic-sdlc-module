@@ -157,10 +157,13 @@ The batch is `[{"question": "…", "options": [{"key": "A", "text": "…"}, …]
 `"A: text"` becomes `{"key": "A", "text": "text"}`.
 
 Option keys are single letters, A first, at least two; `--recommend` marks the
-one you would pick. Then **stop** and show the questions: while one is pending,
+one you would pick. If `ask` printed `DIALOG_PENDING`, send that dialog. With no
+decision pending (a free question-tool call is denied while one is), put the
+question through the question tool and record the pick with
+`$STATE answer Q1=B --via picker`. Otherwise **stop** and show the questions: while one is pending,
 `step-done` and `close` exit 4. The human answers in the conversation — record
 it with `$STATE answer Q1=B Q2=X:"free text"` or `--prose "1B 2A"` — or fills the
-`[Answer]:` line in `.ai/reports/<task-id>/task.md` §Questions, which is then the
+`[Answer]:` line in `.ai/reports/<task-id>/task.md` §Questions; that file stays the
 record. Never edit that file, and never answer on the human's behalf.
 
 ## 6. Hand over by mode

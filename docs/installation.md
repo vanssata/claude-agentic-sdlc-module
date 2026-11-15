@@ -5,36 +5,36 @@ version: `npx riskrails` alone runs whatever was published last, and the hooks
 it installs see every command an agent runs.
 
 ```bash
-npx riskrails@4.2.0                       # detects Claude Code, Codex, or both, and updates each
-npx riskrails@4.2.0 --target codex        # auto | claude | codex | both
-npx riskrails@4.2.0 --dry-run             # print what would be written, write nothing
-npx riskrails@4.2.0 --home ~/alt-claude   # another Claude home (--codex-home for Codex)
+npx riskrails@4.3.0                       # detects Claude Code, Codex, or both, and updates each
+npx riskrails@4.3.0 --target codex        # auto | claude | codex | both
+npx riskrails@4.3.0 --dry-run             # print what would be written, write nothing
+npx riskrails@4.3.0 --home ~/alt-claude   # another Claude home (--codex-home for Codex)
 # The installer does not read CLAUDE_CONFIG_DIR or CODEX_HOME: with a home other than
 # ~/.claude or ~/.codex, pass it with --home / --codex-home (or CLAUDE_DIR / CODEX_DIR).
 
 # Claude-side options. The plan is detected from ~/.claude.json (organizationRateLimitTier
 # tells Max 5x from 20x; a Team account by its seat) and, on a terminal, proposed for you
 # to confirm with Enter; --yes takes the detection, or the plan recorded last time, without asking:
-npx riskrails@4.2.0 --plan pro            # Pro: opusplan session, opus pinned for STRONG and EXPERT
-npx riskrails@4.2.0 --plan team-pro       # Team, Standard seat: the pro profile with the Team label
-npx riskrails@4.2.0 --plan team-max       # Team, Premium seat: the max profile, Fable on architect
-npx riskrails@4.2.0 --plan max            # Max 5x: Opus 5.5 [1m] session, Fable only on architect
-npx riskrails@4.2.0 --plan max20          # Max 20x: max's settings, EXPERT twice per task without asking
-npx riskrails@4.2.0 --plan max --fable no # no Fable anywhere; architect inherits the Opus session
-npx riskrails@4.2.0 --plan balanced-max   # BalancedMax: only the session is strong (Opus 5.5, 200k); readers on Haiku,
+npx riskrails@4.3.0 --plan pro            # Pro: opusplan session, opus pinned for STRONG and EXPERT
+npx riskrails@4.3.0 --plan team-pro       # Team, Standard seat: the pro profile with the Team label
+npx riskrails@4.3.0 --plan team-max       # Team, Premium seat: the max profile, Fable on architect
+npx riskrails@4.3.0 --plan max            # Max 5x: Opus 5.5 [1m] session, Fable only on architect
+npx riskrails@4.3.0 --plan max20          # Max 20x: max's settings, EXPERT twice per task without asking
+npx riskrails@4.3.0 --plan max --fable no # no Fable anywhere; architect inherits the Opus session
+npx riskrails@4.3.0 --plan balanced-max   # BalancedMax: only the session is strong (Opus 5.5, 200k); readers on Haiku,
                                           # judgement on Sonnet, reviews on Opus, EXPERT at high, no Fable, no xhigh;
                                           # also picks the Codex balanced-max profile (Sol session, readers on Luna)
 
 # Codex-side options (the ChatGPT plan is read from ~/.codex/auth.json; unknown means pro, and says so):
-npx riskrails@4.2.0 --codex-plan plus     # Plus: Sol at medium, three agent threads, Astra at high, no xhigh
-npx riskrails@4.2.0 --codex-plan pro      # Pro: Sol at high, six agent threads, Astra at xhigh
-npx riskrails@4.2.0 --codex-plan balanced-max  # Pro's budgets, Sol session, FAST readers on Luna, Astra at high
+npx riskrails@4.3.0 --codex-plan plus     # Plus: Sol at medium, three agent threads, Astra at high, no xhigh
+npx riskrails@4.3.0 --codex-plan pro      # Pro: Sol at high, six agent threads, Astra at xhigh
+npx riskrails@4.3.0 --codex-plan balanced-max  # Pro's budgets, Sol session, FAST readers on Luna, Astra at high
 
 # Context (both runtimes):
-npx riskrails@4.2.0 --context economy     # the plan's compaction window (800 000 Max, 300 000 Pro); the guard also blocks
-npx riskrails@4.2.0 --context default     # the default: each runtime's own window and compaction; the guard only warns
-npx riskrails@4.2.0 --statusline-context no  # no model and context line in the statusline (default yes)
-npx riskrails@4.2.0 --statusline own         # Claude: keep your own statusline command (from 3.2.1; default riskrails: the plugin's)
+npx riskrails@4.3.0 --context economy     # the plan's compaction window (800 000 Max, 300 000 Pro); the guard also blocks
+npx riskrails@4.3.0 --context default     # the default: each runtime's own window and compaction; the guard only warns
+npx riskrails@4.3.0 --statusline-context no  # no model and context line in the statusline (default yes)
+npx riskrails@4.3.0 --statusline own         # Claude: keep your own statusline command (from 3.2.1; default riskrails: the plugin's)
 ```
 
 **Menus on a terminal (from 4.1.0).** Each question is a menu in this order:
@@ -46,6 +46,35 @@ installs what detection proposes; with no detected Claude plan that is `pro`
 (`team-pro` for a Team org). A flag skips its menu. `--yes` or no terminal asks
 nothing; `RISKRAILS_MENU=off` (or `TERM=dumb`) brings back the typed plan
 question, where Enter on an undetected plan exits as in 4.0.
+
+**The wizard (from 4.3.0).** On a terminal the menus above are one wizard, drawn
+with colour: a stepper line (`step 3 of 6 · runtimes › plan › [context] ›
+statusline › codex plan › review`), the choices with a one-line note each, and
+the keys at the bottom. The steps are runtimes (Space toggles each, nothing
+checked asks again), plan, Fable (only on Max, Max 20x and Team Max), context,
+statusline, Codex plan, then the review; the steps a choice makes irrelevant
+are left out. A flag you pass only pre-selects its answer; the wizard still asks. Keys: ↑/k and ↓/j move, Home/End, 1–9 jump, Space toggles
+(runtimes), Enter or → confirms, ←, h or Backspace goes back one step, and Esc, q
+or Ctrl-C stop with nothing written (exit 130).
+
+The last step is the review: "Review — nothing is written until you pick
+Install", the text `--dry-run` prints for these choices, and
+`same as: <command>`, then Install, Back or Cancel. Only Install writes. When it
+is done a box ends the output with the next step (`/rr-setup` in a project) and
+the same command again, for the next machine:
+
+```bash
+npx riskrails@<version> --target <t> [--plan P --fable F --statusline S] [--codex-plan P] --context C --yes
+```
+
+The wizard does not start, and today's menus and typed prompts apply, with
+`--yes`, with no terminal on stdin, with `RISKRAILS_MENU=off` or `0`, with
+`TERM=dumb`, with `--dry-run` and with `--uninstall`. Without a terminal or with
+`--yes` the output is the same as in 4.2.0.
+
+**Colour.** `NO_COLOR` set to anything non-empty, `TERM=dumb` or a stderr that
+is not a terminal turn it off. Colour is written to stderr only; what goes to
+stdout is plain.
 
 Node 18 or newer and `python3` (Python 3.11 or newer) on `PATH` are required;
 the installer stops with one line when either is missing. From a checkout, `node bin/riskrails.js`
@@ -61,7 +90,7 @@ alone Codex only. If it finds neither CLI it stops and tells you which
 `--target` to name; it never guesses one.
 
 **Updating.** The same command updates in place: it backs up what it replaces
-under `<home>/backups/<date>/`, never duplicates a hook entry, and never
+under `<home>/backups/<stamp>/`, never duplicates a hook entry, and never
 overwrites your edits to `ai-git-guard.json`. The short form, for a machine
 that already has a plan recorded:
 
@@ -73,6 +102,10 @@ npx -y riskrails@latest --yes              # in a terminal
 `--yes` keeps the recorded plan without a prompt; `-y` skips npx's own install
 prompt. Then `/rr-setup --update` in each project ([project-update.md](project-update.md)).
 
+The stamp names one run in one home: `backups/<YYYY-MM-DD>/` when that folder
+does not exist, else `backups/<YYYY-MM-DD>T<HHMMSS>/`, else the same with `-2`,
+`-3`. A backup never overwrites another.
+
 Restart the runtime afterwards.
 
 - **Claude Code**: `/skills` lists `rr-setup`, `rr-spec`, `rr-plan`,
@@ -81,6 +114,50 @@ Restart the runtime afterwards.
 - **Codex**: `/hooks` shows the hooks — **and you must review and trust them
   there before they run.** Codex does not execute a non-managed hook until it
   has been trusted, so until you do, nothing is being enforced.
+
+## Uninstalling
+
+```bash
+npx riskrails@<version> --uninstall [--target T] [--home DIR] [--codex-home DIR] [--dry-run] [--yes]
+```
+
+Only those flags go with `--uninstall` (any other exits 2). Without a terminal
+it needs `--yes` or `--dry-run`; on a terminal it prints the plan and asks
+`[y/N]`. `--dry-run` prints the plan and writes nothing.
+
+Nothing is deleted. These are **moved** under `<home>/backups/<stamp>/`: the
+agents, the hook files, the skills, `riskrails/` and `bin/claude-1m` (and the
+`~/.local/bin/claude-1m` link, when it points at this home). These are
+**edited**, after a copy of each goes to the same folder: our hook entries are
+removed from `settings.json` (`hooks.json` on Codex); `statusLine` is put back
+to your own command from `riskrails/statusline.json`; any other settings key is
+removed only where it still equals what the recorded plan wrote; the managed
+block is removed from `CLAUDE.md` (`AGENTS.md`). The edits come first, then the
+moves, so a run that stops at a move leaves no setting pointing at a moved
+hook. Our hook entries are found by the shipped file names, so they go even when
+the hook files are already gone. Every settings key it removes is printed as
+`removed: settings.json: <key>`, with one `earlier:` line that names the oldest
+`settings.json` under `backups/`: a value of yours that the install replaced may
+be there; nothing is restored for you.
+
+A move that fails stops the run with one message (the path, the system's error,
+what was done, what is left), exit 1. Move the rest by hand, or run
+`--uninstall` again once the cause is gone: it finishes what is left.
+
+These are **kept**, and printed as `kept:`: a settings key that differs from
+what the plan wrote, the Codex `config.toml` values (the merge script has no
+remove mode), the riskrails plugin, and every project's `.ai/`. The moved hook
+directories can leave `__pycache__` folders behind.
+
+A second run finds nothing to do and says so. Exits: 0 done, 1 error (for
+example a settings file that is not valid JSON), 2 usage, 130 cancelled with
+nothing written.
+
+## Supported systems
+
+The test suite runs on Linux (`ubuntu-latest`) in CI, on Python 3.11 to 3.13
+and Node 22; the installer needs Node 18 or newer. The installer writes hook commands that use `$HOME` and
+symlinks under `~/.local/bin`. No other operating system is tested.
 
 ## The plugin route
 

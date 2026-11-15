@@ -12,6 +12,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -642,6 +643,8 @@ class InstallDryRun(ScratchCase):  # pylint: disable=too-many-public-methods  # 
     def test_14_backups_never_land_in_skills(self):
         d = self.path("claude")
         write(os.path.join(d, "skills", "ai-init", "EXTRA.md"), "stale\n")
+        # An earlier test installed into this home today: its backups/<date> is taken, so a run now stamps a time. Start the day over.
+        shutil.rmtree(os.path.join(d, "backups"), ignore_errors=True)
         run("--plan", "max", "--fable", "yes", CLAUDE_DIR=d)
         bak = glob.glob(os.path.join(d, "skills", "*.bak"))
         self.ok("no *.bak directory is left in skills/ (they would load as duplicate skills)", not bak,
@@ -670,6 +673,8 @@ class InstallDryRun(ScratchCase):  # pylint: disable=too-many-public-methods  # 
         write(os.path.join(d, "CLAUDE.md.bak"), "old\n")
         write(os.path.join(d, "hooks", "fable-gate.py"), "#!/usr/bin/env python3\n")
         write(os.path.join(d, "bin", "claude-1m.bak"), "old\n")
+        # An earlier test installed into this home today: its backups/<date> is taken, so a run now stamps a time. Start the day over.
+        shutil.rmtree(os.path.join(d, "backups"), ignore_errors=True)
         write(os.path.join(d, "skills", "status", "SKILL.md"), "---\nname: status\n---\nold\n")
         for alias in ("ai-status", "sdlc-intent", "sdlc-plan", "sdlc-spec"):
             write(os.path.join(d, "skills", alias, "SKILL.md"), "---\nname: %s\n---\nold\n" % alias)

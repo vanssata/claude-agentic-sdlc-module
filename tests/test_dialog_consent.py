@@ -554,5 +554,25 @@ class TestSetupRound(unittest.TestCase):
             self.assertEqual(p.decisions(), [])
 
 
+class TestNpxPickIsSpent(unittest.TestCase):
+    """R3: an `npx riskrails@<v> --yes` pick is spent when it runs, as a git pick is."""
+    NPX = "npx riskrails@4.3.0 --yes"
+
+    def test_the_pick_is_used_its_decision_settles_and_a_second_run_is_refused(self):
+        p = Project()
+        self.addCleanup(p.close)
+        # D2 stays open, so a second run of the spent pick meets the gate and is not simply outside it.
+        p.decide(dec("D1", "install", self.NPX), dec("D2", "commit", COMMIT))
+        p.pick("D1", 2, 1, self.NPX)
+        out = p.guard(self.NPX)
+        self.assertEqual(decision_of(out), "allow", out[:400])
+        self.assertEqual([e["type"] for e in p.ledger()], ["pick", "use"], "the pick is used by the run")
+        pending = dialog.pending(dialog.read_decisions(p.root), p.ledger())
+        self.assertEqual([d["id"] for d in pending], ["D2"], "D1 is no longer pending")
+        again = p.guard(self.NPX)
+        self.assertEqual(decision_of(again), "deny", again[:400])
+        self.assertIn("DECISION_PENDING", p.reason(again))
+
+
 if __name__ == "__main__":
     unittest.main()
