@@ -9,10 +9,12 @@ encoding is held against `jq -Rsc`, and the payload reader against the jq
 filters read_payload ran.
 """
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "hooks"))
@@ -143,6 +145,51 @@ class TestEreMatch(unittest.TestCase):
     def test_an_invalid_pattern_never_matches(self):
         self.assertFalse(self.m.ere_match("*a", "*a"))
         self.assertFalse(self.m.ere_match("*a", "*a" + "b" * 5000))
+
+
+class TestLazyCompile(unittest.TestCase):
+    """The regex is built only once the `required` prefilter passes: a fresh
+    process compiles ~34 patterns and most never get past it (the 1 KB Bash
+    TestTimed case). Laziness changes no result."""
+    PATTERN = "(^|[|;&[:space:]])git[[:space:]]+([^;&|]*[[:space:]])?push([[:space:]]|$)"
+
+    def test_a_prefilter_rejection_builds_no_regex(self):
+        with mock.patch.object(ere.re, "compile", wraps=re.compile) as rc:
+            c = ere.Compiled(self.PATTERN, "b", False)
+            self.assertIsNone(c.search("ls -la " * 150))
+        self.assertIsNotNone(c.required)
+        self.assertEqual(rc.call_count, 0)
+        with mock.patch.object(ere.re, "compile", wraps=re.compile) as rc:
+            self.assertIsNotNone(c.search("git push origin"))
+        self.assertEqual(rc.call_count, 1)
+
+    def test_an_invalid_pattern_stays_invalid(self):
+        for pattern in ("*a", "a{32768}", "[a", "\\1"):
+            c = ere.Compiled(pattern, "b", False)
+            self.assertIsNone(c.search("zzz"), pattern)
+            self.assertIsNone(c.search(pattern), pattern)
+            self.assertIsNone(c.rx, pattern)
+            self.assertIsNone(c.search("zzz"), pattern)
+            self.assertEqual(ere.valid(pattern), valid_eager(pattern), pattern)
+
+    def test_same_results_as_an_eager_build(self):
+        subjects = [s for s, _ in CASES] + ["", "zzz", "git status", "x" * 300]
+        for _, pattern in CASES:
+            for mode in ("b", "u"):
+                for capture in (False, True):
+                    eager = ere.Compiled(pattern, mode, capture)
+                    _ = eager.rx            # built before any search
+                    for subject in subjects:
+                        lazy = ere.Compiled(pattern, mode, capture)
+                        got, want = lazy.search(subject), eager.search(subject)
+                        self.assertEqual(got is None, want is None, (pattern, mode, subject))
+                        if capture and want is not None:
+                            self.assertEqual(got.groups(), want.groups(), (pattern, subject))
+
+
+def valid_eager(pattern):
+    c = ere.Compiled(pattern, "b", False)
+    return c.rx is not None
 
 
 class TestDenyEncoding(unittest.TestCase):
