@@ -61,8 +61,9 @@ def on_stop(dialog, root, runtime, payload):
         blocks = sum(1 for e in dialog.read_ledger(root, types={dialog.STOP_BLOCK})
                      if e.get("session") == session and e.get("turn") == turn and e.get("decisions") == ids)
     if blocks >= policy["stop_blocks_max"]:
-        return {"systemMessage": "DECISION_PENDING %s is still open. Settle it in your terminal: %s"
-                                 % (" ".join(ids), escape)}
+        return {"systemMessage": "DECISION_PENDING %s is still open. Reply in this chat (for example \"ask me "
+                                 "again\") and the session sends you the dialog; or settle it in your "
+                                 "terminal: %s" % (" ".join(ids), escape)}
     with dialog.ledger_lock(root):
         dialog.ledger_append(root, {"type": dialog.STOP_BLOCK, "session": session, "turn": turn,
                                     "decisions": ids})

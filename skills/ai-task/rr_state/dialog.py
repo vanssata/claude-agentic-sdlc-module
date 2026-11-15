@@ -1,7 +1,7 @@
 """dialog: the human decision dialog and the authority that tells a human from the agent -- decisions, consent labels, picks, the approval offer.
 
-shell: human_route, human_turn, refuse_approval, DIALOG_PICK, dialog_policy, dialog_tool_verified, dialog_on, open_decision, print_dialog, offer_decision, settle_decision, settle_written, prune_decisions, mirror_ledger, sync_dialog, dialog_pick, valid_decisions, retire_approvals, task_facts, audit_pick, approve_command, offer_approval
-core: DIALOG_TOOL, SESSION_ENV, DECISIONS_MAX, QUESTION_MAX, HEADER_MAX, JSON_DEPTH_MAX, json_loads_capped, dialog_questions, option_description, part_question, dialog_payload, MIRROR, pick_data
+shell: human_route, human_turn, open_approval_id, refuse_approval, DIALOG_PICK, dialog_policy, dialog_tool_verified, dialog_on, open_decision, print_dialog, offer_decision, settle_decision, settle_written, prune_decisions, mirror_ledger, sync_dialog, dialog_pick, valid_decisions, retire_approvals, task_facts, audit_pick, approve_command, offer_approval
+core: DIALOG_TOOL, SESSION_ENV, DECISIONS_MAX, QUESTION_MAX, HEADER_MAX, JSON_DEPTH_MAX, json_loads_capped, dialog_questions, option_description, human_refusal, part_question, dialog_payload, MIRROR, pick_data
 """
 import json
 import os
@@ -77,16 +77,29 @@ def human_turn(root, state):
     return True, ""
 
 
+def open_approval_id(root, rt=rr_runtime.Runtime()):
+    """The id of the open approval decision, or None with the dialog off or none open: the refusals name the dialog then (R7)."""
+    if not dialog_on(root, runtime=rt.name):
+        return None
+    try:
+        with open(fs.decision_path(root), encoding="utf-8") as fh:
+            return next((d["id"] for d in json.load(fh)["open"] if d.get("kind") == "approval"), None)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError):
+        return None                       # an unreadable decision.json names no decision: the refusal stays today's
+
+
 def refuse_approval(root, state, gate_id, by, why):
     # Quoted: this project's own path has a space in it, and the command the
     # refusal prints is the only route a human without the flag has.
-    fs.die("APPROVAL_REFUSED — approval happens outside the agent. Run in your own terminal:\n"
-        "  python3 %s --root %s approve --by %s\n"
+    cmd = "python3 %s --root %s approve --by %s" % (shlex.quote(fs.ENTRY), shlex.quote(root), shlex.quote(by))
+    asked = None if state["mode"] == "full_irreversible" else human_refusal("'state.py approve'", cmd, why, open_approval_id(root))
+    questions = os.path.relpath(fs.questions_path(root, state, None), root)
+    if asked:
+        fs.die("%s Or set [Answer]: A on %s in %s and tell the session to sync." % (asked, gate_id, questions), 5)
+    fs.die("APPROVAL_REFUSED — approval happens outside the agent. Run in your own terminal:\n  %s\n"
         "or set [Answer]: A on %s in %s and tell the session to sync. An unattended run exports "
         "AI_UNATTENDED=1 in the launcher's environment; the journal then records the approval as "
-        "unattended.\nRefused because %s."
-        % (shlex.quote(fs.ENTRY), shlex.quote(root), shlex.quote(by), gate_id,
-           os.path.relpath(fs.questions_path(root, state, None), root), why), 5)
+        "unattended.\nRefused because %s." % (cmd, gate_id, questions, why), 5)
 
 
 # ---------------------------------------------- the dialog (R36, step 7c)
@@ -254,6 +267,9 @@ def open_decision(root, state, kind, header, question, options, opened_by, multi
         "question": (question or "").strip()[:QUESTION_MAX],
         "options": [dict(option, n=n) for n, option in enumerate(options, 1)],
     }, **extra)
+    for option in decision["options"]:
+        if option["kind"] == "command" and not option.get("description"):
+            option["description"] = labels.describe(shlex.split(option["label"]))
     data["open"].append(decision)
     rr_ledger.write_decisions(root, data)
     if state and state.get("task_id"):
@@ -268,6 +284,15 @@ def option_description(option):
     if option.get("description"):
         return option["description"]
     return "the session runs exactly this, once" if option["kind"] == "command" else "nothing runs"
+
+
+def human_refusal(what, cmd, why, decision):
+    """The refusal text that names the dialog first, or None without a decision: the site prints its own text then (R7)."""
+    if not decision:
+        return None
+    return ("APPROVAL_REFUSED — %s is the human's. Ask them in the dialog: send DIALOG_PENDING %s (printed above), "
+            "then run the command they pick, verbatim, once. Or they run, in their own terminal:\n  %s\n"
+            "Refused because %s." % (what, decision, cmd, why))
 
 
 def part_question(question, i, n):

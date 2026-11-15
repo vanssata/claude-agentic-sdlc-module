@@ -101,3 +101,31 @@ touch the files of a task. The ones that shape the next work:
 - **The old command names.** The 3.x aliases (`/ai-task`, `/ai-status`,
   `/sdlc-*` and the rest), the `<home>/claude-agentic` symlink and the
   `current.json` fallback were removed in 4.0; they do not come back.
+
+## 5. Next, for 4.4.0: the platform's own diet
+
+A refactoring of its own (constitution C3), never mixed with a feature change.
+Two things to settle in its spec: which design limits `.pylintrc` should turn
+back on (today it disables `too-many-locals`, `-branches`, `-statements`,
+`-arguments`, `-positional-arguments`, `-instance-attributes`, `-return-statements`,
+`-nested-blocks`, `-boolean-expressions` and `too-few-public-methods`), and which
+modules to split. Measured with `wc -l` on 2026-11-15, the non-test `.py` and
+`.js` files over 600 lines:
+
+| File | Lines |
+|---|---|
+| `bin/riskrails.js` | 1792 |
+| `hooks/runtime-gate.py` | 1362 |
+| `skills/ai-task/memory_compact.py` | 993 |
+| `skills/usage-report/usage-report.py` | 927 |
+| `skills/rr-setup/setup.py` | 846 |
+| `hooks/context-guard.py` | 839 |
+| `skills/ai-task/memory_format.py` | 779 |
+| `hooks/guard/dialog.py` | 700 |
+| `hooks/guard/common.py` | 640 |
+| `hooks/guard/ere.py` | 611 |
+
+These are facts to start from, not limits. `runtime-gate.py` is a standalone
+hook for two runtimes and must stay one file (`.pylintrc`), so its split is the
+open question. Record: `docs/sdlc/specs/ui-first-approvals.md`, R28 and
+"Open questions".

@@ -4,6 +4,7 @@
 //                 [--fable auto|yes|no] [--codex-plan plus|pro|balanced-max] [--dry-run]
 //                 [--context default|economy] [--statusline-context yes|no]
 //                 [--statusline riskrails|own] [--home DIR] [--codex-home DIR] [--yes] [--version]
+//   npx riskrails --uninstall [--target T] [--home DIR] [--codex-home DIR] [--dry-run] [--yes]
 // --target defaults to auto: each runtime is installed only if its executable is on PATH.
 // --plan   Claude only: pro, team-pro (Team Standard seat), team-max (Team Premium seat), max
 //          or max20 (Max 20x: max's settings, larger budgets). Defaults to auto-detect from
@@ -37,6 +38,14 @@
 //          variables CLAUDE_DIR and CODEX_DIR mean the same). Naming exactly one of them under
 //          --target auto installs that runtime alone.
 // --dry-run prints everything that would be written, per runtime, and writes nothing.
+// --uninstall  moves what the installer wrote out of each home into backups/<stamp>/ and edits the
+//          shared files: our hook entries, the statusline, the settings keys the recorded plan
+//          renders (only where still equal) and the managed block. Nothing is deleted. Codex
+//          config.toml, the plugin and every project's .ai/ stay. Only --target, --home,
+//          --codex-home, --dry-run and --yes go with it (exit 2 otherwise); without a terminal it
+//          needs --yes or --dry-run. A second run finds nothing to do.
+// A run's backups go to backups/<YYYY-MM-DD>/ in each home; when that exists already, to
+// backups/<YYYY-MM-DD>T<HHMMSS>/, then the same with -2, -3: a backup never overwrites another.
 // On a terminal each choice no flag names is an arrow-key menu, in this order: runtime (only
 //          without --target, --home and --codex-home), plan, fable (max, max20, team-max),
 //          context, statusline, codex plan. The proposal above is highlighted and Enter
@@ -55,6 +64,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const uninstall = require('./uninstall');
+const wizard = require('./wizard');
 
 const SRC = path.resolve(__dirname, '..');
 const out = (s) => fs.writeSync(1, s + '\n');
@@ -72,7 +83,8 @@ let PLAN = '', FABLE = 'auto', DRY = false, TARGET = 'auto', PLAN_GIVEN = false;
 let CODEX_PLAN = '', CODEX_PLAN_GIVEN = false, YES = false;
 let CONTEXT = 'default', STATUSLINE_CONTEXT = 'yes', STATUSLINE = 'riskrails', STATUSLINE_GIVEN = false;
 // A flag that names a choice skips its menu on a terminal (bin/menu.js).
-let TARGET_GIVEN = false, FABLE_GIVEN = false, CONTEXT_GIVEN = false;
+let TARGET_GIVEN = false, FABLE_GIVEN = false, CONTEXT_GIVEN = false, UNINSTALL = false;
+const UNINSTALL_FLAGS = ['--uninstall', '--target', '--home', '--codex-home', '--dry-run', '--yes', '-y'];
 
 function version() {
   try { return JSON.parse(fs.readFileSync(path.join(SRC, 'package.json'), 'utf8')).version || 'unknown'; }
@@ -109,10 +121,16 @@ function usage() {
       case '--codex-home': CODEX_DIR = path.resolve(take()); CODEX_DIR_GIVEN = true; break;
       case '--dry-run': DRY = true; break;
       case '--yes': case '-y': YES = true; break;
+      case '--uninstall': UNINSTALL = true; break;
       case '--version': case '-v': out(version()); process.exit(0); break;
       case '-h': case '--help': usage(); process.exit(0); break;
       default: die('unknown option: ' + argv[i], 2);
     }
+  }
+  const stray = UNINSTALL ? argv.filter((a) => a.startsWith('-')).map((a) => a.split('=')[0]).find((a) => !UNINSTALL_FLAGS.includes(a)) : '';
+  if (stray) die(`riskrails: ${stray} does not go with --uninstall; expected only ${UNINSTALL_FLAGS.filter((f) => f !== '-y').join(', ')} (see --help)`, 2);
+  if (UNINSTALL && !DRY && !YES && process.stdin.isTTY !== true) {
+    die('riskrails: --uninstall needs a terminal to confirm and this is not one; pass --yes to uninstall anyway, or --dry-run to print the plan', 2);
   }
 }
 if (!['auto', 'claude', 'codex', 'both'].includes(TARGET)) {
@@ -249,8 +267,21 @@ function python(args, opts = {}) {
 }
 
 const pad2 = (n) => String(n).padStart(2, '0');
-const now = new Date();
+// RISKRAILS_NOW names the run's clock (a local time, 2026-03-04T05:06:07): the backup stamp is the one place it matters.
+const now = env.RISKRAILS_NOW ? new Date(env.RISKRAILS_NOW) : new Date();
 const BACKUP_DATE = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+
+// <date> when backups/<date> is free in the home, else <date>T<HHMMSS>, else that with -2, -3: pure, `taken` asks the disk.
+function backupStamp(at, taken) {
+  const day = `${at.getFullYear()}-${pad2(at.getMonth() + 1)}-${pad2(at.getDate())}`;
+  if (!taken(day)) return day;
+  const time = `${day}T${pad2(at.getHours())}${pad2(at.getMinutes())}${pad2(at.getSeconds())}`;
+  let name = time;
+  for (let n = 2; taken(name); n++) name = `${time}-${n}`;
+  return name;
+}
+const STAMPS = {};   // one stamp per home per run, chosen at its first backup
+const stampOf = (root) => STAMPS[root] || (STAMPS[root] = backupStamp(now, (n) => fs.existsSync(path.join(root, 'backups', n))));
 const utcStamp = () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 // A line from the terminal, as `read -r -p`: the prompt on stderr.
@@ -340,9 +371,101 @@ Code or Codex first, or name the runtime yourself:
   npx riskrails --target both        # both, whether or not they are detected`);
   process.exit(1);
 }
-// On a terminal, with nothing naming the runtime, the detected set is the menu's first proposal.
+// ------------------------------------------------------------------ wizard
+// With the menu on, one screen per choice and a review before any write (spec ui-first-approvals
+// R15-R17). It sets every choice and its *_GIVEN flag, so the single menus below never ask.
+// A dry run, --yes, no terminal, RISKRAILS_MENU=off|0 and TERM=dumb keep today's prompts.
+let WIZARD_COMMAND = '';
+const STEP_KEY = { 'codex plan': 'codexPlan' };
+function wizardPick(spec) {
+  const menu = { title: spec.title, why: '', initial: spec.initial, step: { n: spec.step, names: spec.trail },
+    items: spec.items.map(({ value, label, note }) => ({ value, label, desc: note })), back: spec.step > 1, color: true };
+  if (spec.multi) { menu.multi = true; menu.checked = spec.items.filter((it) => it.checked).map((it) => it.value); }
+  const r = spawnSync(process.execPath, [path.join(__dirname, 'menu.js')],
+    { stdio: ['inherit', 'pipe', 'inherit'], env: { ...env, RISKRAILS_MENU_SPEC: JSON.stringify(menu) }, encoding: 'utf8' });
+  if (r.status === 0) return { value: spec.multi ? r.stdout.split(',').filter(Boolean) : r.stdout };
+  if (r.status === 4) return { back: true };
+  if (r.status === 130 || r.signal) {
+    if (r.signal) err(`riskrails: the menu was stopped by ${r.signal}; run \`stty sane\` if the terminal misbehaves`);
+    die('riskrails: aborted — nothing was written', 130);
+  }
+  return die(`riskrails: the wizard menu could not take the terminal (exit ${r.status}); expected a terminal, run with --yes or RISKRAILS_MENU=off instead`, 1);
+}
+const shellWord = (w) => (/^[\w@%+=:,./-]+$/.test(w) ? w : `'${w.replace(/'/g, "'\\''")}'`);
+// The flag command the picks stand for, with the homes this run was given; its --dry-run is the review.
+function wizardCommand(choices) {
+  const argv = [...wizard.flags(choices).argv];
+  if (CLAUDE_DIR_GIVEN) argv.push('--home', CLAUDE_DIR);
+  if (CODEX_DIR_GIVEN) argv.push('--codex-home', CODEX_DIR);
+  return argv;
+}
+function wizardReview(argv) {
+  const r = spawnSync(process.execPath, [__filename, ...argv.slice(2), '--dry-run'], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (r.status !== 0) die(`riskrails: the review could not be built: the dry run exited ${r.status}\n${r.stderr}expected a dry run that prints the plan; fix the cause above, or install with the flags of --help`, 1);
+  return r.stdout;
+}
+function runWizard() {
+  const seen = {};
+  const live = (rt) => { seen[rt] = seen[rt] || detectPlan(rt); return seen[rt]; };
+  const picks = { claude: DO_CLAUDE, codex: DO_CODEX, context: CONTEXT_GIVEN ? CONTEXT : '' };
+  try {
+    const rec = readJSON(path.join(CLAUDE_DIR, 'riskrails', 'statusline.json'));
+    if (isObj(rec) && ['riskrails', 'own'].includes(rec.mode)) picks.statusline = rec.mode;
+  } catch (e) { /* none yet */ }
+  if (STATUSLINE_GIVEN) picks.statusline = STATUSLINE;
+  const detected = () => ({ claude: picks.claude, codex: picks.codex,
+    plan: picks.plan || (PLAN_GIVEN ? PLAN : picks.claude ? prevPlan(CLAUDE_DIR) || live('claude').plan || (live('claude').from === 'team' ? 'team-pro' : 'pro') : ''),
+    codexPlan: picks.codexPlan || (CODEX_PLAN_GIVEN ? CODEX_PLAN : (picks.plan || PLAN) === 'balanced-max' ? 'balanced-max'
+      : picks.codex ? prevPlan(CODEX_DIR) || live('codex').plan || 'pro' : '') });
+  const choices = () => {
+    const d = detected(), has = (id) => wizard.steps(d).some((s) => s.id === id);
+    return { target: d.claude && d.codex ? 'both' : d.claude ? 'claude' : 'codex', plan: d.claude ? d.plan : undefined,
+      fable: has('fable') ? picks.fable || 'yes' : undefined, statusline: d.claude ? picks.statusline || 'riskrails' : undefined,
+      codexPlan: d.codex ? d.codexPlan : undefined, context: picks.context || 'default', version: version() };
+  };
+  const history = [];
+  let id = 'runtimes';
+  for (;;) {
+    let spec = wizard.steps(detected()).find((s) => s.id === id);
+    const kept = picks[STEP_KEY[id] || id];
+    const at = typeof kept === 'string' ? spec.items.findIndex((it) => it.value === kept) : -1;
+    if (at >= 0) spec = { ...spec, initial: at };
+    if (id === 'review') {
+      const argv = wizardCommand(choices()), command = argv.map(shellWord).join(' ');
+      err(wizard.reviewLines(wizardReview(argv), command).join('\n'));
+      const r = wizardPick(spec);
+      if (!r.back && r.value === 'install') { WIZARD_COMMAND = command; break; }
+      if (!r.back && r.value === 'cancel') die('riskrails: aborted — nothing was written', 130);
+      id = history.pop();
+      continue;
+    }
+    const r = wizardPick(spec);
+    if (r.back) { id = history.pop(); continue; }
+    if (id === 'runtimes') {
+      if (r.value.length === 0) continue;   // nothing checked: ask again
+      picks.claude = r.value.includes('claude'); picks.codex = r.value.includes('codex');
+    } else {
+      picks[STEP_KEY[id] || id] = r.value;
+    }
+    history.push(id);
+    const next = wizard.steps(detected());
+    id = next[next.findIndex((s) => s.id === id) + 1].id;
+  }
+  const c = choices();
+  DO_CLAUDE = c.target !== 'codex'; DO_CODEX = c.target !== 'claude';
+  CONTEXT = c.context; CONTEXT_GIVEN = true;
+  if (DO_CLAUDE) {
+    PLAN = c.plan; PLAN_GIVEN = true; FABLE_GIVEN = true;
+    if (c.fable) FABLE = c.fable;
+    STATUSLINE = c.statusline; STATUSLINE_GIVEN = true;
+  }
+  if (DO_CODEX) { CODEX_PLAN = c.codexPlan; CODEX_PLAN_GIVEN = true; }
+}
 let RUNTIME_PICKED = false;
-if (TARGET === 'auto' && !TARGET_GIVEN && !CLAUDE_DIR_GIVEN && !CODEX_DIR_GIVEN) {
+if (!UNINSTALL && !DRY && !menuOff()) { runWizard(); RUNTIME_PICKED = true; }
+
+// On a terminal, with nothing naming the runtime, the detected set is the menu's first proposal.
+if (!RUNTIME_PICKED && !UNINSTALL && TARGET === 'auto' && !TARGET_GIVEN && !CLAUDE_DIR_GIVEN && !CODEX_DIR_GIVEN) {
   const RUNTIMES = ['claude', 'codex', 'both'];
   const detected = DO_CLAUDE && DO_CODEX ? 'both' : DO_CLAUDE ? 'claude' : 'codex';
   const rt = choose('runtime', pick(RUNTIMES, ['Claude Code', 'Codex', 'Claude Code and Codex']),
@@ -841,24 +964,24 @@ function claudeDryRun() {
 }
 
 // Every backup goes to one dated directory, <root>/backups/<date>/<path>: a backup beside
-// the file it saves would be loaded too. A second run on the same day replaces that copy.
+// the file it saves would be loaded too. The directory is the run's stamp for that home (stampOf).
 function backupFile(dst, root, src = dst) {
   const rel = path.relative(root, dst);
-  const bak = path.join(root, 'backups', BACKUP_DATE, rel);
+  const bak = path.join(root, 'backups', stampOf(root), rel);
   mkdirp(path.dirname(bak));
   rmrf(bak);
   // A file is copied through a symlink: a CLAUDE.md linked from dotfiles is saved as its content.
   if (isDir(src)) copyTree(src, bak); else fs.copyFileSync(fs.realpathSync(src), bak);
-  out(`backup: ${rel} -> backups/${BACKUP_DATE}/${rel}`);
+  out(`backup: ${rel} -> backups/${stampOf(root)}/${rel}`);
 }
 
 function retire(root, rel) {                       // move what nothing installs any more into backups/<date>/
   if (!exists(path.join(root, rel))) return;
-  const dest = path.join(root, 'backups', BACKUP_DATE, rel);
+  const dest = path.join(root, 'backups', stampOf(root), rel);
   mkdirp(path.dirname(dest));
   rmrf(dest);
   fs.renameSync(path.join(root, rel), dest);
-  out(`retired: ${rel} -> backups/${BACKUP_DATE}/${rel}`);
+  out(`retired: ${rel} -> backups/${stampOf(root)}/${rel}`);
 }
 
 // sweep_bak — every *.bak an older installer left beside a live file moves into
@@ -870,10 +993,10 @@ function sweepBak(root, ...names) {
   for (const bak of candidates) {
     if (!isFile(bak) || !exists(bak.slice(0, -4))) continue;
     const rel = path.relative(root, bak);
-    const dest = path.join(root, 'backups', BACKUP_DATE, rel);
+    const dest = path.join(root, 'backups', stampOf(root), rel);
     mkdirp(path.dirname(dest));
     fs.renameSync(bak, dest);
-    out(`moved: ${rel} -> backups/${BACKUP_DATE}/${rel}`);
+    out(`moved: ${rel} -> backups/${stampOf(root)}/${rel}`);
   }
 }
 
@@ -901,7 +1024,7 @@ function installFile(src, dst, root = CLAUDE_DIR) {  // back up on a real change
 // skill goes in without its SKILL.md: the plugin loads the skill, and the skills still find
 // their scripts (state.py, ai-path, ...) through $AI_HOME/skills/ as on the npx route.
 function installSkills(root, plugin) {
-  const backups = path.join(root, 'backups', BACKUP_DATE, 'skills');
+  const backups = path.join(root, 'backups', stampOf(root), 'skills');
   // /status became /rr-status (2.3) and the ai-status and sdlc-* aliases ended in 4.0: a leftover would load as a second command.
   for (const n of RETIRED_SKILLS) retire(root, `skills/${n}`);
   for (const name of ls(path.join(SRC, 'skills')).filter((n) => isDir(path.join(SRC, 'skills', n)))) {
@@ -921,7 +1044,7 @@ function installSkills(root, plugin) {
     const base = path.basename(stale).slice(0, -4);
     rmrf(path.join(backups, base + '-old'));
     fs.renameSync(stale, path.join(backups, base + '-old'));
-    out(`moved: skills/${path.basename(stale)} -> backups/${BACKUP_DATE}/skills/ (it was loading as a duplicate skill)`);
+    out(`moved: skills/${path.basename(stale)} -> backups/${stampOf(root)}/skills/ (it was loading as a duplicate skill)`);
   }
   for (const f of ['skills/ai-init/scaffold-ai.sh', 'skills/ai-task/state.py', 'skills/ai-task/sensors.py',
     'skills/project-update/update.py', 'skills/rr-status/status.py']) chmodX(path.join(root, f));
@@ -1558,11 +1681,113 @@ function codexSummary() {
     '  /skills        lists rr-setup, rr-spec, rr-plan, rr-build, rr-build-all, rr-review, rr-ship, rr-status',
     '  /rr-setup      in a project, to survey it and build .ai/',
     '',
-    `Your previous default model was replaced. backups/${BACKUP_DATE}/config.toml holds the old one.`,
+    `Your previous default model was replaced. backups/${stampOf(CODEX_DIR)}/config.toml holds the old one.`,
   ].join('\n'));
 }
 
+// ================================================================= uninstall
+// --uninstall: bin/uninstall.js plans it from what a home holds; this part reads the home, prints the
+// plan and moves through the helpers above. Nothing is deleted: a path goes to backups/<stamp>/.
+const lexists = (p) => isLink(p) || exists(p);
+const relToSrc = (files) => files.map((f) => path.relative(SRC, f));
+const skillDirs = () => ls(path.join(SRC, 'skills')).filter((n) => isDir(path.join(SRC, 'skills', n))).map((n) => 'skills/' + n);
+const sharedShipped = () => ['riskrails', 'hooks/ai-path-guard-defaults.json', 'hooks/ai-git-guard-defaults.json',
+  ...SHIMS.map((n) => 'hooks/' + n), ...skillDirs()];
+const claudeShipped = () => [...glob(path.join(SRC, 'agents'), '.md.tmpl').map((f) => 'agents/' + path.basename(f, '.tmpl')),
+  ...relToSrc(claudeHookFiles()), 'bin/claude-1m', 'hooks/fable-gate.py', ...sharedShipped()];
+const codexShipped = () => [...glob(path.join(SRC, 'agents'), '.md.tmpl').map((f) => 'agents/' + path.basename(f, '.md.tmpl') + '.toml'),
+  ...relToSrc([...codexHookFiles(), ...glob(path.join(SRC, 'hooks/guard'), '.py'), path.join(SRC, 'hooks/lib/ai-hook-common.sh')]),
+  'hooks/codex-model-gate.py', ...sharedShipped()];
+
+function readHomeJSON(file) {
+  if (!isFile(file)) return null;
+  try { return readJSON(file); } catch (e) {
+    return die(`riskrails: ${file} is not valid JSON (${e.message}); expected a JSON file, fix it and run --uninstall again`, 1);
+  }
+}
+
+// The settings keys the recorded plan renders: the plan, fable and context the install wrote to profile.json.
+function recordedSnippet() {
+  const rec = readHomeJSON(path.join(CLAUDE_DIR, 'riskrails/profile.json'));
+  if (!isObj(rec) || !rec.plan) return {};
+  PLAN = String(rec.plan); FABLE = rec.fable === true ? 'yes' : 'no';
+  CONTEXT = isObj(rec.context) && rec.context.mode === 'economy' ? 'economy' : 'default';
+  FABLE_GIVEN = CONTEXT_GIVEN = STATUSLINE_GIVEN = true;   // the record answers every menu
+  claudeRender();
+  return C.snippet;
+}
+
+// The plan for one home; `names` are the home's JSON and text files, which the planner calls settings.json and CLAUDE.md.
+// The oldest backup of a home's settings file: backups/<stamp>/<name> with the smallest stamp; null when none.
+function oldestBackup(home, name) {
+  const dir = path.join(home, 'backups');
+  return (isDir(dir) ? ls(dir) : []).map((d) => path.join(dir, d, name)).find(isFile) || null;
+}
+
+function homePlan(home, shipped, names, snippet) {
+  const text = path.join(home, names[1]);
+  const plan = uninstall.planUninstall({
+    files: shipped.filter((f) => lexists(path.join(home, f))),
+    shippedHooks: shipped.filter((f) => f.startsWith('hooks/')).map((f) => f.slice('hooks/'.length)),
+    earlierSettings: oldestBackup(home, names[0]),
+    settings: readHomeJSON(path.join(home, names[0])), snippet,
+    statusline: readHomeJSON(path.join(home, 'riskrails/statusline.json')),
+    claudeMd: isFile(text) ? read(text) : null,
+  });
+  for (const e of plan.edited) e.file = e.file === 'settings.json' ? names[0] : names[1];
+  return plan;
+}
+
+const noopIO = (log) => ({ move() {}, backup() {}, writeJSON() {}, writeText() {}, log });
+function homeIO(home, log) {
+  const into = (rel) => { const d = path.join(home, 'backups', stampOf(home), rel); mkdirp(path.dirname(d)); return d; };
+  return {
+    move: (rel) => fs.renameSync(path.join(home, rel), into(rel)),
+    backup: (rel) => fs.copyFileSync(fs.realpathSync(path.join(home, rel)), into(rel)),
+    writeJSON: (rel, doc) => writeJSONFile(path.join(home, rel), doc),
+    writeText: (rel, text) => fs.writeFileSync(path.join(home, rel), text),
+    log,
+  };
+}
+
+// The launcher link the install made in ~/.local/bin: ours only when it points at this home's bin/claude-1m.
+const LAUNCHER = path.join(HOME, '.local/bin/claude-1m');
+const launcherIsOurs = (home) => isLink(LAUNCHER) && path.resolve(path.dirname(LAUNCHER), fs.readlinkSync(LAUNCHER)) === path.join(home, 'bin/claude-1m');
+
+function runUninstall() {
+  const targets = [];
+  if (DO_CLAUDE) targets.push({ home: CLAUDE_DIR, plan: homePlan(CLAUDE_DIR, claudeShipped(), ['settings.json', 'CLAUDE.md'], recordedSnippet()), link: launcherIsOurs(CLAUDE_DIR) });
+  if (DO_CODEX) targets.push({ home: CODEX_DIR, plan: homePlan(CODEX_DIR, codexShipped(), ['hooks.json', 'AGENTS.md'], {}), link: false });
+  const work = targets.filter((t) => t.plan.moved.length > 0 || t.plan.edited.length > 0 || t.link);
+  for (const t of targets.filter((x) => !work.includes(x))) out(`nothing to uninstall in ${t.home}: no file the installer ships and no entry of its is left`);
+  for (const t of work) {
+    out(`== uninstall: ${t.home}${DRY ? ' (dry run, nothing written)' : ''}`);
+    out(`   backups: ${t.home}/backups/${stampOf(t.home)}/`);
+    if (t.link) out('moved: ~/.local/bin/claude-1m -> backups/');
+    uninstall.applyUninstall(t.plan, noopIO(out));
+  }
+  if (DRY || work.length === 0) process.exit(0);
+  if (!YES && !/^y(es)?$/i.test(ask('Move these into backups and edit the files above? [y/N] ').trim())) {
+    die('riskrails: cancelled — nothing was written', 130);
+  }
+  for (const t of work) {
+    try { uninstall.applyUninstall(t.plan, homeIO(t.home, () => {})); } catch (e) {
+      die(`${e.message} (backups: ${t.home}/backups/${stampOf(t.home)}/)`, 1);
+    }
+    if (t.link) {   // the link itself is renamed, never followed; after the edits, so a failure here leaves settings clean
+      const dest = path.join(t.home, 'backups', stampOf(t.home), '.local/bin/claude-1m');
+      mkdirp(path.dirname(dest));
+      try { fs.renameSync(LAUNCHER, dest); } catch (e) {
+        die(`riskrails: could not move ${LAUNCHER} into ${dest} (${e.message}); done: the files and settings of ${t.home}; left: the launcher link; nothing was deleted. Move it by hand, or run --uninstall again once the cause is gone`, 1);
+      }
+    }
+    out(`uninstalled: ${t.home} (${t.plan.moved.length} moved, ${t.plan.edited.length} edited; backups/${stampOf(t.home)}/)`);
+  }
+  process.exit(0);
+}
+
 // ======================================================================= run
+if (UNINSTALL) runUninstall();
 if (DO_CLAUDE) claudeRender();
 if (DO_CODEX) codexRender();
 if (DRY) {
@@ -1575,4 +1800,5 @@ if (DO_CLAUDE) claudeApply();
 if (DO_CODEX) codexApply();
 if (DO_CLAUDE) claudeSummary();
 if (DO_CODEX) codexSummary();
+if (WIZARD_COMMAND) out(wizard.finalBox({ command: WIZARD_COMMAND }).join('\n'));
 process.exit(0);

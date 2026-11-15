@@ -37,6 +37,12 @@ do not rename anything to make the change fit.
   `project/known-risks.md`.
 - Do not reformat lines you did not change — it hides the real diff from the
   reviewer.
+- Write the simplest version that passes the step's tests. A branch, an option,
+  a parameter or a layer is added only when a requirement or a failing test
+  asks for it.
+- A new dependency is not yours to add. Ask first whether the standard library
+  or one function of about fifty lines does the job; when it does not, return
+  `SCOPE_CHANGE_REQUIRED` naming the manifest and the reason.
 
 ## Output
 

@@ -1,12 +1,13 @@
 """dialog_cmd: the consent and decision commands -- decision open/show/settle/fallback, the pick applied, and the read-only consent view.
 
-core: SETTLE_EFFECT, SETUP_VALUES, SETUP_VALUE_MAX, SETUP_SPEC_MAX, setup_option_why, setup_decision_why, setup_spec_why
-shell: cmd_decision, decision_open, read_setup_spec, setup_command_why, check_setup_labels, setup_open, decision_settle, apply_choice, cmd_consent
+core: SETTLE_EFFECT, INSTALL_RE, SETUP_VALUES, SETUP_VALUE_MAX, SETUP_SPEC_MAX, setup_option_why, setup_decision_why, setup_spec_why
+shell: cmd_decision, decision_open, install_open, read_setup_spec, setup_command_why, check_setup_labels, setup_open, decision_settle, apply_choice, cmd_consent
 """
 # pylint: disable=unused-argument  # uniform cli dispatch: cmd_consent takes rt like every command
 import argparse
 import json
 import os
+import re
 import shlex
 import sys
 
@@ -22,6 +23,7 @@ SETUP_VALUES = {"memory": ("off", "keep"), "runtime": ("auto", "claude", "codex"
                 "survey": ("light", "full", "keep"), "verify": ("", "other", "keep", "edit")}
 SETUP_VALUE_MAX = 200
 SETUP_SPEC_MAX = 262144
+INSTALL_RE = re.compile(r"^npx riskrails@(\d+\.\d+\.\d+) --yes$")   # the one command an install decision offers
 
 
 def cmd_decision(args, root, rt=rr_runtime.Runtime()):
@@ -61,13 +63,17 @@ def cmd_decision(args, root, rt=rr_runtime.Runtime()):
 
 
 def decision_open(args, root, rt=rr_runtime.Runtime()):
-    """The openers the model may call: --kind commit (git commit and git push) and --kind setup (the /rr-setup
-    questions: choices that set a value, and this project's `memory enable`); nothing else."""
+    """The openers the model may call: --kind commit (git commit and git push), --kind setup (the /rr-setup
+    questions: choices that set a value, and this project's `memory enable`) and --kind install (one
+    `npx riskrails@X.Y.Z --yes`); nothing else."""
     if args.kind == "setup":
         setup_open(args, root, rt=rt)
         return
+    if args.kind == "install":
+        install_open(args, root, rt=rt)
+        return
     if args.kind != "commit":
-        fs.die("decision open takes --kind commit or --kind setup; every other decision is opened by the "
+        fs.die("decision open takes --kind commit or --kind setup (or --kind install, one npx riskrails@X.Y.Z --yes); every other decision is opened by the "
             "command that needs it (close, ask, the budgets, start --mode)")
     if args.spec is not None:
         fs.die("decision open --kind commit takes --command, not --spec", 2)
@@ -92,6 +98,33 @@ def decision_open(args, root, rt=rr_runtime.Runtime()):
         [{"kind": "command", "label": c} for c in args.commands]
     decision, why = dialog.open_decision(root, state, "commit", "Commit", question, options, "decision open",
                                   multi=len(args.commands) > 1, rt=rt)
+    if decision is None:
+        fs.die(why, 6)
+    dialog.print_dialog([decision], rt=rt)
+
+
+def install_open(args, root, rt=rr_runtime.Runtime()):
+    """decision open --kind install --command "npx riskrails@X.Y.Z --yes": the update offered in the dialog (R4).
+    The command is exactly that, once; no task may be in flight, because the install rewrites the hooks."""
+    match = INSTALL_RE.match(args.commands[0]) if len(args.commands) == 1 else None
+    if args.spec is not None or not match:
+        fs.die("CONSENT_LABEL_INVALID — decision open --kind install takes one --command, exactly "
+               "\"npx riskrails@X.Y.Z --yes\" (X.Y.Z a plain version); found: %s"
+               % (" | ".join(args.commands)[:120] or "none"), 6)
+    if not dialog.dialog_on(root, runtime=rt.name):
+        fs.die("the dialog is off here (.ai/policies/dialog.json, the runtime's dialog tool, a session id): "
+            "suggest the command; the human runs it outside the agent")
+    state = task.in_flight(root, rt=rt)
+    if state:
+        fs.die("INSTALL_DURING_TASK — an install rewrites the hooks and skills this task runs on, and task %s is in "
+               "flight; finish or abandon it, then open the install decision again" % state["task_id"], 6)
+    runtime = rr_runtime.own_runtime(runtime=rt.name)
+    have = profile.read_profile(runtime, rt=rt).get("plugin_version") or "unknown"
+    question = ("Install RiskRails %s (installed %s)? It rewrites the hooks, skills and settings under %s; "
+                "restart the session afterwards." % (match.group(1), have, rr_runtime.runtime_home(runtime)))
+    options = [{"kind": "choice", "effect": "defer", "label": "Not now — keep %s" % have},
+               {"kind": "command", "label": args.commands[0]}]
+    decision, why = dialog.open_decision(root, None, "install", "Install", question, options, "decision open", rt=rt)
     if decision is None:
         fs.die(why, 6)
     dialog.print_dialog([decision], rt=rt)

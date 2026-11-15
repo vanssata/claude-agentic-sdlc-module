@@ -4,6 +4,7 @@ task: none — no task in flight
 schema: project 0 · plugin 12 — behind: run /rr-setup --update
 
 exit 0
+waiting on the agent: build — edit, then 'state.py verify --scope all', then 'state.py close'
 root: <ROOT>
 task: <ID> — tweak the widget
 mode: light · W 0 · workflow feature

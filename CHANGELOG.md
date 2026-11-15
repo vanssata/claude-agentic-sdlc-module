@@ -4,6 +4,30 @@ Notable changes to RiskRails (npm package `riskrails`). Format: [Keep a Changelo
 
 ## [Unreleased]
 
+## [4.3.0] — 2026-11-15
+
+A user without a terminal takes a task's routine decisions from the question dialog and sees what waits on them; the installer is one step wizard with a review before it writes, and an uninstall.
+
+### Added
+- `batch on` through the dialog: `state.py batch on --by` without a pick opens a "Batch" decision, and the command the human picks runs verbatim, once, in the same session; the `batch_set` event records the consent.
+- `state.py decision open --kind install --command "npx riskrails@X.Y.Z --yes"` offers an update in the dialog. It is refused with the dialog off and, as `INSTALL_DURING_TASK`, while a task is in flight. With the dialog on the update notice reads `Say "update RiskRails" and the session asks you in the dialog`, and the session's own context names the command.
+- Every command a dialog offers has a description in plain words — what an approval, a commit, a push, a run past the budget or an install does — where it read "the session runs exactly this, once"; the budget questions say how many runs or passes the task allows.
+- What waits on you: the statusline shows the task, its mode and stage and `waiting on you: D3 Q2 G1`; `/rr-status` and `state.py status` open with `waiting on you: …` or `waiting on the agent: …`, and `status --json` has a `waiting` key. With no task and no open decision both are as before.
+- The installer's wizard on a terminal: one screen per step with a stepper, back, a description of the highlighted option and runtime checkboxes; a review screen with the dry run's text and the equivalent flag command before anything is written; a final box with the next step. Colour goes to a terminal's stderr only and `NO_COLOR` turns it off; `TERM=dumb` and `RISKRAILS_MENU=off` give the typed prompts.
+- `npx riskrails --uninstall`: its hook entries and the settings keys that still equal what it wrote are removed first — each removed key is printed, with the oldest settings backup, where an earlier value of yours may be — then what the installer shipped moves under `backups/<stamp>/`. The earlier statusline comes back, and what stays is printed: changed settings keys, Codex `config.toml`, the plugin, every project's `.ai/`. Nothing is deleted; a move that fails stops the run with what was done and what is left, and a second run finishes it.
+- Tight code: the implementer contract asks for the simplest version that passes the step's tests and gives no leave to add a dependency; both reviewer lists name padding — last, MEDIUM at most, three findings — and a dependency without its line in the plan; a full-mode review ends with `## READ FIRST`, which `/rr-ship` shows before the approval; the coding policy template has three lines on what a function is. From a reading of `LearnPrompt/andrej-karpathy-skills` (MIT): the ideas, reworded, no text copied.
+- `docs/glossary.md`, and `docs/dialog-probe.md`: the checklist for Remote Control, the desktop app and the web, not filled yet.
+
+### Changed
+- With the dialog on, a refusal names the dialog before the terminal: the Stop hook's fallback ("Reply in this chat …"), `CONSENT_REQUIRED`, the `approve` refusal of the guard and of `state.py`, the mode, batch, suite-budget and review-budget refusals, the gate and its questions. With the dialog off, and under `AI_UNATTENDED`, every text is the one of 4.2.0.
+- `/rr-build` and `/rr-spec` put a question through the runtime's question tool when no decision is pending, and record the pick with `answer --via picker`.
+- A second backup of a day goes to `backups/<date>T<HHMMSS>/` (then `-2`, `-3`), where it used to share the first one's directory.
+- On a terminal a flag such as `--plan max` selects the answer of its wizard step and the step is still shown. Without a terminal, and with `--yes`, the installer's output is byte for byte that of 4.2.0.
+- **Upgrade:** `/rr-setup --update` replaces an unedited `.ai/policies/coding.md` with the new template; an edited copy waits for you.
+
+### Fixed
+- An `npx riskrails@… --yes` pick stayed unspent after it ran, so its decision stayed pending and held every tool. The decision gate now records its use, as it does for a git pick.
+
 ## [4.2.0] — 2026-11-13
 
 A task seal that changed many files fits one line again (#74), the agent record is local by default, and a version bump merged to `main` is tagged, published and released by CI.
@@ -126,6 +150,7 @@ Project schema 10 → 11: run `/rr-setup --update` after upgrading.
 - Risk tiers replaced by the weight and three modes (light, guarded, full); `/ai-*` and `/sdlc-*` become `/rr-*` (old names kept as aliases).
 - Guards in one Python process; task state in `.ai/state/state.json`. See "Upgrade to 3.0" in the README.
 
+[4.3.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/vanssata/claude-agentic-sdlc-module/compare/v3.2.2...v4.0.1

@@ -5,8 +5,9 @@ shell: guard_pending, request_gate, close_gate
 """
 import os
 import re
+import shlex
 
-from rr_state import fs
+from rr_state import dialog, fs
 from rr_state import journal
 from rr_state import locks
 from rr_state import questions as questions_mod   # the bodies keep a local `questions`; the module is aliased
@@ -36,12 +37,17 @@ def guard_pending(root, command, rt=rr_runtime.Runtime()):
     if any(q["kind"] == "G" for q in blocking):
         # `answer` refuses a G id, so the general text would send the human to a
         # command that cannot work. A gate is closed from a terminal.
+        gates = ", ".join(q["id"] for q in blocking if q["kind"] == "G")
+        cmd = "python3 %s --root %s approve --by \"<name>\"" % (shlex.quote(fs.ENTRY), shlex.quote(root))
+        asked = dialog.human_refusal("the approval gate", cmd, "approve and reject are the human's, and %s is open" % gates,
+                                     dialog.open_approval_id(root, rt=rt))
+        if asked:
+            fs.die("QUESTIONS_PENDING — %d unanswered in %s: %s. Stage stays at %s.\n%s"
+                % (len(blocking), os.path.relpath(path, root), ", ".join(ids), state.get("current_stage"), asked), 4)
         fs.die("QUESTIONS_PENDING — %d unanswered in %s: %s. %s is the approval gate: run "
             "'state.py approve --by \"<name>\"' or 'state.py reject --by \"<name>\" --why \"<text>\"' "
             "in your own terminal. Stage stays at %s."
-            % (len(blocking), os.path.relpath(path, root), ", ".join(ids),
-               ", ".join(q["id"] for q in blocking if q["kind"] == "G"),
-               state.get("current_stage")), 4)
+            % (len(blocking), os.path.relpath(path, root), ", ".join(ids), gates, state.get("current_stage")), 4)
     fs.die("QUESTIONS_PENDING — %d unanswered in %s: %s. Answer with 'state.py answer %s' or fill "
         "the [Answer]: lines and run 'state.py questions --sync'. Stage stays at %s."
         % (len(blocking), os.path.relpath(path, root), ", ".join(ids),

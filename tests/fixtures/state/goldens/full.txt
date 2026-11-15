@@ -56,6 +56,7 @@ state.py: QUESTIONS_PENDING — 1 unanswered in .ai/reports/<ID1>/task.md: G1. G
 $ state.py --root <ROOT> status
 exit 0
 --- stdout
+waiting on you: gate G1 — approve in the dialog ('state.py close' offers it) or in your own terminal
 root: <ROOT>
 task: <ID1> — tweak the widget
 mode: full · W 0 · workflow feature · override light → full by test

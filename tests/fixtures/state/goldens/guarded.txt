@@ -59,6 +59,7 @@ review: passed_with_findings (BALANCED, pass 2 of 2) — open: H1
 $ state.py --root <ROOT> status
 exit 0
 --- stdout
+waiting on the agent: review — 'state.py close'
 root: <ROOT>
 task: <ID1> — tweak the widget
 mode: guarded · W 0 · workflow feature · override light → guarded by test

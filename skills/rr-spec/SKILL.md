@@ -39,6 +39,12 @@ $STATE ask --topic <slug> "<one line>" --option "A: <text>" --option "B: <text>"
 $STATE answer --topic <slug> Q1=B              # or --prose "1B", or Q1=X:"free text"
 ```
 
+If `ask` printed `DIALOG_PENDING`, send that dialog. With no decision pending (a
+free question-tool call is denied while one is), put the question through the
+question tool and relay the pick with `$STATE answer --topic <slug> Q1=B --via
+picker`; the questions file stays the record, and the human may still answer in
+the chat or fill `[Answer]:`.
+
 If `superpowers:brainstorming` is available, let it drive the conversation; the
 questions and answers still go through `ask` and `answer`. Otherwise:
 

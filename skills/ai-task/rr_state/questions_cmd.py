@@ -280,10 +280,11 @@ def close_gate_from_file(root, state, question, by, rt=rr_runtime.Runtime()):
         state.update(fresh)
         seen, why = (True, "") if unattended else dialog.human_turn(root, state)
         if not seen:
-            fs.die("APPROVAL_REFUSED — %s. Fill the answer, tell the session, and sync again, or run "
-                "in your own terminal:\n  python3 %s --root %s approve --by %s"
-                % (why, shlex.quote(fs.ENTRY), shlex.quote(root),
-                   shlex.quote(by)), 5)
+            cmd = "python3 %s --root %s approve --by %s" % (shlex.quote(fs.ENTRY), shlex.quote(root), shlex.quote(by))
+            asked = dialog.human_refusal("'state.py approve'", cmd, why, dialog.open_approval_id(root, rt=rt))
+            fs.die(asked + " Or fill the [Answer]: line, tell the session, and sync again." if asked else
+                   "APPROVAL_REFUSED — %s. Fill the answer, tell the session, and sync again, or run "
+                   "in your own terminal:\n  %s" % (why, cmd), 5)
         approved = question["choice"] == "A"
         session = fs.read_session(root)
         task.claim_runtime(root, state, rt=rt)

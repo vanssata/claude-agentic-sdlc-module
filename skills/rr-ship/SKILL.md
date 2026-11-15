@@ -51,8 +51,8 @@ approve in your own terminal, then run close again:
   python3 /home/…/skills/ai-task/state.py --root /path/to/project approve --by "<name>"
 ```
 
-Show the human the summary (§3), the open findings, the rollback, and that
-command **verbatim** — paths absolute and quoted, because they paste it into
+Show the human the summary (§3), the review's `READ FIRST` lines, the open
+findings, the rollback, and that command **verbatim** — paths absolute and quoted, because they paste it into
 their own shell, where `$AI_HOME` is not set. Then **stop**.
 
 - **You approve only through the dialog.** With `.ai/policies/dialog.json`

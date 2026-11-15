@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import unittest
@@ -507,6 +508,8 @@ class CodexInstall(ScratchCase):  # pylint: disable=too-many-public-methods  # o
         if os.path.lexists(link):
             os.remove(link)
         os.symlink(self.path("dotfiles", "AGENTS.md"), link)
+        # An earlier test installed into this home today: its backups/<date> is taken, so a run now stamps a time. Start the day over.
+        shutil.rmtree(os.path.join(dir2, "backups"), ignore_errors=True)
         self.codex(dir2)
         saved = os.path.join(dir2, "backups", today(), "AGENTS.md")
         self.check("a symlinked AGENTS.md is backed up as its content",
@@ -553,6 +556,8 @@ class CodexInstall(ScratchCase):  # pylint: disable=too-many-public-methods  # o
 
     def test_15_backups_never_land_inside_skills(self):
         write(os.path.join(self.dir, "skills", "ai-init", "EXTRA.md"), "stale\n")
+        # An earlier test installed into this home today: its backups/<date> is taken, so a run now stamps a time. Start the day over.
+        shutil.rmtree(os.path.join(self.dir, "backups"), ignore_errors=True)
         self.codex(self.dir)
         skills = os.path.join(self.dir, "skills")
         stray = [n for n in os.listdir(skills) if n.endswith(".bak") and os.path.isdir(os.path.join(skills, n))]

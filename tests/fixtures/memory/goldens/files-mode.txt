@@ -21,6 +21,7 @@ tests/test_widget.py
 
 $ state.py status
 exit 0
+waiting on the agent: build — edit, then 'state.py verify --scope all', then 'state.py close'
 root: <ROOT>
 task: <ID> — tweak the widget
 mode: light · W 0 · workflow feature

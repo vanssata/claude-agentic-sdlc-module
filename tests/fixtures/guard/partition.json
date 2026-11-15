@@ -33,7 +33,7 @@
   "check": {"module": "paths", "kind": "method", "label": "shell", "signature": "(self)", "value_hash": null}
  },
  "modules": {
-  "paths_base": {"layer": 0, "label": "core", "imports": [], "approx_lines": 46, "defs": ["T", "Q", "END", "VAR", "WHY_CONFIRM_DELETE", "WHY_SENSITIVE", "WHY_PROTECTED", "WHY_TASK", "WHY_APPROVE", "WHY_WORK_CAP", "WHY_HUMAN", "WHY_PICK", "SEGMENT"]},
+  "paths_base": {"layer": 0, "label": "core", "imports": [], "approx_lines": 46, "defs": ["T", "Q", "END", "VAR", "WHY_CONFIRM_DELETE", "WHY_SENSITIVE", "WHY_PROTECTED", "WHY_TASK", "WHY_APPROVE", "WHY_APPROVE_DIALOG", "WHY_WORK_CAP", "WHY_HUMAN", "WHY_PICK", "SEGMENT"]},
   "paths_fs": {"layer": 0, "label": "mixed", "imports": [], "approx_lines": 115, "defs": ["LoopError", "realpath_m", "find_print", "lexnorm", "cd_physical", "anchor_list"]},
   "paths_shell": {"layer": 0, "label": "core", "imports": [], "approx_lines": 276, "defs": ["_KEYWORDS", "_FLAGGED", "_ASSIGN", "_SPECIAL_OUT", "_SPECIAL_D", "_SPECIAL_A", "shell_segments"]},
   "paths_human": {"layer": 1, "label": "mixed", "imports": ["paths_base"], "approx_lines": 68, "defs": ["SEP", "CONFIRM_DEL", "CONFIRM_CLEAN", "CONFIRM", "APPLY", "HEAD", "CONFIRM_RE", "ARGS", "VERB", "BOUND", "APPROVE_RE", "PROFILE_SET_VERB", "PROFILE_SET_RE", "BY_TOK", "MODE_LIGHT", "SKIP", "HUMAN_BY_VERB", "START_LIGHT_VERB", "state_verb_re", "HUMAN_BY_RE", "START_LIGHT_RE", "DIALOG_GATE_RE", "confirm_delete", "dialog_consent"]},
@@ -53,6 +53,7 @@
   "WHY_PROTECTED": {"module": "paths_base", "kind": "const", "label": "core", "signature": "", "value_hash": "bb3b77484074"},
   "WHY_TASK": {"module": "paths_base", "kind": "const", "label": "core", "signature": "", "value_hash": "71a280f471d1"},
   "WHY_APPROVE": {"module": "paths_base", "kind": "const", "label": "core", "signature": "", "value_hash": "7c2cf1506fc0"},
+  "WHY_APPROVE_DIALOG": {"module": "paths_base", "kind": "const", "label": "core", "signature": "", "value_hash": "c5681d343a9c"},
   "WHY_WORK_CAP": {"module": "paths_base", "kind": "const", "label": "core", "signature": "", "value_hash": "b029e3440af8"},
   "TOKEN_END": {"module": "paths_classify", "kind": "const", "label": "core", "signature": "", "value_hash": "49cca99ec156"},
   "SEP": {"module": "paths_human", "kind": "const", "label": "core", "signature": "", "value_hash": "5c6b4b48335a"},

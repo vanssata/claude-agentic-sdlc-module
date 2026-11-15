@@ -35,6 +35,7 @@ state.py: task <ID1> is in flight: finish it with 'state.py close' (or 'close --
 $ state.py --root <ROOT> status
 exit 0
 --- stdout
+waiting on the agent: build — edit, then 'state.py verify --scope all', then 'state.py close'
 root: <ROOT>
 task: <ID1> — tweak the widget
 mode: light · W 0 · workflow feature
@@ -115,7 +116,13 @@ exit 0
     ],
     "tree": "<TREE40>"
   },
-  "questions_pending": 0
+  "questions_pending": 0,
+  "waiting": {
+    "on": "agent",
+    "decisions": [],
+    "gate": null,
+    "questions": []
+  }
 }
 --- stderr
 
@@ -369,6 +376,7 @@ suite runs used: 2 of 2
 $ state.py --root <ROOT> status
 exit 0
 --- stdout
+waiting on the agent: verify — edit, then 'state.py verify --scope all', then 'state.py close'
 root: <ROOT>
 task: <ID1> — tweak the widget
 mode: light · W 0 · workflow feature

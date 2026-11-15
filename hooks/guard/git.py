@@ -285,7 +285,8 @@ class GitGuard:
                     return
         except Exception:                   # pylint: disable=broad-exception-caught
             pass
-        raise Deny(text_to_b("CONSENT_REQUIRED \u2014 no live pick of this session is this command.") + WHY_CONSENT)
+        raise Deny(text_to_b("CONSENT_REQUIRED \u2014 no live pick of this session is this command. Ask the human in "
+                                 "the dialog; or they run it in their own terminal.") + WHY_CONSENT)
 
     def _drop_status(self, path):
         """`[ "${#path}" -lt 3 ] || path="${path:3}"`, counted in the locale's characters."""

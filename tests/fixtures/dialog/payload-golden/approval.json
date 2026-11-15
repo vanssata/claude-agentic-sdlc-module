@@ -10,11 +10,11 @@
     },
     {
      "label": "python3 <STATE> --root <ROOT> approve --by '<NAME>'",
-     "description": "the session runs exactly this, once"
+     "description": "Approve the task's result as it is now, so it can be closed."
     },
     {
      "label": "python3 <STATE> --root <ROOT> reject --by '<NAME>' --why 'rejected in the dialog'",
-     "description": "the session runs exactly this, once"
+     "description": "Reject the task's result and send it back for changes."
     }
    ],
    "multiSelect": false

@@ -16,6 +16,8 @@ done
 python3 -I "$AI_HOME/skills/rr-status/status.py" --root "$PWD"
 ```
 
+With a task in flight or a decision open, the first line says who it waits on (`waiting on you` or `waiting on the agent`).
+
 After the output, at most one line, and only when a line asks for it:
 
 - `root:` is an ancestor of this repository, or `$HOME`: that `.ai/` arms the

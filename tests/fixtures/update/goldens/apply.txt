@@ -6,6 +6,7 @@ project-update: <ROOT> (applied)
   split     .ai/policies/verification.md      9 command line(s) of testing.md copied verbatim, with its Project specifics
   split     .ai/policies/weight.project.json  0 leaf/leaves of weight.json that differ from the plugin's table carried (none); 1 not carried, equal to an older shipped value: hints
   regenerate .ai/AGENTS.md                     unchanged since it was installed
+  regenerate .ai/policies/coding.md            unchanged since it was installed
   regenerate .ai/policies/safety.md            unchanged since it was installed
   regenerate .ai/policies/security.md          unchanged since it was installed
   regenerate .ai/policies/testing.md           unchanged since it was installed
@@ -21,7 +22,7 @@ project-update: <ROOT> (applied)
   hint      .ai/policies/verification.md: e2e_command is empty — e2e runs once at the end of a task; write 'none' if there is no suite
   hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
   hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
-12 automatic
+13 automatic
 --- stderr
 
 ##### files of the project tree after the run
@@ -29,7 +30,7 @@ fa0cb370b024e1a30e1355912032657b08f609e47773a603c193b1e609b0f997  - .gitignore
 401256979228051792f2d7186e4075e457b990304229c2c034008a03df07affe  - CLAUDE.md
 7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
 a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION
-3dd55bf5f9d9471c68af3353166da11593a11e639f7557397ce46787291fa629  - .ai/policies/coding.md
+dac90781793b8a1c8e5f3e0307665b6394d922140c3831c5508d019f79e1ed0a  - .ai/policies/coding.md
 164cd34c182de88c33de7df35beb29200d792419e1c13a5f0b2104f944e57be7  - .ai/policies/dialog.json
 099f3debfe1ce808502661de4a31c3a349f149f5fe7246691d41a4966179a63c  - .ai/policies/path-guard.json
 8ec171f0fbdf38cc6996d496f01491fd1f21f04a435a118ad979b127a8be06f1  - .ai/policies/safety.md
@@ -113,7 +114,7 @@ project-update: <ROOT> (applied)
 a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION
 8da9942c50c3ea5bb538c9753a21ac09e50ba9324ba9c22858370d59a7784921  - .ai/local/memory/config.json
 3772d96afbca09c03e7d58b3e6ef014f39e8a84898c28b04cebfa58e386e4d42  - .ai/memory/notes.md
-3dd55bf5f9d9471c68af3353166da11593a11e639f7557397ce46787291fa629  - .ai/policies/coding.md
+dac90781793b8a1c8e5f3e0307665b6394d922140c3831c5508d019f79e1ed0a  - .ai/policies/coding.md
 164cd34c182de88c33de7df35beb29200d792419e1c13a5f0b2104f944e57be7  - .ai/policies/dialog.json
 ba3760a257e9f80ae4b5f229f14c0e78fe0323cd553f5aec5b16b7cba94f1cbb  - .ai/policies/git.md
 d63a548c927cbcbce2ba1c9d0915b0d285b16aeb5a652c68c1525ed58d11970a  - .ai/policies/memory.json
@@ -179,6 +180,7 @@ project-update: <ROOT> (applied)
   split     .ai/policies/verification.md      9 command line(s) of testing.md copied verbatim, with its Project specifics
   split     .ai/policies/weight.project.json  0 leaf/leaves of weight.json that differ from the plugin's table carried (none); 1 not carried, equal to an older shipped value: hints
   regenerate .ai/AGENTS.md                     unchanged since it was installed
+  regenerate .ai/policies/coding.md            unchanged since it was installed
   regenerate .ai/policies/safety.md            unchanged since it was installed
   regenerate .ai/policies/security.md          unchanged since it was installed
   regenerate .ai/policies/testing.md           unchanged since it was installed
@@ -194,7 +196,7 @@ project-update: <ROOT> (applied)
   hint      .ai/policies/verification.md: e2e_command is empty — e2e runs once at the end of a task; write 'none' if there is no suite
   hint      .ai/policies/verification.md: lint_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
   hint      .ai/policies/verification.md: typecheck_command is empty — a sensor reads it; read the project's config files for it, and write 'none' if there is none
-12 automatic
+13 automatic
 --- stderr
 
 ##### files of the project tree after the run
@@ -203,7 +205,7 @@ caed02a7e1a0dd39b9d0f113cef2579270f5425fc314ce75ee3dd79f6b359bfe  - AGENTS.md
 483fb2bbc26f2d9656f416e3eb6c692c1ebd31fe631b3fb7d0323f2469bb5a3c  - CLAUDE.md
 7bae90789625d6fb9071ecb412d14a8d1eb0bc5659d8d284c4eaf213e1b5de56  - .ai/AGENTS.md
 a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION
-3dd55bf5f9d9471c68af3353166da11593a11e639f7557397ce46787291fa629  - .ai/policies/coding.md
+dac90781793b8a1c8e5f3e0307665b6394d922140c3831c5508d019f79e1ed0a  - .ai/policies/coding.md
 164cd34c182de88c33de7df35beb29200d792419e1c13a5f0b2104f944e57be7  - .ai/policies/dialog.json
 099f3debfe1ce808502661de4a31c3a349f149f5fe7246691d41a4966179a63c  - .ai/policies/path-guard.json
 8ec171f0fbdf38cc6996d496f01491fd1f21f04a435a118ad979b127a8be06f1  - .ai/policies/safety.md
@@ -263,7 +265,7 @@ a0407ffa0983094e8bae38c36e9e5a0c61dd8c66238a05945c4ceca1261ef67f  - .gitignore
 a1fb50e6c86fae1679ef3351296fd6713411a08cf8dd1790a4fd05fae8688164  - .ai/VERSION
 8da9942c50c3ea5bb538c9753a21ac09e50ba9324ba9c22858370d59a7784921  - .ai/local/memory/config.json
 3772d96afbca09c03e7d58b3e6ef014f39e8a84898c28b04cebfa58e386e4d42  - .ai/memory/notes.md
-3dd55bf5f9d9471c68af3353166da11593a11e639f7557397ce46787291fa629  - .ai/policies/coding.md
+dac90781793b8a1c8e5f3e0307665b6394d922140c3831c5508d019f79e1ed0a  - .ai/policies/coding.md
 164cd34c182de88c33de7df35beb29200d792419e1c13a5f0b2104f944e57be7  - .ai/policies/dialog.json
 d63a548c927cbcbce2ba1c9d0915b0d285b16aeb5a652c68c1525ed58d11970a  - .ai/policies/memory.json
 099f3debfe1ce808502661de4a31c3a349f149f5fe7246691d41a4966179a63c  - .ai/policies/path-guard.json

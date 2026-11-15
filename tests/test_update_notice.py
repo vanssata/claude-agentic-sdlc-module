@@ -230,6 +230,79 @@ class TestUpdateNotice(unittest.TestCase):  # pylint: disable=too-many-public-me
                     self.assertEqual("RiskRails 3.0.2 is available (installed 3.0.1)" in proc.stdout,
                                      expected, proc.stdout + proc.stderr)
 
+    # -- the dialog names itself first (R8)
+    def dialog_on(self, runtime="claude"):
+        home = self.codex if runtime == "codex" else self.config
+        tool = "request_user_input" if runtime == "codex" else "AskUserQuestion"
+        os.makedirs(self.project + "/.ai/policies", exist_ok=True)
+        with open(self.project + "/.ai/policies/dialog.json", "w", encoding="utf-8") as fh:
+            json.dump({"version": 1, "enabled": True}, fh)
+        with open(home + "/riskrails/profile.json", "w", encoding="utf-8") as fh:
+            json.dump({"dialog": {"tool": tool}}, fh)
+
+    def state_files(self):
+        found = {}
+        for base, _dirs, names in os.walk(self.project + "/.ai/state"):
+            found.update({os.path.join(base, n): os.stat(os.path.join(base, n)).st_mtime_ns for n in names})
+        return found
+
+    def test_dialog_on_names_the_dialog_first(self):
+        for runtime in ("claude", "codex"):
+            with self.subTest(runtime=runtime):
+                have = installed(runtime)
+                self.cache(runtime, bump(have))
+                self.dialog_on(runtime)
+                message = json.loads(self.start(runtime))["systemMessage"]
+                self.assertEqual(
+                    message,
+                    f'RiskRails {bump(have)} is available (installed {have}). Say "update RiskRails" and the '
+                    f"session asks you in the dialog — or run {COMMAND} in a terminal; "
+                    "then /rr-setup --update in each project.")
+                self.assertLess(message.index("dialog"), message.index("terminal"))
+                context = json.loads(self.start(runtime))["hookSpecificOutput"]["additionalContext"]
+                self.assertIn("decision open --kind install", context)
+                self.assertIn(f'--command "npx riskrails@{bump(have)} --yes"', context)
+                self.assertIn("never run the update without that pick", context)
+
+    def test_dialog_off_and_unattended_keep_todays_text(self):
+        have = installed("claude")
+        self.cache("claude", bump(have))
+        today = (f"RiskRails {bump(have)} is available (installed {have}). Update: {COMMAND} "
+                 f"— inside Claude Code or Codex CLI: ! {COMMAND} — then /rr-setup --update in each project.")
+        self.dialog_on()
+        with open(self.config + "/riskrails/profile.json", "w", encoding="utf-8") as fh:
+            json.dump({}, fh)       # no verified dialog tool: off
+        context = (f"RiskRails {bump(have)} is available on npm; {have} is installed. The user updates it "
+                   f"with `{COMMAND}` in a terminal, or `! {COMMAND}` inside Claude Code or Codex CLI, "
+                   "then `/rr-setup --update` in each project. Mention this once to the user if it is "
+                   "relevant; never run the update yourself — installing is the user's act.")
+        doc = json.loads(self.start())
+        self.assertEqual(doc["systemMessage"], today)
+        self.assertEqual(doc["hookSpecificOutput"]["additionalContext"], context)
+        self.dialog_on()
+        doc = json.loads(self.start(AI_UNATTENDED="1"))
+        self.assertEqual(doc["systemMessage"], today)
+        self.assertEqual(doc["hookSpecificOutput"]["additionalContext"], context)
+
+    def test_dialog_on_opens_no_decision_and_writes_nothing(self):
+        self.cache("claude", bump(installed("claude")))
+        self.dialog_on()
+        os.makedirs(self.project + "/.ai/state")
+        before = self.state_files()
+        self.assertIn("in the dialog", self.start(source="startup"))
+        after = self.state_files()
+        self.assertFalse(os.path.exists(self.project + "/.ai/state/decisions.jsonl"))
+        # SessionStart's own session.json is the only file it may write; no decision, no ledger.
+        self.assertEqual(set(after) - set(before) - {self.project + "/.ai/state/session.json"}, set())
+        self.assertEqual({k: v for k, v in before.items() if k in after and after[k] != v}, {})
+
+    def test_dialog_on_keeps_the_throttle_and_the_off_switches(self):
+        self.dialog_on()
+        self.cache("claude", bump(installed("claude")), age=10 * 86400)
+        self.assertIn("in the dialog", self.start())
+        self.assertNotIn("in the dialog", self.start(RISKRAILS_NO_UPDATE_CHECK="1"))
+        self.assertNotIn("in the dialog", self.start(source="resume"))
+
     # -- helpers
     def write_registry(self, version):
         with open(self.registry, "w", encoding="utf-8") as fh:

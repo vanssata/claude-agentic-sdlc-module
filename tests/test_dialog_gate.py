@@ -174,6 +174,27 @@ class TestPayload(unittest.TestCase):
                 self.assertIsNotNone(rr_labels.validate_label(label))
         self.assertIn("memory enable", rr_labels.validate_label("git status"))
 
+    def test_batch_on_label(self):
+        """R1: `batch on --by S [--why S]` is a label, in the validator and the hooks' copy; every other form
+        is refused."""
+        here = os.path.abspath(STATE)
+        batch = "python3 %s --root /p batch on" % here
+        good = [" --by me", " --by 'Ivan Kakurov'", " --by me --why 'one batch'", " --why x --by me"]
+        bad = ["", " --by", " --why x", " --by=me", " --by me --by you", " --by me --why", " --by me now",
+               " now --by me", " --by me --who x", " --b me", " --by ''", " --by -me", " --by me --why -x",
+               " --by me; ls", " --by me --why $(id)", " off --by me"]
+        for tail in good:
+            with self.subTest(good=tail):
+                self.assertIsNone(rr_labels.validate_label(batch + tail))
+                self.assertIsNone(dialog.validate_label(batch + tail))
+        for tail in bad:
+            with self.subTest(bad=tail):
+                self.assertIsNotNone(rr_labels.validate_label(batch + tail))
+                self.assertIsNotNone(dialog.validate_label(batch + tail))
+        self.assertIsNotNone(dialog.validate_label("python3 %s --root /p batch off --by me" % here))
+        self.assertIn("batch on", rr_labels.validate_label("git status"))
+        self.assertIn("batch on", dialog.validate_label("git status"))
+
     def test_commit_opener_stays_git_only(self):
         """R13 widens the label rule, not the opener the model may call: `decision open --kind commit` still
         offers git commit and git push only, so no model-opened decision carries `memory enable`."""

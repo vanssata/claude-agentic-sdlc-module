@@ -1,0 +1,639 @@
+##### claude --yes
+##### exit 0
+##### stdout
+installed: agents/Explore.md
+installed: agents/ai-discovery.md
+installed: agents/ai-reviewer.md
+installed: agents/architect.md
+installed: agents/log-reader.md
+installed: hooks/project-scaffold.sh
+installed: hooks/ai-guard.py
+installed: hooks/cap-large-read.py
+installed: hooks/context-guard.py
+installed: hooks/dialog-gate.py
+installed: hooks/memory-pre-push.py
+installed: hooks/project-scaffold.py
+installed: hooks/runtime-gate.py
+installed: hooks/update_notice.py
+installed: hooks/lib/ai-hook-common.sh
+installed: hooks/guard/__init__.py
+installed: hooks/guard/common.py
+installed: hooks/guard/decision.py
+installed: hooks/guard/dialog.py
+installed: hooks/guard/ere.py
+installed: hooks/guard/git.py
+installed: hooks/guard/paths.py
+installed: hooks/guard/paths_base.py
+installed: hooks/guard/paths_bash.py
+installed: hooks/guard/paths_classify.py
+installed: hooks/guard/paths_fs.py
+installed: hooks/guard/paths_human.py
+installed: hooks/guard/paths_interp.py
+installed: hooks/guard/paths_movers.py
+installed: hooks/guard/paths_shell.py
+installed: hooks/guard/scope.py
+installed: hooks/ai-path-guard-defaults.json
+installed: hooks/ai-git-guard-defaults.json
+installed: hooks/ai-git-guard.json (edit this one; it is never overwritten)
+installed: riskrails/ai (25 files)
+installed: riskrails/ai-path
+installed: riskrails/profiles/balanced-max.json
+installed: riskrails/profiles/codex-balanced-max.json
+installed: riskrails/profiles/codex-plus.json
+installed: riskrails/profiles/codex-pro.json
+installed: riskrails/profiles/max.json
+installed: riskrails/profiles/max20.json
+installed: riskrails/profiles/pro.json
+installed: riskrails/scripts/resolve-profile.py
+installed: skills/ai-audit
+installed: skills/ai-init
+installed: skills/ai-task
+installed: skills/project-init
+installed: skills/project-update
+installed: skills/rr-build
+installed: skills/rr-build-all
+installed: skills/rr-plan
+installed: skills/rr-review
+installed: skills/rr-setup
+installed: skills/rr-ship
+installed: skills/rr-spec
+installed: skills/rr-status
+installed: skills/usage-report
+merged: settings.json
+statusline: added the plugin's statusline (the model, effort and context line and the prompt line), which also records the quota
+CLAUDE.md: appended
+installed: riskrails/routing.md
+CLAUDE.md: managed block 2 021 B (budget 2 560), file 2 022 B — the rest is yours
+
+Done (Claude Code).
+  target          <HOME>/.claude
+  plan            pro  (Pro, pro profile, fable=no)
+  plan tables     <HOME>/.claude/riskrails/profile.json
+  session model   opusplan (Opus 5 in plan mode, Sonnet 5 when executing (opusplan)), effort medium
+  fallback        sonnet
+  EXPERT tier     architect on opus, pinned at effort high
+  compaction      the runtime default: near 167000 tokens on this 200k session;
+                  context-guard warns from 133600 and never holds a prompt back (economy only)
+
+  read guard      an unbounded Read is refused above 4000 lines / 250000 bytes
+  agents          Explore ai-discovery ai-reviewer architect log-reader
+  hooks           cap-large-read, project-scaffold (Setup:init), ai-guard (git checks global;
+                  path and scope checks where .ai/ exists),
+                  context-guard (UserPromptSubmit, PreCompact, SessionStart:compact)
+  runtime gate    on — budgets from riskrails/profile.json, running agents, quota through the statusline
+  fable branch    off (no Fable on this install)
+  skills          AGENTS.md CLAUDE.md ai-audit ai-init ai-task project-init project-update rr-build rr-build-all rr-plan rr-review rr-setup rr-ship rr-spec rr-status usage-report
+
+Restart Claude Code, then:
+  /config        model and effort match the profile
+  /hooks         lists cap-large-read, ai-guard, project-scaffold and context-guard, plus runtime-gate on PreToolUse, PostToolUse, SubagentStart, SubagentStop
+  /skills        lists rr-setup, rr-spec, rr-plan, rr-build, rr-build-all, rr-review, rr-ship, rr-status
+  /rr-setup      in a project, to survey it and build .ai/
+  /rr-setup --update in a project that already has .ai/ or docs/sdlc/, to pull in these rules
+##### stderr
+##### claude --yes --dry-run
+##### exit 0
+##### stdout
+== claude: plan=pro (Pro, pro profile) fable=no fable-gate=off runtime-gate=on (dry run, nothing written)
+== claude: target directory <HOME>/.claude
+== statusline: would have added the plugin's statusline (the model, effort and context line and the prompt line), which also records the quota
+== settings snippet (merged into <HOME>/.claude/settings.json):
+{
+  "bashOutputMaxChars": 75000,
+  "taskOutputMaxChars": 80000,
+  "env": {
+    "MAX_MCP_OUTPUT_TOKENS": "40000",
+    "CLAUDE_READ_MAX_LINES": "4000",
+    "CLAUDE_READ_MAX_BYTES": "250000"
+  },
+  "enableAllProjectMcpServers": false,
+  "autoCompactEnabled": true,
+  "precomputeCompactionEnabled": false,
+  "showClearContextOnPlanAccept": true,
+  "autoContinueAtUsageLimit": true,
+  "workflowSizeGuideline": "small",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/cap-large-read.py\"",
+            "timeout": 5,
+            "statusMessage": "Checking read size"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"$HOME/.claude/hooks/ai-guard.py\"",
+            "timeout": 15,
+            "statusMessage": "Checking git, paths, scope and open decisions"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/runtime-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Checking model availability and budgets"
+          }
+        ]
+      }
+    ],
+    "Setup": [
+      {
+        "matcher": "init",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/project-scaffold.sh\"",
+            "timeout": 10,
+            "statusMessage": "Scaffolding project folders"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/context-guard.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/context-guard.py\"",
+            "timeout": 15,
+            "statusMessage": "Saving a context snapshot"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/context-guard.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "auth_success",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/context-guard.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"$HOME/.claude/hooks/dialog-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Recording the dialog's answer"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/runtime-gate.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"$HOME/.claude/hooks/dialog-gate.py\"",
+            "timeout": 5,
+            "statusMessage": "Checking for an open decision"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/runtime-gate.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/runtime-gate.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "model": "opusplan",
+  "availableModels": [
+    "opusplan",
+    "opus",
+    "sonnet",
+    "haiku"
+  ],
+  "fallbackModel": [
+    "sonnet"
+  ],
+  "effortLevel": "medium",
+  "modelSettings": {
+    "claude-opus-5": {
+      "effortLevel": "medium"
+    },
+    "claude-sonnet-5": {
+      "effortLevel": "medium"
+    },
+    "claude-haiku-4-5-20251001": {
+      "effortLevel": "high"
+    }
+  }
+}
+== agents/architect.md (rendered head):
+---
+name: architect
+description: Use for architecture and design decisions before implementation — class and module structure, service boundaries, Symfony/Sylius/Magento/Shopware design, Kubernetes/Helm/ArgoCD layout, migration strategy, tradeoff analysis. Does NOT write code; returns a design document and an ordered implementation plan.
+tools: Read, Grep, Glob
+model: opus
+effort: high
+memory: user
+color: purple
+---
+You are a principal engineer. You design; you never implement.
+== CLAUDE.md managed block:
+<!-- riskrails:start -->
+# RiskRails (Pro plan)
+
+Rules for every repository; everything else loads on demand. `~/.claude/riskrails/routing.md` has the model ladder, the context-guard thresholds and the launcher; a project's `.ai/AGENTS.md` routes to its policies.
+
+- With `.ai/`: read `.ai/AGENTS.md` first, run every change through `/rr-build <request>`, treat `.ai/policies/` as binding; `/rr-setup --update` after a plugin reinstall. Without `.ai/`: `/rr-setup` first.
+- Production behaviour is the source of truth: document problems outside the task, do not fix them. Never mix a refactoring with a feature change.
+- Each step names the files it may touch; an edit outside them is refused — answer `SCOPE_CHANGE_REQUIRED`, do not widen the step.
+- No agent merges or deploys. Commit, push and approval run only as the command the human picked in the dialog, as the harness recorded — verbatim, once — or the human runs them outside the agent. A guard's refusal is not a hint to reword.
+- Verify before reporting done: the verification command once, to the end, every failure fixed as one batch, output shown.
+- Context: `grep -n`, then read the hits; never `cat` logs, lockfiles or generated code; a file over ~4000 lines is read by a FAST reader (`Explore`, `log-reader`) that returns `file:line` excerpts, never the file. Deterministic tools first. `/clear` between tasks. `/rr-status --cost` shows where tokens went.
+- Models are tiers, not names: runners and verbatim extraction on FAST at `low`, readers that judge on BALANCED; the session implements; STRONG and EXPERT only on a named trigger, one agent at a time, never a fleet on the top tier; a failed thinking task is never retried on a cheaper model.
+- On compaction keep decisions and their reasons, rejected options, exact paths and names, failed attempts with the error text, open questions and the latest instruction verbatim; trust `.ai/state/handoff.md` and the guard's "Session state before compaction" over the summary.
+<!-- riskrails:end -->
+== routing.md (on demand): <HOME>/.claude/riskrails/routing.md
+# Model routing (Pro plan)
+
+Facts are collected cheaply; thinking is paid for. Session model Opus 5 in plan mode, Sonnet 5 when executing (opusplan), fallback Sonnet 5, default effort `medium`.
+
+| Tier | Model / effort | Used for |
+|---|---|---|
+| FAST | `haiku` / `low` | reading and running: file search, listings, counting, logs and test output, running a command and reporting it (`Explore`, `log-reader`) |
+| BALANCED | `sonnet` / `low`–`medium` | discovery with judgement, the review in guarded mode (`ai-discovery`, `ai-reviewer` in guarded mode) |
+| STRONG | `opus` / `high` | the review in full mode, adversarial and security review (`ai-reviewer`, with a `focus: security` brief when domain is 2) |
+| EXPERT | `opus` / `high`, pinned — on opusplan an inherited model is Sonnet outside plan mode | design (`architect`), only when STRONG said it cannot settle the question |
+
+- Session model is `opusplan`: Opus 5 in plan mode, Sonnet 5 when executing. Use plan mode for T3+ and for a T2 that spans several modules — that is where Opus is paid for. Fable is off this plan; never request it. `xhigh`/`max` are unavailable. STRONG and EXPERT both pin `model: opus` explicitly.
+- Every agent definition and Workflow `agent()` call declares `model:` and `effort:`. Readers and runners never go above `low`. Forks inherit the session and take no `model`.
+- Five or more parallel agents never run on `opus`. Escalate one task at a time on a stated trigger, never the whole fleet; never retry a failed thinking task on a cheaper model.
+- Raise to `high` only for architecture, root-cause analysis and adversarial verification, and say that you are raising it.
+- Planning, the weight, the test run and the release are the session's work, not an agent's: `/rr-plan`, `state.py weight`, `state.py verify`, `/rr-ship`.
+- Implement in the main session. Delegate reading: logs and test output to `log-reader`, wide searches to `Explore` — both on `haiku`. Nothing below T4 runs on `opus`. The conclusion a human reads is written here, never delegated.
+- Split code reading by how many hops it needs. A lookup — where X is, one route, service id, config key or template — goes to `Explore` on `haiku`. A trace of how the *installed* third-party code behaves (`vendor/`, `node_modules/`: decorators, compiler passes, service or template overrides, event subscribers) goes to a BALANCED reader at `low` — `ai-discovery`, or `Explore` spawned with `model: sonnet` where there is no `.ai/` — because a FAST reader stops at the first plausible match, and there a wrong answer reads like a right one.
+
+# Context hygiene
+
+- Search with `grep -n` and read the hits. No unbounded `Read` over ~4000 lines — a hook refuses it, and a `limit` larger than that budget is refused too. Never `cat` logs, lockfiles, migrations or generated code.
+- A file too large to open is read by the cheapest model, never here: send `Explore` (code) or `log-reader` (logs, test output) and take back only the relevant excerpt with `file:line` — never the file.
+- Tools and MCP servers are context too, in every turn, used or not. Default off: `enableAllProjectMcpServers: false`, a project enables only what nearly every task needs, a task names anything extra in one line and turns it off again, and deferred tools are loaded in one batched call. See `.ai/policies/tooling.md`.
+- One subagent returning twenty lines beats five tool calls whose output stays in context all session.
+- Deterministic tools first: `rg`, `git`, `jq`, the framework CLI, the test runner.
+- `/clear` between tasks, and after every task that ran a review. Compaction near 167 000 tokens is a summary of the old task, not a clean start; until then every turn re-reads the whole history.
+- `context-guard` measures the context on every prompt: a one-line warning from 133k tokens, and the prompt is never held back (only `--context economy` sets a block threshold). When its note says the prompt starts a different task, suggest `/clear` before doing the work. Before a compaction it saves the edited files, the latest instructions verbatim, the todo list and the git state, and hands them back afterwards as "Session state before compaction": trust that block over the summary where they differ, and re-read a file before editing it rather than relying on what the summary says it contains.
+- Run tests once, to the end, and fix every failure as one batch. Never one failure, one fix, one run.
+- `/rr-status --cost` shows where the tokens went, at zero model cost; `--provider both` puts Codex next to Claude Code.
+
+# Guards
+
+- `ai-git-guard` runs in every repository: no force push, history rewrite, push or merge to a protected branch, `--no-verify`, staged secret or production deploy. `ai-path-guard` and `ai-scope-guard` arm only where `.ai/` exists. No agent merges or deploys; commit, push and approval run only as the command the human picked in the dialog, as the harness recorded — verbatim, once — or the human runs them outside the agent.
+- `context-guard` measures the context on every prompt and holds a prompt back once at the block threshold above, when there is one; its "Session state before compaction" block and `.ai/state/handoff.md` are what a resumed session trusts over the summary.
+
+- Shared `.ai/` files — policies, agent contracts, workflows, templates — are installed once in `<HOME>/.claude/riskrails/ai/`. A project's own regular file at the same path under `.ai/` overrides it; `<HOME>/.claude/riskrails/ai-path <path>` prints the one to read.
+== profile.json (plan tables): <HOME>/.claude/riskrails/profile.json
+{
+  "inherits": null,
+  "plan": "pro",
+  "label": "Pro",
+  "runtime": "claude",
+  "economy": {
+    "autoCompactWindow": 300000
+  },
+  "tiers": {
+    "FAST": {
+      "model": "haiku",
+      "effort": "low",
+      "agents": [
+        "Explore",
+        "log-reader"
+      ]
+    },
+    "BALANCED": {
+      "model": "sonnet",
+      "effort": "medium",
+      "agents": [
+        "ai-discovery"
+      ]
+    },
+    "STRONG": {
+      "model": "opus",
+      "effort": "high",
+      "agents": [
+        "ai-reviewer"
+      ]
+    },
+    "EXPERT": {
+      "model": "opus",
+      "effort": "high",
+      "agents": [
+        "architect"
+      ]
+    }
+  },
+  "budgets": {
+    "expert": {
+      "without_asking": false,
+      "max_per_task": 1
+    },
+    "tokens": {
+      "unit": "total_tokens_millions",
+      "per_task": {
+        "T0": 0.2,
+        "T1": 0.4,
+        "T2": 1,
+        "T3": 3,
+        "T4": 5,
+        "T5": 8
+      }
+    }
+  },
+  "preferred_runtime": {
+    "default": "same",
+    "by_workflow": {
+      "refactoring": "codex"
+    },
+    "quota_pct": 90,
+    "cross_vendor_review_from": "T4"
+  },
+  "fable": false,
+  "context": {
+    "mode": "default",
+    "window": null
+  },
+  "plugin_version": "<VERSION>",
+  "written_at": "<TIME>",
+  "dialog": {
+    "tool": "AskUserQuestion"
+  },
+  "set_by": {
+    "via": "installer",
+    "at": "<TIME>"
+  }
+}
+== would install:
+   agents:  Explore,ai-discovery,ai-reviewer,architect,log-reader
+   hooks:   project-scaffold.sh,ai-guard.py,cap-large-read.py,context-guard.py,dialog-gate.py,memory-pre-push.py,project-scaffold.py,runtime-gate.py,update_notice.py,lib/ai-hook-common.sh,guard/__init__.py,guard/common.py,guard/decision.py,guard/dialog.py,guard/ere.py,guard/git.py,guard/paths.py,guard/paths_base.py,guard/paths_bash.py,guard/paths_classify.py,guard/paths_fs.py,guard/paths_human.py,guard/paths_interp.py,guard/paths_movers.py,guard/paths_shell.py,guard/scope.py,ai-path-guard-defaults.json,ai-git-guard-defaults.json
+   skills:  ai-audit,ai-init,ai-task,project-init,project-update,rr-build,rr-build-all,rr-plan,rr-review,rr-setup,rr-ship,rr-spec,rr-status,usage-report
+   retire:  skills/{status,ai-status,sdlc-intent,sdlc-plan,sdlc-spec}, into backups/<date>/ if present
+   retire:  hooks/ai-git-guard.sh, hooks/ai-path-guard.sh, hooks/ai-scope-guard.sh and their settings.json entries (ai-guard.py runs all three), into backups/<date>/ if present
+   shared:  riskrails/ai (25 files), riskrails/ai-path
+   config:  ai-git-guard.json (only if absent)
+   routing: riskrails/routing.md
+   profile: riskrails/profile.json
+##### stderr
+##### claude, no --yes, no terminal
+##### exit 0
+##### stdout
+installed: agents/Explore.md
+installed: agents/ai-discovery.md
+installed: agents/ai-reviewer.md
+installed: agents/architect.md
+installed: agents/log-reader.md
+installed: hooks/project-scaffold.sh
+installed: hooks/ai-guard.py
+installed: hooks/cap-large-read.py
+installed: hooks/context-guard.py
+installed: hooks/dialog-gate.py
+installed: hooks/memory-pre-push.py
+installed: hooks/project-scaffold.py
+installed: hooks/runtime-gate.py
+installed: hooks/update_notice.py
+installed: hooks/lib/ai-hook-common.sh
+installed: hooks/guard/__init__.py
+installed: hooks/guard/common.py
+installed: hooks/guard/decision.py
+installed: hooks/guard/dialog.py
+installed: hooks/guard/ere.py
+installed: hooks/guard/git.py
+installed: hooks/guard/paths.py
+installed: hooks/guard/paths_base.py
+installed: hooks/guard/paths_bash.py
+installed: hooks/guard/paths_classify.py
+installed: hooks/guard/paths_fs.py
+installed: hooks/guard/paths_human.py
+installed: hooks/guard/paths_interp.py
+installed: hooks/guard/paths_movers.py
+installed: hooks/guard/paths_shell.py
+installed: hooks/guard/scope.py
+installed: hooks/ai-path-guard-defaults.json
+installed: hooks/ai-git-guard-defaults.json
+installed: hooks/ai-git-guard.json (edit this one; it is never overwritten)
+installed: riskrails/ai (25 files)
+installed: riskrails/ai-path
+installed: riskrails/profiles/balanced-max.json
+installed: riskrails/profiles/codex-balanced-max.json
+installed: riskrails/profiles/codex-plus.json
+installed: riskrails/profiles/codex-pro.json
+installed: riskrails/profiles/max.json
+installed: riskrails/profiles/max20.json
+installed: riskrails/profiles/pro.json
+installed: riskrails/scripts/resolve-profile.py
+installed: skills/ai-audit
+installed: skills/ai-init
+installed: skills/ai-task
+installed: skills/project-init
+installed: skills/project-update
+installed: skills/rr-build
+installed: skills/rr-build-all
+installed: skills/rr-plan
+installed: skills/rr-review
+installed: skills/rr-setup
+installed: skills/rr-ship
+installed: skills/rr-spec
+installed: skills/rr-status
+installed: skills/usage-report
+merged: settings.json
+statusline: added the plugin's statusline (the model, effort and context line and the prompt line), which also records the quota
+CLAUDE.md: appended
+installed: riskrails/routing.md
+CLAUDE.md: managed block 2 021 B (budget 2 560), file 2 022 B — the rest is yours
+
+Done (Claude Code).
+  target          <HOME>/.claude
+  plan            pro  (Pro, pro profile, fable=no)
+  plan tables     <HOME>/.claude/riskrails/profile.json
+  session model   opusplan (Opus 5 in plan mode, Sonnet 5 when executing (opusplan)), effort medium
+  fallback        sonnet
+  EXPERT tier     architect on opus, pinned at effort high
+  compaction      the runtime default: near 167000 tokens on this 200k session;
+                  context-guard warns from 133600 and never holds a prompt back (economy only)
+
+  read guard      an unbounded Read is refused above 4000 lines / 250000 bytes
+  agents          Explore ai-discovery ai-reviewer architect log-reader
+  hooks           cap-large-read, project-scaffold (Setup:init), ai-guard (git checks global;
+                  path and scope checks where .ai/ exists),
+                  context-guard (UserPromptSubmit, PreCompact, SessionStart:compact)
+  runtime gate    on — budgets from riskrails/profile.json, running agents, quota through the statusline
+  fable branch    off (no Fable on this install)
+  skills          AGENTS.md CLAUDE.md ai-audit ai-init ai-task project-init project-update rr-build rr-build-all rr-plan rr-review rr-setup rr-ship rr-spec rr-status usage-report
+
+Restart Claude Code, then:
+  /config        model and effort match the profile
+  /hooks         lists cap-large-read, ai-guard, project-scaffold and context-guard, plus runtime-gate on PreToolUse, PostToolUse, SubagentStart, SubagentStop
+  /skills        lists rr-setup, rr-spec, rr-plan, rr-build, rr-build-all, rr-review, rr-ship, rr-status
+  /rr-setup      in a project, to survey it and build .ai/
+  /rr-setup --update in a project that already has .ai/ or docs/sdlc/, to pull in these rules
+##### stderr
+##### claude, no plan, no terminal
+##### exit 1
+##### stdout
+##### stderr
+Could not detect plan; pass --plan pro|team-pro|team-max|max|max20
+##### codex --yes
+##### exit 0
+##### stdout
+installed: agents/Explore.toml
+installed: agents/ai-discovery.toml
+installed: agents/ai-reviewer.toml
+installed: agents/architect.toml
+installed: agents/log-reader.toml
+installed: hooks/ai-guard.py
+installed: hooks/runtime-gate.py
+installed: hooks/context-guard.py
+installed: hooks/dialog-gate.py
+installed: hooks/update_notice.py
+installed: hooks/guard/__init__.py
+installed: hooks/guard/common.py
+installed: hooks/guard/decision.py
+installed: hooks/guard/dialog.py
+installed: hooks/guard/ere.py
+installed: hooks/guard/git.py
+installed: hooks/guard/paths.py
+installed: hooks/guard/paths_base.py
+installed: hooks/guard/paths_bash.py
+installed: hooks/guard/paths_classify.py
+installed: hooks/guard/paths_fs.py
+installed: hooks/guard/paths_human.py
+installed: hooks/guard/paths_interp.py
+installed: hooks/guard/paths_movers.py
+installed: hooks/guard/paths_shell.py
+installed: hooks/guard/scope.py
+installed: hooks/lib/ai-hook-common.sh
+installed: hooks/ai-path-guard-defaults.json
+installed: hooks/ai-git-guard-defaults.json
+installed: hooks/ai-git-guard.json (edit this one; it is never overwritten)
+installed: riskrails/ai (25 files)
+installed: riskrails/ai-path
+installed: riskrails/profiles/balanced-max.json
+installed: riskrails/profiles/codex-balanced-max.json
+installed: riskrails/profiles/codex-plus.json
+installed: riskrails/profiles/codex-pro.json
+installed: riskrails/profiles/max.json
+installed: riskrails/profiles/max20.json
+installed: riskrails/profiles/pro.json
+installed: riskrails/scripts/resolve-profile.py
+installed: skills/ai-audit
+installed: skills/ai-init
+installed: skills/ai-task
+installed: skills/project-init
+installed: skills/project-update
+installed: skills/rr-build
+installed: skills/rr-build-all
+installed: skills/rr-plan
+installed: skills/rr-review
+installed: skills/rr-setup
+installed: skills/rr-ship
+installed: skills/rr-spec
+installed: skills/rr-status
+installed: skills/usage-report
+merged: hooks.json
+codex config: left [tui] status_line alone (not set: Codex's default items; add model-with-reasoning and context-used to show them)
+codex config: added model = "gpt-5.6-sol"
+codex config: added model_reasoning_effort = "high"
+codex config: added [agents]
+codex config: added enabled = true
+codex config: added default_subagent_model = "gpt-5.6-terra"
+codex config: added default_subagent_reasoning_effort = "medium"
+codex config: added max_concurrent_threads_per_session = 6
+AGENTS.md: appended
+installed: riskrails/routing.md
+AGENTS.md: managed block 2 158 B (budget 2 560), file 2 159 B — the rest is yours
+
+Done (Codex).
+  target          <HOME>/.codex
+  plan            pro  (Pro)
+  session model   gpt-5.6-sol at effort high
+  subagent default gpt-5.6-terra at medium, at most 6 threads at once
+  FAST tier       gpt-5.6-terra at low (Explore, log-reader)
+  BALANCED tier   gpt-5.6-terra at medium (ai-discovery at low)
+  STRONG tier     gpt-5.6-sol at high (ai-reviewer, architect)
+  EXPERT tier     gpt-6-astra at xhigh (no agent pins it)
+  runtime gate    sends EXPERT work to gpt-5.6-sol while gpt-6-astra is rate-limited or
+                  unavailable, explains an EXPERT launch past the plan's budget, reads the quota
+                  from the session rollouts; 'runtime-gate.py status' / 'quota' show it
+  agents          Explore ai-discovery ai-reviewer architect log-reader
+  hooks           ai-guard (git checks global; path and scope checks where .ai/ exists),
+                  runtime-gate, context-guard. No cap-large-read: Codex has no hookable Read tool.
+  skills          AGENTS.md CLAUDE.md ai-audit ai-init ai-task project-init project-update rr-build rr-build-all rr-plan rr-review rr-setup rr-ship rr-spec rr-status usage-report
+
+Restart Codex, then:
+  /hooks         review and trust the guard, gate and context hooks — until you do, Codex skips them
+  /skills        lists rr-setup, rr-spec, rr-plan, rr-build, rr-build-all, rr-review, rr-ship, rr-status
+  /rr-setup      in a project, to survey it and build .ai/
+
+Your previous default model was replaced. backups/<DATE>/config.toml holds the old one.
+##### stderr
+could not detect the ChatGPT plan; using the pro profile — pass --codex-plan plus on Plus

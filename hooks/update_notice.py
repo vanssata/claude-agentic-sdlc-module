@@ -80,8 +80,9 @@ def spawn_refresh(path):
         pass
 
 
-def notice(runtime, home, plugin_root, now):
-    """(systemMessage, additionalContext) when the cache knows a newer release, else ("", "")."""
+def notice(runtime, home, plugin_root, now, dialog=False):
+    """(systemMessage, additionalContext) when the cache knows a newer release, else ("", "").
+    dialog: the caller's answer to "is the dialog on"; the message then names the dialog first."""
     if disabled():
         return "", ""
     riskrails = os.path.join(home, "riskrails")
@@ -95,12 +96,26 @@ def notice(runtime, home, plugin_root, now):
     have, new = parse(installed), parse(latest)
     if not have or not new or new <= have:
         return "", ""
-    message = (f"RiskRails {latest} is available (installed {installed}). Update: {COMMAND} "
-               f"— inside Claude Code or Codex CLI: ! {COMMAND} — then /rr-setup --update in each project.")
-    context = (f"RiskRails {latest} is available on npm; {installed} is installed. The user updates it "
-               f"with `{COMMAND}` in a terminal, or `! {COMMAND}` inside Claude Code or Codex CLI, "
-               "then `/rr-setup --update` in each project. Mention this once to the user if it is "
-               "relevant; never run the update yourself — installing is the user's act.")
+    if dialog:
+        message = (f'RiskRails {latest} is available (installed {installed}). Say "update RiskRails" and the '
+                   f"session asks you in the dialog — or run {COMMAND} in a terminal; "
+                   "then /rr-setup --update in each project.")
+    else:
+        message = (f"RiskRails {latest} is available (installed {installed}). Update: {COMMAND} "
+                   f"— inside Claude Code or Codex CLI: ! {COMMAND} — then /rr-setup --update in each project.")
+    if dialog:
+        context = (f"RiskRails {latest} is available on npm; {installed} is installed. When the user asks to "
+                   "update, open the install decision — state.py decision open --kind install "
+                   f'--command "npx riskrails@{latest} --yes" — send the dialog it prints and run the '
+                   "command the user picks, verbatim, once; never run the update without that pick — "
+                   "installing is the user's act. A task in flight refuses it (INSTALL_DURING_TASK): close "
+                   "the task first. Afterwards the user starts a new session and runs /rr-setup --update "
+                   "in each project. Mention this once to the user if it is relevant.")
+    else:
+        context = (f"RiskRails {latest} is available on npm; {installed} is installed. The user updates it "
+                   f"with `{COMMAND}` in a terminal, or `! {COMMAND}` inside Claude Code or Codex CLI, "
+                   "then `/rr-setup --update` in each project. Mention this once to the user if it is "
+                   "relevant; never run the update yourself — installing is the user's act.")
     return message, context
 
 

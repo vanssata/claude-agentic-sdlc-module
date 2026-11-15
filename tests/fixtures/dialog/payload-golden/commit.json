@@ -10,7 +10,7 @@
     },
     {
      "label": "git commit -m 'it'\"'\"'s done' -- src/widget.py",
-     "description": "the session runs exactly this, once"
+     "description": "Save the finished work as a commit in git."
     }
    ],
    "multiSelect": false

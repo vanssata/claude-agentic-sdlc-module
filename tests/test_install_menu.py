@@ -336,7 +336,7 @@ class TestMenu(ScratchCase):
         self.assertEqual(code, 0, term)
         self.assertIn("plan: max20\n", term)
         self.assertIn("== claude: plan=max20 (Max 20x, max profile)", out)
-        rows = [line for line in term.split("plan (")[1].splitlines()[1:7]]
+        rows = list(term.split("plan (")[1].splitlines()[1:7])
         self.assertEqual([r.split(". ")[1].split()[0] for r in rows],
                          ["pro", "team-pro", "team-max", "max", "max20", "balanced-max"])
 
@@ -432,7 +432,7 @@ class TestMenu(ScratchCase):
                 before = sorted(os.path.relpath(os.path.join(d, f), home) for d, _, fs in os.walk(home) for f in fs)
                 shell = ('stty -g; "$0" "$@"; echo "exit=$?"; stty -g')
                 _code, out, term = on_terminal([], self.env(home), replies,
-                                               cmd=["sh", "-c", shell, *INSTALLER, "--target", "both"])
+                                               cmd=["sh", "-c", shell, *INSTALLER, "--target", "both", "--dry-run"])
                 first, code_line, last = out.splitlines()[0], out.splitlines()[-2], out.splitlines()[-1]
                 self.assertEqual(code_line, "exit=130", term)
                 self.assertEqual(first, last)
@@ -450,6 +450,160 @@ class TestMenu(ScratchCase):
                                               [(PROPOSE % ("max", why), ENTER)])
                 self.assertEqual((code, term), (0, PROPOSE % ("max", why) + "\n"))
                 self.assertIn("== claude: plan=max (Max, max profile)", out)
+
+
+ANSI = os.path.join(os.path.dirname(MENU), "ansi.js")
+# A 4.2.0 spec: none of help, multi, checked, step, back, color.
+OLD_SPEC = {"title": "plan", "why": "detected from x", "initial": 1,
+            "items": [{"value": "pro", "label": "pro", "note": "cheap"}, {"value": "max", "label": "max20", "note": ""},
+                      {"value": "t", "label": "t"}]}
+# Today's frame of OLD_SPEC with row 2 highlighted, recorded from bin/menu.js as 4.2.0 ships it.
+OLD_FRAME = ["plan (detected from x) — ↑/↓ to move, Enter to confirm, Esc to abort", "  1. pro    cheap",
+             "\x1b[7m❯ 2. max20\x1b[0m", "  3. t    "]
+RUNTIMES = {"title": "runtimes", "step": {"n": 1, "names": ["runtimes", "plan", "review"]}, "multi": True,
+            "checked": ["claude"], "back": True,
+            "items": [{"value": "claude", "label": "claude", "desc": "Claude Code"},
+                      {"value": "codex", "label": "codex", "desc": "Codex CLI"}]}
+HOME_KEY, END_KEY, LEFT, RIGHT, BACKSPACE = "\x1b[H", "\x1b[F", "\x1b[D", "\x1b[C", "\x7f"
+
+
+def run_menu(spec, keys, **env):
+    """bin/menu.js as the installer runs it: stdin and stderr on a pseudo-terminal, stdout on a pipe.
+    Each key is typed once the terminal has gone quiet. Returns (exit code, stdout, the terminal's bytes)."""
+    try:
+        master, slave = os.openpty()
+    except (AttributeError, OSError) as exc:
+        raise unittest.SkipTest("no pseudo-terminal: %s" % exc) from exc
+    term = b""
+    try:
+        with subprocess.Popen([INSTALLER[0], MENU], stdin=slave, stdout=subprocess.PIPE, stderr=slave,
+                              env=env_with(**{"RISKRAILS_MENU_SPEC": json.dumps(spec), "TERM": "xterm", "NO_COLOR": None, **env})) as proc:
+            os.close(slave)
+            slave = -1
+            for key in [None, *keys]:
+                while select.select([master], [], [], 1.0 if key is None else 0.3)[0]:
+                    try:
+                        chunk = os.read(master, 65536)
+                    except OSError:
+                        chunk = b""
+                    if not chunk:
+                        break
+                    term += chunk
+                if key is not None and proc.poll() is None:
+                    os.write(master, key.encode())
+            out = proc.communicate(timeout=10)[0]
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and select.select([master], [], [], 0.2)[0]:
+                try:
+                    chunk = os.read(master, 65536)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                term += chunk
+            code = proc.returncode
+    finally:
+        os.close(master)
+        if slave >= 0:
+            os.close(slave)
+    return code, out.decode(), term.decode()
+
+
+class TestWizardMenu(unittest.TestCase):
+    """R14, R15: the colour gate, and the menu child's stepper, back, descriptions, help and multi-select."""
+
+    def test_colour_gate(self):
+        """Colour only with a TTY, an empty or unset NO_COLOR and TERM not dumb."""
+        run = ("const {useColor} = require(%s);\n"
+               "process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).map(([t, e]) => useColor(t, e))));"
+               % json.dumps(ANSI))
+        cases = [(tty, no_color, term) for tty in (True, False, None) for no_color in (None, "", "1")
+                 for term in (None, "xterm", "dumb")]
+        rows = [[tty, {k: v for k, v in (("NO_COLOR", nc), ("TERM", term)) if v is not None}] for tty, nc, term in cases]
+        proc = subprocess.run([INSTALLER[0], "-e", run, json.dumps(rows)], capture_output=True, text=True,
+                              check=True, stdin=subprocess.DEVNULL)
+        for (tty, no_color, term), got in zip(cases, json.loads(proc.stdout)):
+            with self.subTest(tty=tty, no_color=no_color, term=term):
+                self.assertEqual(got, tty is True and not no_color and term != "dumb")
+
+    def test_colour_on_stderr_only(self):
+        """A coloured wizard spec styles the terminal (stderr); stdout is the bare value; NO_COLOR removes it."""
+        spec = {**RUNTIMES, "color": True, "multi": False, "checked": None}
+        code, out, term = run_menu(spec, [RIGHT])
+        self.assertEqual((code, out), (0, "claude"))
+        self.assertIn("\x1b[1m[runtimes]\x1b[0m", term)
+        code, out, term = run_menu(spec, [RIGHT], NO_COLOR="1")
+        self.assertEqual((code, out), (0, "claude"))
+        self.assertNotIn("\x1b[1m", term)
+        self.assertNotIn("\x1b[7m", term)
+        code, out, term = run_menu({**spec, "color": False}, [RIGHT])
+        self.assertNotIn("\x1b[1m", term)
+
+    def test_old_spec_draws_as_before(self):
+        """A 4.2.0 spec: the frames are byte-identical, ← h Backspace Space → do nothing, exit codes and output as today."""
+        shown = node_json("process.stdout.write(JSON.stringify(m.lines(JSON.parse(process.argv[1]), 1, 0)))",
+                          json.dumps(OLD_SPEC))
+        self.assertEqual(shown, OLD_FRAME)
+        code, out, term = run_menu(OLD_SPEC, [LEFT, "h", BACKSPACE, " ", RIGHT, "\r"])
+        self.assertEqual((code, out), (0, "max"))
+        self.assertTrue(term.startswith("\x1b[?25l" + "\n".join(OLD_FRAME).replace("\n", "\r\n") + "\r\n"), repr(term))
+        self.assertIn("plan: max (detected from x)\r\n", term)
+        self.assertEqual(run_menu(OLD_SPEC, [ESC])[0], 130)
+
+    def test_stepper_description_help(self):
+        """The stepper, the highlighted option's description and the help line, and what follows the highlight."""
+        _code, _out, term = run_menu(RUNTIMES, ["j", ESC])
+        self.assertIn(" step 1 of 3 · [runtimes] › plan › review", term)
+        self.assertIn("Claude Code", term)
+        self.assertIn("Codex CLI", term)
+        self.assertIn("↑/↓ move   Space toggle   ← back   Enter next   Esc cancel", term)
+        self.assertLess(term.index("Claude Code"), term.index("Codex CLI"))
+        spec = {**RUNTIMES, "help": "my help line"}
+        self.assertIn("my help line", run_menu(spec, [ESC])[2])
+        no_back = {**RUNTIMES, "back": False}
+        self.assertNotIn("← back", run_menu(no_back, [ESC])[2])
+
+    def test_back(self):
+        """←, h and Backspace exit 4 with nothing on stdout when the spec allows back, and are ignored when not."""
+        for key in (LEFT, "h", BACKSPACE):
+            with self.subTest(key=key):
+                self.assertEqual(run_menu(RUNTIMES, [key])[:2], (4, ""))
+                code, out, _term = run_menu({**RUNTIMES, "back": False}, [key, "\r"])
+                self.assertEqual((code, out), (0, "claude"))
+
+    def test_multi_select(self):
+        """Space toggles the highlighted row, checked is the start, Enter confirms the set in item order."""
+        for name, keys, want in (("start set", ["\r"], "claude"),
+                                 ("add codex", ["j", " ", "\r"], "claude,codex"),
+                                 ("uncheck all", [" ", "\r"], ""),
+                                 ("toggle twice", ["j", " ", " ", RIGHT], "claude"),
+                                 ("digit then space", ["2", " ", "\r"], "claude,codex")):
+            with self.subTest(name):
+                code, out, term = run_menu(RUNTIMES, keys)
+                self.assertEqual((code, out), (0, want), term)
+        _code, _out, term = run_menu(RUNTIMES, ["j", " ", ESC])
+        self.assertIn("[x] 1. claude", term)
+        self.assertIn("[x] 2. codex", term)
+
+    def test_jumps(self):
+        """Home, End and the digits move the highlight, in a wizard menu too."""
+        spec = {"title": "t", "step": {"n": 1, "names": ["t"]},
+                "items": [{"value": v, "label": v} for v in "abcd"]}
+        for name, keys, want in (("end", [END_KEY, "\r"], "d"), ("home", ["3", HOME_KEY, "\r"], "a"),
+                                 ("digit", ["3", "\r"], "c"), ("past the list", ["9", "\r"], "a")):
+            with self.subTest(name):
+                self.assertEqual(run_menu(spec, keys)[:2], (0, want))
+
+    def test_abort_restores_terminal(self):
+        """Esc, q and Ctrl-C exit 130 with the cursor shown again and nothing on stdout; no terminal exits 3."""
+        for key in (ESC, "q", CTRL_C):
+            with self.subTest(key=key):
+                code, out, term = run_menu(RUNTIMES, [key])
+                self.assertEqual((code, out), (130, ""))
+                self.assertTrue(term.endswith("\x1b[?25h"), repr(term))
+        proc = subprocess.run([INSTALLER[0], MENU], capture_output=True, text=True, check=False,
+                              stdin=subprocess.DEVNULL, env=env_with(RISKRAILS_MENU_SPEC=json.dumps(RUNTIMES)))
+        self.assertEqual((proc.returncode, proc.stdout, proc.stderr), (3, "", ""))
 
 
 if __name__ == "__main__":

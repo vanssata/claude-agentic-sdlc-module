@@ -84,20 +84,24 @@ def cmd_review(args, root, rt=rr_runtime.Runtime()):
     if review["passes"] >= rounds:
         if not args.by:
             report = ["--report", os.path.abspath(args.report)] if args.report and os.path.isfile(args.report) else []
-            dialog.offer_decision(root, state, "human_set", "Review",
-                           "%s\nREVIEW_BUDGET: %d review passes; weight.json allows %d%s. The next verdict is yours."
-                           % (dialog.task_facts(root, state), review["passes"], rounds,
-                              " (%s)" % budget_name if rr_policy.batch_on(state) else ""),
-                           [{"kind": "choice", "effect": "keep", "label": "Keep it open — no verdict now"}] +
-                           [{"kind": "command",
-                             "label": rr_labels.state_label(root, ["review", "--verdict", verdict, "--tier", args.tier] +
-                                                     report + ["--by", rr_labels.human_name(root)])}
-                            for verdict in ("pass", "pass_with_findings", "blockers_open")], "review", rt=rt)
-            fs.die("REVIEW_BUDGET — %d review passes; weight.json allows %d (%s). The next "
-                "verdict is the human's, in their own terminal:\n  python3 %s --root %s review --verdict "
-                "<verdict> --tier %s --by \"<name>\"" % (review["passes"], rounds, budget_name,
-                                                         shlex.quote(fs.ENTRY),
-                                                         shlex.quote(root), args.tier), 6)
+            decision = dialog.offer_decision(
+                root, state, "human_set", "Review",
+                "%s\n%d review passes so far; this task allows %d%s. The next verdict is yours."
+                % (dialog.task_facts(root, state), review["passes"], rounds,
+                   " (%s)" % budget_name if rr_policy.batch_on(state) else ""),
+                [{"kind": "choice", "effect": "keep", "label": "Keep it open — no verdict now"}] +
+                [{"kind": "command",
+                  "label": rr_labels.state_label(root, ["review", "--verdict", verdict, "--tier", args.tier] +
+                                                 report + ["--by", rr_labels.human_name(root)])}
+                 for verdict in ("pass", "pass_with_findings", "blockers_open")], "review", rt=rt)
+            cmd = "python3 %s --root %s review --verdict <verdict> --tier %s --by \"<name>\"" % (
+                shlex.quote(fs.ENTRY), shlex.quote(root), args.tier)
+            asked = dialog.human_refusal("the next review verdict", cmd, "the review budget is spent: %d passes, %d allowed"
+                                         % (review["passes"], rounds), decision and decision["id"])
+            fs.die(("REVIEW_BUDGET — %d review passes; weight.json allows %d (%s).\n%s"
+                    % (review["passes"], rounds, budget_name, asked)) if asked else
+                   "REVIEW_BUDGET — %d review passes; weight.json allows %d (%s). The next verdict is the human's, "
+                   "in their own terminal:\n  %s" % (review["passes"], rounds, budget_name, cmd), 6)
         via, why = dialog.human_route(root, allow_dialog=True, rt=rt)
         if via is None:
             fs.die("APPROVAL_REFUSED — a verdict past the review budget is the human's, from their own "

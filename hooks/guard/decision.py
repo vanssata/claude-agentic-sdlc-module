@@ -7,7 +7,7 @@ pending, every tool is denied (DECISION_PENDING and the JSON to send) except:
 
   1. the dialog tool, when its questions equal what state.py prepared (R36.5);
      the call is appended as an `offer`;
-  2. a Bash command equal to the next live pick (R36.7); a git pick's `use` is
+  2. a Bash command equal to the next live pick (R36.7); a git or npx pick's `use` is
      appended here and handed to the git check on ctx.consent, a state.py pick
      is spent by state.py itself after its argv check (R36.10);
   3. `state.py decision show|settle|fallback`.
@@ -82,13 +82,14 @@ def gate(ctx, root):                        # pylint: disable=too-many-locals
     if ctx.payload.tool == "Bash":
         pick = dialog.next_live_pick(root, session, datetime.now(timezone.utc))
         if pick and pick.get("decision") in ids and pick.get("label") == command:
-            if dialog.is_git_label(command):
+            if dialog.is_git_label(command) or dialog.is_npx_label(command):
                 with dialog.ledger_lock(root):
                     # Read again under the lock: two calls must not spend one pick.
                     again = dialog.next_live_pick(root, session, datetime.now(timezone.utc))
                     if not again or again.get("id") != pick["id"]:
                         raise Deny(text_to_b(pending_text))
-                    dialog.ledger_append(root, {"type": "use", "id": pick["id"], "by": "git"})
+                    dialog.ledger_append(root, {"type": "use", "id": pick["id"],
+                                                "by": command.split()[0]})
                 ctx.consent = pick
             raise Allow()
         if dialog.guarded(command):

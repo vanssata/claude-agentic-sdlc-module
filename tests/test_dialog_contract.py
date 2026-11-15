@@ -7,6 +7,7 @@ asserted the state.py side; 7d1 added hooks/guard/dialog.py's reader to READERS.
 import itertools
 import json
 import os
+import shlex
 import sys
 import tempfile
 import unittest
@@ -173,6 +174,66 @@ class TestLedgerContract(unittest.TestCase):
         taken = [t for t in tails if reference(t)]
         for order in itertools.permutations([["--author", "ivan"], ["--period", "quarter"], ["--index", "sqlite"]]):
             self.assertIn([word for pair in order for word in pair], taken)
+
+    def test_batch_on_rule_is_one_table_and_both_twins_take_the_same_argv(self):
+        """R1: the `batch on` rule is data in each twin; the tables are equal and every argv over the rule's
+        words and its near misses is taken or refused alike, as a reference written as a loop says."""
+        self.assertEqual(dialog.BATCH_ON, rr_labels.BATCH_ON)
+        self.assertEqual(dialog.BATCH_ON, {"--by": True, "--why": False})
+
+        def reference(tail):
+            seen, i = {}, 0
+            while i < len(tail):
+                name, value = tail[i], tail[i + 1] if i + 1 < len(tail) else None
+                if name not in ("--by", "--why") or name in seen or value in (None, "") or value.startswith("-"):
+                    return False
+                seen[name] = value
+                i += 2
+            return "--by" in seen
+
+        words = ["--by", "--why", "ivan", "-x", "", "--by=ivan", "--b", "--force", "on", "off"]
+        tails = [list(t) for n in range(5) for t in itertools.product(words, repeat=n)]
+        wrong = []
+        for tail in tails:
+            want = reference(tail)
+            got = (rr_labels.state_label_ok(["--root", "/p", "--runtime", "claude", "batch", "on"] + tail),
+                   dialog.state_label_ok(["python3", "-I", "/h/state.py", "--root", "/p", "batch", "on"] + tail))
+            if got != (want, want):
+                wrong.append((tail, want, got))
+        self.assertEqual(wrong[:5], [])
+        taken = [t for t in tails if reference(t)]   # not vacuous: both orders of the two options were taken
+        self.assertIn(["--by", "ivan", "--why", "ivan"], taken)
+        self.assertIn(["--why", "ivan", "--by", "ivan"], taken)
+        for argv in (["batch", "off", "--by", "me"], ["batch"], ["batch", "--by", "me"], ["batch", "on", "now"]):
+            with self.subTest(argv=argv):
+                self.assertEqual((rr_labels.state_label_ok(argv), dialog.state_label_ok(["python3", "/h/state.py"] + argv)),
+                                 (False, False))
+        here = os.path.abspath(state_mod.__file__)
+        for tail in (" --by me", " --by me --why 'one batch'", " --why x --by me", " --by", " --why x", " --by=me",
+                     " --by me --by you", " --by me now", " --by me --who x", " --by me; ls", " --by me --why $(id)"):
+            label = "python3 %s --root /p batch on%s" % (here, tail)
+            with self.subTest(label=label):
+                want = reference(shlex.split(tail)) and not any(c in tail for c in ";$")
+                self.assertEqual((dialog.validate_label(label) is None, rr_labels.validate_label(label) is None),
+                                 (want, want))
+        for message in (dialog.validate_label("git status"), rr_labels.validate_label("git status")):
+            self.assertIn("batch on", message)
+
+    def test_describe_is_plain_words_for_every_offered_command(self):
+        here = os.path.abspath(state_mod.__file__)
+        labels = ["python3 %s --root /p approve --by me" % here, "python3 %s reject --by me" % here,
+                  "python3 %s profile set max20" % here, "python3 %s verify --scope all --by me" % here,
+                  "python3 %s review --verdict pass --by me" % here, "python3 %s start --mode full --by me" % here,
+                  "python3 %s memory enable" % here, "python3 %s --root /p batch on --by me" % here,
+                  "git commit -m x -- a.py", "git push origin main", "npx riskrails@3.1.0 --yes"]
+        lines = [rr_labels.describe(shlex.split(label)) for label in labels]
+        self.assertEqual(len(set(lines)), len(labels))
+        for line in lines:
+            with self.subTest(line=line):
+                self.assertTrue(line and "\n" not in line)
+                for token in ("state.py", "--", "argv", "DIALOG", "python"):
+                    self.assertNotIn(token, line)
+        self.assertEqual(rr_labels.describe(["ls"]), rr_labels.describe(["python3", "/tmp/other.py", "x"]))
 
     def test_both_sides_share_the_limits(self):
         self.assertEqual((dialog.LINE_MAX, dialog.LOCK_STALE_S, dialog.LABEL_MAX, dialog.LEDGER_TYPES),

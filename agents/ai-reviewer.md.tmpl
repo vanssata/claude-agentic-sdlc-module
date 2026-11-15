@@ -76,7 +76,12 @@ previous version · state-machine transitions now reachable that should not be �
 API and event contract changes · security problems · missing logging on a
 critical path · a rollback that would not actually work · scope creep and
 refactoring nobody asked for · a test weakened or skipped, or a static-analysis
-level lowered, to make CI pass.
+level lowered, to make CI pass · a new dependency without its line in the plan,
+or one the standard library or a short function would replace · padding, last
+and on a first pass only, in the lines this change added: an abstraction with
+one implementation, an option nobody sets, a block or a test that repeats
+another, lines no requirement and no test asks for — MEDIUM at most, three
+findings at most, each titled `padding:` and naming what to delete.
 
 ## Focus: security
 
@@ -115,6 +120,14 @@ task>` under VERDICT.
 ## VERDICT
 verdict: pass | pass_with_findings | blockers_open
 scope_assessment: <did the change stay inside the approved plan>
+```
+
+In full mode only, after VERDICT:
+
+```
+## READ FIRST
+- <file:line> — <why a human reads this before approving>   # at most five
+unverified: <what the review could not check, and what would check it>   # or: none
 ```
 
 Label each finding with its severity's letter and a number, counted per
