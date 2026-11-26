@@ -23,4 +23,5 @@
 ## Upgrade landmines
 
 - RISK: golden and hash outputs depend on the Python version. Release 3.2.0 failed on 3.12 while `main` was green (`tests.yml:29-30`).
-- RISK: `TestTimed` uses `AI_TIMED_FACTOR=3` nightly (`tests.yml:57`) but 1 in release verify (`npm-publish.yml:118`), so a slow runner can fail a release.
+- KNOWN FACT: the wall-clock tests (`TestTimed`, `TestGateFastPath`, `test_cost_with_100_decisions`) run serially with `AI_TIMED_FACTOR=3` nightly (`tests.yml:57,76`) and in release verify (`npm-publish.yml:117-118`).
+- RISK: with `AI_TIMED_FACTOR` unset the factor is 1 (`tests/test_statusline_task.py:40`, `tests/test_dialog_gate.py:1526`, `tests/test_guard_characterization.py:580`), and `verify_command` sets none (`.ai/policies/verification.md:4`), so a busy machine can fail these budgets with no regression in the code; scale with `AI_TIMED_FACTOR`.
