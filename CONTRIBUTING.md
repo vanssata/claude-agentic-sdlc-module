@@ -36,8 +36,8 @@ runs the verification. `CLAUDE.md` holds the lessons earlier reviews taught.
 
 Locally, run the parallel runner: one process per test file, the same test ids
 as `unittest discover`, the same `Ran N tests` / `OK` tail, exit 1 on anything
-red, the wall-clock tests named by `--serial` run alone after the rest. CI runs the serial `unittest discover` as
-the oracle, plus the end-to-end suite, on every release (`npm-publish.yml`); a
+red, the wall-clock tests named by `--serial` run alone after the rest. CI runs
+the same runner, plus the end-to-end suite, on every release (`npm-publish.yml`); a
 pull request runs a smoke subset (`tests.yml`), the full suite runs nightly and
 on demand:
 
