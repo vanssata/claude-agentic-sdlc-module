@@ -14,3 +14,5 @@ files
 .ai/memory/
 .ai/reports/
 .ai/reports/project-update-2026-10-31/
+!.ai/memory/
+!.ai/reports/
