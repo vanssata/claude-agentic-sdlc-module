@@ -246,7 +246,7 @@ to do: [docs/known-risks.md](docs/known-risks.md).
 ## Tests
 
 ```bash
-python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath
+python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath --serial test_statusline_task.TestStatuslineTask.test_cost_with_100_decisions
 python3 -I -m unittest discover -s tests -p 'test_*.py'      # CI's serial oracle, same test ids
 AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
 ```

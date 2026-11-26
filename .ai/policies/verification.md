@@ -1,7 +1,7 @@
 # Verification — this project's commands
 <!-- Yours. Read by state.py verify and close, setup.py check, update.py hints; /rr-setup --update never rewrites it. -->
 
-verify_command:      python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath
+verify_command:      python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath --serial test_statusline_task.TestStatuslineTask.test_cost_with_100_decisions
 step_test_command:   python3 -I tests/run_suite.py {files}
 e2e_command:         AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
 lint_command:        pylint $(git ls-files '*.py')

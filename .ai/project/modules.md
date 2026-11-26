@@ -13,7 +13,7 @@ Mode is what `state.py weight` gives. Hooks and skills changes are weighed by th
 ## Runtime, dialog and context gates
 
 - **Lives in**: `hooks/runtime-gate.py` (1275 lines: subagent model routing, ask/allow), `hooks/dialog-gate.py` (records picks, re-prompts on Stop), `hooks/context-guard.py` (829 lines: context thresholds, handoff, update notice via `hooks/update_notice.py`)
-- **Tests**: `test_runtime_gate{,_codex,_fable}`, `test_dialog_gate` (`TestGateFastPath` runs serially), `test_dialog_consent`, `test_dialog_contract`, `test_context_guard`, `test_update_notice`
+- **Tests**: `test_runtime_gate{,_codex,_fable}`, `test_dialog_gate` (`TestGateFastPath` runs serially, like `test_guard_characterization.TestTimed` and `test_statusline_task.TestStatuslineTask.test_cost_with_100_decisions`: the `--serial` ids in `.ai/policies/verification.md:4`), `test_dialog_consent`, `test_dialog_contract`, `test_context_guard`, `test_update_notice`
 
 ## Task state machine
 
