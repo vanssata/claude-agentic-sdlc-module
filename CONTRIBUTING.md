@@ -36,32 +36,38 @@ runs the verification. `CLAUDE.md` holds the lessons earlier reviews taught.
 
 Locally, run the parallel runner: one process per test file, the same test ids
 as `unittest discover`, the same `Ran N tests` / `OK` tail, exit 1 on anything
-red, the two timed classes serial. CI runs the serial `unittest discover` as
+red, the wall-clock tests named by `--serial` run alone after the rest. CI runs the serial `unittest discover` as
 the oracle, plus the end-to-end suite, on every release (`npm-publish.yml`); a
 pull request runs a smoke subset (`tests.yml`), the full suite runs nightly and
 on demand:
 
 ```bash
-python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath
+python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath --serial test_statusline_task.TestStatuslineTask.test_cost_with_100_decisions
 python3 -I -m unittest discover -s tests -p 'test_*.py'
 AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py
 pylint $(git ls-files '*.py')
 ```
 
-The first line is `verify_command` in `.ai/policies/testing.md`, which
+The first line is `verify_command` in `.ai/policies/verification.md`, which
 `state.py verify --scope all` runs. pylint comes from the distribution package
 (`python3-pylint` on Debian and Ubuntu); `pylint` on `PATH` is what
 `lint_command` calls.
 
+Renaming or moving a test named by `--serial` means changing every copy of
+that command: `.ai/policies/verification.md`, both workflows, `README.md` and
+this file. An id that matches no test stops `run_suite.py` with exit 2
+(`matches no test`), and `tests/test_release.py` pins the workflow copies.
+
 **In a cloud session** (Claude Code on the web, a CI runner, any slow or shared
 machine) two things differ from the development machine:
 
-- The timing budgets in `TestTimed` and `TestGateFastPath` are measured there,
+- The timing budgets in `TestTimed`, `TestGateFastPath` and
+  `test_cost_with_100_decisions` are measured there,
   so a slower container fails them with no regression in the code. Scale them
   the way CI does:
 
   ```bash
-  AI_TIMED_FACTOR=3 python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath
+  AI_TIMED_FACTOR=3 python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed --serial test_dialog_gate.TestGateFastPath --serial test_statusline_task.TestStatuslineTask.test_cost_with_100_decisions
   ```
 
 - A cloud session clones shallow, and `test_project_update.py` runs

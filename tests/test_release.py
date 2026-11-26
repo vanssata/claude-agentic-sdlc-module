@@ -163,7 +163,8 @@ class TestReleaseWorkflow(unittest.TestCase):
     def test_verify_job_runs_the_gates(self):
         for needle in ('tools/sync-version.py --check --tag "$TAG"',
                        "python3 -I tests/run_suite.py --serial test_guard_characterization.TestTimed"
-                       " --serial test_dialog_gate.TestGateFastPath",
+                       " --serial test_dialog_gate.TestGateFastPath"
+                       " --serial test_statusline_task.TestStatuslineTask.test_cost_with_100_decisions",
                        "AI_E2E=1 python3 -I -m unittest discover -s tests -p test_end_to_end.py",
                        "pylint $(git ls-files '*.py')", "npm pack --dry-run", "npm view"):
             self.assertIn(needle, self.verify)
